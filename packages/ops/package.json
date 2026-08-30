@@ -31,7 +31,7 @@
   "dependencies": {
     "@storylet-studio/compiler": "0.0.0",
     "@storylet-studio/model": "0.0.0",
-    "@storylet-studio/runtime": "0.0.0",
+    "@storylet-studio/runtime": "0.1.0",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1"
   }

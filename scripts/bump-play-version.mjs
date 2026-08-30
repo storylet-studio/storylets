@@ -42,15 +42,44 @@ const write = (p, s) => { writeFileSync(at(p), s); console.log("  wrote", p); };
 
 // --- 1. the manifests ------------------------------------------------------
 
+// Idempotent on purpose. A bump that has to be re-run - because a pin was missed,
+// or a tag failed and the fix is in - should carry on rather than throw halfway
+// through and leave the tree half-bumped.
 const bumpJsonVersion = (p) => {
   const s = read(p);
   const out = s.replace(/"version":\s*"[^"]*"/, `"version": "${version}"`);
-  if (out === s) throw new Error(`${p}: no "version" field changed`);
+  if (out === s) {
+    if (!s.includes(`"version": "${version}"`)) throw new Error(`${p}: no "version" field to change`);
+    console.log("  skip ", p, `(already ${version})`);
+    return;
+  }
   write(p, out);
 };
 
 bumpJsonVersion("packages/runtime/package.json");
 bumpJsonVersion("ports/unity/StoryletEngine/package.json");
+
+// The JS runtime is a WORKSPACE package that its siblings depend on by EXACT
+// version, so bumping it without refreshing those pins leaves them asking for a
+// version no longer in the tree. npm then concludes the dependency must be on a
+// registry, and `npm ci` dies with
+//   404 '@storylet-studio/runtime@0.0.0' is not in this registry
+// on a scope where we publish nothing. That failure landed in a release run
+// rather than locally, because an existing node_modules keeps working and only a
+// clean install re-resolves. Patter's script refreshes these pins for the same
+// reason; ours did not, for exactly one release.
+{
+  const pinned = "packages/runtime/package.json";
+  const name = JSON.parse(read(pinned)).name;
+  for (const p of ["packages/ops/package.json", "packages/play-helpers/package.json",
+                   "packages/studio/package.json"]) {
+    const s = read(p);
+    const re = new RegExp(`("${name.replace("/", "\\/")}":\\s*")[^"]*(")`);
+    if (!re.test(s)) continue;
+    const out = s.replace(re, `$1${version}$2`);
+    if (out !== s) write(p, out);
+  }
+}
 
 // Unreal carries two: VersionName is the human one the tag is checked against,
 // Version is an integer Epic wants incremented on every release.
@@ -58,11 +87,15 @@ bumpJsonVersion("ports/unity/StoryletEngine/package.json");
   const p = "ports/unreal/StoryletEngine/StoryletEngine.uplugin";
   const s = read(p);
   const current = JSON.parse(s);
-  const out = s
-    .replace(/"VersionName":\s*"[^"]*"/, `"VersionName": "${version}"`)
-    .replace(/"Version":\s*\d+/, `"Version": ${Number(current.Version) + 1}`);
-  if (out === s) throw new Error(`${p}: nothing changed`);
-  write(p, out);
+  if (current.VersionName === version) {
+    console.log("  skip ", p, `(already ${version})`);
+  } else {
+    const out = s
+      .replace(/"VersionName":\s*"[^"]*"/, `"VersionName": "${version}"`)
+      .replace(/"Version":\s*\d+/, `"Version": ${Number(current.Version) + 1}`);
+    if (out === s) throw new Error(`${p}: nothing changed`);
+    write(p, out);
+  }
 }
 
 // Godot's plugin.cfg is ini, not JSON.
@@ -70,8 +103,10 @@ bumpJsonVersion("ports/unity/StoryletEngine/package.json");
   const p = "ports/godot/addons/storyletengine/plugin.cfg";
   const s = read(p);
   const out = s.replace(/^version=".*"$/m, `version="${version}"`);
-  if (out === s) throw new Error(`${p}: no version= line changed`);
-  write(p, out);
+  if (out === s) {
+    if (!s.includes(`version="${version}"`)) throw new Error(`${p}: no version= line to change`);
+    console.log("  skip ", p, `(already ${version})`);
+  } else write(p, out);
 }
 
 // --- 2. the changelogs -----------------------------------------------------

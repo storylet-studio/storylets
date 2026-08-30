@@ -28,6 +28,6 @@
   },
   "dependencies": {
     "@storylet-studio/model": "0.0.0",
-    "@storylet-studio/runtime": "0.0.0"
+    "@storylet-studio/runtime": "0.1.0"
   }
 }
