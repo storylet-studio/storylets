@@ -1,0 +1,59 @@
+name: Storylet Engine Unreal release
+
+# Tagging `play-unreal-vX.Y.Z` gates the C++ port on the conformance corpus (the clang TestHost
+# compiles the same headers the UE plugin ships and replays it), then zips TWO sibling folders -
+# StoryletEngine, the runtime plugin, and StoryletEngineDemo, a ready-to-open sample .uproject -
+# and attaches the zip to the matching Release. UE itself is not needed to verify parity: the
+# core is std-only C++, so the gate runs on a plain ubuntu runner. (Patter's play-unreal.yml.)
+on:
+  push:
+    tags: ["play-unreal-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the tag matches the plugin version (bump via `npm run bump:play`)
+        run: |
+          version="${GITHUB_REF_NAME#play-unreal-v}"
+          manifest=$(node -p "JSON.parse(require('fs').readFileSync('ports/unreal/StoryletEngine/StoryletEngine.uplugin','utf8')).VersionName")
+          [ "$manifest" = "$version" ] || { echo "the .uplugin says $manifest but the tag says $version"; exit 1; }
+          grep -q "^## \[${version}\] - [0-9]" ports/unreal/StoryletEngine/CHANGELOG.md \
+            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
+
+      - name: Verify parity (the corpus gates the release)
+        run: bash ports/unreal/TestHost/build.sh
+
+      - name: Package the UE plugin and its demo
+        run: |
+          version="${GITHUB_REF_NAME#play-unreal-v}"
+          echo "ASSET=storyletengine-unreal-${version}.zip" >> "$GITHUB_ENV"
+          # Source-only, always: never ship engine build output, even if a checkout carries it.
+          ( cd ports/unreal && zip -rq "../../storyletengine-unreal-${version}.zip" StoryletEngine StoryletEngineDemo \
+              -x "*/Binaries/*" -x "*/Intermediate/*" -x "*/DerivedDataCache/*" -x "*/Saved/*" \
+              -x "*/.vs/*" -x "*.sln" -x "*.slnx" -x "*/.DS_Store" )
+
+      - name: Release notes = this version's changelog section
+        id: relnotes
+        run: |
+          version="${GITHUB_REF_NAME#play-unreal-v}"
+          awk -v ver="$version" 'index($0, "## [" ver "]") == 1 {f=1; next} /^## \[/ {f=0} f' \
+            ports/unreal/StoryletEngine/CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          [ -s "$RUNNER_TEMP/release-notes.md" ] || { echo "no changelog section for ${version}"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: false  # never claim GitHub's Latest badge - that stays on Storyletter for the updater
+          name: Storylet Engine Unreal ${{ steps.relnotes.outputs.version }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          files: ${{ env.ASSET }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

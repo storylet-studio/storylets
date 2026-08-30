@@ -1,6 +1,6 @@
 {
   "name": "@storylet-studio/runtime",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Storylet Engine JS reference runtime: the session (peek / deal / play / outcomes / board / save), held to the conformance corpus.",
   "type": "module",
   "license": "MIT",
@@ -24,7 +24,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean"
+    "build": "tsup"
   },
   "dependencies": {
     "@storylet-studio/dialect": "0.0.0",

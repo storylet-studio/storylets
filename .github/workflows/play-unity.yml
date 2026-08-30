@@ -1,0 +1,60 @@
+name: Storylet Engine Unity release
+
+# Tagging `play-unity-vX.Y.Z` gates the C# port on the conformance corpus (the dotnet TestHost
+# replays it through the same Runtime/*.cs the UPM package ships), then zips the package and
+# attaches it to the matching GitHub Release. Users install by git URL, or by dropping the
+# zip's StoryletEngine/ folder into their project's Packages/. (Patter's play-unity.yml.)
+on:
+  push:
+    tags: ["play-unity-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the tag matches the package version (bump via `npm run bump:play`)
+        run: |
+          version="${GITHUB_REF_NAME#play-unity-v}"
+          manifest=$(node -p "require('./ports/unity/StoryletEngine/package.json').version")
+          [ "$manifest" = "$version" ] || { echo "package.json says $manifest but the tag says $version"; exit 1; }
+          grep -q "^## \[${version}\] - [0-9]" ports/unity/StoryletEngine/CHANGELOG.md \
+            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Verify parity (the corpus gates the release)
+        run: dotnet run --project ports/unity/TestHost
+
+      - name: Package the UPM package
+        run: |
+          version="${GITHUB_REF_NAME#play-unity-v}"
+          echo "ASSET=storyletengine-unity-${version}.zip" >> "$GITHUB_ENV"
+          ( cd ports/unity && zip -rq "../../storyletengine-unity-${version}.zip" StoryletEngine \
+              -x "*/.DS_Store" )
+
+      - name: Release notes = this version's changelog section
+        id: relnotes
+        run: |
+          version="${GITHUB_REF_NAME#play-unity-v}"
+          awk -v ver="$version" 'index($0, "## [" ver "]") == 1 {f=1; next} /^## \[/ {f=0} f' \
+            ports/unity/StoryletEngine/CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          [ -s "$RUNNER_TEMP/release-notes.md" ] || { echo "no changelog section for ${version}"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: false  # never claim GitHub's Latest badge - that stays on Storyletter for the updater
+          name: Storylet Engine Unity ${{ steps.relnotes.outputs.version }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          files: ${{ env.ASSET }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

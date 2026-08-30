@@ -1,0 +1,104 @@
+name: Storylet Engine JS release
+
+# Tagging `play-js-vX.Y.Z` releases the JS member of the runtime set, on the same lockstep
+# version as the Unity / Unreal / Godot ports (bump via `npm run bump:play`). Gated on the
+# full JS suite, which replays the conformance corpus through this runtime - the reference the
+# other three are held against - it attaches one zip carrying exactly what play/javascript.md
+# says it does: the runtime, play-helpers, and a browser drop-in that needs no build step.
+# (Patter's play-js.yml, with its tour demos dropped: ours ships the two packages the docs
+# name instead.)
+on:
+  push:
+    tags: ["play-js-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout storylets
+        uses: actions/checkout@v5
+        with:
+          path: storylets
+      - name: Checkout @wildwinter/expr (the drop-in inlines its source)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/expr
+          path: expr
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: storylets/package-lock.json
+      - run: npm ci
+        working-directory: storylets
+
+      - name: Check the tag matches the runtime version (bump via `npm run bump:play`)
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#play-js-v}"
+          manifest=$(node -p "require('./packages/runtime/package.json').version")
+          [ "$manifest" = "$version" ] || { echo "package.json says $manifest but the tag says $version"; exit 1; }
+          grep -q "^## \[${version}\] - [0-9]" packages/runtime/CHANGELOG.md \
+            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
+
+      - name: Verify parity (the full suite, incl. the corpus - gates the release)
+        working-directory: storylets
+        run: npm test
+
+      - name: Build the runtime, play-helpers and the drop-in
+        working-directory: storylets
+        run: |
+          npm run -w @storylet-studio/runtime build
+          npm run -w @storylet-studio/play-helpers build
+
+      - name: Assemble the zip
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#play-js-v}"
+          pkg="storyletengine-js-${version}"
+          out="/tmp/${pkg}"
+
+          # The three things play/javascript.md promises, under the names it uses,
+          # so the folder a reader unzips matches the import they are told to write.
+          mkdir -p "${out}/@storylet-studio/runtime/dist" "${out}/@storylet-studio/play-helpers/dist"
+          cp packages/runtime/dist/index.js packages/runtime/dist/index.cjs \
+             packages/runtime/dist/index.d.ts packages/runtime/dist/index.d.cts \
+             "${out}/@storylet-studio/runtime/dist/"
+          cp packages/runtime/package.json packages/runtime/README.md packages/runtime/CHANGELOG.md \
+             "${out}/@storylet-studio/runtime/"
+          cp packages/play-helpers/dist/index.js packages/play-helpers/dist/index.cjs \
+             packages/play-helpers/dist/index.d.ts packages/play-helpers/dist/index.d.cts \
+             "${out}/@storylet-studio/play-helpers/dist/"
+          cp packages/play-helpers/package.json "${out}/@storylet-studio/play-helpers/"
+
+          # The drop-in, loose at the top where somebody looking for one file finds it.
+          cp packages/runtime/dist/storyletengine.min.js packages/runtime/dist/storyletengine.min.js.map "${out}/"
+          cp LICENSE "${out}/"
+
+          ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
+          echo "JS_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"
+
+      - name: Release notes = this version's changelog section
+        id: relnotes
+        run: |
+          version="${GITHUB_REF_NAME#play-js-v}"
+          awk -v ver="$version" 'index($0, "## [" ver "]") == 1 {f=1; next} /^## \[/ {f=0} f' \
+            storylets/packages/runtime/CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          [ -s "$RUNNER_TEMP/release-notes.md" ] || { echo "no changelog section for ${version}"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: false  # never claim GitHub's Latest badge - that stays on Storyletter for the updater
+          name: Storylet Engine JS ${{ steps.relnotes.outputs.version }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          files: |
+            ${{ env.JS_ZIP }}
+            storylets/packages/runtime/dist/storyletengine.min.js
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

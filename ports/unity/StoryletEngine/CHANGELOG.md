@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-30
+
 ### Added
 
 - Shared scarcity (design/shared-scarcity.md): `Shared` on `Deck` and `Card` plus

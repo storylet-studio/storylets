@@ -11,6 +11,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit && npm run typecheck -w @storylet-studio/studio",
     "test": "vitest run",
+    "bump:play": "node scripts/bump-play-version.mjs",
     "parity": "node scripts/check-runtime-api-parity.mjs",
     "sample": "node scripts/check-sample-coverage.mjs",
     "check:unity-demo": "./scripts/check-unity-demo.sh",

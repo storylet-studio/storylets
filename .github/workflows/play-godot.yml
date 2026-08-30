@@ -1,0 +1,72 @@
+name: Storylet Engine Godot release
+
+# Tagging `play-godot-vX.Y.Z` gates the GDScript port on the conformance corpus (a headless
+# Godot replays corpus.json through the addon), then zips the addon and attaches it to the
+# matching GitHub Release. Users drop the zip's storyletengine/ folder into their project's
+# addons/. (Patter's play-godot.yml, carried whole.)
+on:
+  push:
+    tags: ["play-godot-v*"]
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: "4.7"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the tag matches the addon version (bump via `npm run bump:play`)
+        run: |
+          version="${GITHUB_REF_NAME#play-godot-v}"
+          manifest=$(sed -n 's/^version="\(.*\)"$/\1/p' ports/godot/addons/storyletengine/plugin.cfg)
+          [ "$manifest" = "$version" ] || { echo "plugin.cfg says $manifest but the tag says $version"; exit 1; }
+          grep -q "^## \[${version}\] - [0-9]" ports/godot/addons/storyletengine/CHANGELOG.md \
+            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
+
+      - name: Install headless Godot ${{ env.GODOT_VERSION }}
+        run: |
+          base="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          curl -fsSL -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/${base}.zip"
+          unzip -q godot.zip
+          mv "$base" godot
+          chmod +x godot
+
+      - name: Import the project (registers the class_name globals)
+        run: ./godot --headless --path ports/godot --import || true
+
+      - name: Verify parity (the corpus gates the release)
+        run: ./godot --headless --path ports/godot --script res://test/test_corpus.gd
+
+      - name: Package the addon
+        run: |
+          version="${GITHUB_REF_NAME#play-godot-v}"
+          echo "ASSET=storyletengine-godot-${version}.zip" >> "$GITHUB_ENV"
+          # The addon only: the test scripts and corpus material never ship.
+          ( cd ports/godot/addons && zip -rq "../../../storyletengine-godot-${version}.zip" storyletengine \
+              -x "*/.DS_Store" )
+
+      - name: Release notes = this version's changelog section
+        id: relnotes
+        run: |
+          version="${GITHUB_REF_NAME#play-godot-v}"
+          awk -v ver="$version" 'index($0, "## [" ver "]") == 1 {f=1; next} /^## \[/ {f=0} f' \
+            ports/godot/addons/storyletengine/CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          [ -s "$RUNNER_TEMP/release-notes.md" ] || { echo "no changelog section for ${version}"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: false  # never claim GitHub's Latest badge - that stays on Storyletter for the updater
+          name: Storylet Engine Godot ${{ steps.relnotes.outputs.version }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          files: ${{ env.ASSET }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

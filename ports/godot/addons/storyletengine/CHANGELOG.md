@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-30
+
 ### Added
 - Shared scarcity (design/shared-scarcity.md): `shared` on a deck (or a card,
   overriding its deck) plus `sharedCopies`, so a pile is scarce across flows
