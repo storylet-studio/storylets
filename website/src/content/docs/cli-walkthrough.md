@@ -22,7 +22,7 @@ This page walks all of it in one sitting. Every command and every output below i
 ## The tool
 
 `storyletengine` is the command line. Get it from the [Download page](/download/) as a
-standalone binary, or with `npm install -g @storylet-studio/cli`. Every command is on [the
+standalone binary from the [Download page](/download/). Every command is on [the
 CLI page](/cli/).
 
 ## 1. Make a project

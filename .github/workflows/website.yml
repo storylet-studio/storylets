@@ -20,12 +20,21 @@ name: Website
 # Path-filtered, which is safe because the site is standalone: its own lockfile,
 # its own node_modules, no import from `packages/` and nothing read out of the
 # monorepo at build time. If that ever stops being true, this filter goes.
+#
+# **The site stopped being standalone, so the filter grew.** The paragraph above was
+# true until the playable Village moved into the site: `prebuild` now builds
+# packages/village-client, which compiles examples/the-village.storylets. Both are
+# watched below, or an edit to the example would ship a site still serving the last one.
 on:
   push:
     branches: [main]
-    paths: ["website/**", ".github/workflows/website.yml"]
+    paths: &site
+      - "website/**"
+      - "packages/village-client/**"
+      - "examples/the-village.storylets/**"
+      - ".github/workflows/website.yml"
   pull_request:
-    paths: ["website/**", ".github/workflows/website.yml"]
+    paths: *site
   workflow_dispatch:
 
 # Least privilege by default; the deploy job asks for what it needs.
@@ -51,6 +60,14 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: website/package-lock.json
+      # TWO installs, because the site keeps its own lockfile and always has. The
+      # monorepo one is new: `prebuild` builds the Village client out of it. No
+      # sibling `../expr` checkout is needed here, unlike the release workflows -
+      # the aliases prefer a sibling only WHEN PRESENT and fall back to the
+      # published @wildwinter packages, which is what a plain clone gets.
+      - name: Install the monorepo, for the Village client
+        working-directory: .
+        run: npm ci
       - run: npm ci
       # `build` ends in a `postbuild` that runs scripts/check-docs.mjs, which is the
       # half that actually catches things: Astro reports neither a blank line inside

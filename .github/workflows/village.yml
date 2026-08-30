@@ -1,0 +1,89 @@
+name: The Village release
+
+# Tagging `village-vX.Y.Z` builds the playable Village client and attaches one zip to the
+# matching GitHub Release. The zip carries BOTH halves deliberately: `dist/` to open and play
+# with no build step, and `src/` to read, because the client exists to be read as much as
+# played - it is the worked example of using the runtime's public API from an ordinary app.
+#
+# Its own family, not one of the four runtimes: it is versioned independently, because nothing
+# a game ships depends on it and lockstepping it with the engines would imply otherwise.
+on:
+  push:
+    tags: ["village-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout storylets
+        uses: actions/checkout@v5
+        with:
+          path: storylets
+      - name: Checkout @wildwinter/expr (the client bundles the runtime, which inlines it)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/expr
+          path: expr
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: storylets/package-lock.json
+      - run: npm ci
+        working-directory: storylets
+
+      - name: Check the tag matches the client version
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#village-v}"
+          manifest=$(node -p "require('./packages/village-client/package.json').version")
+          [ "$manifest" = "$version" ] || { echo "package.json says $manifest but the tag says $version"; exit 1; }
+          grep -q "^## \[${version}\] - [0-9]" packages/village-client/CHANGELOG.md \
+            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
+
+      - name: Verify it still plays (the gated scripted playthroughs)
+        working-directory: storylets
+        run: npx vitest run packages/village-client
+
+      - name: Build the client
+        working-directory: storylets
+        run: npm run build -w @storylet-studio/village-client
+
+      - name: Assemble the zip
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#village-v}"
+          pkg="the-village-${version}"
+          out="/tmp/${pkg}"
+          mkdir -p "$out"
+          # dist/ to play, src/ to read, and the two files that explain both.
+          cp -R packages/village-client/dist "$out/dist"
+          cp -R packages/village-client/src "$out/src"
+          cp packages/village-client/README.md packages/village-client/CHANGELOG.md \
+             packages/village-client/village.css packages/village-client/index.html "$out/"
+          cp LICENSE "$out/"
+          ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
+          echo "VILLAGE_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"
+
+      - name: Release notes = this version's changelog section
+        id: relnotes
+        run: |
+          version="${GITHUB_REF_NAME#village-v}"
+          awk -v ver="$version" 'index($0, "## [" ver "]") == 1 {f=1; next} /^## \[/ {f=0} f' \
+            storylets/packages/village-client/CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          [ -s "$RUNNER_TEMP/release-notes.md" ] || { echo "no changelog section for ${version}"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: false  # never claim GitHub's Latest badge - that stays on Storyletter for the updater
+          name: The Village ${{ steps.relnotes.outputs.version }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          files: ${{ env.VILLAGE_ZIP }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -12,12 +12,15 @@ script a hand-off.
 ## Getting it
 
 Download a standalone binary for your platform from the [Download page](/download/): one
-file, no Node installation needed. Or, if you already have Node:
+file, no Node installation needed, and nothing else to install alongside it.
 
 ```sh
-npm install -g @storylet-studio/cli
-storyletengine validate ./my-project.storylets
+chmod +x ./storyletengine-macos-arm64
+./storyletengine-macos-arm64 validate ./my-project.storylets
 ```
+
+The binaries are the distribution. The packages are not published to npm, so put the binary
+somewhere on your `PATH` and call it `storyletengine` if you want the short form.
 
 The CLI package is public on npm. The runtimes aren't: they ship as zips on the Download
 page.

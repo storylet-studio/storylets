@@ -2,17 +2,19 @@
 // Curated download sections, read live from the public, CORS-enabled GitHub Releases
 // API in the BROWSER, so they stay current without rebuilding the static site.
 //
-// Ported from Patter's Downloads.astro, which is the shipped precedent. One of its
-// four sections is absent here: the Interactive Tour release family, which we do not
-// have (our worked example ships inside Storyletter instead).
+// Ported from Patter's Downloads.astro, which is the shipped precedent. It has four
+// sections and so do we, but the fourth is not the same thing: theirs is the
+// Interactive Tour, ours is The Village, a playable browser client that is also
+// readable source. (This comment used to say we had no fourth family and that our
+// worked example shipped inside Storyletter instead. Both halves stopped being true
+// the day the Village got its own tag.)
 //
 // Each instance renders ONE section (`kind`): "storyletter" (per-platform installer
 // cards, from bare `v*` tags), "plugins" (the four runtime zips, from
-// `play-<engine>-v*` tags, Patter's family) or "cli" (the standalone binaries, from
-// `cli-v*`). Only those tag families render at all, which is what keeps any other
-// release in the repo invisible here. The runtime workflows that write the
-// `play-*` tags land with the public repo (design/release-shape.md); until one has
-// tagged, its card reads "coming soon".
+// `play-<engine>-v*` tags), "cli" (the standalone binaries, from `cli-v*`) or
+// "village" (the playable example, from `village-v*`). Only those tag families
+// render at all, which is what keeps any other release in the repo invisible here.
+// Until a family has tagged, its card reads "coming soon".
 const { kind = "storyletter" } = Astro.props;
 const repo = "storylet-studio/storylets";
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/"); // for the engine icons
@@ -121,6 +123,21 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, "/"); // for the engine ic
     root.innerHTML = `${btns}${meta(r, ver)}`;
   }
 
+  // The Village is the one section with somewhere to GO as well as something to
+  // download, so it leads with the link: most people will play it rather than keep it.
+  function renderVillage(root: HTMLElement, releases: Release[]): void {
+    const play = `<a class="pt-dl-btn" href="/village/">Play it in your browser</a>`;
+    const r = releases.find((x) => /^village-v\d/.test(x.tag_name));
+    if (!r) {
+      root.innerHTML = `${play}<p class="pt-dl-sub">The downloadable zip will appear here once the first release ships.</p>`;
+      return;
+    }
+    const ver = r.tag_name.replace(/^village-v/, "");
+    const zip = r.assets.find((a) => /\.zip$/i.test(a.name));
+    const dl = zip ? `<a class="pt-dl-btn" href="${esc(zip.browser_download_url)}">Download the zip</a>` : "";
+    root.innerHTML = `${play} ${dl}${meta(r, ver)}`;
+  }
+
   function empty(root: HTMLElement, what: string): void {
     root.innerHTML = `<p class="pt-dl-empty">${what} will appear here once the first release ships - see <a href="https://github.com/storylet-studio/storylets/releases">GitHub Releases</a>.</p>`;
   }
@@ -137,6 +154,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, "/"); // for the engine ic
         if (m.dataset.ptDl === "storyletter") renderStoryletter(m, releases);
         else if (m.dataset.ptDl === "plugins") renderPlugins(m, releases, base);
         else if (m.dataset.ptDl === "cli") renderCli(m, releases);
+        else if (m.dataset.ptDl === "village") renderVillage(m, releases);
       }
     } catch {
       for (const m of mounts) empty(m, "The downloads");

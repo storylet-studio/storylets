@@ -39,6 +39,19 @@ The JavaScript zip carries the runtime, the dev helpers and a browser drop-in, s
 package manager to set up. See [Playing in your game](/play/overview/) and the per-engine
 guides to get started.
 
+## The Village: see it working
+
+A complete storylet project you can play in a browser, and read. Five drawn regions, thirteen
+places, 86 cards, and a hand dealt wherever you stand. It runs the same runtime a shipped game
+would, over the same public API, with no engine-side special cases, which is the point of it:
+it is evidence the API is usable rather than a bespoke demo.
+
+<Downloads kind="village" />
+
+The zip carries `dist/` to open offline and `src/` to read: about 900 lines of framework-free
+TypeScript. If you want to know what building on the engine actually looks like, this is the
+shortest honest answer.
+
 ## The CLI
 
 `storyletengine` validates, compiles, deals and tests projects from the terminal, which is
@@ -47,11 +60,11 @@ required**:
 
 <Downloads kind="cli" />
 
-Or from npm, if you already have Node:
+The binaries are the distribution: the packages are not on npm.
 
 ```sh
-npm install -g @storylet-studio/cli
-storyletengine validate ./my-project.storylets
+chmod +x ./storyletengine-macos-arm64
+./storyletengine-macos-arm64 validate ./my-project.storylets
 ```
 
 See [the CLI reference](/cli/) for every command.

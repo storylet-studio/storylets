@@ -6,6 +6,7 @@
   "description": "The Storylet Studio landing + docs site: a static Astro + Starlight build for storylet.studio.",
   "scripts": {
     "dev": "astro dev",
+    "prebuild": "node scripts/build-village.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "postbuild": "node scripts/check-docs.mjs",

@@ -2,3 +2,8 @@
 dist/
 .astro/
 node_modules/
+
+# The playable Village, built into the site by the `prebuild` (scripts/build-village.mjs).
+# Generated from packages/village-client + examples/the-village.storylets, so it is
+# never committed: 4.5 MB of build output with a source of truth two directories away.
+public/village/
