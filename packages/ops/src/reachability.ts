@@ -181,7 +181,20 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
     const at = key.indexOf(":");
     if (at > 0 && broken.has(key.slice(0, at))) broken.add(key);
   }
-  const monotonic = (key: string): boolean => latched.has(key) && !broken.has(key);
+  // `@world` is the HOST's state, and the host writes it in any direction at any
+  // moment. Even when the story is the only writer we can SEE, we cannot say it
+  // only moves one way, so no ordering argument may rest on it - in either
+  // position, which is why this sits in `monotonic` rather than at one use site.
+  //
+  // design/reachability.md step 1 said this from the start: a "`@world` ref the
+  // host drives" is UNKNOWN and "takes no part in what follows". The code never
+  // implemented it. Raised from the Patter side as a third route of the same
+  // class as the two above, with the suggestion to look when such a thing first
+  // appeared; it already had.
+  const hostDriven = (key: string): boolean => key.startsWith("@world.");
+
+  const monotonic = (key: string): boolean =>
+    latched.has(key) && !broken.has(key) && !hostDriven(key);
 
   // Latches whose DECLARED DEFAULT already holds them, so they are true before
   // anything runs. They are still monotonic - nothing moves them back - but they

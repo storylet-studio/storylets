@@ -30,13 +30,14 @@ interface CardFix {
 const project = (cards: CardFix[], opts: {
   story?: PropertyDecl[];
   deck?: PropertyDecl[];
+  world?: PropertyDecl[];
 } = {}): SourceProject => ({
   path: "p.storyletproj",
   project: {
     schema: "storylets/project@0",
     project: { id: "p", name: "P", version: "0.0.1" },
     settings: { playAdvancesTurns: 1 },
-    world: { properties: [] },
+    world: { properties: opts.world ?? [] },
     story: { properties: opts.story ?? [] },
     templates: {},
     export: { bundle: "dist/p.storyletsc", metadata: "full" },
@@ -280,5 +281,40 @@ describe("reachability: the positive term must itself be a latch", () => {
       { id: "c_open", condition: "@deck.seen", outcomes: [{ id: "o2", changes: { "@deck.open": "true" } }] },
       { id: "dead", condition: "@deck.open && !@deck.seen" },
     ], { deck: [{ ...LATCH, name: "seen" }, { ...LATCH, name: "open" }] }))).toEqual(["dead"]);
+  });
+});
+
+// --- @world is the host's, in both directions --------------------------------
+//
+// design/reachability.md step 1 already says this: a ref that is "a `@world` ref
+// the host drives" is UNKNOWN and "takes no part in what follows". The code never
+// implemented it, so a story-side `@world.x = true` was classified as a latch
+// like any other. The Patter side raised it as a THIRD route of the same class
+// (to-storylets/reachability-two-routes-confirmed.md) and suggested looking when
+// such a thing first appeared. It already had.
+//
+// The point is not that the story writes it one way. It is that the GAME can
+// write it the other way at any moment, and nothing in the project can prove
+// otherwise, so no ordering argument built on it is sound.
+describe("reachability: @world is the host's, so it anchors nothing", () => {
+  const HOST = { type: "boolean", default: false } as const;
+
+  it("says nothing when the positive term is a @world ref", () => {
+    expect(named(project([
+      { id: "c_see", outcomes: [{ id: "o1", changes: { "@deck.seen": "true" } }] },
+      { id: "c_flag", condition: "@deck.seen", outcomes: [{ id: "o2", changes: { "@world.alarm": "true" } }] },
+      // The host can raise the alarm itself, before anything is seen.
+      { id: "fine", condition: "@world.alarm && !@deck.seen" },
+    ], { deck: [{ ...LATCH, name: "seen" }], world: [{ ...HOST, name: "alarm" }] }))).toEqual([]);
+  });
+
+  it("says nothing when the NEGATED term is a @world ref", () => {
+    // The mirror: "nothing sets it back" is exactly what we cannot claim about a
+    // ref the game owns, so it cannot carry the negated half either.
+    expect(named(project([
+      { id: "c_raise", outcomes: [{ id: "o1", changes: { "@world.alarm": "true" } }] },
+      { id: "c_act", condition: "@world.alarm", outcomes: [{ id: "o2", changes: { "@deck.acted": "true" } }] },
+      { id: "fine", condition: "@deck.acted && !@world.alarm" },
+    ], { deck: [{ ...LATCH, name: "acted" }], world: [{ ...HOST, name: "alarm" }] }))).toEqual([]);
   });
 });
