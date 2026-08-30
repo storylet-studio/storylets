@@ -25,6 +25,7 @@ import {
   BOX_KITS,                        // the one kit list; --kit validates from it
 } from "@storylet-studio/ops";
 import type { BoxKit, Issue, PlannedWrite } from "@storylet-studio/ops";
+import pkg from "../package.json" with { type: "json" };
 
 export const USAGE = `storyletengine - Storylet Engine CLI
 
@@ -80,6 +81,7 @@ Usage:
                  [--json] [--fail-on-gap]                gets dealt or played?
                  [--propose]          Print an auto-proposed coverage block
                                       (drivers + arg domains) instead of running
+  storyletengine --version            Print the version and exit (also -v, version)
 
 Exit codes: 0 ok, 1 the operation found problems, 2 usage. "merge" alone also
 maps a malformed INPUT to 2, so a version-control driver can tell "these three
@@ -200,6 +202,16 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
   if (command === undefined || command === "help" || command === "--help" || command === "-h") {
     io.log(USAGE);
     return command === undefined ? 2 : 0;
+  }
+  // Which build is this? A standalone binary has no package.json beside it and no
+  // npm to ask, so without this there is no way to answer "what are you running?",
+  // which is the first question any support conversation opens with. The version is
+  // read from package.json at BUILD time: both shipping paths (tsup for dist/cli.js,
+  // Bun --compile for the standalone binaries) bundle this entry and inline the
+  // import, so the number cannot drift from the manifest the tag is checked against.
+  if (command === "version" || command === "--version" || command === "-v") {
+    io.log(pkg.version);
+    return 0;
   }
   if (!(command in FLAGS)) {
     io.error(`unknown command "${command}"\n\n${USAGE}`);

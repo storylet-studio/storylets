@@ -49,8 +49,7 @@ nothing to install alongside it.
 macOS binaries are Developer ID signed. Windows ships unsigned by policy, so SmartScreen asks
 for "More info" then "Run anyway" on first run.
 
-### Known gaps
-
-- **No `--version`.** The binary cannot report which build it is, which makes "what are you
-  running?" harder than it should be. Patter's CLI has the same gap, so this is a family-wide
-  thing to fix in both rather than a divergence.
+- **`--version`** (also `-v`, and a bare `version` command). A standalone binary has no
+  package.json beside it and no npm to ask, so without this there is no way to answer "what are
+  you running?". The number is inlined from the manifest at build time by both shipping paths,
+  so it cannot drift from the tag the release is named for.

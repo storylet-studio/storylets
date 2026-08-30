@@ -628,3 +628,31 @@ describe("every loading command reports the project's issues", () => {
     });
   }
 });
+
+// --- `--version` ------------------------------------------------------------
+// The number is inlined from package.json at build time, so the risk is not that
+// it drifts but that the wiring quietly stops working: a bundler that fails to
+// inline the JSON, or a dispatch change that swallows the flag, both turn this
+// into "unknown command" without anything else noticing. The release asset is
+// named from the TAG and the manifest is what the tag is checked against, so a
+// binary that disagrees with its own filename is the failure worth preventing.
+describe("--version", () => {
+  it("prints the manifest version, on all three spellings", async () => {
+    const manifest = JSON.parse(
+      readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
+    ) as { version: string };
+    for (const spelling of ["--version", "-v", "version"]) {
+      const out: string[] = [];
+      const code = await run([spelling], { log: (m) => out.push(String(m)), error: () => {} });
+      expect(code, `"${spelling}" should exit 0`).toBe(0);
+      expect(out.join("\n").trim(), `"${spelling}" should print the manifest version`)
+        .toBe(manifest.version);
+    }
+  });
+
+  it("is discoverable from the usage text", async () => {
+    const out: string[] = [];
+    await run(["--help"], { log: (m) => out.push(String(m)), error: () => {} });
+    expect(out.join("\n")).toContain("--version");
+  });
+});
