@@ -230,3 +230,55 @@ describe("reachability: what it refuses to guess about", () => {
     expect(named(source)).toEqual([]);
   });
 });
+
+// --- The positive latch has to be a latch too --------------------------------
+//
+// From the Patter side (to-storylets/reachability-positive-latch.md), found
+// porting this to Patterpad: step 3 asks `monotonic` of the NEGATED term and
+// never of the positive one. The refutation argues "A can only become true
+// after B", which is sound only when A becoming true REQUIRES a writer to have
+// run. If A can be true with no writer running, it implies nothing about order.
+//
+// They flagged it as possibly unreachable here. It is not. It is MORE reachable
+// here than there, by two separate routes, and both are below.
+describe("reachability: the positive term must itself be a latch", () => {
+  it("says nothing when the positive term's own default already holds it", () => {
+    // `open` is declared true. It is written cleanly once, so it is `latched`
+    // and not `broken`, and the old code walked its writer chain and refuted.
+    // But it does not need that writer: it is true from the first turn, so it
+    // implies nothing about `seen` having happened.
+    expect(named(project([
+      { id: "c_see", outcomes: [{ id: "o1", changes: { "@deck.seen": "true" } }] },
+      { id: "c_open", condition: "@deck.seen", outcomes: [{ id: "o2", changes: { "@deck.open": "true" } }] },
+      // Plays on turn one, before anything: `open` starts true and `seen` starts false.
+      { id: "fine", condition: "@deck.open && !@deck.seen" },
+    ], {
+      deck: [{ ...LATCH, name: "seen" }, { name: "open", type: "boolean", default: true }],
+    }))).toEqual([]);
+  });
+
+  it("says nothing when the positive term is written in a shape it cannot read", () => {
+    // `open` is latched once cleanly and once by a computed write, so it is
+    // `broken`: we can no longer say it only moves one way. It keeps its
+    // `writers` entry either way, which is what let the chain walk refute on it.
+    expect(named(project([
+      { id: "c_see", outcomes: [{ id: "o1", changes: { "@deck.seen": "true" } }] },
+      { id: "c_open", condition: "@deck.seen", outcomes: [{ id: "o2", changes: { "@deck.open": "true" } }] },
+      // A second, unreadable route to the same ref, needing nothing.
+      { id: "c_odd", outcomes: [{ id: "o3", changes: { "@deck.open": "@deck.seen == false" } }] },
+      { id: "fine", condition: "@deck.open && !@deck.seen" },
+    ], {
+      deck: [{ ...LATCH, name: "seen" }, { ...LATCH, name: "open" }],
+    }))).toEqual([]);
+  });
+
+  it("still refutes the real shape, where the positive term IS a latch", () => {
+    // The guard must not buy its silence by going quiet everywhere: the
+    // Village's own case has to keep reporting.
+    expect(named(project([
+      { id: "c_see", outcomes: [{ id: "o1", changes: { "@deck.seen": "true" } }] },
+      { id: "c_open", condition: "@deck.seen", outcomes: [{ id: "o2", changes: { "@deck.open": "true" } }] },
+      { id: "dead", condition: "@deck.open && !@deck.seen" },
+    ], { deck: [{ ...LATCH, name: "seen" }, { ...LATCH, name: "open" }] }))).toEqual(["dead"]);
+  });
+});

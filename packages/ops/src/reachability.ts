@@ -32,7 +32,7 @@
 
 import { compileProject } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
-import type { Bundle, Expression } from "@storylet-studio/model";
+import type { Bundle, Expression, PropertyDecl } from "@storylet-studio/model";
 import { effectiveGameId } from "@storylet-studio/model";
 
 type AstNode = Expression["ast"];
@@ -183,6 +183,36 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
   }
   const monotonic = (key: string): boolean => latched.has(key) && !broken.has(key);
 
+  // Latches whose DECLARED DEFAULT already holds them, so they are true before
+  // anything runs. They are still monotonic - nothing moves them back - but they
+  // do not need a writer, and every refutation this check makes is an argument
+  // about a writer having run. `A can only become true after B` is worth nothing
+  // when A was true on turn one.
+  //
+  // From the Patter side (to-storylets/reachability-positive-latch.md). They found
+  // the missing `monotonic` on the positive term and flagged it as possibly
+  // unreachable here; it is reachable by TWO routes here, and this is the one
+  // their one-line fix does not cover, because a defaulted latch is monotonic.
+  // Our model makes it likelier than theirs: `default` is required on every
+  // declaration, not optional.
+  const startsSet = new Set<string>();
+  const noteDefaults = (decls: readonly PropertyDecl[] | undefined, scope: string, owner: string): void => {
+    for (const d of decls ?? []) {
+      const key = keyOf(`${scope}.${d.name}`, { box: owner, deck: owner });
+      if (d.type === "boolean" && d.default === true) startsSet.add(key);
+      // A flags property whose default already contains a flag starts that flag set.
+      if (d.type === "flags" && Array.isArray(d.default)) {
+        for (const f of d.default) startsSet.add(`${key}:${String(f)}`);
+      }
+    }
+  };
+  noteDefaults(bundle.story?.properties, "@story", "");
+  for (const box of bundle.boxes) {
+    const boxName = effectiveGameId(box);
+    noteDefaults(box.properties, "@box", boxName);
+    for (const deck of box.decks) noteDefaults(deck.properties, "@deck", effectiveGameId(deck));
+  }
+
   // --- 2. what must already be true before a latch can be set ---------------
   //
   // INTERSECTION across writers, not union: any one live route to a latch is
@@ -242,6 +272,13 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
           for (const no of ts.filter((t) => t.negated)) {
             if (!monotonic(no.key)) continue;
             for (const yes of ts.filter((t) => !t.negated && t.key !== no.key)) {
+              // The POSITIVE term has to be a latch too. The refutation argues
+              // "A can only become true after B", which is sound only when A
+              // becoming true REQUIRES a writer to have run. A term that is not
+              // monotonic (written somewhere in a shape we cannot read) or that
+              // starts already set (its default holds it) can be true without
+              // any writer, and then it implies nothing about order.
+              if (!monotonic(yes.key) || startsSet.has(yes.key)) continue;
               const chain = mustHold(yes.key);
               if (!chain.cut && chain.need.has(no.key)) {
                 reason ??= `${shown(yes.key)} can only become true after ${shown(no.key)}, `
