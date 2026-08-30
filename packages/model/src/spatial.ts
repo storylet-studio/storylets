@@ -314,7 +314,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 
 // --- geometry ----------------------------------------------------------------
 // Lifted from the old system's `canvasGeometry` helpers, which the storymap
-// canvas proved (../storylets/docs/developer/storymap-canvas.md section 1).
+// canvas proved (../storylets-old/docs/developer/storymap-canvas.md section 1).
 
 export interface Rect { x: number; y: number; width: number; height: number }
 

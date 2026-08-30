@@ -9,7 +9,7 @@
 // places, hit-tests, selects and moves them. It knows nothing about cards.
 //
 // Conventions carried from the old system, which paid for them once already
-// (../storylets/docs/developer/storymap-canvas.md section 2):
+// (../storylets-old/docs/developer/storymap-canvas.md section 2):
 //   - chrome scales INVERSELY with zoom, so rings and handles stay a constant
 //     size on screen rather than ballooning as you zoom in
 //   - move by dragging an item's BODY; a separate centre handle was tried there

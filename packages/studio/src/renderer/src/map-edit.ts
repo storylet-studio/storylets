@@ -3,7 +3,7 @@
 // handles that reshape a finished one.
 //
 // Both lifted from the old system's storymap canvas, which paid for these
-// decisions once already (../storylets, StorymapCanvasZoneHandles and the
+// decisions once already (../storylets-old, StorymapCanvasZoneHandles and the
 // draw-zone tool in StorymapCanvas):
 //
 //   - a click adds a vertex; clicking near the FIRST vertex closes the shape;

@@ -16,7 +16,7 @@
 // A zone is TRACED, never conjured as a square. Click to lay vertices, click the
 // first one again or press Enter to close, Escape to abandon; then drag its vertices
 // to reshape, or a mid-edge handle to add one. That is the old system's canvas
-// (../storylets, StorymapCanvasZoneHandles and its draw-zone tool), whose
+// (../storylets-old, StorymapCanvasZoneHandles and its draw-zone tool), whose
 // conventions were paid for once already.
 //
 // Zones and sites share ONE surface and one selection, with each item saying which
