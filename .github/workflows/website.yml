@@ -1,11 +1,17 @@
 name: Website
 
-# Build the static Astro + Starlight site, as a gate.
+# Build the static Astro + Starlight site, and deploy it to GitHub Pages.
 #
-# Patter's equivalent both builds and DEPLOYS to GitHub Pages. The deploy half is
-# deliberately absent here: this repo is private and the site is not served from
-# it. Adding the `deploy` job is part of the public split rather than a thing to
-# leave switched off in the meantime (see design/public-split.md).
+# One-time setup, already done: Settings > Pages > Source = "GitHub Actions".
+# The custom domain is set in those same settings, NOT by a CNAME file in the
+# build. Checked against Patter 2026-08-30, which serves patterkit.dev with no
+# CNAME file anywhere in its tree: with an Actions build, GitHub keeps the domain
+# in the Pages config, and the <user>.github.io/<repo> URL 301s to it.
+#
+# `base` is "/" because this is an apex-domain site, so the project-page URL
+# (storylet-studio.github.io/storylets/) serves HTML with asset paths that only
+# resolve at the root. That is expected, not a fault: it is correct the moment
+# the custom domain is attached.
 #
 # Unlike Patter's, this also runs on `pull_request`. Patter's file is a DEPLOY
 # and only wants to fire on main; ours is a gate, and a gate that reports after
@@ -21,6 +27,16 @@ on:
   pull_request:
     paths: ["website/**", ".github/workflows/website.yml"]
   workflow_dispatch:
+
+# Least privilege by default; the deploy job asks for what it needs.
+permissions:
+  contents: read
+
+# One deploy at a time, and let an in-progress one finish rather than cancelling
+# a half-published site.
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -42,3 +58,24 @@ jobs:
       # diagram as prose) nor a dead internal link. Both look exactly like a green
       # build, and both shipped. Do not "simplify" this to `astro build`.
       - run: npm run build
+      # Only the main-branch push produces something to publish. A pull request
+      # runs everything above as a gate and stops here: it must not deploy, and
+      # it does not get the token that would let it.
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: website/dist
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
