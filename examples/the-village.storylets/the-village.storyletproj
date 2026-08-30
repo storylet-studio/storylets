@@ -1,0 +1,151 @@
+{
+  schema: "storylets/project@0",
+  project: {
+    id: "proj_007l",
+    name: "The Village",
+    version: "0.1.0",
+  },
+  export: {
+    bundle: "dist/the-village.storyletsc",
+    metadata: "full",
+  },
+  settings: {
+    playAdvancesTurns: 1,
+  },
+  story: {
+    properties: [
+      {
+        default: "act-1",
+        name: "act",
+        type: "string",
+      },
+      {
+        default: [],
+        name: "lore",
+        type: "flags",
+        values: [
+          "old_song_heard",
+          "bard_favour",
+          "village_gossip_spread",
+          "forest_trail_known",
+          "cave_rhythm_noted",
+          "lair_investigated_early",
+          "founding_rumour_heard",
+          "miners_disturbed",
+          "wrongness_seen",
+          "wisher_known",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_blacksmith",
+        type: "flags",
+        values: [
+          "met",
+          "warm_first_impression",
+          "grateful",
+          "angry",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_herbalist",
+        type: "flags",
+        values: [
+          "met",
+          "aided",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_innkeeper",
+        type: "flags",
+        values: [
+          "met",
+          "warm_first_impression",
+          "trusts_player",
+          "reported",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_oracle",
+        type: "flags",
+        values: [
+          "met",
+          "allied",
+          "hostile",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_patrol_ranger",
+        type: "flags",
+        values: [
+          "rescued",
+          "friends",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_ranger_captain",
+        type: "flags",
+        values: [
+          "met",
+          "impressed",
+          "owes_player",
+          "disappointed",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_trader",
+        type: "flags",
+        values: [
+          "met",
+          "allied",
+          "leverage",
+          "exposed",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_village_elder",
+        type: "flags",
+        values: [
+          "met",
+          "has_favour",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_warden",
+        type: "flags",
+        values: [
+          "encountered",
+          "at_peace",
+        ],
+      },
+      {
+        default: [],
+        name: "world_events",
+        type: "flags",
+        values: [
+          "traders_arrived",
+          "miners_saved",
+          "miners_doomed",
+          "tree_bloomed",
+          "door_resolved",
+          "curse_lifted",
+          "legend_forged",
+          "conspiracy_revealed",
+          "oracle_active",
+          "well_vision",
+        ],
+      },
+    ],
+  },
+  world: {
+    properties: [],
+  },
+}

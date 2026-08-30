@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 116" width="848" height="1024">
+  <title>.storyletpack</title>
+  <path d="M14 4 H62 L90 32 V106 a6 6 0 0 1 -6 6 H14 a6 6 0 0 1 -6 -6 V10 a6 6 0 0 1 6 -6 Z" fill="#36284a"></path>
+  <path d="M62 4 V26 a6 6 0 0 0 6 6 H90 Z" fill="#4a3866"></path>
+  <rect x="8" y="60" width="82" height="27" fill="#c8902f"></rect>
+  <rect x="8" y="60" width="82" height="2.5" fill="#e0b463"></rect>
+  <rect x="8" y="84.5" width="82" height="2.5" fill="#a97620"></rect>
+  <circle cx="49" cy="73.5" r="15.5" fill="#f3ede2"></circle>
+  <g transform="translate(49,73.5) scale(0.26) translate(-50,-50)"><g fill="none"><path d="M88 12 C5 12 5 50 50 50 C95 50 95 88 12 88" stroke="#36284a" stroke-width="12" stroke-linecap="round"></path><circle cx="88" cy="12" r="9.5" fill="#c8902f"></circle><circle cx="12" cy="88" r="9.5" fill="#c8902f"></circle><circle cx="50" cy="50" r="9.5" fill="#c8902f"></circle></g></g>
+</svg>

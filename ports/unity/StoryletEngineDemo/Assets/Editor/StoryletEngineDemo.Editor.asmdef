@@ -1,0 +1,20 @@
+{
+    "name": "StoryletEngineDemo.Editor",
+    "rootNamespace": "StoryletStudio.StoryletEngine.Demo.Editor",
+    "references": [
+        "StoryletEngine.Runtime",
+        "StoryletEngine.Runtime.Unity",
+        "StoryletEngineDemo"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

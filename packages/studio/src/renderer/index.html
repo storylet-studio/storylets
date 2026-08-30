@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- `img-src` names storylet-asset: because a map draws a box's own pictures.
+         Only this window and the Board do; the rest keep the tighter default. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: storylet-asset:" />
+    <title>Storyletter</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./src/renderer.ts"></script>
+  </body>
+</html>

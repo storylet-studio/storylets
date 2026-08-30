@@ -1,0 +1,422 @@
+/* The Board window - consumes theme.css tokens only. */
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#table { height: 100%; display: flex; flex-direction: column; }
+
+.overline {
+  font: 600 0.66rem/1 var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+button {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+button:hover { background: var(--accent-soft); color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.primary { background: var(--accent); color: var(--surface); border-color: transparent; font-weight: 500; }
+button.primary:hover { filter: brightness(1.06); transition: filter var(--dur-quick) var(--ease-standard); }
+button.disabled { opacity: 0.45; cursor: default; }
+button.disabled:hover { background: none; color: var(--muted); }
+input, select {
+  font: inherit;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+
+/* The SESSION strip: seed, snapshots, restart. The window's own chrome is the
+   shell's .swin-head above it, so this no longer restates a drag region or
+   reserves 84px for traffic lights on a window that had an OS title bar anyway. */
+.tbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+.tbargap { flex: 1 1 auto; }
+.swin-head .tname { font-family: var(--font-read); font-size: 0.85rem; color: var(--muted); }
+/* The pin is the shared .swin-pin (app-shell tool-window.css). */
+.tbar .seed { font-size: 0.78rem; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.tbar .seedin { width: 68px; font-family: var(--font-mono); font-size: 0.78rem; }
+
+.tbody { flex: 1; display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
+.tmain { padding: 20px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+
+/* --- map mode (graphical-views 2, slice 6b) -----------------------------------
+   Two columns, not three. The map takes the big one because a map needs both
+   dimensions - stacked, it would be a letterbox (1080x350 at this window's
+   default, 720x200 at its minimum) and a letterbox is the worst possible shape
+   for a floor plan. The side column carries what is HERE above what has
+   HAPPENED: the selected pin's cards, then the journal. Wider than in list
+   mode, because a card face and the play panel both live in it now. */
+.mapbody { grid-template-columns: 1fr 380px; }
+.mapmain { overflow: hidden; }
+.boardmap {
+  flex: 1; min-height: 220px;
+  border: 1px solid var(--line-soft); border-radius: var(--radius-md);
+  background: var(--bg);
+}
+/* The stage: what is HERE floats bottom-centre over the view, where the eye
+   already is. Born on the map (the wrap is the positioning context for the
+   picked site's cards or the open card's play panel); List view adopted the
+   same grammar after the antagonist review found a panel at the bottom of a
+   scrolled column reads as "clicking a card does nothing"
+   (design/board-legibility.md piece 1). */
+.mapstage-wrap { flex: 1; min-height: 220px; position: relative; display: flex; }
+.mapstage-wrap .boardmap { flex: 1; }
+.stagefloat {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  z-index: 4; max-width: min(640px, calc(100% - 24px));
+  /* Never taller than the view it floats over: the panel scrolls inside
+     itself rather than running off the edge. */
+  max-height: calc(100% - 24px);
+  display: flex; justify-content: center; align-items: flex-end;
+}
+.stagefloat .hcell {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-2);
+  max-width: 100%;
+}
+.stagefloat .hcards { overflow-x: auto; }
+.stagefloat .playpanel { max-height: 100%; overflow-y: auto; }
+/* List view's frame: the main column stops scrolling itself so the stage can
+   float over the viewport; the inner scroller carries the old padding. */
+.listmain { position: relative; overflow: hidden; padding: 0; display: flex; flex-direction: column; }
+.tscroll {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 20px 24px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.tside { display: flex; flex-direction: column; min-height: 0; }
+.tside .rail { flex: 1; min-height: 0; }
+.tside .hcell { border: none; border-radius: 0; }
+.sidehint { padding: 14px 16px; }
+
+/* Follow: off is the resting state, so it looks like the quiet button it is
+   until somebody turns it on. */
+.followbtn { flex: none; font-size: 0.78rem; }
+.followbtn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+/* Live Link (design/live-link.md). The "A game is connected. Watch it?" banner,
+   the same weight as the out-of-date bar, offering the switch. */
+.livebanner {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--ok); border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--ok) 12%, transparent);
+  color: var(--ink); font: 0.85rem var(--font-ui);
+}
+.livebanner-msg { flex: 1; }
+.livebanner-go {
+  flex: none; font: inherit; padding: 4px 12px;
+  border: 1px solid var(--accent); border-radius: var(--radius-sm);
+  background: var(--accent); color: var(--surface); cursor: pointer;
+}
+.livebanner-go:hover { background: color-mix(in oklab, var(--accent) 85%, var(--ink)); }
+.livebanner-no { flex: none; border: none; background: none; color: var(--muted); padding: 2px 6px; }
+/* The observe-only note in the session strip, where seed usually sits. */
+.livenote { font-size: 0.78rem; color: var(--muted); font-style: italic; }
+
+/* The view switch: quiet, and it sits with the filters because "how am I
+   looking at this" belongs beside "what am I looking at". */
+.viewswitch { display: inline-flex; gap: 2px; }
+.viewswitch.livemode { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 1px; }
+/* Which participant is being watched: a plain control beside the switch, and
+   only when a run has more than one flow to choose between. */
+.viewswitch .liveflow { max-width: 12ch; border: 0; background: transparent; color: inherit; font: inherit; }
+.vbtn { padding: 3px 10px; font-size: 0.78rem; }
+.vbtn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.maphere { display: inline-flex; align-items: baseline; gap: 6px; }
+.maphere-of { font: 600 0.66rem/1 var(--font-ui); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.maphere-name { font-family: var(--font-mono); font-size: 0.8rem; }
+
+.runner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.qselect { font-family: var(--font-mono); font-size: 0.85rem; }
+.runner .arg, .filters .arg { width: 150px; font-family: var(--font-mono); font-size: 0.8rem; }
+.empty { color: var(--muted); font-style: italic; font-size: 0.82rem; }
+
+/* --- the turn dial + filter bar ---------------------------------------------- */
+.boardbar { display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
+.dial { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dialnum {
+  font-family: var(--font-read);
+  font-size: 1.9rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--ink); border: 0; padding: 0 4px; line-height: 1;
+}
+/* Clocks forward (board-legibility.md piece 4): every box's clock, always
+   visible, each with its own +1; Next turn stays the one primary action. */
+.clocksdial { flex-direction: column; align-items: stretch; gap: 6px; }
+.clockshead { display: flex; align-items: center; gap: 12px; }
+.clocks { display: flex; flex-direction: column; gap: 2px; padding-left: 2px; }
+.clockrow { display: inline-flex; align-items: center; gap: 8px; font-size: 0.78rem; }
+.clockbox { font-family: var(--font-mono); color: var(--muted); min-width: 90px; }
+.clockval { font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
+.mini { font-size: 0.72rem; padding: 1px 8px; border-radius: var(--radius-pill); }
+.filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+
+/* --- the board: hands as places ----------------------------------------------- */
+.board { display: flex; flex-direction: column; gap: 12px; }
+.hcell {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  padding: 10px 14px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.hhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.hname { font-family: var(--font-read); font-weight: 600; font-size: 0.95rem; }
+.htags { display: inline-flex; gap: 6px; }
+.hcards { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+.hcard {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  padding: 10px 14px;
+  width: 176px; min-height: 58px;
+  text-align: left;
+  color: var(--ink);
+}
+.hcard h4 { font-family: var(--font-read); font-size: 0.92rem; font-weight: 600; margin: 0; }
+.hcard.on { border-color: var(--accent); outline: 1px solid var(--accent); }
+.hcard.seen h4 { color: var(--muted); }
+.hcard { position: relative; }
+.hcard .runmark { position: absolute; top: 8px; right: 8px; }
+
+/* --- the running position (run-marks.ts, Patterpad's step marker) -------------
+   Where this run has been, and nothing more: it reports, it never asks. One dot,
+   two strengths - the accent for the hand the last play came from, muted for
+   everywhere the run has already been. A soft wash on the live hand, the same
+   grammar Patterpad uses on the current line. */
+.runmark {
+  flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: color-mix(in oklab, var(--ink) 30%, transparent);
+}
+.runmark.now {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+.hcell.here {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line-soft));
+  background: color-mix(in oklab, var(--accent) 5%, var(--surface));
+}
+
+/* --- the play panel: read, choose, continue ----------------------------------- */
+.playpanel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  padding: 16px 20px;
+  display: flex; flex-direction: column; gap: 10px;
+  max-width: 560px;
+}
+.pp-head { display: flex; align-items: baseline; gap: 10px; }
+.pp-head h3 { font-family: var(--font-read); font-size: 1.1rem; margin: 0; flex: 1; }
+.pp-hand { font-size: 0.74rem; color: var(--muted); font-family: var(--font-mono); }
+.pp-close { border: 0; font-size: 1rem; padding: 0 6px; }
+.playpanel .beat { font-family: var(--font-read); font-size: 0.9rem; line-height: 1.45; margin: 0; }
+.pp-outcome { border-top: 1px solid var(--line-soft); padding-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+.pp-otitle { font-family: var(--font-read); font-weight: 600; margin: 0; }
+.pp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Choosing an outcome: one full-width button per option, so the choices line
+   up as a column the eye can compare instead of a ragged centre-stack (the
+   author's call, 2026-08-25). The confirm step (Back / Continue) keeps the
+   compact row: two verbs, not a list of options. */
+.playpanel > .pp-actions:last-child:not(:has(.primary)) { flex-direction: column; align-items: stretch; }
+.playpanel > .pp-actions:last-child:not(:has(.primary)) > button { width: 100%; text-align: left; padding: 8px 12px; }
+
+/* --- snapshots ------------------------------------------------------------------ */
+.snappanel {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md); padding: 8px 12px;
+}
+.snapname { width: 220px; }
+.snaprow { display: inline-flex; align-items: center; gap: 4px; }
+.snappick { font-size: 0.8rem; }
+.snapdel { border: 0; color: var(--danger); padding: 0 4px; }
+
+/* The out-of-date banner is the shell's now (app-shell/stale.css). */
+
+/* not-dealt panel: cards the query considered but did not deal, with why */
+.notdealt { display: flex; flex-direction: column; gap: 4px; }
+.ndrow { display: flex; align-items: baseline; gap: 10px; font-size: 0.8rem; }
+.ndname { font-family: var(--font-read); color: var(--muted); min-width: 140px; }
+.ndreason { font-family: var(--font-mono); font-size: 0.74rem; color: var(--muted); }
+
+/* --- behind the curtain (the diagnostic fold) --------------------------------- */
+.curtain { margin-top: auto; border-top: 1px solid var(--line-soft); padding-top: 10px; }
+.curtain > summary {
+  cursor: pointer; color: var(--muted); font-size: 0.78rem;
+  list-style: none; user-select: none;
+}
+.curtain > summary::before { content: "▸ "; }
+.curtain[open] > summary::before { content: "▾ "; }
+.curtain > *:not(summary) { margin-top: 12px; }
+.peeked { display: flex; flex-direction: column; gap: 4px; }
+
+.statestrip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.sr { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; color: var(--muted); }
+.srlabel { font-family: var(--font-mono); font-size: 0.72rem; }
+.srval { width: 58px; font-family: var(--font-mono); font-size: 0.76rem; padding: 2px 6px; }
+.srval.ro { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface); }
+/* A quality's ladder: the rungs in order, current one marked. Joined pills so
+   the row reads as one ladder rather than a list of buttons. */
+.srladder { display: inline-flex; }
+.srrung {
+  font-family: var(--font-mono); font-size: 0.72rem; padding: 2px 7px;
+  border: 1px solid var(--line-soft); background: var(--surface);
+  color: var(--muted); cursor: pointer;
+}
+.srrung + .srrung { border-left: none; }
+.srrung:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.srrung:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.srrung.on { background: var(--accent-soft, var(--line-soft)); color: var(--ink); font-weight: 600; }
+.srrung:hover:not(.on) { color: var(--ink); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.7rem; border: 1px solid var(--line); border-radius: var(--radius-pill);
+  padding: 2px 9px; color: var(--muted);
+}
+.chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--muted); }
+
+/* --- the rail: Journal and State as tabs (board-legibility.md piece 2) -------- */
+.rail {
+  display: flex; flex-direction: column; min-height: 0;
+  border-left: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+.railtabs {
+  display: flex; align-items: center; gap: 2px;
+  padding: 10px 12px 8px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.railtab {
+  border: 0; padding: 3px 9px; cursor: pointer;
+  font: 600 0.66rem/1 var(--font-ui); text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); background: none; border-radius: var(--radius-pill);
+}
+.railtab.on { color: var(--ink); background: var(--accent-soft); }
+.railgap { flex: 1; }
+
+/* --- the journal: the story of the session ------------------------------------- */
+.journal {
+  flex: 1; min-height: 0;
+  padding: 12px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.76rem;
+}
+
+/* --- the State tab: the raw state and the stock peek --------------------------- */
+.statepanel {
+  flex: 1; min-height: 0;
+  padding: 12px 16px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px;
+  font-size: 0.8rem;
+}
+.statepanel .runner { border-top: 1px solid var(--line-soft); padding-top: 12px; }
+/* Peek results: stamped, and greyed the moment the session moves past them. */
+.peekresults { display: flex; flex-direction: column; gap: 10px; }
+.peeknote { display: flex; flex-direction: column; gap: 2px; }
+.peekresults.stale .peeked, .peekresults.stale .notdealt { opacity: 0.45; }
+/* Filter chips: which kinds of beat the journal tells. Muted = hidden.
+   Pinned in the rail under the tabs, not scrolling with the story. */
+.jfilters { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 16px 8px 14px; border-bottom: 1px solid var(--line-soft); }
+.jflt {
+  font-size: 0.66rem; font-weight: 600; padding: 1px 8px;
+  border: 1px solid var(--line-soft); border-radius: var(--radius-pill);
+  background: transparent; color: var(--muted); opacity: 0.55; cursor: pointer;
+  transition: opacity var(--dur-quick) var(--ease-standard), border-color var(--dur-quick) var(--ease-standard);
+}
+.jflt.on { opacity: 1; border-color: var(--line); color: var(--ink); }
+.jrow { display: flex; align-items: baseline; gap: 8px; line-height: 1.45; }
+.jt { font-family: var(--font-mono); font-size: 0.66rem; color: var(--muted); min-width: 26px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Box-qualified stamps ("contracts 4") need a wider, still-aligned column. */
+.journal.stamped .jt { min-width: 72px; max-width: 72px; overflow: hidden; text-overflow: ellipsis; }
+.jk { font-weight: 600; font-size: 0.68rem; min-width: 44px; }
+.jp { flex: 1; overflow-wrap: anywhere; color: var(--ink); }
+.j-deal .jk { color: var(--ok); }
+.j-play .jk { color: var(--accent); }
+.j-write .jk { color: var(--warn); }
+.j-write .jp { font-family: var(--font-mono); font-size: 0.7rem; }
+.j-evict .jk, .j-evict .jp { color: var(--muted); }
+.j-turn .jk { color: var(--muted); }
+.j-warn .jk, .j-warn .jp { color: var(--danger); }
+
+.runerr { color: var(--danger); font-size: 0.82rem; }
+.loaderr { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; }
+.loaderr h2 { font-family: var(--font-read); margin: 0; }
+.loaderr pre { font-family: var(--font-mono); font-size: 0.8rem; color: var(--danger); white-space: pre-wrap; max-width: 60ch; text-align: left; }
+
+/* --- the ripple (design/board-ripple.md) ------------------------------------
+   Consequences indent under their play in the journal; changed hands pulse
+   once; a multi-box list gets box section headers with a quiet changed badge.
+   The pulse respects reduced motion (it is attention direction, not data). */
+.jrow.j-ripple { padding-left: 26px; }
+.jrow.j-ripple .jk { color: var(--accent); font-style: italic; }
+/* A play's writes, indented into its causal group (board-legibility.md 3). */
+.jrow.j-in { padding-left: 26px; }
+/* The author's own poke, on the record: wrote's colour, meddled's honesty. */
+.j-meddle .jk { color: var(--warn); font-style: italic; }
+.j-meddle .jp { font-family: var(--font-mono); font-size: 0.7rem; }
+.boardbox-head { display: flex; align-items: baseline; gap: 8px; margin: 10px 2px 2px; }
+.boardbox-head:first-child { margin-top: 0; }
+.bbname { font-family: var(--font-read); font-weight: 600; font-size: 0.92rem; color: var(--ink); }
+.bbadge { font-size: 0.72rem; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px; }
+.hcell.rippled { animation: ripple-pulse 1.1s ease-out 2; }
+@keyframes ripple-pulse {
+  0% { box-shadow: 0 0 0 0 var(--accent-soft); }
+  55% { box-shadow: 0 0 0 6px var(--accent-soft); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hcell.rippled { animation: none; outline: 2px solid var(--accent-soft); }
+}
+
+/* --- the box navigator (design/board-ripple.md section 4) -------------------
+   The editor navigator's grammar on the Board: every box visible as a thing,
+   whatever the main area shows. Name, held-count right-aligned, the ripple's
+   changed-badge between them. */
+.tbody { grid-template-columns: 172px 1fr 320px; }
+.tbody.nonav { grid-template-columns: 1fr 320px; }
+.bnav { display: flex; flex-direction: column; gap: 1px; padding: 14px 8px; border-right: 1px solid var(--line-soft); background: var(--surface); overflow-y: auto; }
+.bnav-row { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; font: inherit; font-size: 0.85rem; color: var(--ink); background: none; border: 0; border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer; }
+.bnav-row:hover { background: var(--accent-soft); }
+.bnav-row.sel { background: var(--accent-soft); font-weight: 600; }
+.bnav-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bnav-n { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }

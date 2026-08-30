@@ -1,0 +1,21 @@
+{
+  schema: "storylets/box@0",
+  box: {
+    fields: [
+      {
+        default: "",
+        name: "body",
+        type: "string",
+      },
+    ],
+    gameId: "codex",
+    id: "b_codex",
+    order: 3,
+    properties: [],
+    purpose: "The box the game only reads: entries unlock, accumulate, and are never played. Priority is the listing order.",
+    ranking: {
+      specificity: false,
+    },
+    title: "Codex",
+  },
+}

@@ -1,0 +1,21 @@
+{
+  schema: "storylets/box@0",
+  box: {
+    fields: [
+      {
+        default: 0,
+        name: "value",
+        type: "number",
+      },
+    ],
+    gameId: "items",
+    id: "b_items",
+    order: 2,
+    properties: [],
+    purpose: "What exploring turns up. The value field is data FOR the game - its economy pays out, not ours.",
+    ranking: {
+      specificity: true,
+    },
+    title: "Items",
+  },
+}

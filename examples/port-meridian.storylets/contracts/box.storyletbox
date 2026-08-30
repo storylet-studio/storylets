@@ -1,0 +1,15 @@
+{
+  schema: "storylets/box@0",
+  box: {
+    fields: [],
+    gameId: "contracts",
+    id: "b_contracts",
+    order: 0,
+    properties: [],
+    purpose: "Jobs offered at boards and fixers: the player chooses to take one.",
+    ranking: {
+      specificity: true,
+    },
+    title: "Contracts",
+  },
+}

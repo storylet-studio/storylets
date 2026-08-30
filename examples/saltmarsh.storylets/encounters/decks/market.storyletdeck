@@ -1,0 +1,52 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "@story.reputation > -5",
+    gameId: "market",
+    id: "k_market",
+    properties: [],
+    purpose: "Colour and cutpurses.",
+    title: "Market",
+  },
+  cards: [
+    {
+      fields: {
+        "patter-scene": "scn_pickpocket",
+      },
+      gameId: "pickpocket",
+      id: "c_pickpocket",
+      outcomes: [
+        {
+          changes: {
+            "@story.reputation": "@story.reputation + 1",
+          },
+          gameId: "caught",
+          id: "o_catch",
+          title: "Catch them at it",
+        },
+      ],
+      tags: {
+        d_zone: [
+          "v_market",
+        ],
+      },
+      title: "A light-fingered stranger",
+    },
+    {
+      fields: {
+        "patter-scene": "scn_stranger",
+      },
+      gameId: "mysterious-stranger",
+      id: "c_stranger",
+      outcomes: [
+        {
+          gameId: "listened",
+          id: "o_listen",
+        },
+      ],
+      purpose: "Wildcard: appears anywhere, once.",
+      redraw: "never",
+      title: "The mysterious stranger",
+    },
+  ],
+}

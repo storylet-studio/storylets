@@ -1,0 +1,72 @@
+/* The Links window: a frameless tool whose body is a canvas. Tokens from
+   theme.css only; the drag bar, pin and close are the shared .swin-* chrome
+   (app-shell tool-window.css, arriving via theme.css), and the canvas and its
+   Open chip are the node view's own rules (.nodestage, card-open.css), so the
+   two canvases cannot drift apart in styling. */
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  -webkit-user-select: none;
+  user-select: none;
+  border: 1px solid var(--line-soft);
+}
+#links { height: 100%; display: flex; flex-direction: column; }
+
+button {
+  font: inherit; color: var(--muted); background: none;
+  border: 0; border-radius: var(--radius-sm); cursor: pointer;
+}
+button:hover { color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* In the bar: the follow control, and the quiet statement of the same fact when
+   there is nothing to do about it. */
+.swin-follow {
+  font-size: 0.72rem; padding: 2px 9px;
+  border: 1px solid var(--line);
+}
+.swin-follow:hover { border-color: var(--accent); }
+.swin-note { font-size: 0.72rem; color: var(--muted); }
+
+.lbody { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 10px 12px 0; }
+.lbody .hint { color: var(--muted); font-size: 0.85rem; max-width: 48ch; line-height: 1.5; margin: 6px 2px; }
+
+/* The canvas fills the body. .nodestage brings the border, the radius and the
+   positioning the Open chip is placed against. */
+.lbody .nodestage { flex: 1; min-height: 0; }
+
+/* Under the canvas: what the selected link is, and why it exists. A FIXED height
+   that scrolls inside, never a growing one: a panel that grew with its content
+   would resize the canvas underneath a gesture, which is how the node view lost
+   about one drag in four before it was found. Deep enough for a lead line and
+   three reasons, which covers all but the busiest links. */
+.lstrip {
+  flex: none; height: 88px; overflow-y: auto; overscroll-behavior: contain;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* The lead: which two cards, and what one does to the other. The payload, so it
+   is the one thing here in reading ink. */
+.lstrip .lead {
+  margin: 0 0 4px; font-size: 0.82rem; color: var(--ink); line-height: 1.35;
+}
+.lstrip .lead.quiet { color: var(--muted); }
+/* A second link on the same card (a mutual pair) starts a new statement. */
+.lstrip .reason + .lead { margin-top: 8px; }
+
+/* One reason per row: the property in the mono voice values use everywhere in
+   this app, the words about it quiet, a caveat quieter still. */
+.lstrip .reason { margin: 0 0 2px; font-size: 0.76rem; line-height: 1.45; }
+.lstrip .reason code { font-family: var(--font-mono); font-size: 0.95em; color: var(--ink); }
+.lstrip .reason .detail { color: var(--muted); }
+.lstrip .reason .rnote { color: var(--muted); font-style: italic; }
+
+/* The analyser's standing caveats, in the empty state only. */
+.lstrip .caveat { margin: 2px 0 0; font-size: 0.74rem; color: var(--muted); line-height: 1.4; }

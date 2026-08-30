@@ -1,0 +1,15 @@
+{
+  schema: "storylets/box@0",
+  box: {
+    fields: [],
+    gameId: "news",
+    id: "b_news",
+    order: 4,
+    properties: [],
+    purpose: "The city talking about what you did. Never played: headlines leave the way an offer is withdrawn - the game clears the wire and re-deals, and stale conditions evict.",
+    ranking: {
+      specificity: false,
+    },
+    title: "News",
+  },
+}

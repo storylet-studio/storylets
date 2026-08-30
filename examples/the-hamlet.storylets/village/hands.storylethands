@@ -1,0 +1,50 @@
+{
+  schema: "storylets/hands@0",
+  hands: [
+    {
+      chosen: {
+        d_zone: "v_village",
+      },
+      gameId: "the-forge",
+      id: "h_forge",
+      order: 1,
+      slots: 2,
+      template: "t_whats_happening",
+      title: "The Forge",
+    },
+    {
+      chosen: {
+        d_zone: "v_village",
+      },
+      gameId: "the-inn",
+      id: "h_inn",
+      order: 0,
+      slots: 2,
+      template: "t_whats_happening",
+      title: "The Inn",
+    },
+    {
+      chosen: {
+        d_zone: "v_forest",
+      },
+      gameId: "the-mystic-tree",
+      id: "h_tree",
+      order: 2,
+      slots: 1,
+      template: "t_whats_happening",
+      title: "The Mystic Tree",
+    },
+  ],
+  templates: [
+    {
+      chooses: [
+        "d_zone",
+      ],
+      gameId: "whats-happening",
+      id: "t_whats_happening",
+      properties: [],
+      purpose: "The main lens: which story beat happens at a place now. One hand per place.",
+      slots: 3,
+    },
+  ],
+}

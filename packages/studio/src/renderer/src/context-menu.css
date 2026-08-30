@@ -1,0 +1,38 @@
+/* The right-click menu and the anchored popover, styled BESIDE the module that
+   builds them (context-menu.ts imports this file) rather than in shell.css.
+
+   Why it moved, 2026-08-05: these rules lived in the main window's stylesheet,
+   so a tool window that imported the module got the behaviour and none of the
+   look. In the Links window that meant a right-click appended an unstyled
+   static div: no menu appeared, and the page grew a scrollbar instead. A shared
+   module has to carry its own appearance, exactly as card-open.ts does with the
+   Open chip. Tokens only, so both palettes come out right wherever it lands. */
+
+.ctxmenu {
+  position: fixed; z-index: 300; min-width: 160px; padding: 4px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-3); display: flex; flex-direction: column; gap: 1px;
+  animation: panel-in var(--dur-quick) var(--ease-standard);
+}
+/* The reset is spelled out here, not inherited from a host stylesheet's `button`
+   rule, for the same reason this file exists. */
+.ctxmenu-item {
+  text-align: left; width: 100%; padding: 6px 10px;
+  font: inherit; font-size: 0.85rem; color: var(--ink);
+  background: none; border: 0; border-radius: var(--radius-sm); cursor: pointer;
+}
+.ctxmenu-item:hover { background: var(--accent-soft); color: var(--accent); }
+/* Greyed and inert, and it must not light up on hover like a live item. */
+.ctxmenu-item:disabled { color: var(--muted); opacity: 0.55; cursor: default; }
+.ctxmenu-item:disabled:hover { background: none; color: var(--muted); }
+.ctxmenu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ctxmenu-item.danger { color: var(--danger); }
+.ctxmenu-item.danger:hover { background: var(--danger); color: var(--surface); }
+
+/* An anchored panel: the same floating shell as the menu, hosting content. */
+.popover {
+  position: fixed; z-index: 300; padding: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-3);
+  animation: panel-in var(--dur-quick) var(--ease-standard);
+}

@@ -1,0 +1,102 @@
+name: CLI release
+
+# Standalone `storyletengine` CLI executables (one per platform, no Node),
+# attached to a GitHub Release. Its own tag flow (not Changesets, which
+# handles the npm packages): tagging `cli-vX.Y.Z` builds the binaries via
+# Bun --compile and uploads them as release assets. The macOS binaries are
+# Developer-ID signed on the macOS runner; Linux + Windows cross-compile on
+# Linux (Windows ships unsigned by policy). One Bun could cross-compile
+# everything from a single runner, but only macOS can sign macOS, so the
+# build is split in two. (Patter's cli.yml, carried whole.)
+on:
+  push:
+    tags: ["cli-v*"]
+
+permissions:
+  contents: write   # create / upload to the release for this tag
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout storylets
+        uses: actions/checkout@v5
+        with:
+          path: storylets
+      - name: Checkout @wildwinter/expr (the CLI bundle inlines its source)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/expr
+          path: expr
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: storylets/package-lock.json
+      - uses: oven-sh/setup-bun@v2
+      - run: npm ci
+        working-directory: storylets
+      - name: Import Developer ID certificate
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}             # base64 .p12
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          if [ -z "$CSC_LINK" ]; then echo "no CSC_LINK secret - binaries will be ad-hoc signed"; exit 0; fi
+          echo "$CSC_LINK" | base64 --decode > /tmp/cert.p12
+          security create-keychain -p actions /tmp/build.keychain
+          security default-keychain -s /tmp/build.keychain
+          security unlock-keychain -p actions /tmp/build.keychain
+          security import /tmp/cert.p12 -k /tmp/build.keychain -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k actions /tmp/build.keychain
+          rm /tmp/cert.p12
+      - name: Build + sign the macOS binaries
+        working-directory: storylets
+        run: npm run -w @storylet-studio/cli build:standalone:mac
+      - id: ver
+        run: echo "version=${GITHUB_REF_NAME#cli-v}" >> "$GITHUB_OUTPUT"
+      - name: Upload to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: false
+          name: storyletengine CLI ${{ steps.ver.outputs.version }}
+          body: |
+            The standalone `storyletengine` command-line tool - one
+            self-contained executable per platform, no Node or npm required.
+            Scaffold, validate, format, compile and test-draw storylets
+            projects from scripts and CI.
+
+            macOS binaries are Developer ID signed. Windows ships unsigned by
+            policy (SmartScreen: "More info" then "Run anyway").
+          files: storylets/packages/cli/dist/storyletengine-macos-*
+
+  others:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout storylets
+        uses: actions/checkout@v5
+        with:
+          path: storylets
+      - name: Checkout @wildwinter/expr (the CLI bundle inlines its source)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/expr
+          path: expr
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: storylets/package-lock.json
+      - uses: oven-sh/setup-bun@v2
+      - run: npm ci
+        working-directory: storylets
+      - name: Cross-compile the Linux + Windows binaries
+        working-directory: storylets
+        run: npm run -w @storylet-studio/cli build:standalone:others
+      - name: Upload to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: false
+          files: |
+            storylets/packages/cli/dist/storyletengine-linux-x64
+            storylets/packages/cli/dist/storyletengine-linux-arm64
+            storylets/packages/cli/dist/storyletengine-windows-x64.exe

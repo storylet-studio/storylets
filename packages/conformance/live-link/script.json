@@ -1,0 +1,56 @@
+{
+  "schema": "storylets/live-link-fixture@1",
+  "bundle": "packages/play-helpers/demo/the-hamlet.storyletsc",
+  "build": "0no8e6g",
+  "project": "The Hamlet",
+  "seed": 7,
+  "steps": [
+    {
+      "op": "attach"
+    },
+    {
+      "op": "open"
+    },
+    {
+      "op": "dealMany"
+    },
+    {
+      "op": "play",
+      "card": "arrive-at-the-gate",
+      "outcome": "step-through",
+      "hand": "the-inn"
+    },
+    {
+      "op": "play",
+      "card": "known-at-the-forge",
+      "outcome": "admire-the-work",
+      "hand": "the-forge"
+    },
+    {
+      "op": "advanceTurns",
+      "box": "village",
+      "n": 1
+    },
+    {
+      "op": "openFlow",
+      "flow": "bob"
+    },
+    {
+      "op": "dealMany",
+      "flow": "bob"
+    },
+    {
+      "op": "advanceTurns",
+      "flow": "bob",
+      "box": "village",
+      "n": 1
+    },
+    {
+      "op": "closeFlow",
+      "flow": "bob"
+    },
+    {
+      "op": "dealMany"
+    }
+  ]
+}

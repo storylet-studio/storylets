@@ -1,0 +1,19 @@
+{
+  schema: "storylets/view@0",
+  map: {
+    sites: {
+      h_back_room: {
+        x: 620,
+        y: 90,
+      },
+      h_container_7: {
+        x: 350,
+        y: 300,
+      },
+      h_service_duct: {
+        x: 1350,
+        y: 280,
+      },
+    },
+  },
+}

@@ -1,0 +1,98 @@
+{
+  schema: "storylets/tags@0",
+  groups: [
+    {
+      gameId: "district",
+      id: "d_itm_district",
+      purpose: "Which district of Port Meridian this belongs to.",
+      tags: [
+        {
+          gameId: "docks",
+          id: "v_itm_docks",
+          order: 0,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: 0,
+                  y: 0,
+                },
+                {
+                  x: 480,
+                  y: 0,
+                },
+                {
+                  x: 480,
+                  y: 360,
+                },
+                {
+                  x: 0,
+                  y: 360,
+                },
+              ],
+            },
+          },
+        },
+        {
+          gameId: "oldgrid",
+          id: "v_itm_oldgrid",
+          order: 2,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: 1000,
+                  y: 0,
+                },
+                {
+                  x: 1480,
+                  y: 0,
+                },
+                {
+                  x: 1480,
+                  y: 360,
+                },
+                {
+                  x: 1000,
+                  y: 360,
+                },
+              ],
+            },
+          },
+        },
+        {
+          gameId: "strip",
+          id: "v_itm_strip",
+          order: 1,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: 500,
+                  y: 0,
+                },
+                {
+                  x: 980,
+                  y: 0,
+                },
+                {
+                  x: 980,
+                  y: 360,
+                },
+                {
+                  x: 500,
+                  y: 360,
+                },
+              ],
+            },
+          },
+        },
+      ],
+      templates: {
+        spatial: {
+          map: true,
+        },
+      },
+    },
+  ],
+}

@@ -1,0 +1,38 @@
+{
+  "name": "@storylet-studio/ops",
+  "version": "0.0.0",
+  "description": "Pure-function operations layer shared by the CLI, the editor and CI: init, new box, export, validate, format, ask (peek / deal), merge, coverage. Returns planned writes; callers commit them through the VC layer.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ian Thomas",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "gen-player-blob": "node scripts/gen-player-blob.mjs",
+    "prebuild": "node scripts/gen-player-blob.mjs",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean"
+  },
+  "dependencies": {
+    "@storylet-studio/compiler": "0.0.0",
+    "@storylet-studio/model": "0.0.0",
+    "@storylet-studio/runtime": "0.0.0",
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.1"
+  }
+}

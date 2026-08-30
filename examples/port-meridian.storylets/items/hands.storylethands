@@ -1,0 +1,50 @@
+{
+  schema: "storylets/hands@0",
+  hands: [
+    {
+      chosen: {
+        d_itm_district: "v_itm_strip",
+      },
+      gameId: "back-room",
+      id: "h_back_room",
+      order: 1,
+      slots: 1,
+      template: "t_stash",
+      title: "The Back Room",
+    },
+    {
+      chosen: {
+        d_itm_district: "v_itm_docks",
+      },
+      gameId: "container-7",
+      id: "h_container_7",
+      order: 0,
+      slots: 1,
+      template: "t_stash",
+      title: "Container 7",
+    },
+    {
+      chosen: {
+        d_itm_district: "v_itm_oldgrid",
+      },
+      gameId: "service-duct",
+      id: "h_service_duct",
+      order: 2,
+      slots: 1,
+      template: "t_stash",
+      title: "Service Duct",
+    },
+  ],
+  templates: [
+    {
+      chooses: [
+        "d_itm_district",
+      ],
+      gameId: "stash",
+      id: "t_stash",
+      properties: [],
+      purpose: "A hiding place the level marks: what's tucked away there, if anything.",
+      slots: 1,
+    },
+  ],
+}

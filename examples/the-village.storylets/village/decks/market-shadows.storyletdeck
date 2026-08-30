@@ -1,0 +1,245 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "@story.act == \"act-2\"",
+    gameId: "market-shadows",
+    id: "k_005o",
+    order: 8,
+    properties: [
+      {
+        default: false,
+        name: "additional_evidence",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "cargo_seen",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "connected",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "contraband_detail",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "torin_offer_seen",
+        type: "boolean",
+      },
+    ],
+    title: "Market in the Shadows",
+  },
+  cards: [
+    {
+      condition: "@deck.connected",
+      gameId: "blackmail-torin",
+      id: "c_0059",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_trader": "set_flags(@story.rel_trader, +leverage)",
+          },
+          gameId: "name-price",
+          id: "o_0058",
+          order: 0,
+          purpose: "Torin pays it. Both parties understand the nature of their arrangement.",
+          title: "Name your price",
+        },
+      ],
+      priority: 1,
+      purpose: "Player uses their knowledge of the operation to extract something from Torin. Key to establish: Torin is not helpless - he will manage this. But the player has leverage and is using it. The relationship becomes one of mutual exposure.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000c",
+        ],
+      },
+      title: "Blackmail Torin",
+    },
+    {
+      condition: "@deck.torin_offer_seen && @deck.cargo_seen",
+      gameId: "connect-the-evidence",
+      id: "c_005c",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@deck.connected": "true",
+          },
+          gameId: "confront-torin",
+          id: "o_005a",
+          order: 0,
+          purpose: "Torin's expression shifts. He decides to deal with it directly rather than run.",
+          title: "Confront Torin with what you have found",
+        },
+        {
+          changes: {
+            "@deck.additional_evidence": "true",
+            "@deck.connected": "true",
+          },
+          gameId: "more-evidence",
+          id: "o_005b",
+          order: 1,
+          purpose: "Player wants to be certain before moving. They gather additional evidence and have a more complete case.",
+          title: "Look for more evidence before acting",
+        },
+      ],
+      priority: 1,
+      purpose: "Player has seen both Torin's offer and the unusual cargo. They are putting it together. Key to establish: the connection is clear once both pieces are present. The player's choice here is about what they do with the knowledge.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000c",
+        ],
+      },
+      title: "Connect Torin's Offer to the Inn's Hidden Cargo",
+    },
+    {
+      condition: "@deck.connected",
+      gameId: "expose-the-conspiracy",
+      id: "c_005f",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_village_elder": "set_flags(@story.rel_village_elder, +has_favour)",
+            "@story.world_events": "set_flags(@story.world_events, +conspiracy_revealed, +traders_arrived)",
+          },
+          gameId: "go-to-bryna",
+          id: "o_005d",
+          order: 0,
+          purpose: "Bryna receives the information with controlled reaction and moves immediately.",
+          title: "Take the evidence to Bryna",
+        },
+        {
+          changes: {
+            "@story.world_events": "set_flags(@story.world_events, +conspiracy_revealed, +traders_arrived)",
+          },
+          gameId: "tell-gareth",
+          id: "o_005e",
+          order: 1,
+          purpose: "Gareth helps figure out next steps. Exposure happens through the village's informal networks.",
+          title: "Tell Gareth first",
+        },
+      ],
+      priority: 1,
+      purpose: "Player takes action to expose Torin's smuggling. Key to establish: Torin's operation has implications beyond the village - who receives the cargo, what it is, why it moves through here. Exposing it is a significant act. Who the player tells first determines the resolution tone.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000c",
+          "h_000g",
+        ],
+      },
+      title: "Expose the Conspiracy",
+    },
+    {
+      gameId: "investigate-the-unusual-cargo-at-the-inn",
+      id: "c_005i",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@deck.cargo_seen": "true",
+          },
+          gameId: "ask-mira-directly",
+          id: "o_005g",
+          order: 0,
+          purpose: "Mira is brief and guarded. She says it is in transit, not her business what is in it. Player notes the evasion.",
+          title: "Ask Mira about the unusual cargo directly",
+        },
+        {
+          changes: {
+            "@deck.cargo_seen": "true",
+            "@deck.contraband_detail": "true",
+          },
+          gameId: "examine-crates",
+          id: "o_005h",
+          order: 1,
+          purpose: "Player gets physical evidence - markings, contents, weight, smell. Something specific about what is being moved.",
+          title: "Examine the crates when Mira is not looking",
+        },
+      ],
+      priority: 1,
+      purpose: "There is cargo at the inn that does not match Mira's usual trade. It has been there longer than it should be. Key to establish: the cargo is connected to Torin's smuggling operation. Mira may or may not know what is in it. Three approaches, each yielding different evidence.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000g",
+        ],
+      },
+      title: "Investigate the Unusual Cargo at the Inn",
+    },
+    {
+      condition: "@deck.connected",
+      gameId: "join-the-smugglers",
+      id: "c_005l",
+      order: 4,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +lair_investigated_early)",
+            "@story.rel_trader": "set_flags(@story.rel_trader, +allied)",
+          },
+          gameId: "ask-cargo-from",
+          id: "o_005j",
+          order: 0,
+          purpose: "Torin hesitates, then answers. The answer includes a lead on the lair - where the cargo originates.",
+          title: "Ask Torin where the cargo comes from",
+        },
+        {
+          changes: {
+            "@story.rel_trader": "set_flags(@story.rel_trader, +allied)",
+          },
+          gameId: "set-terms",
+          id: "o_005k",
+          order: 1,
+          purpose: "Player specifies what they will and will not do. Torin accepts. Alliance based on agreed limits.",
+          title: "Set your own terms before agreeing",
+        },
+      ],
+      priority: 1,
+      purpose: "Player joins Torin's operation rather than exposing it. Key to establish: this is a legitimate choice. Torin's operation has its own internal logic. The player becomes part of it. What terms they set determines the nature of their position.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000c",
+        ],
+      },
+      title: "Join the Smugglers",
+    },
+    {
+      gameId: "take-a-look-at-torins-offer",
+      id: "c_005n",
+      order: 5,
+      outcomes: [
+        {
+          changes: {
+            "@deck.torin_offer_seen": "true",
+            "@story.rel_trader": "set_flags(@story.rel_trader, +met)",
+          },
+          gameId: "accept-cautiously",
+          id: "o_005m",
+          order: 0,
+          purpose: "Torin gives just enough detail to seem legitimate - destination, timing, pay. He does not say what is being moved. Player is now in Torin's network.",
+          title: "Accept cautiously and ask what the job involves",
+        },
+      ],
+      priority: 1,
+      purpose: "Torin, a trader, is at the market with a job offer that does not quite add up. He is looking for someone to move something with no questions asked. Key to establish: Torin is friendly, professional, and being very careful. The offer is suspicious precisely because it is presented as routine. This is the meet-Torin card and the opening of the smuggling arc.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000c",
+        ],
+      },
+      title: "Take a Look at Torin's Offer",
+    },
+  ],
+}

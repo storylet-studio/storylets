@@ -1,0 +1,272 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "(@story.act == \"act-2\") && (check_flags(@story.rel_blacksmith, +grateful))",
+    gameId: "forging-legend",
+    id: "k_003k",
+    order: 4,
+    properties: [
+      {
+        default: false,
+        name: "forge_shared",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "iron_gathered",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "shards_gathered",
+        type: "boolean",
+      },
+      {
+        default: "unheard",
+        name: "legend",
+        stages: [
+          "unheard",
+          "planned",
+          "forged",
+        ],
+        type: "quality",
+      },
+    ],
+    title: "Forging a Legend",
+  },
+  cards: [
+    {
+      condition: "@deck.legend == \"forged\"",
+      gameId: "arm-the-village-watch",
+      id: "c_0034",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_village_elder": "set_flags(@story.rel_village_elder, +has_favour)",
+            "@story.world_events": "set_flags(@story.world_events, +legend_forged)",
+          },
+          gameId: "ask-who-needs",
+          id: "o_0032",
+          order: 0,
+          purpose: "Bryna is consulted. The item goes to the most defensively critical role.",
+          title: "Ask who in the village needs it most",
+        },
+        {
+          changes: {
+            "@story.rel_village_elder": "set_flags(@story.rel_village_elder, +has_favour)",
+            "@story.world_events": "set_flags(@story.world_events, +legend_forged)",
+          },
+          gameId: "give-to-bryna",
+          id: "o_0033",
+          order: 1,
+          purpose: "Bryna receives it. She understands the significance.",
+          title: "Give the weapon directly to Bryna",
+        },
+      ],
+      priority: 1,
+      purpose: "The item is finished. Player gives it to the village's defence rather than keeping it. Key to establish: this is a public act of generosity. The item goes to protect the village and Bryna is involved.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000k",
+        ],
+      },
+      title: "Arm the Village Watch",
+    },
+    {
+      condition: "@deck.legend == \"planned\" && check_flags(@story.world_events, +oracle_active)",
+      gameId: "gather-crystal-shards",
+      id: "c_0036",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@deck.shards_gathered": "true",
+          },
+          gameId: "ask-miners",
+          id: "o_0035",
+          order: 0,
+          purpose: "Miners point to surface shards that can be collected safely. Oracle observes but does not object.",
+          title: "Ask the miners where shards can be collected",
+        },
+      ],
+      priority: 1,
+      purpose: "Player goes to the Crystal Grotto to collect shards for the forge. The Oracle is present and aware. Key to establish: the shards can be gathered, but the Oracle notices. Whether the Oracle endorses or simply observes depends on how the player approaches this.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000e",
+        ],
+      },
+      title: "Gather Crystal Shards",
+    },
+    {
+      condition: "@deck.legend == \"planned\"",
+      gameId: "gather-mountain-iron",
+      id: "c_0038",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@deck.iron_gathered": "true",
+          },
+          gameId: "ask-sven",
+          id: "o_0037",
+          order: 0,
+          purpose: "Sven grants it.",
+          title: "Ask Sven for access to the iron deposit",
+        },
+      ],
+      priority: 1,
+      purpose: "Player goes to the Mountain Camp to secure the iron Gareth needs. Key to establish: the iron is available but requires request, purchase, or trade. Three approaches to obtaining it.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000h",
+        ],
+      },
+      title: "Gather Mountain Iron",
+    },
+    {
+      condition: "@deck.legend == \"unheard\" && check_flags(@story.rel_blacksmith, +grateful)",
+      gameId: "hear-gareths-ambitious-idea",
+      id: "c_003b",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@deck.legend": "advance(@deck.legend)",
+          },
+          gameId: "hear-out-eagerly",
+          id: "o_0039",
+          order: 0,
+          purpose: "Gareth is energised. He lays out the full plan. Player is engaged as an active collaborator.",
+          title: "Hear Gareth out eagerly and ask what he needs",
+        },
+        {
+          changes: {
+            "@deck.legend": "advance(@deck.legend)",
+            "@story.rel_blacksmith": "set_flags(@story.rel_blacksmith, +grateful)",
+          },
+          gameId: "tell-him-start",
+          id: "o_003a",
+          order: 1,
+          purpose: "Gareth looks at the player. He was not expecting that. He thanks them in his way. Gareth's confidence in the project increases.",
+          title: "Tell Gareth to just start and trust himself",
+        },
+      ],
+      priority: 1,
+      purpose: "Gareth, now free of the debt, has a plan: a forged weapon using mountain iron and crystal shards. He has never attempted it before. Key to establish: this idea has been building in Gareth for some time. Getting clear of the debt gave him room to imagine it. The player's response sets the tone for the forge collaboration.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000k",
+        ],
+      },
+      title: "Hear Gareth's Ambitious Idea",
+    },
+    {
+      condition: "@deck.legend == \"forged\" && check_flags(@story.world_events, +traders_arrived)",
+      gameId: "sell-the-legend",
+      id: "c_003d",
+      order: 4,
+      outcomes: [
+        {
+          changes: {
+            "@story.world_events": "set_flags(@story.world_events, +legend_forged)",
+          },
+          gameId: "name-price",
+          id: "o_003c",
+          order: 0,
+          purpose: "Player controls the transaction. The price is fair to Gareth's work.",
+          title: "Name the price yourself",
+        },
+      ],
+      priority: 1,
+      purpose: "Traders are in the village and the item is worth significantly more on the open market. Player sells it. Key to establish: this is a legitimate choice. The item's value can be realised. How the sale is arranged determines who benefits.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000k",
+        ],
+      },
+      title: "Sell the Legend",
+    },
+    {
+      condition: "@deck.legend == \"planned\" && @deck.iron_gathered && @deck.shards_gathered",
+      gameId: "stay-for-the-forge-to-burn-all-night",
+      id: "c_003h",
+      order: 5,
+      outcomes: [
+        {
+          changes: {
+            "@deck.forge_shared": "true",
+            "@deck.legend": "advance(@deck.legend)",
+          },
+          gameId: "bring-food-drink",
+          id: "o_003e",
+          order: 0,
+          purpose: "Player sustains Gareth through the night with practical support. Gareth, grateful and tired, shares something from his past that he would not normally say. The Oracle notes this collaboration.",
+          title: "Bring food and drink for the long night",
+        },
+        {
+          changes: {
+            "@deck.legend": "advance(@deck.legend)",
+          },
+          gameId: "come-back-morning",
+          id: "o_003f",
+          order: 1,
+          purpose: "Gareth has been there the whole time when the player returns. The item is finished.",
+          title: "Leave and come back in the morning",
+        },
+        {
+          changes: {
+            "@deck.legend": "advance(@deck.legend)",
+          },
+          gameId: "stay-help-bellows",
+          id: "o_003g",
+          order: 2,
+          purpose: "Player works through the night alongside Gareth. Exhausted by morning, but present for the whole thing.",
+          title: "Stay and help with the bellows",
+        },
+      ],
+      priority: 1,
+      purpose: "The forge night has come. Gareth is forging the legendary item and it will take all night. Key to establish: this is a long, patient scene. The forge is running hot and Gareth is focused. The player's role here is presence - they can contribute, wait, or leave and return.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000k",
+        ],
+      },
+      title: "Stay For the Forge to Burn All Night",
+    },
+    {
+      condition: "@deck.legend == \"forged\"",
+      gameId: "a-weapon-for-you",
+      id: "c_003j",
+      order: 6,
+      outcomes: [
+        {
+          changes: {
+            "@story.world_events": "set_flags(@story.world_events, +legend_forged)",
+          },
+          gameId: "accept-gratitude",
+          id: "o_003i",
+          order: 0,
+          purpose: "Simple and direct. Item passes hands.",
+          title: "Accept the weapon with gratitude",
+        },
+      ],
+      priority: 1,
+      purpose: "The item is finished. Gareth offers it to the player. Key to establish: this is a significant object and how the player receives it is a character beat. Three ways to accept.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000k",
+        ],
+      },
+      title: "Take the Forged Weapon for Yourself",
+    },
+  ],
+}

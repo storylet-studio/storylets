@@ -1,0 +1,50 @@
+{
+  schema: "storylets/hands@0",
+  hands: [
+    {
+      chosen: {
+        d_news_district: "v_news_docks",
+      },
+      gameId: "dock-screen",
+      id: "h_dock_screen",
+      order: 0,
+      slots: 2,
+      template: "t_screen",
+      title: "Dock Screen",
+    },
+    {
+      chosen: {
+        d_news_district: "v_news_oldgrid",
+      },
+      gameId: "grid-screen",
+      id: "h_grid_screen",
+      order: 2,
+      slots: 2,
+      template: "t_screen",
+      title: "Grid Screen",
+    },
+    {
+      chosen: {
+        d_news_district: "v_news_strip",
+      },
+      gameId: "strip-screen",
+      id: "h_strip_screen",
+      order: 1,
+      slots: 2,
+      template: "t_screen",
+      title: "Strip Screen",
+    },
+  ],
+  templates: [
+    {
+      chooses: [
+        "d_news_district",
+      ],
+      gameId: "screen",
+      id: "t_screen",
+      properties: [],
+      purpose: "A public screen: shows its top-priority story, keeps the ambient strip underneath.",
+      slots: 2,
+    },
+  ],
+}

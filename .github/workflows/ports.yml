@@ -1,0 +1,127 @@
+# The engine ports, built and run.
+#
+# There was no CI for any of them until 2026-08-29, though
+# BoardDemoSmokeTest.cs said "it is what CI runs". The pre-release audit found
+# three port bugs that a compiler would have caught in seconds: the Unity demo
+# passed a flow where Attach takes an engine (three CS1503 errors, so the demo
+# scene could not enter Play mode), and Godot's StoryletStateLogger referenced
+# six methods a refactor had deleted, so the class had not compiled - or
+# existed - for weeks. Nothing was watching, by construction.
+#
+# What runs here needs no licence and no game engine:
+#   - Godot really is Godot, headless, running the whole addon suite.
+#   - Unity's runtime is pure C#, so the dotnet TestHost compiles the same
+#     files the asmdefs ship and replays the corpus and the Live Link fixture.
+#   - Unreal's core is std-only C++, so clang compiles it with no UE at all.
+#
+# The gap, stated rather than hidden: this does NOT compile the Unity demo
+# scripts or the UE-dependent plugin modules, because both need the editor.
+#
+# A LICENCE IS NOT WHAT MAKES THAT HARD - an installed, activated Unity compiles
+# from the command line, and `scripts/check-unity-demo.sh` does exactly that in
+# one step. What a GitHub-HOSTED runner lacks is Unity itself, and installing it
+# there is what needs credentials. So there are two ways to close this, and
+# neither is blocked on anything:
+#   - run `./scripts/check-unity-demo.sh` before a release (no secret, no CI);
+#   - or point a SELF-HOSTED runner at a machine that has Unity, where the same
+#     script runs as a step with nothing else needed.
+# The `unity-demo` job below is the third way, for a hosted runner, and skips
+# itself unless a UNITY_LICENSE secret exists.
+name: Ports
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  GODOT_VERSION: "4.7"
+
+jobs:
+  godot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Fetch Godot ${{ env.GODOT_VERSION }} (headless)
+        run: |
+          base="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          curl -fsSL -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/${base}.zip"
+          unzip -q godot.zip
+          chmod +x "$base"
+          echo "GODOT=$PWD/$base" >> "$GITHUB_ENV"
+      # Once, so class_name registrations exist before any script runs.
+      - name: Import the project
+        run: |
+          "$GODOT" --headless --path ports/godot --import
+      # Each prints its own PASS/FAIL lines and exits non-zero on failure, so
+      # they are separate steps: the log says which one went, not just that one did.
+      - name: Conformance corpus
+        run: |
+          "$GODOT" --headless --path ports/godot --script res://test/test_corpus.gd
+      - name: Smoke (deal, play, save round trip)
+        run: |
+          "$GODOT" --headless --path ports/godot --script res://test/test_smoke.gd
+      - name: Editor bundle view
+        run: |
+          "$GODOT" --headless --path ports/godot --script res://test/test_editor_view.gd
+      - name: Runtime State panel
+        run: |
+          "$GODOT" --headless --path ports/godot --script res://test/test_state_panel.gd
+      - name: Live Link fixture
+        run: |
+          "$GODOT" --headless --path ports/godot --script res://test/test_live_link.gd
+      - name: State logger
+        run: |
+          "$GODOT" --headless --path ports/godot --script res://test/test_state_logger.gd
+
+  unity-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      # Compiles the same Runtime/**/*.cs the Unity asmdefs ship, then replays
+      # the corpus, the Live Link fixture (byte for byte) and the live refresh.
+      - name: C# runtime against the corpus and the fixtures
+        run: dotnet run --project ports/unity/TestHost
+
+  unreal-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # build.sh compiles the std-only core with clang and runs it against the
+      # committed corpus.json. No Unreal involved.
+      - name: std C++ core against the corpus
+        run: ./ports/unreal/TestHost/build.sh
+
+  # The demo scripts, which is where the bug that motivated this file lived.
+  #
+  # Opt-in, because a GitHub-hosted runner has no Unity and installing one needs
+  # credentials: set UNITY_LICENSE (and UNITY_EMAIL / UNITY_PASSWORD) and this
+  # starts running. Without them it skips rather than failing red for a reason
+  # nobody can fix from a pull request.
+  #
+  # On a machine that HAS Unity, none of this applies: run
+  # `./scripts/check-unity-demo.sh`, which is the same compile in one step.
+  unity-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - id: gate
+        run: echo "licensed=${{ secrets.UNITY_LICENSE != '' }}" >> "$GITHUB_OUTPUT"
+      - name: No Unity licence configured
+        if: steps.gate.outputs.licensed != 'true'
+        run: |
+          echo "::notice::Skipped. The Unity demo scripts are not compiled without a"
+          echo "::notice::UNITY_LICENSE secret, so a break there reaches a human by hand."
+      - uses: game-ci/unity-test-runner@v4
+        if: steps.gate.outputs.licensed == 'true'
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: ports/unity/StoryletEngineDemo
+          testMode: EditMode

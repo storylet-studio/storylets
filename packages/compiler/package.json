@@ -1,0 +1,35 @@
+{
+  "name": "@storylet-studio/compiler",
+  "version": "0.0.0",
+  "description": "Storylet Engine compiler: .storylets shards in, validated .storyletsc bundle out. Canonical serialisation, publish-gate validation, the hash32 staleness gate.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ian Thomas",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean"
+  },
+  "dependencies": {
+    "@storylet-studio/dialect": "0.0.0",
+    "@storylet-studio/model": "0.0.0",
+    "@wildwinter/expr": "^0.4.0",
+    "json5": "^2.2.3"
+  }
+}

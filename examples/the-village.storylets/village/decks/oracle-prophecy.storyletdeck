@@ -1,0 +1,106 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "@story.act == \"act-2\"",
+    gameId: "oracle-prophecy",
+    id: "k_006b",
+    order: 10,
+    properties: [
+      {
+        default: "unheard",
+        name: "prophecy",
+        stages: [
+          "unheard",
+          "first",
+          "second",
+          "final",
+        ],
+        type: "quality",
+      },
+    ],
+    title: "The Oracle's Prophecy",
+  },
+  cards: [
+    {
+      condition: "@deck.prophecy == \"unheard\" && check_flags(@story.world_events, +oracle_active)",
+      gameId: "ask-the-oracle-what-it-has-seen",
+      id: "c_0066",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@deck.prophecy": "advance(@deck.prophecy)",
+          },
+          gameId: "ask-explain-further",
+          id: "o_0065",
+          order: 0,
+          purpose: "Oracle elaborates. Player gets additional context about the Door's history.",
+          title: "Ask the Oracle to explain further",
+        },
+      ],
+      priority: 1,
+      purpose: "Player is at the Crystal Grotto. The Oracle is ready to share its first prophecy - about the Door and the Accord. Key to establish: this prophecy is specific, not vague. The Oracle has watched the village's history and knows what is coming. Production must make the content clear: the Door will be decided, and the Accord that sealed it may be relevant. Player's response is about how they receive prophecy.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000e",
+        ],
+      },
+      title: "Ask the Oracle What It Has Seen",
+    },
+    {
+      condition: "@deck.prophecy == \"second\" && check_flags(@story.world_events, +door_resolved)",
+      gameId: "hear-the-oracles-final-vision",
+      id: "c_0068",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@deck.prophecy": "advance(@deck.prophecy)",
+          },
+          gameId: "accept-reading",
+          id: "o_0067",
+          order: 0,
+          purpose: "Player receives the Oracle's account of what they have done. Scene ends with acknowledgement.",
+          title: "Accept the Oracle's reading of your journey",
+        },
+      ],
+      priority: 1,
+      purpose: "The Door arc is resolved. The Oracle delivers its final prophecy - a synthesis of the player's entire journey. Key to establish: this is the final scene with the Oracle and must reference the player's actual choices and consequences. Production must be prepared to personalise this scene significantly based on arc outcomes. The player's response to the final vision is the scene's emotional resolution.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000e",
+        ],
+      },
+      title: "Hear the Oracle's Final Vision",
+    },
+    {
+      condition: "@deck.prophecy == \"first\" && (check_flags(@story.world_events, +miners_saved) || check_flags(@story.world_events, +tree_bloomed) || check_flags(@story.world_events, +conspiracy_revealed) || check_flags(@story.world_events, +curse_lifted))",
+      gameId: "return-to-the-oracle-after-progress",
+      id: "c_006a",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@deck.prophecy": "advance(@deck.prophecy)",
+          },
+          gameId: "accept-framing",
+          id: "o_0069",
+          order: 0,
+          purpose: "Player takes the Oracle's interpretation. It adds context to what they have experienced.",
+          title: "Accept the Oracle's framing of the past",
+        },
+      ],
+      priority: 1,
+      purpose: "Player returns after making significant progress in at least one major arc. The Oracle has observed all of it. Key to establish: this prophecy concerns Mira's bloodline and its connection to what the Oracle has seen. The Oracle's framing of events may differ from the player's experience - it has the long view. Production should be ready for the Oracle to reference specific arc outcomes.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000e",
+        ],
+      },
+      title: "Return to the Oracle After Progress",
+    },
+  ],
+}

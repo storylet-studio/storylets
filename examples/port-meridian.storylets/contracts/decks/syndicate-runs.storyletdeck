@@ -1,0 +1,152 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    gameId: "syndicate-runs",
+    id: "k_syndicate",
+    properties: [],
+    purpose: "The Ashfall Syndicate's ladder of work: each rung earned by the last. A contract is two cards - the offer at a board, the resolution at the destination - joined by a jobs flag.",
+    title: "Syndicate Runs",
+  },
+  cards: [
+    {
+      condition: "!check_flags(@jobs, +cold_done)",
+      gameId: "cold-delivery",
+      id: "c_cold_delivery",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@story.jobs": "set_flags(@jobs, +cold_taken)",
+            "@story.rel_syndicate": "set_flags(@rel_syndicate, +met)",
+          },
+          gameId: "take-the-job",
+          id: "c_cold_delivery_take_the_job",
+          order: 0,
+          title: "Take the job",
+        },
+      ],
+      priority: 1,
+      purpose: "A sealed cold-crate, no manifest, dockside to the Palace. The Syndicate's first test of a new courier.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_dockside_board",
+        ],
+      },
+      title: "Cold Delivery",
+    },
+    {
+      condition: "check_flags(@jobs, +cold_taken) && !check_flags(@jobs, +cold_done)",
+      gameId: "cold-delivery-handoff",
+      id: "c_cold_handoff",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@story.jobs": "set_flags(@jobs, +cold_done)",
+            "@story.rel_syndicate": "set_flags(@rel_syndicate, +delivered)",
+          },
+          gameId: "delivered-clean",
+          id: "c_cold_handoff_delivered_clean",
+          order: 0,
+          title: "Delivered clean",
+        },
+        {
+          changes: {
+            "@story.heat": "advance(@heat)",
+            "@story.jobs": "set_flags(@jobs, +cold_done, +cold_loud)",
+            "@story.rel_syndicate": "set_flags(@rel_syndicate, +delivered)",
+            "@story.wire": "set_flags(@wire, +container_robbery)",
+          },
+          gameId: "it-went-loud",
+          id: "c_cold_handoff_it_went_loud",
+          order: 1,
+          title: "It went loud",
+        },
+        {
+          changes: {
+            "@story.heat": "advance(@heat)",
+            "@story.jobs": "set_flags(@jobs, +cold_done)",
+          },
+          gameId: "the-window-closed",
+          id: "c_cold_handoff_the_window_closed",
+          order: 2,
+          title: "The window closed",
+        },
+      ],
+      priority: 2,
+      purpose: "The fixer at the Neon Palace takes delivery. How it arrives is the game's story; what it means is ours.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_palace_fixer",
+        ],
+      },
+      title: "Cold Delivery: Handoff",
+    },
+    {
+      condition: "check_flags(@jobs, +noq_taken) && !check_flags(@jobs, +noq_done)",
+      gameId: "no-questions-dead-drop",
+      id: "c_noq_drop",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@story.jobs": "set_flags(@jobs, +noq_done)",
+            "@story.rel_syndicate": "set_flags(@rel_syndicate, +trusted)",
+          },
+          gameId: "drop-made",
+          id: "c_noq_drop_drop_made",
+          order: 0,
+          title: "Drop made",
+        },
+        {
+          changes: {
+            "@story.heat": "advance(@heat)",
+            "@story.jobs": "set_flags(@jobs, +noq_done)",
+            "@story.rel_syndicate": "set_flags(@rel_syndicate, +trusted)",
+          },
+          gameId: "watched-the-whole-way",
+          id: "c_noq_drop_watched_the_whole_way",
+          order: 1,
+          title: "Watched the whole way",
+        },
+      ],
+      priority: 3,
+      purpose: "Leave it in the dockside locker and walk away. Nobody says thank you; the Syndicate remembers anyway.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_dockside_board",
+        ],
+      },
+      title: "No Questions: Dead Drop",
+    },
+    {
+      condition: "check_flags(@rel_syndicate, +delivered)",
+      gameId: "no-questions-run",
+      id: "c_noq_run",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@story.jobs": "set_flags(@jobs, +noq_taken)",
+          },
+          gameId: "take-it",
+          id: "c_noq_run_take_it",
+          order: 0,
+          title: "Take it, no questions",
+        },
+      ],
+      priority: 2,
+      purpose: "A heavier crate and a thinner story. The fixer only offers it to couriers who have delivered before.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_palace_fixer",
+        ],
+      },
+      title: "No Questions Run",
+    },
+  ],
+}

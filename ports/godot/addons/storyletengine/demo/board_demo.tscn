@@ -1,0 +1,72 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://addons/storyletengine/demo/board_demo.gd" id="1_board"]
+[ext_resource type="Script" path="res://addons/storyletengine/ui/storylet_state_panel.gd" id="2_panel"]
+
+[node name="BoardDemo" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_board")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 16.0
+offset_right = -424.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="Header" type="Label" parent="Layout"]
+layout_mode = 2
+text = "Storylet Engine · The Board"
+
+[node name="BoardScroll" type="ScrollContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Board" type="VBoxContainer" parent="Layout/BoardScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="Controls" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="DealAllHands" type="Button" parent="Layout/Controls"]
+layout_mode = 2
+text = "Deal all hands"
+
+[node name="NextTurn" type="Button" parent="Layout/Controls"]
+layout_mode = 2
+text = "Next turn"
+
+[node name="Restart" type="Button" parent="Layout/Controls"]
+layout_mode = 2
+text = "Restart"
+
+[node name="TranscriptScroll" type="ScrollContainer" parent="Layout"]
+custom_minimum_size = Vector2(0, 180)
+layout_mode = 2
+
+[node name="Transcript" type="VBoxContainer" parent="Layout/TranscriptScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StoryletStatePanel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -400.0
+script = ExtResource("2_panel")

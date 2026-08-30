@@ -1,0 +1,19 @@
+{
+  schema: "storylets/view@0",
+  map: {
+    sites: {
+      h_dock_screen: {
+        x: 100,
+        y: 60,
+      },
+      h_grid_screen: {
+        x: 1100,
+        y: 200,
+      },
+      h_strip_screen: {
+        x: 700,
+        y: 300,
+      },
+    },
+  },
+}

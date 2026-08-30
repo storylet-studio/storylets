@@ -1,0 +1,33 @@
+.DS_Store
+node_modules/
+dist/
+*.tsbuildinfo
+dist-electron/
+
+# Local Claude Code launch config (session-specific paths)
+.claude/launch.json
+
+# dotnet TestHost build output (ports)
+ports/**/bin/
+ports/**/obj/
+ports/godot/.godot/
+
+# Unity demo project: everything Unity regenerates on first open
+ports/unity/**/[Ll]ibrary/
+ports/unity/**/[Tt]emp/
+ports/unity/**/[Oo]bj/
+ports/unity/**/[Bb]uild/
+ports/unity/**/[Ll]ogs/
+ports/unity/**/UserSettings/
+ports/unity/**/.vsconfig
+ports/unity/StoryletEngineDemo/*.csproj
+ports/unity/StoryletEngineDemo/*.sln
+ports/unity/StoryletEngineDemo/*.slnx
+
+# Local, uncommitted test assets for the labs (real floor plans, big images).
+packages/studio/dev/local/
+
+# Packaging output and the generated icon set (rebuilt by the dist scripts).
+packages/studio/dist/
+packages/studio/build/*.icns
+packages/studio/build/*.ico

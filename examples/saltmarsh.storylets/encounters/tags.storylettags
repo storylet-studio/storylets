@@ -1,0 +1,27 @@
+{
+  schema: "storylets/tags@0",
+  groups: [
+    {
+      gameId: "area",
+      id: "d_zone",
+      purpose: "Where in the town.",
+      tags: [
+        {
+          gameId: "docks",
+          id: "v_docks",
+          properties: [
+            {
+              default: 0,
+              name: "danger",
+              type: "number",
+            },
+          ],
+        },
+        {
+          gameId: "market",
+          id: "v_market",
+        },
+      ],
+    },
+  ],
+}

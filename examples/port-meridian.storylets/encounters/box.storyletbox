@@ -1,0 +1,15 @@
+{
+  schema: "storylets/box@0",
+  box: {
+    fields: [],
+    gameId: "encounters",
+    id: "b_encounters",
+    order: 1,
+    properties: [],
+    purpose: "What the street does to you: the game asks what the challenge is, here, now, and springs it.",
+    ranking: {
+      specificity: true,
+    },
+    title: "Encounters",
+  },
+}

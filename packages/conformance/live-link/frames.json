@@ -1,0 +1,952 @@
+[
+  {
+    "t": "hello",
+    "v": 2,
+    "build": "0no8e6g",
+    "flows": [
+      "main"
+    ],
+    "project": "The Hamlet",
+    "boxes": [
+      "village"
+    ]
+  },
+  {
+    "t": "board",
+    "flow": "main",
+    "hands": {
+      "the-forge": [],
+      "the-inn": [],
+      "the-mystic-tree": []
+    },
+    "turns": {
+      "village": 0
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "main",
+    "event": {
+      "type": "deal",
+      "hand": "the-inn",
+      "cards": [
+        {
+          "id": "c_amb_forest",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_forge",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_night",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_bryna",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_forge_first",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_men",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_gareth_thanks",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_troubled",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_mira_distracted",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_mira_letter",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_forest_peril",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_bloom",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_night",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_arrive",
+          "verdict": "dealt",
+          "priority": 10,
+          "specificity": 1
+        },
+        {
+          "id": "c_inn_first",
+          "verdict": "dealt",
+          "priority": 3,
+          "specificity": 1
+        },
+        {
+          "id": "c_amb_market",
+          "verdict": "capped",
+          "priority": 0,
+          "specificity": 0
+        }
+      ]
+    }
+  },
+  {
+    "t": "board",
+    "flow": "main",
+    "hands": {
+      "the-forge": [],
+      "the-inn": [
+        "arrive-at-the-gate",
+        "settle-at-the-inn"
+      ],
+      "the-mystic-tree": []
+    },
+    "turns": {
+      "village": 0
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "main",
+    "event": {
+      "type": "deal",
+      "hand": "the-mystic-tree",
+      "cards": [
+        {
+          "id": "c_amb_forge",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_market",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_night",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_arrive",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_bryna",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_forge_first",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_inn_first",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_men",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_thanks",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_troubled",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_mira_distracted",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_mira_letter",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_forest_peril",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_tree_bloom",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_tree_night",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_amb_forest",
+          "verdict": "dealt",
+          "priority": 0,
+          "specificity": 0
+        }
+      ]
+    }
+  },
+  {
+    "t": "board",
+    "flow": "main",
+    "hands": {
+      "the-forge": [],
+      "the-inn": [
+        "arrive-at-the-gate",
+        "settle-at-the-inn"
+      ],
+      "the-mystic-tree": [
+        "wind-in-the-leaves"
+      ]
+    },
+    "turns": {
+      "village": 0
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "main",
+    "event": {
+      "type": "deal",
+      "hand": "the-forge",
+      "cards": [
+        {
+          "id": "c_amb_forest",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_night",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_arrive",
+          "verdict": "claimed"
+        },
+        {
+          "id": "c_bryna",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_inn_first",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_men",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_gareth_thanks",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_gareth_troubled",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_mira_distracted",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_mira_letter",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_forest_peril",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_bloom",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_night",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_forge_first",
+          "verdict": "dealt",
+          "priority": 3,
+          "specificity": 1
+        },
+        {
+          "id": "c_amb_forge",
+          "verdict": "dealt",
+          "priority": 0,
+          "specificity": 0
+        },
+        {
+          "id": "c_amb_market",
+          "verdict": "capped",
+          "priority": 0,
+          "specificity": 0
+        }
+      ]
+    }
+  },
+  {
+    "t": "board",
+    "flow": "main",
+    "hands": {
+      "the-forge": [
+        "known-at-the-forge",
+        "ring-of-the-anvil"
+      ],
+      "the-inn": [
+        "arrive-at-the-gate",
+        "settle-at-the-inn"
+      ],
+      "the-mystic-tree": [
+        "wind-in-the-leaves"
+      ]
+    },
+    "turns": {
+      "village": 0
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "main",
+    "event": {
+      "type": "write",
+      "target": "@story.act",
+      "path": "story.act",
+      "value": "act-1",
+      "prev": "arrival"
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "main",
+    "event": {
+      "type": "play",
+      "card": "c_arrive",
+      "outcome": "step-through",
+      "turn": 1
+    }
+  },
+  {
+    "t": "board",
+    "flow": "main",
+    "hands": {
+      "the-forge": [
+        "known-at-the-forge",
+        "ring-of-the-anvil"
+      ],
+      "the-inn": [
+        "settle-at-the-inn"
+      ],
+      "the-mystic-tree": [
+        "wind-in-the-leaves"
+      ]
+    },
+    "turns": {
+      "village": 1
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "main",
+    "event": {
+      "type": "write",
+      "target": "@story.rel_blacksmith",
+      "path": "story.rel_blacksmith",
+      "value": [
+        "met",
+        "warm"
+      ],
+      "prev": []
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "main",
+    "event": {
+      "type": "play",
+      "card": "c_forge_first",
+      "outcome": "admire-the-work",
+      "turn": 2
+    }
+  },
+  {
+    "t": "board",
+    "flow": "main",
+    "hands": {
+      "the-forge": [
+        "ring-of-the-anvil"
+      ],
+      "the-inn": [
+        "settle-at-the-inn"
+      ],
+      "the-mystic-tree": [
+        "wind-in-the-leaves"
+      ]
+    },
+    "turns": {
+      "village": 2
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "main",
+    "event": {
+      "type": "turns",
+      "box": "village",
+      "turn": 3
+    }
+  },
+  {
+    "t": "board",
+    "flow": "main",
+    "hands": {
+      "the-forge": [
+        "ring-of-the-anvil"
+      ],
+      "the-inn": [
+        "settle-at-the-inn"
+      ],
+      "the-mystic-tree": [
+        "wind-in-the-leaves"
+      ]
+    },
+    "turns": {
+      "village": 3
+    }
+  },
+  {
+    "t": "flowOpen",
+    "flow": "bob"
+  },
+  {
+    "t": "board",
+    "flow": "bob",
+    "hands": {
+      "the-forge": [],
+      "the-inn": [
+        "settle-at-the-inn",
+        "market-bustle"
+      ],
+      "the-mystic-tree": []
+    },
+    "turns": {
+      "village": 0
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "bob",
+    "event": {
+      "type": "deal",
+      "hand": "the-inn",
+      "cards": [
+        {
+          "id": "c_amb_forest",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_forge",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_night",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_arrive",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_bryna",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_forge_first",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_men",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_gareth_thanks",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_troubled",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_mira_distracted",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_mira_letter",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_forest_peril",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_bloom",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_night",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_inn_first",
+          "verdict": "dealt",
+          "priority": 3,
+          "specificity": 1
+        },
+        {
+          "id": "c_amb_market",
+          "verdict": "dealt",
+          "priority": 0,
+          "specificity": 0
+        }
+      ]
+    }
+  },
+  {
+    "t": "board",
+    "flow": "bob",
+    "hands": {
+      "the-forge": [],
+      "the-inn": [
+        "settle-at-the-inn",
+        "market-bustle"
+      ],
+      "the-mystic-tree": []
+    },
+    "turns": {
+      "village": 0
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "bob",
+    "event": {
+      "type": "deal",
+      "hand": "the-mystic-tree",
+      "cards": [
+        {
+          "id": "c_amb_forge",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_market",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_night",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_arrive",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_bryna",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_forge_first",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_inn_first",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_men",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_thanks",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_troubled",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_mira_distracted",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_mira_letter",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_forest_peril",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_tree_bloom",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_tree_night",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_amb_forest",
+          "verdict": "dealt",
+          "priority": 0,
+          "specificity": 0
+        }
+      ]
+    }
+  },
+  {
+    "t": "board",
+    "flow": "bob",
+    "hands": {
+      "the-forge": [],
+      "the-inn": [
+        "settle-at-the-inn",
+        "market-bustle"
+      ],
+      "the-mystic-tree": [
+        "wind-in-the-leaves"
+      ]
+    },
+    "turns": {
+      "village": 0
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "bob",
+    "event": {
+      "type": "deal",
+      "hand": "the-forge",
+      "cards": [
+        {
+          "id": "c_amb_forest",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_market",
+          "verdict": "claimed"
+        },
+        {
+          "id": "c_amb_night",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_arrive",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_bryna",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_forge_first",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_inn_first",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_men",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_gareth_thanks",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_mira_distracted",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_mira_letter",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_forest_peril",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_bloom",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_night",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_troubled",
+          "verdict": "dealt",
+          "priority": 4,
+          "specificity": 3
+        },
+        {
+          "id": "c_amb_forge",
+          "verdict": "dealt",
+          "priority": 0,
+          "specificity": 0
+        }
+      ]
+    }
+  },
+  {
+    "t": "board",
+    "flow": "bob",
+    "hands": {
+      "the-forge": [
+        "gareth-looks-troubled",
+        "ring-of-the-anvil"
+      ],
+      "the-inn": [
+        "settle-at-the-inn",
+        "market-bustle"
+      ],
+      "the-mystic-tree": [
+        "wind-in-the-leaves"
+      ]
+    },
+    "turns": {
+      "village": 0
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "bob",
+    "event": {
+      "type": "turns",
+      "box": "village",
+      "turn": 1
+    }
+  },
+  {
+    "t": "board",
+    "flow": "bob",
+    "hands": {
+      "the-forge": [
+        "gareth-looks-troubled",
+        "ring-of-the-anvil"
+      ],
+      "the-inn": [
+        "settle-at-the-inn",
+        "market-bustle"
+      ],
+      "the-mystic-tree": [
+        "wind-in-the-leaves"
+      ]
+    },
+    "turns": {
+      "village": 1
+    }
+  },
+  {
+    "t": "flowClose",
+    "flow": "bob"
+  },
+  {
+    "t": "trace",
+    "flow": "main",
+    "event": {
+      "type": "deal",
+      "hand": "the-forge",
+      "cards": [
+        {
+          "id": "c_amb_forest",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_forge",
+          "verdict": "claimed"
+        },
+        {
+          "id": "c_amb_night",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_arrive",
+          "verdict": "cooldown"
+        },
+        {
+          "id": "c_bryna",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_forge_first",
+          "verdict": "cooldown"
+        },
+        {
+          "id": "c_inn_first",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_men",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_gareth_thanks",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_mira_distracted",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_mira_letter",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_forest_peril",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_bloom",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_night",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_troubled",
+          "verdict": "dealt",
+          "priority": 4,
+          "specificity": 3
+        },
+        {
+          "id": "c_amb_market",
+          "verdict": "capped",
+          "priority": 0,
+          "specificity": 0
+        }
+      ]
+    }
+  },
+  {
+    "t": "board",
+    "flow": "main",
+    "hands": {
+      "the-forge": [
+        "ring-of-the-anvil",
+        "gareth-looks-troubled"
+      ],
+      "the-inn": [
+        "settle-at-the-inn"
+      ],
+      "the-mystic-tree": [
+        "wind-in-the-leaves"
+      ]
+    },
+    "turns": {
+      "village": 3
+    }
+  },
+  {
+    "t": "trace",
+    "flow": "main",
+    "event": {
+      "type": "deal",
+      "hand": "the-inn",
+      "cards": [
+        {
+          "id": "c_amb_forest",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_forge",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_night",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_arrive",
+          "verdict": "cooldown"
+        },
+        {
+          "id": "c_bryna",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_forge_first",
+          "verdict": "cooldown"
+        },
+        {
+          "id": "c_inn_first",
+          "verdict": "claimed"
+        },
+        {
+          "id": "c_gareth_men",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_gareth_thanks",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_gareth_troubled",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_mira_distracted",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_mira_letter",
+          "verdict": "condition"
+        },
+        {
+          "id": "c_forest_peril",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_bloom",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_tree_night",
+          "verdict": "tags"
+        },
+        {
+          "id": "c_amb_market",
+          "verdict": "dealt",
+          "priority": 0,
+          "specificity": 0
+        }
+      ]
+    }
+  },
+  {
+    "t": "board",
+    "flow": "main",
+    "hands": {
+      "the-forge": [
+        "ring-of-the-anvil",
+        "gareth-looks-troubled"
+      ],
+      "the-inn": [
+        "settle-at-the-inn",
+        "market-bustle"
+      ],
+      "the-mystic-tree": [
+        "wind-in-the-leaves"
+      ]
+    },
+    "turns": {
+      "village": 3
+    }
+  }
+]

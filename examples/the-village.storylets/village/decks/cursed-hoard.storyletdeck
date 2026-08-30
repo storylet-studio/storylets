@@ -1,0 +1,205 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "@story.act == \"act-2\"",
+    gameId: "cursed-hoard",
+    id: "k_0031",
+    order: 3,
+    properties: [
+      {
+        default: false,
+        name: "curse_felt",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "hoard_found",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "investigated_curse",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "took_something",
+        type: "boolean",
+      },
+    ],
+    title: "The Cursed Hoard",
+  },
+  cards: [
+    {
+      condition: "@deck.hoard_found && !check_flags(@story.world_events, +curse_lifted)",
+      gameId: "attempt-to-claim-from-the-hoard",
+      id: "c_002p",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@deck.investigated_curse": "true",
+            "@story.lore": "set_flags(@story.lore, +wisher_known)",
+          },
+          gameId: "study-markings",
+          id: "o_002n",
+          order: 0,
+          purpose: "Player focuses on the markings and begins to understand what they are looking at. The original wisher's identity is encoded here.",
+          title: "Study the Hoard markings more carefully",
+        },
+        {
+          changes: {
+            "@deck.curse_felt": "true",
+          },
+          gameId: "try-again",
+          id: "o_002o",
+          order: 1,
+          purpose: "Another attempt. The curse responds. Whatever went wrong before, something goes wrong again - worse, or stranger.",
+          title: "Try again to take something from the Hoard",
+        },
+      ],
+      priority: 1,
+      purpose: "Player returns to the Hoard. The curse has been established. Key to establish: the Hoard pulls. Each visit either deepens the curse or advances the player's understanding of it. Production should escalate the strangeness of the curse effects with each visit.",
+      redraw: 3,
+      tags: {
+        place: [
+          "h_000l",
+        ],
+      },
+      title: "Attempt to Claim From the Hoard",
+    },
+    {
+      condition: "check_flags(@story.world_events, +curse_lifted) && check_flags(@story.world_events, -miners_saved, -traders_arrived)",
+      gameId: "claim-from-the-freed-hoard",
+      id: "c_002s",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +founding_rumour_heard)",
+          },
+          gameId: "leave-it",
+          id: "o_002q",
+          order: 0,
+          purpose: "Player leaves it all behind. While deciding, they find a fragment of village founding information.",
+          title: "Leave the Hoard untouched",
+        },
+        {
+          changes: {
+            "@story.rel_village_elder": "set_flags(@story.rel_village_elder, +has_favour)",
+          },
+          gameId: "take-share",
+          id: "o_002r",
+          order: 1,
+          purpose: "Player takes what they want and shares the rest. Bryna hears about it. A public act of generosity.",
+          title: "Take freely and share some with the village",
+        },
+      ],
+      priority: 1,
+      purpose: "The curse has been lifted via the Well's Bargain arc. The Hoard is accessible. Key to establish: the Hoard is the same treasure - but it no longer pulls or resists. The player can take what they want. Their choice here is a character moment about what they value.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000l",
+        ],
+      },
+      title: "Claim From the Freed Hoard",
+    },
+    {
+      condition: "@deck.hoard_found && (@deck.investigated_curse || check_flags(@story.lore, +wrongness_seen))",
+      gameId: "connect-the-well-to-the-hoard",
+      id: "c_002w",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +wisher_known, +founding_rumour_heard)",
+          },
+          gameId: "ask-village",
+          id: "o_002t",
+          order: 0,
+          purpose: "Player finds a villager who remembers a story about the Well and the Hoard. Connection confirmed through village memory.",
+          title: "Ask around the village - someone knows this history",
+        },
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +wisher_known)",
+          },
+          gameId: "piece-together",
+          id: "o_002u",
+          order: 1,
+          purpose: "Player verbalises the connection. Speaking it makes it concrete.",
+          title: "Piece the connection together aloud",
+        },
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +wisher_known)",
+          },
+          gameId: "return-to-hoard",
+          id: "o_002v",
+          order: 2,
+          purpose: "Player checks the Hoard against their new understanding. Connection confirmed physically.",
+          title: "Return to the Hoard to confirm the link",
+        },
+      ],
+      priority: 1,
+      purpose: "Player is at the Wishing Well with knowledge of the Hoard's curse. They begin to see a connection. Key to establish: the curse and the Well's bargain are the same thing. The Hoard is the collateral on the original wish. This is the moment the player understands how two arcs are linked.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000m",
+        ],
+      },
+      title: "Connect the Well to the Hoard",
+    },
+    {
+      gameId: "examine-the-treasure-hoard",
+      id: "c_0030",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@deck.hoard_found": "true",
+            "@deck.investigated_curse": "true",
+          },
+          gameId: "investigate-markings",
+          id: "o_002x",
+          order: 0,
+          purpose: "Player studies the marks and finds a pattern - protective, warning, or sealing. The markings are significant.",
+          title: "Investigate the markings before touching anything",
+        },
+        {
+          changes: {
+            "@deck.hoard_found": "true",
+          },
+          gameId: "look-and-leave",
+          id: "o_002y",
+          order: 1,
+          purpose: "Player reads the signs and chooses not to engage.",
+          title: "Look carefully and leave - something is wrong here",
+        },
+        {
+          changes: {
+            "@deck.curse_felt": "true",
+            "@deck.hoard_found": "true",
+            "@deck.took_something": "true",
+          },
+          gameId: "take-something",
+          id: "o_002z",
+          order: 2,
+          purpose: "Player takes an item. Something goes wrong immediately - not catastrophic, but wrong. The curse makes itself known.",
+          title: "Take something from the Hoard - you have earned it",
+        },
+      ],
+      priority: 1,
+      purpose: "Player finds the Treasure Hoard in the lair zone - valuable items, too intact, too arranged, with markings around the collection. Key to establish: the Hoard is cursed. The player cannot know this with certainty on first contact, but the signs are readable if they look. How they approach it determines the arc's opening trajectory.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000l",
+        ],
+      },
+      title: "Examine the Treasure Hoard",
+    },
+  ],
+}

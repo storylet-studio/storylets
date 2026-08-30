@@ -1,0 +1,144 @@
+/* ---------------------------------------------------------------------------
+   Storyletter PALETTE + fonts - the app-specific half of "two palettes,
+   one grammar" (Reboot 9.3). The shared grammar (elevation / motion / radius /
+   scrollbar) is imported below from the shared shell package
+   (@wildwinter/app-shell/tokens.css); this file supplies Storyletter's own
+   colour + font VALUES over that grammar: the Chambray (light) and Indigo
+   (dark) defaults, the earlier Linen / Baize green pair kept as explicit
+   choices, plus follow-system.
+
+   Chambray and Indigo are the DEFAULTS (the author's ruling, 2026-08-27: the
+   green tints read as tinted, not neutral). They are the green pair's exact
+   lightness structure re-inked in blue-grey: every neutral keeps its L, only
+   the hue moves (~150deg to ~215deg), and the accent is a steel blue of the
+   same weight as the old green. The semantic trio (--danger/--warn/--ok) and
+   the --char-* wheels are UNCHANGED across same-lightness themes on purpose:
+   they are content and status identity, not theme identity, so switching
+   Chambray <-> Linen never recolours an author's tags, decks or furniture.
+
+   Colour token NAMES mirror Patterpad's (--bg / --surface / --ink / --muted /
+   --line / --accent / --danger / --warn / --ok / --char-0..11) so the surface
+   palette is swap-compatible. Two are storylets EXTENSIONS beyond Patterpad's
+   set, flagged for the eventual shared-token decision:
+     --card       a third surface tier (card faces above --surface panels).
+     --line-soft  a softer divider than --line.
+   The --char-* set keeps Patterpad's hue spacing (a designed,
+   collision-tested wheel) but is tuned for the ink-and-baize temperature:
+   earthed on Linen, embered on Baize (the 2026-07 palette pass).
+
+   Theme axis: data-theme="chambray" | "indigo" | "linen" | "baize" on
+   <html>; absent = follow-OS (Chambray in light, Indigo in dark). The bare
+   :root IS Chambray, so an explicit data-theme="chambray" needs no block of
+   its own: setting any data-theme detaches the follow-OS media query below.
+   --------------------------------------------------------------------------- */
+
+@import "@wildwinter/app-shell/tokens.css";
+@import "@wildwinter/app-shell/pane-shell.css";
+@import "@wildwinter/app-shell/settings.css";
+@import "@wildwinter/app-shell/tool-window.css";
+@import "@wildwinter/app-shell/confirm.css";
+@import "@wildwinter/app-shell/save.css";
+@import "@wildwinter/app-shell/stale.css";
+@import "@wildwinter/app-shell/stepper.css";
+
+:root {
+  --bg: #e6eaef;
+  --surface: #f4f6f9;
+  --card: #fbfcfe;
+  --ink: #161e28;
+  --muted: #4d5b6b;
+  --line: #c6ceda;
+  --line-soft: #d8dee7;
+  --accent: #2d5c86;
+  --accent-soft: #2d5c861f;
+  --danger: #b0402f;
+  --warn: #a9772b;
+  --ok: #3f7d49;
+
+  --char-0: #a84a38; --char-1: #ab6626; --char-2: #8f7a1e; --char-3: #6f7c2b;
+  --char-4: #44793f; --char-5: #2f7a68; --char-6: #37718a; --char-7: #4a6694;
+  --char-8: #665f9e; --char-9: #7f5590; --char-10: #96487a; --char-11: #a04a52;
+
+  --font-read: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Linen, the original green-tinted light palette, kept as an explicit choice. */
+:root[data-theme="linen"] {
+  --bg: #e7ebe5;
+  --surface: #f5f8f4;
+  --card: #fcfdfb;
+  --ink: #17231c;
+  --muted: #4f6157;
+  --line: #c9d2c8;
+  --line-soft: #dbe1d9;
+  --accent: #28654a;
+  --accent-soft: #28654a1f;
+}
+
+/* Indigo, the dark default, as an explicit choice... */
+:root[data-theme="indigo"] {
+  --bg: #131923;
+  --surface: #1c2431;
+  --card: #212a39;
+  --ink: #e8ebef;
+  --muted: #919cad;
+  --line: #2a3444;
+  --line-soft: #242d3b;
+  --accent: #7cb0dd;
+  --accent-soft: #7cb0dd24;
+  --danger: #d97c66;
+  --warn: #cfa25e;
+  --ok: #79bd80;
+  --char-0: #d97f74; --char-1: #d69a5c; --char-2: #c8ad5e; --char-3: #a4b164;
+  --char-4: #7cb87d; --char-5: #63b09a; --char-6: #68a8bd; --char-7: #7fa0cf;
+  --char-8: #9a97cc; --char-9: #b18fc6; --char-10: #ca86b2; --char-11: #d5808d;
+}
+
+/* Baize, the original green-felt dark palette, kept as an explicit choice. */
+:root[data-theme="baize"] {
+  --bg: #151c1a;
+  --surface: #1e2724;
+  --card: #232e2a;
+  --ink: #e9edeb;
+  --muted: #92a29c;
+  --line: #2c3934;
+  --line-soft: #26312d;
+  --accent: #6fbfa2;
+  --accent-soft: #6fbfa224;
+  --danger: #d97c66;
+  --warn: #cfa25e;
+  --ok: #79bd80;
+  --char-0: #d97f74; --char-1: #d69a5c; --char-2: #c8ad5e; --char-3: #a4b164;
+  --char-4: #7cb87d; --char-5: #63b09a; --char-6: #68a8bd; --char-7: #7fa0cf;
+  --char-8: #9a97cc; --char-9: #b18fc6; --char-10: #ca86b2; --char-11: #d5808d;
+}
+
+/* The follow-system default when the OS is dark: Indigo. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #131923;
+    --surface: #1c2431;
+    --card: #212a39;
+    --ink: #e8ebef;
+    --muted: #919cad;
+    --line: #2a3444;
+    --line-soft: #242d3b;
+    --accent: #7cb0dd;
+    --accent-soft: #7cb0dd24;
+    --danger: #d97c66;
+    --warn: #cfa25e;
+    --ok: #79bd80;
+    --char-0: #d97f74; --char-1: #d69a5c; --char-2: #c8ad5e; --char-3: #a4b164;
+    --char-4: #7cb87d; --char-5: #63b09a; --char-6: #68a8bd; --char-7: #7fa0cf;
+    --char-8: #9a97cc; --char-9: #b18fc6; --char-10: #ca86b2; --char-11: #d5808d;
+  }
+}
+
+/* A hint is not content: placeholders render lighter and italic, so an empty
+   field reads as an invitation rather than a filled value (the author's
+   finding, 2026-08-28 - "they don't look like hints, and the fields don't
+   look clickable as a result"). opacity pinned for Firefox, which otherwise
+   dims its own. */
+::placeholder { color: color-mix(in oklab, var(--muted) 70%, transparent); font-style: italic; opacity: 1; }

@@ -1,0 +1,87 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "check_flags(@jobs, +cold_taken) || check_flags(@jobs, +noq_taken)",
+    gameId: "interceptions",
+    id: "k_interceptions",
+    properties: [],
+    purpose: "Job-reactive trouble. The deck's own gate means these exist ONLY while a contract is live.",
+    title: "Interceptions",
+  },
+  cards: [
+    {
+      condition: "check_flags(@jobs, +cold_taken) && !check_flags(@jobs, +cold_done)",
+      gameId: "cold-interception",
+      id: "c_cold_interception",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@story.heat": "advance(@heat)",
+          },
+          gameId: "fought-through",
+          id: "c_cold_interception_fought_through",
+          order: 0,
+          title: "Fought through",
+        },
+        {
+          changes: {},
+          condition: "check_flags(@events, +burner_found)",
+          gameId: "paid-them-off",
+          id: "c_cold_interception_paid_them_off",
+          order: 1,
+          title: "Paid them off",
+        },
+        {
+          changes: {},
+          gameId: "slipped-away",
+          id: "c_cold_interception_slipped_away",
+          order: 2,
+          title: "Slipped away",
+        },
+      ],
+      priority: 4,
+      purpose: "Two riders who know exactly what's in the crate. Somebody at the dockside board talks.",
+      redraw: "never",
+      tags: {
+        d_enc_district: [
+          "v_enc_strip",
+        ],
+      },
+      title: "Cold Interception",
+    },
+    {
+      condition: "check_flags(@jobs, +noq_taken) && !check_flags(@jobs, +noq_done)",
+      gameId: "collective-tail",
+      id: "c_collective_tail",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_collective": "set_flags(@rel_collective, +met)",
+          },
+          gameId: "confront-them",
+          id: "c_collective_tail_confront_them",
+          order: 1,
+          title: "Confront them",
+        },
+        {
+          changes: {},
+          gameId: "lose-them",
+          id: "c_collective_tail_lose_them",
+          order: 0,
+          title: "Lose them in the tunnels",
+        },
+      ],
+      priority: 4,
+      purpose: "Someone in a grey coat has matched your pace for three blocks of the Old Grid. They're not Syndicate.",
+      redraw: "never",
+      tags: {
+        d_enc_district: [
+          "v_enc_oldgrid",
+        ],
+      },
+      title: "Collective Tail",
+    },
+  ],
+}

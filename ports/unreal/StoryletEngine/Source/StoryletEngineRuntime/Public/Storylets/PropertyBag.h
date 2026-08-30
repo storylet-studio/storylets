@@ -1,0 +1,292 @@
+// The state kernel's unit of state: a typed, declared property bag with
+// defaults, the firing rule (engine writes notify subscribers; host writes are
+// silent but always auditable), examiner rows, one sanctioned clone door, and
+// bare-value save/load. Port of @wildwinter/scoperegistry's PropertyBag
+// (expr/packages/scoperegistry/src/index.ts).
+#pragma once
+
+#include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <functional>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "Storylets/OrderedMap.h"
+#include "Storylets/StoryletValue.h"
+
+namespace storylets
+{
+    /** The property type vocabulary (boolean / number / string / enum /
+     *  flags). Kept as strings, exactly as the kernel and the bundle carry
+     *  it; an enum value is a string at runtime. */
+    namespace PropertyTypes
+    {
+        inline const char* const Boolean = "boolean";
+        inline const char* const Number = "number";
+        inline const char* const String = "string";
+        inline const char* const Enum = "enum";
+        inline const char* const Flags = "flags";
+        inline const char* const Quality = "quality";
+    }
+
+    /** A property declaration. `defaultValue` seeds an owned bag (absent falls
+     *  back to the type default); `writable` false makes it read-only. */
+    struct ScopeDeclaration
+    {
+        std::string name;
+        std::string type;
+        std::optional<std::vector<std::string>> values;    // for enum / flags
+        /** A quality's ordered ladder of stage names (quality.md). */
+        std::optional<std::vector<std::string>> stages;
+        std::optional<StoryletValue> defaultValue;         // owned scopes: seed value
+        std::optional<bool> writable;                      // default true
+
+        /** The type default when no explicit default is declared (the kernel's
+         *  defaultFor). */
+        StoryletValue defaultOrTypeDefault() const
+        {
+            if (defaultValue.has_value()) return *defaultValue;
+            if (type == PropertyTypes::Boolean) return StoryletValue::Bool(false);
+            if (type == PropertyTypes::Number) return StoryletValue::Num(0);
+            if (type == PropertyTypes::String) return StoryletValue::Str("");
+            if (type == PropertyTypes::Enum)
+            {
+                return StoryletValue::Str(values.has_value() && !values->empty() ? (*values)[0] : "");
+            }
+            if (type == PropertyTypes::Flags) return StoryletValue::Flags({});
+            // A quality starts at the first rung of its ladder (quality.md).
+            if (type == PropertyTypes::Quality)
+            {
+                return StoryletValue::Str(stages.has_value() && !stages->empty() ? (*stages)[0] : "");
+            }
+            return StoryletValue::Bool(false);
+        }
+    };
+
+    /** One property change. `silent` marks a host write (the firing rule: it
+     *  reaches the audit hook but not subscribers); `reason` is the host's own
+     *  note for its log. */
+    struct BagChange
+    {
+        std::string name;
+        std::optional<StoryletValue> prev;     // absent when the property had no value
+        StoryletValue next;
+        bool silent = false;
+        std::string reason;
+    };
+
+    /** One examiner row: what a property examiner/editor needs to render and
+     *  edit a declared property. */
+    struct PropertyRow
+    {
+        std::string name;
+        std::string type;
+        StoryletValue value;
+        StoryletValue defaultValue;
+        std::optional<std::vector<std::string>> values;
+        /** A quality's ladder, when this row is one. Present on the JS and
+         *  Godot rows since the qualities work and absent here, so the same
+         *  public listProperties() answered differently on two runtimes; added
+         *  2026-08-29 so it does not. Nothing in the shipped examiners reads it
+         *  yet: it is API surface for a host that wants to show a ladder. */
+        std::optional<std::vector<std::string>> stages;
+        bool writable = true;
+    };
+
+    inline std::string LowercaseName(const std::string& name)
+    {
+        std::string out = name;
+        std::transform(out.begin(), out.end(), out.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return out;
+    }
+
+    class PropertyBag
+    {
+    public:
+        using Normalise = std::function<std::string(const std::string&)>;
+        using Listener = std::function<void(const BagChange&)>;
+        using Unsubscribe = std::function<void()>;
+
+        /** Name normalisation policy: lowercase by default (the registry's
+         *  long-standing contract); a product whose names are case-significant
+         *  passes identity (storylets does). */
+        explicit PropertyBag(const std::vector<ScopeDeclaration>* declarations = nullptr, Normalise normalise = nullptr)
+            : norm_(normalise ? std::move(normalise) : Normalise(&LowercaseName))
+        {
+            seed(declarations);
+        }
+
+        /** The live values map (stable identity across reseed, so an eval
+         *  context built over it stays valid). Read-path for evaluation; writes
+         *  go through set() so the firing rule applies. */
+        const OrderedMap<std::string, StoryletValue>& values() const { return values_; }
+
+        std::optional<StoryletValue> get(const std::string& name) const
+        {
+            const StoryletValue* v = values_.get(norm_(name));
+            return v ? std::optional<StoryletValue>(*v) : std::nullopt;
+        }
+
+        /** Write a property. Engine writes (the default) notify subscribers;
+         *  pass silent = true for a host write, which reaches only the audit
+         *  hook. Throws on a read-only property. Returns the change. */
+        BagChange set(const std::string& name, const StoryletValue& value, bool silent = false, const std::string& reason = "")
+        {
+            std::string n = norm_(name);
+            const ScopeDeclaration* decl = decls_.get(n);
+            if (decl && decl->writable.has_value() && !*decl->writable)
+            {
+                throw StoryletError("'" + name + "' is read-only");
+            }
+            BagChange change;
+            change.name = n;
+            const StoryletValue* prev = values_.get(n);
+            if (prev) change.prev = *prev;
+            change.next = value;
+            change.silent = silent;
+            change.reason = reason;
+            values_.set(n, value);
+            for (const auto& audit : snapshot(auditors_)) audit(change);
+            if (!change.silent)
+            {
+                for (const auto& fn : snapshot(subscribers_)) fn(change);
+            }
+            return change;
+        }
+
+        /** Notified of engine (non-silent) writes. Returns the unsubscribe. */
+        Unsubscribe subscribe(Listener fn)
+        {
+            return add(subscribers_, std::move(fn));
+        }
+
+        /** Notified of EVERY write, silent or not. Returns the unsubscribe. */
+        Unsubscribe onAudit(Listener fn)
+        {
+            return add(auditors_, std::move(fn));
+        }
+
+        /** Examiner rows: the declared surface only (stray values are storage,
+         *  not surface). */
+        std::vector<PropertyRow> rows() const
+        {
+            std::vector<PropertyRow> out;
+            for (const auto& pair : decls_)
+            {
+                std::optional<StoryletValue> value = get(pair.first);
+                out.push_back(RowFor(pair.second,
+                    value.has_value() ? *value : pair.second.defaultOrTypeDefault(),
+                    std::nullopt, pair.first));
+            }
+            return out;
+        }
+
+        std::vector<ScopeDeclaration> declarations() const
+        {
+            std::vector<ScopeDeclaration> out;
+            for (const auto& pair : decls_) out.push_back(pair.second);
+            return out;
+        }
+
+        /** The one sanctioned copy door: values copied, declarations
+         *  duplicated, the normalisation policy carried, subscriptions NOT
+         *  carried. */
+        PropertyBag clone() const
+        {
+            PropertyBag c(nullptr, norm_);
+            for (const auto& pair : decls_) c.decls_.set(pair.first, pair.second);
+            for (const auto& pair : values_) c.values_.set(pair.first, pair.second);
+            return c;
+        }
+
+        /** Clear and re-seed from new declarations, in place (the values map
+         *  keeps its identity, so contexts built over it stay valid). */
+        void reseed(const std::vector<ScopeDeclaration>* declarations)
+        {
+            values_.clear();
+            decls_.clear();
+            seed(declarations);
+        }
+
+        /** Bare values, ready to embed in a product's save. */
+        OrderedMap<std::string, StoryletValue> save() const
+        {
+            OrderedMap<std::string, StoryletValue> copy;
+            for (const auto& pair : values_) copy.set(pair.first, pair.second);
+            return copy;
+        }
+
+        /** Lay saved values over the current ones (call after a fresh seed:
+         *  orphans land as strays, new declarations keep their defaults; the
+         *  product decides whether to prune). Does not fire events. */
+        void load(const OrderedMap<std::string, StoryletValue>& values)
+        {
+            for (const auto& pair : values) values_.set(norm_(pair.first), pair.second);
+        }
+
+        static PropertyRow RowFor(
+            const ScopeDeclaration& d,
+            const StoryletValue& value,
+            std::optional<bool> writable,
+            const std::string& name = "")
+        {
+            PropertyRow row;
+            row.name = name.empty() ? LowercaseName(d.name) : name;
+            row.type = d.type;
+            row.value = value;
+            row.defaultValue = d.defaultOrTypeDefault();
+            row.values = d.values;
+            row.writable = writable.has_value() ? *writable : d.writable.value_or(true);
+            return row;
+        }
+
+    private:
+        using Entry = std::pair<uint64_t, Listener>;
+
+        void seed(const std::vector<ScopeDeclaration>* declarations)
+        {
+            if (!declarations) return;
+            for (const auto& d : *declarations)
+            {
+                std::string name = norm_(d.name);
+                decls_.set(name, d);
+                // StoryletValue is a value type, so seeding shares no mutable
+                // default (the kernel structuredClones for the same reason).
+                values_.set(name, d.defaultOrTypeDefault());
+            }
+        }
+
+        Unsubscribe add(std::vector<Entry>& list, Listener fn)
+        {
+            uint64_t id = nextListenerId_++;
+            list.push_back({id, std::move(fn)});
+            std::vector<Entry>* target = &list;
+            return [target, id]()
+            {
+                target->erase(
+                    std::remove_if(target->begin(), target->end(),
+                        [id](const Entry& e) { return e.first == id; }),
+                    target->end());
+            };
+        }
+
+        static std::vector<Listener> snapshot(const std::vector<Entry>& list)
+        {
+            std::vector<Listener> out;
+            out.reserve(list.size());
+            for (const auto& e : list) out.push_back(e.second);
+            return out;
+        }
+
+        OrderedMap<std::string, StoryletValue> values_;
+        OrderedMap<std::string, ScopeDeclaration> decls_;
+        std::vector<Entry> subscribers_;
+        std::vector<Entry> auditors_;
+        uint64_t nextListenerId_ = 1;
+        Normalise norm_;
+    };
+}

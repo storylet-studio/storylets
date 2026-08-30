@@ -1,0 +1,299 @@
+/* Storylet Studio landing page (the marketing home: a standalone Astro page, NOT the docs
+ * chrome). Full-bleed, cream, light-only by design. Brand colours come from the shared tokens
+ * in storylets.css (--sy-plum / --sy-plum-mid / --sy-plum-tint / --sy-amber / --sy-ink); the
+ * neutral scale is declared once here, and since 2026-08-29 it is Storyletter's own default
+ * light theme, Chambray, rather than the brand cream. See storylets.css's header for why. The
+ * plum-deep BANDS are untouched: cream ink on plum-deep is brand, and stays.
+ */
+
+.sy-landing {
+  /* The light-only neutral scale, from the brand palette. */
+  --l-page: #e6eaef;          /* Chambray --bg: the page ground */
+  --l-paper: #eef1f5;         /* section tint */
+  --l-paper-2: #f7f9fb;       /* cards */
+  --l-ink: #161e28;           /* Chambray --ink: headings */
+  --l-ink-2: #1e2733;         /* strong body ink */
+  --l-body: #38465a;          /* body text */
+  --l-muted: #4d5b6b;         /* Chambray --muted */
+  --l-faint: #78859a;         /* fine print */
+  --l-hair: #d5dde6;          /* card hairline */
+  --l-hair-2: #dae1ea;        /* band hairline */
+  --l-hair-3: #c6ceda;        /* Chambray --line: window border */
+
+  color: var(--l-ink-2);
+  background: var(--l-page);
+  font-family: var(--sl-font, "Inter", ui-sans-serif, system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+.sy-landing *, .sy-landing *::before, .sy-landing *::after { box-sizing: border-box; }
+.sy-landing ::selection { background: color-mix(in srgb, var(--sy-amber) 26%, transparent); }
+
+.sy-wrap { max-width: 1160px; margin: 0 auto; padding-left: 32px; padding-right: 32px; }
+.sy-serif { font-family: var(--sy-read, "Newsreader", Georgia, serif); }
+.sy-em { font-style: italic; color: var(--sy-plum); }
+
+.sy-eye {
+  font-family: var(--sl-font-mono);
+  font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--sy-plum-mid);
+}
+
+/* ---- Buttons ---------------------------------------------------------------- */
+.sy-btn {
+  display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+  font-weight: 600; border-radius: 11px; border: 1.5px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+}
+.sy-btn-primary { background: var(--sy-amber); color: #241a33; box-shadow: 0 2px 6px rgba(200, 144, 47, 0.3); }
+.sy-btn-primary:hover { background: #b07d24; }
+.sy-btn-outline { background: transparent; color: var(--sy-plum); border-color: var(--sy-plum); }
+.sy-btn-outline:hover { background: rgba(54, 40, 74, 0.05); }
+.sy-btn-ghost { background: transparent; color: #e0d8ee; border-color: #4d3d69; }
+.sy-btn-ghost:hover { border-color: #9a89b5; background: rgba(255, 255, 255, 0.05); }
+.sy-btn-lg { font-size: 15.5px; padding: 13px 24px; }
+.sy-btn-xl { font-size: 15.5px; padding: 14px 28px; }
+.sy-textlink {
+  display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+  color: var(--sy-plum); font-weight: 600; font-size: 15.5px;
+  border-bottom: 2px solid rgba(54, 40, 74, 0.3); padding-bottom: 2px;
+  transition: border-color 0.15s ease;
+}
+.sy-textlink:hover { border-bottom-color: var(--sy-plum); }
+
+/* ---- Nav -------------------------------------------------------------------- */
+.sy-nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(251, 252, 254, 0.86); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--l-hair-2);
+}
+.sy-nav-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-top: 14px; padding-bottom: 14px; }
+.sy-brand { display: flex; align-items: center; gap: 11px; text-decoration: none; }
+.sy-brand svg { display: block; }
+.sy-wordmark { font-family: var(--sy-read, "Newsreader", Georgia, serif); font-weight: 600; font-size: 21px; letter-spacing: -0.02em; color: var(--sy-ink); }
+.sy-wordmark span { color: var(--sy-plum-mid); }
+.sy-navlinks { display: flex; align-items: center; gap: 6px; }
+.sy-navlink { text-decoration: none; color: var(--l-body); font-size: 14.5px; font-weight: 500; padding: 8px 12px; border-radius: 8px; transition: background 0.15s ease, color 0.15s ease; }
+.sy-navlink:hover { background: #dde3ea; color: var(--l-ink); }
+.sy-nav .sy-btn { margin-left: 8px; font-size: 14.5px; padding: 9px 18px; border-radius: 9px; }
+
+/* ---- Hero ------------------------------------------------------------------- */
+.sy-hero { position: relative; background: linear-gradient(180deg, var(--l-paper) 0%, var(--l-page) 100%); }
+.sy-hero-glows { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.sy-glow { position: absolute; border-radius: 50%; }
+.sy-glow-a { top: -120px; right: -80px; width: 420px; height: 420px; background: radial-gradient(circle, rgba(200, 144, 47, 0.11), transparent 70%); }
+.sy-glow-b { bottom: -160px; left: -120px; width: 520px; height: 520px; background: radial-gradient(circle, rgba(54, 40, 74, 0.08), transparent 70%); }
+.sy-hero-grid { position: relative; display: grid; grid-template-columns: 1.02fr 0.98fr; gap: 56px; align-items: center; padding-top: 80px; padding-bottom: 96px; }
+
+.sy-pill {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-family: var(--sl-font-mono); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--sy-plum-mid); background: #ece6f2; border: 1px solid #ddd3e6; padding: 6px 12px; border-radius: 999px;
+}
+.sy-pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--sy-amber); display: inline-block; }
+.sy-h1 { font-family: var(--sy-read, "Newsreader", Georgia, serif); font-weight: 500; font-size: clamp(2.5rem, 5.2vw, 4rem); line-height: 1.05; letter-spacing: -0.02em; color: var(--l-ink); margin: 22px 0 0; text-wrap: balance; }
+.sy-h1-brand { font-weight: 700; color: var(--sy-plum); }
+.sy-lead { font-size: 18.5px; line-height: 1.6; color: var(--l-body); max-width: 34em; margin: 22px 0 0; }
+.sy-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+.sy-fineprint { font-family: var(--sl-font-mono); font-size: 12.5px; color: var(--l-faint); margin: 22px 0 0; }
+
+/* The hero's recreated board: hands with dealt cards. */
+.sy-hero-media { position: relative; }
+.sy-window { border-radius: 14px; overflow: hidden; background: var(--l-paper-2); border: 1px solid var(--l-hair-3); box-shadow: 0 2px 6px rgba(36, 26, 51, 0.07), 0 30px 60px -24px rgba(36, 26, 51, 0.3); transform: rotate(-1deg); }
+.sy-window-bar { display: flex; align-items: center; gap: 7px; padding: 11px 14px; background: #eaeef3; border-bottom: 1px solid #dbe2ea; }
+.sy-dot { width: 11px; height: 11px; border-radius: 50%; }
+.sy-dot-r { background: #c96a5a; } .sy-dot-y { background: var(--sy-amber); } .sy-dot-g { background: #7a9a72; }
+.sy-window-title { font-family: var(--sl-font-mono); font-size: 11px; color: #8894a3; margin-left: 8px; }
+.sy-window-body { padding: 18px 18px 22px; }
+.sy-window img { display: block; width: 100%; height: auto; }
+
+.sy-hand { margin-bottom: 14px; }
+.sy-hand:last-child { margin-bottom: 0; }
+.sy-hand-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 8px; }
+.sy-hand-name { font-family: var(--sy-read, "Newsreader", serif); font-weight: 600; font-size: 15px; color: var(--l-ink); }
+.sy-tag { font-family: var(--sl-font-mono); font-size: 10px; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 999px; background: #ece6f2; color: var(--sy-plum-mid); border: 1px solid #ddd3e6; }
+.sy-tag.is-amber { background: #f7ecd7; color: #8e6413; border-color: #ecd9b3; }
+.sy-hand-cards { display: flex; gap: 9px; flex-wrap: wrap; }
+.sy-mini {
+  flex: 1 1 44%; min-width: 150px;
+  background: #fbfcfe; border: 1px solid var(--l-hair); border-radius: 9px; padding: 9px 11px;
+  box-shadow: 0 1px 2px rgba(36, 26, 51, 0.05);
+}
+.sy-mini h4 { font-family: var(--sy-read, "Newsreader", serif); font-weight: 600; font-size: 13.5px; margin: 0; color: var(--l-ink); line-height: 1.25; }
+.sy-mini code { display: block; margin-top: 5px; font-family: var(--sl-font-mono); font-size: 10.5px; color: #8e6413; }
+.sy-mini p { margin: 5px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--l-muted); }
+.sy-mini.is-empty { display: flex; align-items: center; justify-content: center; color: var(--l-faint); font-size: 11.5px; border-style: dashed; box-shadow: none; background: transparent; }
+
+.sy-float-card { position: absolute; bottom: -58px; left: -34px; width: 236px; background: var(--sy-plum-deep, #241a33); border-radius: 12px; padding: 14px 16px; box-shadow: 0 20px 40px -14px rgba(36, 26, 51, 0.55); transform: rotate(2deg); }
+.sy-float-label { font-family: var(--sl-font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #f3ede2; }
+.sy-float-bundle { margin-top: 8px; font-family: var(--sy-read, "Newsreader", serif); color: #f3ede2; font-size: 15px; }
+.sy-float-bundle code { font-family: var(--sl-font-mono); font-size: 12px; color: #e0b463; }
+.sy-float-icons { margin-top: 10px; display: flex; gap: 6px; }
+.sy-float-icons img { border-radius: 6px; }
+
+/* ---- Engine strip ----------------------------------------------------------- */
+/* ---- What you'd decide with it: the concrete list under the abstract hero -- */
+.sy-uses { border-top: 1px solid var(--l-hair-2); }
+.sy-uses-inner {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 40px;
+  padding-top: 54px; padding-bottom: 54px;
+}
+.sy-uses-copy { flex: 1 1 300px; max-width: 26em; }
+.sy-uses-lead { margin: 12px 0 0; color: var(--sy-ink-soft, inherit); }
+.sy-uses-list {
+  flex: 1 1 420px; margin: 0; padding: 0; list-style: none;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px 28px;
+}
+.sy-uses-list li { position: relative; padding-left: 22px; font-size: 15.5px; line-height: 1.45; }
+.sy-uses-list li::before {
+  content: ""; position: absolute; left: 0; top: 0.42em;
+  width: 9px; height: 9px; border-radius: 2.5px;
+  background: var(--sy-amber); transform: rotate(45deg);
+}
+.sy-uses-aside { color: var(--sy-plum-mid); font-size: 13.5px; }
+.sy-uses-more { padding-left: 0 !important; }
+.sy-uses-more::before { display: none; }
+
+.sy-engine { background: #241a33; color: #e8e1f0; }
+.sy-engine-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 28px; padding-top: 46px; padding-bottom: 46px; }
+.sy-engine-copy { max-width: 27em; }
+.sy-engine h2 { font-family: var(--sy-read, "Newsreader", serif); font-weight: 500; font-size: 26px; line-height: 1.2; margin: 0; color: #f3ede2; }
+.sy-engine h2 span { color: var(--sy-amber-light, #e0b463); }
+.sy-engine p { font-size: 14.5px; color: #b3a5c9; margin: 8px 0 0; line-height: 1.55; }
+.sy-engine-tiles { display: flex; gap: 26px; flex-wrap: wrap; }
+.sy-engine-tile { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+.sy-engine-tile img { border-radius: 12px; }
+.sy-engine-tile span { font-size: 12px; color: #b3a5c9; font-weight: 500; }
+
+/* ---- The three products ----------------------------------------------------- */
+.sy-products { background: var(--l-paper); border-top: 1px solid var(--l-hair-2); border-bottom: 1px solid var(--l-hair-2); }
+.sy-products-inner { padding-top: 88px; padding-bottom: 88px; }
+.sy-h2 { font-family: var(--sy-read, "Newsreader", serif); font-weight: 500; line-height: 1.1; letter-spacing: -0.01em; color: var(--l-ink); }
+.sy-products .sy-h2 { font-size: clamp(2rem, 4vw, 2.9rem); margin: 14px 0 0; }
+.sy-products-lead { font-size: 17px; line-height: 1.62; color: var(--l-body); margin: 16px 0 0; max-width: 42em; }
+.sy-prods { margin-top: 42px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+@media (max-width: 900px) { .sy-prods { grid-template-columns: 1fr; } }
+.sy-prod { display: block; text-decoration: none; color: inherit; background: var(--l-paper-2); border: 1px solid var(--l-hair); border-top: 3px solid var(--sy-plum); border-radius: 14px; padding: 26px 24px; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.sy-prod:hover { transform: translateY(-3px); box-shadow: 0 18px 34px -22px rgba(36, 26, 51, 0.32); }
+.sy-prod-2 { border-top-color: var(--sy-amber); }
+.sy-prod-3 { border-top-color: var(--sy-ink); }
+.sy-prod-tag { font-family: var(--sl-font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--sy-plum-mid); }
+.sy-prod-2 .sy-prod-tag { color: #8e6413; }
+.sy-prod-3 .sy-prod-tag { color: var(--l-muted); }
+.sy-prod h3 { font-family: var(--sy-read, "Newsreader", serif); font-weight: 600; font-size: 22px; line-height: 1.2; color: var(--l-ink); margin: 10px 0 0; }
+.sy-prod .who { font-size: 13px; color: var(--l-muted); margin: 4px 0 0; font-style: italic; }
+.sy-prod p.body { font-size: 15px; line-height: 1.6; color: var(--l-body); margin: 12px 0 0; }
+
+/* ---- Authors ---------------------------------------------------------------- */
+.sy-authors { background: var(--l-page); }
+.sy-split { display: grid; grid-template-columns: 0.95fr 1.05fr; gap: 60px; align-items: center; padding-top: 96px; padding-bottom: 96px; }
+.sy-authors .sy-h2 { font-size: clamp(2rem, 3.6vw, 2.8rem); margin: 14px 0 0; }
+.sy-authors-intro { font-size: 17px; line-height: 1.62; color: var(--l-body); margin: 18px 0 0; }
+.sy-list { list-style: none; margin: 26px 0 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+.sy-list li { display: flex; gap: 13px; align-items: flex-start; }
+.sy-list i { flex: 0 0 auto; margin-top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--sy-amber); }
+.sy-list strong { color: var(--l-ink); font-weight: 600; }
+.sy-list span { color: var(--l-body); }
+.sy-authors .sy-textlink { margin-top: 30px; }
+
+/* The recreated card-editor surface. */
+/* min-width: 0 or the canvas's own minimum propagates up and makes this card wider than
+   its grid column, which .sy-landing's overflow-x: hidden then quietly clips. */
+.sy-screen { min-width: 0; position: relative; background: var(--l-paper-2); border: 1px solid var(--l-hair); border-radius: 16px; box-shadow: 0 2px 5px rgba(36, 26, 51, 0.05), 0 26px 50px -28px rgba(36, 26, 51, 0.3); }
+.sy-screen-head { padding: 15px 20px; border-bottom: 1px solid #e3e9ef; display: flex; align-items: center; justify-content: space-between; }
+.sy-screen-deck { font-family: var(--sl-font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8894a3; }
+/* ---- The split deck picture (designers' section) ---------------------------
+   One deck cut on the diagonal: its cards top-left, the flow the tool derived
+   bottom-right. Two <g> elements clipped to complementary triangles, so the
+   seam is exact and neither half can drift from the other. */
+.sy-screen-same { font-family: var(--sl-font-mono); font-size: 11px; color: #a3adbb; }
+.sy-screen-canvas { padding: 18px 20px 20px; overflow-x: auto; }
+.sy-both { display: block; width: 100%; min-width: 430px; height: auto; background-color: #f9fbfc; background-image: radial-gradient(var(--l-hair) 1px, transparent 1px); background-size: 17px 17px; border: 1px solid var(--l-hair); border-radius: 12px; }
+
+/* the card faces */
+.sy-flow-ground { fill: #eaeef3; }
+.sy-gc rect { fill: #fbfcfe; stroke: var(--l-hair); stroke-width: 1.5; }
+.sy-gc-t { font-family: var(--sy-read, "Newsreader", serif); font-weight: 600; font-size: 12.5px; fill: var(--l-ink); }
+.sy-gc-r { font-family: var(--sl-font-mono); font-size: 10px; fill: #8e6413; }
+
+/* the same cards as a flow */
+.sy-fn rect { fill: #fbfcfe; stroke: var(--l-hair); stroke-width: 1.5; }
+.sy-fn-sel rect { stroke: var(--sy-plum-tint); stroke-width: 2; }
+.sy-fn-t { font-family: var(--sy-read, "Newsreader", serif); font-weight: 600; font-size: 14px; fill: var(--l-ink); }
+.sy-fe path { fill: none; stroke-width: 1.75; }
+.sy-fe text { font-family: var(--sl-font-mono); font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; text-anchor: middle; }
+.sy-fe-on path { stroke: var(--sy-plum-tint); }
+.sy-fe-on text { fill: var(--sy-plum-mid); }
+.sy-fe-off path { stroke: var(--sy-amber); }
+.sy-fe-off text { fill: #8e6413; }
+
+/* the cut, and what each side is */
+.sy-seam { fill: none; stroke: var(--sy-plum-tint); stroke-width: 1.25; stroke-dasharray: 5 5; opacity: 0.75; }
+
+
+/* ---- Why / pillars ---------------------------------------------------------- */
+.sy-why { background: var(--l-paper); border-top: 1px solid var(--l-hair-2); border-bottom: 1px solid var(--l-hair-2); }
+.sy-why-inner { padding-top: 96px; padding-bottom: 96px; }
+.sy-why-intro { max-width: 40em; }
+.sy-why .sy-h2 { font-size: clamp(2rem, 4vw, 3rem); line-height: 1.08; margin: 14px 0 0; }
+.sy-why-lead { font-size: 17px; line-height: 1.62; color: var(--l-body); margin: 16px 0 0; }
+.sy-pillars { margin-top: 44px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.sy-pillar { background: var(--l-paper-2); border: 1px solid var(--l-hair); border-top: 3px solid var(--sy-plum); border-radius: 14px; padding: 26px 24px; }
+.sy-pillar-2 { border-top-color: var(--sy-plum-mid); }
+.sy-pillar-3 { border-top-color: var(--sy-amber); }
+.sy-pillar h3 { font-family: var(--sy-read, "Newsreader", serif); font-weight: 600; font-size: 21px; line-height: 1.2; color: var(--l-ink); margin: 0; }
+.sy-pillar p { font-size: 15px; line-height: 1.6; color: var(--l-body); margin: 12px 0 0; }
+
+.sy-builtins { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1px; background: var(--l-hair); border: 1px solid var(--l-hair); border-radius: 14px; overflow: hidden; }
+.sy-builtin { background: var(--l-paper-2); padding: 22px; }
+.sy-builtin-t { font-family: var(--sy-read, "Newsreader", serif); font-weight: 600; font-size: 17px; color: var(--l-ink); }
+.sy-builtin p { font-size: 13.5px; line-height: 1.55; color: var(--l-muted); margin: 7px 0 0; }
+.sy-builtin code { font-family: var(--sl-font-mono); font-size: 12px; color: var(--sy-plum); background: #e7e0ef; padding: 1px 5px; border-radius: 4px; }
+.sy-why .sy-textlink { margin-top: 30px; }
+
+/* ---- Differentiator --------------------------------------------------------- */
+.sy-diff { background: var(--l-page); }
+.sy-diff-inner { max-width: 960px; margin: 0 auto; padding: 92px 32px; text-align: center; }
+.sy-diff .sy-eye { display: block; margin: 20px 0 0; }
+.sy-diff .sy-h2 { font-size: clamp(2rem, 4.2vw, 3.1rem); line-height: 1.12; font-weight: 500; margin: 18px 0 0; text-wrap: balance; }
+.sy-diff-lead { font-size: 18px; line-height: 1.65; color: var(--l-body); margin: 22px auto 0; max-width: 40em; }
+.sy-diff-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 30px; }
+/* Mono, as Patter's are, but in the quiet register: these carry prose now, and plum on
+   lilac read as "this is code" back when they held function signatures. */
+.sy-diff-chip { font-family: var(--sl-font-mono); font-size: 12.5px; color: var(--l-body); background: var(--l-paper-2); border: 1px solid var(--l-hair); padding: 8px 16px; border-radius: 999px; }
+
+/* ---- Closing CTA ------------------------------------------------------------ */
+.sy-cta { position: relative; background: #241a33; color: #e8e1f0; overflow: hidden; }
+.sy-cta-inner { position: relative; padding-top: 88px; padding-bottom: 88px; text-align: center; }
+.sy-cta h2 { font-family: var(--sy-read, "Newsreader", serif); font-weight: 500; font-size: clamp(1.9rem, 3.6vw, 2.7rem); line-height: 1.12; margin: 0; color: #f3ede2; }
+.sy-cta p { font-size: 16.5px; line-height: 1.6; color: #b3a5c9; margin: 16px auto 0; max-width: 44em; }
+.sy-cta-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 30px; }
+
+/* ---- Footer ----------------------------------------------------------------- */
+.sy-foot { background: #1c1429; color: #b3a5c9; }
+/* Mailing-list sign-up: its own quiet row above the credit row, hairlined off from it.
+   The form's own colours come from Newsletter.astro's "landing" variant. */
+.sy-foot-signup { padding-top: 26px; padding-bottom: 22px; border-bottom: 1px solid #2e2340; }
+.sy-foot-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; padding-top: 30px; padding-bottom: 34px; }
+.sy-foot-brand { display: flex; align-items: center; gap: 10px; font-family: var(--sy-read, "Newsreader", serif); font-size: 16px; color: #f3ede2; }
+.sy-foot-links { display: flex; flex-wrap: wrap; gap: 18px; }
+.sy-foot-links a { color: #b3a5c9; text-decoration: none; font-size: 14px; }
+.sy-foot-links a:hover { color: #f3ede2; text-decoration: underline; }
+/* No width: brand, links and legal are three items on one space-between row, as Patter's
+   are. The `width: 100%` that used to be here forced the attribution onto a line of its
+   own, which is what a footer carrying two links too many looks like. */
+.sy-foot-legal { font-family: var(--sl-font-mono); font-size: 12px; color: #8878a3; }
+.sy-foot-legal a { color: #b3a5c9; text-decoration: none; }
+.sy-foot-legal a:hover { text-decoration: underline; }
+
+/* ---- Responsive ------------------------------------------------------------- */
+@media (max-width: 1000px) {
+  .sy-hero-grid, .sy-split { grid-template-columns: 1fr; gap: 44px; }
+  .sy-pillars { grid-template-columns: 1fr; }
+  .sy-float-card { position: static; width: auto; transform: none; margin-top: 20px; }
+}
+@media (max-width: 640px) {
+  .sy-wrap { padding-left: 20px; padding-right: 20px; }
+  .sy-navlinks .sy-navlink { display: none; }
+  .sy-hero-grid { padding-top: 52px; padding-bottom: 64px; }
+}

@@ -1,0 +1,398 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "(@story.act == \"act-2\") && (@story.act != \"act-1\")",
+    gameId: "ambients",
+    id: "k_001i",
+    order: 0,
+    properties: [],
+    title: "Ambients",
+  },
+  cards: [
+    {
+      condition: "count_played_in(\"thread\", \"bard\") >= 2 && turns_since_played_in(\"thread\", \"bard\") >= 6",
+      gameId: "the-bard-has-made-this-his-regular-stop",
+      id: "c_000q",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +village_gossip_spread, +bard_favour)",
+          },
+          gameId: "carry-word-south",
+          id: "o_000o",
+          order: 0,
+          purpose: "The player pays him — coin, or information worth more than coin. He agrees to carry the village's story south. Word will reach places the player cannot go. The relationship between player and bard deepens.",
+          title: "Pay him to carry your story further south",
+        },
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +old_song_heard)",
+          },
+          gameId: "commission-song",
+          id: "o_000p",
+          order: 1,
+          purpose: "The bard performs for whoever has gathered. The curse, the wrongness, the ancient weight — woven into song. The village hears their situation given form. The story has a shape now that people can hold onto.",
+          title: "Ask him to sing about the curse to the village",
+        },
+      ],
+      priority: 1,
+      purpose: "The bard has made the village a regular stop on his circuit. He knows faces, he knows the player, he has songs about this place now. Production team: this card can recur every six or more rounds. Reference what has changed since his last visit - the arc's current state, any recent events.",
+      redraw: 6,
+      tags: {
+        d_0001: [
+          "v_0004",
+        ],
+        d_0002: [
+          "v_0008",
+        ],
+      },
+      title: "The Bard Has Made This His Regular Stop",
+    },
+    {
+      condition: "count_played_in(\"thread\", \"bard\") == 1 && turns_since_played_in(\"thread\", \"bard\") >= 5",
+      gameId: "the-bard-is-back",
+      id: "c_000t",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +founding_rumour_heard, +bard_favour)",
+          },
+          gameId: "ask-south-news",
+          id: "o_000r",
+          order: 0,
+          purpose: "The bard shares fragments from the road — gossip, rumour, old history. Something connects to what the player has already encountered. The bard senses genuine interest and warms to the player.",
+          title: "Ask what news he's brought from his travels",
+        },
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +village_gossip_spread)",
+          },
+          gameId: "share-troubles",
+          id: "o_000s",
+          order: 1,
+          purpose: "The player shares news of the village's troubles — the wrongness, the disturbances, the pressure building. The bard's interest sharpens. He will carry this story outward. Word begins to travel beyond the valley.",
+          title: "Tell him about the strange happenings here",
+        },
+      ],
+      priority: 1,
+      purpose: "The bard has returned. He recognises the player from his last visit — a warmth of familiarity. He has been on the road and has heard things. Production team: this fires once, at least five rounds after the first bard card. Reference what the player has done since that first meeting.",
+      redraw: "never",
+      tags: {
+        d_0001: [
+          "v_0004",
+        ],
+        d_0002: [
+          "v_0008",
+        ],
+      },
+      title: "The Bard Is Back",
+    },
+    {
+      gameId: "confront-the-lairs-unnatural-silence",
+      id: "c_000v",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +lair_investigated_early)",
+          },
+          gameId: "listen-very-carefully",
+          id: "o_000u",
+          order: 0,
+          purpose: "Player focuses. At the very edge of perception, something - they are not sure what. Nothing changes mechanically, but something has been planted.",
+          title: "Listen very carefully to the silence",
+        },
+      ],
+      priority: 1,
+      purpose: "The lair zone is completely silent - not quiet, silent. Even footsteps are muted. Animals avoid this place. Key to establish: the player should feel they are the loudest thing here. The silence is suppressive, not peaceful.",
+      redraw: 5,
+      tags: {
+        d_0001: [
+          "v_0003",
+        ],
+      },
+      title: "Confront the Lair's Unnatural Silence",
+    },
+    {
+      gameId: "investigate-what-moved-in-the-dark",
+      id: "c_000x",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +cave_rhythm_noted)",
+          },
+          gameId: "move-toward",
+          id: "o_000w",
+          order: 0,
+          purpose: "They find almost nothing - a mark on the wall, an animal trace. Nothing changes mechanically, but the scene has texture.",
+          title: "Move toward where the movement was",
+        },
+      ],
+      priority: 1,
+      purpose: "Something moved at the edge of the player's vision in the cave zone. Not the Oracle - something in the cave itself. Atmospheric texture. Key to establish: the caves have presence beyond the miners. How the player responds is a character beat.",
+      redraw: 4,
+      tags: {
+        d_0001: [
+          "v_0007",
+        ],
+      },
+      title: "Investigate What Moved in the Dark",
+    },
+    {
+      gameId: "listen-to-the-cave-rhythms",
+      id: "c_000z",
+      order: 4,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +cave_rhythm_noted)",
+          },
+          gameId: "decode-pattern",
+          id: "o_000y",
+          order: 0,
+          purpose: "Player identifies a cycle in the rhythms and notes it. This knowledge becomes relevant in the Crystal Grotto - the Oracle communicates in patterns. Cave rhythm noted.",
+          title: "Attempt to count and decode the pattern",
+        },
+      ],
+      priority: 1,
+      purpose: "In the cave zone, the player notices a rhythmic sound from deeper in - structured, not random. Key to establish: the caves are not quiet. There is a pattern here that changes over time. The pattern is Oracle communication, though the player may not know this yet.",
+      redraw: 4,
+      tags: {
+        d_0001: [
+          "v_0007",
+        ],
+      },
+      title: "Listen to the Cave Rhythms",
+    },
+    {
+      gameId: "overhear-the-village-gossip",
+      id: "c_0013",
+      order: 5,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_village_elder": "set_flags(@story.rel_village_elder, +has_favour)",
+          },
+          gameId: "correct-record",
+          id: "o_0010",
+          order: 0,
+          purpose: "The gossips are briefly subdued. Bryna, or a contact who reports to her, hears about the correction. Bryna's assessment of the player improves.",
+          title: "Correct the record firmly",
+        },
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +village_gossip_spread)",
+          },
+          gameId: "engage-embellish",
+          id: "o_0011",
+          order: 1,
+          purpose: "The gossip spreads further with the player's contribution. Information circulates through the village.",
+          title: "Engage and add to the gossip",
+        },
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +founding_rumour_heard)",
+          },
+          gameId: "listen-carefully",
+          id: "o_0012",
+          order: 2,
+          purpose: "Player gathers more than they appear to. They hear something specific about the village founding. Founding rumour heard.",
+          title: "Listen carefully without joining in",
+        },
+      ],
+      priority: 1,
+      purpose: "Two or more villagers gossiping. The content should draw on active arc context to be relevant - production team should use what they know of the current state of the village. Player can engage, observe, or correct the record.",
+      redraw: 4,
+      tags: {
+        d_0001: [
+          "v_0004",
+        ],
+      },
+      title: "Overhear the Village Gossip",
+    },
+    {
+      gameId: "press-through-the-unnatural-chill",
+      id: "c_0015",
+      order: 6,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +lair_investigated_early)",
+          },
+          gameId: "note-carefully",
+          id: "o_0014",
+          order: 0,
+          purpose: "Player moves deeper despite the chill. They gain a stronger sense of the lair's layout and its wrongness. Lair investigated early.",
+          title: "Press on and note the chill carefully",
+        },
+      ],
+      priority: 1,
+      purpose: "In the lair zone, the temperature drops suddenly and unnaturally. Key to establish: this is not weather. Something is resisting presence here. The player may or may not recognise this. Early investigation of the lair is mechanically rewarded later.",
+      redraw: 5,
+      tags: {
+        d_0001: [
+          "v_0003",
+        ],
+      },
+      title: "Press Through the Unnatural Chill",
+    },
+    {
+      gameId: "sense-something-watching-from-the-trees",
+      id: "c_0017",
+      order: 7,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +forest_trail_known)",
+          },
+          gameId: "move-carefully",
+          id: "o_0016",
+          order: 0,
+          purpose: "The watching sense follows for a while, then fades. Player learns the path a little better. Forest trail known.",
+          title: "Move carefully and respectfully through the area",
+        },
+      ],
+      priority: 1,
+      purpose: "Player is in the forest zone and has a distinct sense of being watched. Nothing is visible. This is the forest being aware of their presence - not a threat. Key to establish: the forest has attention. How the player responds is a character beat.",
+      redraw: 5,
+      tags: {
+        d_0001: [
+          "v_0005",
+        ],
+      },
+      title: "Sense Something Watching From the Trees",
+    },
+    {
+      condition: "count_played_in(\"thread\", \"bard\") == 0",
+      gameId: "stop-for-the-travelling-bard",
+      id: "c_001a",
+      order: 8,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +old_song_heard)",
+          },
+          gameId: "old-song",
+          id: "o_0018",
+          order: 0,
+          purpose: "The bard plays something old and local. Player hears a phrase that may connect elsewhere.",
+          title: "Request a song about the old days",
+        },
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +bard_favour, +founding_rumour_heard)",
+          },
+          gameId: "toss-coin",
+          id: "o_0019",
+          order: 1,
+          purpose: "The bard catches the player's eye and plays a line about the old village founders. A fragment of founding lore offered in song. Bard favour noted.",
+          title: "Toss the bard a coin",
+        },
+      ],
+      priority: 1,
+      purpose: "A travelling bard performing in the village zone. The bard knows old songs about the region, including fragments about the village founding. Atmospheric scene that fires periodically. Player choices reveal character and yield small lore gains.",
+      redraw: "never",
+      tags: {
+        d_0001: [
+          "v_0004",
+        ],
+        d_0002: [
+          "v_0008",
+        ],
+      },
+      title: "Stop for the Travelling Bard",
+    },
+    {
+      condition: "check_flags(@story.rel_ranger_captain, +met) && check_flags(@story.rel_blacksmith, +grateful)",
+      gameId: "watch-the-eagle-over-the-mountain",
+      id: "c_001c",
+      order: 9,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_ranger_captain": "set_flags(@story.rel_ranger_captain, +impressed)",
+          },
+          gameId: "good-omen-sven",
+          id: "o_001b",
+          order: 0,
+          purpose: "Sven pauses and looks at the eagle. He notes the player's attention to natural signs. His assessment of the player improves.",
+          title: "Read it as a good omen and tell Sven",
+        },
+      ],
+      priority: 1,
+      purpose: "An eagle circles above the mountain zone. Sven, the ranger captain, should be present or nearby for this card. Key to establish: Sven reads natural signs as information - this is part of how he operates. The eagle is circling in the direction of the beacon tower.",
+      redraw: 4,
+      tags: {
+        d_0001: [
+          "v_0006",
+        ],
+      },
+      title: "Watch the Eagle Over the Mountain",
+    },
+    {
+      gameId: "watch-the-fox-in-the-trees",
+      id: "c_001f",
+      order: 10,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +forest_trail_known)",
+          },
+          gameId: "follow-quietly",
+          id: "o_001d",
+          order: 0,
+          purpose: "The fox leads them a short way along a forest path before disappearing. Player learns where a trail begins. Forest trail known.",
+          title: "Follow the fox quietly into the forest",
+        },
+        {
+          changes: {
+            "@story.rel_herbalist": "set_flags(@story.rel_herbalist, +aided)",
+          },
+          gameId: "stand-still",
+          id: "o_001e",
+          order: 1,
+          purpose: "The fox comes close, then leaves. Elara mentions this later - a small credit with her is earned.",
+          title: "Stand still and let the fox approach",
+        },
+      ],
+      priority: 1,
+      purpose: "A fox at the forest edge watches the player. It holds still longer than a wild animal would - this is purposeful, not natural. Key to establish: the forest is attentive. The fox was sent by Elara to check on the player. If Elara has been met, she should reference this in a later scene; if not, she brings it up unprompted.",
+      redraw: 5,
+      tags: {
+        d_0001: [
+          "v_0005",
+        ],
+      },
+      title: "Watch the Fox in the Trees",
+    },
+    {
+      gameId: "weather-a-mountain-squall",
+      id: "c_001h",
+      order: 11,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_ranger_captain": "set_flags(@story.rel_ranger_captain, +impressed)",
+          },
+          gameId: "press-through",
+          id: "o_001g",
+          order: 0,
+          purpose: "Player continues without stopping. Sven notes it without comment. His assessment of the player's capability improves.",
+          title: "Pushe through - you have seen worse",
+        },
+      ],
+      priority: 1,
+      purpose: "A sudden weather change in the mountain zone - sharp and brief. Key to establish: conditions in the mountain change fast. How the player handles this is a character moment. Sven, if present, may notice.",
+      redraw: 4,
+      tags: {
+        d_0001: [
+          "v_0006",
+        ],
+      },
+      title: "Weather a Mountain Squall",
+    },
+  ],
+}

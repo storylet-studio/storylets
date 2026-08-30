@@ -1,0 +1,118 @@
+/* The Village client's look. Plain CSS, no build step of its own: a reader
+   after the engine should not have to read a stylesheet toolchain first. */
+:root {
+  --ink: #1e232b; --soft: #55606f; --muted: #8a94a3;
+  --bg: #eef1f5; --surface: #ffffff; --line: #d3dae3;
+  --accent: #2d5c86; --accent-soft: #e4edf6; --locked: #b4bcc7;
+  --font: ui-sans-serif, system-ui, "Helvetica Neue", Arial, sans-serif;
+  --read: Georgia, "Iowan Old Style", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e7ecf3; --soft: #b3bdca; --muted: #7d8797;
+    --bg: #141922; --surface: #1c222c; --line: #2c3542;
+    --accent: #7cb0dd; --accent-soft: #24313f; --locked: #4a5462;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 var(--font); height: 100vh; display: flex; flex-direction: column;
+}
+header {
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--surface);
+}
+h1 { font: 600 1.1rem var(--read); margin: 0; }
+.build { color: var(--muted); font-size: 0.72rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.turn { color: var(--muted); font-size: 0.8rem; margin-left: auto; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.quiet {
+  background: none; border: 1px solid var(--line); border-radius: 6px;
+  color: var(--soft); font-size: 0.78rem; padding: 3px 10px;
+}
+.quiet:hover { color: var(--accent); border-color: var(--accent); }
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 24rem; }
+@media (max-width: 820px) { main { grid-template-columns: 1fr; grid-template-rows: 45vh 1fr; } }
+
+.map { position: relative; min-height: 0; overflow: hidden; background: var(--bg); }
+.mapsvg { width: 100%; height: 100%; display: block; }
+.zone { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 10 8; opacity: 0.5; }
+.zonename {
+  fill: var(--ink); font: 600 26px var(--font); text-anchor: middle;
+  paint-order: stroke; stroke: var(--surface); stroke-width: 6px; opacity: 0.85;
+}
+.site { cursor: pointer; }
+.site circle { fill: var(--surface); stroke: var(--accent); stroke-width: 5; }
+.site text {
+  fill: var(--ink); font: 600 22px var(--font); text-anchor: middle;
+  paint-order: stroke; stroke: var(--surface); stroke-width: 5px;
+}
+/* A place with nothing at it is quiet; one with cards waiting is not. Without
+   this the Village's opening - one site with anything, twelve without - reads
+   as a map of dead pins. */
+.site circle { opacity: 0.55; }
+.site.waiting circle { opacity: 1; stroke-width: 6; }
+.site .count { fill: var(--accent); font: 700 26px var(--font); stroke: none; }
+.site.here .count { fill: var(--surface); }
+.site:hover circle { fill: var(--accent-soft); opacity: 1; }
+.site.here circle { fill: var(--accent); stroke: var(--accent); opacity: 1; }
+.leave { position: absolute; left: 14px; bottom: 14px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; font-size: 0.82rem; }
+
+.side { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); background: var(--surface); }
+.place { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px; }
+.place h2 { font: 600 1rem var(--read); margin: 0 0 10px; }
+.hint { color: var(--muted); font-style: italic; }
+.card-face {
+  display: block; width: 100%; text-align: left; margin-bottom: 6px; font-weight: 600;
+  background: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px;
+}
+.card-face:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+/* Playing a card: over the map, not down the column. The panel is a fixed
+   column - head, scrolling purpose, choices - so a long storylet scrolls its
+   own text and never pushes its choices off the bottom. */
+.cardview {
+  position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 4vh 4vw;
+  background: color-mix(in oklab, var(--ink) 55%, transparent);
+}
+.cardview[hidden] { display: none; }
+.cardview-panel {
+  display: flex; flex-direction: column; width: min(38rem, 100%); max-height: 84vh;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 18px 50px color-mix(in oklab, var(--ink) 45%, transparent);
+}
+.cardview-head { display: flex; align-items: baseline; gap: 12px; padding: 16px 20px 10px; border-bottom: 1px solid var(--line); }
+.cardview-head h2 { margin: 0; font: 600 1.15rem var(--read); }
+.cardview-head .quiet { margin-left: auto; }
+.cardview-purpose {
+  flex: 1; min-height: 0; overflow: auto; padding: 14px 20px;
+  color: var(--soft); font: 1rem/1.6 var(--read); white-space: pre-wrap;
+}
+.cardview-choices { flex: none; border-top: 1px solid var(--line); padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.choice {
+  display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
+  background: none; border: 1px solid transparent; border-radius: 8px;
+  padding: 10px 12px; font-size: 0.95rem; color: var(--accent);
+}
+.choice:hover { background: var(--accent-soft); border-color: var(--accent); }
+.choice.locked { color: var(--locked); cursor: not-allowed; }
+.choice.locked:hover { background: none; border-color: transparent; }
+.choice.onward { color: var(--surface); background: var(--accent); border-color: var(--accent); justify-content: center; font-weight: 600; }
+.choice.onward:hover { filter: brightness(1.08); background: var(--accent); }
+.choice-why { margin-left: auto; font-size: 0.72rem; font-style: italic; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.journalwrap { border-top: 1px solid var(--line); display: flex; flex-direction: column; height: 40%; min-height: 0; }
+.journalhead { display: flex; align-items: center; gap: 10px; padding: 8px 16px 4px; }
+.journalhead h3 { margin: 0; font: 600 0.68rem var(--font); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.journalhead .quiet { margin-left: auto; }
+.journal { flex: 1; min-height: 0; overflow: auto; padding: 0 16px 14px; }
+.journal p { margin: 0 0 8px; font: 0.88rem/1.55 var(--read); color: var(--soft); }
+
+.sheetwrap { border-top: 1px solid var(--line); padding: 8px 16px 10px; max-height: 22%; overflow: auto; }
+.sheetwrap h3 { margin: 0 0 6px; font: 600 0.68rem var(--font); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.sheet { display: flex; flex-direction: column; gap: 2px; }
+.prop { display: flex; gap: 10px; font-size: 0.82rem; }
+.propname { color: var(--soft); }
+.propvalue { margin-left: auto; color: var(--ink); text-align: right; }

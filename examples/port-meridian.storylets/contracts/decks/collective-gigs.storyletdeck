@@ -1,0 +1,66 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    gameId: "collective-gigs",
+    id: "k_collective",
+    properties: [],
+    purpose: "The Grid Collective doesn't pay in credits. It pays in belonging, and it asks strange favours.",
+    title: "Collective Gigs",
+  },
+  cards: [
+    {
+      condition: "check_flags(@rel_collective, +aided) && check_flags(@events, +decryptor_found)",
+      gameId: "the-blackout-job",
+      id: "c_blackout_job",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@story.events": "set_flags(@events, +blackout_done)",
+            "@story.heat": "advance(@heat)",
+            "@story.rel_collective": "set_flags(@rel_collective, +inner_circle)",
+            "@story.wire": "set_flags(@wire, +blackout)",
+          },
+          gameId: "kill-the-grid",
+          id: "c_blackout_job_kill_the_grid",
+          order: 0,
+          title: "Kill the grid",
+        },
+      ],
+      priority: 3,
+      purpose: "With the decryptor in hand, the Collective wants the substation dark for one night. The city will notice.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_collective_drop",
+        ],
+      },
+      title: "The Blackout Job",
+    },
+    {
+      gameId: "signal-boost",
+      id: "c_signal_boost",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_collective": "set_flags(@rel_collective, +met, +aided)",
+          },
+          gameId: "climb-and-clamp",
+          id: "c_signal_boost_climb_and_clamp",
+          order: 0,
+          title: "Climb and clamp it",
+        },
+      ],
+      priority: 1,
+      purpose: "Climb the old transmission mast and clamp a repeater to it. A test of nerve, not loyalty - yet.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_collective_drop",
+        ],
+      },
+      title: "Signal Boost",
+    },
+  ],
+}

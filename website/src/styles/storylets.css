@@ -1,0 +1,315 @@
+/* Storylet Studio documentation - brand pass.
+ * BRAND (theme independent, branding/README.md's table): plum (the primary ink and the default
+ * accent), plum deep (the compiled / dark ground and every code block), plum mid, plum tint
+ * (accents on dark), amber (the beats: reserved for action - primary calls to action and runtime
+ * contexts). Fonts load from the Google Fonts <link> in astro.config.mjs.
+ *
+ * LIGHT SURFACES are Storyletter's OWN default light theme, Chambray, rather than the brand's
+ * cream. This follows what the Patter side already does: PatterKit's docs take their light
+ * neutrals straight from Patterpad's default Paper theme (#f1ebe0 ground and all) and keep the
+ * brand teal for the accent. Ours were cream #f3ede2, which is within a hair of Patter's
+ * parchment #f1ebe0, so the two family sites read as the same site. Chambray's blue-grey is what
+ * a reader meets the moment they open Storyletter, so the docs meet them with it too, and the
+ * families are told apart at a glance: PatterKit warm, Storylet Studio cool.
+ *
+ * What does NOT move: the accent stays plum, the dark theme stays on the plum-deep ground, and
+ * every band and code block that sits ON plum-deep keeps its cream ink. Patter draws the same
+ * line, its docs' dark ground being the brand stage-black rather than Patterpad's dark theme.
+ * Only the LIGHT neutrals follow the app.
+ */
+
+/* Screenshots of the real Storyletter UI, framed to read as a capture rather than a
+   diagram. Patter's .doc-shot, same rules. */
+.doc-shot { margin: 1.5rem 0; }
+.doc-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(36, 26, 51, 0.08), 0 8px 24px rgba(36, 26, 51, 0.06);
+}
+:root[data-theme="dark"] .doc-shot img {
+  border-color: var(--sl-color-gray-4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+.doc-shot figcaption {
+  margin-top: 0.55rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--sl-color-gray-2);
+}
+
+:root {
+  --sy-read: "Newsreader", Georgia, "Iowan Old Style", serif;
+  --sl-font: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Widen the central reading column (Starlight default 45rem) so the schema tables get room.
+   * Running prose is capped back to a comfortable measure below, so only tables, figures,
+   * code and diagrams use the extra width. */
+  --sl-content-width: 54rem;
+  --sy-prose-measure: 46rem;
+
+  /* Brand reference tokens (theme independent), from branding/README.md. */
+  --sy-plum: #36284a;
+  --sy-plum-deep: #241a33;
+  --sy-plum-mid: #4a3866;
+  --sy-plum-tint: #9a89b5;
+  --sy-amber: #c8902f;
+  --sy-amber-light: #e0b463;
+  --sy-cream: #f3ede2;
+  --sy-paper: #faf6ee;
+  --sy-ink: #2a2431;
+
+  /* Storyletter's Chambray, the app's default LIGHT theme, verbatim from
+   * packages/studio/src/renderer/src/theme.css. That file is the source of truth; these are a
+   * copy, so a change there wants echoing here. */
+  --sy-cham-bg: #e6eaef;
+  --sy-cham-surface: #f4f6f9;
+  --sy-cham-card: #fbfcfe;
+  --sy-cham-ink: #161e28;
+  --sy-cham-muted: #4d5b6b;
+  --sy-cham-line: #c6ceda;
+}
+
+/* ------------------------------------------------------------------ */
+/* DARK (Starlight default): plum tint on the plum-deep ground         */
+/* ------------------------------------------------------------------ */
+:root,
+:root[data-theme="dark"] {
+  --sl-color-accent-low: #33265180;
+  --sl-color-accent: #7a66a0;
+  --sl-color-accent-high: #c3b4dd;
+  --sl-color-text-accent: #c3b4dd;
+
+  --sl-color-white: #f3ede2;
+  --sl-color-gray-1: #e8e1f0;
+  --sl-color-gray-2: #cabfdc;
+  --sl-color-gray-3: #9a89b5;
+  --sl-color-gray-4: #695a85;
+  --sl-color-gray-5: #3b2d52;
+  --sl-color-gray-6: #2b2040;
+  --sl-color-black: #1c1429;
+
+  --sl-color-bg: #241a33;
+  --sl-color-bg-nav: #2b2040;
+  --sl-color-bg-sidebar: #2b2040;
+  --sl-color-bg-inline-code: #33264a;
+
+  --sy-cta: #d09a3c;
+}
+
+/* ------------------------------------------------------------------ */
+/* LIGHT: plum accent on Storyletter's Chambray blue-grey              */
+/* The neutrals are a ladder in Chambray's hue, anchored on the three   */
+/* app tokens that land on a Starlight step exactly: --ink at gray-1,   */
+/* --muted at gray-3, --line at gray-5. The rest are interpolated in    */
+/* the same family. The ACCENT stays plum: brand identity is not theme  */
+/* identity, and the same rule holds inside Storyletter, where the      */
+/* semantic and character colours survive a theme switch untouched.     */
+/* ------------------------------------------------------------------ */
+:root[data-theme="light"] {
+  --sl-color-accent-low: #e2dbee;
+  --sl-color-accent: #36284a;
+  --sl-color-accent-high: #241a33;
+  --sl-color-text-accent: #4a3866;
+
+  /* In Starlight's light mode the "white" and "black" tokens invert:
+     white = highest-contrast text, black = page background. */
+  --sl-color-white: #0f151d;
+  --sl-color-gray-1: #161e28;   /* = Chambray --ink */
+  --sl-color-gray-2: #2c3846;
+  --sl-color-gray-3: #4d5b6b;   /* = Chambray --muted */
+  --sl-color-gray-4: #8894a3;
+  --sl-color-gray-5: #c6ceda;   /* = Chambray --line */
+  --sl-color-gray-6: #eef1f5;
+  --sl-color-gray-7: #f7f9fb;
+  --sl-color-black: #e6eaef;    /* = Chambray --bg */
+
+  --sl-color-bg: #e6eaef;         /* = Chambray --bg */
+  --sl-color-bg-nav: #fbfcfe;     /* = Chambray --card, the lightest tier */
+  --sl-color-bg-sidebar: #f4f6f9; /* = Chambray --surface */
+  --sl-color-bg-inline-code: #e7e0ef;  /* plum tint: inline code is accent, not ground */
+
+  --sy-cta: #c8902f;
+}
+
+/* Keep running prose to a comfortable measure inside the wider column; tables, figures and
+ * code blocks are left to use the full --sl-content-width. */
+.sl-markdown-content > p,
+.sl-markdown-content > ul,
+.sl-markdown-content > ol,
+.sl-markdown-content > blockquote,
+.sl-markdown-content > h1,
+.sl-markdown-content > h2,
+.sl-markdown-content > h3,
+.sl-markdown-content > h4,
+.sl-markdown-content > h5,
+.sl-markdown-content > h6 { max-width: var(--sy-prose-measure); }
+
+/* ------------------------------------------------------------------ */
+/* Headings and the wordmark: the brand reading face                   */
+/* ------------------------------------------------------------------ */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+h1#_top,
+.site-title {
+  font-family: var(--sy-read);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Mono eyebrow utility for section labels. */
+.sy-eyebrow {
+  font-family: var(--sl-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.75rem;
+  color: var(--sy-plum-mid);
+}
+:root[data-theme="dark"] .sy-eyebrow { color: var(--sy-plum-tint); }
+
+/* ------------------------------------------------------------------ */
+/* Asides: off the default lilac, onto the brand                       */
+/* This Starlight version does not derive the aside fill from the      */
+/* border, so tint the fill explicitly from the (brand-mapped) border  */
+/* var - one rule covers every variant and both themes.                */
+/* ------------------------------------------------------------------ */
+.sl-markdown-content .starlight-aside {
+  background-color: color-mix(in oklab, var(--sl-color-asides-border) 12%, var(--sl-color-bg));
+}
+.starlight-aside {
+  --sl-color-asides-text-accent: var(--sy-plum);
+  --sl-color-asides-border: var(--sy-plum);
+}
+:root[data-theme="dark"] .starlight-aside {
+  --sl-color-asides-text-accent: var(--sy-plum-tint);
+  --sl-color-asides-border: var(--sy-plum-tint);
+}
+.starlight-aside--caution {
+  --sl-color-asides-text-accent: #8e6413;
+  --sl-color-asides-border: var(--sy-amber);
+}
+:root[data-theme="dark"] .starlight-aside--caution {
+  --sl-color-asides-text-accent: var(--sy-amber-light);
+  --sl-color-asides-border: var(--sy-amber);
+}
+.starlight-aside--danger {
+  --sl-color-asides-text-accent: #9c3b2f;
+  --sl-color-asides-border: #b8452f;
+}
+:root[data-theme="dark"] .starlight-aside--danger {
+  --sl-color-asides-text-accent: #e0866f;
+  --sl-color-asides-border: #b8452f;
+}
+
+/* ------------------------------------------------------------------ */
+/* Sidebar: plum active page with a beat marker, mono group labels     */
+/* ------------------------------------------------------------------ */
+#starlight__sidebar a[aria-current="page"] {
+  background: var(--sy-plum);
+  color: var(--sy-cream);
+  border-radius: 6px;
+  font-weight: 500;
+}
+#starlight__sidebar a[aria-current="page"]::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 9px;
+  vertical-align: 1px;
+  border-radius: 50%;
+  background: var(--sy-amber-light);
+}
+#starlight__sidebar .sidebar-content summary span,
+#starlight__sidebar .group-label > span {
+  font-family: var(--sl-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  color: var(--sl-color-gray-3);
+}
+
+/* ------------------------------------------------------------------ */
+/* Buttons: amber primary (the beats are the action colour), plum      */
+/* outline secondary.                                                  */
+/* ------------------------------------------------------------------ */
+.sl-link-button.primary,
+a.action.primary {
+  background: var(--sy-cta);
+  border-color: var(--sy-cta);
+  color: #241a33;
+}
+.sl-link-button.primary:hover,
+a.action.primary:hover {
+  background: #b07d24;
+  border-color: #b07d24;
+}
+.sl-link-button.secondary,
+a.action.secondary {
+  background: transparent;
+  color: var(--sy-plum);
+  border: 1.5px solid var(--sy-plum);
+}
+:root[data-theme="dark"] .sl-link-button.secondary,
+:root[data-theme="dark"] a.action.secondary {
+  color: var(--sy-plum-tint);
+  border-color: var(--sy-plum-tint);
+}
+
+/* ------------------------------------------------------------------ */
+/* Cards: hairline plus a product-colour top border. Used on the docs  */
+/* overview pages; the grid is declared here, not in each page.        */
+/* ------------------------------------------------------------------ */
+.sy-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-auto-rows: 1fr; align-items: stretch; gap: 1rem; margin-top: 1.5rem;
+}
+.sy-card {
+  height: 100%; box-sizing: border-box; margin: 0;
+  background: var(--sl-color-bg-sidebar);
+  border: 1px solid var(--sl-color-gray-5);
+  border-top: 2px solid var(--sy-plum);
+  border-radius: 0.6rem;
+  padding: 1.1rem 1.25rem;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.sy-card:hover { border-color: var(--sy-plum-tint); transform: translateY(-1px); }
+.sy-card h3 { margin: 0 0 0.45rem; font-size: 1.02rem; font-family: var(--sy-read); }
+.sy-card p { margin: 0; font-size: 0.9rem; color: var(--sl-color-gray-2); }
+.sy-card.is-author { border-top-color: var(--sy-plum); }
+.sy-card.is-play { border-top-color: var(--sy-amber); }
+.sy-card.is-cli { border-top-color: var(--sy-ink); }
+:root[data-theme="dark"] .sy-card.is-cli { border-top-color: var(--sl-color-gray-3); }
+:root[data-theme="dark"] .sy-card.is-author { border-top-color: var(--sy-plum-tint); }
+
+/* The engine badge row used at the top of each runtime page. */
+.sy-badge {
+  display: flex; align-items: center; gap: 0.9rem;
+  margin: 0 0 1.6rem;
+}
+.sy-badge img { border-radius: 12px; flex: 0 0 auto; }
+.sy-badge p { margin: 0; font-size: 0.95rem; color: var(--sl-color-gray-2); max-width: 34em; }
+
+/* ------------------------------------------------------------------ */
+/* Inline code: pale plum chip                                         */
+/* ------------------------------------------------------------------ */
+.sl-markdown-content :not(pre) > code {
+  background: var(--sl-color-bg-inline-code);
+  color: var(--sy-plum);
+}
+:root[data-theme="dark"] .sl-markdown-content :not(pre) > code {
+  color: #c3b4dd;
+}
+
+/* Code blocks sit on plum deep in BOTH themes (the compiled surface). The syntax theme is
+   forced dark in astro.config (expressiveCode) so the tokens suit this ground; this is the
+   belt-and-braces background pin. */
+.expressive-code .frame pre,
+.expressive-code .frame .copy + pre {
+  --ec-codeBg: #241a33;
+  background: #241a33;
+}

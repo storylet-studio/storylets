@@ -1,0 +1,106 @@
+{
+  schema: "storylets/project@0",
+  project: {
+    id: "proj_village",
+    name: "The Hamlet",
+    version: "0.1.0",
+  },
+  coverage: {
+    drivers: {
+      "@world.time_of_day": {
+        cadence: "sometimes",
+        kind: "recurring",
+        values: [
+          "night",
+        ],
+      },
+    },
+  },
+  export: {
+    bundle: "dist/the-hamlet.storyletsc",
+    metadata: "full",
+  },
+  settings: {
+    playAdvancesTurns: 1,
+  },
+  story: {
+    properties: [
+      {
+        default: "arrival",
+        name: "act",
+        type: "enum",
+        values: [
+          "arrival",
+          "act-1",
+          "act-2",
+        ],
+      },
+      {
+        default: 0,
+        name: "reputation",
+        type: "number",
+      },
+      {
+        default: false,
+        name: "village_open",
+        type: "boolean",
+      },
+      {
+        default: [],
+        name: "rel_innkeeper",
+        type: "flags",
+        values: [
+          "met",
+          "warm",
+          "trusts",
+          "reported",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_blacksmith",
+        type: "flags",
+        values: [
+          "met",
+          "warm",
+          "grateful",
+          "angry",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_elder",
+        type: "flags",
+        values: [
+          "met",
+          "has_favour",
+        ],
+      },
+      {
+        default: [],
+        name: "world_events",
+        type: "flags",
+        values: [
+          "tree_bloomed",
+          "curse_lifted",
+          "legend_forged",
+        ],
+      },
+    ],
+  },
+  templates: {},
+  world: {
+    properties: [
+      {
+        default: "day",
+        name: "time_of_day",
+        type: "enum",
+        values: [
+          "day",
+          "night",
+        ],
+      },
+    ],
+    registry: {},
+  },
+}

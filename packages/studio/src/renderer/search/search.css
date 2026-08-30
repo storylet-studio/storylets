@@ -1,0 +1,83 @@
+/* The Find window - a frameless tool; consumes theme.css tokens only. */
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  -webkit-user-select: none;
+  user-select: none;
+  border: 1px solid var(--line-soft);
+}
+#find { height: 100%; display: flex; flex-direction: column; }
+
+button { font: inherit; color: var(--muted); background: none; border: 0; border-radius: var(--radius-sm); cursor: pointer; }
+button:hover { color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The drag bar, pin and close are the shared .swin-* chrome (app-shell
+   tool-window.css, arriving via theme.css); only content styles live here. */
+
+/* The tabs: Patterpad's segmented mode toggle (Find | Replace | Property),
+   standing in the bar where the title was. The control is our container, so
+   its frame and the gaps between its buttons opt out of the drag region here;
+   the shell's rule only reaches the buttons themselves. */
+.swin-modes { -webkit-app-region: no-drag; display: inline-flex; border: 1px solid var(--line-soft); border-radius: 7px; overflow: hidden; }
+.swin-mode {
+  border-radius: 0; color: var(--muted);
+  font: 600 0.72rem var(--font-ui); padding: 3px 9px;
+  transition: background var(--dur-quick) var(--ease-standard), color var(--dur-quick) var(--ease-standard);
+}
+.swin-mode + .swin-mode { border-left: 1px solid var(--line-soft); }
+.swin-mode:hover { color: var(--ink); }
+.swin-mode.active { background: var(--accent-soft); color: var(--accent); }
+
+.swin-input {
+  font: inherit; font-size: 0.95rem;
+  background: none; color: var(--ink);
+  border: 0; border-bottom: 1px solid var(--line-soft);
+  padding: 10px 12px;
+  -webkit-user-select: text; user-select: text;
+}
+.swin-input:focus-visible { outline: none; }
+
+/* Replace only: the replacement text beside the bulk apply, under the query. */
+.swin-replace-row { display: flex; align-items: center; border-bottom: 1px solid var(--line-soft); }
+.swin-replace-row[hidden] { display: none; }
+.swin-replace { flex: 1; min-width: 0; border-bottom: 0; }
+.swin-replace-all {
+  flex: none; margin-right: 8px; padding: 4px 10px;
+  border: 1px solid var(--accent); border-radius: var(--radius-sm);
+  background: var(--accent); color: var(--surface); font-size: 0.78rem;
+}
+.swin-replace-all:hover { color: var(--surface); filter: brightness(1.08); }
+.swin-replace-all:disabled { background: none; border-color: var(--line-soft); color: var(--muted); cursor: default; filter: none; }
+
+.sr-list { flex: 1; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 1px; }
+.sr-row { display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; padding: 7px 10px; border-radius: var(--radius-sm); color: var(--ink); }
+.sr-row.active, .sr-row:hover { background: var(--accent-soft); }
+.sr-kind { font: 600 0.58rem/1 var(--font-ui); text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); min-width: 58px; }
+.sr-label { flex: 1; min-width: 0; font-family: var(--font-read); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-sub { color: var(--muted); font-size: 0.74rem; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%; }
+.sr-none { color: var(--muted); font-style: italic; font-size: 0.8rem; padding: 10px 12px; }
+
+/* Property: reads or writes, said in a word beside the item. */
+.sr-use { flex: none; font: 600 0.62rem/1 var(--font-ui); letter-spacing: 0.04em; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--line-soft); color: var(--muted); }
+.sr-use.write { color: var(--accent); border-color: var(--accent); }
+
+/* Replace: before → after (before muted, not struck: the arrow and the ink
+   colour show the change), where it is under it, and a per-row Replace. The
+   diff WRAPS where every other row truncates: a purpose is a sentence, and a
+   row that hides the word that changed behind an ellipsis previews nothing. */
+.sr-rrow { cursor: default; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 2px; align-items: center; }
+.sr-rrow:hover { background: none; }
+.sr-diff { grid-column: 1; font-family: var(--font-read); font-size: 0.9rem; line-height: 1.35; }
+.sr-before { color: var(--muted); }
+.sr-arrow { color: var(--muted); }
+.sr-after { color: var(--ink); }
+.sr-rrow .sr-sub { grid-column: 1; margin-left: 0; max-width: none; }
+.sr-rone { grid-column: 2; grid-row: 1 / span 2; padding: 2px 8px; border: 1px solid var(--line-soft); font-size: 0.72rem; color: var(--muted); }
+.sr-rone:hover { border-color: var(--accent); color: var(--accent); }

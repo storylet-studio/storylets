@@ -1,0 +1,76 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    gameId: "docks",
+    id: "k_docks",
+    properties: [],
+    purpose: "Beats for the harbour arc.",
+    title: "Docks",
+  },
+  cards: [
+    {
+      condition: "@hand.danger >= 2",
+      fields: {
+        "patter-scene": "scn_ambush",
+      },
+      gameId: "ambush-at-the-ford",
+      id: "c_ambush",
+      outcomes: [
+        {
+          changes: {
+            "@hand.danger": "@hand.danger - 1",
+            "@story.reputation": "@story.reputation + 1",
+          },
+          condition: "@story.reputation >= 0",
+          gameId: "stand-and-fight",
+          id: "o_fight",
+          order: 1,
+          title: "Stand and fight",
+        },
+        {
+          changes: {
+            "@story.reputation": "@story.reputation - 1",
+          },
+          gameId: "flee",
+          id: "o_flee",
+          order: 0,
+          title: "Flee",
+        },
+      ],
+      priority: 2,
+      purpose: "Pressure beat once the docks heat up.",
+      redraw: 5,
+      tags: {
+        d_zone: [
+          "v_docks",
+        ],
+      },
+      title: "Ambush at the ford",
+    },
+    {
+      fields: {
+        "patter-scene": "scn_rats",
+      },
+      gameId: "rat-job",
+      id: "c_rat_job",
+      outcomes: [
+        {
+          changes: {
+            "@story.visited": "set_flags(@story.visited, +docks)",
+          },
+          gameId: "accepted",
+          id: "o_accept",
+          title: "Take the job",
+        },
+      ],
+      priority: 1,
+      purpose: "Easy first job on the docks.",
+      tags: {
+        d_zone: [
+          "v_docks",
+        ],
+      },
+      title: "A rat job",
+    },
+  ],
+}

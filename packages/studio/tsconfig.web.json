@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "exclude": ["node_modules"],
+  // THE PARENT DIRECTORY, not a list of windows. This was `src/renderer/src`
+  // alone, so the four tool windows were outside the typecheck entirely and
+  // app-shell 0.23.0's breaking `pinButton` change - it returns `{ el, set }`
+  // now, not the button - typechecked clean while four window title bars were
+  // about to render "[object Object]": `Child` accepts a Node, and nobody was
+  // checking. Naming the five directories fixed that and left the same trap set,
+  // since adding a window here is routine and remembering to add a line is not.
+  // `include` takes a directory and means everything under it, so a window added
+  // tomorrow is checked the day it appears. The list never carried information:
+  // every entry was a child of one parent (the answer is Patterpad's, which had
+  // the identical hole by a different route - patterkit to-storylets, 2026-08-17).
+  "include": ["src/renderer", "src/shell", "src/shared", "dev"]
+}

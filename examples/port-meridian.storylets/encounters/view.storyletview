@@ -1,0 +1,41 @@
+{
+  schema: "storylets/view@0",
+  canvases: {
+    k_street: {
+      cards: {
+        c_checkpoint: {
+          x: 60,
+          y: 60,
+        },
+        c_corner_hustle: {
+          x: 300,
+          y: 60,
+        },
+        c_drone_sweep: {
+          x: 300,
+          y: 176,
+        },
+        c_pickpocket: {
+          x: 60,
+          y: 292,
+        },
+      },
+    },
+  },
+  map: {
+    sites: {
+      h_docks_alleys: {
+        x: 160,
+        y: 120,
+      },
+      h_grid_tunnels: {
+        x: 1160,
+        y: 100,
+      },
+      h_strip_crowds: {
+        x: 820,
+        y: 240,
+      },
+    },
+  },
+}

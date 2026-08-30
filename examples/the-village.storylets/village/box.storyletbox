@@ -1,0 +1,14 @@
+{
+  schema: "storylets/box@0",
+  box: {
+    fields: [],
+    gameId: "village",
+    id: "b_0000",
+    properties: [],
+    purpose: "One game's worth of storylets: the village, the wilds beyond it, and the arcs that run through both.",
+    ranking: {
+      specificity: true,
+    },
+    title: "The Village",
+  },
+}

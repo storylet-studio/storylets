@@ -1,0 +1,45 @@
+---
+// Starlight Footer override: the stock footer (edit link / pagination), the Storytools
+// mailing-list sign-up, then a one-line site-wide credit - licence, author, and the Storylet
+// Studio home. Registered in astro.config.mjs `components`.
+import Default from "@astrojs/starlight/components/Footer.astro";
+import Newsletter from "./Newsletter.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/"); // normalise to a trailing slash
+---
+
+<Default><slot /></Default>
+{/* pagefind-ignore: Starlight puts data-pagefind-body on <main>, which encloses this footer, so
+    without it the sign-up copy would match a site search on every page. */}
+<div class="sy-signup" data-pagefind-ignore><Newsletter /></div>
+{/* One line, no internal newlines: Astro collapses a newline between text and an adjacent
+    inline element to nothing, which would run "Made by" into the author link. */}
+<p class="sy-credit"><a href={`${base}licensing/`}>MIT-licensed</a> open source &middot; Made by <a href="https://ian.wildwinter.net" rel="author">Ian Thomas</a> &middot; <a href="https://storylet.studio">storylet.studio</a></p>
+
+<style>
+  .sy-signup {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sl-color-hairline);
+  }
+  /* The sign-up already supplies the rule above it, so the credit line only needs its spacing. */
+  .sy-signup + .sy-credit {
+    padding-top: 0;
+    border-top: 0;
+  }
+  .sy-credit {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sl-color-hairline);
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+  .sy-credit a {
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+  }
+  .sy-credit a:hover {
+    color: var(--sl-color-white);
+    text-decoration: underline;
+  }
+</style>

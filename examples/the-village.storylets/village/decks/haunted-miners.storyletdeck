@@ -1,0 +1,254 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "@story.act == \"act-2\"",
+    gameId: "haunted-miners",
+    id: "k_004f",
+    order: 6,
+    properties: [
+      {
+        default: false,
+        name: "descended",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "oracle_spoken",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "research_done",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "screaming_seen",
+        type: "boolean",
+      },
+    ],
+    title: "The Haunted Miners",
+  },
+  cards: [
+    {
+      condition: "@deck.screaming_seen",
+      gameId: "enter-the-crystal-grotto",
+      id: "c_003z",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@deck.descended": "true",
+            "@story.rel_oracle": "set_flags(@story.rel_oracle, +met)",
+            "@story.world_events": "set_flags(@story.world_events, +oracle_active)",
+          },
+          gameId: "carefully-quietly",
+          id: "o_003y",
+          order: 0,
+          purpose: "Crystals respond to the quiet approach. The Oracle observes before making contact. When it does, it is as an equal considering another. The Oracle arc is now active.",
+          title: "Approach carefully and quietly",
+        },
+      ],
+      priority: 1,
+      purpose: "Player descends to the Crystal Grotto. The crystals are active, resonating, and aware. The Oracle is present. Key to establish: this is a genuine encounter with something ancient and non-human. The Oracle is not hostile but it is purposeful. Production should make the Oracle's presence felt before any interaction begins. This card activates the Oracle arc.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000e",
+        ],
+      },
+      title: "Enter the Crystal Grotto",
+    },
+    {
+      condition: "@deck.research_done || @deck.oracle_spoken",
+      gameId: "face-the-oracles-demand",
+      id: "c_0043",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@story.world_events": "set_flags(@story.world_events, +miners_saved, +oracle_active)",
+          },
+          gameId: "agree-terms",
+          id: "o_0040",
+          order: 0,
+          purpose: "Oracle is satisfied. The pressure on the miners releases immediately - production should show a physical change in the Grotto atmosphere. The miners are freed.",
+          title: "Agree to the Oracle's terms",
+        },
+        {
+          changes: {
+            "@story.rel_oracle": "set_flags(@story.rel_oracle, +met, +allied)",
+            "@story.world_events": "set_flags(@story.world_events, +miners_saved, +oracle_active)",
+          },
+          gameId: "counter-propose",
+          id: "o_0041",
+          order: 1,
+          purpose: "Oracle considers the counter-proposal. A negotiation follows. An alternative is found that satisfies both parties. The miners are freed. The Oracle recognises the player as an ally.",
+          title: "Counter-propose alternative terms",
+        },
+        {
+          changes: {
+            "@story.rel_oracle": "set_flags(@story.rel_oracle, +hostile)",
+            "@story.world_events": "set_flags(@story.world_events, +miners_doomed, +oracle_active)",
+          },
+          gameId: "refuse",
+          id: "o_0042",
+          order: 2,
+          purpose: "Oracle does not argue. It returns to what it was doing. The miners' situation worsens rapidly. The Oracle becomes an adversary.",
+          title: "Refuse the Oracle's demand",
+        },
+      ],
+      priority: 1,
+      purpose: "The Oracle has stated its terms. The miners are caught between the Oracle's needs and their own safety. Key to establish: the Oracle's demand is not unreasonable by its own values - it wants something specific and will release the miners when it has it. The player has had time to understand this. The choice here has lasting consequences for the miners and for the Oracle relationship.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000e",
+        ],
+      },
+      title: "Face the Oracle's Demand",
+    },
+    {
+      condition: "@hand.haunting >= \"screaming\" && !check_flags(@story.world_events, +miners_saved) && !check_flags(@story.world_events, +miners_doomed)",
+      gameId: "find-the-miner-who-wont-wake",
+      id: "c_0047",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@deck.descended": "true",
+          },
+          gameId: "descend-now",
+          id: "o_0044",
+          order: 0,
+          purpose: "Player bypasses the immediate crisis and goes below. The Grotto arc opens directly.",
+          title: "Descend to the Crystal Grotto immediately",
+        },
+        {
+          changes: {
+            "@hand.haunting": "advance(@hand.haunting)",
+          },
+          gameId: "fetch-help",
+          id: "o_0045",
+          order: 1,
+          purpose: "Other miners respond. The man is moved and cared for. The camp is now properly frightened. Crisis building.",
+          title: "Fetche help from the camp",
+        },
+        {
+          changes: {
+            "@hand.haunting": "advance(@hand.haunting)",
+          },
+          gameId: "rouse-yourself",
+          id: "o_0046",
+          order: 2,
+          purpose: "The miner comes around slowly and disoriented. He cannot describe what happened. Unhurt but shaken. Incident documented. Crisis continues to build.",
+          title: "Try to rouse the miner yourself",
+        },
+      ],
+      priority: 1,
+      purpose: "A miner is found in a catatonic state - eyes open, breathing, not responding. Key to establish: the situation has escalated from strange to dangerous. The miner is alive but absent - something is holding his attention below. The player must decide how to respond to an immediate crisis.",
+      redraw: 2,
+      tags: {
+        place: [
+          "h_000b",
+        ],
+      },
+      title: "Find the Miner Who Won't Wake",
+    },
+    {
+      condition: "@hand.haunting < \"screaming\" && !check_flags(@story.world_events, +miners_saved) && !check_flags(@story.world_events, +miners_doomed)",
+      gameId: "investigate-disturbances-at-the-miners-camp",
+      id: "c_0049",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@deck.screaming_seen": "true",
+            "@hand.haunting": "advance(@hand.haunting)",
+            "@story.lore": "set_flags(@story.lore, +miners_disturbed)",
+          },
+          gameId: "ask-miners",
+          id: "o_0048",
+          order: 0,
+          purpose: "Miners are grateful to be believed. They describe a pattern - started small, now nightly. One describes something specific he saw. Timeline established.",
+          title: "Ask the miners what has been happening",
+        },
+      ],
+      priority: 1,
+      purpose: "The miners camp has been disrupted. Miners are shaken, some will not go below. Key to establish: the player witnesses evidence of the disturbance directly - this is not rumour. A structured pattern of events (sounds, movement, a man found catatonic) has been building. The crystal is doing this. This card unlocks the Crystal Grotto arc.",
+      redraw: 3,
+      tags: {
+        place: [
+          "h_000b",
+        ],
+      },
+      title: "Investigate Disturbances at the Miners Camp",
+    },
+    {
+      condition: "@deck.descended",
+      gameId: "research-the-oracle-at-elaras-cottage",
+      id: "c_004c",
+      order: 4,
+      outcomes: [
+        {
+          changes: {
+            "@deck.research_done": "true",
+            "@story.rel_herbalist": "set_flags(@story.rel_herbalist, +met, +aided)",
+          },
+          gameId: "ask-crystal-voices",
+          id: "o_004a",
+          order: 0,
+          purpose: "Elara recognises the question immediately. She explains: what the Oracle is, what it wants, how to approach it.",
+          title: "Ask Elara about crystal voices",
+        },
+        {
+          changes: {
+            "@deck.research_done": "true",
+            "@story.rel_herbalist": "set_flags(@story.rel_herbalist, +met)",
+          },
+          gameId: "look-through-notes",
+          id: "o_004b",
+          order: 1,
+          purpose: "Player finds the relevant information. Elara notices the disturbance but does not press it.",
+          title: "Look through Elara's notes without asking",
+        },
+      ],
+      priority: 1,
+      purpose: "Player visits Elara to understand what they encountered in the Grotto. Key to establish: Elara knows about the Oracle - it is old knowledge. She has records and a framework for understanding it. She can give the player what they need to return with understanding. How the player approaches her affects how much she shares.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000j",
+        ],
+      },
+      title: "Research the Oracle at Elara's Cottage",
+    },
+    {
+      condition: "@deck.descended",
+      gameId: "speak-with-the-oracle-directly",
+      id: "c_004e",
+      order: 5,
+      outcomes: [
+        {
+          changes: {
+            "@deck.oracle_spoken": "true",
+          },
+          gameId: "address-respect",
+          id: "o_004d",
+          order: 0,
+          purpose: "Oracle acknowledges the approach. Exchange is measured and direct. Player comes away with a clear sense of what the Oracle needs and why.",
+          title: "Address the Oracle with respect",
+        },
+      ],
+      priority: 1,
+      purpose: "Player initiates direct communication with the Oracle in the Crystal Grotto. Key to establish: the Oracle does not speak the way humans speak - it communicates in images, resonance, fragments of meaning. Production should convey that the player is being understood and responded to, even if the form is not language. This scene establishes the Oracle as a genuine presence.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000e",
+        ],
+      },
+      title: "Speak With the Oracle Directly",
+    },
+  ],
+}

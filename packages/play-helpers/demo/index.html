@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storylet Engine - the Board demo</title>
+<style>
+  :root { --ink: #1d1f21; --surface: #fff; --line: #ccc; --muted: #666; --page: #f2f2f0; }
+  body { margin: 0; padding: 16px 20px 24px; font: 14px system-ui, sans-serif;
+         color: var(--ink); background: var(--page); }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  #header-line { font: 12px ui-monospace, monospace; color: var(--muted); margin-bottom: 14px; }
+
+  #columns { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  #play { flex: 0 1 26rem; min-width: 18rem; }
+  #examiners { flex: 1 1 26rem; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  #examiners > section { flex: 0 1 auto; }
+  #examiners h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+                  color: var(--muted); margin: 0 0 6px; }
+
+  .bd-hand { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+             padding: 8px 10px; margin-bottom: 10px; }
+  .bd-hand-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+                   color: var(--muted); margin: 0 0 6px; }
+  .bd-empty { font: 12px ui-monospace, monospace; color: var(--muted); }
+  .bd-card-row { margin: 2px 0 4px; }
+  .bd-card { font: inherit; font-size: 13px; text-align: left; padding: 4px 10px; cursor: pointer;
+             border: 1px solid var(--line); border-radius: 5px; background: #fff; }
+  .bd-card:hover { background: #eee; }
+  .bd-card-open { border-color: #888; background: #ebebe8; }
+  .bd-outcomes { display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+                 margin: 4px 0 2px 16px; }
+  .bd-outcome { font: inherit; font-size: 12px; text-align: left; padding: 2px 8px; cursor: pointer;
+                border: 1px solid var(--line); border-radius: 5px; background: #fafafa; }
+  .bd-outcome:hover:enabled { background: #eee; }
+  .bd-outcome:disabled { color: var(--muted); cursor: default; opacity: 0.6; }
+
+  #controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 10px; }
+  .bd-control { font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer;
+                border: 1px solid var(--line); border-radius: 5px; background: #fff; }
+  .bd-control:hover { background: #eee; }
+
+  #transcript { font: 11px ui-monospace, monospace; background: #fff; border: 1px solid var(--line);
+                border-radius: 6px; padding: 6px 8px; height: 9rem; overflow: auto;
+                white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h1>Storylet Engine - the Board demo</h1>
+  <div id="header-line">loading the bundle...</div>
+
+  <div id="columns">
+    <div id="play">
+      <div id="board"></div>
+      <div id="controls"></div>
+      <div id="transcript"></div>
+    </div>
+
+    <div id="examiners">
+      <section>
+        <h2>createPropertyInspector(engine, flow)</h2>
+        <div id="examiner-state"></div>
+      </section>
+      <section>
+        <h2>createBundleInspector(bundle)</h2>
+        <div id="examiner-bundle"></div>
+      </section>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+{
+  schema: "storylets/project@0",
+  project: {
+    id: "proj_meridian",
+    name: "Port Meridian",
+    version: "0.1.0",
+  },
+  coverage: {
+    drivers: {
+      "@world.armed": {
+        kind: "recurring",
+        values: [
+          true,
+          false,
+        ],
+      },
+      "@world.time_of_day": {
+        kind: "recurring",
+        values: [
+          "day",
+          "night",
+        ],
+      },
+    },
+  },
+  export: {
+    bundle: "dist/port-meridian.storyletsc",
+    metadata: "full",
+  },
+  settings: {
+    playAdvancesTurns: 1,
+  },
+  story: {
+    properties: [
+      {
+        default: "unnoticed",
+        name: "heat",
+        purpose: "How much the city has noticed you - the one ladder every box reads.",
+        stages: [
+          "unnoticed",
+          "watched",
+          "hunted",
+        ],
+        type: "quality",
+      },
+      {
+        default: [],
+        name: "rel_syndicate",
+        purpose: "Standing with the Ashfall Syndicate.",
+        type: "flags",
+        values: [
+          "met",
+          "delivered",
+          "trusted",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_collective",
+        purpose: "Standing with the Grid Collective.",
+        type: "flags",
+        values: [
+          "met",
+          "aided",
+          "inner_circle",
+        ],
+      },
+      {
+        default: [],
+        name: "jobs",
+        purpose: "The contract lifecycle record: which jobs are live, done, or went loud.",
+        type: "flags",
+        values: [
+          "cold_taken",
+          "cold_done",
+          "cold_loud",
+          "noq_taken",
+          "noq_done",
+        ],
+      },
+      {
+        default: [],
+        name: "events",
+        purpose: "The permanent record of what has happened - what the codex reacts to.",
+        type: "flags",
+        values: [
+          "decryptor_found",
+          "burner_found",
+          "blackout_done",
+        ],
+      },
+      {
+        default: [],
+        name: "wire",
+        purpose: "What JUST happened, as the screens report it. Written by outcomes beside their permanent record; CLEARED BY THE GAME each news cycle, so stale headlines evict.",
+        type: "flags",
+        values: [
+          "container_robbery",
+          "blackout",
+        ],
+      },
+    ],
+  },
+  templates: {},
+  world: {
+    properties: [
+      {
+        default: "day",
+        name: "time_of_day",
+        purpose: "The game's clock, fed each turn.",
+        type: "enum",
+        values: [
+          "day",
+          "night",
+        ],
+      },
+      {
+        default: false,
+        name: "armed",
+        purpose: "Whether the player carries a weapon right now - gates outcomes the game may offer.",
+        type: "boolean",
+      },
+    ],
+    registry: {},
+  },
+}

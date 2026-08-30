@@ -1,0 +1,22 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.7",
+	"Category": "Samples",
+	"Description": "Storylet Engine demo, as a ready-to-open sample project: loads the Hamlet example bundle from disk, deals the board and plays a storylet, logged to the Output Log. Finds the StoryletEngine plugin in the sibling folder (AdditionalPluginDirectories), so the release zip works as unpacked.",
+	"Modules": [
+		{
+			"Name": "StoryletEngineDemo",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "StoryletEngine",
+			"Enabled": true
+		}
+	],
+	"AdditionalPluginDirectories": [
+		".."
+	]
+}

@@ -1,0 +1,1512 @@
+{
+  "schema": "storylets/bundle@0",
+  "boxes": [
+    {
+      "decks": [
+        {
+          "cards": [
+            {
+              "fields": {
+                "scene": "scn_amb_forest"
+              },
+              "gameId": "wind-in-the-leaves",
+              "id": "c_amb_forest",
+              "outcomes": [
+                {
+                  "changes": {},
+                  "gameId": "continue",
+                  "id": "c_amb_forest_o",
+                  "title": "Continue"
+                }
+              ],
+              "priority": 0,
+              "purpose": "The forest breathes around you. The trail markers are older than the village.",
+              "redraw": "always",
+              "tags": {
+                "d_zone": [
+                  "v_forest"
+                ]
+              },
+              "title": "Wind in the Leaves"
+            },
+            {
+              "fields": {
+                "scene": "scn_amb_forge"
+              },
+              "gameId": "ring-of-the-anvil",
+              "id": "c_amb_forge",
+              "outcomes": [
+                {
+                  "changes": {},
+                  "gameId": "continue",
+                  "id": "c_amb_forge_o",
+                  "title": "Continue"
+                }
+              ],
+              "priority": 0,
+              "purpose": "Gareth's hammer keeps time across the village, steady as a heartbeat.",
+              "redraw": "always",
+              "tags": {
+                "place": [
+                  "h_forge"
+                ]
+              },
+              "title": "The Ring of the Anvil"
+            },
+            {
+              "fields": {
+                "scene": "scn_amb_market"
+              },
+              "gameId": "market-bustle",
+              "id": "c_amb_market",
+              "outcomes": [
+                {
+                  "changes": {},
+                  "gameId": "continue",
+                  "id": "c_amb_market_o",
+                  "title": "Continue"
+                }
+              ],
+              "priority": 0,
+              "purpose": "Torin the trader is loudly overselling turnips. The square is alive with haggling and gossip.",
+              "redraw": "always",
+              "tags": {
+                "d_zone": [
+                  "v_village"
+                ]
+              },
+              "title": "Market Bustle"
+            },
+            {
+              "condition": {
+                "ast": [
+                  "bin",
+                  "==",
+                  [
+                    "sv",
+                    "world",
+                    "time_of_day"
+                  ],
+                  [
+                    "s",
+                    "night"
+                  ]
+                ],
+                "src": "@world.time_of_day == \"night\""
+              },
+              "fields": {
+                "scene": "scn_amb_night"
+              },
+              "gameId": "night-settles",
+              "id": "c_amb_night",
+              "outcomes": [
+                {
+                  "changes": {},
+                  "gameId": "continue",
+                  "id": "c_amb_night_o",
+                  "title": "Continue"
+                }
+              ],
+              "priority": 0,
+              "purpose": "Lamps gutter; the well stands black and still. Something feels watchful after dark.",
+              "redraw": "always",
+              "tags": {
+                "d_zone": [
+                  "v_village"
+                ]
+              },
+              "title": "Night Settles on the Village"
+            }
+          ],
+          "gameId": "ambients",
+          "id": "k_ambients",
+          "properties": [],
+          "purpose": "Background colour that never blocks a real beat.",
+          "title": "Ambients"
+        },
+        {
+          "cards": [
+            {
+              "condition": {
+                "ast": [
+                  "bin",
+                  "==",
+                  [
+                    "sv",
+                    "story",
+                    "act"
+                  ],
+                  [
+                    "s",
+                    "arrival"
+                  ]
+                ],
+                "src": "@act == \"arrival\""
+              },
+              "fields": {
+                "scene": "scn_gate"
+              },
+              "gameId": "arrive-at-the-gate",
+              "id": "c_arrive",
+              "outcomes": [
+                {
+                  "changes": {
+                    "@story.act": {
+                      "ast": [
+                        "s",
+                        "act-1"
+                      ],
+                      "src": "\"act-1\""
+                    }
+                  },
+                  "gameId": "step-through",
+                  "id": "c_arrive_o",
+                  "title": "Step through the gate"
+                }
+              ],
+              "priority": 10,
+              "purpose": "The road ends at a weathered gate; smoke rises from the Inn beyond. First impressions begin here.",
+              "redraw": "never",
+              "tags": {
+                "d_zone": [
+                  "v_village"
+                ]
+              },
+              "title": "Arrive at the Village Gate"
+            },
+            {
+              "condition": {
+                "ast": [
+                  "bin",
+                  "and",
+                  [
+                    "call",
+                    "check_flags",
+                    [
+                      "sv",
+                      "story",
+                      "rel_innkeeper"
+                    ],
+                    [
+                      "fd",
+                      "+",
+                      "met"
+                    ]
+                  ],
+                  [
+                    "call",
+                    "check_flags",
+                    [
+                      "sv",
+                      "story",
+                      "rel_blacksmith"
+                    ],
+                    [
+                      "fd",
+                      "+",
+                      "met"
+                    ]
+                  ]
+                ],
+                "src": "check_flags(@rel_innkeeper, +met) and check_flags(@rel_blacksmith, +met)"
+              },
+              "fields": {
+                "scene": "scn_elder"
+              },
+              "gameId": "answer-brynas-summons",
+              "id": "c_bryna",
+              "outcomes": [
+                {
+                  "changes": {
+                    "@story.act": {
+                      "ast": [
+                        "s",
+                        "act-2"
+                      ],
+                      "src": "\"act-2\""
+                    },
+                    "@story.rel_elder": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "rel_elder"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "met"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "has_favour"
+                        ]
+                      ],
+                      "src": "set_flags(@rel_elder, +met, +has_favour)"
+                    },
+                    "@story.village_open": {
+                      "ast": [
+                        "b",
+                        true
+                      ],
+                      "src": "true"
+                    }
+                  },
+                  "gameId": "pledge-your-help",
+                  "id": "c_bryna_pledge",
+                  "title": "Pledge your help to the village"
+                },
+                {
+                  "changes": {
+                    "@story.act": {
+                      "ast": [
+                        "s",
+                        "act-2"
+                      ],
+                      "src": "\"act-2\""
+                    },
+                    "@story.rel_elder": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "rel_elder"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "met"
+                        ]
+                      ],
+                      "src": "set_flags(@rel_elder, +met)"
+                    },
+                    "@story.village_open": {
+                      "ast": [
+                        "b",
+                        true
+                      ],
+                      "src": "true"
+                    }
+                  },
+                  "gameId": "keep-your-distance",
+                  "id": "c_bryna_cautious",
+                  "title": "Stay polite but keep your distance"
+                }
+              ],
+              "priority": 2,
+              "purpose": "The village elder has heard a newcomer is asking questions. She would like to hear them herself.",
+              "redraw": "never",
+              "tags": {
+                "d_zone": [
+                  "v_village"
+                ]
+              },
+              "title": "Answer Bryna's Summons"
+            },
+            {
+              "condition": {
+                "ast": [
+                  "u",
+                  "not",
+                  [
+                    "call",
+                    "check_flags",
+                    [
+                      "sv",
+                      "story",
+                      "rel_blacksmith"
+                    ],
+                    [
+                      "fd",
+                      "+",
+                      "met"
+                    ]
+                  ]
+                ],
+                "src": "not check_flags(@rel_blacksmith, +met)"
+              },
+              "fields": {
+                "scene": "scn_forge"
+              },
+              "gameId": "known-at-the-forge",
+              "id": "c_forge_first",
+              "outcomes": [
+                {
+                  "changes": {
+                    "@story.rel_blacksmith": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "rel_blacksmith"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "met"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "warm"
+                        ]
+                      ],
+                      "src": "set_flags(@rel_blacksmith, +met, +warm)"
+                    }
+                  },
+                  "gameId": "admire-the-work",
+                  "id": "c_forge_warm",
+                  "title": "Admire the work openly and specifically"
+                },
+                {
+                  "changes": {
+                    "@story.rel_blacksmith": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "rel_blacksmith"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "met"
+                        ]
+                      ],
+                      "src": "set_flags(@rel_blacksmith, +met)"
+                    }
+                  },
+                  "gameId": "ask-if-hes-hiring",
+                  "id": "c_forge_straight",
+                  "title": "Talk straight: ask if he's hiring"
+                }
+              ],
+              "priority": 3,
+              "purpose": "Gareth barely looks up from the anvil. Respect for the work, or a straight question, both land - flattery does not.",
+              "redraw": "never",
+              "tags": {
+                "place": [
+                  "h_forge"
+                ]
+              },
+              "title": "Make Yourself Known at the Forge"
+            },
+            {
+              "condition": {
+                "ast": [
+                  "u",
+                  "not",
+                  [
+                    "call",
+                    "check_flags",
+                    [
+                      "sv",
+                      "story",
+                      "rel_innkeeper"
+                    ],
+                    [
+                      "fd",
+                      "+",
+                      "met"
+                    ]
+                  ]
+                ],
+                "src": "not check_flags(@rel_innkeeper, +met)"
+              },
+              "fields": {
+                "scene": "scn_inn"
+              },
+              "gameId": "settle-at-the-inn",
+              "id": "c_inn_first",
+              "outcomes": [
+                {
+                  "changes": {
+                    "@story.rel_innkeeper": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "rel_innkeeper"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "met"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "warm"
+                        ]
+                      ],
+                      "src": "set_flags(@rel_innkeeper, +met, +warm)"
+                    },
+                    "@story.reputation": {
+                      "ast": [
+                        "bin",
+                        "+",
+                        [
+                          "sv",
+                          "story",
+                          "reputation"
+                        ],
+                        [
+                          "n",
+                          1
+                        ]
+                      ],
+                      "src": "@reputation + 1"
+                    }
+                  },
+                  "gameId": "ask-about-history",
+                  "id": "c_inn_warm",
+                  "title": "Ask warmly about the village's history"
+                },
+                {
+                  "changes": {
+                    "@story.rel_innkeeper": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "rel_innkeeper"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "met"
+                        ]
+                      ],
+                      "src": "set_flags(@rel_innkeeper, +met)"
+                    }
+                  },
+                  "gameId": "ask-about-the-road-north",
+                  "id": "c_inn_road",
+                  "title": "Ask only about the road north"
+                }
+              ],
+              "priority": 3,
+              "purpose": "Mira the innkeeper takes your measure over a bowl of stew. How you speak to her sets the tone.",
+              "redraw": "never",
+              "tags": {
+                "place": [
+                  "h_inn"
+                ]
+              },
+              "title": "Get Settled at the Inn"
+            }
+          ],
+          "gameId": "arrival",
+          "id": "k_arrival",
+          "properties": [],
+          "purpose": "A newcomer finds their footing.",
+          "title": "Arrival"
+        },
+        {
+          "cards": [
+            {
+              "condition": {
+                "ast": [
+                  "bin",
+                  "==",
+                  [
+                    "sv",
+                    "deck",
+                    "debt"
+                  ],
+                  [
+                    "s",
+                    "troubled"
+                  ]
+                ],
+                "src": "@deck.debt == \"troubled\""
+              },
+              "fields": {
+                "scene": "scn_gareth_men"
+              },
+              "gameId": "the-moneylenders-men",
+              "id": "c_gareth_men",
+              "outcomes": [
+                {
+                  "changes": {
+                    "@deck.debt": {
+                      "ast": [
+                        "call",
+                        "advance",
+                        [
+                          "sv",
+                          "deck",
+                          "debt"
+                        ]
+                      ],
+                      "src": "advance(@deck.debt)"
+                    },
+                    "@story.rel_blacksmith": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "rel_blacksmith"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "grateful"
+                        ]
+                      ],
+                      "src": "set_flags(@rel_blacksmith, +grateful)"
+                    },
+                    "@story.reputation": {
+                      "ast": [
+                        "bin",
+                        "+",
+                        [
+                          "sv",
+                          "story",
+                          "reputation"
+                        ],
+                        [
+                          "n",
+                          2
+                        ]
+                      ],
+                      "src": "@reputation + 2"
+                    }
+                  },
+                  "condition": {
+                    "ast": [
+                      "call",
+                      "check_flags",
+                      [
+                        "sv",
+                        "story",
+                        "rel_blacksmith"
+                      ],
+                      [
+                        "fd",
+                        "+",
+                        "warm"
+                      ]
+                    ],
+                    "src": "check_flags(@rel_blacksmith, +warm)"
+                  },
+                  "gameId": "stand-with-gareth",
+                  "id": "c_gm_stand",
+                  "title": "Stand with Gareth against them"
+                },
+                {
+                  "changes": {
+                    "@deck.debt": {
+                      "ast": [
+                        "call",
+                        "advance",
+                        [
+                          "sv",
+                          "deck",
+                          "debt"
+                        ]
+                      ],
+                      "src": "advance(@deck.debt)"
+                    },
+                    "@deck.helped": {
+                      "ast": [
+                        "b",
+                        true
+                      ],
+                      "src": "true"
+                    },
+                    "@story.reputation": {
+                      "ast": [
+                        "bin",
+                        "+",
+                        [
+                          "sv",
+                          "story",
+                          "reputation"
+                        ],
+                        [
+                          "n",
+                          1
+                        ]
+                      ],
+                      "src": "@reputation + 1"
+                    }
+                  },
+                  "condition": {
+                    "ast": [
+                      "bin",
+                      ">=",
+                      [
+                        "sv",
+                        "story",
+                        "reputation"
+                      ],
+                      [
+                        "n",
+                        2
+                      ]
+                    ],
+                    "src": "@reputation >= 2"
+                  },
+                  "gameId": "pay-them-off",
+                  "id": "c_gm_pay",
+                  "title": "Pay the debt yourself"
+                },
+                {
+                  "changes": {
+                    "@deck.debt": {
+                      "ast": [
+                        "call",
+                        "advance",
+                        [
+                          "sv",
+                          "deck",
+                          "debt"
+                        ]
+                      ],
+                      "src": "advance(@deck.debt)"
+                    },
+                    "@story.rel_blacksmith": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "rel_blacksmith"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "angry"
+                        ]
+                      ],
+                      "src": "set_flags(@rel_blacksmith, +angry)"
+                    }
+                  },
+                  "gameId": "walk-away",
+                  "id": "c_gm_walk",
+                  "title": "Walk away; it isn't your fight"
+                }
+              ],
+              "priority": 5,
+              "purpose": "Two of Aldric's men lean on the forge door. This is the debt made flesh.",
+              "redraw": "never",
+              "tags": {
+                "d_zone": [
+                  "v_village"
+                ]
+              },
+              "title": "The Moneylender's Men"
+            },
+            {
+              "condition": {
+                "ast": [
+                  "sv",
+                  "deck",
+                  "helped"
+                ],
+                "src": "@deck.helped"
+              },
+              "fields": {
+                "scene": "scn_gareth_thanks"
+              },
+              "gameId": "gareths-gratitude",
+              "id": "c_gareth_thanks",
+              "outcomes": [
+                {
+                  "changes": {
+                    "@story.rel_blacksmith": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "rel_blacksmith"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "grateful"
+                        ]
+                      ],
+                      "src": "set_flags(@rel_blacksmith, +grateful)"
+                    }
+                  },
+                  "gameId": "clasp-his-hand",
+                  "id": "c_gtx_o",
+                  "title": "Clasp his hand"
+                }
+              ],
+              "priority": 2,
+              "purpose": "The debt is settled and the forge rings again. Gareth wants you to know it won't be forgotten.",
+              "redraw": "never",
+              "tags": {
+                "place": [
+                  "h_forge"
+                ]
+              },
+              "title": "Gareth's Gratitude"
+            },
+            {
+              "condition": {
+                "ast": [
+                  "bin",
+                  "and",
+                  [
+                    "bin",
+                    "and",
+                    [
+                      "bin",
+                      "!=",
+                      [
+                        "sv",
+                        "story",
+                        "act"
+                      ],
+                      [
+                        "s",
+                        "arrival"
+                      ]
+                    ],
+                    [
+                      "call",
+                      "check_flags",
+                      [
+                        "sv",
+                        "story",
+                        "rel_blacksmith"
+                      ],
+                      [
+                        "fd",
+                        "+",
+                        "met"
+                      ]
+                    ]
+                  ],
+                  [
+                    "bin",
+                    "==",
+                    [
+                      "sv",
+                      "deck",
+                      "debt"
+                    ],
+                    [
+                      "s",
+                      "quiet"
+                    ]
+                  ]
+                ],
+                "src": "@act != \"arrival\" and check_flags(@rel_blacksmith, +met) and @deck.debt == \"quiet\""
+              },
+              "fields": {
+                "scene": "scn_gareth_troubled"
+              },
+              "gameId": "gareth-looks-troubled",
+              "id": "c_gareth_troubled",
+              "outcomes": [
+                {
+                  "changes": {
+                    "@deck.debt": {
+                      "ast": [
+                        "call",
+                        "advance",
+                        [
+                          "sv",
+                          "deck",
+                          "debt"
+                        ]
+                      ],
+                      "src": "advance(@deck.debt)"
+                    }
+                  },
+                  "gameId": "ask-what-is-wrong",
+                  "id": "c_gt_ask",
+                  "title": "Ask him what's wrong"
+                },
+                {
+                  "changes": {
+                    "@deck.debt": {
+                      "ast": [
+                        "call",
+                        "advance",
+                        [
+                          "sv",
+                          "deck",
+                          "debt"
+                        ]
+                      ],
+                      "src": "advance(@deck.debt)"
+                    }
+                  },
+                  "gameId": "leave-him-be",
+                  "id": "c_gt_leave",
+                  "title": "Leave him be"
+                }
+              ],
+              "priority": 4,
+              "purpose": "The hammer has gone quiet. Gareth is staring at a letter he keeps folding and unfolding.",
+              "redraw": "never",
+              "tags": {
+                "place": [
+                  "h_forge"
+                ]
+              },
+              "title": "Gareth Looks Troubled"
+            }
+          ],
+          "gameId": "gareths-debt",
+          "id": "k_gareth",
+          "properties": [
+            {
+              "default": "quiet",
+              "name": "debt",
+              "stages": [
+                "quiet",
+                "troubled",
+                "confronted"
+              ],
+              "type": "quality"
+            },
+            {
+              "default": false,
+              "name": "helped",
+              "type": "boolean"
+            }
+          ],
+          "purpose": "The blacksmith owes the wrong people. Whether you stand with him is up to you.",
+          "title": "Gareth's Debt"
+        },
+        {
+          "cards": [
+            {
+              "condition": {
+                "ast": [
+                  "bin",
+                  "and",
+                  [
+                    "bin",
+                    "and",
+                    [
+                      "bin",
+                      "!=",
+                      [
+                        "sv",
+                        "story",
+                        "act"
+                      ],
+                      [
+                        "s",
+                        "arrival"
+                      ]
+                    ],
+                    [
+                      "call",
+                      "check_flags",
+                      [
+                        "sv",
+                        "story",
+                        "rel_innkeeper"
+                      ],
+                      [
+                        "fd",
+                        "+",
+                        "met"
+                      ]
+                    ]
+                  ],
+                  [
+                    "u",
+                    "not",
+                    [
+                      "call",
+                      "check_flags",
+                      [
+                        "sv",
+                        "deck",
+                        "progress"
+                      ],
+                      [
+                        "fd",
+                        "+",
+                        "distracted_seen"
+                      ]
+                    ]
+                  ]
+                ],
+                "src": "@act != \"arrival\" and check_flags(@rel_innkeeper, +met) and not check_flags(@deck.progress, +distracted_seen)"
+              },
+              "fields": {
+                "scene": "scn_mira_distracted"
+              },
+              "gameId": "mira-seems-distracted",
+              "id": "c_mira_distracted",
+              "outcomes": [
+                {
+                  "changes": {
+                    "@deck.progress": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "deck",
+                          "progress"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "distracted_seen"
+                        ]
+                      ],
+                      "src": "set_flags(@deck.progress, +distracted_seen)"
+                    }
+                  },
+                  "gameId": "hold-her-gaze",
+                  "id": "c_md_o",
+                  "title": "Hold her gaze a moment"
+                }
+              ],
+              "priority": 3,
+              "purpose": "Mira keeps glancing at the sealed door behind the bar. She catches you noticing and looks away.",
+              "redraw": "never",
+              "tags": {
+                "place": [
+                  "h_inn"
+                ]
+              },
+              "title": "Mira Seems Distracted"
+            },
+            {
+              "condition": {
+                "ast": [
+                  "bin",
+                  "and",
+                  [
+                    "call",
+                    "check_flags",
+                    [
+                      "sv",
+                      "deck",
+                      "progress"
+                    ],
+                    [
+                      "fd",
+                      "+",
+                      "distracted_seen"
+                    ]
+                  ],
+                  [
+                    "call",
+                    "check_flags",
+                    [
+                      "sv",
+                      "story",
+                      "rel_innkeeper"
+                    ],
+                    [
+                      "fd",
+                      "+",
+                      "warm"
+                    ]
+                  ]
+                ],
+                "src": "check_flags(@deck.progress, +distracted_seen) and check_flags(@rel_innkeeper, +warm)"
+              },
+              "fields": {
+                "scene": "scn_mira_letter"
+              },
+              "gameId": "the-sealed-letter",
+              "id": "c_mira_letter",
+              "outcomes": [
+                {
+                  "changes": {
+                    "@story.rel_innkeeper": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "rel_innkeeper"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "reported"
+                        ]
+                      ],
+                      "src": "set_flags(@rel_innkeeper, +reported)"
+                    }
+                  },
+                  "gameId": "read-it",
+                  "id": "c_ml_read",
+                  "title": "Read it while you can"
+                },
+                {
+                  "changes": {
+                    "@story.rel_innkeeper": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "rel_innkeeper"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "trusts"
+                        ]
+                      ],
+                      "src": "set_flags(@rel_innkeeper, +trusts)"
+                    },
+                    "@story.reputation": {
+                      "ast": [
+                        "bin",
+                        "+",
+                        [
+                          "sv",
+                          "story",
+                          "reputation"
+                        ],
+                        [
+                          "n",
+                          1
+                        ]
+                      ],
+                      "src": "@reputation + 1"
+                    }
+                  },
+                  "gameId": "return-it-unread",
+                  "id": "c_ml_return",
+                  "title": "Return it unread"
+                }
+              ],
+              "priority": 4,
+              "purpose": "A letter slips from Mira's ledger, sealed with a symbol you have seen carved on the old well.",
+              "redraw": "never",
+              "tags": {
+                "place": [
+                  "h_inn"
+                ]
+              },
+              "title": "The Sealed Letter"
+            }
+          ],
+          "gameId": "miras-secret",
+          "id": "k_mira",
+          "properties": [
+            {
+              "default": [],
+              "name": "progress",
+              "type": "flags",
+              "values": [
+                "distracted_seen"
+              ]
+            }
+          ],
+          "purpose": "The innkeeper is hiding something older than the village.",
+          "title": "Mira's Secret"
+        },
+        {
+          "cards": [
+            {
+              "condition": {
+                "ast": [
+                  "bin",
+                  ">=",
+                  [
+                    "sv",
+                    "hand",
+                    "peril"
+                  ],
+                  [
+                    "n",
+                    1
+                  ]
+                ],
+                "src": "@hand.peril >= 1"
+              },
+              "fields": {
+                "scene": "scn_forest_peril"
+              },
+              "gameId": "the-forest-turns",
+              "id": "c_forest_peril",
+              "outcomes": [
+                {
+                  "changes": {},
+                  "gameId": "continue",
+                  "id": "c_forest_peril_o",
+                  "title": "Continue"
+                }
+              ],
+              "priority": 1,
+              "purpose": "Something you did has unsettled the wood. The trail markers no longer seem to point the same way twice.",
+              "redraw": "always",
+              "tags": {
+                "d_zone": [
+                  "v_forest"
+                ]
+              },
+              "title": "The Forest Turns Wary"
+            },
+            {
+              "condition": {
+                "ast": [
+                  "call",
+                  "check_flags",
+                  [
+                    "sv",
+                    "story",
+                    "world_events"
+                  ],
+                  [
+                    "fd",
+                    "+",
+                    "tree_bloomed"
+                  ]
+                ],
+                "src": "check_flags(@world_events, +tree_bloomed)"
+              },
+              "fields": {
+                "scene": "scn_tree_bloom"
+              },
+              "gameId": "the-tree-blooms",
+              "id": "c_tree_bloom",
+              "outcomes": [
+                {
+                  "changes": {
+                    "@story.reputation": {
+                      "ast": [
+                        "bin",
+                        "+",
+                        [
+                          "sv",
+                          "story",
+                          "reputation"
+                        ],
+                        [
+                          "n",
+                          1
+                        ]
+                      ],
+                      "src": "@reputation + 1"
+                    }
+                  },
+                  "gameId": "breathe-it-in",
+                  "id": "c_tb_o",
+                  "title": "Breathe it in"
+                }
+              ],
+              "priority": 2,
+              "purpose": "Where you touched the bark, blossom spreads in the dark. The forest holds its breath.",
+              "redraw": "never",
+              "tags": {
+                "place": [
+                  "h_tree"
+                ]
+              },
+              "title": "The Tree Blooms"
+            },
+            {
+              "condition": {
+                "ast": [
+                  "bin",
+                  "and",
+                  [
+                    "sv",
+                    "story",
+                    "village_open"
+                  ],
+                  [
+                    "bin",
+                    "==",
+                    [
+                      "sv",
+                      "world",
+                      "time_of_day"
+                    ],
+                    [
+                      "s",
+                      "night"
+                    ]
+                  ]
+                ],
+                "src": "@village_open and @world.time_of_day == \"night\""
+              },
+              "fields": {
+                "scene": "scn_tree_night"
+              },
+              "gameId": "the-glowing-tree",
+              "id": "c_tree_night",
+              "outcomes": [
+                {
+                  "changes": {
+                    "@hand.peril": {
+                      "ast": [
+                        "bin",
+                        "+",
+                        [
+                          "sv",
+                          "hand",
+                          "peril"
+                        ],
+                        [
+                          "n",
+                          1
+                        ]
+                      ],
+                      "src": "@hand.peril + 1"
+                    },
+                    "@story.world_events": {
+                      "ast": [
+                        "call",
+                        "set_flags",
+                        [
+                          "sv",
+                          "story",
+                          "world_events"
+                        ],
+                        [
+                          "fd",
+                          "+",
+                          "tree_bloomed"
+                        ]
+                      ],
+                      "src": "set_flags(@world_events, +tree_bloomed)"
+                    }
+                  },
+                  "gameId": "touch-the-bark",
+                  "id": "c_tn_touch",
+                  "title": "Touch the glowing bark"
+                },
+                {
+                  "changes": {},
+                  "gameId": "observe-carefully",
+                  "id": "c_tn_observe",
+                  "title": "Step back and observe carefully"
+                }
+              ],
+              "priority": 3,
+              "purpose": "Deep in the forest the Mystic Tree burns with a soft light, as if it has been waiting to be addressed.",
+              "redraw": "never",
+              "tags": {
+                "place": [
+                  "h_tree"
+                ]
+              },
+              "title": "The Glowing Tree at Night"
+            }
+          ],
+          "gameId": "calling-tree",
+          "id": "k_tree",
+          "properties": [],
+          "purpose": "The Mystic Tree remembers the founding, and it is waking.",
+          "title": "The Calling Tree"
+        }
+      ],
+      "fields": [
+        {
+          "default": "",
+          "name": "scene",
+          "type": "string"
+        }
+      ],
+      "gameId": "village",
+      "handTemplates": [
+        {
+          "chooses": [
+            "d_zone"
+          ],
+          "gameId": "whats-happening",
+          "id": "t_whats_happening",
+          "properties": [],
+          "purpose": "The main lens: which story beat happens at a place now. One hand per place.",
+          "slots": 3
+        }
+      ],
+      "hands": [
+        {
+          "chosen": {
+            "d_zone": "v_village"
+          },
+          "gameId": "the-forge",
+          "id": "h_forge",
+          "slots": 2,
+          "template": "t_whats_happening",
+          "title": "The Forge"
+        },
+        {
+          "chosen": {
+            "d_zone": "v_village"
+          },
+          "gameId": "the-inn",
+          "id": "h_inn",
+          "slots": 2,
+          "template": "t_whats_happening",
+          "title": "The Inn"
+        },
+        {
+          "chosen": {
+            "d_zone": "v_forest"
+          },
+          "gameId": "the-mystic-tree",
+          "id": "h_tree",
+          "slots": 1,
+          "template": "t_whats_happening",
+          "title": "The Mystic Tree"
+        }
+      ],
+      "id": "b_village",
+      "properties": [],
+      "purpose": "Every story beat in and around the village.",
+      "ranking": {
+        "specificity": true
+      },
+      "tagGroups": [
+        {
+          "gameId": "area",
+          "id": "d_zone",
+          "purpose": "Where in the world this beat belongs.",
+          "tags": [
+            {
+              "gameId": "cave",
+              "id": "v_cave"
+            },
+            {
+              "gameId": "forest",
+              "id": "v_forest",
+              "properties": [
+                {
+                  "default": 0,
+                  "name": "peril",
+                  "type": "number"
+                }
+              ]
+            },
+            {
+              "gameId": "lair",
+              "id": "v_lair"
+            },
+            {
+              "gameId": "mountain",
+              "id": "v_mountain"
+            },
+            {
+              "gameId": "village",
+              "id": "v_village"
+            }
+          ]
+        }
+      ],
+      "title": "Village"
+    }
+  ],
+  "content": {
+    "hash": "0no8e6g",
+    "project": "proj_village",
+    "version": "0.1.0"
+  },
+  "metadata": "full",
+  "settings": {
+    "playAdvancesTurns": 1
+  },
+  "story": {
+    "properties": [
+      {
+        "default": "arrival",
+        "name": "act",
+        "type": "enum",
+        "values": [
+          "arrival",
+          "act-1",
+          "act-2"
+        ]
+      },
+      {
+        "default": 0,
+        "name": "reputation",
+        "type": "number"
+      },
+      {
+        "default": false,
+        "name": "village_open",
+        "type": "boolean"
+      },
+      {
+        "default": [],
+        "name": "rel_innkeeper",
+        "type": "flags",
+        "values": [
+          "met",
+          "warm",
+          "trusts",
+          "reported"
+        ]
+      },
+      {
+        "default": [],
+        "name": "rel_blacksmith",
+        "type": "flags",
+        "values": [
+          "met",
+          "warm",
+          "grateful",
+          "angry"
+        ]
+      },
+      {
+        "default": [],
+        "name": "rel_elder",
+        "type": "flags",
+        "values": [
+          "met",
+          "has_favour"
+        ]
+      },
+      {
+        "default": [],
+        "name": "world_events",
+        "type": "flags",
+        "values": [
+          "tree_bloomed",
+          "curse_lifted",
+          "legend_forged"
+        ]
+      }
+    ]
+  },
+  "world": {
+    "properties": [
+      {
+        "default": "day",
+        "name": "time_of_day",
+        "type": "enum",
+        "values": [
+          "day",
+          "night"
+        ]
+      }
+    ],
+    "registry": {}
+  }
+}

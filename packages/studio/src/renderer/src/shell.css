@@ -1,0 +1,942 @@
+/* ---------------------------------------------------------------------------
+   Shell styles: consume tokens from theme.css only. Three panes - navigator |
+   centre | inspector - the centre is the constant, the sides are guests that
+   collapse to 0 width when closed (Patterpad's grammar).
+   --------------------------------------------------------------------------- */
+
+@import "./card-open.css";
+
+/* The measure every document is set to. Widened from 760 on 2026-08-15: this app
+   retired the inspector, so the centre carries machinery Patterpad keeps in a
+   side pane (conditions, ranking rows, tag chips), and 760 squeezed those into a
+   column with a third of the pane empty beside it. Prose still stops well short
+   of an unreadable line at this width. A LAYOUT constant, so it lives here and
+   not in theme.css, which is colour and type. */
+:root { --doc-measure: 1000px; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#app { height: 100%; display: flex; flex-direction: column; }
+
+.insp-label {
+  font: 600 0.62rem/1 var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+button {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+button:hover { background: var(--accent-soft); color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.primary { background: var(--accent); color: var(--surface); font-weight: 500; }
+button.primary:hover { filter: brightness(1.06); transition: filter var(--dur-quick) var(--ease-standard); }
+kbd { font-family: var(--font-mono); font-size: 0.68rem; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; color: var(--muted); }
+input, textarea, select {
+  font: inherit; background: var(--card); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 9px;
+  -webkit-user-select: text; user-select: text;
+}
+input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+
+/* --- welcome ---------------------------------------------------------------- */
+/* The entrypoint (no project open): a centred CARD, as Patterpad's is, rather
+   than a full-width column - which is what made it read as a sea of text. Wider
+   than Patterpad's 34rem because the examples lay out in a row. */
+.welcome { flex: 1; min-height: 0; display: grid; place-items: center; padding: 2rem; overflow: auto; -webkit-app-region: drag; }
+.welcome button, .welcome input { -webkit-app-region: no-drag; }
+.welcome-card { width: min(48rem, 100%); }
+.wel-title { font-family: var(--font-read); font-size: 2.2rem; font-weight: 600; margin: 0 0 4px; text-align: center; }
+.wel-sub { color: var(--muted); margin: 0 0 32px; text-align: center; }
+/* One group per job (start / learn / return), captioned. The caption is what
+   makes them read as three things rather than one list. */
+.wel-group { margin-bottom: 26px; }
+.wel-label {
+  color: var(--muted); font: 600 0.66rem var(--font-ui); text-transform: uppercase;
+  letter-spacing: 0.06em; margin: 0 0 8px;
+}
+.wel-actions { display: flex; gap: 10px; align-items: center; }
+/* Three across, wrapping to one column when the window is too narrow to keep
+   them legible rather than squeezing them. */
+/* The consequence of a click, said before the click. Sits under the group
+   label, which already carries the 8px gap, so this one closes it up. */
+.wel-note { color: var(--muted); font-size: 0.78rem; line-height: 1.45; margin: -4px 0 8px; }
+.wel-examples { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 10px; }
+/* A real edge, deliberately against the house default (buttons here are
+   recessive: a transparent border that firms on hover, which is right for a
+   toolbar). These are three things you choose BETWEEN, so they have to read as
+   three objects at rest, not as text that turns out to be clickable. */
+.wel-example {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left;
+  padding: 12px 14px; height: 100%; cursor: pointer;
+  border-color: var(--line); background: var(--surface);
+}
+.wel-example:hover { border-color: var(--accent); background: var(--accent-soft); }
+.wel-example:hover .wel-example-name { color: var(--accent); }
+.wel-example-size {
+  color: var(--muted); font: 600 0.6rem var(--font-ui); text-transform: uppercase; letter-spacing: 0.06em;
+}
+.wel-example-name { color: var(--ink); font: 600 0.95rem var(--font-ui); }
+.wel-example-hint { color: var(--muted); font-size: 0.78rem; line-height: 1.45; }
+.wel-recents { display: flex; flex-direction: column; gap: 2px; }
+.wel-recent {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%;
+  background: none; border: 1px solid transparent; padding: 7px 10px; cursor: pointer;
+  /* A button's UA default is CENTRED text, which nothing here overrode. The
+     name never wraps so the row looked left-aligned; a long enough path does
+     wrap, and its second line sat in the middle. (`.wel-example` had already
+     set this, for the same reason.) `anywhere` because a path has no spaces to
+     break at, so without it a deep one widens the card instead of wrapping. */
+  text-align: left; overflow-wrap: anywhere;
+}
+.wel-recent:hover { background: color-mix(in oklab, var(--accent) 8%, transparent); border-color: var(--line); }
+.wel-recent-name { color: var(--ink); font: 600 0.9rem var(--font-ui); }
+.wel-recent-path { color: var(--muted); font: 0.7rem var(--font-mono); }
+.welcome .error { color: var(--danger); font-size: 0.85rem; max-width: 60ch; text-align: center; }
+
+/* --- topbar ----------------------------------------------------------------- */
+/* The pane frame (top bar, grid, toggles, resizers) is the shared shell
+   (@wildwinter/app-shell/pane-shell.css), and so is the fused title bar
+   (.titlebar/.titlebar-inset, applied in mountShell - macOS only for the
+   inset, matching the hiddenInset window). Storyletter adds only its own
+   content styling on the shell's pane classes. */
+/* the inspector pane is retired (dormant): hide its toggle and resizer */
+.topbar > .pane-toggle:last-child, .pane-resizer-insp { display: none; }
+.pname { font-size: 0.85rem; color: var(--muted); }
+/* the topbar Play affordance: quiet chrome, the accent on hover */
+.topbtn { font-size: 0.78rem; color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 2px 10px; }
+.topbtn:hover { color: var(--accent); border-color: var(--accent); background: none; }
+/* autosave status: a dot + word, calm when saved, amber while pending/saving */
+/* The save indicator itself is the shell's (app-shell/save.css). */
+
+/* --- navigator (content over the shell's .pane-nav) ------------------------- */
+.pane-nav { border-right: 1px solid var(--line-soft); background: var(--surface); }
+.pane-nav .pane-inner {
+  padding: 12px 8px; display: flex; flex-direction: column; gap: 1px; font-size: 0.85rem;
+}
+/* Nav rows never squeeze: when the list outgrows the pane it scrolls. Without
+   this, a row with overflow:hidden (the card sub-rows' ellipsis) zeroes its
+   flex minimum size and gets crushed to a half-line of clipped text. */
+.pane-nav .pane-inner > * { flex: none; }
+/* The project's own row: no page of its own, so clicking it opens the
+   Settings dialog (the container leaf carries its settings, rule 10). */
+.nav-project { display: block; width: 100%; text-align: left; font-family: var(--font-read); font-size: 1rem; font-weight: 600; color: var(--ink); padding: 2px 8px 8px; }
+/* One row grammar for the whole tree: [chevron|spacer] label [count]. Depth is
+   indentation; the open document's row is `sel`, its ancestors `on-path`. */
+.nav-row { display: flex; align-items: center; gap: 5px; width: 100%; text-align: left; padding-top: 3px; padding-bottom: 3px; padding-right: 8px; color: var(--ink); }
+.nav-d0 { padding-left: 6px; }
+.nav-d1 { padding-left: 20px; }
+.nav-d2 { padding-left: 34px; }
+.nav-d3 { padding-left: 48px; }
+.nav-boxrow { font-weight: 600; }
+/* The Story row: the @story document, a fixed peer above the boxes. Box
+   weight (it is a top-level document), with a breath below before the boxes. */
+.nav-storyrow { font-weight: 600; margin-bottom: 6px; }
+.nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-row .nav-n { flex: none; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.nav-row.sel { background: var(--accent-soft); color: var(--accent); }
+.nav-row.on-path { color: var(--accent); }
+.nav-row.on-path .nav-n { color: var(--accent); opacity: 0.7; }
+/* disclosure: a drawn triangle (glyphs render hairline-thin), the user's to
+   toggle - clicking it never navigates. */
+.nav-chev, .nav-chev-space { flex: none; width: 12px; height: 12px; display: inline-flex; align-items: center; justify-content: center; }
+.nav-chev { cursor: pointer; }
+.nav-chev::before {
+  content: ""; width: 0; height: 0;
+  border-left: 6px solid var(--muted); border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent;
+  transform-origin: 35% 50%; transition: transform var(--dur-quick) var(--ease-standard);
+}
+.nav-chev:hover::before { border-left-color: var(--accent); }
+.nav-chev.open::before { transform: rotate(90deg); }
+/* quick add rows */
+.nav-add { display: block; width: 100%; text-align: left; color: var(--muted); font-size: 0.8rem; padding-top: 2px; padding-bottom: 2px; }
+.nav-add.nav-d2 { padding-left: 46px; }
+.nav-add.nav-d3 { padding-left: 60px; }
+.nav-add:hover { color: var(--accent); }
+.nav-add-box { margin-top: 14px; padding-left: 6px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+
+/* --- centre ----------------------------------------------------------------- */
+.pane-centre { padding: 22px 26px; display: flex; flex-direction: column; gap: 16px; }
+/* ONE right edge per page (2026-08-15).
+   A measured document used to cap its BODY at the measure while its own trail,
+   heading, tabs and card stepper ran to the full pane, so the page had two right
+   edges and the stepper floated in the empty band beside the content. The cap now
+   belongs to the column, not to the body: every child of a measured centre shares
+   it, chrome included.
+   Marked with a class rather than applied to .pane-centre outright, because the
+   list and canvas pages (a deck's card grid, a box's map) are NOT measured - they
+   are surfaces to fill, and a canvas stopping short of its own pane would read as
+   a bug. */
+.pane-centre.measured > * { max-width: var(--doc-measure); width: 100%; }
+/* card / table view switch (top-right of the centre head) */
+.viewtoggle { display: inline-flex; align-self: center; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.viewbtn { padding: 3px 9px; font-size: 0.85rem; color: var(--muted); border: 0; border-right: 1px solid var(--line-soft); border-radius: 0; }
+.viewbtn:last-child { border-right: 0; }
+.viewbtn:hover { background: var(--accent-soft); color: var(--accent); }
+.viewbtn.on { background: var(--accent-soft); color: var(--accent); }
+/* Node view: the deck's cards on a canvas. It takes the height the centre has
+   left rather than a fixed one, because a canvas is only useful at the size of
+   the window - and the pane is a flex column, so `min-height: 0` is what stops
+   the canvas from pushing past the bottom instead of fitting inside. */
+.nodeview { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.nodestage {
+  flex: 1; min-height: 240px;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  /* The furniture text editor is absolutely positioned over the canvas. */
+  position: relative;
+}
+
+/* A comment marker's hover line, and the invisible proxy its popover hangs off
+   (comment-markers.ts). Both are DOM rather than Konva: a tooltip wants to wrap
+   text, and the shell's anchored panel wants an element to measure. */
+.cmt-marker-tip {
+  position: absolute; z-index: 5;
+  transform: translateX(-50%);
+  max-width: 260px;
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: var(--tip-bg, var(--ink));
+  color: var(--tip-fg, var(--surface));
+  font-size: 0.78rem; line-height: 1.35;
+  pointer-events: none;       /* it must never intercept the click it describes */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cmt-marker-proxy {
+  position: absolute; width: 0; height: 0;
+  pointer-events: none;
+}
+
+/* Typing into a region: a real textarea, sat exactly where the item is
+   (furniture-edit.ts). Konva cannot take typing, and a dialog would make a
+   one-line name cost two clicks and a context switch. */
+.furniture-edit {
+  position: absolute; z-index: 4;
+  margin: 0; padding: 4px 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--card); color: var(--ink);
+  font: 0.78rem/1.35 var(--font-ui);
+  resize: none;
+  box-shadow: var(--shadow-1);
+}
+.furniture-edit:focus { outline: none; }
+/* The strip under the canvas: quiet, and only there when it has something to
+   say (notably that a deck's cards link to cards elsewhere, so an empty canvas
+   is not mistaken for a broken one). */
+.nodestrip { flex: none; display: flex; align-items: center; gap: 14px; min-height: 26px; }
+.nodestrip .hint { font-size: 0.8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Pushes the camera controls to the right end, so the summary reads left to
+   right and the buttons sit where a toolbar would. */
+.nodestrip .stripgap { flex: 1 1 auto; min-width: 8px; }
+/* The coverage legend: a quiet aside, not a status the eye has to clear. It
+   dates the evidence, so it must be readable, but the canvas is the report and
+   this is only its caption. */
+.cover-legend { flex: none; font-style: italic; opacity: 0.85; }
+.camerabtn { flex: none; font-size: 0.78rem; padding: 3px 10px; color: var(--muted); }
+.camerabtn:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.camerabtn:disabled { opacity: 0.4; cursor: default; }
+
+/* A canvas strip carries THREE voices, and giving them all one was the mistake
+   the map shipped with: its primary verbs wore the costume built for the camera
+   controls, so the row read as a sentence rather than as a toolbar.
+
+   1. VERBS (Add zone, Pin a hand): a real button. Bordered, on the card surface,
+      grouped at the left, with a leading + so the act is legible before the words
+      are read.
+   2. WAITING (a declared zone with no outline, a hand with no pin): chips. A
+      noun you pick, carrying its identity colour, visibly not a verb.
+   3. CAMERA (Fit all, Show selection): unchanged and quiet, at the right. */
+/* Which map this is. The name alone read as a stray word, so it is labelled and
+   the NAME carries the weight. */
+.maphere { flex: none; display: inline-flex; align-items: baseline; gap: 5px; font-size: 0.78rem; }
+.maphere-of { color: var(--muted); }
+.maphere-name { color: var(--ink); font-family: var(--font-mono); font-size: 0.95em; }
+
+.nodestrip .striptools { flex: none; display: flex; align-items: center; gap: 6px; }
+.stripbtn {
+  flex: none; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.78rem; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 3px 10px 3px 8px;
+}
+.stripbtn::before { content: "+"; color: var(--muted); font-size: 0.9rem; line-height: 1; }
+.stripbtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.stripbtn:hover::before { color: var(--accent); }
+/* The one that gets you OUT of a gesture: the same shape, warned. */
+.stripbtn.cancel::before { content: "✕"; font-size: 0.72rem; }
+.stripbtn.cancel:hover { border-color: var(--danger); color: var(--danger); background: none; }
+
+.stripchip {
+  flex: none; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.75rem; color: var(--ink);
+  background: none; border: 1px dashed var(--line); border-radius: 999px;
+  padding: 2px 10px 2px 7px;
+}
+.stripchip:hover { border-style: solid; border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+/* The identity dot: the same colour the zone wears on the canvas and its tag
+   wears in the inspector, so a chip is recognisably ABOUT that thing. */
+.stripchip i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.85; }
+
+/* The map's side panel: the canvas keeps the big column, the contents live in
+   the spare width on the right (the Board's own map shape). One row a thing;
+   a row that still needs doing wears its verb at the far end. */
+.mapwrap { flex: 1; min-height: 0; display: flex; gap: 8px; }
+.mapmain-ed { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.mapside {
+  flex: none; width: 224px; overflow-y: auto;
+  border: 1px solid var(--line-soft); border-radius: var(--radius-md);
+  padding: 8px 0;
+}
+.mapside-cap {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 8px 12px 3px; font-size: 0.68rem; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.mapside-cap:first-child { padding-top: 2px; }
+.mapside-waiting { text-transform: none; letter-spacing: 0; font-size: 0.72rem; }
+.mapside-row {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  padding: 3px 12px; border: none; background: none; text-align: left;
+  font: inherit; font-size: 0.8rem; color: var(--ink); cursor: pointer;
+}
+.mapside-row:hover { background: var(--accent-soft); }
+.mapside-row.todo .mapside-name { color: var(--muted); }
+.mapside-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 0.76rem; }
+.mapside-act { flex: none; font-size: 0.7rem; color: var(--accent); }
+.mapside-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.85; }
+.mapside-pin { flex: none; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--muted); }
+/* A hand has no zone colour of its own until it is placed, so its chip carries
+   the pin's outline shape instead of a filled dot. */
+.stripchip.pin i { background: none; border: 1.5px solid currentColor; }
+
+/* A picture's chip. Not a chip in the "waiting to be placed" sense: this one is a
+   HANDLE on something already on the map, and the only handle a locked picture
+   has, since a locked one is invisible to the pointer. Solid rather than dashed
+   for exactly that reason - dashed means "not placed yet" in this strip. */
+.bgchip {
+  flex: none; font-size: 0.72rem; color: var(--muted);
+  background: none; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 2px 8px; font-family: var(--font-mono);
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bgchip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+/* Hidden reads as absent; locked reads as fixed down. Both are states of a thing
+   that is still there, so neither disappears. */
+.bgchip.off { opacity: 0.5; text-decoration: line-through; }
+.bgchip.locked::before { content: "lock  "; letter-spacing: -0.02em; opacity: 0.7; }
+
+/* table (list) view of a deck's cards / a box's decks */
+.ctable-wrap { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.ctable { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+.ctable thead th { text-align: left; font: 600 0.66rem/1 var(--font-ui); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 10px 6px; border-bottom: 1px solid var(--line-soft); }
+.ctable tbody td { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: baseline; }
+.ctable tbody tr { cursor: pointer; }
+.ctable tbody tr:hover { background: var(--card); }
+.ctable tbody tr.sel { background: var(--accent-soft); }
+.ctable .ct-title { font-family: var(--font-read); }
+.ctable .ct-mono { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+.ctable .ct-when { font-size: 0.78rem; }
+.ctable td.ct-when { display: flex; align-items: baseline; gap: 4px; }
+.ctable .ct-dim { color: var(--muted); font-style: italic; }
+.ctable-new { border: 1px dashed var(--line); color: var(--muted); }
+.ctable-new:hover { border-color: var(--accent); color: var(--accent); background: none; }
+.ctable .ct-grip { width: 1.6rem; padding-right: 0; }
+
+/* drag-reorder: grip affordance + drop marks (Patterpad's model) */
+/* One grip grammar for every draggable (the Cards views' model): card-like
+   faces reveal it TOP-RIGHT on rollover; wide table-like rows reveal it
+   LEFT-MIDDLE. Same fade, same weight, everywhere. */
+.cardgrip { color: var(--muted); font-size: 0.85rem; cursor: grab; line-height: 1; user-select: none; }
+.cardgrip:active { cursor: grabbing; }
+.scard .cardgrip, .deck-card .cardgrip { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity var(--dur-quick) var(--ease-standard); }
+.scard:hover .cardgrip, .deck-card:hover .cardgrip { opacity: 0.5; }
+.listrow.draggable { position: relative; padding-left: 32px; }
+.listrow.draggable .cardgrip { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: 0; transition: opacity var(--dur-quick) var(--ease-standard); }
+.listrow.draggable:hover .cardgrip { opacity: 0.5; }
+.ctable .ct-grip .cardgrip { opacity: 0; transition: opacity var(--dur-quick) var(--ease-standard); }
+.ctable tr:hover .ct-grip .cardgrip { opacity: 0.5; }
+/* Drag feedback is one language on EVERY draggable surface (the Cards
+   model): the dragged item dims, and an accent insertion mark shows where
+   the drop will land - on the leading/trailing EDGE that matches the drag
+   axis (x for grids: left/right bars; y for rows: top/bottom lines). */
+.scard.dragging, .deck-card.dragging, .ctable tr.dragging, .listrow.draggable.dragging { opacity: 0.45; }
+.deck-card.drop-before { box-shadow: -3px 0 0 var(--accent); }
+.deck-card.drop-after { box-shadow: 3px 0 0 var(--accent); }
+.listrow.draggable.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.listrow.draggable.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+/* the drop indicator: a bright edge on the side the card will land */
+.scard.drop-before { box-shadow: -3px 0 0 var(--accent); }
+.scard.drop-after { box-shadow: 3px 0 0 var(--accent); }
+.ctable tr.drop-before td { box-shadow: inset 0 2px 0 var(--accent); }
+.ctable tr.drop-after td { box-shadow: inset 0 -2px 0 var(--accent); }
+.centre-head h2 { font-family: var(--font-read); font-size: 1.4rem; font-weight: 600; margin: 0; }
+.centre-head .sub { color: var(--muted); font-size: 0.85rem; font-style: italic; }
+
+.cards, .deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.scard, .deck-card {
+  position: relative;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1); padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px;
+  min-height: 96px; cursor: pointer; text-align: left; font: inherit; color: inherit;
+  transition: box-shadow var(--dur-quick) var(--ease-standard), transform var(--dur-quick) var(--ease-standard);
+}
+/* Hover lifts the card; it does NOT recolour its text. A card face is a button,
+   so the global button:hover was tinting every word on it accent green, which
+   read as "all of this is a link" - and it never was, even before the click
+   stopped opening the card. The lift and the shadow are the whole hover state. */
+.scard:hover, .deck-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); background: var(--card); color: inherit; }
+.scard:hover h3, .deck-card:hover h3, .scard:hover .beat, .deck-card:hover .beat { color: inherit; }
+.scard.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow-1); }
+.scard h3, .deck-card h3 { font-family: var(--font-read); font-size: 1.02rem; font-weight: 600; margin: 0; }
+.scard .beat, .deck-card .beat { font-family: var(--font-read); font-size: 0.85rem; line-height: 1.4; margin: 0; }
+.beat.muted { color: var(--muted); font-style: italic; }
+/* The purpose field's label (B1). Quiet - it is the same word on every document
+   and the reader only needs it once - but present, because a placeholder is not
+   a label: it leaves the moment anything is typed. */
+/* The new-thing picker (kit-picker.ts), on <dialog> rather than a hand-rolled
+   overlay: the focus trap, Escape and the inert background come with it. */
+/* The project name is a button now (A13), and must not look like one until
+   it is reached for: it is a title first and a door second. */
+button.pname { background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: inherit; }
+button.pname:hover { color: var(--accent); }
+.kit-dialog {
+  border: none; border-radius: var(--radius-md); padding: 22px 24px;
+  background: var(--surface); color: var(--ink);
+  width: min(560px, calc(100vw - 48px)); max-height: 82vh; overflow: auto;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.22);
+}
+.kit-dialog::backdrop { background: rgb(0 0 0 / 0.3); }
+.kit-name {
+  display: block; width: 100%; margin: 10px 0 2px; padding: 7px 10px;
+  font: 0.95rem var(--font-read); color: var(--ink);
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.kit-name:focus { outline: none; border-color: var(--accent); }
+.kit-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+.kit-cancel { font-size: 0.8rem; padding: 4px 12px; color: var(--muted); }
+.kit-cancel:hover { color: var(--ink); }
+.kit-what { margin: 0 0 4px; font: 0.85rem/1.5 var(--font-read); color: var(--ink); }
+.doc-explainer p { margin: 0 0 8px; font: 0.85rem/1.5 var(--font-read); color: var(--ink); }
+.doc-explainer p:last-child { margin-bottom: 0; }
+.doc-purpose-label {
+  font: 600 0.66rem/1 var(--font-ui); text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted); margin-top: 2px;
+}
+.deck-card .sub { color: var(--muted); font-size: 0.75rem; }
+/* read-only condition preview on a card face: restrained (Patterpad's "if"
+   idiom) - a quiet prefix and toned-down pills, not a loud chip strip. */
+.cardwhen { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; font-size: 0.78rem; color: var(--muted); }
+.cardwhen-if { font-family: var(--font-mono); color: var(--muted); flex: none; }
+/* Restrained: strip the loud fills and the boxy pill padding, leaving just a
+   hair of horizontal padding so adjacent tokens read as words ("act is
+   arrival"), close to plain text rather than chips. Shared with the table's
+   When cell. */
+.cardwhen .exed-pill, .ct-when .exed-pill {
+  background: none; color: var(--ink); font-weight: 500; border-radius: 0;
+  padding: 0 0.14rem; margin: 0;
+}
+.cardwhen .exed-pill:hover, .ct-when .exed-pill:hover { filter: none; }
+.cardwhen .exed-pill-op, .ct-when .exed-pill-op { color: var(--muted); }
+.cardwhen .exed-pill-flagpos, .ct-when .exed-pill-flagpos { color: var(--ok); }
+.cardwhen .exed-pill-flagneg, .ct-when .exed-pill-flagneg { color: var(--danger); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 2px 9px; color: var(--muted); }
+.chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--muted); }
+button.chip { cursor: pointer; }
+.chip.on { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); }
+/* The "new" ghost - faded until hovered (Patterpad's add-affordance treatment). */
+.scard.ghost, .deck-card.ghost {
+  border-style: dashed; background: none; box-shadow: none; color: var(--muted);
+  align-items: center; justify-content: center; font-size: 0.85rem; min-height: 96px;
+}
+.scard.ghost:hover, .deck-card.ghost:hover { transform: none; border-color: var(--accent); color: var(--accent); }
+
+.rowlist { display: flex; flex-direction: column; gap: 8px; }
+.listrow { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left; width: 100%; padding: 10px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.listrow:hover { background: var(--card); border-color: var(--accent); }
+.listrow.ghost { border-style: dashed; background: none; color: var(--muted); align-items: center; flex-direction: row; }
+.listrow.ghost:hover { border-color: var(--accent); color: var(--accent); }
+.listname { font-family: var(--font-mono); font-size: 0.9rem; color: var(--ink); }
+/* a titled item reads as a title (the mono voice is for name-like ids) */
+.listname.listtitle { font-family: var(--font-read); font-size: 0.95rem; font-weight: 600; }
+/* a settings link in a rowlist: the gear costume (rule 10), never the add ghost */
+.listrow-settings .listname { font-family: var(--font-ui); color: var(--muted); }
+.listrow-settings .listname::before { content: "\2699\00a0 "; }
+.listmeta { font-size: 0.76rem; color: var(--muted); }
+
+/* --- inspector -------------------------------------------------------------- */
+.pane-inspector { border-left: 1px solid var(--line-soft); background: var(--surface); }
+/* The retired inspector is mounted CLOSED (its grid column is 0), but a
+   border still paints 1px wide and hangs past the window's right edge -
+   a permanent horizontal scrollbar for anyone with always-on scroll bars.
+   No pane, no border. */
+.panes.no-inspector .pane-inspector { border-left: 0; }
+.pane-inspector .pane-inner { padding: 16px; }
+.insp-empty { color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
+/* one rhythm (centre-clarity 4): 28px between sections, 6px label-to-panel,
+   10px between rows inside a panel; every document caps at the 760px measure */
+.insp-card { display: flex; flex-direction: column; gap: 28px; }
+.insp-card.cardedit { max-width: var(--doc-measure); width: 100%; }
+/* two materials (centre-clarity 1): paper (prose, chromeless, on the page)
+   and panel - ONE container material for every machinery cluster. */
+.doc-sect { display: flex; flex-direction: column; gap: 6px; }
+.doc-sect-head { display: flex; align-items: baseline; gap: 8px; }
+.doc-sect-hint { font-size: 0.74rem; color: var(--muted); }
+/* Density (design language: quiet chrome - furniture recessive, shown on
+   hover / focus, dimmed until relevant): the labels stay, the explanations
+   wait. A section's hint appears when you approach the section; a Settings
+   row's description when you approach the row; a panel's trailing note when
+   you approach the panel. Solo notes (empty states) stay visible - they are
+   the content. Keyboard focus reveals the same way. */
+.doc-sect-hint,
+.cfg-row .cfg-cap small,
+.doc-panel + .doc-tab-note,
+.insp-note {
+  opacity: 0;
+  transition: opacity var(--dur-quick) var(--ease-standard);
+}
+.doc-sect:hover .doc-sect-hint, .doc-sect:focus-within .doc-sect-hint,
+.cfg-row:hover .cfg-cap small, .cfg-row:focus-within .cfg-cap small,
+.doc-panel:hover + .doc-tab-note, .doc-panel + .doc-tab-note:hover,
+.doc-sect:hover .insp-note, .doc-sect:focus-within .insp-note {
+  opacity: 1;
+}
+/* The rule's own boundary, found by the antagonist audit (2026-08-29): the
+   hover gate is right for FILLED panels and exactly wrong for EMPTY ones,
+   where the gloss IS the content. An empty panel's trailing note, and a
+   load-bearing subtitle on a blank control, stay at full opacity. */
+.doc-panel.empty + .doc-tab-note { opacity: 1; }
+.cfg-row.cfg-loadbearing .cfg-cap small { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .doc-sect-hint, .cfg-row .cfg-cap small, .doc-panel + .doc-tab-note, .insp-note { transition: none; }
+}
+.doc-panel {
+  background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--radius-md);
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
+  transition: box-shadow var(--dur-base) var(--ease-standard),
+              border-color var(--dur-base) var(--ease-standard),
+              background var(--dur-base) var(--ease-standard);
+}
+/* the lift (centre-clarity 2): the panel holding focus rises, the rest rest flat */
+.doc-panel:focus-within { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-1); }
+.doc-panel-rows { display: flex; flex-direction: column; gap: 10px; }
+/* an empty section costs one line (centre-clarity 8): quiet row, ghost + */
+.doc-collapsed { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; padding: 2px 0; border: 0; background: none; }
+button.doc-collapsed { cursor: pointer; }
+button.doc-collapsed:hover { background: none; }
+button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-collapsed-plus { color: var(--accent); border-color: var(--accent); }
+.doc-collapsed-sum { font-size: 0.78rem; color: var(--muted); }
+.doc-collapsed-plus { margin-left: auto; color: var(--muted); font-size: 0.85rem; line-height: 1.2; border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 0 8px; }
+.insp-head { display: flex; align-items: center; gap: 8px; }
+.insp-head .insp-label { flex: 1; }
+.insp-del { color: var(--danger); font-size: 0.78rem; }
+.insp-del:hover { background: var(--danger); color: var(--surface); }
+.insp-del.small { padding: 2px 8px; font-size: 0.72rem; }
+/* The up/down pair that sits beside a list row's Remove. Quiet until hovered,
+   and plainly inert at the ends of the list. */
+.insp-moves { display: inline-flex; align-items: center; gap: 4px; }
+.insp-move { padding: 2px 7px; font-size: 0.72rem; color: var(--muted); }
+.insp-move:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.insp-move:disabled { opacity: 0.35; cursor: default; }
+.insp-input { width: 100%; font-size: 0.88rem; }
+.insp-input.insp-title { font-family: var(--font-read); font-size: 1.1rem; font-weight: 600; }
+.insp-input.insp-mono { font-family: var(--font-mono); font-size: 0.8rem; }
+.insp-input.insp-short { width: auto; max-width: 90px; }
+.insp-input.insp-beat { font-family: var(--font-read); font-size: 0.9rem; line-height: 1.45; resize: vertical; }
+.insp-segrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.insp-seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; flex: none; }
+.insp-seg button { border-radius: 0; border: 0; border-right: 1px solid var(--line-soft); padding: 5px 8px; font-size: 0.76rem; color: var(--muted); }
+.insp-seg button:last-child { border-right: 0; }
+.insp-seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+/* one row shape inside panels (centre-clarity 5): label (fixed column, UI
+   voice) / control / delete, so labels align down the whole panel; hairline
+   separators between rows only */
+.doc-row { display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 10px; }
+.doc-row + .doc-row { border-top: 1px solid var(--line-soft); padding-top: 10px; }
+/* rows whose control wraps (dimension chips): label aligns to the first line */
+.doc-row-top { align-items: start; }
+.doc-row-top .doc-row-label { padding-top: 3px; }
+.doc-row-label { font-size: 0.78rem; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-row-label i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; background: var(--muted); }
+/* scalars don't stretch: selects size to content, only text fields fill */
+.doc-row > select.insp-input { width: auto; justify-self: start; }
+.insp-kv { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+.insp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.insp-exed { min-height: 30px; }
+.insp-add, .settings-add { align-self: flex-start; border: 1px dashed var(--line); color: var(--muted); background: none; padding: 4px 12px; border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-size: 0.82rem; }
+
+
+/* The hoist nudge on a tag group: one quiet line under the Properties list,
+   shown only when a name is declared identically on every tag. */
+.insp-nudge { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 0.8rem; }
+.insp-add:hover, .settings-add:hover { border-color: var(--accent); color: var(--accent); background: none; }
+.settings-add { margin-top: 6px; }
+/* a value block inside the Values panel: hairline-separated, not its own card */
+.doc-vblock { display: flex; flex-direction: column; gap: 8px; }
+.doc-vblock + .doc-vblock { border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.insp-ohead { display: flex; align-items: center; gap: 8px; }
+.insp-ohead .insp-input { flex: 1; }
+/* an inspector level: a common, shell-like subpanel with a labelled header. */
+.insp-level { border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
+.insp-level-head { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--card); border-bottom: 1px solid var(--line-soft); }
+.insp-level-label { text-transform: uppercase; letter-spacing: 0.07em; font-size: 0.64rem; font-weight: 700; color: var(--muted); }
+.insp-level-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.insp-level-body { display: flex; flex-direction: column; gap: 14px; padding: 14px; }
+/* a gameId reads as a quiet value, not a typed-in field: derived from the title
+   ("auto") until pinned. Click for the override popover. */
+.gid { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; padding: 5px 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: none; cursor: pointer; }
+.gid:hover { border-color: var(--accent); background: var(--card); }
+.gid-value { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gid-tag { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); flex: none; }
+.gid-auto .gid-value { color: var(--muted); font-style: italic; }
+/* the override popover */
+.gid-pop { display: flex; flex-direction: column; gap: 8px; min-width: 240px; }
+.gid-pop-note { margin: 0; font-size: 0.74rem; line-height: 1.4; color: var(--muted); }
+/* Patterpad's id-editor row: Reset to auto on the left, Set on the right, and a
+   hint that turns red rather than a field that quietly rewrites what you typed. */
+.gid-pop-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gid-pop-auto { font-size: 0.74rem; border: 1px dashed var(--line); color: var(--muted); }
+.gid-pop-auto:hover { border-color: var(--accent); color: var(--accent); background: none; }
+.gid-pop-set {
+  font-size: 0.78rem; padding: 3px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--accent); background: var(--accent); color: var(--surface);
+}
+.gid-pop-set:disabled { opacity: 0.4; cursor: default; background: none; color: var(--muted); border-color: var(--line); }
+.gid-pop-note.bad { color: var(--danger); }
+/* the outcomes accordion in the centre: a light header row per outcome that
+   expands in place to its full editor. */
+.cardedit-outcomes { display: flex; flex-direction: column; }
+/* closed outcomes are hairline list rows inside the Outcomes panel; the open
+   one becomes a lifted panel of its own (centre-clarity 2) */
+.outcome-item { border: 0; border-radius: var(--radius-md); }
+.outcome-item + .outcome-item { border-top: 1px solid var(--line-soft); }
+.outcome-item.open { background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-1); margin: 6px 0; }
+.outcome-item.open + .outcome-item { border-top: 0; }
+.outcome-row { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 0; background: none; cursor: pointer; }
+.outcome-row:hover { background: var(--surface); }
+.outcome-item.open .outcome-row:hover { background: none; }
+.outcome-row.open { background: none; border-bottom: 1px solid var(--line-soft); }
+.outcome-row-line { display: flex; align-items: baseline; gap: 8px; }
+/* a CSS triangle, not a glyph: U+25B8/25BE are "small" triangles that stay
+   hairline-thin however large the font is set. */
+.outcome-row-chev {
+  flex: none; align-self: center; width: 0; height: 0; margin: 0 4px 0 1px;
+  border-left: 7px solid var(--ink); border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+  transform-origin: 35% 50%; transition: transform var(--dur-quick) var(--ease-standard);
+}
+.outcome-row.open .outcome-row-chev { transform: rotate(90deg); }
+.outcome-row-title { font-size: 0.88rem; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outcome-row-sum { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.outcome-row-when { padding-left: 1.4em; }
+.outcome-body { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-top: 0; }
+/* the outcome's own paper: title + beat in the reading face, chromeless */
+.outcome-body .outcome-title { font-family: var(--font-read); font-size: 1rem; font-weight: 600; border: 0; background: none; padding: 0; border-radius: 0; }
+.outcome-body .outcome-title:focus-visible { outline: 0; box-shadow: 0 1px 0 var(--accent); }
+.outcome-body .outcome-beat { font-family: var(--font-read); font-size: 0.88rem; line-height: 1.45; color: var(--muted); border: 0; background: none; padding: 0; border-radius: 0; resize: vertical; }
+.outcome-body .outcome-beat:focus-visible { outline: 0; box-shadow: 0 1px 0 var(--line); }
+.outcome-remove { align-self: flex-start; }
+.cardedit-outcomes .insp-add { margin-top: 2px; }
+.insp-muted, .insp-ro { color: var(--muted); font-size: 0.85rem; }
+.insp-ro.insp-mono { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink); }
+.insp-kv { display: inline-flex; align-items: center; gap: 5px; }
+.insp-kv i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; background: var(--muted); }
+.doc-vblock .insp-ohead .insp-kv { flex: 1; }
+.doc-vblock .insp-ohead .insp-kv .insp-input { flex: 1; }
+
+/* --- the Review Feedback bar ------------------------------------------------
+   ONE bar grammar with one modifier, which is the rule that sent the bar itself
+   to the shell (app-shell/stepper.css). What is left here is the walk's own
+   voice: its kinds are names rather than severities, so they are set as small
+   caps in the accent rather than coloured by how bad they are. It sits ABOVE the
+   problems bar when both are up, because the walk is a mode you entered and the
+   problems bar is ambient. */
+.reviewbar .stepbar-cat { color: var(--accent); text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.06em; }
+/* A resolved thread is in the walk only because Show Resolved asked for it, so
+   it is marked and recessive rather than absent. */
+.reviewbar .stepbar-cat.done { color: var(--muted); }
+
+/* --- problems bar ------------------------------------------------------------
+   The bar is the shell's (app-shell/stepper.css): count, steppers, the entry,
+   an action slot. Storyletter adds where it sits and what its severities are
+   coloured with, both of which are this app's business and not a third app's. */
+.problembar .sev-error { color: var(--danger); }
+.problembar .sev-warning { color: var(--warn); }
+/* The quick-fix slot at the right end (Patterpad's problem-fix). An accent
+   button, because it is the one thing in that bar that ACTS rather than
+   describes. */
+.problembar-fix {
+  flex: none; font-size: 0.78rem; padding: 3px 10px; margin-left: 8px;
+  border: 1px solid var(--accent); border-radius: var(--radius-sm);
+  color: var(--accent); background: var(--accent-soft);
+}
+.problembar-fix:hover { background: var(--accent); color: var(--surface); }
+/* the topbar health chip */
+.probstat { flex: none; font-size: 0.72rem; font-variant-numeric: tabular-nums; border: 0; padding: 2px 8px; border-radius: var(--radius-pill); cursor: pointer; }
+.probstat.ok { color: var(--ok); cursor: default; }
+.probstat.err { color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, transparent); }
+.probstat.warn { color: var(--warn); background: color-mix(in oklab, var(--warn) 14%, transparent); }
+
+/* --- version control (lock / read-only / out-of-date) ----------------------- */
+/* Quiet chrome: a monochrome glyph on the item, nothing at all when the shard
+   is clean and writable (which is nearly always). The glyphs inherit their
+   themed colour, so they read the same in Linen and Baize. */
+/* The six badges and their colours are the shell's (app-shell/vc.css): locked,
+   out of date, checked out by you, modified, new, read-only. Three of those were
+   dropped on the way into the shared copy and came back in 0.26.0, so the three
+   colours that used to be repeated here are gone with them - two apps holding
+   the same three rules is how the other three went missing unnoticed. What stays
+   is where a badge SITS, which is this app's layout and nobody else's. */
+.vc-badge { flex: none; font-size: 0.72rem; line-height: 1; opacity: 0.9; }
+/* on a row: at the end of the line; on a card face: out of the grip's way */
+.nav-row > .vc-badge, .nav-project > .vc-badge { margin-left: 4px; }
+.listrow { position: relative; }
+.listrow > .vc-badge { position: absolute; top: 9px; right: 11px; }
+.scard > .vc-badge, .deck-card > .vc-badge { position: absolute; right: 11px; bottom: 9px; }
+.ctable td > .vc-badge { margin-left: 6px; }
+/* the topbar chip: the OPEN document's state, beside the save indicator */
+.vcstat { flex: none; font-size: 0.72rem; color: var(--warn); white-space: nowrap; -webkit-app-region: no-drag; }
+.vcstat.locked { color: var(--danger); }
+.vcstat[hidden] { display: none; }
+/* A document whose shard somebody else holds: a notice naming them, and the
+   editing controls off (reading, navigating and switching tabs stay live -
+   only the writing stops). The save would be refused anyway; this says so
+   before the author types into a doomed edit. */
+.vc-lock {
+  display: flex; align-items: baseline; gap: 8px; max-width: 760px;
+  padding: 7px 12px; border-radius: var(--radius-md);
+  border: 1px solid color-mix(in oklab, var(--danger) 45%, var(--line));
+  background: color-mix(in oklab, var(--danger) 8%, transparent);
+  color: var(--ink); font-size: 0.8rem;
+}
+.vc-lock-glyph { color: var(--danger); flex: none; }
+.vc-readonly .vc-off { opacity: 0.55; cursor: default; }
+.vc-readonly input.vc-off, .vc-readonly textarea.vc-off, .vc-readonly select.vc-off { color: var(--muted); background: var(--surface); }
+.vc-readonly .doc-panel:focus-within { background: var(--card); border-color: var(--line-soft); box-shadow: none; }
+
+/* --- the New Box kit picker (the new-document moment) ------------------------ */
+.kit-panel { padding: 18px; gap: 10px; }
+.kit-title { font-family: var(--font-read); font-size: 1.15rem; margin: 0; }
+.kit-sub { color: var(--muted); font-size: 0.82rem; margin: 0 0 6px; }
+.kit-card { text-align: left; width: 100%; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: none; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }
+.kit-card:hover { border-color: var(--accent); background: var(--accent-soft); }
+.kit-card h3 { margin: 0; font-size: 0.95rem; }
+.kit-card p { margin: 0; color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
+
+/* --- the Where row (design/where-and-selectors.md Part A) -------------------
+   One place answer per card. A place chip wears a house so the DIRECT form
+   ("this card belongs to The Inn") is distinguishable at a glance from the
+   regional one, which keeps the tag's own colour dot. */
+.where-body { display: flex; flex-direction: column; gap: 8px; }
+.where-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.where-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; }
+.where-any { color: var(--muted); font-size: 0.85rem; }
+.where-place::before { content: "\2302"; margin-right: 5px; opacity: 0.75; font-size: 0.95em; }
+.where-in { margin-left: 6px; color: var(--muted); font-size: 0.72rem; }
+.where-edit { font-size: 0.75rem; color: var(--muted); padding: 2px 8px; }
+.where-edit:hover { color: var(--accent); background: var(--accent-soft); }
+/* The contradiction: a warning, not an error. Nothing is broken, the rule
+   resolved it, and the amber matches the map's two-zone site marker. */
+.where-warn { margin: 0; font-size: 0.78rem; line-height: 1.5; color: var(--warn); }
+.where-pick { display: flex; flex-direction: column; gap: 6px; min-width: 260px; max-width: 340px; }
+.where-pick .insp-label { margin-top: 4px; }
+.where-hint { margin: 6px 0 0; font-size: 0.72rem; line-height: 1.45; color: var(--muted); }
+
+/* --- context menu (right-click) ---------------------------------------------
+   Moved to context-menu.css, imported by context-menu.ts, so every window that
+   uses the module gets its look as well as its behaviour. */
+
+/* --- card editor in the centre (document-class content gets the width) ------ */
+/* the hierarchy trail: left-aligned ancestor segments, identical on every page */
+.crumbs { display: flex; align-items: center; gap: 4px; margin: -6px 0 2px; font-size: 0.82rem; }
+/* The hierarchy trail is retired (2026-08-04): the navigator already shows where
+   you are and jumps anywhere, and the trail could not answer the "get me out of
+   here" reflex it looked like it should. Back is the one control left. */
+.crumb-back {
+  flex: none; display: inline-flex; align-items: center; gap: 2px;
+  font-size: 0.82rem; color: var(--muted);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 1px 9px 1px 6px;
+}
+.crumb-back:hover { color: var(--accent); border-color: var(--accent); background: none; }
+/* The way back to where you actually came from, beside the way UP. Same size and
+   the same border as its neighbour so the two read as one pair of controls, but
+   accent-tinted from rest: it is the transient one, it is what the author is
+   probably reaching for, and it must not be mistaken for a second parent. */
+.crumb-return {
+  flex: none; display: inline-flex; align-items: center; gap: 3px;
+  margin-left: 6px;
+  font-size: 0.82rem; color: var(--accent);
+  border: 1px solid var(--accent-soft); border-radius: var(--radius-sm);
+  padding: 1px 9px 1px 7px;
+}
+.crumb-return:hover { border-color: var(--accent); background: var(--accent-soft); }
+.crumb-spacer { flex: 1; }
+.centre-step { flex: none; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--muted); font-size: 0.9rem; line-height: 1; padding: 1px 8px; }
+.centre-step:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); background: none; }
+.centre-step:disabled { opacity: 0.35; cursor: default; }
+.centre-step-pos { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; }
+.centre-editor { max-width: var(--doc-measure); width: 100%; }
+/* the document heading of a centre editor: type label + overflow menu, the
+   Title (or name), the gameId chip, and the Purpose - identity in one place,
+   quietly editable (inspector-free model). */
+.doc-head { display: flex; flex-direction: column; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
+/* The label takes the free space and the actions cluster at the right.
+   `space-between` was here instead, which reads as deliberate with two children
+   and falls apart with four: the note and comment buttons ended up floating in
+   the middle of the row (design/annotation.md 6). */
+.doc-topline { display: flex; align-items: center; gap: 2px; }
+.doc-topline > :first-child { margin-right: auto; }
+.doc-menu { border: 0; background: none; color: var(--muted); font-size: 1rem; line-height: 1; padding: 0 6px; cursor: pointer; }
+.doc-menu:hover { color: var(--accent); background: none; }
+
+/* The documentation-note opener, beside the ⋯ menu: quiet when there is nothing
+   to read, and in the accent when there is, so a document says at a glance
+   whether somebody has written down why it exists (Patterpad's outline/filled
+   note icon, in our topline). */
+.doc-note { border: 0; background: none; color: var(--muted); font-size: 0.9rem; line-height: 1; padding: 0 4px; cursor: pointer; opacity: 0.55; }
+.doc-note:hover { color: var(--accent); opacity: 1; }
+.doc-note.has { color: var(--accent); opacity: 1; }
+
+/* The comment bubble in a document's topline: pencil = documentation,
+   speech-bubble = conversation (a pairing Patterpad reserved before either was
+   built, so the two never have to be told apart by position). */
+.doc-thread { border: 0; background: none; color: var(--muted); font-size: 0.82rem; line-height: 1; padding: 0 4px; cursor: pointer; opacity: 0.55; }
+.doc-thread:hover { color: var(--accent); opacity: 1; }
+.doc-thread.has { color: var(--accent); opacity: 1; }
+
+/* Notes, comments and identity are the shell's surfaces now (app-shell 0.12.0):
+   their styles ship with them. What stays here is only this app's chrome. */
+/* Title and address on one row, the address right-aligned and only as wide as it
+   needs. It had a row to itself, which spent a line of vertical space on every
+   document for a chip that usually only confirms the title. */
+.doc-titlerow { display: flex; align-items: baseline; gap: 12px; }
+.doc-titlerow .doc-title { flex: 1; min-width: 0; }
+.doc-gid { align-self: baseline; flex: 0 1 auto; min-width: 0; max-width: 45%; }
+/* An outcome's identity row carries its comment bubble, because an outcome is a
+   sub-item with no topline of its own (design/annotation.md 2). Pushed to the
+   right of the row so it sits where a document's bubble sits. */
+.outcome-gid { display: flex; align-items: center; gap: 8px; max-width: none; align-self: stretch; }
+.outcome-gid .gid { flex: 1; min-width: 0; }
+.doc-name { font-size: 1.1rem; }
+/* the defining scalars, obvious near the top of the document */
+/* Settings tabs read as configuration (centre-clarity 7): grouped rows in a
+   panel, caption + small description left, the control right, sized to fit */
+.cfg-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; align-items: center; }
+.cfg-row + .cfg-row { border-top: 1px solid var(--line-soft); padding-top: 10px; }
+.cfg-cap { display: flex; flex-direction: column; gap: 2px; }
+.cfg-cap > span { font: 500 0.85rem var(--font-ui); color: var(--ink); }
+.cfg-cap small { font: 0.76rem var(--font-ui); color: var(--muted); max-width: 46ch; }
+.cfg-ctl { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.cfg-ctl .doc-gid { min-width: 240px; max-width: none; }
+.cfg-ctl .toggle-cb { width: auto; padding: 0; border: 0; background: none; accent-color: var(--accent); cursor: pointer; }
+/* derived, read-only usage: the document's recessive footer */
+.doc-footer { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line-soft); color: var(--muted); font-size: 0.78rem; display: flex; flex-direction: column; gap: 3px; }
+.doc-head .doc-title { font-family: var(--font-read); font-size: 1.3rem; font-weight: 600; border: 0; background: none; padding: 2px 0; border-radius: 0; }
+.doc-head .doc-title:focus-visible { outline: 0; box-shadow: 0 1px 0 var(--accent); }
+.doc-head .doc-purpose { border: 0; background: none; padding: 0; border-radius: 0; color: var(--muted); resize: vertical; }
+.doc-head .doc-purpose:focus-visible { outline: 0; box-shadow: 0 1px 0 var(--line); }
+/* a collection master's heading: same document heading, read-only title */
+.collection-title { font-family: var(--font-read); font-size: 1.3rem; font-weight: 600; margin: 0; padding: 2px 0; }
+.master-sub { margin: 0; color: var(--muted); font-size: 0.85rem; }
+/* Where the project lives, under its name on the project page. Mono, because it
+   is a path and not prose; one line with an ellipsis, because a deep path would
+   otherwise push the page's own sentence down. Patterpad's `.overview-path`, in
+   this app's tokens. */
+.pdir {
+  display: block; width: fit-content; max-width: 100%; padding: 0; margin: 1px 0 2px;
+  border: none; background: none; cursor: pointer;
+  color: var(--muted); font: 0.75rem var(--font-mono); text-align: left;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Colour alone on hover. `width: fit-content` for the same reason: the house
+   button rule paints a background, and a full-width block turned one quiet line
+   of path into a bar across the page. */
+.pdir:hover { color: var(--accent); background: none; }
+/* the container page's [Content | Settings] tabs, under the identity heading */
+.doc-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line-soft); }
+.doc-tab { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 14px; font-size: 0.85rem; color: var(--muted); border: 0; border-bottom: 2px solid transparent; border-radius: 0; margin-bottom: -1px; background: none; cursor: pointer; }
+.doc-tab:hover { color: var(--ink); background: none; }
+.doc-tab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+/* counts where a count is meaningful; a zero-count tab stays, muted, with
+   its explanation inside (tab-grammar 3: every document keeps one silhouette) */
+.doc-tab .doc-tab-n { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.doc-tab.on .doc-tab-n { color: var(--accent); opacity: 0.7; }
+.doc-tab.zero { opacity: 0.55; }
+.doc-tab.zero.on { opacity: 1; }
+/* a tab body's quiet explanation line (the "none declared" case and hints) */
+.doc-tab-note { margin: 0; font-size: 0.78rem; line-height: 1.4; color: var(--muted); }
+/* master pages share the trail; their heading sits directly beneath it */
+.master-head { display: flex; flex-direction: column; gap: 4px; }
+
+/* the inspector holds a card's mechanical settings; a small note gives the
+   priority number meaning against how the box ranks. */
+.insp-note { margin: -4px 0 0; font-size: 0.76rem; line-height: 1.35; color: var(--muted); }
+
+/* --- project settings (sections over the shared settings dialog) ------------ */
+/* The gap is load-bearing since app-shell 0.22.0: a settings row is a WELL now,
+   bordered and on --card, and it draws no divider of its own. Without a gap the
+   wells sit flush and read as one block instead of as things you can edit. */
+.set-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.set-dim { color: var(--muted); font-style: italic; font-size: 0.8rem; }
+
+/* A second list under the first (World: declarations, then the coverage
+   drivers that feed them) needs a heading to divide them; teaching text stays
+   quiet, per the density pass. */
+.set-cap { margin: 22px 0 0; font: 600 0.8rem/1.3 var(--font-ui); }
+.set-note { margin: 2px 0 8px; font-size: 0.76rem; line-height: 1.4; color: var(--muted); max-width: 52ch; }
+/* An inline link-shaped button inside a note (the Story page's pointer to
+   Project Settings > World). */
+.set-note .linklike { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.set-note .linklike:hover { color: var(--accent-strong, var(--accent)); }
+.set-empty { margin: 4px 0; font-size: 0.8rem; color: var(--muted); }
+/* The driver ref: fixed "@world." chrome, so only the name is typed. The
+   property name needs only its own width; the VALUE POOL is the field that
+   grows, because it is the one that gets long. (Both selectors have to out-
+   specify the shell's `.set-rowline input.set-name { flex: 1 }`.) */
+.set-ref { display: inline-flex; align-items: baseline; gap: 0; flex: 0 1 12rem; min-width: 7rem; }
+.set-scope { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+.set-ref input.set-name { min-width: 4rem; }
+.set-rowline input.set-values { flex: 1 1 12rem; min-width: 6rem; }
+.set-actions { display: flex; gap: 8px; }
+
+/* --- toast ------------------------------------------------------------------ */
+.toast { position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%); color: var(--surface); padding: 8px 16px; border-radius: var(--radius-md); box-shadow: var(--shadow-3); font-size: 0.85rem; z-index: 100; }
+.toast.error { background: var(--danger); } .toast.ok { background: var(--ok); }
+
+/* --- Live Link chip (design/live-link.md; Patterpad's .debuglink, lifted) ------
+   Bottom-right, fixed: one coloured connect icon, the copiable address beside
+   it while the server is up. Grey off, amber listening, green in sync, red on a
+   different build. */
+.livelink { position: fixed; right: 0.9rem; bottom: 0.32rem; z-index: 40; display: inline-flex; align-items: center; gap: 0.4rem; }
+.livelink[hidden] { display: none; }
+.livelink-word { font: 0.7rem var(--font-ui); color: var(--muted); user-select: none; }
+.set-uses { font: 0.72rem var(--font-mono); color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: var(--radius-pill); padding: 0.1rem 0.55rem; cursor: pointer; white-space: nowrap; }
+.set-uses:hover { color: var(--accent); border-color: var(--accent); }
+.livelink-url { font: 0.72rem var(--font-mono); color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.14rem 0.45rem; cursor: pointer; }
+.livelink-url:hover { border-color: var(--accent); color: var(--accent); }
+.livelink-url.copied { color: var(--accent); border-color: var(--accent); }
+.livelink-toggle { flex: none; width: 1.4rem; height: 1.4rem; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); cursor: pointer; transition: filter var(--dur-quick) var(--ease-standard), border-color var(--dur-quick) var(--ease-standard); }
+.livelink-toggle svg { width: 0.85rem; height: 0.85rem; display: block; }
+.livelink-toggle:hover { filter: brightness(1.06); border-color: var(--accent); }
+.livelink-toggle.listening { color: var(--warn); border-color: var(--warn); background: color-mix(in oklab, var(--warn) 12%, var(--surface)); }
+.livelink-toggle.live { color: var(--ok); border-color: var(--ok); background: color-mix(in oklab, var(--ok) 14%, var(--surface)); }
+.livelink-toggle.stale { color: var(--danger); border-color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, var(--surface)); }

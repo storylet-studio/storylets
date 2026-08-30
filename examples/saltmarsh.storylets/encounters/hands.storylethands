@@ -1,0 +1,27 @@
+{
+  schema: "storylets/hands@0",
+  hands: [
+    {
+      chosen: {
+        d_zone: "v_docks",
+      },
+      gameId: "docks-street",
+      id: "h_docks",
+      slots: 2,
+      template: "t_street",
+      title: "Docks street",
+    },
+  ],
+  templates: [
+    {
+      chooses: [
+        "d_zone",
+      ],
+      gameId: "street-hands",
+      id: "t_street",
+      properties: [],
+      purpose: "What could happen on a street now? One hand per zone.",
+      slots: 3,
+    },
+  ],
+}

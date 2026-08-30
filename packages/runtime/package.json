@@ -1,0 +1,36 @@
+{
+  "name": "@storylet-studio/runtime",
+  "version": "0.0.0",
+  "description": "Storylet Engine JS reference runtime: the session (peek / deal / play / outcomes / board / save), held to the conformance corpus.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ian Thomas",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean"
+  },
+  "dependencies": {
+    "@storylet-studio/dialect": "0.0.0",
+    "@storylet-studio/model": "0.0.0",
+    "@wildwinter/expr": "^0.4.0",
+    "@wildwinter/expr-specificity": "^0.1.0",
+    "@wildwinter/scoperegistry": "^0.3.0"
+  }
+}

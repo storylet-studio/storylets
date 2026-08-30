@@ -1,0 +1,27 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.0.0",
+	"FriendlyName": "Storylet Engine",
+	"Description": "Storylet Engine runtime for Unreal Engine. Loads compiled .storyletsc bundles and deals, peeks and plays storylets, exposed to Blueprint and C++. Every Storylet Engine runtime plays the same bundle with the same behaviour. MIT licensed (see LICENSE).",
+	"Category": "Gameplay",
+	"CreatedBy": "Ian Thomas",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "https://github.com/storylet-studio/storylets",
+	"CanContainContent": true,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "StoryletEngineRuntime",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "StoryletEngineEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}

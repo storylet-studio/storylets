@@ -1,0 +1,19 @@
+{
+  schema: "storylets/view@0",
+  map: {
+    sites: {
+      h_collective_drop: {
+        x: 1240,
+        y: 180,
+      },
+      h_dockside_board: {
+        x: 240,
+        y: 180,
+      },
+      h_palace_fixer: {
+        x: 740,
+        y: 180,
+      },
+    },
+  },
+}

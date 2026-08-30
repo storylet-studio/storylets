@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- The Board draws a box's map, backgrounds and all, so it needs the same
+         img-src as the editor window. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: storylet-asset:" />
+    <title>The Board</title>
+  </head>
+  <body>
+    <div id="table"></div>
+    <script type="module" src="./table/table.ts"></script>
+  </body>
+</html>

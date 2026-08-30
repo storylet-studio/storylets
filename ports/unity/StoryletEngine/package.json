@@ -1,0 +1,22 @@
+{
+  "name": "com.storylet-studio.storyletengine",
+  "version": "0.0.0",
+  "displayName": "Storylet Engine",
+  "description": "Storylet Engine for Unity - the native C# runtime for Storyletter. Loads a compiled .storyletsc bundle and deals, peeks and plays storylets directly in Unity (no web runtime, JS, or IPC). Every Storylet Engine runtime plays the same bundle with the same behaviour.",
+  "unity": "2021.3",
+  "author": {
+    "name": "Ian Thomas"
+  },
+  "license": "MIT",
+  "documentationUrl": "https://github.com/storylet-studio/storylets",
+  "keywords": [
+    "storylets",
+    "storyletter",
+    "narrative",
+    "interactive-fiction",
+    "quality-based-narrative"
+  ],
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  }
+}

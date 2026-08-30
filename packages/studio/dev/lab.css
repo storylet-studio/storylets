@@ -1,0 +1,57 @@
+/* The canvas lab's own chrome. Not shipped: this page exists to exercise
+   canvas-surface by hand, in both themes, outside Electron. */
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+}
+#lab { height: 100%; display: flex; flex-direction: column; }
+
+.bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-soft);
+}
+.bar .sep { flex: 0 0 1px; height: 18px; background: var(--line); margin: 0 4px; }
+.bar output { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); min-width: 4.5rem; }
+
+button, select {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 11px;
+  cursor: pointer;
+}
+button:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* The canvas fills what is left; Konva sizes its own child to this box. */
+/* The canvas box. The chip's own styling comes from the app's card-open.css, and
+   the host carries the app's .nodestage class, so the lab shows what the app
+   shows rather than a lookalike. */
+#stage { flex: 1; min-height: 0; overflow: hidden; }
+
+/* One line, always. A readout that wraps when a long id appears steals height
+   from the canvas, which resizes the stage mid-gesture: the surface copes with
+   that now, but a harness whose own furniture moves the thing under test is a
+   poor harness. */
+.log {
+  display: flex; gap: 18px; align-items: baseline;
+  flex: none; height: 30px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.log output { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.log #sel { flex: 0 1 auto; max-width: 40%; }
+.log #events { flex: 1 1 auto; text-align: right; min-width: 0; }

@@ -1,0 +1,292 @@
+{
+  "name": "@storylet-studio/studio",
+  "productName": "Storyletter",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Storyletter - the storylet editor. Electron shell over @storylet-studio/ops (one core, many front-ends); cards and decks first.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ian Thomas",
+  "main": "dist-electron/main/index.js",
+  "scripts": {
+    "predev": "node -e \"fs.rmSync('node_modules/.vite',{recursive:true,force:true})\"",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "canvas-lab": "vite dev dev --port 5199",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "build:mac-icons": "bash scripts/build-mac-icons.sh",
+    "build:win-icons": "node scripts/build-win-icons.mjs",
+    "dist": "npm run build:mac-icons && npm run build:win-icons && electron-vite build && electron-builder",
+    "dist:mac": "npm run build:mac-icons && electron-vite build && electron-builder --mac",
+    "dist:win": "npm run build:win-icons && electron-vite build && electron-builder --win nsis",
+    "dist:all": "npm run build:mac-icons && npm run build:win-icons && electron-vite build && electron-builder --mac --win nsis",
+    "dist:linux": "electron-vite build && electron-builder --linux AppImage",
+    "publish:mac": "npm run build:mac-icons && electron-vite build && dotenv -e .env.local -- electron-builder --mac --publish always"
+  },
+  "dependencies": {
+    "@storylet-studio/compiler": "0.0.0",
+    "@storylet-studio/dialect": "0.0.0",
+    "@storylet-studio/model": "0.0.0",
+    "@storylet-studio/ops": "0.0.0",
+    "@storylet-studio/runtime": "0.0.0",
+    "@wildwinter/app-shell": "^0.36.0",
+    "@wildwinter/expr-editor": "^0.15.1",
+    "@wildwinter/simple-vc-lib": "^0.4.1",
+    "konva": "^10.3.0",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "dotenv-cli": "^11.0.0",
+    "electron": "42.6.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "png-to-ico": "^3.0.2",
+    "vite": "^7.3.6"
+  },
+  "build": {
+    "appId": "studio.storylet.storyletter",
+    "npmRebuild": false,
+    "productName": "Storyletter",
+    "files": [
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../../examples/the-hamlet.storylets",
+        "to": "examples/the-hamlet.storylets",
+        "filter": [
+          "**/*",
+          "!dist/**"
+        ]
+      },
+      {
+        "from": "../../examples/the-village.storylets",
+        "to": "examples/the-village.storylets",
+        "filter": [
+          "**/*",
+          "!dist/**"
+        ]
+      },
+      {
+        "from": "../../examples/port-meridian.storylets",
+        "to": "examples/port-meridian.storylets",
+        "filter": [
+          "**/*",
+          "!dist/**"
+        ]
+      }
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "storylet-studio",
+      "repo": "storylets"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "../../branding/icons/png/icon-storyletter-1024.png",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "gatekeeperAssess": false,
+      "notarize": true,
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "fileAssociations": [
+        {
+          "ext": "storylets",
+          "name": "Storylets project",
+          "description": "Storylets narrative project",
+          "role": "Editor",
+          "rank": "Owner",
+          "isPackage": true,
+          "icon": "doc-storyletproj.icns"
+        },
+        {
+          "ext": "storyletsc",
+          "name": "Storylets compiled bundle",
+          "description": "Storylets compiled story bundle",
+          "role": "Viewer",
+          "icon": "doc-storyletsc.icns"
+        },
+        {
+          "ext": "storyletpack",
+          "name": "Storyletpack",
+          "description": "Storylets project package (single file)",
+          "role": "Editor",
+          "icon": "doc-storyletpack.icns"
+        }
+      ],
+      "extendInfo": {
+        "UTExportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "studio.storylet.storylets",
+            "UTTypeDescription": "Storylets narrative project",
+            "UTTypeConformsTo": [
+              "com.apple.package",
+              "public.composite-content"
+            ],
+            "UTTypeIconFile": "doc-storyletproj.icns",
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "storylets"
+              ]
+            }
+          },
+          {
+            "UTTypeIdentifier": "studio.storylet.storyletsc",
+            "UTTypeDescription": "Storylets compiled story bundle",
+            "UTTypeConformsTo": [
+              "public.data"
+            ],
+            "UTTypeIconFile": "doc-storyletsc.icns",
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "storyletsc"
+              ]
+            }
+          },
+          {
+            "UTTypeIdentifier": "studio.storylet.storyletpack",
+            "UTTypeDescription": "Storylets project package (single file)",
+            "UTTypeConformsTo": [
+              "public.data",
+              "public.zip-archive"
+            ],
+            "UTTypeIconFile": "doc-storyletpack.icns",
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "storyletpack"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "dmg": {
+      "title": "${productName} ${version}"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
+      ],
+      "fileAssociations": [
+        {
+          "ext": "storyletproj",
+          "name": "Storylets project file",
+          "description": "Storylets project",
+          "role": "Editor",
+          "icon": "doc-storyletproj.ico"
+        },
+        {
+          "ext": "storyletbox",
+          "name": "Storylets box",
+          "description": "Storylets box",
+          "role": "Editor",
+          "icon": "doc-storyletshard.ico"
+        },
+        {
+          "ext": "storylettags",
+          "name": "Storylets tag group",
+          "description": "Storylets tag group",
+          "role": "Editor",
+          "icon": "doc-storyletshard.ico"
+        },
+        {
+          "ext": "storylethands",
+          "name": "Storylets hands",
+          "description": "Storylets hands",
+          "role": "Editor",
+          "icon": "doc-storyletshard.ico"
+        },
+        {
+          "ext": "storyletdeck",
+          "name": "Storylets deck",
+          "description": "Storylets deck",
+          "role": "Editor",
+          "icon": "doc-storyletshard.ico"
+        },
+        {
+          "ext": "storyletview",
+          "name": "Storylets arrangement",
+          "description": "Storylets arrangement",
+          "role": "Editor",
+          "icon": "doc-storyletshard.ico"
+        },
+        {
+          "ext": "storyletsc",
+          "name": "Storylets compiled bundle",
+          "description": "Storylets compiled story bundle",
+          "role": "Viewer",
+          "icon": "doc-storyletsc.ico"
+        },
+        {
+          "ext": "storyletpack",
+          "name": "Storyletpack",
+          "description": "Storylets project package (single file)",
+          "role": "Editor",
+          "icon": "doc-storyletpack.ico"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    },
+    "linux": {
+      "icon": "../../branding/icons/png/icon-storyletter-1024.png",
+      "category": "Development",
+      "target": [
+        "AppImage"
+      ],
+      "fileAssociations": [
+        {
+          "ext": "storyletproj",
+          "name": "Storylets project file",
+          "description": "Storylets project"
+        },
+        {
+          "ext": "storyletbox",
+          "name": "Storylets box",
+          "description": "Storylets box"
+        },
+        {
+          "ext": "storylettags",
+          "name": "Storylets tag group",
+          "description": "Storylets tag group"
+        },
+        {
+          "ext": "storylethands",
+          "name": "Storylets hands",
+          "description": "Storylets hands"
+        },
+        {
+          "ext": "storyletdeck",
+          "name": "Storylets deck",
+          "description": "Storylets deck"
+        },
+        {
+          "ext": "storyletview",
+          "name": "Storylets arrangement",
+          "description": "Storylets arrangement"
+        },
+        {
+          "ext": "storyletsc",
+          "name": "Storylets compiled bundle",
+          "description": "Storylets compiled story bundle"
+        },
+        {
+          "ext": "storyletpack",
+          "name": "Storyletpack",
+          "description": "Storylets project package (single file)"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,111 @@
+name: Storyletter release
+
+# The desktop app's own tag-driven pipeline, Patterpad's shape verbatim
+# (patter/.github/workflows/patterpad.yml): tagging `vX.Y.Z` builds + signs
+# Storyletter on each OS and publishes the installers plus the electron-updater
+# feeds (latest-mac.yml / latest.yml / latest-linux.yml) to the matching Release.
+#
+# STORYLETTER IS THE ONE DELIVERABLE ON BARE `v*` TAGS, and that is load-bearing
+# rather than tidiness. electron-builder's GitHub publisher can only target a
+# `v<version>` tag, and electron-updater walks the releases feed skipping any tag
+# that is not plain semver - so `cli-v*` releases are invisible to it, which is
+# exactly what we want. Never give another deliverable a bare `v*` tag: a
+# non-Storyletter release taking GitHub's "Latest" badge has no latest.yml, and
+# Check for Updates then 404s. (Patterpad learned this the hard way.)
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  # Pre-create the release as a DRAFT with the changelog section as its notes; the OS
+  # matrix uploads installers into it (electron-builder reuses a draft whose tag
+  # matches), and `publish` flips it live once every OS has uploaded. The draft is a
+  # staging area so a half-built release is never visible.
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Create the draft release with the changelog as notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v ver="$version" 'index($0, "## [" ver "]") == 1 {f=1; next} /^## \[/ {f=0} f' \
+            packages/studio/CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          [ -s "$RUNNER_TEMP/release-notes.md" ] || { echo "no changelog section for ${version}"; exit 1; }
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --draft --title "Storyletter $version" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+
+  build:
+    needs: notes
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            script: dist:mac
+          - os: windows-latest
+            script: dist:win
+          - os: ubuntu-latest
+            script: dist:linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout storylets
+        uses: actions/checkout@v5
+        with:
+          path: storylets
+      # electron-vite bundles @wildwinter/expr from a sibling checkout, as CI does.
+      - name: Checkout @wildwinter/expr
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/expr
+          path: expr
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: storylets/package-lock.json
+      - run: npm ci
+        working-directory: storylets
+      - name: Check the tag matches the app version
+        working-directory: storylets
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          manifest=$(node -p "require('./packages/studio/package.json').version")
+          [ "$manifest" = "$version" ] || { echo "package.json says $manifest but the tag says $version"; exit 1; }
+          grep -q "^## \[${version}\] - [0-9]" packages/studio/CHANGELOG.md \
+            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
+      - name: Build, sign + publish
+        working-directory: storylets
+        run: npm run -w @storylet-studio/studio ${{ matrix.script }} -- --publish always
+        env:
+          # electron-builder's GitHub publisher uploads to the release for this tag.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing + notarisation, SCOPED TO THE MAC JOB ONLY. These are not
+          # no-ops elsewhere: on Windows electron-builder reads CSC_LINK as an
+          # Authenticode certificate and then writes that publisher into
+          # app-update.yml as the expected one, so every Windows auto-update fails
+          # verification. Unsigned with no publisherName skips the check and updates
+          # work. Windows stays deliberately unsigned (Patterpad's ruling, and its
+          # reasoning, inherited whole).
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
+
+  # Every OS uploaded -> publish. Runs only when the whole matrix succeeded, so a
+  # partial release never goes live.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false

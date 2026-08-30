@@ -1,0 +1,218 @@
+{
+  schema: "storylets/tags@0",
+  groups: [
+    {
+      gameId: "zone",
+      id: "d_0001",
+      properties: [
+        {
+          default: "quiet",
+          name: "haunting",
+          stages: [
+            "quiet",
+            "restless",
+            "screaming",
+          ],
+          type: "quality",
+        },
+      ],
+      purpose: "Where in the world a beat belongs. A map: its tags carry outlines.",
+      tags: [
+        {
+          gameId: "lair",
+          id: "v_0003",
+          order: 0,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: 870,
+                  y: -1559,
+                },
+                {
+                  x: 871,
+                  y: -1069,
+                },
+                {
+                  x: 1754,
+                  y: -1067,
+                },
+                {
+                  x: 1750,
+                  y: -1554,
+                },
+              ],
+            },
+          },
+        },
+        {
+          gameId: "village",
+          id: "v_0004",
+          order: 1,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: 296,
+                  y: -441,
+                },
+                {
+                  x: 295,
+                  y: 51,
+                },
+                {
+                  x: 1175,
+                  y: 47,
+                },
+                {
+                  x: 1173,
+                  y: -438,
+                },
+              ],
+            },
+          },
+        },
+        {
+          gameId: "forest",
+          id: "v_0005",
+          order: 2,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: -721,
+                  y: -417,
+                },
+                {
+                  x: -719,
+                  y: 68,
+                },
+                {
+                  x: 148,
+                  y: 66,
+                },
+                {
+                  x: 152,
+                  y: -417,
+                },
+              ],
+            },
+          },
+        },
+        {
+          gameId: "mountain",
+          id: "v_0006",
+          order: 3,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: 860,
+                  y: -971,
+                },
+                {
+                  x: 858,
+                  y: -485,
+                },
+                {
+                  x: 1740,
+                  y: -483,
+                },
+                {
+                  x: 1738,
+                  y: -973,
+                },
+              ],
+            },
+          },
+        },
+        {
+          gameId: "cave",
+          id: "v_0007",
+          order: 4,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: -287,
+                  y: -979,
+                },
+                {
+                  x: -288,
+                  y: -489,
+                },
+                {
+                  x: 593,
+                  y: -490,
+                },
+                {
+                  x: 592,
+                  y: -981,
+                },
+              ],
+            },
+          },
+        },
+      ],
+      templates: {
+        spatial: {
+          backgrounds: [
+            {
+              file: "lair.jpg",
+              height: 492,
+              id: "g_bglair",
+              width: 884,
+              x: 870,
+              y: -1559,
+            },
+            {
+              file: "village.jpg",
+              height: 492,
+              id: "g_bgvillage",
+              width: 880,
+              x: 295,
+              y: -441,
+            },
+            {
+              file: "forest.jpg",
+              height: 485,
+              id: "g_bgforest",
+              width: 873,
+              x: -721,
+              y: -417,
+            },
+            {
+              file: "mountain.jpg",
+              height: 490,
+              id: "g_bgmountain",
+              width: 882,
+              x: 858,
+              y: -973,
+            },
+            {
+              file: "cave.jpg",
+              height: 492,
+              id: "g_bgcave",
+              width: 881,
+              x: -288,
+              y: -981,
+            },
+          ],
+          map: true,
+        },
+      },
+    },
+    {
+      gameId: "thread",
+      id: "d_0002",
+      purpose: "Cross-cutting threads a beat belongs to, for pacing rules that count them.",
+      tags: [
+        {
+          gameId: "bard",
+          id: "v_0008",
+          order: 0,
+        },
+      ],
+    },
+  ],
+}

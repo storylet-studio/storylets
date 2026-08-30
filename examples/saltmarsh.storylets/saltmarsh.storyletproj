@@ -1,0 +1,44 @@
+{
+  schema: "storylets/project@0",
+  project: {
+    id: "proj_salt",
+    name: "Saltmarsh",
+    version: "0.1.0",
+  },
+  export: {
+    bundle: "dist/saltmarsh.storyletsc",
+    metadata: "full",
+  },
+  settings: {
+    playAdvancesTurns: 1,
+  },
+  story: {
+    properties: [
+      {
+        default: 0,
+        name: "reputation",
+        type: "number",
+      },
+      {
+        default: [],
+        name: "visited",
+        type: "flags",
+        values: [
+          "docks",
+          "market",
+        ],
+      },
+    ],
+  },
+  templates: {},
+  world: {
+    properties: [
+      {
+        default: 0,
+        name: "danger",
+        type: "number",
+      },
+    ],
+    registry: {},
+  },
+}

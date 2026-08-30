@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Village</title>
+<link rel="stylesheet" href="village.css">
+</head>
+<body>
+  <header>
+    <h1>The Village</h1>
+    <span id="build" class="build"></span>
+    <span id="turn" class="turn"></span>
+    <button id="wait" class="quiet" type="button">Wait a while</button>
+    <button id="restart" class="quiet" type="button">Start again</button>
+  </header>
+  <main>
+    <section id="map" class="map"></section>
+    <aside class="side">
+      <section id="place" class="place"></section>
+      <section class="sheetwrap">
+        <h3>You</h3>
+        <div id="sheet" class="sheet"></div>
+      </section>
+      <section class="journalwrap">
+        <div class="journalhead">
+          <h3>Journal</h3>
+          <button id="journal-clear" class="quiet" type="button">Clear</button>
+        </div>
+        <div id="journal" class="journal"></div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- Playing a card happens HERE, over the map, not in the sidebar column.
+       A long purpose in a narrow column pushed its own outcomes off the bottom,
+       which is the one thing a player must always be able to reach.
+
+       A plain overlay rather than <dialog>: jsdom implements no <dialog> at all
+       (checked at v26 and v30), and this client's play-through test IS the
+       guard on opening a card and taking an outcome. Losing focus-trapping in a
+       sample costs less than blinding the test on its most important gesture.
+       In a real app, reach for <dialog>. -->
+  <div id="cardview" class="cardview" hidden>
+    <div class="cardview-panel" role="dialog" aria-modal="true" aria-labelledby="cardview-title">
+      <div class="cardview-head">
+        <h2 id="cardview-title"></h2>
+        <button id="cardview-close" class="quiet" type="button" aria-label="Close">Close</button>
+      </div>
+      <div id="cardview-purpose" class="cardview-purpose"></div>
+      <div id="cardview-choices" class="cardview-choices"></div>
+    </div>
+  </div>
+
+  <script src="village.js"></script>
+</body>
+</html>

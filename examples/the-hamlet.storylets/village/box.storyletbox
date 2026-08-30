@@ -1,0 +1,20 @@
+{
+  schema: "storylets/box@0",
+  box: {
+    fields: [
+      {
+        default: "",
+        name: "scene",
+        type: "string",
+      },
+    ],
+    gameId: "village",
+    id: "b_village",
+    properties: [],
+    purpose: "Every story beat in and around the village.",
+    ranking: {
+      specificity: true,
+    },
+    title: "Village",
+  },
+}

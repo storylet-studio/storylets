@@ -1,0 +1,323 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "@story.act == \"act-2\"",
+    gameId: "wells-bargain",
+    id: "k_006w",
+    order: 11,
+    properties: [
+      {
+        default: false,
+        name: "connecting_seen",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "counter_found",
+        type: "boolean",
+      },
+      {
+        default: "unfelt",
+        name: "curse",
+        stages: [
+          "unfelt",
+          "unease",
+          "spreading",
+          "undeniable",
+        ],
+        type: "quality",
+      },
+      {
+        default: false,
+        name: "elara_consulted",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "mira_consulted",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "origin_found",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "spirit_spoken",
+        type: "boolean",
+      },
+    ],
+    title: "The Well's Bargain",
+  },
+  cards: [
+    {
+      condition: "check_flags(@story.rel_herbalist, +met)",
+      gameId: "ask-elara-about-the-wells-history",
+      id: "c_006f",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@deck.elara_consulted": "true",
+            "@story.rel_herbalist": "set_flags(@story.rel_herbalist, +aided)",
+          },
+          gameId: "ask-debt-directly",
+          id: "o_006c",
+          order: 0,
+          purpose: "Elara recognises the question immediately. She explains: the Well made a bargain once and it was never honoured. The debt is why luck is breaking.",
+          title: "Ask Elara directly about a debt on the Well",
+        },
+        {
+          changes: {
+            "@deck.elara_consulted": "true",
+            "@story.lore": "set_flags(@story.lore, +founding_rumour_heard)",
+            "@story.rel_herbalist": "set_flags(@story.rel_herbalist, +aided)",
+          },
+          gameId: "ask-old-history",
+          id: "o_006d",
+          order: 1,
+          purpose: "Player approaches from the history side. Elara connects it herself. Player learns about the founding in the process.",
+          title: "Ask about old village history and build toward it",
+        },
+        {
+          changes: {
+            "@deck.elara_consulted": "true",
+            "@deck.origin_found": "true",
+            "@story.rel_herbalist": "set_flags(@story.rel_herbalist, +aided)",
+          },
+          gameId: "describe-symptoms",
+          id: "o_006e",
+          order: 2,
+          purpose: "Elara listens and names what is happening immediately: the Well's bargain, the original wisher, what is owed.",
+          title: "Describe the symptoms and let Elara diagnose",
+        },
+      ],
+      priority: 1,
+      purpose: "Player asks Elara about the Well's history. Key to establish: Elara knows about curses and long-standing bargains. She can explain the Well's bargain - a wish made, a price not paid, a debt still accumulating. She can give the player the framework they need.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000j",
+        ],
+      },
+      title: "Ask Elara About the Well's History",
+    },
+    {
+      condition: "@deck.curse >= \"spreading\" && !check_flags(@story.world_events, +curse_lifted)",
+      gameId: "find-another-villagers-luck-has-broken",
+      id: "c_006j",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@deck.curse": "advance(@deck.curse)",
+            "@deck.mira_consulted": "true",
+          },
+          gameId: "ask-what-happened",
+          id: "o_006g",
+          order: 0,
+          purpose: "Villager tells the story - specific and sad. Player later presses Mira about it.",
+          title: "Ask the villager what happened to them",
+        },
+        {
+          changes: {
+            "@deck.connecting_seen": "true",
+            "@deck.curse": "advance(@deck.curse)",
+          },
+          gameId: "investigate-pattern",
+          id: "o_006h",
+          order: 1,
+          purpose: "Player recognises this as escalation, not coincidence. They begin actively connecting incidents.",
+          title: "Investigate the pattern - this is the third time",
+        },
+        {
+          changes: {
+            "@deck.curse": "advance(@deck.curse)",
+            "@story.rel_village_elder": "set_flags(@story.rel_village_elder, +has_favour)",
+          },
+          gameId: "try-help-directly",
+          id: "o_006i",
+          order: 2,
+          purpose: "Player offers practical help - not a solution to the curse, but immediate support. Bryna hears about it.",
+          title: "Try to help the villager directly",
+        },
+      ],
+      priority: 1,
+      purpose: "A specific villager has suffered a loss that cannot be dismissed as coincidence. Key to establish: the curse has escalated. Someone specific has been hurt. The player has a choice about how to engage with their suffering.",
+      redraw: 3,
+      tags: {
+        d_0001: [
+          "v_0004",
+        ],
+      },
+      title: "Find Another Villager's Luck Has Broken",
+    },
+    {
+      condition: "@deck.spirit_spoken",
+      gameId: "find-the-original-wishers-identity",
+      id: "c_006l",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@deck.origin_found": "true",
+          },
+          gameId: "ask-village-records",
+          id: "o_006k",
+          order: 0,
+          purpose: "Mira, with her family's long connection to the village, finds the name.",
+          title: "Ask Mira about the village records",
+        },
+      ],
+      priority: 1,
+      purpose: "Player knows the bargain exists. Now they need to find who made the original wish. Key to establish: the wisher is someone from the village's past. Their name connects to other history. Finding the wisher is the research puzzle of this arc.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000g",
+          "h_000l",
+        ],
+      },
+      title: "Find the Original Wisher's Identity",
+    },
+    {
+      condition: "@deck.elara_consulted || @deck.mira_consulted",
+      gameId: "listen-to-the-well",
+      id: "c_006n",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@deck.spirit_spoken": "true",
+            "@story.world_events": "set_flags(@story.world_events, +well_vision)",
+          },
+          gameId: "listen-no-interrupt",
+          id: "o_006m",
+          order: 0,
+          purpose: "The Well speaks at length. Player gets the full account - the original wish, the price, what the Well has been waiting for.",
+          title: "Listen to the Well without interrupting",
+        },
+      ],
+      priority: 1,
+      purpose: "Player is at the Well and the Well is communicating - a spirit, a presence, something that speaks through the water. Key to establish: the Well is not malevolent. It made a bargain that was not honoured and has been collecting on the debt. The player's approach here determines whether the Well sees them as someone to deal with.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000m",
+        ],
+      },
+      title: "Listen to the Well",
+    },
+    {
+      condition: "@deck.curse < \"spreading\" && !check_flags(@story.world_events, +curse_lifted)",
+      gameId: "notice-something-wrong-in-the-village",
+      id: "c_006p",
+      order: 4,
+      outcomes: [
+        {
+          changes: {
+            "@deck.curse": "advance(@deck.curse)",
+            "@story.lore": "set_flags(@story.lore, +wrongness_seen)",
+          },
+          gameId: "ask-locals",
+          id: "o_006o",
+          order: 0,
+          purpose: "Locals confirm it - more things going wrong than usual, for longer than feels like coincidence.",
+          title: "Ask locals what you have been noticing",
+        },
+      ],
+      priority: 1,
+      purpose: "A series of small misfortunes has accumulated across the village - tools breaking, a harvest spoiling, a rope snapping at a bad moment. This is the Well's curse at low intensity. Key to establish: nothing dramatic has happened yet. This is the 'something is wrong and we have not named it' scene. Player notices a pattern.",
+      redraw: 4,
+      tags: {
+        d_0001: [
+          "v_0004",
+        ],
+      },
+      title: "Notice a Pattern of Bad Luck Across the Village",
+    },
+    {
+      condition: "check_flags(@story.lore, +wrongness_seen)",
+      gameId: "press-mira-about-whats-been-happening",
+      id: "c_006r",
+      order: 5,
+      outcomes: [
+        {
+          changes: {
+            "@deck.mira_consulted": "true",
+          },
+          gameId: "comfort-ask",
+          id: "o_006q",
+          order: 0,
+          purpose: "Mira talks - not everything, but more than nothing. She names the Well without quite saying why.",
+          title: "Comfort Mira and ask what has been happening",
+        },
+      ],
+      priority: 1,
+      purpose: "Player presses Mira about the run of bad luck. Mira knows more than she has said. Key to establish: Mira is uncomfortable with this topic because her family's history is connected to the Well. She is aware of the curse without being its cause.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000g",
+        ],
+      },
+      title: "Press Mira About What's Been Happening",
+    },
+    {
+      condition: "@deck.spirit_spoken",
+      gameId: "seek-a-counter-ritual",
+      id: "c_006t",
+      order: 6,
+      outcomes: [
+        {
+          changes: {
+            "@deck.counter_found": "true",
+          },
+          gameId: "ask-elara-ritual",
+          id: "o_006s",
+          order: 0,
+          purpose: "Elara has studied this. She provides a counter-ritual that honours the spirit of the bargain without meeting its literal terms.",
+          title: "Ask Elara for a counter-ritual",
+        },
+      ],
+      priority: 1,
+      purpose: "Player looks for an alternative to simply paying the original debt. Key to establish: the counter-ritual is real and achievable. Either Elara or the Oracle can provide it. This opens the renegotiate path in the resolution.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000j",
+          "h_000e",
+        ],
+      },
+      title: "Search for a Way to Break the Well's Bargain",
+    },
+    {
+      condition: "@deck.origin_found || @deck.counter_found",
+      gameId: "resolve-the-bargain",
+      id: "c_006v",
+      order: 7,
+      outcomes: [
+        {
+          changes: {
+            "@story.world_events": "set_flags(@story.world_events, +curse_lifted)",
+          },
+          gameId: "honour-bargain",
+          id: "o_006u",
+          order: 0,
+          purpose: "Player pays what was owed. The Well receives it. The curse lifts completely - production should show this through the village environment.",
+          title: "Honour the original bargain",
+        },
+      ],
+      priority: 1,
+      purpose: "Player resolves the Well's bargain. Three paths: honour the original debt, break the bargain by force, or renegotiate. Key to establish: all three paths work and all three lift the curse. But they feel different and the Well responds differently. Production should differentiate the tone of each resolution.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000m",
+        ],
+      },
+      title: "Settle the Well's Long-Unpaid Debt",
+    },
+  ],
+}

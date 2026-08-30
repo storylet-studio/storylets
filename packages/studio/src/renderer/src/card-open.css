@@ -1,0 +1,41 @@
+/* ---------------------------------------------------------------------------
+   The Open affordance, in ONE place because it appears in three views: a card
+   face, a table row, and over a node on the canvas.
+   
+   Kept in its own file so the canvas lab can import the REAL rules rather than
+   its own copy. It had a copy, and that is precisely why a cascade bug (the base
+   rule's `right`/`bottom` still applying on the canvas, where `left`/`top` are
+   set inline, stretching the chip across the whole pane) looked fine in the lab
+   and broken in the app.
+   --------------------------------------------------------------------------- */
+
+/* As little ink and as little space as a control can take: two small words in the
+   muted voice, no border, no background, invisible at rest, and out of the layout
+   entirely. Double-click is the gesture; this only has to be discoverable. */
+.cardopen {
+  position: absolute; right: 12px; bottom: 10px;
+  font: 500 0.68rem/1 var(--font-ui);
+  color: var(--muted);
+  padding: 0; border: 0; background: none;
+  opacity: 0; cursor: pointer;
+  transition: opacity var(--dur-quick) var(--ease-standard);
+}
+.scard:hover .cardopen, .scard:focus-visible .cardopen { opacity: 0.75; }
+.cardopen:hover { color: var(--accent); opacity: 1; text-decoration: underline; text-underline-offset: 2px; }
+
+/* In the table it gets its own narrow column rather than floating over the row's
+   right edge, where a row with long tags ran underneath it. */
+.ctable .ct-open { width: 3.4rem; padding-right: 12px; text-align: right; white-space: nowrap; }
+.ctable .ct-open .cardopen { position: static; }
+.ctable tbody tr:hover .cardopen { opacity: 0.75; }
+
+/* On the canvas it is placed over the hovered node from the camera, so it is
+   positioned by left/top - and MUST release the right/bottom above, or it is
+   pinned on all four edges and stretches to fill the pane. */
+.nodestage { position: relative; }
+.nodestage .cardopen {
+  right: auto; bottom: auto;
+  opacity: 1; z-index: 2;
+  padding: 2px 6px; border-radius: var(--radius-sm);
+  background: var(--surface); box-shadow: 0 0 0 1px var(--line-soft);
+}

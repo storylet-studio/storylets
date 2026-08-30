@@ -1,0 +1,32 @@
+{
+  "name": "@storylet-studio/dialect",
+  "version": "0.0.0",
+  "description": "The storylets expression dialect for @wildwinter/expr: five scopes (@story default), the function set (random, flags, play history). One dialect drives runtime eval and publish-time validation.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ian Thomas",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean"
+  },
+  "dependencies": {
+    "@wildwinter/expr": "^0.4.0"
+  }
+}

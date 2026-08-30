@@ -1,0 +1,17 @@
+{
+  "name": "StoryletEngine.Runtime.Unity",
+  "rootNamespace": "StoryletStudio.StoryletEngine",
+  "references": [
+    "StoryletEngine.Runtime",
+    "StoryletEngine.Runtime.Json"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

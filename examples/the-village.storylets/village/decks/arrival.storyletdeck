@@ -1,0 +1,284 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "@story.act == \"act-1\"",
+    gameId: "arrival",
+    id: "k_0022",
+    order: 1,
+    properties: [
+      {
+        default: false,
+        name: "arrived",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "deferential",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "diplomatic_approach",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "directed_to_elder",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "forge_looked_around",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "pledge_made",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "quiet_observer",
+        type: "boolean",
+      },
+    ],
+    title: "Arrival",
+  },
+  cards: [
+    {
+      gameId: "arrive-in-the-village",
+      id: "c_001m",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@deck.arrived": "true",
+            "@deck.diplomatic_approach": "true",
+            "@deck.directed_to_elder": "true",
+          },
+          gameId: "find-whoever-runs-things",
+          id: "o_001j",
+          order: 0,
+          purpose: "Player identifies themselves as purposeful and asks to be pointed toward whoever runs things. They are directed to the Elder's House. The village reads this as organised, deliberate behaviour.",
+          title: "Ask directly who is in charge",
+        },
+        {
+          changes: {
+            "@deck.arrived": "true",
+            "@story.lore": "set_flags(@story.lore, +founding_rumour_heard)",
+          },
+          gameId: "introduce-yourself",
+          id: "o_001k",
+          order: 1,
+          purpose: "Player makes a friendly first contact. A local responds and points out key locations. A mention of the village founding comes up - player gains a fragment of village history.",
+          title: "Introduce yourself, and ask for directions",
+        },
+        {
+          changes: {
+            "@deck.arrived": "true",
+            "@deck.quiet_observer": "true",
+          },
+          gameId: "walk-quietly",
+          id: "o_001l",
+          order: 2,
+          purpose: "Player moves through the village without drawing attention. They take in the layout - forge, inn, market, well - without engaging anyone. Villagers note the reticence.",
+          title: "Walk through quietly",
+        },
+      ],
+      priority: 10,
+      purpose: "The player's first arrival in the village. The scene establishes the village as a functioning community - visible activity at the forge, inn, and market. No one approaches the player; they are noticed but not yet engaged. Key to establish: this is a real working place with ongoing concerns. The player's opening manner sets a first impression.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000m",
+        ],
+      },
+      title: "Arrive in the Village",
+    },
+    {
+      condition: "check_flags(@story.rel_village_elder, +met) && check_flags(@story.rel_blacksmith, +met) && check_flags(@story.rel_innkeeper, +met)",
+      gameId: "declare-your-intentions",
+      id: "c_001p",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@deck.pledge_made": "true",
+            "@story.act": "\"act-2\"",
+          },
+          gameId: "agree-no-promise",
+          id: "o_001n",
+          order: 0,
+          purpose: "Bryna accepts without comment. She expected this. The village opens, but the player has not made a particular friend in Bryna.",
+          title: "Agree to stay but makes no specific promises",
+        },
+        {
+          changes: {
+            "@deck.pledge_made": "true",
+            "@story.act": "\"act-2\"",
+            "@story.rel_village_elder": "set_flags(@story.rel_village_elder, +has_favour)",
+          },
+          gameId: "pledge-openly",
+          id: "o_001o",
+          order: 1,
+          purpose: "Bryna accepts the pledge formally. The village feels it. Player earns Bryna's favour. World opens.",
+          title: "Pledge to help the village openly",
+        },
+      ],
+      priority: 1,
+      purpose: "Bryna asks the player directly: what are they going to do? This is the threshold card - whatever the player says, the village opens from this point. Key to establish: Bryna needs an answer. The village cannot move forward without one. How the player answers matters to Bryna and to the arc.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000f",
+        ],
+      },
+      title: "Declare Your Intentions",
+    },
+    {
+      condition: "@deck.arrived",
+      gameId: "get-settled-at-the-inn",
+      id: "c_001t",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_innkeeper": "set_flags(@story.rel_innkeeper, +met, +warm_first_impression)",
+          },
+          gameId: "ask-history",
+          id: "o_001q",
+          order: 0,
+          purpose: "Mira engages warmly. She is pleased to talk to someone interested in the place.",
+          title: "Ask Mira about the village history",
+        },
+        {
+          changes: {
+            "@story.rel_innkeeper": "set_flags(@story.rel_innkeeper, +met)",
+          },
+          gameId: "ask-road",
+          id: "o_001r",
+          order: 1,
+          purpose: "Mira answers practically. A transaction, not a connection. Player is noted without particular warmth or concern.",
+          title: "Ask Mira about the road north",
+        },
+        {
+          changes: {
+            "@deck.quiet_observer": "true",
+            "@story.rel_innkeeper": "set_flags(@story.rel_innkeeper, +met)",
+          },
+          gameId: "drink-quietly",
+          id: "o_001s",
+          order: 2,
+          purpose: "Mira gives the player space without comment. She registers the quiet watchfulness. Player observes the room and its dynamics.",
+          title: "Drink quietly and observe",
+        },
+      ],
+      priority: 1,
+      purpose: "First meeting with Mira, the innkeeper. Mira is sharp and observant - she takes the player's measure during this first exchange. Key to establish: Mira is competent and curious, not just functional. She will remember how the player presents themselves here.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000g",
+        ],
+      },
+      title: "Get Settled at the Inn",
+    },
+    {
+      condition: "@deck.arrived",
+      gameId: "make-yourself-known-at-the-forge",
+      id: "c_001x",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_blacksmith": "set_flags(@story.rel_blacksmith, +met, +warm_first_impression)",
+          },
+          gameId: "admire-work",
+          id: "o_001u",
+          order: 0,
+          purpose: "Gareth pauses and assesses the player. He distinguishes genuine interest from flattery. A brief warmth follows - not effusive, but real.",
+          title: "Admire the work openly",
+        },
+        {
+          changes: {
+            "@deck.forge_looked_around": "true",
+            "@story.rel_blacksmith": "set_flags(@story.rel_blacksmith, +met)",
+          },
+          gameId: "look-around",
+          id: "o_001v",
+          order: 1,
+          purpose: "Gareth watches without speaking. He notes the inspection. This will colour his next interaction with the player.",
+          title: "Look around the forge without acknowledging Gareth",
+        },
+        {
+          changes: {
+            "@story.rel_blacksmith": "set_flags(@story.rel_blacksmith, +met)",
+          },
+          gameId: "talk-straight",
+          id: "o_001w",
+          order: 2,
+          purpose: "Gareth gives a straight answer. A practical exchange. No warmth, no hostility.",
+          title: "Ask directly if Gareth is hiring",
+        },
+      ],
+      priority: 1,
+      purpose: "First meeting with Gareth, the blacksmith. Gareth is working when the player arrives. Key to establish: Gareth measures people by how they behave in his space. He does not volunteer warmth but can be earned.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000k",
+        ],
+      },
+      title: "Make Yourself Known at the Forge",
+    },
+    {
+      condition: "@deck.directed_to_elder || check_flags(@story.rel_blacksmith, +met) && check_flags(@story.rel_innkeeper, +met)",
+      gameId: "answer-brynas-summons",
+      id: "c_0021",
+      order: 4,
+      outcomes: [
+        {
+          changes: {
+            "@deck.diplomatic_approach": "true",
+            "@story.rel_village_elder": "set_flags(@story.rel_village_elder, +met)",
+          },
+          gameId: "be-diplomatic",
+          id: "o_001y",
+          order: 0,
+          purpose: "Bryna relaxes slightly. She sees this as the right instinct. She answers at some length. Player learns more about the village's actual problems.",
+          title: "Ask what the village needs before explaining yourself",
+        },
+        {
+          changes: {
+            "@story.rel_village_elder": "set_flags(@story.rel_village_elder, +met)",
+          },
+          gameId: "be-direct",
+          id: "o_001z",
+          order: 1,
+          purpose: "Bryna receives this without visible reaction. She asks one or two precise questions. The player gets the sense they passed a test they did not know they were taking.",
+          title: "State directly that you are here to help",
+        },
+        {
+          changes: {
+            "@deck.deferential": "true",
+            "@story.rel_village_elder": "set_flags(@story.rel_village_elder, +met)",
+          },
+          gameId: "just-listen",
+          id: "o_0020",
+          order: 2,
+          purpose: "Bryna talks. The player listens. She covers more ground than in the other approaches, comfortable that the player is not trying to manage her. Player comes away with a fuller picture.",
+          title: "Defer and let Bryna lead the conversation",
+        },
+      ],
+      priority: 1,
+      purpose: "First meeting with Bryna, the village elder. By the time this card fires, Bryna already knows the player has been seen around the village. Key to establish: Bryna is the authority here. She is not unfriendly, but she is assessing the player. Their approach in this scene will influence how Bryna relates to them throughout the story.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000f",
+        ],
+      },
+      title: "Seek Out the Village Elder",
+    },
+  ],
+}

@@ -1,0 +1,283 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "@story.act == \"act-2\"",
+    gameId: "calling-tree",
+    id: "k_002m",
+    order: 2,
+    properties: [
+      {
+        default: false,
+        name: "compromise_found",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "demand_known",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "elara_consulted",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "elara_explained",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "sacrifice_made",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "tree_connected",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "tree_seen",
+        type: "boolean",
+      },
+    ],
+    title: "The Calling Tree",
+  },
+  cards: [
+    {
+      gameId: "approach-the-glowing-tree-at-night",
+      id: "c_0026",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@deck.tree_seen": "true",
+          },
+          gameId: "call-out-by-name",
+          id: "o_0023",
+          order: 0,
+          purpose: "The Tree's light wavers - it has been addressed.",
+          title: "Call out to the tree by name",
+        },
+        {
+          changes: {
+            "@deck.tree_seen": "true",
+          },
+          gameId: "step-back-observe",
+          id: "o_0024",
+          order: 1,
+          purpose: "Player watches without engaging. The Tree's light continues. They note its pattern.",
+          title: "Step back and observe the tree carefully",
+        },
+        {
+          changes: {
+            "@deck.tree_connected": "true",
+            "@deck.tree_seen": "true",
+          },
+          gameId: "touch-bark",
+          id: "o_0025",
+          order: 2,
+          purpose: "The Tree responds - the glow intensifies briefly, then steadies. Something was exchanged.",
+          title: "Touche the bark of the glowing tree",
+        },
+      ],
+      priority: 1,
+      purpose: "The Mystic Tree in the forest zone is glowing at night. Key to establish: this is specific to this tree - not a general forest effect. The Tree is aware of the player and the light appears directed. Production should distinguish this from ambient forest light.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000i",
+        ],
+      },
+      title: "Approach the Glowing Tree at Night",
+    },
+    {
+      condition: "@deck.tree_seen && @deck.elara_consulted",
+      gameId: "ask-elara-what-the-tree-means",
+      id: "c_002a",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@deck.elara_explained": "true",
+          },
+          gameId: "ask-old-seals",
+          id: "o_0027",
+          order: 0,
+          purpose: "Elara has notes on this. She explains their purpose: markers placed at the founding to contain or seal something.",
+          title: "Ask Elara about the old seals",
+        },
+        {
+          changes: {
+            "@deck.elara_explained": "true",
+            "@story.lore": "set_flags(@story.lore, +founding_rumour_heard)",
+          },
+          gameId: "ask-village-founding",
+          id: "o_0028",
+          order: 1,
+          purpose: "Elara connects the founding story to the Tree and shares a founding rumour she has been cautious about.",
+          title: "Ask Elara about the village founding",
+        },
+        {
+          changes: {
+            "@deck.elara_explained": "true",
+            "@story.rel_herbalist": "set_flags(@story.rel_herbalist, +aided)",
+          },
+          gameId: "just-listen",
+          id: "o_0029",
+          order: 2,
+          purpose: "Elara tells the story she has pieced together, in her own order. More complete than either specific question.",
+          title: "Just listens while Elara talks",
+        },
+      ],
+      priority: 1,
+      purpose: "With both the Tree sighting and Elara's research as context, player has a specific conversation with Elara about the Tree's significance. Key to establish: the Tree connects to something old in the village's founding - a seal, a promise. Elara has fragments but not the whole picture.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000j",
+        ],
+      },
+      title: "Ask Elara What the Tree Means",
+    },
+    {
+      condition: "@deck.demand_known && !@deck.sacrifice_made && !@deck.compromise_found",
+      gameId: "name-the-trees-price",
+      id: "c_002d",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@deck.sacrifice_made": "true",
+            "@story.world_events": "set_flags(@story.world_events, +tree_bloomed)",
+          },
+          gameId: "make-sacrifice",
+          id: "o_002b",
+          order: 0,
+          purpose: "Player pays what the Tree asked. The tree blooms visibly - in a way the whole forest would notice. A flag the player earned elsewhere is consumed as the cost.",
+          title: "Make the sacrifice the Tree asked for",
+        },
+        {
+          changes: {
+            "@deck.compromise_found": "true",
+          },
+          gameId: "seek-compromise",
+          id: "o_002c",
+          order: 1,
+          purpose: "Player negotiates an alternative resolution. The Tree accepts. It does not bloom in the same dramatic way - a quieter resolution.",
+          title: "Seek a compromise with the Tree",
+        },
+      ],
+      priority: 1,
+      purpose: "Player knows the demand. Now they choose their response: pay the price or find a different resolution. Key to establish: both paths are valid. Production should not frame one as better than the other. The Tree responds to either, though differently.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000i",
+        ],
+      },
+      title: "Choose How to Answer the Tree's Price",
+    },
+    {
+      condition: "@deck.elara_explained and check_flags(@world_events, +well_vision)",
+      gameId: "accept-the-trees-demand",
+      id: "c_002h",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@deck.demand_known": "true",
+            "@story.world_events": "set_flags(@story.world_events, +tree_bloomed)",
+          },
+          gameId: "agree-trust",
+          id: "o_002e",
+          order: 0,
+          purpose: "The Tree accepts. The intention was sufficient. The tree blooms. The trust itself was the sacrifice.",
+          title: "Agree to the Tree's demand before knowing what it is",
+        },
+        {
+          changes: {
+            "@deck.demand_known": "true",
+          },
+          gameId: "ask-sacrifice-first",
+          id: "o_002f",
+          order: 1,
+          purpose: "The Tree waits. Player gets an answer - something specific will be required. The demand is known. Player has not yet committed.",
+          title: "Ask what the sacrifice is before committing",
+        },
+        {
+          changes: {
+            "@story.rel_herbalist": "set_flags(@story.rel_herbalist, -aided)",
+          },
+          gameId: "refuse-outright",
+          id: "o_002g",
+          order: 2,
+          purpose: "The Tree does not react with hostility - it simply remains. Elara, who has been watching the player's approach to this, notes the refusal. Something in the player-Elara relationship shifts.",
+          title: "Refuse the Tree outright",
+        },
+      ],
+      priority: 1,
+      purpose: "Player returns to the Tree knowing what Elara said and what the Well showed. The Tree is ready to ask. Key to establish: the Tree's demand is real - something will be required. The player can ask what before committing, agree on trust, or refuse. This is about the player's relationship to trust and obligation.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000i",
+        ],
+      },
+      title: "Face What the Mystic Tree Is Asking",
+    },
+    {
+      gameId: "find-elara-poring-over-old-notes",
+      id: "c_002j",
+      order: 4,
+      outcomes: [
+        {
+          changes: {
+            "@deck.elara_consulted": "true",
+            "@story.rel_herbalist": "set_flags(@story.rel_herbalist, +met, +aided)",
+          },
+          gameId: "ask-what-found",
+          id: "o_002i",
+          order: 0,
+          purpose: "Elara looks up and decides to trust the question. She explains what she is tracking: the Tree has activated before, in a pattern she has been piecing together. Full analysis given.",
+          title: "Ask Elara what she has found",
+        },
+      ],
+      priority: 1,
+      purpose: "Elara is at her cottage working through old documents with visible urgency. Something in the forest has changed and she is tracking it. Key to establish: Elara has been watching the Tree for longer than the player has. She has context the player lacks. How the player approaches her determines how much she shares.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000j",
+        ],
+      },
+      title: "Find Elara Poring Over Old Notes",
+    },
+    {
+      condition: "@deck.elara_consulted",
+      gameId: "read-the-vision-in-the-wishing-well",
+      id: "c_002l",
+      order: 5,
+      outcomes: [
+        {
+          changes: {},
+          gameId: "lean-in",
+          id: "o_002k",
+          order: 0,
+          purpose: "Vision sharpens. Player gets a full reading - understands what the Tree wants, even if not the specific form it will take.",
+          title: "Lean in and look deeper into the well",
+        },
+      ],
+      priority: 1,
+      purpose: "Elara indicated there is a vision in the Wishing Well connected to the Tree. Key to establish: the vision is real and specific - it shows the Tree's origin and the demand it will make. Production should convey this as felt experience rather than a literal image. Brief but significant.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000m",
+        ],
+      },
+      title: "Read the Vision in the Wishing Well",
+    },
+  ],
+}

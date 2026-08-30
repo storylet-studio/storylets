@@ -1,0 +1,403 @@
+---
+// The Storylet Studio marketing home. A STANDALONE page (its own nav and footer, full-bleed,
+// cream, light-only), deliberately outside the Starlight docs chrome. Brand tokens come from
+// src/styles/storylets.css; the landing's own classes live in src/styles/landing.css.
+import "../styles/storylets.css";
+import "../styles/landing.css";
+import Newsletter from "../components/Newsletter.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/"); // normalise to a trailing slash
+const repo = "https://github.com/storylet-studio/storylets";
+const title = "Storylet Studio - design playable stories";
+const description =
+  "An open toolkit for storylets: pools of small story beats your game asks for instead of scripting by hand. Your designers turn them into cards in Storyletter; you drop one small file into Unity, Unreal, Godot or the web and ask what happens next.";
+---
+
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://storylet.studio/" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content="https://storylet.studio/social-card.png" />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="640" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://storylet.studio/social-card.png" />
+    <link rel="icon" href={`${base}favicon.svg`} type="image/svg+xml" />
+    <link rel="icon" href={`${base}favicon.ico`} sizes="48x48" />
+    <link rel="apple-touch-icon" href={`${base}apple-touch-icon.png`} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>{"html{scroll-behavior:smooth}body{margin:0}"}</style>
+  </head>
+  <body>
+    <div class="sy-landing">
+      <!-- NAV -->
+      <nav class="sy-nav">
+        <div class="sy-wrap sy-nav-inner">
+          <a class="sy-brand" href={base} aria-label="Storylet Studio home">
+            <svg viewBox="0 0 100 100" width="30" height="30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <g fill="none">
+                <path d="M88 12 C5 12 5 50 50 50 C95 50 95 88 12 88" stroke="#36284a" stroke-width="12" stroke-linecap="round"></path>
+                <circle cx="88" cy="12" r="9.5" fill="#c8902f"></circle>
+                <circle cx="12" cy="88" r="9.5" fill="#c8902f"></circle>
+                <circle cx="50" cy="50" r="9.5" fill="#c8902f"></circle>
+              </g>
+            </svg>
+            <span class="sy-wordmark">Storylet <span>Studio</span></span>
+          </a>
+          <div class="sy-navlinks">
+            <a class="sy-navlink" href="#products">The tools</a>
+            <a class="sy-navlink" href={`${base}why/`}>Why Storylet Studio</a>
+            <a class="sy-navlink" href={`${base}download/`}>Download</a>
+            <a class="sy-navlink" href={repo}>GitHub</a>
+            <a class="sy-btn sy-btn-primary" href={`${base}getting-started/`}>Get started</a>
+          </div>
+        </div>
+      </nav>
+
+      <!-- HERO -->
+      <header class="sy-hero">
+        <div class="sy-hero-glows"><div class="sy-glow sy-glow-a"></div><div class="sy-glow sy-glow-b"></div></div>
+        <div class="sy-wrap sy-hero-grid">
+          <div>
+            <div class="sy-pill"><i></i> Open storylet toolkit</div>
+            <h1 class="sy-h1"><strong class="sy-h1-brand">Storylet Studio.</strong> <br /> Design <em class="sy-em">playable</em> stories.</h1>
+            <p class="sy-lead"><strong>Storylet Studio</strong> takes the "what should happen next?" logic out of your
+              game code. Encounters on a road, rumours in a tavern, quest offers, interludes between chapters: your
+              narrative designers turn them into <strong>cards</strong>, each with a rule for when it fits. You drop
+              one small file into your game and ask which cards apply right now. Same answer on Unity, Unreal, Godot
+              or the web.</p>
+            <div class="sy-actions">
+              <a class="sy-btn sy-btn-primary sy-btn-lg" href={`${base}getting-started/`}>Get started</a>
+              <a class="sy-btn sy-btn-outline sy-btn-lg" href={`${base}download/`}>Download &darr;</a>
+            </div>
+            <p class="sy-fineprint">MIT-licensed &amp; free &middot; no server &middot; no subscription &middot; no lock-in</p>
+          </div>
+
+          <div class="sy-hero-media">
+            <div class="sy-window">
+              <div class="sy-window-bar">
+                <span class="sy-dot sy-dot-r"></span><span class="sy-dot sy-dot-y"></span><span class="sy-dot sy-dot-g"></span>
+                <span class="sy-window-title">the Board &middot; the-hamlet.storylets</span>
+              </div>
+              <img src={`${base}doc-images/Board.png`} alt="The Board in Storyletter: three hands, The Forge, The Inn and The Mystic Tree, each holding the cards just dealt to it, with the journal of the session down the right" />
+            </div>
+            <div class="sy-float-card">
+              <div class="sy-float-label">Plays in your engine</div>
+              <div class="sy-float-bundle">one <code>.storyletsc</code> bundle</div>
+              <div class="sy-float-icons">
+                <img src={`${base}plugin-javascript.svg`} alt="JavaScript" width="26" height="26" />
+                <img src={`${base}plugin-unity.svg`} alt="Unity" width="26" height="26" />
+                <img src={`${base}plugin-unreal.svg`} alt="Unreal" width="26" height="26" />
+                <img src={`${base}plugin-godot.svg`} alt="Godot" width="26" height="26" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- WHAT YOU'D DECIDE WITH IT -->
+      <section class="sy-uses">
+        <div class="sy-wrap sy-uses-inner">
+          <div class="sy-uses-copy">
+            <div class="sy-eye">What it's for</div>
+            <h2 class="sy-h2">“What happens next?”</h2>
+            <p class="sy-uses-lead">Anywhere your game has to pick from a pool of possibilities, that's a <strong>box</strong> of <strong>storylet cards</strong>.
+              You could use one to decide:</p>
+          </div>
+          <ul class="sy-uses-list">
+            <li>Which scene of your story should play now</li>
+            <li>Which conversation topics an NPC should offer</li>
+            <li>Which encounters should spawn at a spot on your map</li>
+            <li>Which items should spawn to be picked up</li>
+            <li>Which quests or jobs should be offered to your player</li>
+            <li>Which characters you can meet in the town</li>
+            <li>What bark line should play right now <span class="sy-uses-aside">(though <a href="https://patterkit.dev" target="_blank">Patter</a>'s a better solution for barks)</span></li>
+            <li>What lore should appear in your player's codex</li>
+            <li>What topic your actor should raise with a visitor, right now, at an immersive event</li>
+            <li>Where to send your visitor next in an interactive event</li>
+            <li class="sy-uses-more"><a class="sy-textlink" href={`${base}why/`}>More on what it's for &rarr;</a></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ENGINE STRIP -->
+      <section class="sy-engine">
+        <div class="sy-wrap sy-engine-inner">
+          <div class="sy-engine-copy">
+            <h2 class="sy-serif">One bundle. Four runtimes. <span>Tested to match.</span></h2>
+            <p>Pick the runtime for the engine you actually ship on. What plays in the editor plays in your
+              build: the same cards come up, in the same order, with the same saves, right down to the random
+              draws.</p>
+          </div>
+          <div class="sy-engine-tiles">
+            <div class="sy-engine-tile"><img src={`${base}plugin-javascript.svg`} alt="" width="52" height="52" /><span>JavaScript</span></div>
+            <div class="sy-engine-tile"><img src={`${base}plugin-unity.svg`} alt="" width="52" height="52" /><span>Unity</span></div>
+            <div class="sy-engine-tile"><img src={`${base}plugin-unreal.svg`} alt="" width="52" height="52" /><span>Unreal</span></div>
+            <div class="sy-engine-tile"><img src={`${base}plugin-godot.svg`} alt="" width="52" height="52" /><span>Godot</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- THREE PRODUCTS -->
+      <section id="products" class="sy-products">
+        <div class="sy-wrap sy-products-inner">
+          <div>
+            <div class="sy-eye">Three tools, one model</div>
+            <h2 class="sy-h2">An editor, a runtime for your engine, and a command line.</h2>
+            <p class="sy-products-lead">Storyletter for the people designing the content, Storylet Engine for the
+              people shipping the game, and the <code>storyletengine</code> CLI for the build. They share one
+              vocabulary and run the same core, so what a designer sees in the editor is what your game and your
+              CI see.</p>
+          </div>
+          <div class="sy-prods">
+            <a class="sy-prod" href={`${base}storyletter/overview/`}>
+              <div class="sy-prod-tag">author</div>
+              <h3>Storyletter</h3>
+              <p class="who">for narrative designers and writers</p>
+              <p class="body">The storylet editor. Design cards, give each one a rule for when it comes up, and
+                press Play to see what the real engine deals. The node view draws how your cards connect; you
+                never wire anything up.</p>
+            </a>
+            <a class="sy-prod sy-prod-2" href={`${base}play/overview/`}>
+              <div class="sy-prod-tag">play</div>
+              <h3>Storylet Engine</h3>
+              <p class="who">for the developers integrating it</p>
+              <p class="body">Four runtimes over one bundle: JavaScript, Unity, Unreal and Godot. Same API, same
+                behaviour, checked against one shared test suite.</p>
+            </a>
+            <a class="sy-prod sy-prod-3" href={`${base}cli/`}>
+              <div class="sy-prod-tag">cli</div>
+              <h3>storyletengine</h3>
+              <p class="who">for the project lead and CI</p>
+              <p class="body">Create, validate, compile, merge and test coverage from the command line. It's the
+                same code the editor runs, so you can gate a build on it.</p>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- AUTHORS -->
+      <section class="sy-authors">
+        <div class="sy-wrap sy-split">
+          <div>
+            <div class="sy-eye">For the people designing the story</div>
+            <h2 class="sy-h2">Nothing to wire up. Nothing to untangle.</h2>
+            <p class="sy-authors-intro">Other tools have you drawing lines between boxes, and then working out why
+              the story won't go where you meant it to. Here you design a card and attach a <em>condition</em> to it.
+              That's the whole job. The tool works out how the cards relate and draws the flow for you.</p>
+            <ul class="sy-list">
+              <li><i></i><div><strong>No wiring, ever.</strong> <span>You never join one card to another. Set the
+                rule for when each should appear, and the picture of how they connect is worked out from what you
+                wrote. Change your mind and it redraws itself.</span></div></li>
+              <li><i></i><div><strong>Play it right there in the editor.</strong> <span>Try the story out without
+                leaving the tool, using the same code that runs in the finished game.</span></div></li>
+              <li><i></i><div><strong>Find out why something never happens.</strong> <span>Autorun the story thousands
+                of times and it'll show you which cards never come up at all, how
+                often the rest appear, and what's getting in the way.</span></div></li>
+            </ul>
+            <a class="sy-textlink" href={`${base}storyletter/overview/`}>Tour Storyletter &rarr;</a>
+          </div>
+
+          {/* One deck, cut on the diagonal: the same six cards as a grid and as a flow. The
+              split is the argument the section makes, so it's one picture rather than two.
+              Card faces top-left, the arrows the tool worked out bottom-right. */}
+          <div class="sy-screen">
+            <div class="sy-screen-head">
+              <span class="sy-screen-deck">Village &rsaquo; Gareth's Debt</span>
+              <span class="sy-screen-same">the cards you write &middot; the flow it works out</span>
+            </div>
+            <div class="sy-screen-canvas">
+              <svg class="sy-both" viewBox="0 0 520 372" role="img" aria-labelledby="sy-both-t">
+                <title id="sy-both-t">One deck shown two ways at once, divided on the diagonal. The
+                  upper half is its cards as a grid, each with the rule for when it comes up. The lower
+                  half is the same cards as a flow, with arrows the tool worked out from those rules:
+                  one card opens up another, and shuts a third off.</title>
+                <defs>
+                  <clipPath id="sy-cut-cards"><path d="M0 0 H520 V0 L0 372 Z"></path></clipPath>
+                  <clipPath id="sy-cut-flow"><path d="M520 0 V372 H0 Z"></path></clipPath>
+                  <marker id="sy-a-on" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M0 0 L8 4 L0 8 z" fill="var(--sy-plum-tint)"></path>
+                  </marker>
+                  <marker id="sy-a-off" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M0 0 L8 4 L0 8 z" fill="var(--sy-amber)"></path>
+                  </marker>
+                </defs>
+
+                <g clip-path="url(#sy-cut-cards)">
+                  <g class="sy-gc"><rect x="20" y="16" width="128" height="70" rx="10"></rect>
+                    <text class="sy-gc-t" x="32" y="38">The Blacksmith&apos;s</text>
+                    <text class="sy-gc-t" x="32" y="54">Trouble</text>
+                    <text class="sy-gc-r" x="32" y="72">when: met Gareth</text></g>
+                  <g class="sy-gc"><rect x="156" y="16" width="128" height="70" rx="10"></rect>
+                    <text class="sy-gc-t" x="168" y="38">Gareth Asks</text>
+                    <text class="sy-gc-t" x="168" y="54">for Help</text>
+                    <text class="sy-gc-r" x="168" y="72">when: he owes you</text></g>
+                  <g class="sy-gc"><rect x="292" y="16" width="128" height="70" rx="10"></rect>
+                    <text class="sy-gc-t" x="304" y="38">The Ring of</text>
+                    <text class="sy-gc-t" x="304" y="54">the Anvil</text>
+                    <text class="sy-gc-r" x="304" y="72">when: always</text></g>
+                  <g class="sy-gc"><rect x="20" y="100" width="128" height="70" rx="10"></rect>
+                    <text class="sy-gc-t" x="32" y="122">A Rumour at</text>
+                    <text class="sy-gc-t" x="32" y="138">the Inn</text>
+                    <text class="sy-gc-r" x="32" y="156">when: debt called</text></g>
+                  <g class="sy-gc"><rect x="156" y="100" width="128" height="70" rx="10"></rect>
+                    <text class="sy-gc-t" x="168" y="122">The Forge</text>
+                    <text class="sy-gc-t" x="168" y="138">Falls Quiet</text>
+                    <text class="sy-gc-r" x="168" y="156">when: debt called</text></g>
+                  <g class="sy-gc"><rect x="20" y="184" width="128" height="70" rx="10"></rect>
+                    <text class="sy-gc-t" x="32" y="206">Mira Pours</text>
+                    <text class="sy-gc-t" x="32" y="222">a Second</text>
+                    <text class="sy-gc-r" x="32" y="240">when: evening</text></g>
+                </g>
+
+                <g clip-path="url(#sy-cut-flow)">
+                  {/* Its own ground, so the cards it covers read as tucked underneath rather
+                      than as rectangles that failed to draw. */}
+                  <path class="sy-flow-ground" d="M520 0 V372 H0 Z"></path>
+                  <g class="sy-fe sy-fe-on">
+                    <path d="M310 282 C342 282 340 206 370 206" marker-end="url(#sy-a-on)"></path>
+                    <text x="340" y="196">opens up</text>
+                  </g>
+                  <g class="sy-fe sy-fe-off">
+                    <path d="M310 300 C342 300 340 294 370 294" marker-end="url(#sy-a-off)"></path>
+                    <text x="341" y="322">shuts off</text>
+                  </g>
+                  <g class="sy-fn sy-fn-sel"><rect x="150" y="268" width="160" height="56" rx="11"></rect>
+                    <text class="sy-fn-t" x="166" y="292">The Blacksmith&apos;s</text>
+                    <text class="sy-fn-t" x="166" y="310">Trouble</text></g>
+                  <g class="sy-fn"><rect x="370" y="180" width="140" height="52" rx="11"></rect>
+                    <text class="sy-fn-t" x="384" y="204">Gareth Asks</text>
+                    <text class="sy-fn-t" x="384" y="222">for Help</text></g>
+                  <g class="sy-fn"><rect x="370" y="268" width="140" height="52" rx="11"></rect>
+                    <text class="sy-fn-t" x="384" y="292">The Forge</text>
+                    <text class="sy-fn-t" x="384" y="310">Falls Quiet</text></g>
+                </g>
+                <path class="sy-seam" d="M520 0 L0 372"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WHY -->
+      <section class="sy-why">
+        <div class="sy-wrap sy-why-inner">
+          <div class="sy-why-intro">
+            <div class="sy-eye">Why teams reach for it</div>
+            <h2 class="sy-h2">Files you own, merges that behave, answers you can check.</h2>
+            <p class="sy-why-lead">Indie-first, built for a team to grow into. Plain text on disk, a format designed
+              around the merge, and tooling that catches a dead beat before your players do.</p>
+          </div>
+
+          <div class="sy-pillars">
+            <div class="sy-pillar">
+              <h3>Files you own, in your VCS</h3>
+              <p>A project is a folder of plain text files, one per deck, living in git or Perforce. No database,
+                no server, no export step to get your data out.</p>
+            </div>
+            <div class="sy-pillar sy-pillar-2">
+              <h3>Merges that behave</h3>
+              <p>A deck is a pool rather than a list, so two designers adding a card are never adding it to the same
+                place. The conflict every other tool gives you doesn't happen here.</p>
+            </div>
+            <div class="sy-pillar sy-pillar-3">
+              <h3>"Why didn't that happen?" has an answer</h3>
+              <p>Every time the engine deals, it records what it looked at and why each card was passed over. "Why
+                isn't this beat showing up?" is a line you can read, in the editor and in your game's log.</p>
+            </div>
+          </div>
+
+          <div class="sy-builtins">
+            <div class="sy-builtin"><div class="sy-builtin-t">Review in the editor</div><p>Threaded comments on any card, deck or outcome, stored with the project and versioned with it. No spreadsheet round trip.</p></div>
+            <div class="sy-builtin"><div class="sy-builtin-t">Save and load, one call</div><p>The whole run: state, turns, what's on the table and what's been played, restored exactly, in any runtime.</p></div>
+            <div class="sy-builtin"><div class="sy-builtin-t">Automatable from CI</div><p>The <code>storyletengine</code> CLI validates, compiles and measures coverage, so you can fail a build on a beat nothing can reach.</p></div>
+            <div class="sy-builtin"><div class="sy-builtin-t">Works alongside Patter</div><p>Optional. If you also use <a href="https://patterkit.dev">Patter</a> for dialogue, both can read and write the same game state, so a conversation and a storylet work from one picture of the world.</p></div>
+          </div>
+
+          <a class="sy-textlink" href={`${base}why/`}>Read why Storylet Studio &rarr;</a>
+        </div>
+      </section>
+
+      <!-- DIFFERENTIATOR -->
+      <section class="sy-diff">
+        <div class="sy-wrap sy-diff-inner">
+          <svg viewBox="0 0 100 100" width="46" height="46" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <g fill="none">
+              <path d="M88 12 C5 12 5 50 50 50 C95 50 95 88 12 88" stroke="#36284a" stroke-width="12" stroke-linecap="round"></path>
+              <circle cx="88" cy="12" r="9.5" fill="#c8902f"></circle>
+              <circle cx="12" cy="88" r="9.5" fill="#c8902f"></circle>
+              <circle cx="50" cy="50" r="9.5" fill="#c8902f"></circle>
+            </g>
+          </svg>
+          <span class="sy-eye">A simple model</span>
+          <h2 class="sy-h2">Your beats are <em class="sy-em">cards in a deck</em>, and the engine is the dealer.</h2>
+            <p class="sy-diff-lead">Your game deals a hand and the engine picks the cards that fit, best first.
+            Play a card and the world remembers: <i>that particular rumour</i> never comes round again, while
+            <i>that offer of a job</i> keeps being shuffled back in until the player acts on it. No flags to set,
+            no list of what's been seen to keep up to date.</p>
+            <p class="sy-diff-lead">Different boxes can deal in different ways: one for encounters, one for dramatic
+            scenes, one for item pickups, each carrying whatever data your game needs on the card.</p>
+          <div class="sy-diff-chips">
+            <span class="sy-diff-chip">a card can't be in two places at once</span>
+            <span class="sy-diff-chip">dealt cards stay put until you play them</span>
+            <span class="sy-diff-chip">play a card and the world remembers</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- CLOSING CTA -->
+      <section class="sy-cta">
+        <div class="sy-wrap sy-cta-inner">
+          <h2>Your game asks. Your story answers.</h2>
+          <p>Start a project, deal your first hand and have it running in your own engine in one sitting. It's
+            open source, MIT-licensed, and free.</p>
+          <div class="sy-cta-actions">
+            <a class="sy-btn sy-btn-primary sy-btn-xl" href={`${base}getting-started/`}>Get started</a>
+            <a class="sy-btn sy-btn-ghost sy-btn-xl" href={`${base}download/`}>Download Storyletter</a>
+            <a class="sy-btn sy-btn-ghost sy-btn-xl" href={repo}>GitHub &#8599;</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- FOOTER -->
+      <footer class="sy-foot">
+        <div class="sy-wrap sy-foot-signup"><Newsletter variant="landing" /></div>
+        <div class="sy-wrap sy-foot-inner">
+          <div class="sy-foot-brand">
+            <svg viewBox="0 0 100 100" width="24" height="24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <g fill="none">
+                <path d="M88 12 C5 12 5 50 50 50 C95 50 95 88 12 88" stroke="#9a89b5" stroke-width="12" stroke-linecap="round"></path>
+                <circle cx="88" cy="12" r="9.5" fill="#e0b463"></circle>
+                <circle cx="12" cy="88" r="9.5" fill="#e0b463"></circle>
+                <circle cx="50" cy="50" r="9.5" fill="#e0b463"></circle>
+              </g>
+            </svg>
+            <span>Storylet Studio</span>
+          </div>
+          <div class="sy-foot-links">
+            <a href={`${base}why/`}>Why Storylet Studio</a>
+            <a href={`${base}storyletter/overview/`}>Storyletter</a>
+            <a href={`${base}play/overview/`}>Runtimes</a>
+            <a href={`${base}download/`}>Download</a>
+            <a href={repo}>GitHub</a>
+          </div>
+          {/* One line, no internal newlines: Astro collapses a newline between text and an
+              adjacent inline element to nothing, which ran "Made by" into the author link. */}
+          <div class="sy-foot-legal"><a href={`${base}licensing/`}>MIT-licensed</a> &middot; Made by <a href="https://ian.wildwinter.net" rel="author">Ian Thomas</a> &middot; <a href="https://storylet.studio">storylet.studio</a></div>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

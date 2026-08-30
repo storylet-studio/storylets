@@ -1,0 +1,14 @@
+# clang TestHost binary
+TestHost/storyletengine_testhost
+*.o
+
+# Unreal-generated
+StoryletEngine/Binaries/
+StoryletEngine/Intermediate/
+StoryletEngine/Saved/
+StoryletEngineDemo/Binaries/
+StoryletEngineDemo/Intermediate/
+StoryletEngineDemo/Saved/
+StoryletEngineDemo/DerivedDataCache/
+StoryletEngineDemo/.vscode/
+StoryletEngineDemo/*.xcworkspace

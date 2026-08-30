@@ -1,0 +1,24 @@
+{
+  schema: "storylets/hands@0",
+  hands: [
+    {
+      chosen: {},
+      gameId: "codex",
+      id: "h_codex",
+      order: 0,
+      slots: 12,
+      template: "t_archive",
+      title: "Codex",
+    },
+  ],
+  templates: [
+    {
+      chooses: [],
+      gameId: "archive",
+      id: "t_archive",
+      properties: [],
+      purpose: "The codex page: every unlocked entry, in priority order. Slots is the page size - grow it with the content.",
+      slots: 12,
+    },
+  ],
+}

@@ -1,0 +1,340 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "@story.act == \"act-2\"",
+    gameId: "behind-the-door",
+    id: "k_007k",
+    order: 12,
+    properties: [
+      {
+        default: false,
+        name: "elder_research",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "mira_lore",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "oracle_consulted",
+        type: "boolean",
+      },
+      {
+        default: "shut",
+        name: "door",
+        stages: [
+          "shut",
+          "seen",
+          "warned",
+        ],
+        type: "quality",
+      },
+    ],
+    title: "What Lies Behind the Door",
+  },
+  cards: [
+    {
+      condition: "@deck.door == \"shut\"",
+      gameId: "approach-the-figure-by-the-ancient-door",
+      id: "c_006y",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@deck.door": "advance(@deck.door)",
+            "@story.rel_warden": "set_flags(@story.rel_warden, +encountered)",
+          },
+          gameId: "speak-ask",
+          id: "o_006x",
+          order: 0,
+          purpose: "The Warden responds - not in words exactly, but the player understands. It identifies itself as the guardian.",
+          title: "Speak to the figure and ask who it is",
+        },
+      ],
+      priority: 1,
+      purpose: "At the Ancient Door site, a figure stands that is not quite present in the way people are. This is the Warden - the ghost of the person who sealed the Door long ago. Key to establish: the Warden is not threatening the player. It is guarding the Door. It is aware of the player. How the player approaches sets the tone for the whole Door arc.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000n",
+        ],
+      },
+      title: "Approach the Figure by the Ancient Door",
+    },
+    {
+      condition: "@deck.door >= \"seen\" && check_flags(@story.rel_innkeeper, +trusts_player)",
+      gameId: "ask-mira-what-her-family-has-been-keeping",
+      id: "c_0071",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@deck.elder_research": "true",
+            "@deck.mira_lore": "true",
+          },
+          gameId: "ask-what-family-did",
+          id: "o_006z",
+          order: 0,
+          purpose: "Mira explains their specific role. Player gets the information about the family connection to the Accord.",
+          title: "Ask Mira what her family did",
+        },
+        {
+          changes: {
+            "@deck.elder_research": "true",
+            "@deck.mira_lore": "true",
+            "@deck.oracle_consulted": "true",
+            "@story.rel_innkeeper": "set_flags(@story.rel_innkeeper, +trusts_player)",
+          },
+          gameId: "listen-no-questions",
+          id: "o_0070",
+          order: 1,
+          purpose: "Mira talks freely. She tells the player the full account - her family's role, the Accord, what it means for the Door. Player learns everything. Mira's trust deepens.",
+          title: "Listen to Mira and ask no questions",
+        },
+      ],
+      priority: 1,
+      purpose: "Mira trusts the player. Her family history connects to the Door: her ancestors were part of the original Accord that sealed it. Key to establish: Mira's family secret connects to the Door arc. This is the scene where that connection is made explicit. A significant reveal that advances all three Door research paths simultaneously.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000g",
+        ],
+      },
+      title: "Ask Mira What Her Family Has Been Keeping",
+    },
+    {
+      condition: "@deck.door >= \"seen\" && check_flags(@story.world_events, +oracle_active)",
+      gameId: "consult-the-oracle-about-the-door",
+      id: "c_0074",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@deck.oracle_consulted": "true",
+          },
+          gameId: "ask-about-warden",
+          id: "o_0072",
+          order: 0,
+          purpose: "Oracle describes the Warden - who they were, what they are doing, why they remain.",
+          title: "Ask the Oracle about the Warden",
+        },
+        {
+          changes: {
+            "@deck.mira_lore": "true",
+            "@deck.oracle_consulted": "true",
+          },
+          gameId: "ask-accord-by-name",
+          id: "o_0073",
+          order: 1,
+          purpose: "Oracle knows this term. It provides the full history: what was agreed, who agreed it, what the Door contains as a result.",
+          title: "Ask the Oracle about the Accord by name",
+        },
+      ],
+      priority: 1,
+      purpose: "Player asks the Oracle about the Ancient Door. Key to establish: the Oracle has seen the Door's history - it predates the village. It knows things no human record contains. What the player asks determines what they learn.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000e",
+        ],
+      },
+      title: "Consult the Oracle About the Door",
+    },
+    {
+      condition: "@deck.door == \"seen\" && ((@deck.elder_research && @deck.oracle_consulted) || @deck.mira_lore)",
+      gameId: "face-the-wardens-warning",
+      id: "c_0076",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@deck.door": "advance(@deck.door)",
+          },
+          gameId: "promise-seal",
+          id: "o_0075",
+          order: 0,
+          purpose: "Warden is satisfied. It describes the sealing ritual. Player has committed to the sealing path.",
+          title: "Promise to seal the Door and ask the Warden how",
+        },
+      ],
+      priority: 1,
+      purpose: "Player has gathered what they need. The Warden approaches them at the Door site with a warning. Key to establish: the Warden is not asking - it is warning. Whatever is behind the Door should not come out. Or should it? The player's response here unlocks the three resolution paths.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000n",
+        ],
+      },
+      title: "Face the Warden's Warning",
+    },
+    {
+      condition: "@deck.door == \"warned\"",
+      gameId: "force-the-ancient-door-open",
+      id: "c_0078",
+      order: 4,
+      outcomes: [
+        {
+          changes: {
+            "@story.world_events": "set_flags(@story.world_events, +door_resolved)",
+          },
+          gameId: "enter-at-once",
+          id: "o_0077",
+          order: 0,
+          purpose: "Player goes through immediately.",
+          title: "Enter the Door at once",
+        },
+      ],
+      priority: 1,
+      purpose: "Player opens the Ancient Door. Key to establish: this is irreversible. What lies behind is now accessible. Production should make the moment of opening significant. The way the player enters is a final character beat for this arc.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000n",
+        ],
+      },
+      title: "Force the Ancient Door Open",
+    },
+    {
+      condition: "@deck.door == \"warned\" && check_flags(@story.world_events, +tree_bloomed) && check_flags(@story.world_events, +miners_saved)",
+      gameId: "perform-the-old-ritual",
+      id: "c_007b",
+      order: 5,
+      outcomes: [
+        {
+          changes: {
+            "@story.world_events": "set_flags(@story.world_events, +door_resolved)",
+          },
+          gameId: "perform-alone",
+          id: "o_0079",
+          order: 0,
+          purpose: "Player performs the ritual. The Door arc is complete.",
+          title: "Perform the old ritual alone",
+        },
+        {
+          changes: {
+            "@story.rel_warden": "set_flags(@story.rel_warden, +at_peace)",
+            "@story.world_events": "set_flags(@story.world_events, +door_resolved)",
+          },
+          gameId: "warden-guide-ritual",
+          id: "o_007a",
+          order: 1,
+          purpose: "Warden guides the player. The ritual proceeds with the Warden's full cooperation. The Warden is at peace. The Door arc is complete.",
+          title: "Ask the Warden to guide them through the ritual",
+        },
+      ],
+      priority: 1,
+      purpose: "With the Tree bloomed and miners saved, the conditions for the old ritual are met. Key to establish: this ritual was designed at the village's founding for exactly this moment. It is the synthesis resolution - a third way that neither forces nor seals, but resolves the tension the Door represents. Production should frame this as the resolution the village's original design intended.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000n",
+        ],
+      },
+      title: "Perform the Old Ritual",
+    },
+    {
+      condition: "@deck.door >= \"seen\"",
+      gameId: "research-the-doors-history-with-bryna",
+      id: "c_007d",
+      order: 6,
+      outcomes: [
+        {
+          changes: {
+            "@deck.elder_research": "true",
+          },
+          gameId: "ask-bryna-directly",
+          id: "o_007c",
+          order: 0,
+          purpose: "Bryna tells what she knows: the Door predates the village; the founding chose to build around it rather than deal with it.",
+          title: "Ask Bryna directly about the Door",
+        },
+      ],
+      priority: 1,
+      purpose: "Player visits Bryna to understand the Door's history. Key to establish: Bryna has records - the village's history is her responsibility. She knows something about the Door and will share it if approached correctly.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000f",
+        ],
+      },
+      title: "Research the Door's History With Bryna",
+    },
+    {
+      condition: "@deck.door >= \"seen\" && !check_flags(@story.world_events, +door_resolved)",
+      gameId: "resist-the-ancient-doors-pull",
+      id: "c_007g",
+      order: 7,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +lair_investigated_early)",
+          },
+          gameId: "press-ear",
+          id: "o_007e",
+          order: 0,
+          purpose: "Player hears something - not clearly, but enough to know there is something on the other side. A sound, a presence, a temperature change.",
+          title: "Press your ear to the Door and listen",
+        },
+        {
+          changes: {
+            "@deck.elder_research": "true",
+          },
+          gameId: "read-markings",
+          id: "o_007f",
+          order: 1,
+          purpose: "Player studies the markings. Some can be partially understood: this is a seal, not a construction.",
+          title: "Try to read the carved markings on the Door",
+        },
+      ],
+      priority: 1,
+      purpose: "Player is back at the Ancient Door. There is a pull - not physical exactly, but present. A compulsion to open it, listen to it, press against it. Key to establish: the Door is active. It is not just an object. The player must decide how to engage with this pull.",
+      redraw: 2,
+      tags: {
+        place: [
+          "h_000n",
+        ],
+      },
+      title: "Resist the Ancient Door's Pull",
+    },
+    {
+      condition: "@deck.door == \"warned\"",
+      gameId: "seal-the-door-further",
+      id: "c_007j",
+      order: 8,
+      outcomes: [
+        {
+          changes: {
+            "@story.world_events": "set_flags(@story.world_events, +door_resolved)",
+          },
+          gameId: "force-without",
+          id: "o_007h",
+          order: 0,
+          purpose: "Player completes the sealing alone. It works. The Warden watches but does not assist. The Door arc is complete, but the relationship with the Warden is left unfinished.",
+          title: "Force the sealing without the Warden",
+        },
+        {
+          changes: {
+            "@story.rel_warden": "set_flags(@story.rel_warden, +at_peace)",
+            "@story.world_events": "set_flags(@story.world_events, +door_resolved)",
+          },
+          gameId: "use-research",
+          id: "o_007i",
+          order: 1,
+          purpose: "Player applies what they have learned. The seal holds. The Warden is at peace with the outcome. The Door arc is complete.",
+          title: "Use your research to seal the Door",
+        },
+      ],
+      priority: 1,
+      purpose: "Player seals the Ancient Door - reinforces what was already there or reapplies the original seal. Key to establish: sealing the Door is not a defeat. It is a choice with its own weight. The Warden responds to how it is done.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000n",
+        ],
+      },
+      title: "Seal the Door Further",
+    },
+  ],
+}

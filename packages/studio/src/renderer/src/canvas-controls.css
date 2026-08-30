@@ -1,0 +1,49 @@
+/* The canvas navigation cluster (canvas-controls.ts): one cluster, same corner,
+   on all three canvases. TOP LEFT (the author's call, 2026-08-25, having used
+   it): the bottom-right corner is where content drifts when a canvas is panned
+   and where the map's zoom control collided with the eye's path to the strip;
+   top-left sits over dead space on every canvas and matches where the document
+   chrome already starts reading.
+
+   Quiet until wanted. Its CONTENTS sit dimmed until the pointer is over the
+   canvas they belong to, so a map reads as a map rather than as a map with a
+   widget on it, but it never disappears: a control nobody can see teaches nobody
+   the gesture it stands for, which is the whole reason it exists.
+
+   The dimming is on the contents and the plate is OPAQUE, which was learnt from
+   a real background image: a translucent plate over flat paper looks restrained,
+   and the same plate over a picture of a village shows a roof through the zoom
+   buttons and reads as broken. Frosting it would have kept the translucency
+   honest, but a solid plate cannot fail on any picture anybody drops in. */
+.canvasctl {
+  position: absolute; left: 10px; top: 10px; z-index: 3;
+  display: flex; align-items: center; gap: 1px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  cursor: default;
+}
+.canvasctl > * { opacity: 0.65; transition: opacity var(--dur-quick) var(--ease-standard); }
+.nodestage:hover > .canvasctl > *, .canvasctl:focus-within > * { opacity: 1; }
+
+.canvasbtn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0;
+  border: none; background: none; color: var(--muted);
+  border-radius: var(--radius-sm); cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-standard), color var(--dur-quick) var(--ease-standard);
+}
+.canvasbtn:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.canvasbtn:disabled { opacity: 0.35; cursor: default; }
+
+.canvasctl-sep { flex: none; width: 1px; height: 15px; background: var(--line-soft); margin: 0 4px; }
+
+/* The zoom readout is a button in its own right (click for 100%), so it is one
+   of these rather than a label wedged between two. Tabular figures: the cluster
+   must not change width as the number does. */
+.canvaszoom {
+  width: auto; min-width: 42px; padding: 0 5px;
+  font: 0.72rem/1 var(--font-ui); font-variant-numeric: tabular-nums;
+}

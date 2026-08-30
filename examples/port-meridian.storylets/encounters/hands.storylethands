@@ -1,0 +1,50 @@
+{
+  schema: "storylets/hands@0",
+  hands: [
+    {
+      chosen: {
+        d_enc_district: "v_enc_docks",
+      },
+      gameId: "docks-alleys",
+      id: "h_docks_alleys",
+      order: 0,
+      slots: 1,
+      template: "t_street",
+      title: "Docks Alleys",
+    },
+    {
+      chosen: {
+        d_enc_district: "v_enc_oldgrid",
+      },
+      gameId: "grid-tunnels",
+      id: "h_grid_tunnels",
+      order: 2,
+      slots: 1,
+      template: "t_street",
+      title: "Grid Tunnels",
+    },
+    {
+      chosen: {
+        d_enc_district: "v_enc_strip",
+      },
+      gameId: "strip-crowds",
+      id: "h_strip_crowds",
+      order: 1,
+      slots: 1,
+      template: "t_street",
+      title: "Strip Crowds",
+    },
+  ],
+  templates: [
+    {
+      chooses: [
+        "d_enc_district",
+      ],
+      gameId: "street",
+      id: "t_street",
+      properties: [],
+      purpose: "The street's one open slot per district: the challenge waiting to happen there.",
+      slots: 1,
+    },
+  ],
+}

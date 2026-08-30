@@ -1,0 +1,50 @@
+{
+  schema: "storylets/hands@0",
+  hands: [
+    {
+      chosen: {
+        d_con_district: "v_con_oldgrid",
+      },
+      gameId: "collective-drop",
+      id: "h_collective_drop",
+      order: 2,
+      slots: 2,
+      template: "t_job_board",
+      title: "Collective Drop",
+    },
+    {
+      chosen: {
+        d_con_district: "v_con_docks",
+      },
+      gameId: "dockside-board",
+      id: "h_dockside_board",
+      order: 0,
+      slots: 2,
+      template: "t_job_board",
+      title: "Dockside Board",
+    },
+    {
+      chosen: {
+        d_con_district: "v_con_strip",
+      },
+      gameId: "palace-fixer",
+      id: "h_palace_fixer",
+      order: 1,
+      slots: 2,
+      template: "t_job_board",
+      title: "The Palace Fixer",
+    },
+  ],
+  templates: [
+    {
+      chooses: [
+        "d_con_district",
+      ],
+      gameId: "job-board",
+      id: "t_job_board",
+      properties: [],
+      purpose: "A place jobs are posted: what work is on offer here, now.",
+      slots: 2,
+    },
+  ],
+}

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout storylets
+        uses: actions/checkout@v5
+        with:
+          path: storylets
+      # tsconfig + vitest alias @wildwinter/expr to a sibling ../expr checkout (dev tests
+      # against its source, not the published version). Mirror that here so CI sees the same.
+      - name: Checkout @wildwinter/expr (sibling source)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/expr
+          path: expr
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: storylets/package-lock.json
+      - run: npm ci
+        working-directory: storylets
+      - run: npm run typecheck
+        working-directory: storylets
+      - run: npm test
+        working-directory: storylets
+      # The four runtimes' API surface. This script existed since the flows work
+      # and its own header said "a member missing anywhere fails CI" - while
+      # nothing ran it anywhere. Found by the pre-release audit, 2026-08-29.
+      - run: npm run parity
+        working-directory: storylets
+      # The Village client is a SAMPLE, so it has a second kind of rot: it can
+      # compile, pass and play while quietly teaching two thirds of an API that
+      # grew underneath it. This asks whether it still shows what there is to
+      # show (design/village-client.md section 6).
+      - run: npm run sample
+        working-directory: storylets
+      - run: npm run build
+        working-directory: storylets

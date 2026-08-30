@@ -1,0 +1,63 @@
+---
+title: Download
+description: Download Storyletter (the editor), the four Storylet Engine runtimes, and the storyletengine CLI, straight from GitHub Releases.
+---
+
+import Downloads from "../../components/Downloads.astro";
+
+Everything below is read live from
+[GitHub Releases](https://github.com/storylet-studio/storylets/releases), so it's always
+the latest version.
+
+## Storyletter: the editor
+
+**Storyletter is the main app**: the desktop editor where you design cards, set up your
+boxes and play the result. It's self-contained; there's nothing else to install.
+
+<Downloads kind="storyletter" />
+
+:::caution[Windows SmartScreen]
+The Windows installer isn't code-signed yet, so SmartScreen shows a warning on first run.
+Choose **More info → Run anyway**. (macOS builds are signed and notarised.)
+:::
+
+### Something to open
+
+New here? Storyletter ships three worked examples, and the welcome screen offers all
+three; start with **The Hamlet**, the small one. It's copied somewhere you choose, so you can take it apart
+without worrying. Start there rather than with an empty project: the idea is much easier to
+read than to describe. [Getting started](/getting-started/) walks you through it.
+
+## Storylet Engine: the runtimes
+
+The plugin that plays your project inside your game. Pick the engine you ship on. The four
+runtimes are the same version and [tested to match](/compatibility/):
+
+<Downloads kind="plugins" />
+
+The JavaScript zip carries the runtime, the dev helpers and a browser drop-in, so there's no
+package manager to set up. See [Playing in your game](/play/overview/) and the per-engine
+guides to get started.
+
+## The CLI
+
+`storyletengine` validates, compiles, deals and tests projects from the terminal, which is
+what you want for CI and automation. One self-contained file per platform, **no Node.js
+required**:
+
+<Downloads kind="cli" />
+
+Or from npm, if you already have Node:
+
+```sh
+npm install -g @storylet-studio/cli
+storyletengine validate ./my-project.storylets
+```
+
+See [the CLI reference](/cli/) for every command.
+
+## Everything else
+
+The full release history, including older versions and the shared test suite the runtimes
+are checked against, lives on
+[GitHub Releases](https://github.com/storylet-studio/storylets/releases).

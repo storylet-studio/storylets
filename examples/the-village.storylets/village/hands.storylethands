@@ -1,0 +1,158 @@
+{
+  schema: "storylets/hands@0",
+  hands: [
+    {
+      chosen: {
+        d_0001: "v_0007",
+      },
+      gameId: "miners-camp",
+      id: "h_000b",
+      order: 0,
+      template: "t_000a",
+      title: "Miners Camp",
+    },
+    {
+      chosen: {
+        d_0001: "v_0004",
+      },
+      gameId: "market",
+      id: "h_000c",
+      order: 1,
+      template: "t_0009",
+      title: "Market",
+    },
+    {
+      chosen: {
+        d_0001: "v_0006",
+      },
+      gameId: "beacon-tower",
+      id: "h_000d",
+      order: 2,
+      template: "t_000a",
+      title: "Beacon Tower",
+    },
+    {
+      chosen: {
+        d_0001: "v_0007",
+      },
+      gameId: "crystal-grotto",
+      id: "h_000e",
+      order: 3,
+      template: "t_000a",
+      title: "The Crystal Grotto",
+    },
+    {
+      chosen: {
+        d_0001: "v_0004",
+      },
+      gameId: "elders-house",
+      id: "h_000f",
+      order: 4,
+      template: "t_0009",
+      title: "Elder's House",
+    },
+    {
+      chosen: {
+        d_0001: "v_0004",
+      },
+      gameId: "inn",
+      id: "h_000g",
+      order: 5,
+      template: "t_0009",
+      title: "The Inn",
+    },
+    {
+      chosen: {
+        d_0001: "v_0006",
+      },
+      gameId: "mountain-camp",
+      id: "h_000h",
+      order: 6,
+      template: "t_000a",
+      title: "Mountain Camp",
+    },
+    {
+      chosen: {
+        d_0001: "v_0005",
+      },
+      gameId: "mystic-tree",
+      id: "h_000i",
+      order: 7,
+      template: "t_000a",
+      title: "The Mystic Tree",
+    },
+    {
+      chosen: {
+        d_0001: "v_0005",
+      },
+      gameId: "old-cottage",
+      id: "h_000j",
+      order: 8,
+      template: "t_000a",
+      title: "Old Cottage",
+    },
+    {
+      chosen: {
+        d_0001: "v_0004",
+      },
+      gameId: "forge",
+      id: "h_000k",
+      order: 9,
+      template: "t_0009",
+      title: "The Forge",
+    },
+    {
+      chosen: {
+        d_0001: "v_0003",
+      },
+      gameId: "treasure",
+      id: "h_000l",
+      order: 10,
+      template: "t_000a",
+      title: "Treasure",
+    },
+    {
+      chosen: {
+        d_0001: "v_0004",
+      },
+      gameId: "wishing-well",
+      id: "h_000m",
+      order: 11,
+      template: "t_0009",
+      title: "The Wishing Well",
+    },
+    {
+      chosen: {
+        d_0001: "v_0003",
+      },
+      gameId: "ancient-door",
+      id: "h_000n",
+      order: 12,
+      template: "t_000a",
+      title: "Ancient Door",
+    },
+  ],
+  templates: [
+    {
+      chooses: [
+        "d_0001",
+      ],
+      gameId: "place-in-the-village",
+      id: "t_0009",
+      properties: [],
+      purpose: "A place in the village, which is open from the start.",
+      slots: 5,
+    },
+    {
+      chooses: [
+        "d_0001",
+      ],
+      condition: "@story.act == \"act-2\"",
+      gameId: "place-in-the-wilds",
+      id: "t_000a",
+      properties: [],
+      purpose: "A place beyond the village. The wilds open in act 2, so every one of these is unavailable until then.",
+      slots: 5,
+    },
+  ],
+}

@@ -1,0 +1,20 @@
+{
+  schema: "storylets/box@0",
+  box: {
+    fields: [
+      {
+        default: "",
+        name: "patter-scene",
+        type: "string",
+      },
+    ],
+    gameId: "encounters",
+    id: "b_enc",
+    properties: [],
+    purpose: "Street-level story beats.",
+    ranking: {
+      specificity: true,
+    },
+    title: "Encounters",
+  },
+}

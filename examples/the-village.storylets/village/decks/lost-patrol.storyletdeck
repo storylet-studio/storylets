@@ -1,0 +1,387 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "@story.act == \"act-2\"",
+    gameId: "lost-patrol",
+    id: "k_0057",
+    order: 7,
+    properties: [
+      {
+        default: false,
+        name: "beacon_seen",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "forest_clue",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "sven_briefed",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "tower_clue",
+        type: "boolean",
+      },
+    ],
+    title: "The Lost Patrol",
+  },
+  cards: [
+    {
+      condition: "@deck.sven_briefed and check_flags(@rel_warden, -encountered, -at_peace) and check_flags(@rel_patrol_ranger, -rescued)",
+      gameId: "let-the-mountain-keep-its-own",
+      id: "c_004h",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_ranger_captain": "set_flags(@story.rel_ranger_captain, +disappointed)",
+          },
+          gameId: "let-go",
+          id: "o_004g",
+          order: 0,
+          purpose: "Sven absorbs it without visible reaction. His disappointment is real. The player and Sven's relationship carries this.",
+          title: "Accept the situation and tell Sven",
+        },
+      ],
+      priority: 1,
+      purpose: "Player has decided not to pursue rescue, or has accepted the mountain search will not succeed. Key to establish: this is a scene of letting go. Sven has to hear it. It is not a failure exactly, but it is a cost. How this is delivered matters.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000h",
+        ],
+      },
+      title: "Accept That the Mountain Won't Give Petra Back",
+    },
+    {
+      condition: "@deck.beacon_seen",
+      gameId: "ask-elara-about-strange-signs",
+      id: "c_004k",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@deck.forest_clue": "true",
+            "@story.lore": "set_flags(@story.lore, +forest_trail_known)",
+            "@story.rel_herbalist": "set_flags(@story.rel_herbalist, +met)",
+          },
+          gameId: "ask-mtn-paths",
+          id: "o_004i",
+          order: 0,
+          purpose: "Elara maps the paths for the player - where Petra would have gone, where they become dangerous. Player gains knowledge of the mountain routes.",
+          title: "Ask Elara about the mountain paths",
+        },
+        {
+          changes: {
+            "@deck.forest_clue": "true",
+            "@story.rel_herbalist": "set_flags(@story.rel_herbalist, +met, +aided)",
+          },
+          gameId: "describe-seen",
+          id: "o_004j",
+          order: 1,
+          purpose: "Elara pieces it together with her own observations. She identifies the pattern - something moved through the paths in a way that does not fit natural causes.",
+          title: "Describe what you have seen and ask Elara about it",
+        },
+      ],
+      priority: 1,
+      purpose: "Player visits Elara to ask about unusual signs in the mountain paths and forest. Key to establish: Elara knows the landscape better than anyone. She has been independently tracking something in the mountain paths that intersects with the patrol's disappearance. She can connect it for the player.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000j",
+        ],
+      },
+      title: "Ask Elara About Strange Signs",
+    },
+    {
+      gameId: "ask-sven-about-the-dark-beacon",
+      id: "c_004n",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@deck.beacon_seen": "true",
+            "@story.rel_ranger_captain": "set_flags(@story.rel_ranger_captain, +met, +impressed)",
+          },
+          gameId: "look-at-tower",
+          id: "o_004l",
+          order: 0,
+          purpose: "Sven and player stand there together. He says something brief. He has noticed that the player can hold silence.",
+          title: "Say nothing and look at the dark tower alongside Sven",
+        },
+        {
+          changes: {
+            "@deck.beacon_seen": "true",
+            "@story.rel_ranger_captain": "set_flags(@story.rel_ranger_captain, +met)",
+          },
+          gameId: "offer-investigate",
+          id: "o_004m",
+          order: 1,
+          purpose: "Sven accepts. He gives the player what he knows - the tower location, the timeline, what Petra was sent to do. Player is engaged.",
+          title: "Offer to investigate the beacon tower",
+        },
+      ],
+      priority: 1,
+      purpose: "Sven, the ranger captain, is at the mountain camp. The beacon tower visible in the distance has been dark for three nights. Sven's best ranger, Petra, went to relight it and has not returned. Key to establish: Sven is worried but managing it professionally. The beacon being dark has practical consequences for the village. Player can engage the arc or not.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000h",
+        ],
+      },
+      title: "Ask Sven About the Dark Beacon",
+    },
+    {
+      condition: "@deck.tower_clue && @deck.forest_clue",
+      gameId: "brief-sven-on-both-reports",
+      id: "c_004p",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@deck.sven_briefed": "true",
+          },
+          gameId: "argue-rescue",
+          id: "o_004o",
+          order: 0,
+          purpose: "Sven responds to the urgency. Plans mobilise for rescue.",
+          title: "Argue for immediate rescue",
+        },
+      ],
+      priority: 1,
+      purpose: "Player has gathered evidence from both the tower and Elara. They bring it to Sven. Key to establish: this is the player's briefing scene. How they present the findings will shape how Sven responds and which resolution he commits to.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000h",
+        ],
+      },
+      title: "Brief Sven on Both Reports",
+    },
+    {
+      condition: "@deck.sven_briefed and check_flags(@rel_blacksmith, +grateful) and check_flags(@rel_patrol_ranger, -rescued)",
+      gameId: "send-word-to-the-village",
+      id: "c_004r",
+      order: 4,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_patrol_ranger": "set_flags(@story.rel_patrol_ranger, +rescued)",
+          },
+          gameId: "organise-party",
+          id: "o_004q",
+          order: 0,
+          purpose: "Gareth agrees without hesitation. He owes the player. The search party goes out. A collective village response rather than a solo rescue.",
+          title: "Organise a search party through Gareth",
+        },
+      ],
+      priority: 1,
+      purpose: "Player calls on Gareth (who is grateful from the Debt arc) to organise a broader village search party. Key to establish: this is the player using their relationships across arcs. Gareth can mobilise the village in ways a single person cannot.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000h",
+        ],
+      },
+      title: "Call on Gareth to Organise a Search Party",
+    },
+    {
+      condition: "check_flags(@story.rel_patrol_ranger, +rescued)",
+      gameId: "catch-up-with-petra",
+      id: "c_004t",
+      order: 5,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_patrol_ranger": "set_flags(@story.rel_patrol_ranger, +friends)",
+          },
+          gameId: "ask-ordeal",
+          id: "o_004s",
+          order: 0,
+          purpose: "Petra shares what happened. Player learns something about the mountain relevant to other arcs.",
+          title: "Ask about Petra's ordeal - what did she see?",
+        },
+      ],
+      priority: 1,
+      purpose: "A follow-up scene with Petra at the mountain camp or beacon tower, after her recovery. Key to establish: Petra is now a person, not a mission outcome. This scene is about the player-Petra relationship. What was said or done in the rescue shapes what is possible here.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000h",
+          "h_000d",
+        ],
+      },
+      title: "Catch Up With Petra",
+    },
+    {
+      condition: "check_flags(@story.rel_ranger_captain, +owes_player)",
+      gameId: "find-petra-alive",
+      id: "c_004x",
+      order: 6,
+      outcomes: [
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +lair_investigated_early)",
+            "@story.rel_patrol_ranger": "set_flags(@story.rel_patrol_ranger, +rescued)",
+          },
+          gameId: "ask-what-knows",
+          id: "o_004u",
+          order: 0,
+          purpose: "Player presses Petra for what she saw before moving. She shares something about what she encountered in the mountain.",
+          title: "Ask what Petra knows before leaving",
+        },
+        {
+          changes: {
+            "@story.rel_patrol_ranger": "set_flags(@story.rel_patrol_ranger, +rescued, +friends)",
+          },
+          gameId: "check-unhurt",
+          id: "o_004v",
+          order: 1,
+          purpose: "Player takes care of Petra first. She is grateful and specific - she remembers the player's care. A friendship begins.",
+          title: "Check Petra is unhurt before moving",
+        },
+        {
+          changes: {
+            "@story.rel_patrol_ranger": "set_flags(@story.rel_patrol_ranger, +rescued)",
+          },
+          gameId: "get-out-now",
+          id: "o_004w",
+          order: 2,
+          purpose: "Efficiency is the priority. Petra is grateful for it.",
+          title: "Get Petra out of the area immediately",
+        },
+      ],
+      priority: 1,
+      purpose: "Petra has been found. She is alive and physically unhurt but has been somewhere she cannot fully describe. Key to establish: this is the reunion scene. How the player handles it determines whether Petra becomes a fuller relationship or stays a mission outcome.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000b",
+        ],
+      },
+      title: "Find Petra Alive",
+    },
+    {
+      condition: "check_flags(@story.rel_ranger_captain, +owes_player)",
+      gameId: "follow-petras-trail",
+      id: "c_004z",
+      order: 7,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_patrol_ranger": "set_flags(@story.rel_patrol_ranger, +rescued)",
+          },
+          gameId: "leave-signal",
+          id: "o_004y",
+          order: 0,
+          purpose: "Player marks their position and waits. Petra finds the signal and comes to them. Player is credited with the rescue.",
+          title: "Leave a signal and wait",
+        },
+      ],
+      priority: 1,
+      purpose: "Player is tracking Petra through the miners camp and surrounding area. The trail is warm - they are close. Key to establish: this is the final tracking phase. Player must decide how to proceed at this specific junction.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000b",
+        ],
+      },
+      title: "Follow Petra's Trail",
+    },
+    {
+      condition: "@deck.sven_briefed and check_flags(@rel_patrol_ranger, -rescued)",
+      gameId: "mount-a-rescue",
+      id: "c_0051",
+      order: 8,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_ranger_captain": "set_flags(@story.rel_ranger_captain, +owes_player)",
+          },
+          gameId: "lead-rescue",
+          id: "o_0050",
+          order: 0,
+          purpose: "Player goes in. Rescue begins. Sven is in the player's debt for taking the lead.",
+          title: "Lead the rescue into the mountain yourself",
+        },
+      ],
+      priority: 1,
+      purpose: "Sven has agreed to a rescue. The player is leading it. Key to establish: this is a moment of commitment - the player is going into the mountain with the express purpose of finding Petra. Whatever Petra's condition when found, the player took the initiative.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000h",
+        ],
+      },
+      title: "Lead the Search for Petra into the Mountain",
+    },
+    {
+      condition: "@deck.beacon_seen",
+      gameId: "search-the-beacon-tower",
+      id: "c_0053",
+      order: 9,
+      outcomes: [
+        {
+          changes: {
+            "@deck.tower_clue": "true",
+          },
+          gameId: "search-carefully",
+          id: "o_0052",
+          order: 0,
+          purpose: "Systematic search. Player finds what is there - evidence of Petra's direction of travel or what she encountered.",
+          title: "Search the tower carefully and systematically",
+        },
+      ],
+      priority: 1,
+      purpose: "Player is at the Beacon Tower. Something happened here. Key to establish: there are signs of what happened to Petra - a trail, evidence of struggle, or interference with the beacon mechanism. The player is investigating. All three approaches yield the same conclusion via different methods.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000d",
+        ],
+      },
+      title: "Search the Beacon Tower",
+    },
+    {
+      condition: "check_flags(@story.rel_patrol_ranger, +friends)",
+      gameId: "watch-petra-light-the-beacon",
+      id: "c_0056",
+      order: 10,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_ranger_captain": "set_flags(@story.rel_ranger_captain, +impressed)",
+          },
+          gameId: "give-her-space",
+          id: "o_0054",
+          order: 0,
+          purpose: "Player steps back but stays present. Sven, if watching, notes the player's regard for Petra. Sven impressed.",
+          title: "Give Petra space - this is her moment",
+        },
+        {
+          changes: {
+            "@story.lore": "set_flags(@story.lore, +founding_rumour_heard)",
+          },
+          gameId: "watch-with-her",
+          id: "o_0055",
+          order: 1,
+          purpose: "Player stays for the whole thing. Petra talks while she works - mentions a detail about the village founding. Founding rumour heard.",
+          title: "Watch the lighting alongside Petra",
+        },
+      ],
+      priority: 1,
+      purpose: "Petra lights the Beacon Tower. The beacon burns again. Key to establish: this is a quiet ceremony, not a celebration. Petra is closing something. The player's role is witness. Production should give this moment space.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000d",
+        ],
+      },
+      title: "Watch Petra Light the Beacon",
+    },
+  ],
+}

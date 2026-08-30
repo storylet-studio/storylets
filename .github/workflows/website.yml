@@ -1,0 +1,44 @@
+name: Website
+
+# Build the static Astro + Starlight site, as a gate.
+#
+# Patter's equivalent both builds and DEPLOYS to GitHub Pages. The deploy half is
+# deliberately absent here: this repo is private and the site is not served from
+# it. Adding the `deploy` job is part of the public split rather than a thing to
+# leave switched off in the meantime (see design/public-split.md).
+#
+# Unlike Patter's, this also runs on `pull_request`. Patter's file is a DEPLOY
+# and only wants to fire on main; ours is a gate, and a gate that reports after
+# the merge has already told you too late.
+#
+# Path-filtered, which is safe because the site is standalone: its own lockfile,
+# its own node_modules, no import from `packages/` and nothing read out of the
+# monorepo at build time. If that ever stops being true, this filter goes.
+on:
+  push:
+    branches: [main]
+    paths: ["website/**", ".github/workflows/website.yml"]
+  pull_request:
+    paths: ["website/**", ".github/workflows/website.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      # `build` ends in a `postbuild` that runs scripts/check-docs.mjs, which is the
+      # half that actually catches things: Astro reports neither a blank line inside
+      # a raw <svg> (markdown ends the HTML block there and renders the rest of the
+      # diagram as prose) nor a dead internal link. Both look exactly like a green
+      # build, and both shipped. Do not "simplify" this to `astro build`.
+      - run: npm run build

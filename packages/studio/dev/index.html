@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <title>Canvas lab</title>
+    <!-- theme.css is imported from lab.ts: a ../ link escapes the dev root and
+         the browser would ask the server for a path it cannot serve. -->
+    <link rel="stylesheet" href="./lab.css" />
+  </head>
+  <body>
+    <div id="lab">
+      <header class="bar">
+        <strong>Canvas lab</strong>
+        <span class="sep"></span>
+        <button id="layout">Arrange by links</button>
+        <!-- No camera buttons: fit / fit-selection / zoom are the surface's own
+             cluster in the canvas corner, and the lab has to show what the app
+             shows or it stops being evidence about the app. -->
+        <output id="zoom">100%</output>
+        <span class="sep"></span>
+        <select id="theme" aria-label="Theme">
+          <option value="">Follow the system</option>
+          <option value="linen">Linen</option>
+          <option value="baize">Baize</option>
+        </select>
+      </header>
+      <div id="stage" class="nodestage"></div>
+      <footer class="log">
+        <output id="sel">nothing selected</output>
+        <output id="hover">no hover</output>
+        <output id="events"></output>
+      </footer>
+    </div>
+    <script type="module" src="./lab.ts"></script>
+  </body>
+</html>

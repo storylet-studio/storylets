@@ -1,0 +1,36 @@
+{
+  "name": "storylets-monorepo",
+  "private": true,
+  "type": "module",
+  "description": "Storylet Studio / Storylet Engine workshop monorepo (@storylet-studio/*). Interim home; assembles into the public github.com/storylet-studio/storylets.",
+  "license": "MIT",
+  "author": "Ian Thomas",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit && npm run typecheck -w @storylet-studio/studio",
+    "test": "vitest run",
+    "parity": "node scripts/check-runtime-api-parity.mjs",
+    "sample": "node scripts/check-sample-coverage.mjs",
+    "check:unity-demo": "./scripts/check-unity-demo.sh",
+    "check:unreal-plugin": "./scripts/check-unreal-plugin.sh",
+    "test:watch": "vitest",
+    "test:website": "npm --prefix website run build",
+    "build:libs": "npm run build -w @storylet-studio/model -w @storylet-studio/dialect -w @storylet-studio/compiler -w @storylet-studio/runtime -w @storylet-studio/ops -w @storylet-studio/cli",
+    "build": "npm run build:libs && npm run build -w @storylet-studio/studio && npm run build -w @storylet-studio/village-client",
+    "studio": "npm run dev -w @storylet-studio/studio",
+    "website": "npm --prefix website run dev"
+  },
+  "devDependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.27.7",
+    "fontkit": "^2.0.4",
+    "jsdom": "^26.0.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.6"
+  }
+}

@@ -1,0 +1,184 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    condition: "(@story.act == \"act-2\") && (check_flags(@story.rel_blacksmith, +met))",
+    gameId: "gareth-debt",
+    id: "k_003x",
+    order: 5,
+    properties: [
+      {
+        default: false,
+        name: "aldric_background_known",
+        type: "boolean",
+      },
+      {
+        default: false,
+        name: "troubled_seen",
+        type: "boolean",
+      },
+      {
+        default: "quiet",
+        name: "debt",
+        stages: [
+          "quiet",
+          "engaged",
+          "resolved",
+        ],
+        type: "quality",
+      },
+    ],
+    title: "Gareth's Debt",
+  },
+  cards: [
+    {
+      condition: "@deck.debt == \"engaged\"",
+      gameId: "aldric-arrives-at-the-forge",
+      id: "c_003o",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@deck.debt": "advance(@deck.debt)",
+          },
+          gameId: "negotiate-privately",
+          id: "o_003l",
+          order: 0,
+          purpose: "Player deals with Aldric away from the public scene. Whatever is offered works. Aldric leaves quietly. Gareth finds the problem resolved without understanding why. Neither grateful nor angry.",
+          title: "Intercept Aldric privately before the confrontation",
+        },
+        {
+          changes: {
+            "@deck.debt": "advance(@deck.debt)",
+            "@story.rel_blacksmith": "set_flags(@story.rel_blacksmith, +grateful)",
+          },
+          gameId: "stand-with-gareth",
+          id: "o_003m",
+          order: 1,
+          purpose: "Player makes their position visible. Aldric recalibrates - the confrontation becomes a negotiation. Gareth's debt is resolved in his favour. Aldric leaves without what he came for. Gareth is grateful.",
+          title: "Stand with Gareth publicly",
+        },
+        {
+          changes: {
+            "@deck.debt": "advance(@deck.debt)",
+            "@story.rel_blacksmith": "set_flags(@story.rel_blacksmith, +angry)",
+          },
+          gameId: "stay-out",
+          id: "o_003n",
+          order: 2,
+          purpose: "The confrontation plays out in public. Gareth faces it alone. He sees the player watching and not acting. He says nothing. The relationship is damaged.",
+          title: "Stay out of it",
+        },
+      ],
+      priority: 1,
+      purpose: "Aldric has come to the forge to collect the debt. Gareth is present. The player must decide what role to play. Key to establish: this is a public moment - other villagers can see it. Whatever the player does will be witnessed. All three paths are valid. Gareth is watching to see what the player does.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000k",
+        ],
+      },
+      title: "Aldric Arrives at the Forge to Collect",
+    },
+    {
+      condition: "@deck.debt == \"quiet\"",
+      gameId: "check-on-gareth-at-the-forge",
+      id: "c_003r",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@deck.debt": "advance(@deck.debt)",
+            "@deck.troubled_seen": "true",
+          },
+          gameId: "ask-directly",
+          id: "o_003p",
+          order: 0,
+          purpose: "Gareth deflects initially, then admits there is a problem without naming it. He is grateful someone noticed but not ready to explain. Player has signalled they care.",
+          title: "Ask directly what is wrong",
+        },
+        {
+          changes: {
+            "@deck.troubled_seen": "true",
+          },
+          gameId: "work-quietly",
+          id: "o_003q",
+          order: 1,
+          purpose: "Gareth works. Eventually he says something brief - an acknowledgement that things are not right. Nothing resolved, but the door is open.",
+          title: "Work quietly beside Gareth and wait",
+        },
+      ],
+      priority: 1,
+      purpose: "Gareth is at the forge but something is wrong - working with unusual intensity or staring at his work without making progress. Key to establish: something is preoccupying him and it is visible. He will deflect if asked directly. The player decides whether to push, work alongside him, or leave. This opens the arc.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000k",
+        ],
+      },
+      title: "Check on Gareth at the Forge",
+    },
+    {
+      gameId: "notice-the-stranger-watching-the-forge",
+      id: "c_003t",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@deck.aldric_background_known": "true",
+          },
+          gameId: "observe-distance",
+          id: "o_003s",
+          order: 0,
+          purpose: "Player watches Aldric watch the forge. They read his posture and patience: someone calculating, not impulsive. A creditor with a debt owed. Aldric background known.",
+          title: "Observe Aldric from a distance without being seen",
+        },
+      ],
+      priority: 1,
+      purpose: "At the market site, a stranger (Aldric) is watching the forge from a distance. He is not subtle - he wants to be seen watching. Key to establish: Aldric is a creditor, not a threat. He carries himself with the patience of someone who has leverage. Players who engage will learn the nature of his business with the forge.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000c",
+        ],
+      },
+      title: "Notice the Stranger Watching the Forge",
+    },
+    {
+      condition: "@deck.debt == \"quiet\" && @deck.troubled_seen && @deck.aldric_background_known",
+      gameId: "press-gareth-for-the-truth",
+      id: "c_003w",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@deck.debt": "advance(@deck.debt)",
+          },
+          gameId: "listen-think",
+          id: "o_003u",
+          order: 0,
+          purpose: "Gareth accepts this - he expected it. He tells the player the full situation. Player understands the problem and has heard Gareth out.",
+          title: "Listen and say you will think about it",
+        },
+        {
+          changes: {
+            "@deck.debt": "advance(@deck.debt)",
+          },
+          gameId: "promise-help",
+          id: "o_003v",
+          order: 1,
+          purpose: "Gareth is visibly relieved. He did not expect unconditional help. He tells the player everything. Player is committed before knowing exactly what it will involve.",
+          title: "Promise to help Gareth with no conditions",
+        },
+      ],
+      priority: 1,
+      purpose: "Gareth knows the player has seen his distress and has also seen Aldric watching. He is ready to talk, but it will cost him to say it. Key to establish: Gareth owes money he cannot repay. Aldric will come to collect. He has been handling this alone and has run out of options. This is the scene where the player learns the full situation. How they respond shapes the relationship.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_000k",
+        ],
+      },
+      title: "Press Gareth for the Truth",
+    },
+  ],
+}

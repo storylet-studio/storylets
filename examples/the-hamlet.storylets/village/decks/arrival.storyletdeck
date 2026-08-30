@@ -1,0 +1,159 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    gameId: "arrival",
+    id: "k_arrival",
+    properties: [],
+    purpose: "A newcomer finds their footing.",
+    title: "Arrival",
+  },
+  cards: [
+    {
+      condition: "@act == \"arrival\"",
+      fields: {
+        scene: "scn_gate",
+      },
+      gameId: "arrive-at-the-gate",
+      id: "c_arrive",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@story.act": "\"act-1\"",
+          },
+          gameId: "step-through",
+          id: "c_arrive_o",
+          title: "Step through the gate",
+        },
+      ],
+      priority: 10,
+      purpose: "The road ends at a weathered gate; smoke rises from the Inn beyond. First impressions begin here.",
+      redraw: "never",
+      tags: {
+        d_zone: [
+          "v_village",
+        ],
+      },
+      title: "Arrive at the Village Gate",
+    },
+    {
+      condition: "check_flags(@rel_innkeeper, +met) and check_flags(@rel_blacksmith, +met)",
+      fields: {
+        scene: "scn_elder",
+      },
+      gameId: "answer-brynas-summons",
+      id: "c_bryna",
+      order: 3,
+      outcomes: [
+        {
+          changes: {
+            "@story.act": "\"act-2\"",
+            "@story.rel_elder": "set_flags(@rel_elder, +met)",
+            "@story.village_open": "true",
+          },
+          gameId: "keep-your-distance",
+          id: "c_bryna_cautious",
+          order: 1,
+          title: "Stay polite but keep your distance",
+        },
+        {
+          changes: {
+            "@story.act": "\"act-2\"",
+            "@story.rel_elder": "set_flags(@rel_elder, +met, +has_favour)",
+            "@story.village_open": "true",
+          },
+          gameId: "pledge-your-help",
+          id: "c_bryna_pledge",
+          order: 0,
+          title: "Pledge your help to the village",
+        },
+      ],
+      priority: 2,
+      purpose: "The village elder has heard a newcomer is asking questions. She would like to hear them herself.",
+      redraw: "never",
+      tags: {
+        d_zone: [
+          "v_village",
+        ],
+      },
+      title: "Answer Bryna's Summons",
+    },
+    {
+      condition: "not check_flags(@rel_blacksmith, +met)",
+      fields: {
+        scene: "scn_forge",
+      },
+      gameId: "known-at-the-forge",
+      id: "c_forge_first",
+      order: 2,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_blacksmith": "set_flags(@rel_blacksmith, +met)",
+          },
+          gameId: "ask-if-hes-hiring",
+          id: "c_forge_straight",
+          order: 1,
+          title: "Talk straight: ask if he's hiring",
+        },
+        {
+          changes: {
+            "@story.rel_blacksmith": "set_flags(@rel_blacksmith, +met, +warm)",
+          },
+          gameId: "admire-the-work",
+          id: "c_forge_warm",
+          order: 0,
+          title: "Admire the work openly and specifically",
+        },
+      ],
+      priority: 3,
+      purpose: "Gareth barely looks up from the anvil. Respect for the work, or a straight question, both land - flattery does not.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_forge",
+        ],
+      },
+      title: "Make Yourself Known at the Forge",
+    },
+    {
+      condition: "not check_flags(@rel_innkeeper, +met)",
+      fields: {
+        scene: "scn_inn",
+      },
+      gameId: "settle-at-the-inn",
+      id: "c_inn_first",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_innkeeper": "set_flags(@rel_innkeeper, +met)",
+          },
+          gameId: "ask-about-the-road-north",
+          id: "c_inn_road",
+          order: 1,
+          title: "Ask only about the road north",
+        },
+        {
+          changes: {
+            "@story.rel_innkeeper": "set_flags(@rel_innkeeper, +met, +warm)",
+            "@story.reputation": "@reputation + 1",
+          },
+          gameId: "ask-about-history",
+          id: "c_inn_warm",
+          order: 0,
+          title: "Ask warmly about the village's history",
+        },
+      ],
+      priority: 3,
+      purpose: "Mira the innkeeper takes your measure over a bowl of stew. How you speak to her sets the tone.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_inn",
+        ],
+      },
+      title: "Get Settled at the Inn",
+    },
+  ],
+}

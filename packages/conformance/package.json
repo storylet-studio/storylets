@@ -1,0 +1,9 @@
+{
+  "name": "@storylet-studio/conformance",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Storylets conformance suite: a language-agnostic JSON corpus (expression, specificity, peek and scripted cases) that every runtime, the JS reference and each port, must pass. The parity contract.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ian Thomas"
+}

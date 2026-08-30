@@ -1,0 +1,109 @@
+{
+  schema: "storylets/tags@0",
+  groups: [
+    {
+      gameId: "district",
+      id: "d_enc_district",
+      properties: [
+        {
+          default: false,
+          name: "patrolled",
+          purpose: "Whether Port Authority patrols this district - checkpoint trouble only spawns where they walk.",
+          type: "boolean",
+        },
+      ],
+      purpose: "Which district of Port Meridian this belongs to.",
+      tags: [
+        {
+          gameId: "docks",
+          id: "v_enc_docks",
+          order: 0,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: 0,
+                  y: 0,
+                },
+                {
+                  x: 480,
+                  y: 0,
+                },
+                {
+                  x: 480,
+                  y: 360,
+                },
+                {
+                  x: 0,
+                  y: 360,
+                },
+              ],
+            },
+          },
+          values: {
+            patrolled: true,
+          },
+        },
+        {
+          gameId: "oldgrid",
+          id: "v_enc_oldgrid",
+          order: 2,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: 1000,
+                  y: 0,
+                },
+                {
+                  x: 1480,
+                  y: 0,
+                },
+                {
+                  x: 1480,
+                  y: 360,
+                },
+                {
+                  x: 1000,
+                  y: 360,
+                },
+              ],
+            },
+          },
+        },
+        {
+          gameId: "strip",
+          id: "v_enc_strip",
+          order: 1,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: 500,
+                  y: 0,
+                },
+                {
+                  x: 980,
+                  y: 0,
+                },
+                {
+                  x: 980,
+                  y: 360,
+                },
+                {
+                  x: 500,
+                  y: 360,
+                },
+              ],
+            },
+          },
+        },
+      ],
+      templates: {
+        spatial: {
+          map: true,
+        },
+      },
+    },
+  ],
+}

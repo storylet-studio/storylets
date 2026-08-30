@@ -1,0 +1,142 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    id: "k_gareth",
+    properties: [
+      {
+        default: "quiet",
+        name: "debt",
+        stages: [
+          "quiet",
+          "troubled",
+          "confronted",
+        ],
+        type: "quality",
+      },
+      {
+        default: false,
+        name: "helped",
+        type: "boolean",
+      },
+    ],
+    purpose: "The blacksmith owes the wrong people. Whether you stand with him is up to you.",
+    title: "Gareth's Debt",
+  },
+  cards: [
+    {
+      condition: "@deck.debt == \"troubled\"",
+      fields: {
+        scene: "scn_gareth_men",
+      },
+      gameId: "the-moneylenders-men",
+      id: "c_gareth_men",
+      outcomes: [
+        {
+          changes: {
+            "@deck.debt": "advance(@deck.debt)",
+            "@deck.helped": "true",
+            "@story.reputation": "@reputation + 1",
+          },
+          condition: "@reputation >= 2",
+          gameId: "pay-them-off",
+          id: "c_gm_pay",
+          order: 1,
+          title: "Pay the debt yourself",
+        },
+        {
+          changes: {
+            "@deck.debt": "advance(@deck.debt)",
+            "@story.rel_blacksmith": "set_flags(@rel_blacksmith, +grateful)",
+            "@story.reputation": "@reputation + 2",
+          },
+          condition: "check_flags(@rel_blacksmith, +warm)",
+          gameId: "stand-with-gareth",
+          id: "c_gm_stand",
+          order: 0,
+          title: "Stand with Gareth against them",
+        },
+        {
+          changes: {
+            "@deck.debt": "advance(@deck.debt)",
+            "@story.rel_blacksmith": "set_flags(@rel_blacksmith, +angry)",
+          },
+          gameId: "walk-away",
+          id: "c_gm_walk",
+          order: 2,
+          title: "Walk away; it isn't your fight",
+        },
+      ],
+      priority: 5,
+      purpose: "Two of Aldric's men lean on the forge door. This is the debt made flesh.",
+      redraw: "never",
+      tags: {
+        d_zone: [
+          "v_village",
+        ],
+      },
+      title: "The Moneylender's Men",
+    },
+    {
+      condition: "@deck.helped",
+      fields: {
+        scene: "scn_gareth_thanks",
+      },
+      gameId: "gareths-gratitude",
+      id: "c_gareth_thanks",
+      outcomes: [
+        {
+          changes: {
+            "@story.rel_blacksmith": "set_flags(@rel_blacksmith, +grateful)",
+          },
+          gameId: "clasp-his-hand",
+          id: "c_gtx_o",
+          title: "Clasp his hand",
+        },
+      ],
+      priority: 2,
+      purpose: "The debt is settled and the forge rings again. Gareth wants you to know it won't be forgotten.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_forge",
+        ],
+      },
+      title: "Gareth's Gratitude",
+    },
+    {
+      condition: "@act != \"arrival\" and check_flags(@rel_blacksmith, +met) and @deck.debt == \"quiet\"",
+      fields: {
+        scene: "scn_gareth_troubled",
+      },
+      gameId: "gareth-looks-troubled",
+      id: "c_gareth_troubled",
+      outcomes: [
+        {
+          changes: {
+            "@deck.debt": "advance(@deck.debt)",
+          },
+          gameId: "ask-what-is-wrong",
+          id: "c_gt_ask",
+          title: "Ask him what's wrong",
+        },
+        {
+          changes: {
+            "@deck.debt": "advance(@deck.debt)",
+          },
+          gameId: "leave-him-be",
+          id: "c_gt_leave",
+          title: "Leave him be",
+        },
+      ],
+      priority: 4,
+      purpose: "The hammer has gone quiet. Gareth is staring at a letter he keeps folding and unfolding.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_forge",
+        ],
+      },
+      title: "Gareth Looks Troubled",
+    },
+  ],
+}

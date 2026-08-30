@@ -1,0 +1,28 @@
+{
+  "name": "@storylet-studio/cli",
+  "version": "0.0.0",
+  "description": "storyletengine - the Storylet Engine CLI: init, new, validate, format, export, peek, deal, merge, coverage. A thin front-end over @storylet-studio/ops; pack lands next.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ian Thomas",
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "storyletengine": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "build:standalone": "node scripts/build-standalone.mjs",
+    "build:standalone:mac": "node scripts/build-standalone.mjs --targets=darwin-arm64,darwin-x64",
+    "build:standalone:others": "node scripts/build-standalone.mjs --targets=linux-x64,linux-arm64,windows-x64"
+  },
+  "dependencies": {
+    "@storylet-studio/ops": "0.0.0",
+    "@wildwinter/simple-vc-lib": "^0.4.1"
+  }
+}

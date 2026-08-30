@@ -1,0 +1,95 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    gameId: "salvage",
+    id: "k_salvage",
+    properties: [],
+    purpose: "Found once, never redealt. A find that matters writes the events record; the rest is the game's loot.",
+    title: "Salvage",
+  },
+  cards: [
+    {
+      fields: {
+        value: 0,
+      },
+      gameId: "clean-burner-phone",
+      id: "c_burner",
+      order: 1,
+      outcomes: [
+        {
+          changes: {
+            "@story.events": "set_flags(@events, +burner_found)",
+          },
+          gameId: "pocket-it",
+          id: "c_burner_pocket_it",
+          order: 0,
+          title: "Pocket it",
+        },
+      ],
+      priority: 1,
+      purpose: "Still in its blister pack. In this city, an unregistered number is worth more than the handset.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_back_room",
+        ],
+      },
+      title: "Clean Burner Phone",
+    },
+    {
+      fields: {
+        value: 40,
+      },
+      gameId: "dockside-cache",
+      id: "c_cache",
+      order: 2,
+      outcomes: [
+        {
+          changes: {},
+          gameId: "crack-it-open",
+          id: "c_cache_crack_it_open",
+          order: 0,
+          title: "Crack it open",
+        },
+      ],
+      priority: 1,
+      purpose: "Somebody's rainy-day tin, taped under the container floor. Finders keepers is dock law.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_container_7",
+        ],
+      },
+      title: "Dockside Cache",
+    },
+    {
+      condition: "check_flags(@rel_collective, +met)",
+      fields: {
+        value: 0,
+      },
+      gameId: "military-decryptor",
+      id: "c_decryptor",
+      order: 0,
+      outcomes: [
+        {
+          changes: {
+            "@story.events": "set_flags(@events, +decryptor_found)",
+          },
+          gameId: "pocket-it",
+          id: "c_decryptor_pocket_it",
+          order: 0,
+          title: "Pocket it",
+        },
+      ],
+      priority: 2,
+      purpose: "Wrapped in anti-static film behind the duct grille. The Collective's people leave things where their friends will look.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_service_duct",
+        ],
+      },
+      title: "Military Decryptor",
+    },
+  ],
+}
