@@ -48,9 +48,30 @@ const OUT_DIR    = join(APP_DIR, "build");
 // Icons" view (256).
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256];
 
+// The generated .ico files are COMMITTED, because this script cannot run on the
+// machine that needs them: the resize step is Apple's `sips`, and the Windows
+// installer is built on a Windows runner. So the arrangement is Patterpad's -
+// regenerate on a Mac when the brand art changes, and commit the output.
+//
+// Off macOS, skip ONLY if that committed output is actually present. It used to
+// skip unconditionally, which turned a missing icon into a silent no-op here and
+// an unexplained "cannot find specified resource" from electron-builder a minute
+// later, on a different machine, in a release job. Failing here says what is
+// wrong and how to fix it.
+const OUTPUTS = ["doc-storyletshard", "doc-storyletproj", "doc-storyletsc", "doc-storyletpack", "icon"];
+
 if (process.platform !== "darwin") {
-  console.error("build-win-icons.mjs: skipping - the sips resize step is mac-only");
-  process.exit(0);
+  const missing = OUTPUTS.filter((n) => !existsSync(join(OUT_DIR, `${n}.ico`)));
+  if (missing.length === 0) {
+    console.log("build-win-icons.mjs: using the committed .ico files (regenerate on a Mac)");
+    process.exit(0);
+  }
+  console.error(
+    `build-win-icons.mjs: missing committed icons: ${missing.map((n) => `${n}.ico`).join(", ")}\n` +
+      "  The resize step needs Apple's sips, so these cannot be built here.\n" +
+      "  On a Mac: npm run -w @storylet-studio/studio build:win-icons, then commit packages/studio/build/*.ico",
+  );
+  process.exit(1);
 }
 
 function runSips(args) {

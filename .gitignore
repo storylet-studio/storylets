@@ -27,7 +27,11 @@ ports/unity/StoryletEngineDemo/*.slnx
 # Local, uncommitted test assets for the labs (real floor plans, big images).
 packages/studio/dev/local/
 
-# Packaging output and the generated icon set (rebuilt by the dist scripts).
+# Packaging output. The .icns set is genuinely rebuilt by the dist scripts: the
+# mac icons are cut on the macOS runner, where sips exists. The .ico set is NOT,
+# and must stay COMMITTED: its resize step is also sips, but it is consumed on a
+# WINDOWS runner that has no sips to run it with. Ignoring them shipped a release
+# job that failed with "cannot find specified resource doc-storyletproj.ico".
+# Patter commits its .ico set for the same reason.
 packages/studio/dist/
 packages/studio/build/*.icns
-packages/studio/build/*.ico

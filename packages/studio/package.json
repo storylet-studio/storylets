@@ -46,6 +46,9 @@
   },
   "build": {
     "appId": "studio.storylet.storyletter",
+    "extraMetadata": {
+      "name": "storyletter"
+    },
     "npmRebuild": false,
     "productName": "Storyletter",
     "files": [
