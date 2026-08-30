@@ -50,6 +50,7 @@ import type {
   BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOverlayDto, CoverageReport, DeckGraph, GraphEdge, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, MapBackgroundDto, PaneState, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
 } from "../shared/api.js";
 import { JOB_PROGRESS_CHANNEL, MAP_CANVAS, PROJECT_CHANGED } from "../shared/api.js";
+import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
 
 // Chromium has to be told about a scheme BEFORE `whenReady`, or `protocol.handle`
 // serves a URL the renderer is not allowed to load: an unregistered scheme is
@@ -1819,6 +1820,18 @@ void app.whenReady().then(() => {
   setProjectWrittenListener(scheduleLivePush);   // Live Link: every saved edit reaches a connected game
   createWindow();
   menu();
+  // Auto-update. `configureUpdater` FIRST, or every prompt is addressed to "This
+  // app" and hung off whatever window happened to be focused (Patterpad's note,
+  // and the reason the order is written down rather than assumed).
+  configureUpdater({
+    appName: "Storyletter",
+    activeWindow: () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null,
+  });
+  // Let the window settle before the first check, then every six hours. The delay
+  // is not cosmetic: the renderer registers its four updater handlers at boot, and
+  // a prompt that arrives before them waits 300 seconds and then answers itself.
+  setTimeout(startBackgroundUpdateCheck, 10_000);
+  setInterval(startBackgroundUpdateCheck, 6 * 60 * 60 * 1000);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

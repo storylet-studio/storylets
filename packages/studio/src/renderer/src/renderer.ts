@@ -62,6 +62,7 @@ import { openKitPicker } from "./kit-picker.js";
 import { mountLiveLinkChip } from "./live-link.js";   // Live Link: the bottom-right connect chip
 import type { LiveLinkChip } from "./live-link.js";
 import { canvasId, MAP_CANVAS } from "../../shared/api.js";
+import { showUpdaterDialog, feedUpdaterDownloadProgress } from "./updater-dialog.js";
 import type {
   BoxEdit, BoxKit, CardDto, CardEdit, ConditionProperty, TagGroupEdit, MenuCommand, OpenResult, Problem, ProjectDto,
   ShardVcDto, TemplateEdit, StudioApi, StudioState, ThemeChoice,
@@ -2601,6 +2602,13 @@ async function boot(): Promise<void> {
   mountShell();   // build the pane frame once, seeded from the persisted pane state
   liveLinkChip = mountLiveLinkChip(studio);   // Live Link: hidden until a project is open
   studio.onMenu(onMenu);
+  // The updater's four channels. Registered at boot, not lazily: main starts its
+  // first background check 10 seconds after ready, and a prompt that arrives with
+  // nobody listening waits 300 seconds and then answers itself.
+  studio.onUpdaterCheckDirty(() => saver.pending);
+  studio.onUpdaterSaveBeforeInstall(async () => { await saver.flush(); return { ok: !saver.pending }; });
+  studio.onUpdaterPrompt((opts) => showUpdaterDialog(opts));
+  studio.onUpdaterDownloadProgress(feedUpdaterDownloadProgress);
   studio.onSearchNavigate(goTo);   // Find hits, and the `--at` jump of a running app
   // Find's Replace tab: main asks for pending edits on disk before it rewrites,
   // and says when it has, so the open document shows the new text.

@@ -8,6 +8,8 @@ import { JOB_PROGRESS_CHANNEL, PROJECT_CHANGED } from "../shared/api.js";
 import type { JobProgress } from "../shared/api.js";
 import type {
   BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, LiveLinkFrame, LiveLinkStatus, MenuCommand, OpenResult, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
+  UpdaterPromptOptions,
+  UpdaterDownloadProgress,
 } from "../shared/api.js";
 import type { SaveFile } from "@storylet-studio/model";
 
@@ -212,6 +214,27 @@ const api: StudioApi = {
   },
   onMenu: (handler: (command: MenuCommand) => void) => {
     ipcRenderer.on("menu", (_event, command: MenuCommand) => handler(command));
+  },
+
+  // The auto-updater's four channels. The names are the shell's UPDATER_CHANNELS
+  // values, written out literally rather than imported: this file is the sandbox
+  // boundary and pulls in nothing it does not have to. If they ever disagree the
+  // updater goes silent, so they are covered by a parity test.
+  onUpdaterCheckDirty: (handler: () => boolean) => {
+    ipcRenderer.on("updater:check-dirty", () => ipcRenderer.send("updater:dirty-reply", handler()));
+  },
+  onUpdaterSaveBeforeInstall: (handler: () => Promise<{ ok: boolean }>) => {
+    ipcRenderer.on("updater:save-before-install", () => {
+      void handler().then((r) => ipcRenderer.send("updater:save-done", r));
+    });
+  },
+  onUpdaterPrompt: (handler: (opts: UpdaterPromptOptions) => Promise<number>) => {
+    ipcRenderer.on("updater:prompt", (_event, opts: UpdaterPromptOptions) => {
+      void handler(opts).then((idx) => ipcRenderer.send("updater:prompt-reply", idx));
+    });
+  },
+  onUpdaterDownloadProgress: (handler: (p: UpdaterDownloadProgress) => void) => {
+    ipcRenderer.on("updater:download-progress", (_event, p: UpdaterDownloadProgress) => handler(p));
   },
 };
 

@@ -940,3 +940,30 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .livelink-toggle.listening { color: var(--warn); border-color: var(--warn); background: color-mix(in oklab, var(--warn) 12%, var(--surface)); }
 .livelink-toggle.live { color: var(--ok); border-color: var(--ok); background: color-mix(in oklab, var(--ok) 14%, var(--surface)); }
 .livelink-toggle.stale { color: var(--danger); border-color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, var(--surface)); }
+
+
+/* --- The updater's download progress ------------------------------------- */
+/* The dialog itself is the shell's `confirm-dialog`, so it inherits the themed
+   confirm's frame, type and buttons. Only the progress row is ours: a confirm
+   has nothing to show while it waits, and an update download does. */
+.updater-progress-track {
+  height: 6px;
+  margin: 0.75rem 0 0.4rem;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+.updater-progress-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  background: var(--accent);
+  /* Width is set from a progress event, which can arrive many times a second;
+     the transition keeps that from reading as a flicker. */
+  transition: width 160ms linear;
+}
+.updater-progress-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;   /* the percentage must not jitter as it counts */
+}

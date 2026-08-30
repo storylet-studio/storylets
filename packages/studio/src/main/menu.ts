@@ -11,6 +11,7 @@ import { basename, resolve, sep } from "node:path";
 import { PROJECT_FOLDER_EXTENSION } from "@storylet-studio/model";
 import { APP_MENU, EDIT_MENU, GO_MENU, HELP_MENU, PANE_MENU, namedMenuItems } from "@wildwinter/app-shell/menu";
 import type { MenuCommand, StudioState } from "../shared/api.js";
+import { manualCheckForUpdates } from "@wildwinter/app-shell/updater";
 
 const isMac = process.platform === "darwin";
 
@@ -299,9 +300,10 @@ export function refreshMenu(window: BrowserWindow | undefined, state: StudioStat
         // The gap it was protecting against does not arise: a greyed item with
         // its normal label says "this app does that, not yet here", where an
         // absence says "this app does not do that" - which would be the lie.
-        // Enabled once the release feed exists (release-shape.md, still one of
-        // the three open packaging decisions).
-        { label: HELP_MENU.checkForUpdates.label, enabled: false },
+        // ENABLED 2026-08-30: the feed exists. Storyletter 0.1.0 published
+        // latest-mac.yml / latest.yml / latest-linux.yml to its GitHub Release,
+        // which is what electron-updater walks, so the item can now do its job.
+        { ...HELP_MENU.checkForUpdates, click: () => void manualCheckForUpdates(window) },
         // macOS keeps About in the app menu; everywhere else this is its home.
         ...(isMac ? [] : [
           { type: "separator" as const },

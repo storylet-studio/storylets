@@ -24,6 +24,7 @@
     "publish:mac": "npm run build:mac-icons && electron-vite build && dotenv -e .env.local -- electron-builder --mac --publish always"
   },
   "dependencies": {
+    "electron-updater": "^6.3.9",
     "@storylet-studio/compiler": "0.0.0",
     "@storylet-studio/dialect": "0.0.0",
     "@storylet-studio/model": "0.0.0",

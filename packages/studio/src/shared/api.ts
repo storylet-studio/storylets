@@ -11,6 +11,11 @@ import type { BoxKit, CoverageReport, PropertyUsage, ReplaceHit, ReplaceOptions 
 import type { IssueFix } from "@storylet-studio/compiler";
 import type { TraceEvent } from "@storylet-studio/runtime";   // Live Link: the frames carry the runtime's own events
 
+// The updater's wire shapes are the shell's; re-exported so preload, renderer and
+// main all read one definition rather than three that can drift.
+import type { UpdaterDownloadProgress, UpdaterPromptOptions } from "@wildwinter/app-shell/updater";
+export type { UpdaterDownloadProgress, UpdaterPromptOptions };
+
 export type { CoverageReport } from "@storylet-studio/ops";
 // Find: the Property and Replace tabs carry the ops types across unchanged.
 export type { PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
@@ -1472,4 +1477,17 @@ export interface StudioApi {
   onLiveLinkFrame(handler: (frame: LiveLinkFrame) => void): void;
 
   onMenu(handler: (command: MenuCommand) => void): void;
+
+  // --- The auto-updater (design/shared-shell.md, sixth slice) -----------------
+  // Four channels the shell's updater expects a renderer to answer. It does NOT
+  // degrade to a native dialog if we stay silent: it waits 300 seconds and then
+  // resolves to its own fallback, so these are required, not optional.
+  /** main asks: is anything unwritten? Answer synchronously from the save controller. */
+  onUpdaterCheckDirty(handler: () => boolean): void;
+  /** main asks: write now, before I restart to install. */
+  onUpdaterSaveBeforeInstall(handler: () => Promise<{ ok: boolean }>): void;
+  /** main asks a question; answer with the chosen button INDEX (showMessageBox's contract). */
+  onUpdaterPrompt(handler: (opts: UpdaterPromptOptions) => Promise<number>): void;
+  /** Live download progress, for a dialog opened with `progress: true`. */
+  onUpdaterDownloadProgress(handler: (p: UpdaterDownloadProgress) => void): void;
 }
