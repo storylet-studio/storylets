@@ -92,10 +92,16 @@ jobs:
       - name: Cross-compile the Linux + Windows binaries
         working-directory: storylets
         run: npm run -w @storylet-studio/cli build:standalone:others
+      - id: ver
+        run: echo "version=${GITHUB_REF_NAME#cli-v}" >> "$GITHUB_OUTPUT"
       - name: Upload to the release
         uses: softprops/action-gh-release@v2
         with:
           make_latest: false
+          # Both jobs name the release, deliberately. They race to create it and
+          # whichever wins decides the title: with only the macOS job naming it,
+          # cli-v0.1.0 shipped titled "cli-v0.1.0" because Linux got there first.
+          name: storyletengine CLI ${{ steps.ver.outputs.version }}
           files: |
             storylets/packages/cli/dist/storyletengine-linux-x64
             storylets/packages/cli/dist/storyletengine-linux-arm64

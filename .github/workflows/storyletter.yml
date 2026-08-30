@@ -14,7 +14,13 @@ name: Storyletter release
 # Check for Updates then 404s. (Patterpad learned this the hard way.)
 on:
   push:
-    tags: ["v*"]
+    # `v[0-9]*`, NOT `v*`. The loose glob matches any tag beginning with v, which
+    # includes `village-v0.1.0` - and it fired on exactly that, stripped the leading
+    # v to get "illage-v0.1.0", and only stopped because the changelog check found no
+    # section by that name. One guard away from creating a draft Storyletter release
+    # off another deliverable's tag. Anchoring on a digit is what "bare v* tags are
+    # Storyletter's alone" actually requires.
+    tags: ["v[0-9]*"]
 
 permissions:
   contents: write
