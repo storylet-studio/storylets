@@ -2538,9 +2538,14 @@ function onMenu(command: MenuCommand): void {
       appName: "Storyletter",
       version: command.version,
       blurb: "A studio for storylets: content that offers itself when the moment is right.",
-      credits: "Part of PatterKit. Made by Ian Thomas.",
+      // Storylet Studio, not PatterKit. These two lines were scaffolded from
+      // Patterpad's About and never changed, so the shipped app told anyone who
+      // opened it that it belonged to the sibling project and sent them to the
+      // sibling's site. The Help menu's own links were right all along, which is
+      // how it went unnoticed: only this one dialog was wrong.
+      credits: "Part of Storylet Studio. Made by Ian Thomas.",
       links: [
-        { label: "patterkit.dev", url: "https://patterkit.dev" },
+        { label: "storylet.studio", url: "https://storylet.studio" },
         { label: "ian.wildwinter.net", url: "https://ian.wildwinter.net" },
       ],
       onOpenLink: (url: string) => void studio.openExternal(url),
