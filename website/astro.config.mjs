@@ -74,7 +74,13 @@ export default defineConfig({
       sidebar: [
         {
           label: "Start here",
-          items: ["getting-started", "download", "concepts", "why"],
+          // `what-are-storylets` leads, which is a departure from Patter's order
+          // (theirs opens on getting-started) and a deliberate one: everybody
+          // already knows what dialogue is, and almost nobody knows what a
+          // storylet is. A reader who does not have the idea yet is lost inside
+          // getting-started, and lost again in concepts, which is our vocabulary
+          // rather than the concept.
+          items: ["what-are-storylets", "getting-started", "download", "concepts", "why"],
         },
         {
           label: "The format",
