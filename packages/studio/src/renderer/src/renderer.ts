@@ -417,6 +417,7 @@ const actions: ViewActions = {
   },
   newTemplate(box) { inspectorHost.createTemplate(box); },
   newTagGroup(box) { inspectorHost.createTagGroup(box); },
+  newMap(box) { inspectorHost.createMap(box); },
   newHand(box) { inspectorHost.createHand(box); },
   editBox(box) { setDocTab(`box:${box}`, "template"); actions.focus({ kind: "box", box }); },
   toggleNav(id) {
@@ -925,6 +926,19 @@ const inspectorHost: InspectorHost = {
     const created = await studio.createTagGroup(boxId);
     if ("error" in created) { flashError(created.error); return; }
     applyResult(created.result); actions.inspectTagGroup(boxId, created.groupId);
+  })(),
+  // The same group, already a map. Composed from the two existing calls rather
+  // than given its own main-side path: a map is not a second kind of thing, and
+  // a second write path is how the two would drift.
+  createMap: (boxId) => void (async () => {
+    const created = await studio.createTagGroup(boxId);
+    if ("error" in created) { flashError(created.error); return; }
+    applyResult(created.result);
+    const spatial = await studio.setGroupSpatial(boxId, created.groupId, true);
+    if (!applied(spatial)) return;
+    actions.inspectTagGroup(boxId, created.groupId);
+    renderWorkspace();   // the Map tab appears
+    void refreshVc();
   })(),
   setGroupSpatial: (boxId, groupId, on) => void (async () => {
     const result = await studio.setGroupSpatial(boxId, groupId, on);

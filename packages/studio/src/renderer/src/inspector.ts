@@ -75,6 +75,8 @@ export interface InspectorHost {
   createTemplate(boxId: string): void;
   deleteTemplate(boxId: string, templateId: string): void;
   createTagGroup(boxId: string): void;
+  /** Create a tag group that is already a map. */
+  createMap(boxId: string): void;
   deleteTagGroup(boxId: string, groupId: string): void;
   /** Make this tag group a map, or stop. Traced outlines are kept either way. */
   setGroupSpatial(boxId: string, groupId: string, on: boolean): void;
@@ -1267,11 +1269,15 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
     // the cfg-row voice the other switches use, and it lives BELOW the tags: the
     // tags are what the group is, this is how it is shown.
     const spatial = box.tagGroups.find((g) => g.id === detail.id)?.spatial === true;
+    // The help says what a map is FOR as well as what it does, because the words
+    // around it all lean one way: "place", "zone" and "site" are geography, and a
+    // reader holding only those will assume a map has to be a map OF somewhere.
+    // It does not (design/maps-discoverability.md).
     view.append(section("Map", undefined, cfgRow(
       "A place",
       spatial
-        ? "Its tags are zones with outlines, drawn on the box's Map."
-        : "Turn on to give these tags outlines and draw them on a map.",
+        ? "Its tags are zones with outlines, drawn on the box's Map. Geography, or any other two-dimensional layout: acts, a cast, a tech tree."
+        : "Turn on to draw these tags as a map. It need not be geography: acts and their beats, a cast and who is close to whom, anything you can lay out.",
       cfgCheck(spatial, (on) => h.setGroupSpatial(boxId, detail.id, on)),
     )));
 

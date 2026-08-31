@@ -53,6 +53,8 @@ export interface ViewActions {
   newBox(): void;
   newTemplate(box: string): void;
   newTagGroup(box: string): void;
+  /** Create a tag group that is already a map, for authors who came looking for one. */
+  newMap(box: string): void;
   newHand(box: string): void;
   editBox(box: string): void;
   duplicateBox(box: string): void;
@@ -605,11 +607,16 @@ export function renderBoxCentre(
   // remembered, so this decides the FIRST answer rather than overriding anybody.
   const tabKey = `box:${box.id}`;
   const mapped = box.tagGroups.filter((g) => g.spatial);
-  const chosen = currentDocTab(tabKey, mapped.length > 0 ? "map" : "contents");
-  // A group can stop being spatial while its map is the remembered tab, and a
-  // page remembering its way to somewhere that no longer exists is how a stale
-  // memory turns into an empty screen.
-  const tab = chosen === "map" && mapped.length === 0 ? "contents" : chosen;
+  // The DEFAULT still depends on whether a map exists: a box with one opens on it,
+  // because that is the most informative thing it has to show, and a box without
+  // one opens on Contents rather than on an invitation.
+  //
+  // What is no longer done is FORCING the tab back. That guard was right when the
+  // tab vanished with its last spatial group, since a remembered route to a tab
+  // that no longer existed left an empty screen. The tab is permanent now and has
+  // an empty state, so forcing would instead mean a reader who clicked Maps was
+  // silently put somewhere else.
+  const tab = currentDocTab(tabKey, mapped.length > 0 ? "map" : "contents");
   let titled = box.title ?? "";
   let purpose = box.purpose ?? "";
   let pinned = box.gameIdPinned ?? "";
@@ -629,8 +636,14 @@ export function renderBoxCentre(
   // being three ways of looking at one list, which is what the deck's switch is for.
   // FIRST when it exists, because the tab order is a claim about what the page is
   // mostly for.
+  // ALWAYS offered, even with no map yet. It used to appear only once a spatial
+  // group existed, which meant the word "map" was nowhere in the editor until
+  // after you had made one, and the only route to making one ran through the Tags
+  // tab and a toggle you had to know was there (design/maps-discoverability.md).
+  // An empty tab is a small permanent cost; a feature you cannot find is a larger
+  // one. The empty state does the teaching.
   const tabs = docTabs([
-    ...(mapped.length > 0 ? [{ key: "map", label: "Maps", count: mapped.length }] : []),
+    { key: "map", label: "Maps", ...(mapped.length > 0 ? { count: mapped.length } : {}) },
     { key: "contents", label: "Contents" },
     { key: "dealing", label: "Dealing" },
     { key: "template", label: "Card template", count: box.fields.length },
@@ -649,6 +662,16 @@ export function renderBoxCentre(
     // touches), into a host this tab owns. Same arrangement as the node view.
     body = el("div", { className: "nodeview" });
     actions.mountMapView(body, box);
+  } else if (tab === "map") {
+    // The teaching surface, and the only place the model is explained BEFORE an
+    // author has committed to it. It says what a map is made of, because they
+    // will meet that anyway the first time they tag a card `zone:cave`, and it
+    // says a map need not be geography, because "place", "zone" and "site" all
+    // pull that way and a reader who only has those words will assume it.
+    body = el("div", { className: "doc-sect" },
+      el("p", { className: "doc-tab-note", text: "A map is a tag group you can draw. Its tags become zones with outlines, and the hands bound to them stand inside as pins." }),
+      el("p", { className: "doc-tab-note", text: "It does not have to be geography. Anything you can lay out in two dimensions works: acts and their beats, a cast and who is close to whom, a tech tree. The drawing is for you and the reader, and never reaches the bundle." }),
+      el("button", { className: "listrow ghost", text: "+ New map", onClick: () => actions.newMap(box.id) }));
   } else if (tab !== "contents") {
     body = el("div", { className: "centre-editor" });
     tabBody(body, tab);
@@ -665,6 +688,14 @@ export function renderBoxCentre(
     // most needs to avoid: a deck owns cards, a hand owns what it was DEALT.
     // Two definitions forty lines apart, and the wrong one came first.
     row("Hands", box.hands.length, "The places on the board; each holds the cards it is dealt.", "hands");
+    // Named here so a box says what it HAS. Only when it has one: an author with
+    // no maps is told about them on the Maps tab, which is the surface for that,
+    // and a contents list that advertises what is absent is a different job.
+    if (mapped.length > 0) {
+      list.append(el("button", { className: "listrow", onClick: () => { setDocTab(tabKey, "map"); actions.focus({ kind: "box", box: box.id }); } },
+        el("span", { className: "listname", text: "Maps" }),
+        el("span", { className: "listmeta", text: `${mapped.length} · ${mapped.map((g) => g.gameId).join(", ")}` })));
+    }
     body = list;
   }
   host.replaceChildren(heading, tabs, body);
@@ -712,6 +743,12 @@ function boxTagsBody(box: BoxDto, actions: ViewActions): HTMLElement {
     list.append(row);
   }
   list.append(el("button", { className: "listrow ghost", text: "+ New tag group", onClick: () => actions.newTagGroup(box.id) }));
+  // A second door to the same room. A map IS a tag group, and an author who wants
+  // one should not have to know that before they can make one: until this, the
+  // word "map" appeared nowhere in the editor until after you had made one
+  // (design/maps-discoverability.md). It sits here, next to the thing it makes,
+  // so the relationship is visible in the act rather than hidden by it.
+  list.append(el("button", { className: "listrow ghost", text: "+ New map", onClick: () => actions.newMap(box.id) }));
   const body = el("div", { className: "doc-sect" },
     // B5: one sentence, used on all three tag surfaces, naming both jobs. "Peeks"
     // was engine vocabulary that appears nowhere else an author can see.

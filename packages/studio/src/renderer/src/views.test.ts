@@ -30,7 +30,7 @@ const project: ProjectDto = { dir: "/p", name: "Saltmarsh", threads: {}, storyPr
 
 const stubActions = (over: Partial<ViewActions> = {}): ViewActions => ({
   openThreads: () => 0, showComments: vi.fn(), focus: vi.fn(), toggleNav: vi.fn(), openProjectSettings: vi.fn(), revealProject: vi.fn(), inspectCard: vi.fn(), inspectTemplate: vi.fn(), inspectTagGroup: vi.fn(), inspectHand: vi.fn(),
-  newCard: vi.fn(), newDeck: vi.fn(), newBox: vi.fn(), newTemplate: vi.fn(), newTagGroup: vi.fn(), newHand: vi.fn(), editBox: vi.fn(), saveDeck: vi.fn(), saveBox: vi.fn(),
+  newCard: vi.fn(), newDeck: vi.fn(), newBox: vi.fn(), newTemplate: vi.fn(), newTagGroup: vi.fn(), newMap: vi.fn(), newHand: vi.fn(), editBox: vi.fn(), saveDeck: vi.fn(), saveBox: vi.fn(),
   duplicateBox: vi.fn(), deleteBox: vi.fn(), moveBox: vi.fn(), moveDeck: vi.fn(), moveHand: vi.fn(),
   duplicateCard: vi.fn(), deleteCard: vi.fn(), showLinks: vi.fn(), selectCard: vi.fn(), setViewMode: vi.fn(), mountNodeView: vi.fn(), mountMapView: vi.fn(), moveCard: vi.fn(),
   duplicateDeck: vi.fn(), deleteDeck: vi.fn(), duplicateTemplate: vi.fn(), deleteTemplate: vi.fn(),

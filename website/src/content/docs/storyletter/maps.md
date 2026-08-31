@@ -19,13 +19,39 @@ geometry in the engine, and nothing in a bundle that a runtime reads as a shape.
 a tag; a site is where you chose to draw a hand. Delete the whole map and the project
 plays identically.
 
-## Turning a group into a place
+## It doesn't have to be a map of anywhere
 
-Open the box, go to the **Tags** tab, pick a group, and turn on **A place** under Map.
-The group's tags are now zones, and the box grows a **Maps** tab.
+The vocabulary leans geographic, and the examples are villages and caves, so it's easy to
+read all this as being about physical space. It isn't. **A map is any two-dimensional
+layout of a tag group**, and the drawing is for you and whoever reads the project after
+you.
 
-A box can have several spatial groups, and each is its own map. A box with none has no
-Maps tab at all.
+Some things people lay out that are not places:
+
+- **Act structure.** Zones are acts; the hands inside each one are the beats available
+  during it. Dragging a hand from act two to act three rebinds it, and you can see the
+  shape of the story rather than reading it off a list.
+- **A cast, and who is close to whom.** Zones are factions or households; a hand sits near
+  the people it belongs to. Distance on the page carries meaning that no condition does.
+- **A tech tree, a syllabus, a dream logic.** Anything where "these belong together, and
+  that one is over there" is worth seeing.
+
+The engine never knows any of it. A zone is a tag whichever way you drew it, so an act
+map and a village map compile to exactly the same thing.
+
+## Starting a map
+
+Two routes to the same thing, because a map **is** a tag group and both make one:
+
+- **Maps tab &rarr; + New map.** The box always has a Maps tab, so this works before you
+  have any. It creates the group and marks it a map in one step.
+- **Tags tab &rarr; + New map**, beside **+ New tag group**, if you are already there.
+
+To turn an existing group into a map, open it from the **Tags** tab and switch on **A
+place** under Map. The group's tags become zones either way.
+
+A box can have several of these, and each is its own map. A box with none still has the
+Maps tab: it holds an invitation rather than a canvas.
 
 ## What you can put on it
 
