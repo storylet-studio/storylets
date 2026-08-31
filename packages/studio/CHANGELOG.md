@@ -10,6 +10,16 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-31
+
+### Fixed
+
+- **About said Storyletter was part of PatterKit**, and linked to that project's
+  website. Both lines were carried over from the sibling app when this one was
+  started and never changed. It now says Storylet Studio and links to
+  [storylet.studio](https://storylet.studio). Nothing else was affected: the Help
+  menu's own documentation links were correct already.
+
 ## [0.3.0] - 2026-08-31
 
 ### Changed
