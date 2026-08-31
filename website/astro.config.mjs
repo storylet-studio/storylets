@@ -93,6 +93,7 @@ export default defineConfig({
             "storyletter/workspace",
             "storyletter/cards",
             "storyletter/node-canvas",
+            "storyletter/links",
             "storyletter/box-setup",
             "storyletter/maps",
             "storyletter/board",

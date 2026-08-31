@@ -179,7 +179,7 @@ works the same way, so each place can sit at its own stage of one shared ladder,
 `@hand.perl` is an error rather than a card that quietly never comes up, and a comparison
 against the wrong type or a stage that isn't on the ladder is caught too. What can't be
 worked out ahead of time is which hand will be asking, so the
-[Links window](/storyletter/workspace/#links) and `storyletengine links` still leave
+[Links window](/storyletter/links/) and `storyletengine links` still leave
 `@hand` relationships out rather than guess. One name is read-only: a group's own name is
 what the hand asked for, so writing `@hand.zone` is refused.
 

@@ -238,20 +238,7 @@ content's, not the theme's.
 
 ## Links
 
-**Review ▸ Links…** opens the **Links** window: the card you have open in the middle,
-what can turn it on or off to the left, and what it turns on or off to the right, across
-every deck and box.
+**Review ▸ Links…** opens a lens on the card you have open: what can turn it on or off to the
+left, what it turns on or off to the right, across every deck and box. It follows the editor,
+so it can sit open beside you. &rarr; [The Links window](/storyletter/links/)
 
-The window follows whatever card the editor has open, so it can sit open beside you.
-Click a neighbour to centre on that card instead and walk the graph, or double-click to
-open it in the editor. Once you've walked somewhere, **Follow the editor** hands the window
-back to following the editor.
-
-Each row says which property joins the two cards and which outcome writes it, so seeing
-both "opens" and "shuts" between the same pair is normal: one outcome raises the value
-and another lowers it.
-
-All of it comes from conditions and outcomes alone, with no playthrough. The same
-analysis runs on the command line as [`storyletengine links`](/cli/#links), with the same
-limit: `@hand` state is put together per deal, so links through hand scope aren't worked
-out.
