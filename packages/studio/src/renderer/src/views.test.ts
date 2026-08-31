@@ -156,7 +156,10 @@ describe("box page", () => {
     const tabs = [...host.querySelectorAll(".doc-tab")].map((t) => t.textContent);
     // Zero counts SHOW (audit C15): a dimmed tab with no number read as
     // disabled, and dim-with-a-zero is learnable as "empty".
-    expect(tabs).toEqual(["Contents", "Dealing", "Card template0", "Hand templates1", "Tags1", "Properties0"]);
+    // Maps leads and is ALWAYS offered, with no count when there is none: the tab
+    // used to appear only once a spatial group existed, which left the word "map"
+    // nowhere in the editor until after you had made one.
+    expect(tabs).toEqual(["Maps", "Contents", "Dealing", "Card template0", "Hand templates1", "Tags1", "Properties0"]);
     const rows = [...host.querySelectorAll(".listrow .listname")].map((r) => r.textContent);
     expect(rows).toEqual(["Decks", "Hands"]);
   });
@@ -199,14 +202,22 @@ describe("box page", () => {
     expect(host.querySelector(".doc-tab.on")?.textContent).toBe("Dealing");
   });
 
-  it("falls back to Contents when the remembered map has stopped being one", () => {
-    // Unmarking a group as spatial takes the tab away; a page remembering its
-    // way somewhere that no longer exists is how a stale memory empties a screen.
+  it("stays on Maps when the remembered map has stopped being one, and explains itself", () => {
+    // This USED to fall back to Contents, and that was right while unmarking a
+    // group took the tab away with it: a page remembering its way somewhere that
+    // no longer existed was how a stale memory emptied a screen.
+    //
+    // The tab is permanent now and has something to say, so falling back would
+    // move somebody without telling them why their map went. Staying put and
+    // explaining is the better answer, and it names the way back.
     const host = document.createElement("div");
     setDocTab("box:b_1", "map");
     renderBoxCentre(host, box, () => {}, stubActions());
-    expect([...host.querySelectorAll(".doc-tab")].map((t) => t.textContent)).not.toContain("Map");
-    expect([...host.querySelectorAll(".listrow .listname")].map((r) => r.textContent)).toEqual(["Decks", "Hands"]);
+    const notes = [...host.querySelectorAll(".doc-tab-note")].map((n) => n.textContent ?? "");
+    expect(notes[0]).toContain("A map is a tag group you can draw");
+    // And that it need not be geography, which the words around it all imply.
+    expect(notes[1]).toContain("does not have to be geography");
+    expect([...host.querySelectorAll(".listrow")].map((r) => r.textContent)).toEqual(["+ New map"]);
     setDocTab("box:b_1", "contents");
   });
 
