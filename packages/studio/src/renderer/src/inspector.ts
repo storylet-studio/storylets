@@ -1269,12 +1269,23 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
     // the cfg-row voice the other switches use, and it lives BELOW the tags: the
     // tags are what the group is, this is how it is shown.
     const spatial = box.tagGroups.find((g) => g.id === detail.id)?.spatial === true;
-    // The help says what a map is FOR as well as what it does, because the words
-    // around it all lean one way: "place", "zone" and "site" are geography, and a
-    // reader holding only those will assume a map has to be a map OF somewhere.
-    // It does not (design/maps-discoverability.md).
+    // "A map", not "A place", which it read until 2026-08-31. Two things were
+    // wrong with the old word and the second is the reason it changed.
+    //
+    // It inverted container and member: the GROUP was labelled a place while its
+    // TAGS are zones, so the Village was "a place" and the forest a "zone", when
+    // the forest is the more obviously place-shaped of the two.
+    //
+    // And it hard-coded geography, directly above help saying the opposite. A map
+    // of act structure is not a place in any sense, and a surface arguing with
+    // itself is worse than either half alone.
+    //
+    // "A map" also makes this agree with the four surfaces around it: the section
+    // above, the Maps tab, "+ New map", and the docs page. It was the only
+    // outlier. `spatial` remains the stored key, `zones` the bundle's, `sites`
+    // the sidecar's: nothing about the format moves (design/maps-discoverability.md).
     view.append(section("Map", undefined, cfgRow(
-      "A place",
+      "A map",
       spatial
         ? "Its tags are zones with outlines, drawn on the box's Map. Geography, or any other two-dimensional layout: acts, a cast, a tech tree."
         : "Turn on to draw these tags as a map. It need not be geography: acts and their beats, a cast and who is close to whom, anything you can lay out.",

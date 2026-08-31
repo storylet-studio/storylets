@@ -94,7 +94,7 @@ stage of the same ladder.
 differ. If you find yourself adding the same property to every tag by hand, that's the
 group form asking to be used instead.
 
-To draw a tag group as a map, turn on **A place** under Map. See [Maps](/storyletter/maps/).
+To draw a tag group as a map, turn on **A map** under Map. See [Maps](/storyletter/maps/).
 
 ## Starting a box from a box kit
 

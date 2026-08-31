@@ -1,6 +1,6 @@
 ---
 title: Maps
-description: "Turn a tag group into a place and it becomes a map: zones you draw, hands pinned inside them, and a drag that rebinds a hand to a new zone."
+description: "Turn a tag group into a map: zones you draw, hands pinned inside them, and a drag that rebinds a hand to a new zone. Geography, or any other two-dimensional layout."
 sidebar:
   label: Maps
 ---
@@ -48,7 +48,7 @@ Two routes to the same thing, because a map **is** a tag group and both make one
 - **Tags tab &rarr; + New map**, beside **+ New tag group**, if you are already there.
 
 To turn an existing group into a map, open it from the **Tags** tab and switch on **A
-place** under Map. The group's tags become zones either way.
+map** under Map. The group's tags become zones either way.
 
 A box can have several of these, and each is its own map. A box with none still has the
 Maps tab: it holds an invitation rather than a canvas.
