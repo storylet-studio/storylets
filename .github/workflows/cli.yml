@@ -2,11 +2,13 @@ name: CLI release
 
 # Standalone `storyletengine` CLI executables (one per platform, no Node),
 #
-# The tag is checked against the manifest in BOTH jobs, and that is not belt and
-# braces: the binaries inline their version from package.json (`--version`) while
-# the release assets are named from the tag, so a mismatch ships a binary that
-# disagrees with its own filename. This was the one release workflow without that
-# guard, which went unnoticed until the version it protects was added.
+# The tag is checked against the manifest in the `gate` job, which both build jobs
+# wait on. That is not belt and braces: the binaries inline their version from
+# package.json (`--version`) while the release assets are named from the tag, so a
+# mismatch ships a binary that disagrees with its own filename. This was the one
+# release workflow without that guard, which went unnoticed until the version it
+# protects was added. It lived in both build jobs first, and moved into `gate`
+# when the suite gave the two of them something to share.
 #
 # attached to a GitHub Release. Its own tag flow (not Changesets, which
 # handles the npm packages): tagging `cli-vX.Y.Z` builds the binaries via
@@ -23,7 +25,50 @@ permissions:
   contents: write   # create / upload to the release for this tag
 
 jobs:
+  # One gate for both build jobs: the tag/manifest check that used to be
+  # duplicated in each, plus the suite. ci.yml covers push and pull_request, so
+  # the code is tested somewhere; what that cannot promise is that the commit
+  # being TAGGED is one that passed. Raised from the Patter side, who found a
+  # worse version of the same gap in their npm publish, where an unpublishable
+  # mistake could reach the registry before the suite finished.
+  #
+  # Order is typecheck then test, matching ci.yml. Their warning that tests-first
+  # can silently disable a gate which skips without a build artifact was checked
+  # here and does not apply: nothing in this suite conditions on `dist/` existing.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout storylets
+        uses: actions/checkout@v5
+        with:
+          path: storylets
+      - name: Checkout @wildwinter/expr (sibling source, aliased by tsconfig)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/expr
+          path: expr
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: storylets/package-lock.json
+      - run: npm ci
+        working-directory: storylets
+      - name: Check the tag matches the CLI version
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#cli-v}"
+          manifest=$(node -p "require('./packages/cli/package.json').version")
+          [ "$manifest" = "$version" ] || { echo "package.json says $manifest but the tag says $version"; exit 1; }
+          grep -q "^## \[${version}\] - [0-9]" packages/cli/CHANGELOG.md \
+            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
+      - run: npm run typecheck
+        working-directory: storylets
+      - run: npm test
+        working-directory: storylets
+
   macos:
+    needs: gate
     runs-on: macos-latest
     steps:
       - name: Checkout storylets
@@ -43,14 +88,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: npm ci
         working-directory: storylets
-      - name: Check the tag matches the CLI version
-        working-directory: storylets
-        run: |
-          version="${GITHUB_REF_NAME#cli-v}"
-          manifest=$(node -p "require('./packages/cli/package.json').version")
-          [ "$manifest" = "$version" ] || { echo "package.json says $manifest but the tag says $version"; exit 1; }
-          grep -q "^## \[${version}\] - [0-9]" packages/cli/CHANGELOG.md \
-            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
       - name: Import Developer ID certificate
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}             # base64 .p12
@@ -85,6 +122,7 @@ jobs:
           files: storylets/packages/cli/dist/storyletengine-macos-*
 
   others:
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout storylets
@@ -104,14 +142,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: npm ci
         working-directory: storylets
-      - name: Check the tag matches the CLI version
-        working-directory: storylets
-        run: |
-          version="${GITHUB_REF_NAME#cli-v}"
-          manifest=$(node -p "require('./packages/cli/package.json').version")
-          [ "$manifest" = "$version" ] || { echo "package.json says $manifest but the tag says $version"; exit 1; }
-          grep -q "^## \[${version}\] - [0-9]" packages/cli/CHANGELOG.md \
-            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
       - name: Cross-compile the Linux + Windows binaries
         working-directory: storylets
         run: npm run -w @storylet-studio/cli build:standalone:others

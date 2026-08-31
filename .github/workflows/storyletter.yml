@@ -34,7 +34,40 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          path: storylets
+      - name: Checkout @wildwinter/expr (sibling source, aliased by tsconfig)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/expr
+          path: expr
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: storylets/package-lock.json
+      - run: npm ci
+        working-directory: storylets
+      # The suite gates the release, in the job that runs FIRST and that every OS
+      # build waits on, so a failure stops it before a draft exists rather than
+      # after three installers have been signed.
+      #
+      # ci.yml covers push and pull_request, so the code is tested somewhere. What
+      # that cannot promise is that the commit being TAGGED is one that passed:
+      # until this, "the commit I tagged is the commit I tested" was a claim about
+      # what somebody remembered. Raised from the Patter side, who found a worse
+      # version of it in their npm publish.
+      #
+      # Order is typecheck then test, matching ci.yml. Their warning about
+      # tests-first silently disabling a gate that skips without a build artifact
+      # was checked here and does not apply: nothing in this suite conditions on
+      # `dist/` existing, and ci.yml has always run test before build.
+      - run: npm run typecheck
+        working-directory: storylets
+      - run: npm test
+        working-directory: storylets
       - name: Create the draft release with the changelog as notes
+        working-directory: storylets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
