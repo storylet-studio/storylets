@@ -34,4 +34,4 @@ Two deliveries from one build, which is why they are described together:
 - **Playable at [storylet.studio/village/](https://storylet.studio/village/)**, deployed with
   the documentation site. Most people will meet it as a link.
 - **A zip**, for keeping and for reading: `dist/` to open and play offline, and `src/` to read.
-  About 900 lines of framework-free TypeScript over the runtime's public API.
+  Under 500 lines of framework-free TypeScript over the runtime's public API.
