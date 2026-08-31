@@ -19,6 +19,21 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-31
+
+### Fixed
+
+- **`validate` no longer reports playable cards as impossible.** The reachability
+  check argues that one latch can only become true after another, which is only sound
+  when becoming true requires something to have written it. It was making that
+  argument about state that needs no writer: a property whose declared default already
+  holds it, a property written somewhere in a shape the check cannot read, and a
+  `@world` ref the game owns and can change in either direction whenever it likes.
+
+  This matters more from the CLI than from the editor, because `validate` is what
+  gates a build. A false "this card can never be dealt" in CI fails a pull request
+  over content that plays perfectly well.
+
 ## [0.1.0] - 2026-08-30
 
 The first public release, shipping as a standalone executable per platform: no Node, no npm,

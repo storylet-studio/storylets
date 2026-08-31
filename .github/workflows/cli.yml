@@ -1,6 +1,13 @@
 name: CLI release
 
 # Standalone `storyletengine` CLI executables (one per platform, no Node),
+#
+# The tag is checked against the manifest in BOTH jobs, and that is not belt and
+# braces: the binaries inline their version from package.json (`--version`) while
+# the release assets are named from the tag, so a mismatch ships a binary that
+# disagrees with its own filename. This was the one release workflow without that
+# guard, which went unnoticed until the version it protects was added.
+#
 # attached to a GitHub Release. Its own tag flow (not Changesets, which
 # handles the npm packages): tagging `cli-vX.Y.Z` builds the binaries via
 # Bun --compile and uploads them as release assets. The macOS binaries are
@@ -36,6 +43,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: npm ci
         working-directory: storylets
+      - name: Check the tag matches the CLI version
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#cli-v}"
+          manifest=$(node -p "require('./packages/cli/package.json').version")
+          [ "$manifest" = "$version" ] || { echo "package.json says $manifest but the tag says $version"; exit 1; }
+          grep -q "^## \[${version}\] - [0-9]" packages/cli/CHANGELOG.md \
+            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
       - name: Import Developer ID certificate
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}             # base64 .p12
@@ -89,6 +104,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: npm ci
         working-directory: storylets
+      - name: Check the tag matches the CLI version
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#cli-v}"
+          manifest=$(node -p "require('./packages/cli/package.json').version")
+          [ "$manifest" = "$version" ] || { echo "package.json says $manifest but the tag says $version"; exit 1; }
+          grep -q "^## \[${version}\] - [0-9]" packages/cli/CHANGELOG.md \
+            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
       - name: Cross-compile the Linux + Windows binaries
         working-directory: storylets
         run: npm run -w @storylet-studio/cli build:standalone:others

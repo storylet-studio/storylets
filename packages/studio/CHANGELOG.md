@@ -10,6 +10,32 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-31
+
+### Added
+
+- **Check for Updates now works.** The Help menu item has been present and greyed
+  since the shell's menu spine landed, on the rule that a disabled item says "not yet
+  here" where an absence says "does not do that". It was waiting on a release feed,
+  and 0.1.0 published one. Storyletter checks shortly after launch and every six
+  hours, downloads on your say-so rather than behind your back, shows progress in a
+  themed dialog rather than a system one, and asks before restarting if you have
+  unsaved work.
+
+  **If you are on 0.1.0 you will not be offered this one**, because 0.1.0 has no
+  updater to offer it. Download 0.2.0 once by hand and it updates itself from then on.
+
+### Fixed
+
+- **Two false "this card can never be dealt" warnings.** The reachability check
+  argues that one latch can only become true after another, which is only sound when
+  becoming true requires something to have written it. It was making that argument
+  about state that needs no writer at all: a property whose declared default already
+  holds it, a property written somewhere in a shape the check cannot read, and a
+  `@world` ref the game owns and can change in either direction whenever it likes.
+  All three could report a perfectly playable card as impossible, which is the one
+  mistake this check must never make.
+
 ## [0.1.0] - 2026-08-30
 
 The first public release.
