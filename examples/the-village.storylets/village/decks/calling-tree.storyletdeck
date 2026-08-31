@@ -1,7 +1,7 @@
 {
   schema: "storylets/deck@0",
   deck: {
-    condition: "@story.act == \"act-2\"",
+    condition: "@story.act >= \"act-2\"",
     gameId: "calling-tree",
     id: "k_002m",
     order: 2,

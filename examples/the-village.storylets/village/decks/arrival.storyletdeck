@@ -104,7 +104,7 @@
         {
           changes: {
             "@deck.pledge_made": "true",
-            "@story.act": "\"act-2\"",
+            "@story.act": "advance(@story.act)",
           },
           gameId: "agree-no-promise",
           id: "o_001n",
@@ -115,7 +115,7 @@
         {
           changes: {
             "@deck.pledge_made": "true",
-            "@story.act": "\"act-2\"",
+            "@story.act": "advance(@story.act)",
             "@story.rel_village_elder": "set_flags(@story.rel_village_elder, +has_favour)",
           },
           gameId: "pledge-openly",

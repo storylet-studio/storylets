@@ -17,17 +17,17 @@ const brief = (q: string) => runPropertyUsage(loaded, q).map((u) => `${u.use} ${
 describe("runPropertyUsage", () => {
   it("finds every read and every write of a story property, the write by its outcome", () => {
     const hits = runPropertyUsage(loaded, "@story.act");
-    // Reads: the three cards gated on the act. A bare `@act` in the source
+    // Reads: the four cards gated on the act. A bare `@act` in the source
     // resolves to @story.act in the compiled bundle, which is why the scan reads
     // the bundle and not the text.
     expect(hits.filter((h) => h.use === "read").map((h) => h.item.id).sort())
-      .toEqual(["c_arrive", "c_gareth_troubled", "c_mira_distracted"]);
+      .toEqual(["c_arrive", "c_bryna", "c_gareth_troubled", "c_mira_distracted"]);
     // Writes: three outcomes set it, and each hit is the OUTCOME (with its card).
     const writes = hits.filter((h) => h.use === "write");
     expect(writes.map((h) => h.item.id).sort()).toEqual(["c_arrive_o", "c_bryna_cautious", "c_bryna_pledge"]);
     expect(writes.every((h) => h.item.kind === "outcome" && h.item.card !== undefined)).toBe(true);
     const arrive = writes.find((h) => h.item.id === "c_arrive_o")!;
-    expect(arrive.text).toBe('@story.act ← "act-1"');
+    expect(arrive.text).toBe("@story.act ← advance(@story.act)");
     expect(arrive.where).toBe("outcome change");
     expect(arrive.item.location).toEqual(["Village", "Arrival", "Arrive at the Village Gate"]);
     // Every hit names the canonical property.
@@ -38,6 +38,7 @@ describe("runPropertyUsage", () => {
     expect(brief("@story.act")).toEqual([
       "read card c_arrive When",
       "write outcome c_arrive_o outcome change",
+      "read card c_bryna When",
       // Display order, not id order: the pledge is written above the cautious
       // reply in the deck, and outcomes now reach the bundle the way the author
       // arranged them.

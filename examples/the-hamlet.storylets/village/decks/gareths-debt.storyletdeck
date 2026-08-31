@@ -104,7 +104,7 @@
       title: "Gareth's Gratitude",
     },
     {
-      condition: "@act != \"arrival\" and check_flags(@rel_blacksmith, +met) and @deck.debt == \"quiet\"",
+      condition: "@act >= \"act-1\" and check_flags(@rel_blacksmith, +met) and @deck.debt == \"quiet\"",
       fields: {
         scene: "scn_gareth_troubled",
       },

@@ -28,12 +28,13 @@
       {
         default: "arrival",
         name: "act",
-        type: "enum",
-        values: [
+        purpose: "How far the story has come. An ordered ladder, so gates ask for act 1 or later rather than listing the acts that are not arrival.",
+        stages: [
           "arrival",
           "act-1",
           "act-2",
         ],
+        type: "quality",
       },
       {
         default: 0,

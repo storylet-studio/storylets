@@ -1,7 +1,7 @@
 {
   schema: "storylets/deck@0",
   deck: {
-    condition: "(@story.act == \"act-2\") && (check_flags(@story.rel_blacksmith, +met))",
+    condition: "(@story.act >= \"act-2\") && (check_flags(@story.rel_blacksmith, +met))",
     gameId: "gareth-debt",
     id: "k_003x",
     order: 5,

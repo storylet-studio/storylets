@@ -17,7 +17,12 @@
       {
         default: "act-1",
         name: "act",
-        type: "string",
+        purpose: "How far the story has come. An ordered ladder, so gates ask for act 2 or later rather than naming an exact act, and inserting an act later routes existing play through it.",
+        stages: [
+          "act-1",
+          "act-2",
+        ],
+        type: "quality",
       },
       {
         default: [],

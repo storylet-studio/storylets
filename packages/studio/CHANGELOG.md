@@ -10,6 +10,31 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-31
+
+### Fixed
+
+- **The shipped examples tracked the story's act as plain text.** The Village
+  declared `act` as a string and The Hamlet as an enum, when an act is an ordered
+  ladder and both are unordered types. Neither project was broken by it, which is
+  the problem: an example is a teaching surface, and these two taught the wrong
+  shape for the most obvious quality a story has. Both now declare `act` as a
+  **quality** with its acts as stages.
+- **Every act gate had to name an exact act.** Because the old types could not
+  express "at or past", thirteen conditions in The Village read
+  `@story.act == "act-2"`, which would silently stop firing the day an act-3 was
+  added, and The Hamlet said `@act != "arrival"` for "after you have arrived".
+  They now read `>= "act-2"` and `>= "act-1"`, and outcomes advance the ladder with
+  `advance(@story.act)` rather than naming where they land, so inserting an act
+  routes existing play through it.
+- **A condition that could never do anything.** The Village's ambients deck was
+  gated on `(@story.act == "act-2") && (@story.act != "act-1")`, where the second
+  clause cannot change the answer. It is a single `>=` now.
+- **The Hamlet's elder could summon you before you arrived.** Answering Bryna's
+  summons was gated only on having met the innkeeper and the blacksmith, and both
+  of those cards are ungated, so the whole of act 1 could be skipped. It now also
+  requires that you have come through the gate.
+
 ## [0.3.1] - 2026-08-31
 
 ### Fixed

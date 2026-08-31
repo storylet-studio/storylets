@@ -1,7 +1,7 @@
 {
   schema: "storylets/deck@0",
   deck: {
-    condition: "@story.act == \"act-2\"",
+    condition: "@story.act >= \"act-2\"",
     gameId: "cursed-hoard",
     id: "k_0031",
     order: 3,

@@ -1,7 +1,7 @@
 {
   schema: "storylets/deck@0",
   deck: {
-    condition: "(@story.act == \"act-2\") && (@story.act != \"act-1\")",
+    condition: "@story.act >= \"act-2\"",
     gameId: "ambients",
     id: "k_001i",
     order: 0,

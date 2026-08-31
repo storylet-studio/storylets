@@ -19,7 +19,7 @@
       outcomes: [
         {
           changes: {
-            "@story.act": "\"act-1\"",
+            "@story.act": "advance(@story.act)",
           },
           gameId: "step-through",
           id: "c_arrive_o",
@@ -37,7 +37,7 @@
       title: "Arrive at the Village Gate",
     },
     {
-      condition: "check_flags(@rel_innkeeper, +met) and check_flags(@rel_blacksmith, +met)",
+      condition: "@act >= \"act-1\" and check_flags(@rel_innkeeper, +met) and check_flags(@rel_blacksmith, +met)",
       fields: {
         scene: "scn_elder",
       },
@@ -47,7 +47,7 @@
       outcomes: [
         {
           changes: {
-            "@story.act": "\"act-2\"",
+            "@story.act": "advance(@story.act)",
             "@story.rel_elder": "set_flags(@rel_elder, +met)",
             "@story.village_open": "true",
           },
@@ -58,7 +58,7 @@
         },
         {
           changes: {
-            "@story.act": "\"act-2\"",
+            "@story.act": "advance(@story.act)",
             "@story.rel_elder": "set_flags(@rel_elder, +met, +has_favour)",
             "@story.village_open": "true",
           },

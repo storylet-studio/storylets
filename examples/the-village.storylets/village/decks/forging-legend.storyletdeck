@@ -1,7 +1,7 @@
 {
   schema: "storylets/deck@0",
   deck: {
-    condition: "(@story.act == \"act-2\") && (check_flags(@story.rel_blacksmith, +grateful))",
+    condition: "(@story.act >= \"act-2\") && (check_flags(@story.rel_blacksmith, +grateful))",
     gameId: "forging-legend",
     id: "k_003k",
     order: 4,

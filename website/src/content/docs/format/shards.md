@@ -103,12 +103,12 @@ One per project, at the root. It holds everything that isn't specific to a box.
       {
         default: "arrival",
         name: "act",
-        type: "enum",
-        values: [
+        stages: [
           "arrival",
           "act-1",
           "act-2",
         ],
+        type: "quality",
       },
     ],
   },

@@ -147,7 +147,7 @@
       chooses: [
         "d_0001",
       ],
-      condition: "@story.act == \"act-2\"",
+      condition: "@story.act >= \"act-2\"",
       gameId: "place-in-the-wilds",
       id: "t_000a",
       properties: [],
