@@ -10,6 +10,33 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-31
+
+### Changed
+
+- **Maps are findable.** The Maps tab used to appear only after you had made a map,
+  so the word was nowhere in the editor until you already knew that maps live inside
+  tag groups. The tab is always there now, and a box with no map yet shows what one
+  is and offers to make it.
+- **`+ New map`** sits beside `+ New tag group`, and makes the group and marks it a
+  map in one step. A box that has maps names them in its Contents list.
+- **The switch on a tag group reads "A map"**, where it read "A place". Two things
+  were wrong with the old word: the group was called a place while its tags are
+  zones, so the Village was "a place" and the forest a "zone"; and it said geography
+  when a map does not have to be geographic.
+
+### Added
+
+- **A map does not have to be a map of anywhere.** Any two-dimensional layout of a
+  tag group works: act structure with the beats available in each act, a cast and who
+  is close to whom, a tech tree. The engine never knows the difference, because a
+  zone is a tag whichever way you drew it, so an act map and a village map compile to
+  exactly the same thing. Said now in the editor and on
+  [the Maps page](https://storylet.studio/storyletter/maps/).
+
+Nothing about the format changed. Existing projects open unaltered, and a map still
+adds nothing a runtime reads.
+
 ## [0.2.0] - 2026-08-31
 
 ### Added
