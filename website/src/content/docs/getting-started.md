@@ -10,6 +10,10 @@ design with a Storylet Engine runtime. This is the path from nothing to a hand o
 inside your own game. You don't need to write any code until the last step, and you don't need
 a game to try everything before it.
 
+New here? [What are storylets?](/what-are-storylets/) has the idea itself, and
+[Storylet Studio: A Toolkit for Storylet-Driven Games](https://wildwinter.medium.com/storylet-studio-a-toolkit-for-storylet-driven-games-17603c9358ac)
+introduces the project: where it came from, what is in it, and why it works this way.
+
 Setting a project up is a one-off. After that the work is a short loop: design a card and say
 when it should come up, play to see whether it does, run coverage to find what never does, and
 publish when your game needs it.
