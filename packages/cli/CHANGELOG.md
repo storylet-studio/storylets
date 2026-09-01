@@ -19,6 +19,21 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-01
+
+### Changed
+
+- **Compiled bundles carry the aligned expression semantics.** A bare condition passes on a
+  non-empty string or flag list as well as a boolean or number, and flags compare as a set rather
+  than by the order they were added. Both come from the engine the CLI compiles against, and both
+  mean a condition can change its answer, so a project compiled with this release may play
+  differently from one compiled before it. The four runtimes agree with each other and with
+  Storyletter about all of it.
+
+- Packing is unchanged in behaviour, but its zip-slip guards and deterministic-archive settings now
+  come from `@wildwinter/toolkit`, shared with Patterplay rather than kept as a second copy here.
+
+
 ## [0.2.0] - 2026-08-31
 
 ### Fixed

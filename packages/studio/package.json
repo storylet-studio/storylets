@@ -1,7 +1,7 @@
 {
   "name": "@storylet-studio/studio",
   "productName": "Storyletter",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": true,
   "description": "Storyletter - the storylet editor. Electron shell over @storylet-studio/ops (one core, many front-ends); cards and decks first.",
   "type": "module",

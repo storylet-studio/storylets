@@ -10,6 +10,30 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-01
+
+### Changed
+
+- **A bare condition now passes on a non-empty string or flag list**, not only on a boolean or a
+  number. `@story.mood` where mood is `"tense"` used to be false; it is true. The engine had
+  admitted only booleans and numbers while Patterplay admitted all four, and the two share a
+  property registry, so the same value read from the same place answered the same condition
+  differently depending on which engine asked. A condition of yours that quietly never fired may
+  start firing, which is the answer it should always have given.
+
+- **A condition comparing flags no longer depends on the order they were added.**
+  `@f == [red, blue]` matches a value built as `+blue` then `+red`. A flags value is a set; its
+  stored order was an artefact of the order somebody happened to write the outcomes in, which
+  Storyletter never showed you.
+
+- **Numbers render as the language says everywhere.** Large and fractional values printed
+  differently in the editor and in the four runtimes; they now follow one rule, pinned by a shared
+  conformance corpus that all four are tested against.
+
+- The expression engine is now `@wildwinter/expr`, one implementation shared with Patterplay
+  rather than a copy per project, so a fix lands once instead of twice.
+
+
 ## [0.3.2] - 2026-08-31
 
 ### Fixed

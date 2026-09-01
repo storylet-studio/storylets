@@ -1,6 +1,6 @@
 {
   "name": "@storylet-studio/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "storyletengine - the Storylet Engine CLI: init, new, validate, format, export, peek, deal, merge, coverage. A thin front-end over @storylet-studio/ops; pack lands next.",
   "type": "module",
   "license": "MIT",
