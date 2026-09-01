@@ -75,6 +75,42 @@ jobs:
         run: |
           "$GODOT" --headless --path ports/godot --script res://test/test_state_logger.gd
 
+  # The @wildwinter/expr parity corpus is authored in ../expr and VENDORED here as
+  # packages/conformance/expr-corpus.json, so the port test hosts above run with no
+  # assumption that expr is checked out beside this repo. That copy can go stale, and
+  # a stale copy is worse than none: every port would pass a contract that no longer
+  # matches the one Patterplay is held to, which is the exact drift this whole
+  # exercise exists to stop.
+  expr-corpus-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: storylets
+      - name: Checkout @wildwinter/expr (the corpus is authored there)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/expr
+          path: expr
+      - name: The vendored expr corpus matches the authored one
+        run: |
+          if ! diff -q expr/packages/conformance/corpus.json \
+                       storylets/packages/conformance/expr-corpus.json; then
+            echo "::error::The vendored expr corpus is out of date."
+            echo "Run 'node scripts/sync-conformance.mjs' in ../expr and commit the result here."
+            diff -u expr/packages/conformance/corpus.json \
+                    storylets/packages/conformance/expr-corpus.json | head -40
+            exit 1
+          fi
+          echo "vendored expr corpus is current"
+      # The evaluator itself is now ONE implementation, authored in expr/ports and
+      # vendored into this addon. A hand edit to the vendored copy is how six
+      # transliterations of the same 200 lines started; this is what stops a
+      # seventh. The script exits 1 on any difference, in either direction.
+      - name: The vendored shared port sources match the authored ones
+        working-directory: expr
+        run: node scripts/vendor-ports.mjs --check
+
   unity-runtime:
     runs-on: ubuntu-latest
     steps:

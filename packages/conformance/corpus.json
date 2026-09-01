@@ -661,6 +661,386 @@
       ]
     },
     {
+      "name": "a non-empty string passes as a bare condition",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "title",
+              "type": "string",
+              "default": "onwards"
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_named",
+                    "gameId": "named",
+                    "condition": {
+                      "src": "@story.title",
+                      "ast": [
+                        "sv",
+                        "story",
+                        "title"
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "box": "box",
+      "expect": [
+        "c_named"
+      ]
+    },
+    {
+      "name": "an empty string fails as a bare condition",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "title",
+              "type": "string",
+              "default": ""
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_free",
+                    "gameId": "free",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_named",
+                    "gameId": "named",
+                    "condition": {
+                      "src": "@story.title",
+                      "ast": [
+                        "sv",
+                        "story",
+                        "title"
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "box": "box",
+      "expect": [
+        "c_free"
+      ]
+    },
+    {
+      "name": "a non-empty flag list passes as a bare condition",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "marks",
+              "type": "flags",
+              "default": [
+                "seen"
+              ]
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_flagged",
+                    "gameId": "flagged",
+                    "condition": {
+                      "src": "@story.marks",
+                      "ast": [
+                        "sv",
+                        "story",
+                        "marks"
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "box": "box",
+      "expect": [
+        "c_flagged"
+      ]
+    },
+    {
+      "name": "an empty flag list fails as a bare condition",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "marks",
+              "type": "flags",
+              "default": []
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_flagged",
+                    "gameId": "flagged",
+                    "condition": {
+                      "src": "@story.marks",
+                      "ast": [
+                        "sv",
+                        "story",
+                        "marks"
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_free",
+                    "gameId": "free",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "box": "box",
+      "expect": [
+        "c_free"
+      ]
+    },
+    {
       "name": "a shut deck gate hides the whole deck",
       "bundle": {
         "schema": "storylets/bundle@0",

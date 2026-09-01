@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Compile the Unreal PLUGIN (both modules) with the engine you already have.
+# Compile the Storylet Engine UE plugin modules for real, with Unreal.
 #
-# The clang TestHost covers the std-only core, and it runs in CI with no Unreal
-# at all. It cannot cover StoryletEngineRuntime's UObject wrappers or
-# StoryletEngineEditor's Slate panel, because those need UE headers - and those
-# are the parts a refactor breaks silently. The Godot equivalent of exactly that
-# gap hid a state logger that had not compiled for weeks.
+# The standalone TestHost (ports/unreal/TestHost/build.sh) compiles the std-only
+# core with clang and runs the corpus. It does NOT compile the UE-dependent
+# plugin modules: the Runtime module's Unreal-facing half, the Editor module, or
+# the demo. Those need Unreal, so a green TestHost is not evidence that the
+# plugin builds.
 #
-# NO LICENCE OR SECRET IS INVOLVED, as with the Unity demo check beside this: an
-# installed Unreal builds a plugin from the command line. It is simply SLOW
-# (minutes), which is why it is a script you run rather than a CI step.
+# NO LICENCE SECRET IS INVOLVED. An installed Unreal compiles from the command
+# line, which is what this does. A GitHub-hosted runner has no Unreal on it at
+# all, which is why .github/workflows/ports.yml cannot run this; a self-hosted
+# runner on a machine with Unreal runs this script as it stands.
 #
 # Usage:  ./scripts/check-unreal-plugin.sh
 #         UE_ROOT=/path/to/UE_5.7 ./scripts/check-unreal-plugin.sh
@@ -17,22 +18,23 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
-plugin="$root/ports/unreal/StoryletEngine/StoryletEngine.uplugin"
+project="$root/ports/unreal/StoryletEngineDemo/StoryletEngineDemo.uproject"
 
 ue="${UE_ROOT:-}"
 if [ -z "$ue" ]; then
-  ue="$(ls -d /Volumes/Data/Unreal/UE_* /Users/Shared/Epic\ Games/UE_* 2>/dev/null | sort -V | tail -1 || true)"
+  # The .uproject declares its engine version; match it rather than taking the
+  # newest, because a newer engine silently upgrades the project on open.
+  want="$(sed -n 's/.*"EngineAssociation"[^"]*"\([^"]*\)".*/\1/p' "$project")"
+  for base in /Volumes/Data/Unreal /Users/Shared/Epic\ Games /Applications/Epic\ Games; do
+    [ -d "$base/UE_$want" ] && ue="$base/UE_$want" && break
+  done
 fi
-uat="$ue/Engine/Build/BatchFiles/RunUAT.sh"
-if [ ! -x "$uat" ]; then
-  echo "check-unreal-plugin: no Unreal engine found." >&2
-  echo "  Point at one: UE_ROOT=/path/to/UE_5.7 $0" >&2
+if [ -z "$ue" ] || [ ! -x "$ue/Engine/Build/BatchFiles/Mac/Build.sh" ]; then
+  echo "check-unreal-plugin: no Unreal found (set UE_ROOT to a UE_x.y directory)" >&2
   exit 2
 fi
 
-out="${TMPDIR:-/tmp}/storylets-unreal-plugin"
 echo "check-unreal-plugin: $ue"
-echo "  (a full plugin build; minutes, not seconds)"
-rm -rf "$out"
-"$uat" BuildPlugin -Plugin="$plugin" -Package="$out" -TargetPlatforms=Mac -Rocket
-echo "check-unreal-plugin: both modules compile."
+"$ue/Engine/Build/BatchFiles/Mac/Build.sh" StoryletEngineDemoEditor Mac Development \
+  -Project="$project" -waitmutex
+echo "check-unreal-plugin: the plugin modules compile."

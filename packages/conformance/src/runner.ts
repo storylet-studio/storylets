@@ -16,8 +16,13 @@ import { effectiveGameId } from "@storylet-studio/model";
 import type { Bundle } from "@storylet-studio/model";
 import type { ExpressionCase, PeekCase, ScriptedCase, SpecificityCase, StateSelector } from "./types.js";
 
+/** Truthiness for a bare condition; mirrors the runtime's `conditionPasses`,
+ *  and Patterplay's `truthy`, which it was aligned with on 2026-09-01. */
 const conditionPasses = (v: ScalarValue): boolean =>
-  typeof v === "boolean" ? v : typeof v === "number" ? v !== 0 : false;
+  typeof v === "boolean" ? v
+  : typeof v === "number" ? v !== 0
+  : typeof v === "string" ? v !== ""
+  : v.length > 0;
 
 const show = (v: unknown): string => JSON.stringify(v);
 const same = (a: unknown, b: unknown): boolean => show(a) === show(b);

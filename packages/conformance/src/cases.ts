@@ -101,6 +101,42 @@ export const fixtures: Fixtures = {
       ],
       expect: ["c_yes"] },
 
+    // Truthiness for a bare condition, aligned with Patterplay's `truthy` on
+    // 2026-09-01. Until then a string or a flag list read as false here and as
+    // its JS coercion there, so the same value in the same shared property
+    // registry answered a condition differently depending on which engine
+    // asked. Nothing in this corpus used a non-boolean bare condition, which is
+    // exactly why the drift survived; these four cases are the pin.
+    { name: "a non-empty string passes as a bare condition",
+      story: [{ name: "title", type: "string", default: "onwards" }],
+      cards: [
+        { id: "c_named", condition: "@story.title" },
+      ],
+      expect: ["c_named"] },
+
+    { name: "an empty string fails as a bare condition",
+      story: [{ name: "title", type: "string", default: "" }],
+      cards: [
+        { id: "c_free" },
+        { id: "c_named", condition: "@story.title" },
+      ],
+      expect: ["c_free"] },
+
+    { name: "a non-empty flag list passes as a bare condition",
+      story: [{ name: "marks", type: "flags", default: ["seen"] }],
+      cards: [
+        { id: "c_flagged", condition: "@story.marks" },
+      ],
+      expect: ["c_flagged"] },
+
+    { name: "an empty flag list fails as a bare condition",
+      story: [{ name: "marks", type: "flags", default: [] }],
+      cards: [
+        { id: "c_free" },
+        { id: "c_flagged", condition: "@story.marks" },
+      ],
+      expect: ["c_free"] },
+
     { name: "a shut deck gate hides the whole deck",
       story: [{ name: "open", type: "boolean", default: false }],
       decks: [

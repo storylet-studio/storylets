@@ -104,6 +104,12 @@ const SURFACES = {
       "ports/godot/addons/storyletengine/storyletengine_plugin.gd",
       "ports/godot/addons/storyletengine/editor/storylet_bundle_import_plugin.gd",
       "ports/godot/addons/storyletengine/editor/storylet_bundle_resource.gd",
+      // The SHARED sources, vendored from expr/ports/godot. The import flow and
+      // the Inspector view's empty/error states live there now, not in the two
+      // family files above, so a surface check that reads only those would
+      // report a member missing that is present.
+      "ports/godot/addons/storyletengine/runtime/expr/bundle_import_plugin.gd",
+      "ports/godot/addons/storyletengine/runtime/expr/bundle_view.gd",
     ],
   },
   unreal: {

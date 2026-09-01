@@ -44,3 +44,18 @@ jobs:
         working-directory: storylets
       - run: npm run build
         working-directory: storylets
+      # The playable-HTML export inlines a MINIFIED COPY of the runtime, generated
+      # into packages/ops/src/playable-player.ts by ops' prebuild. If that copy
+      # drifts from the current runtime, a published page ships a stale engine.
+      # Nothing checked it here until 2026-09-01, and it went stale that day: the
+      # truthiness alignment changed the runtime, and the blob only regenerated
+      # because a local build happened to run. Patterplay has had this guard since
+      # its own blob silently missed a change; this is the matching half.
+      - name: Generated player blob is up to date
+        working-directory: storylets
+        run: |
+          if ! git diff --quiet -- packages/ops/src/playable-player.ts; then
+            echo "::error::packages/ops/src/playable-player.ts is stale - run 'npm run gen-player-blob -w @storylet-studio/ops' and commit the result."
+            git diff --stat -- packages/ops/src/playable-player.ts
+            exit 1
+          fi
