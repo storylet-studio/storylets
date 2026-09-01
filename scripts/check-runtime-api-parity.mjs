@@ -93,7 +93,11 @@ const SURFACES = {
       "ports/godot/addons/storyletengine/runtime/flow.gd",
       "ports/godot/addons/storyletengine/runtime/describe_bundle.gd",
       "ports/godot/addons/storyletengine/runtime/state_logger.gd",
+      // The shim keeps the class_name; the bag ITSELF is the vendored shared source
+      // beside it, so a surface check reading only the shim reports every member
+      // missing. Both, because the shim is where StoryletPropertyBag is declared.
       "ports/godot/addons/storyletengine/runtime/property_bag.gd",
+      "ports/godot/addons/storyletengine/runtime/expr/property_bag.gd",
       "ports/godot/addons/storyletengine/runtime/scope_registry.gd",
       "ports/godot/addons/storyletengine/runtime/save.gd",
       "ports/godot/addons/storyletengine/runtime/live_link.gd",
