@@ -34,6 +34,8 @@ import { compileProject } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import type { Bundle, Expression, PropertyDecl } from "@storylet-studio/model";
 import { effectiveGameId } from "@storylet-studio/model";
+import { disjuncts, latchOf, scopedRef, terms } from "@wildwinter/expr";
+import type { Term } from "@wildwinter/expr";
 
 type AstNode = Expression["ast"];
 
@@ -54,65 +56,18 @@ const shown = (key: string): string => {
   return at < 0 ? bare : `${bare.slice(0, at)} +${bare.slice(at + 1)}`;
 };
 
-/** One latch mentioned in a condition, and whether it was mentioned negated. */
-interface Term { key: string; negated: boolean }
-
-const svRef = (ast: AstNode): string | undefined =>
-  (Array.isArray(ast) && ast[0] === "sv" ? `@${ast[1]}.${ast[2]}` : undefined);
-
-/** The latch a node asserts, if it is one of the shapes we understand.
- *  Anything else returns undefined and takes no part in the analysis. */
-function latchOf(ast: AstNode, owner: Owner): string | undefined {
-  const direct = svRef(ast);
-  if (direct !== undefined) return keyOf(direct, owner);
-  if (!Array.isArray(ast)) return undefined;
-  // `@x == true` is the same assertion as `@x`.
-  if (ast[0] === "bin" && ast[1] === "==") {
-    const [, , l, r] = ast as ["bin", string, AstNode, AstNode];
-    for (const [a, b] of [[l, r], [r, l]] as [AstNode, AstNode][]) {
-      const ref = svRef(a);
-      if (ref !== undefined && Array.isArray(b) && b[0] === "b" && b[1] === true) return keyOf(ref, owner);
-    }
-    return undefined;
-  }
-  // `check_flags(@x, +f)` - ONE flag only. Two flags in one call is a
-  // conjunction we could split, and a needless generality until something asks.
-  if (ast[0] === "call" && ast[1] === "check_flags") {
-    const ref = svRef(ast[2] as AstNode);
-    const args = ast.slice(3);
-    if (ref === undefined || args.length !== 1) return undefined;
-    const arg = args[0];
-    if (Array.isArray(arg) && arg[0] === "fd" && arg[1] === "+") return `${keyOf(ref, owner)}:${String(arg[2])}`;
-  }
-  return undefined;
-}
-
-/** Split a condition on top-level `or`. Every branch must be refuted before
- *  the whole condition is. */
-function disjuncts(ast: AstNode): AstNode[] {
-  if (Array.isArray(ast) && ast[0] === "bin" && ast[1] === "or") {
-    const [, , l, r] = ast as ["bin", string, AstNode, AstNode];
-    return [...disjuncts(l), ...disjuncts(r)];
-  }
-  return [ast];
-}
-
-/** The latches one AND-branch asserts, positively or negated. Terms it does
- *  not understand are simply absent: a branch is only ever refuted by what is
- *  proven, never by what is missing. */
-function terms(ast: AstNode, owner: Owner, negated = false, into: Term[] = []): Term[] {
-  const latch = latchOf(ast, owner);
-  if (latch !== undefined) { into.push({ key: latch, negated }); return into; }
-  if (!Array.isArray(ast)) return into;
-  if (ast[0] === "u" && ast[1] === "not") return terms(ast[2] as AstNode, owner, !negated, into);
-  // Inside a negation, `and` becomes `or` and the branch stops being a plain
-  // conjunction - so only descend through `and` while positive.
-  if (ast[0] === "bin" && ast[1] === "and" && !negated) {
-    terms(ast[2] as AstNode, owner, false, into);
-    terms(ast[3] as AstNode, owner, false, into);
-  }
-  return into;
-}
+// The latch GRAMMAR - which shapes assert a latch, and how a condition
+// decomposes into terms - is @wildwinter/expr's, not a copy here. It was
+// written twice, character for character including the flag key format, and it
+// is the piece most likely to drift: teach one family that `@x != false`
+// asserts what `@x` does and the other silently does not learn it. What stays
+// below is the part that genuinely differs, the walk over THIS model's decks,
+// boxes and cards.
+//
+// `keyOf` below is what makes it ours: an owner here is the box and deck a
+// reference was seen in.
+const latchOfAst = (ast: AstNode, owner: Owner) => latchOf(ast, owner, keyOf);
+const termsOfAst = (ast: AstNode, owner: Owner) => terms(ast, owner, keyOf);
 
 interface Writer { requires: Term[] }
 
@@ -141,13 +96,13 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
       const owner: Owner = { box: boxName, deck: effectiveGameId(deck) };
       for (const card of deck.cards) {
         const requires = disjuncts(card.condition?.ast ?? true as unknown as AstNode).length === 1
-          ? terms(card.condition?.ast ?? (true as unknown as AstNode), owner)
+          ? termsOfAst(card.condition?.ast ?? (true as unknown as AstNode), owner)
           // A card whose own condition is a disjunction requires none of its
           // branches for certain, so it constrains nothing.
           : [];
         for (const outcome of card.outcomes) {
           // An outcome's own gate is a requirement too, on top of the card's.
-          const gate = outcome.condition !== undefined ? terms(outcome.condition.ast, owner) : [];
+          const gate = outcome.condition !== undefined ? termsOfAst(outcome.condition.ast, owner) : [];
           const need = [...requires, ...gate];
           for (const [target, expr] of Object.entries(outcome.changes)) {
             const key = keyOf(target, owner);
@@ -159,7 +114,7 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
             // assignment, a computed value - breaks every flag it holds,
             // because we can no longer say the set only grows.
             if (Array.isArray(ast) && ast[0] === "call" && ast[1] === "set_flags"
-              && svRef(ast[2] as AstNode) === target) {
+              && scopedRef(ast[2] as AstNode) === target) {
               let clean = true;
               for (const arg of ast.slice(3)) {
                 if (Array.isArray(arg) && arg[0] === "fd" && arg[1] === "+") noteWrite(`${key}:${String(arg[2])}`, need);
@@ -281,7 +236,7 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
         let reason: string | undefined;
         const branches = disjuncts(card.condition.ast);
         const refuted = branches.every((branch) => {
-          const ts = terms(branch, owner);
+          const ts = termsOfAst(branch, owner);
           for (const no of ts.filter((t) => t.negated)) {
             if (!monotonic(no.key)) continue;
             for (const yes of ts.filter((t) => !t.negated && t.key !== no.key)) {

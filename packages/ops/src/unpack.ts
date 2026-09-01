@@ -37,29 +37,16 @@ import type { MergeResult } from "./merge.js";
 import { ASSETS_DIR } from "./assets.js";
 import { PACK_MANIFEST } from "./pack.js";
 import type { PlannedBinaryWrite, PlannedWrite } from "./write.js";
+import { escapesTarget, isUnsafeEntry } from "@wildwinter/toolkit/archive";
 
 /** A pack entry whose path escapes the target directory (always rejected). */
 export class UnsafeEntryError extends Error {}
 
-/** True if an entry name is absolute or climbs out of the target directory.
- *  JSZip's loader has already collapsed any `..` by the time we see the name,
- *  so in practice this is the ABSOLUTE-path check; containment below covers
- *  traversal. Both are kept: this one is cheap and independent of the reader. */
-export function isUnsafeEntry(name: string): boolean {
-  if (isAbsolute(name) || /^[a-zA-Z]:/.test(name)) return true;
-  const norm = normalize(name);
-  return norm === ".." || norm.startsWith(`..${sep}`) || norm.startsWith("../");
-}
-
-/** True when `join(targetDir, name)` resolves outside `targetDir`. The check
- *  that holds whatever built the zip and whatever read it. */
-function escapesTarget(targetDir: string, name: string): boolean {
-  const target = resolve(targetDir);
-  const full = resolve(join(target, name));
-  const rel = relative(target, full);
-  return rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
-}
-
+// The entry guards are @wildwinter/toolkit's. Both families had a correct copy,
+// which is the state BEFORE a drift rather than proof there will not be one: a
+// subtle weakening of one is a vulnerability nobody reads a diff for.
+// Re-exported so nothing that imports it has to move.
+export { isUnsafeEntry } from "@wildwinter/toolkit/archive";
 /** Is this entry one of a box's binary assets rather than a shard? By WHERE it
  *  is, matching how a pack collects them: a format nobody thought of still
  *  travels, and still must not be read as text. */

@@ -30,11 +30,9 @@
 
 import JSON5 from "json5";
 
-/** Parse JSON5 source text (a leading BOM is tolerated). Throws on malformed input. */
-export function parseSource(text: string): unknown {
-  const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-  return JSON5.parse(body);
-}
+// JSON5 + a tolerated BOM, from @wildwinter/toolkit: four lines both families
+// had written identically. Re-exported so nothing that imports it has to move.
+export { parseSource } from "@wildwinter/toolkit";
 
 /** The shard identity keys hoisted to the top, after `schema` (rule 1). */
 const IDENTITY_KEYS = ["project", "box", "deck"];

@@ -25,6 +25,7 @@ import { SHARD_EXTENSIONS } from "@storylet-studio/model";
 import type { ProjectShard } from "@storylet-studio/model";
 import { ASSETS_DIR, assetUse } from "./assets.js";
 import { findProjectDir, loadProject } from "./load.js";
+import { ARCHIVE_ENTRY_OPTS } from "@wildwinter/toolkit/archive";
 
 /** The manifest at the pack root: what this envelope is, and what is in it. */
 export interface PackManifest {
@@ -64,8 +65,9 @@ const SHARD_EXTS = Object.values(SHARD_EXTENSIONS);
 // `createFolders` must stay off - JSZip stamps implicit folder entries with
 // new Date() whatever the entry's own `date` says, which would leak wall-clock
 // time into the bytes.
-const FIXED_DATE = new Date("2000-01-01T00:00:00Z");
-const ENTRY_OPTS = { date: FIXED_DATE, createFolders: false } as const;
+// The reproducibility settings are @wildwinter/toolkit's: a fixed entry date
+// and no folder entries, so an unchanged project packs to the same bytes.
+const ENTRY_OPTS = ARCHIVE_ENTRY_OPTS;
 
 /** Every file under `dir` (recursively) whose name ends in one of `exts`. */
 

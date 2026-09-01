@@ -21,6 +21,7 @@ import type { Card, DeckShard, Outcome } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
 import type { ResolveKind } from "./resolve.js";
 import type { PlannedWrite } from "./write.js";
+import { findMatcher } from "@wildwinter/toolkit";   // the escaped, global find regex
 
 export interface ReplaceOptions {
   /** The literal text to find (not a regex: special characters match themselves). */
@@ -61,13 +62,7 @@ export interface ReplacePlan {
   items: number;
 }
 
-/** Build the find matcher, or null for an empty query. Global so every occurrence in a string is replaced. */
-function matcher(opts: ReplaceOptions): RegExp | null {
-  if (!opts.query) return null;
-  const esc = opts.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const body = opts.wholeWord ? `\\b${esc}\\b` : esc;
-  return new RegExp(body, opts.caseSensitive ? "g" : "gi");
-}
+
 
 // The canonical serialiser id-sorts the cards (source rule 6), so a replace
 // leaves a shard byte-identical to what a save would have produced.
@@ -79,7 +74,7 @@ function matcher(opts: ReplaceOptions): RegExp | null {
  */
 export function runReplace(loaded: LoadedProject, opts: ReplaceOptions): ReplacePlan {
   const plan: ReplacePlan = { hits: [], writes: [], items: 0 };
-  const re = matcher(opts);
+  const re = findMatcher(opts);
   const source = loaded.source;
   if (!re || !source) return plan;
   const touched = new Set<string>();
