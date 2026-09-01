@@ -28,6 +28,7 @@ jobs:
       - run: npm ci
         working-directory: storylets
       - run: npm run typecheck
+        working-directory: storylets
       # The backstop for the pre-push hook, which is local-only and skippable with
       # --no-verify. A published package whose source moves with no changeset keeps its
       # version while its build changes, so the registry would serve one build under a
@@ -36,7 +37,6 @@ jobs:
         working-directory: storylets
         run: node scripts/release-guard.mjs "${{ github.event.before }}" "${{ github.sha }}"
         if: github.event_name == 'push'
-        working-directory: storylets
       - run: npm test
         working-directory: storylets
       # The four runtimes' API surface. This script existed since the flows work
