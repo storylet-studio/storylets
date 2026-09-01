@@ -596,7 +596,7 @@ TArray<FStoryletPropertyView> UStoryletFlow::ListProperties() const
 {
 	TArray<FStoryletPropertyView> Out;
 	if (IsClosed()) return Out;
-	for (const storylets::PropertyView& R : GetCoreFlow()->listProperties())
+	for (const storylets::PropertyRow& R : GetCoreFlow()->listProperties())
 	{
 		FStoryletPropertyView Row;
 		Row.Path = Ue(R.path);
@@ -841,7 +841,7 @@ TArray<FStoryletPropertyView> UStoryletEngine::ListProperties() const
 {
 	TArray<FStoryletPropertyView> Out;
 	if (!IsValidEngine()) return Out;
-	for (const storylets::PropertyView& R : Impl->Engine->listProperties())
+	for (const storylets::PropertyRow& R : Impl->Engine->listProperties())
 	{
 		FStoryletPropertyView Row;
 		Row.Path = Ue(R.path);

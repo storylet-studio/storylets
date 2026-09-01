@@ -21,7 +21,7 @@ FString StoryletSaveStateToJson(const storylets::Engine& Engine)
 	// engine's current world values and a load applies them back - "host saves
 	// its container once" (design/flows.md).
 	storylets::OrderedMap<std::string, storylets::StoryletValue> World;
-	for (const storylets::PropertyView& Row : Engine.listProperties())
+	for (const storylets::PropertyRow& Row : Engine.listProperties())
 	{
 		if (Row.path.rfind("world.", 0) == 0) World.set(Row.name, Row.value);
 	}

@@ -20,7 +20,7 @@
 // ---------------------------------------------------------------------------
 /// <reference lib="dom" />
 
-import type { Engine, EngineLogEntry, Flow, LogEntry, PropertyView } from "@storylet-studio/runtime";
+import type { Engine, EngineLogEntry, Flow, LogEntry, PropertyRow } from "@storylet-studio/runtime";
 import type { ScalarValue } from "@storylet-studio/model";
 import { serializeState, deserializeState } from "./save.js";
 
@@ -208,7 +208,7 @@ export function createPropertyInspector(engine: Engine, flow: Flow, opts: Proper
 
   // Rows are built once: the declared surface is fixed for a bundle. The
   // filter only toggles visibility (a group hides with its last row).
-  const editors: { row: PropertyView; read: () => void }[] = [];
+  const editors: { row: PropertyRow; read: () => void }[] = [];
   const groups: { el: HTMLElement; rows: { el: HTMLElement; text: string }[] }[] = [];
   let lastGroup = "";
   for (const row of live().listProperties()) {
@@ -381,8 +381,8 @@ export function createPropertyInspector(engine: Engine, flow: Flow, opts: Proper
 
 function buildRow(
   live: () => Flow,
-  row: PropertyView,
-  editors: { row: PropertyView; read: () => void }[],
+  row: PropertyRow,
+  editors: { row: PropertyRow; read: () => void }[],
 ): HTMLElement {
   const div = document.createElement("div");
   div.className = "sl-row";

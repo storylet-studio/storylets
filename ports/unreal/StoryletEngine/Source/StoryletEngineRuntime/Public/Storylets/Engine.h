@@ -219,14 +219,11 @@ namespace storylets
         std::optional<double> turn;
     };
 
-    /** One examiner row, addressed by the property-path grammar
-     *  (getProperty / setProperty take the same path).
-     *
-     *  An ALIAS. This was the shared row plus a `path`, and Patterplay had forked the same
-     *  row for the same reason in its own runtimes; `path` moved onto the shared
-     *  PropertyRow on 2026-09-02, so there is nothing left to add. An empty derived struct
-     *  would be worse than an alias here: a bag's own row could never satisfy it. */
-    using PropertyView = PropertyRow;
+    // PropertyView is gone. It was the shared PropertyRow plus a `path`, and `path` moved
+    // onto that row on 2026-09-02 - so the name was a synonym, and a synonym for a shared
+    // type is how the two families drifted: the same row called PropertyView here,
+    // ScopePropertyRow next to it, PropertyRow in the kernel. listProperties() returns
+    // PropertyRow, in this runtime and in Patterplay's.
 
     /** One kernel bag with its store path prefix (world / story / box.<id> /
      *  deck.<id> / hand.<id> / value.<id>): the state logger's mount surface
@@ -387,7 +384,7 @@ namespace storylets
 
         /** The shared surface as examiner rows: @world (read through the
          *  resolver) then the shared partitions. */
-        std::vector<PropertyView> listProperties() const;
+        std::vector<PropertyRow> listProperties() const;
 
         /** The SHARED kernel bags with their store path prefixes (the state
          *  logger's mount surface). The @world container is the host's own. */
@@ -2299,10 +2296,10 @@ namespace storylets
         /** The flow's FULL merged view as examiner rows: @world read through
          *  the engine's resolver, then per scope the shared values and this
          *  flow's own. Bundle order. */
-        std::vector<PropertyView> listProperties() const
+        std::vector<PropertyRow> listProperties() const
         {
             assertOpen();
-            std::vector<PropertyView> rows;
+            std::vector<PropertyRow> rows;
             addWorldRows(rows);
             auto add = [&rows](const std::string& prefix, const PropertyBag* bag)
             {
@@ -2416,11 +2413,11 @@ namespace storylets
             bag->set(name, value, /*silent=*/true, "host setProperty");
         }
 
-        void addWorldRows(std::vector<PropertyView>& rows) const
+        void addWorldRows(std::vector<PropertyRow>& rows) const
         {
             for (const auto& d : engine_->bundle_->world.properties)
             {
-                PropertyView r;
+                PropertyRow r;
                 r.path = "world." + d.name;
                 r.name = d.name;
                 r.type = d.type;
@@ -2695,12 +2692,12 @@ namespace storylets
         bag->set(parts.back(), value, /*silent=*/true, "host setProperty");
     }
 
-    inline std::vector<PropertyView> Engine::listProperties() const
+    inline std::vector<PropertyRow> Engine::listProperties() const
     {
-        std::vector<PropertyView> rows;
+        std::vector<PropertyRow> rows;
         for (const auto& d : bundle_->world.properties)
         {
-            PropertyView r;
+            PropertyRow r;
             r.path = "world." + d.name;
             r.name = d.name;
             r.type = d.type;

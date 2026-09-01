@@ -277,15 +277,10 @@ function conditionPasses(v: ScalarValue): boolean {
   return v.length > 0; // string[] (flags)
 }
 
-/** One examiner row, addressed by the property-path grammar
- *  (getProperty / setProperty take the same `path`).
- *
- *  An ALIAS now. This was the shared row plus a `path`, declared here because the shared
- *  row had no address field - and Patterplay had forked it for the same reason, in the
- *  same shape, in its own runtimes. `path` moved onto the shared PropertyRow on
- *  2026-09-02 and a bag composes it from its own pathPrefix, so there is nothing left to
- *  add; the name stays because it is exported API and reads well at call sites. */
-export type PropertyView = PropertyRow;
+// PropertyView is gone. It was the shared PropertyRow plus a `path`, and `path` moved onto
+// that row on 2026-09-02 - so the name was a synonym, and a synonym for a shared type is how
+// the two families drifted in the first place: the same row called PropertyView here,
+// ScopePropertyRow next to it, PropertyRow in the kernel. listProperties() returns PropertyRow.
 
 /** One kernel bag with its store path prefix (story / box.<id> / deck.<id>
  *  / hand.<id> / value.<id>): the state logger's mount surface
@@ -724,8 +719,8 @@ export class Engine {
 
   /** The shared surface as examiner rows: @world (read through the
    *  resolver) then the shared partitions. Per-flow rows live on each Flow. */
-  listProperties(): PropertyView[] {
-    const out: PropertyView[] = [];
+  listProperties(): PropertyRow[] {
+    const out: PropertyRow[] = [];
     for (const d of this.internals.bundle.world.properties) {
       const value = this.internals.worldResolver.get(d.name);
       out.push({
@@ -735,7 +730,7 @@ export class Engine {
         ...(d.stages !== undefined ? { stages: d.stages } : {}),
         // @world is FOREIGN - a host resolver backs it - so writability is whether that
         // resolver can be written at all, which is the shared registry's own rule for a
-        // foreign scope. The `as PropertyView` cast this replaces was hiding the field's
+        // foreign scope. The `as PropertyView` cast this replaced was hiding the field's
         // absence: the row type has always required it, and these rows shipped without one.
         writable: this.internals.worldResolver.set !== undefined,
       });
@@ -1799,9 +1794,9 @@ export class Flow {
    *  resolver, then per scope the shared values and this flow's own.
    *  Bundle order: world, story, then per-box / per-deck / per-hand /
    *  per-tag stores. */
-  listProperties(): PropertyView[] {
+  listProperties(): PropertyRow[] {
     this.assertOpen();
-    const out: PropertyView[] = [];
+    const out: PropertyRow[] = [];
     for (const d of this.internals.bundle.world.properties) {
       const value = this.internals.worldResolver.get(d.name);
       out.push({
@@ -1811,7 +1806,7 @@ export class Flow {
         ...(d.stages !== undefined ? { stages: d.stages } : {}),
         // @world is FOREIGN - a host resolver backs it - so writability is whether that
         // resolver can be written at all, which is the shared registry's own rule for a
-        // foreign scope. The `as PropertyView` cast this replaces was hiding the field's
+        // foreign scope. The `as PropertyView` cast this replaced was hiding the field's
         // absence: the row type has always required it, and these rows shipped without one.
         writable: this.internals.worldResolver.set !== undefined,
       });

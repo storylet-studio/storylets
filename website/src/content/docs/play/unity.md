@@ -99,7 +99,7 @@ isn't in that hand.
 ```csharp
 _flow.SetProperty("world.time_of_day", StoryletValue.Str("night"));   // write before you deal
 StoryletValue gold = _flow.GetProperty("world.gold");
-List<PropertyView> rows = _flow.ListProperties();
+List<PropertyRow> rows = _flow.ListProperties();
 
 _flow.AdvanceTurns("village", 1);
 double turn = _flow.Turn("village");

@@ -1,5 +1,5 @@
 // Blueprint-facing types for the Storylet Engine session surface. The pure
-// core's std:: views (DealtCard / OutcomeView / BoxView / PropertyView)
+// core's std:: views (DealtCard / OutcomeView / BoxView / PropertyRow)
 // are converted to these at the UObject boundary; nothing std crosses it.
 #pragma once
 

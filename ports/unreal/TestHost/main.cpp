@@ -741,7 +741,7 @@ static int runSave(const JsonValue& cases)
         flow.dealMany();
 
         OrderedMap<std::string, StoryletValue> world;
-        for (const PropertyView& row : engine.listProperties())
+        for (const PropertyRow& row : engine.listProperties())
         {
             if (row.path.rfind("world.", 0) == 0) world.set(row.name, row.value);
         }
@@ -755,7 +755,7 @@ static int runSave(const JsonValue& cases)
             catch (const std::exception&) { /* orphaned key */ }
         }
         OrderedMap<std::string, StoryletValue> reworld;
-        for (const PropertyView& row : restored.listProperties())
+        for (const PropertyRow& row : restored.listProperties())
         {
             if (row.path.rfind("world.", 0) == 0) reworld.set(row.name, row.value);
         }
@@ -850,7 +850,7 @@ static int runDescribe(const JsonValue& cases)
             for (const PropertySummary& p : scope.properties) declared.push_back(p.name);
         }
         std::vector<std::string> live;
-        for (const PropertyView& row : session.listProperties()) live.push_back(row.name);
+        for (const PropertyRow& row : session.listProperties()) live.push_back(row.name);
         if (declared != live)
         {
             fail("describe", name, "declared properties " + show(declared)
