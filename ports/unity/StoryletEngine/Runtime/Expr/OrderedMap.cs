@@ -1,3 +1,5 @@
+// GENERATED - vendored from expr/ports/unity/OrderedMap.cs by scripts/vendor-ports.mjs.
+// Do not edit here; edit the shared source and re-run the script.
 // An insertion-ordered map: the C#-side stand-in for JavaScript's Map and for
 // plain-object key order, both of which the reference runtime leans on (bound
 // tag order, @hand composition shadowing, store iteration, save shape).
