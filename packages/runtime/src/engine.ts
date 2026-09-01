@@ -257,8 +257,23 @@ interface AskDescriptor {
 const bagFromDecls = (decls: PropertyDecl[]): StateBag =>
   new StateBag(decls, { normalise: (n) => n });
 
-const conditionPasses = (v: ScalarValue): boolean =>
-  typeof v === "boolean" ? v : typeof v === "number" ? v !== 0 : false;
+// Truthiness for a bare condition. Booleans and numbers as you would expect;
+// a string passes when non-empty and a flag list when non-empty, matching
+// JavaScript's own coercion for those two.
+//
+// Until 2026-09-01 this admitted ONLY booleans and numbers, and Patterplay's
+// `truthy` admitted strings and lists as well. That was drift from writing the
+// two engines at different times, not a considered difference: the two share a
+// property registry, so the same value read from the same registry answered a
+// condition differently depending on which engine asked. expr-specificity calls
+// truthiness host-bound, and it is, but "host-bound" is licence for a host to
+// choose, not licence for two hosts in one family to disagree by accident.
+function conditionPasses(v: ScalarValue): boolean {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") return v !== "";
+  return v.length > 0; // string[] (flags)
+}
 
 /** One examiner row, addressed by the property-path grammar
  *  (getProperty / setProperty take the same `path`). */

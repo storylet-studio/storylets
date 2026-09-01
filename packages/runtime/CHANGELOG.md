@@ -8,6 +8,25 @@ section for it.
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: a bare non-boolean condition now passes when it is non-empty.** A
+  condition resolving to a string or a flag list previously always failed; it now
+  passes when the string is non-empty or the list has members. Booleans and
+  numbers are unaffected. This aligns with Patterplay, which the two engines
+  sharing a property registry makes necessary: the same value read from the same
+  registry answered a condition differently depending on which engine asked.
+
+- **Flags compare as a SET.** `==` and `!=` on a flags value now ignore order,
+  as multisets so a duplicate still counts. `set_flags` still sorts its result,
+  now purely so a save is byte-reproducible rather than to make equality work.
+
+- The PRNG is now re-exported from `@wildwinter/expr` rather than implemented
+  here. Same algorithm, same draws, same `makePrng` and `shuffleInPlace` on this
+  package's surface. `toUint32` is deliberately NOT re-exported: it is the seed
+  coercion a port has to reproduce, not something a game author calls.
+
+
 ## [0.1.0] - 2026-08-30
 
 The first public release, shipping alongside the Unity, Unreal and Godot runtimes on the same

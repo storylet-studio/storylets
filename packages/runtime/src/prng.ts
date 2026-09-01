@@ -1,35 +1,12 @@
-// ---------------------------------------------------------------------------
-// The contractual PRNG: mulberry32, bit-for-bit across every port (schema
-// 3.3; carried verbatim from the old engine). Default seed 0; the state is a
-// plain uint32 persisted in the save envelope.
-// ---------------------------------------------------------------------------
-
-export interface Prng {
-  /** One draw in [0, 1); advances the state. */
-  next(): number;
-  /** The persisted state (a uint32; feed back into makePrng to restore). */
-  state(): number;
-}
-
-export function makePrng(seed: number): Prng {
-  let s = seed >>> 0;
-  return {
-    next(): number {
-      s = (s + 0x6d2b79f5) >>> 0;
-      let t = Math.imul(s ^ (s >>> 15), 1 | s);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
-    },
-    state(): number {
-      return s;
-    },
-  };
-}
-
-/** The contractual shuffle: Fisher-Yates, descending (schema 3.3). */
-export function shuffleInPlace<T>(arr: T[], prng: Prng): void {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(prng.next() * (i + 1));
-    [arr[i], arr[j]] = [arr[j]!, arr[i]!];
-  }
-}
+// The contractual PRNG now lives in @wildwinter/expr, the package both product
+// families already depend on: mulberry32 is a fixed published algorithm that
+// neither family owns, and it existed thirteen times across the two of them.
+//
+// This file stays as a re-export so nothing that imports `./prng.js` has to
+// move, and so the runtime's public surface is unchanged.
+// toUint32 is deliberately NOT re-exported: it is the seed-coercion detail a
+// PORT has to reproduce, not something a game author calls, and widening this
+// runtime's public surface by accident is how a sample stops being the answer
+// to "how do I use this". Import it from @wildwinter/expr if you need it.
+export { makePrng, shuffleInPlace } from "@wildwinter/expr";
+export type { Prng } from "@wildwinter/expr";
