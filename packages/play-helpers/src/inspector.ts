@@ -427,9 +427,16 @@ function buildRow(
       read = () => { if (!focused(input)) input.value = String(current() ?? 0); };
       break;
     }
-    case "enum": {
+    case "enum":
+    case "quality": {
+      // A quality edits as a dropdown of its STAGE LADDER, closed exactly like an
+      // enum's values. It fell to the string branch until 2026-09-01, so a free-text
+      // box accepted any stage name at all - and an unknown stage is not a harmless
+      // typo: the evaluator refuses it ("X is not a stage of this quality"), so a
+      // slip here broke play rather than being corrected. listProperties has carried
+      // `stages` for this since it was written; nothing consumed it.
       const select = document.createElement("select");
-      for (const v of row.values ?? []) {
+      for (const v of (row.type === "quality" ? row.stages : row.values) ?? []) {
         const o = document.createElement("option");
         o.value = v;
         o.textContent = v;

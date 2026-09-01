@@ -26,7 +26,11 @@ enum class EStoryletPropertyType : uint8
 	Number,
 	String,
 	Enum,
-	Flags
+	Flags,
+	/** A quality: a closed, ORDERED ladder of stages. Absent until 2026-09-01, so
+	 *  PropertyTypeFrom's fallback turned every quality into a Boolean and the
+	 *  Inspector drew it as a writable checkbox. */
+	Quality
 };
 
 /** One storylets value, flattened for Blueprint: a kind discriminator plus
@@ -229,6 +233,12 @@ struct FStoryletPropertyView
 	/** Enum options (only populated when Type == Enum, or declared flags). */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FString> Values;
+
+	/** A quality's ordered stage ladder: the closed-set twin of Values, and what an
+	 *  editor offers instead of free text. The evaluator compares stages by ladder
+	 *  POSITION and refuses an unknown one, so this is not decoration. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FString> Stages;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	bool bWritable = true;

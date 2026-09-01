@@ -50,6 +50,7 @@ namespace
 		if (T == storylets::PropertyTypes::String) return EStoryletPropertyType::String;
 		if (T == storylets::PropertyTypes::Enum) return EStoryletPropertyType::Enum;
 		if (T == storylets::PropertyTypes::Flags) return EStoryletPropertyType::Flags;
+		if (T == storylets::PropertyTypes::Quality) return EStoryletPropertyType::Quality;
 		return EStoryletPropertyType::Boolean;
 	}
 
@@ -607,6 +608,10 @@ TArray<FStoryletPropertyView> UStoryletFlow::ListProperties() const
 		{
 			for (const std::string& V : *R.values) Row.Values.Add(Ue(V));
 		}
+		if (R.stages.has_value())
+		{
+			for (const std::string& V : *R.stages) Row.Stages.Add(Ue(V));
+		}
 		Row.bWritable = R.writable;
 		Row.bIsDefault = R.value.valueEquals(R.defaultValue);
 		Out.Add(MoveTemp(Row));
@@ -847,6 +852,10 @@ TArray<FStoryletPropertyView> UStoryletEngine::ListProperties() const
 		if (R.values.has_value())
 		{
 			for (const std::string& V : *R.values) Row.Values.Add(Ue(V));
+		}
+		if (R.stages.has_value())
+		{
+			for (const std::string& V : *R.stages) Row.Stages.Add(Ue(V));
 		}
 		Row.bWritable = R.writable;
 		Row.bIsDefault = R.value.valueEquals(R.defaultValue);

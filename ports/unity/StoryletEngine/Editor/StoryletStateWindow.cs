@@ -279,8 +279,14 @@ namespace StoryletStudio.StoryletEngine.Editor
                     return StoryletValue.Str(EditorGUILayout.DelayedTextField(GUIContent.none, current));
                 }
                 case PropertyTypes.Enum:
+                case PropertyTypes.Quality:
                 {
-                    var opts = row.Values ?? new List<string>();
+                    // A quality edits as a dropdown of its STAGE LADDER, closed exactly
+                    // like an enum's values. ListProperties has carried Stages for this
+                    // all along; until 2026-09-01 nothing read it and a quality fell to
+                    // the read-only label below.
+                    var opts = (row.Type == PropertyTypes.Quality ? row.Stages : row.Values)
+                               ?? new List<string>();
                     if (opts.Count == 0)
                     {
                         EditorGUILayout.LabelField(row.Value?.ToString() ?? "");

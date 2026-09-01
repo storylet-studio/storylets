@@ -94,6 +94,23 @@ func _process(_delta: float) -> bool:
 		3:
 			_check("the closed flow's section goes", not body.contains("flow: bob"), body)
 			_check("the open one stays", body.contains("flow: alice"), body)
+			# A QUALITY edits as its ladder, not as free text and not as a label.
+			# The widget is asked for directly: whether the demo bundle happens to
+			# declare a quality is not what is under test, and a check that only
+			# runs when it does is a check that stops running the day it does not.
+			var ladder := ["dawn", "noon", "dusk"]
+			var q_row := {
+				"path": "story.hour", "name": "hour", "type": "quality",
+				"value": "noon", "default": "dawn", "stages": ladder, "writable": true,
+			}
+			var w = _panel._make_widget(_engine.open_flow("alice"), q_row)
+			_check("a quality edits as a dropdown, not a read-only label", w is OptionButton, str(w))
+			if w is OptionButton:
+				var ob := w as OptionButton
+				_check("the dropdown offers the ladder's stages", ob.item_count == ladder.size(),
+					"item_count=%d, expected %d" % [ob.item_count, ladder.size()])
+				_check("it opens on the current stage", ob.selected == 1,
+					"selected=%d, expected 1 (noon)" % ob.selected)
 			StoryletDebug.unregister(_engine)
 		_:
 			_check("unregistering empties the panel", body.contains("No engines registered"), body)

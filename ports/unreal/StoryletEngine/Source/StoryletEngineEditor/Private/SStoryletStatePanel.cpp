@@ -662,9 +662,16 @@ TSharedRef<SWidget> SStoryletStatePanel::BuildRow(
 		break;
 
 	case EStoryletPropertyType::Enum:
+	case EStoryletPropertyType::Quality:
 	{
+		// A quality edits as a dropdown of its STAGE LADDER, closed exactly like an
+		// enum's values. Until 2026-09-01 there was no Quality in the Blueprint enum
+		// at all, so PropertyTypeFrom's fallback made every quality a Boolean and this
+		// panel drew a writable checkbox for an ordered ladder of names.
 		TSharedRef<TArray<TSharedPtr<FString>>> Options = MakeShared<TArray<TSharedPtr<FString>>>();
-		for (const FString& V : Row.Values) { Options->Add(MakeShared<FString>(V)); }
+		const TArray<FString>& Choices =
+			Row.Type == EStoryletPropertyType::Quality ? Row.Stages : Row.Values;
+		for (const FString& V : Choices) { Options->Add(MakeShared<FString>(V)); }
 		EnumSources.Add(Options);
 
 		TSharedPtr<FString> Initial;

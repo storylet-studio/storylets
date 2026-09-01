@@ -56,6 +56,7 @@ namespace
 		if (T == storylets::PropertyTypes::String) return EStoryletPropertyType::String;
 		if (T == storylets::PropertyTypes::Enum) return EStoryletPropertyType::Enum;
 		if (T == storylets::PropertyTypes::Flags) return EStoryletPropertyType::Flags;
+		if (T == storylets::PropertyTypes::Quality) return EStoryletPropertyType::Quality;
 		return EStoryletPropertyType::Boolean;
 	}
 

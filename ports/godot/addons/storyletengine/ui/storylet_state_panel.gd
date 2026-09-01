@@ -287,9 +287,13 @@ func _make_widget(s: StoryletFlow, row: Dictionary) -> Control:
 			le.text = str(row["value"]) if row["value"] != null else ""
 			le.text_submitted.connect(_on_string.bind(s, path))
 			return le
-		"enum":
+		"enum", "quality":
+			# A quality edits as a dropdown of its STAGE LADDER, closed exactly like an
+			# enum's values. list_properties has carried "stages" for this all along;
+			# until 2026-09-01 nothing read it and a quality fell past every arm to the
+			# read-only label at the end of this function.
 			var ob := OptionButton.new()
-			var opts: Array = row.get("values", [])
+			var opts: Array = row.get("stages", []) if row.get("type", "") == "quality" else row.get("values", [])
 			for o in opts:
 				ob.add_item(str(o))
 			var cur := opts.find(row["value"]) if row["value"] != null else -1
