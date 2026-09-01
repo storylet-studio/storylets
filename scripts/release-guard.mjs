@@ -1,28 +1,31 @@
+// GENERATED - vendored from expr/tooling/release-guard.mjs by scripts/vendor-ports.mjs.
+// Do not edit here; edit the shared source and re-run the script.
 // Refuse a push that moves a published package's source with no changeset covering it.
 //
 //   npm run release:guard                 # origin/main..HEAD
 //   npm run release:guard -- <base> <head>
 //   npm run release:guard -- --warn       # report, exit 0
 //
-// Three packages reach npm: @storylet-studio/model, @storylet-studio/dialect and
-// @storylet-studio/runtime. Everything else in packages/ is `private` AND listed in
-// .changeset/config.json's `ignore`, which takes both to be sure: `ignore` keeps a package out
-// of versioning, `private` keeps it out of the registry, and several of them sit at 0.0.0.
+// THE FAILURE THIS EXISTS FOR, from Patterplay on 2026-08-18: two published packages both
+// gained a feature, went to main with no changeset, and the Release workflow ran green in
+// 44 seconds having published nothing. That is worse than a missed release. The registry
+// keeps serving one build while the repo at that version number holds different source, so
+// a version number stops identifying a build - and nothing anywhere goes red, because
+// publishing nothing is a legitimate outcome for that workflow.
 //
-// One package is deliberately NOT treated as ordinary:
-//   - `@storylet-studio/runtime` is versioned by `npm run bump:play` as the JS member of the
-//     lockstep runtime set, together with the Unity, Unreal and Godot ports, because one version
-//     number has to mean one runtime behaviour across all four. A changeset naming it would bump
-//     it out of step with three ports that never had that version, so a changeset that names it
-//     is reported as an error of its own, and a change to it is reported as a note.
+// A `changeset-check` on pull requests cannot catch it. Both families work directly on
+// main, so the check has to run on the push path, which is what this does.
 //
-// Taken from Patterplay's scripts/release-guard.mjs, which exists because @patterkit/ops and
-// @patterkit/cli both gained a feature, went straight to main, and the release ran green having
-// published nothing - leaving the registry serving one build under a version number the repo had
-// given to another. This repo works directly on main too, and a PR-side check would not have
-// caught it.
+// ONE PACKAGE IS NOT ORDINARY. The JS runtime named below is the JS member of the lockstep
+// runtime set, versioned by `npm run bump:play` together with the Unity, Unreal and Godot
+// ports, because one version number has to mean one runtime behaviour across all four. A
+// changeset naming it would bump it out of step with three ports that never had that
+// version, so naming it is an error of its own, and changing it is reported as a note.
 //
-// Exit 0 clean, 1 with findings. `--warn` downgrades to a warning for advisory use.
+// Packages that are `private` AND `ignore`d never publish, so their source moves freely.
+// It takes both: `ignore` keeps a package out of versioning, `private` keeps it out of the
+// registry, and a public package sitting at 0.0.0 is one workflow run from being on the
+// registry forever.
 
 import { execSync } from "node:child_process";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
