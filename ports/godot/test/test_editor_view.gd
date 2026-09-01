@@ -75,5 +75,24 @@ func _run() -> void:
 		mapped_text.substr(0, 120))
 	_check("it says the engine ignores it", mapped_text.contains("The engine ignores it"))
 
+
+	# The two states the SHARED frame owns (expr/bundle_view.gd), rather than
+	# the render. Neither was covered until 2026-09-01, and they are exactly
+	# where the Unreal equivalents of this view drifted: one family taught its
+	# error state to distinguish "failed to load" from "never parsed" and the
+	# other did not, so an unparsed bundle showed a blank Inspector.
+	view.set_bundle_resource(null)
+	var empty_text := _text_of(view)
+	_check("nothing selected says so", empty_text.contains("No bundle selected"), empty_text.substr(0, 60))
+
+	# Built the way the IMPORT PLUGIN builds it, not via from_json_text: that
+	# returns null for an invalid bundle, so it can never reach this state.
+	var broken := StoryletBundleResource.new()
+	broken.json_text = "{ not json at all"
+	view.set_bundle_resource(broken)
+	var broken_text := _text_of(view)
+	_check("a bundle that fails to load says so", broken_text.contains("failed to load"), broken_text.substr(0, 80))
+	_check("and says why, rather than showing a blank panel", broken_text.strip_edges().length() > 30, broken_text.substr(0, 80))
+
 	print("EDITOR VIEW %s" % ("ALL PASS" if _fails == 0 else "%d FAILED" % _fails))
 	quit(0 if _fails == 0 else 1)

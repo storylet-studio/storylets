@@ -103,11 +103,12 @@ static func _fn_check_flags(args: Array, h: Dictionary) -> Variant:
 	if StoryletExpression.is_error(flags):
 		return flags
 	for i in range(1, args.size()):
-		var arg: Dictionary = args[i]
-		if arg.get("kind") != "flagdelta":
+		# A flagdelta node is ["fd", sign, name] in the tagged-tuple form.
+		var arg = args[i]
+		if not (arg is Array) or arg.size() != 3 or arg[0] != "fd":
 			return StoryletExpression.error("check_flags() flag args must be +flagName or -flagName")
-		var present: bool = (flags as Array).has(arg["name"])
-		if (not present) if arg["sign"] == "+" else present:
+		var present: bool = (flags as Array).has(arg[2])
+		if (not present) if arg[1] == "+" else present:
 			return false
 	return true
 
@@ -118,16 +119,20 @@ static func _fn_set_flags(args: Array, h: Dictionary) -> Variant:
 		return flags
 	var result: Array = (flags as Array).duplicate()
 	for i in range(1, args.size()):
-		var arg: Dictionary = args[i]
-		if arg.get("kind") != "flagdelta":
+		# A flagdelta node is ["fd", sign, name] in the tagged-tuple form.
+		var arg = args[i]
+		if not (arg is Array) or arg.size() != 3 or arg[0] != "fd":
 			return StoryletExpression.error("set_flags() flag args must be +flagName or -flagName")
-		if arg["sign"] == "+":
-			if not result.has(arg["name"]):
-				result.append(arg["name"])
+		if arg[1] == "+":
+			if not result.has(arg[2]):
+				result.append(arg[2])
 		else:
-			result.erase(arg["name"])
-	# Canonically sorted: flag values compare by value across ports and in
-	# saves, so the stored order must be deterministic (schema 6.3).
+			result.erase(arg[2])
+	# Sorted so a SAVE is deterministic: the same flags reached by different
+	# routes serialise to the same bytes, which keeps save diffs and cross-runtime
+	# byte comparisons stable. It is no longer what makes equality work - flags
+	# compare as a SET since 2026-09-01 - so this is now about the stored form
+	# only, and Patterplay not sorting is a difference that costs nothing.
 	result.sort()
 	return result
 

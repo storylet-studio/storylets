@@ -33,12 +33,12 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
-	if _import_plugin != null:
-		remove_import_plugin(_import_plugin)
-		_import_plugin = null
 	if _inspector_plugin != null:
 		remove_inspector_plugin(_inspector_plugin)
 		_inspector_plugin = null
+	if _import_plugin != null:
+		remove_import_plugin(_import_plugin)
+		_import_plugin = null
 	# Removed last, mirroring registration. A plugin that registers and never removes leaves Godot
 	# holding freed script instances, and it aborts on shutdown.
 	if _export_plugin != null:

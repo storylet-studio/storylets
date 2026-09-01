@@ -96,12 +96,3 @@ static func load_from_dict(bundle: Dictionary) -> Dictionary:
 	return {"ok": true, "bundle": bundle}
 
 
-## The compiled node for an {src, ast} expression envelope, deserialised once
-## and cached on the envelope itself (idempotent; the bundle Dictionary is
-## otherwise immutable). Returns null (with push_error) on a malformed AST.
-static func node_of(expr: Dictionary) -> Variant:
-	if expr.has("__node"):
-		return expr["__node"]
-	var node = StoryletAst.deserialise(expr.get("ast"))
-	expr["__node"] = node
-	return node

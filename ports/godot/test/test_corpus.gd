@@ -50,6 +50,27 @@ func _initialize() -> void:
 	print("corpus version %d" % int(root["version"]))
 	print("expressions: %d/%d  specificity: %d/%d  peek: %d/%d  scripted: %d/%d" % [
 		e, expressions.size(), sp, specificity.size(), p, peek.size(), s, scripted.size()])
+	# The expr parity corpus sits beside ours, vendored from ../expr. Absent is a
+	# FAILURE, not a skip: a parity gate that quietly does nothing when its fixture
+	# is missing is the shape of check this codebase has been bitten by.
+	var expr_path := path.get_base_dir().path_join("expr-corpus.json")
+	var expr_text := FileAccess.get_file_as_string(expr_path)
+	if expr_text == "":
+		push_error("expr parity corpus not found: " + expr_path)
+		quit(2)
+		return
+	var expr_root = JSON.parse_string(expr_text)
+	if not (expr_root is Dictionary):
+		push_error("expr parity corpus is not valid JSON")
+		quit(2)
+		return
+	var x_prng: Array = expr_root["prng"]
+	var x_expr: Array = expr_root["expressions"]
+	var xp := _run_expr_prng(x_prng)
+	var xe := _run_expressions(x_expr)
+	print("expr corpus v%d - prng: %d/%d  expressions: %d/%d" % [
+		int(expr_root["version"]), xp, x_prng.size(), xe, x_expr.size()])
+
 	print("ALL PASS" if _fails == 0 else "%d FAILED" % _fails)
 	quit(0 if _fails == 0 else 1)
 
@@ -124,14 +145,77 @@ static func _hand_game_ids(bundle: Dictionary) -> Dictionary:
 	return names
 
 
+
+# -- the @wildwinter/expr parity corpus -------------------------------------------
+#
+# A SECOND corpus, authored in ../expr and vendored here, holding the primitives
+# both product families share and neither family's own corpus tests: seed
+# coercion, the PRNG draw and state sequence, operator typing, short-circuiting,
+# value equality and the comparison rules. The evaluator is exercised only
+# incidentally by the storylet corpus (through dealing), so a divergence in expr
+# itself failed nothing anywhere until this existed.
+#
+# Its `expressions` section has the same shape as ours and reuses
+# _run_expressions; only the PRNG section is new.
+
+
+# JSON has no literal for the non-finite doubles, and they are exactly the
+# interesting coercion cases, so the corpus carries them as strings.
+static func _expr_seed(v: Variant) -> float:
+	if typeof(v) == TYPE_STRING:
+		match v:
+			"NaN": return NAN
+			"Infinity": return INF
+			"-Infinity": return -INF
+	return float(v)
+
+
+func _run_expr_prng(cases: Array) -> int:
+	var pass_count := 0
+	for c in cases:
+		var name: String = c["name"]
+		var prng := StoryletMulberry32.new(_expr_seed(c["seed"]))
+
+		var want_seed := int(c["expectSeedState"])
+		if prng.state() != want_seed:
+			_fail("expr/prng", name, "seed state %d, expected %d" % [prng.state(), want_seed])
+			continue
+
+		var states: Array = c["expectStates"]
+		var draws: Array = c["expectDraws"]
+		var ok := true
+		for i in states.size():
+			var d := prng.next()
+			# The corpus pins the draw's NUMERATOR, an exact uint32, so no port is
+			# held to another language's float printing.
+			var got_draw := int(round(d * 4294967296.0))
+			if got_draw != int(draws[i]):
+				_fail("expr/prng", name, "draw %d is %d, expected %d" % [i + 1, got_draw, int(draws[i])])
+				ok = false
+				break
+			if prng.state() != int(states[i]):
+				_fail("expr/prng", name, "state after draw %d is %d, expected %d" % [i + 1, prng.state(), int(states[i])])
+				ok = false
+				break
+			if d < 0.0 or d >= 1.0:
+				_fail("expr/prng", name, "draw %d is %f, outside [0, 1)" % [i + 1, d])
+				ok = false
+				break
+		if ok:
+			pass_count += 1
+	return pass_count
+
+
 # -- expressions ------------------------------------------------------------------
 
 func _run_expressions(cases: Array) -> int:
 	var pass_count := 0
 	for c in cases:
 		var name: String = c["name"]
-		var node = StoryletAst.deserialise(c["ast"])
-		if node == null:
+		# The compiled `ast` IS the node: the evaluator walks the tagged-tuple
+		# form the corpus carries, with no deserialise pass.
+		var node = c["ast"]
+		if not (node is Array):
 			_fail("expressions", name, "malformed AST")
 			continue
 		# The reference runner always supplies a PRNG (seed ?? 0).
@@ -163,12 +247,14 @@ func _run_specificity(cases: Array) -> int:
 	var pass_count := 0
 	for c in cases:
 		var name: String = c["name"]
-		var node = StoryletAst.deserialise(c["ast"])
-		if node == null:
+		# The compiled `ast` IS the node: the evaluator walks the tagged-tuple
+		# form the corpus carries, with no deserialise pass.
+		var node = c["ast"]
+		if not (node is Array):
 			_fail("specificity", name, "malformed AST")
 			continue
 		var ctx := {"scopes": _scopes_of(c)}
-		var truthy := func(n: Dictionary) -> bool:
+		var truthy := func(n: Array) -> bool:
 			var r = StoryletExpression.evaluate(n, ctx, _dialect)
 			if StoryletExpression.is_error(r):
 				return false

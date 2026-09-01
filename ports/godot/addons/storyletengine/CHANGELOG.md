@@ -6,6 +6,59 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING: the `StoryletAst` class is gone.** The evaluator now walks the
+  tagged-tuple form a bundle already carries, so there is no deserialisation step
+  and nothing to expose. It was an internal detail and is not referenced anywhere
+  in the addon; if you called `StoryletAst.deserialise`, the compiled `ast` array
+  is now what the evaluator takes directly.
+
+### Changed
+
+- **BREAKING: a bare non-boolean condition now passes when it is non-empty.** A
+  condition that resolves to a string or a flag list previously always FAILED;
+  it now passes when the string is non-empty or the list has members, which is
+  what Patterplay has always done and what JavaScript coerces.
+
+  This is a behaviour change to existing content: a card gated on a bare
+  `@story.title` was unreachable and now is not. Booleans and numbers are
+  unaffected.
+
+  The two engines share a property registry, so the same value read from the
+  same registry answered a condition differently depending on which engine
+  asked. That was drift from writing them at different times rather than a
+  decision, and this is the side that was wrong.
+
+- **Flags compare as a SET.** `==` and `!=` on a flags value now ignore order.
+  They are compared as multisets, so a duplicated flag still counts. The stored
+  order was an artefact of the order somebody happened to add things in, and
+  `set_flags` sorting its result only held while every producer sorted, which a
+  declared default or a host-supplied list does not. `set_flags` still sorts, now
+  purely so a save is byte-reproducible.
+
+### Fixed
+
+- **Numbers render the way JavaScript's `String(n)` renders them.** This is
+  described as the cross-runtime number-rendering contract and it did not hold.
+  `js_number` used a 1e15 cutoff and `String.num`'s 14-decimal default, so
+  `0.1 + 0.2` showed as `0.3`, `1e16` as `10000000000000000.0` with a trailing
+  `.0`, and `1/3` lost two digits.
+- **The PRNG seed is coerced the way JavaScript coerces it** (ECMA-262 ToUint32).
+  `StoryletMulberry32` took an `int`, so seeds outside 64-bit integer range
+  (`1e19`, `Infinity`) both answered `4294967295` rather than `2313682944` and
+  `0`. The other three runtimes were already correct, which is why nothing
+  noticed.
+
+### Changed
+
+- The evaluator, the specificity scorer, the value helpers, the PRNG and both
+  bundle plugins moved to `runtime/expr/`, generated from a single shared source
+  also used by Patterplay. `StoryletExpression`, `StoryletValues`,
+  `StoryletMulberry32` and `StoryletSpecificity` are unchanged as names and
+  members; they are now thin wrappers over that source.
+
+
 ## [0.1.0] - 2026-08-30
 
 ### Added

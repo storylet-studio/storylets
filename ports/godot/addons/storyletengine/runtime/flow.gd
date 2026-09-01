@@ -370,8 +370,10 @@ func _eval_ctx(box: Dictionary, deck, hand_env: Dictionary) -> Dictionary:
 
 # Evaluate an {src, ast} envelope; a scalar value or an EvalError.
 func _eval(expr: Dictionary, ctx: Dictionary) -> Variant:
-	var node = StoryletBundle.node_of(expr)
-	if node == null:
+	# The compiled `ast` IS the node: the evaluator walks the tagged-tuple form
+	# a bundle already carries, so there is no deserialise pass and no cache.
+	var node = expr.get("ast")
+	if not (node is Array):
 		return StoryletExpression.error("malformed expression AST")
 	return StoryletExpression.evaluate(node, ctx, _engine._dialect)
 
@@ -712,9 +714,9 @@ func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
 
 			var spec := 0
 			if box["ranking"].get("specificity", true) and card.has("condition"):
-				var node = StoryletBundle.node_of(card["condition"])
-				if node != null:
-					var truthy := func(n: Dictionary) -> bool:
+				var node = card["condition"].get("ast")
+				if node is Array:
+					var truthy := func(n: Array) -> bool:
 						var r = StoryletExpression.evaluate(n, ctx, _engine._dialect)
 						if StoryletExpression.is_error(r):
 							return false
