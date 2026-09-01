@@ -1,10 +1,16 @@
-// A storylets scalar value: boolean, number, string, or a flags list (string[]).
-// Mirrors @wildwinter/expr's ScalarValue and the VALUE equality the JS runtime
-// uses for == / != (primitives by value; flags element-wise, in order; mixed
-// kinds unequal - the old PAR-3 lesson lives here, in one place).
+// GENERATED - vendored from expr/ports/unity/Value.cs by scripts/vendor-ports.mjs.
+// Do not edit here; edit the shared source and re-run the script.
+// ---------------------------------------------------------------------------
+// The scalar value type, for Unity / C#. THE SHARED SOURCE.
 //
-// The storylets PropertyType set is boolean / number / string / enum / flags;
-// an enum value is a string at runtime, so four kinds carry all five types.
+// Authored in expr/ports/unity and VENDORED into each consuming package by
+// expr/scripts/vendor-ports.mjs. Do not edit a vendored copy.
+//
+// The four kinds the expression language has. Both families had their own, 68%
+// alike and with character-identical ValueEquals, so most of the difference was
+// spelling. Lands in the package's own namespace, inside its Runtime asmdef.
+// The family supplies its own EvalError before this is used.
+// ---------------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -60,7 +66,13 @@ namespace StoryletStudio.StoryletEngine
             {
                 if (Kind != StoryletKind.Flags || other.Kind != StoryletKind.Flags) return false;
                 if (_f.Count != other._f.Count) return false;
-                for (int i = 0; i < _f.Count; i++) if (_f[i] != other._f[i]) return false;
+                // Compared as a SET: order is an artefact of the order somebody
+                // happened to add things in, and was significant until
+                // 2026-09-01, which was a bug. Sorted copies, so a duplicate
+                // still counts.
+                var x = new List<string>(_f); x.Sort(StringComparer.Ordinal);
+                var y = new List<string>(other._f); y.Sort(StringComparer.Ordinal);
+                for (int i = 0; i < x.Count; i++) if (x[i] != y[i]) return false;
                 return true;
             }
             if (Kind != other.Kind) return false;
@@ -103,9 +115,14 @@ namespace StoryletStudio.StoryletEngine
             if (double.IsNaN(n)) return "NaN";
             if (double.IsPositiveInfinity(n)) return "Infinity";
             if (double.IsNegativeInfinity(n)) return "-Infinity";
-            // Integral doubles print without a decimal point (matches JS).
+            // Integral values below 1e21 print with no decimal point and no
+            // exponent, which is what JS does. NOT via (long): that overflows
+            // above 2^63, and both families printed 1e20 as
+            // "9223372036854775807" until 2026-09-01.
             if (n == Math.Floor(n) && Math.Abs(n) < 1e21)
-                return ((long)n).ToString(CultureInfo.InvariantCulture);
+                return n.ToString("F0", CultureInfo.InvariantCulture);
+            // Otherwise the shortest representation that round-trips, which is
+            // what JS picks. "R" is exactly that.
             return n.ToString("R", CultureInfo.InvariantCulture);
         }
 
@@ -128,6 +145,40 @@ namespace StoryletStudio.StoryletEngine
                 }
             }
             return sb.Append("\"").ToString();
+        }
+
+        /// <summary>The string a JS host would interpolate or display: a bare
+        /// string, a comma-joined flag list. Distinct from ToJsonString, which
+        /// quotes.</summary>
+        public string ToDisplayString()
+        {
+            switch (Kind)
+            {
+                case StoryletKind.Bool: return _b ? "true" : "false";
+                case StoryletKind.Number: return JsNumber(_n);
+                case StoryletKind.Str: return _s;
+                case StoryletKind.Flags: return string.Join(",", _f);
+                default: return "";
+            }
+        }
+
+        /// <summary>Truthiness for a bare condition: booleans and numbers as you
+        /// would expect, a string when non-empty, a flag list when non-empty.
+        /// The two families disagreed about this until 2026-09-01, which
+        /// mattered because they share a property registry.</summary>
+        public bool Truthy
+        {
+            get
+            {
+                switch (Kind)
+                {
+                    case StoryletKind.Bool: return _b;
+                    case StoryletKind.Number: return _n != 0;
+                    case StoryletKind.Str: return _s.Length > 0;
+                    case StoryletKind.Flags: return _f.Count > 0;
+                    default: return false;
+                }
+            }
         }
 
         public override string ToString() => ToJsonString();

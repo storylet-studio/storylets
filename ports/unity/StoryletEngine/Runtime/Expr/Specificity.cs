@@ -1,8 +1,17 @@
-// Matched-constraint specificity: score how many atomic constraints in an
-// expression are actively holding it true against the current state. Port of
-// @wildwinter/expr-specificity (expr/packages/expr-specificity/src/index.ts).
-// An evaluation-aware walk: the host supplies truthiness via an evalTruthy
-// closure, so this stays ignorant of the eval context and the dialect.
+// GENERATED - vendored from expr/ports/unity/Specificity.cs by scripts/vendor-ports.mjs.
+// Do not edit here; edit the shared source and re-run the script.
+// ---------------------------------------------------------------------------
+// @wildwinter/expr-specificity - for Unity / C#. THE SHARED SOURCE.
+//
+// Authored in expr/ports/unity and VENDORED into each consuming package by
+// expr/scripts/vendor-ports.mjs. Do not edit a vendored copy.
+//
+// Lands in the package's own namespace, inside its existing Runtime asmdef.
+//
+// A PURER shared thing than the evaluator: no value type, no dialect, no
+// scopes. Just an AST walk plus a truthiness callback the host supplies, which
+// is exactly why truthiness being host policy does not stop it being shared.
+// ---------------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;

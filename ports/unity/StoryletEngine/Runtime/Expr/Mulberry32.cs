@@ -1,7 +1,20 @@
-// The contractual PRNG: mulberry32, bit-for-bit across every port (schema 3.3;
-// packages/runtime/src/prng.ts ported exactly). Default seed 0; the state is a
-// plain uint32 persisted in the save envelope. All arithmetic is unchecked
-// 32-bit (uint), matching JavaScript's `>>> 0` / Math.imul.
+// GENERATED - vendored from expr/ports/unity/Mulberry32.cs by scripts/vendor-ports.mjs.
+// Do not edit here; edit the shared source and re-run the script.
+// ---------------------------------------------------------------------------
+// mulberry32 - the contractual PRNG, for Unity / C#. THE SHARED SOURCE.
+//
+// Authored in expr/ports/unity and VENDORED into each consuming package by
+// expr/scripts/vendor-ports.mjs. Do not edit a vendored copy.
+//
+// A fixed, published algorithm that both product families need and neither
+// owns. Port of @wildwinter/expr's prng.ts. All arithmetic is unchecked 32-bit,
+// matching JavaScript's `>>> 0` and Math.imul.
+//
+// The seed is a DOUBLE and is coerced exactly as JavaScript's `seed >>> 0`
+// coerces it (ECMA-262 7.1.6 ToUint32): the JS API's seed is a `number`, so
+// anything narrower moves the coercion to the caller and loses the very seeds
+// that need it.
+// ---------------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;

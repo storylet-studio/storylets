@@ -63,6 +63,24 @@ namespace StoryletStudio.StoryletEngine.TestHost
             Console.WriteLine(
                 $"expressions: {e}/{expressions.Count}  specificity: {sp}/{specificity.Count}  " +
                 $"peek: {p}/{peek.Count}  scripted: {s}/{scripted.Count}");
+            // The expr parity corpus sits beside ours, vendored from ../expr. Absent is
+            // a FAILURE, not a skip: a parity gate that quietly does nothing when its
+            // fixture is missing is the shape of check this codebase has been bitten by.
+            string exprPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".", "expr-corpus.json");
+            if (!File.Exists(exprPath))
+            {
+                Console.Error.WriteLine($"expr parity corpus not found: {exprPath}");
+                return 2;
+            }
+            var exprRoot = JObject.Parse(File.ReadAllText(exprPath));
+            var xprng = (JArray)exprRoot["prng"];
+            var xexpr = (JArray)exprRoot["expressions"];
+            int xp = RunExprPrng(xprng);
+            int xe = RunExpressions(xexpr);
+            Console.WriteLine(
+                $"expr corpus v{exprRoot.Value<int>("version")} - " +
+                $"prng: {xp}/{xprng.Count}  expressions: {xe}/{xexpr.Count}");
+
             Console.WriteLine(_fails == 0 ? "ALL PASS" : $"{_fails} FAILED");
             return _fails == 0 ? 0 : 1;
         }
@@ -129,6 +147,80 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 ctx.Scopes[scope.Key] = new BagScope(bag);
             }
             return ctx;
+        }
+
+
+        // -- the @wildwinter/expr parity corpus ---------------------------------
+        //
+        // A SECOND corpus, authored in ../expr and vendored here, holding the
+        // primitives both product families share and neither family's own corpus
+        // tests: seed coercion, the PRNG draw and state sequence, operator typing,
+        // short-circuiting, value equality and the comparison rules. The evaluator
+        // is exercised only incidentally by the storylet corpus (through dealing),
+        // so a divergence in expr itself failed nothing anywhere until this existed.
+        //
+        // Its `expressions` section has the same shape as ours and reuses
+        // RunExpressions; only the PRNG section is new.
+
+        /// <summary>JSON has no literal for the non-finite doubles, and they are exactly
+        /// the interesting coercion cases, so the corpus carries them as strings.</summary>
+        private static double ExprSeed(JToken v)
+        {
+            if (v.Type != JTokenType.String) return v.ToObject<double>();
+            switch (v.ToObject<string>())
+            {
+                case "NaN": return double.NaN;
+                case "Infinity": return double.PositiveInfinity;
+                case "-Infinity": return double.NegativeInfinity;
+                default: throw new Exception($"unknown seed literal: {v.ToObject<string>()}");
+            }
+        }
+
+        private static int RunExprPrng(JArray cases)
+        {
+            int pass = 0;
+            foreach (var c in cases.Cast<JObject>())
+            {
+                var name = c.Value<string>("name");
+                var prng = new Mulberry32(ExprSeed(c["seed"]));
+
+                uint wantSeed = c.Value<uint>("expectSeedState");
+                if (prng.State != wantSeed)
+                {
+                    Fail("expr/prng", name, $"seed state {prng.State}, expected {wantSeed}");
+                    continue;
+                }
+
+                var states = (JArray)c["expectStates"];
+                var draws = (JArray)c["expectDraws"];
+                bool ok = true;
+                for (int i = 0; i < states.Count && ok; i++)
+                {
+                    double d = prng.Next();
+                    // The corpus pins the draw's NUMERATOR, an exact uint32, so no port
+                    // is held to another language's float printing.
+                    uint gotDraw = (uint)Math.Round(d * 4294967296.0);
+                    uint wantDraw = draws[i].ToObject<uint>();
+                    uint wantState = states[i].ToObject<uint>();
+                    if (gotDraw != wantDraw)
+                    {
+                        Fail("expr/prng", name, $"draw {i + 1} is {gotDraw}, expected {wantDraw}");
+                        ok = false;
+                    }
+                    else if (prng.State != wantState)
+                    {
+                        Fail("expr/prng", name, $"state after draw {i + 1} is {prng.State}, expected {wantState}");
+                        ok = false;
+                    }
+                    else if (!(d >= 0.0 && d < 1.0))
+                    {
+                        Fail("expr/prng", name, $"draw {i + 1} is {d}, outside [0, 1)");
+                        ok = false;
+                    }
+                }
+                if (ok) pass++;
+            }
+            return pass;
         }
 
         private static int RunExpressions(JArray cases)

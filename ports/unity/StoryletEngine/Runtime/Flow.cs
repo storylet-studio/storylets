@@ -107,12 +107,11 @@ namespace StoryletStudio.StoryletEngine
             return new PropertyBag(decls, n => n);
         }
 
-        private static bool ConditionPasses(StoryletValue v)
-        {
-            if (v.IsBool) return v.AsBool;
-            if (v.IsNumber) return v.AsNumber != 0;
-            return false;
-        }
+        /// <summary>Truthiness for a bare condition. One line, because the rule is
+        /// on the SHARED value type: the two families disagreed about it until
+        /// 2026-09-01, and they share a property registry, so the same value read
+        /// from the same registry must answer the same question.</summary>
+        private static bool ConditionPasses(StoryletValue v) => v.Truthy;
 
         internal static string VerdictWire(TraceVerdict v)
         {

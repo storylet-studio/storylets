@@ -148,9 +148,12 @@ namespace StoryletStudio.StoryletEngine
                             result.Remove(delta.Name);
                         }
                     }
-                    // Canonically sorted: flag values compare by value across ports
-                    // and in saves, so the stored order must be deterministic. JS
-                    // Array.sort() default order is UTF-16 code units: ordinal.
+                    // Sorted so a SAVE is deterministic: the same flags reached by different
+                    // routes serialise to the same bytes, which keeps save diffs and cross-
+                    // runtime byte comparisons stable. It is no longer what makes equality work
+                    // - flags compare as a SET since 2026-09-01 - so this is now about the
+                    // stored form only, and Patterplay not sorting is a difference that costs
+                    // nothing.
                     result.Sort(StringComparer.Ordinal);
                     return StoryletValue.Flags(result);
                 },
