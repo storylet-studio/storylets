@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-01
+
 ### Removed
 
 - **BREAKING: the `StoryletAst` class is gone.** The evaluator now walks the

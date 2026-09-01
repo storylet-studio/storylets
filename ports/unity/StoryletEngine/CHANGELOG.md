@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-01
+
 ### Changed
 
 - **BREAKING: a bare non-boolean condition now passes when it is non-empty.** A
