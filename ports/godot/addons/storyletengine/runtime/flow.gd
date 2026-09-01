@@ -68,10 +68,10 @@ func _init(engine: StoryletEngine, flow_id: String, seed_value: int) -> void:
 	id = flow_id
 	_prng = StoryletMulberry32.new(seed_value)
 	var fd: Dictionary = engine._flow_decls
-	var stores := {"story": StoryletEngine._bag_from_decls(fd["story"]), "box": {}, "deck": {}, "hand": {}, "value": {}}
+	var stores := {"story": StoryletEngine._bag_from_decls(fd["story"], "story."), "box": {}, "deck": {}, "hand": {}, "value": {}}
 	for kind in ["box", "deck", "hand", "value"]:
 		for owner_id in fd[kind]:
-			stores[kind][owner_id] = StoryletEngine._bag_from_decls(fd[kind][owner_id])
+			stores[kind][owner_id] = StoryletEngine._bag_from_decls(fd[kind][owner_id], "%s.%s." % [kind, owner_id])
 	_stores = stores
 	for box in engine._bundle["boxes"]:
 		_turn_counts[box["id"]] = 0.0

@@ -1340,17 +1340,17 @@ namespace StoryletStudio.StoryletEngine
         /// examiner / editor surface, parity across all runtimes): @world read
         /// through the engine's resolver, then per scope the shared values and
         /// this flow's own. Bundle order.</summary>
-        public List<PropertyView> ListProperties()
+        public List<PropertyRow> ListProperties()
         {
             AssertOpen();
-            var rows = new List<PropertyView>();
+            var rows = new List<PropertyRow>();
             _engine.AddWorldRows(rows);
             void Add(string prefix, PropertyBag bag)
             {
                 if (bag == null) return;
                 foreach (var row in bag.Rows())
                 {
-                    rows.Add(new PropertyView
+                    rows.Add(new PropertyRow
                     {
                         Path = $"{prefix}.{row.Name}",
                         Name = row.Name,

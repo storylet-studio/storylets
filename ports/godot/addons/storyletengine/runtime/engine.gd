@@ -91,8 +91,13 @@ static func _half(scope: String, decls: Array, shared: bool) -> Array:
 	return out
 
 
-static func _bag_from_decls(decls: Array) -> StoryletPropertyBag:
-	return StoryletPropertyBag.new(decls, {"normalise": func(n: String) -> String: return n})
+# path_prefix carries its own separator, so a bag composes its rows' addresses itself
+# ("story.gold", "deck.tavern.drawn") instead of every caller pasting a prefix on.
+static func _bag_from_decls(decls: Array, path_prefix: String) -> StoryletPropertyBag:
+	return StoryletPropertyBag.new(decls, {
+		"normalise": func(n: String) -> String: return n,
+		"path_prefix": path_prefix,
+	})
 
 
 ## new StoryletEngine(bundle, opts). Options: {"seed": int (default 0; each
@@ -178,17 +183,17 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 ## Build the shared stores and the @world seam. The host binding sticks for
 ## the engine's lifetime; reset/load_game rebuild the shared bags around it.
 func _init_shared() -> void:
-	var shared := {"story": _bag_from_decls(_half("story", _bundle["story"].get("properties", []), true)),
+	var shared := {"story": _bag_from_decls(_half("story", _bundle["story"].get("properties", []), true), "story."),
 		"box": {}, "deck": {}, "hand": {}, "value": {}}
 	for box in _bundle["boxes"]:
-		shared["box"][box["id"]] = _bag_from_decls(_half("box", box.get("properties", []), true))
+		shared["box"][box["id"]] = _bag_from_decls(_half("box", box.get("properties", []), true), "box.%s." % box["id"])
 		for deck in box["decks"]:
-			shared["deck"][deck["id"]] = _bag_from_decls(_half("deck", deck.get("properties", []), true))
+			shared["deck"][deck["id"]] = _bag_from_decls(_half("deck", deck.get("properties", []), true), "deck.%s." % deck["id"])
 		for hand in box["hands"]:
-			shared["hand"][hand["id"]] = _bag_from_decls(_half("hand", hand_decls(hand), true))
+			shared["hand"][hand["id"]] = _bag_from_decls(_half("hand", hand_decls(hand), true), "hand.%s." % hand["id"])
 		for group in box["tagGroups"]:
 			for tag in group["tags"]:
-				shared["value"][tag["id"]] = _bag_from_decls(_half("value", tag.get("properties", []), true))
+				shared["value"][tag["id"]] = _bag_from_decls(_half("value", tag.get("properties", []), true), "value.%s." % tag["id"])
 	_shared = shared
 	if _host_world != null:
 		_world = {"get": _host_world["get"], "set": _host_world.get("set")}
@@ -196,7 +201,7 @@ func _init_shared() -> void:
 		# Standalone: self-backed from the declared defaults. Still FOREIGN in
 		# spirit - never in save_game(); a host that wants @world to persist
 		# saves the container itself.
-		var bag := _bag_from_decls(_bundle["world"].get("properties", []))
+		var bag := _bag_from_decls(_bundle["world"].get("properties", []), "world.")
 		_world = {
 			"get": func(n: String) -> Variant: return bag.get_value(n),
 			"set": func(n: String, v) -> void: bag.set_value(n, v),
@@ -452,7 +457,7 @@ func list_properties() -> Array:
 static func _add_rows(out: Array, prefix: String, bag: StoryletPropertyBag) -> void:
 	for row in bag.rows():
 		var r: Dictionary = row.duplicate()
-		r["path"] = "%s.%s" % [prefix, row["name"]]
+		# The bag addressed the row already; prefix stays as the mount label.
 		out.append(r)
 
 

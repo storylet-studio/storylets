@@ -238,12 +238,11 @@ namespace StoryletStudio.StoryletEngine
         public double? Turn;
     }
 
-    /// <summary>One examiner row, addressed by the property-path grammar
-    /// (GetProperty / SetProperty take the same path).</summary>
-    public sealed class PropertyView : PropertyRow
-    {
-        public string Path;
-    }
+    // PropertyView is gone. It was PropertyRow plus a `Path`, and Patterplay had forked
+    // the same row for the same reason in its own runtimes; `Path` moved onto the shared
+    // PropertyRow on 2026-09-02, so there was nothing left to hold. ListProperties returns
+    // the shared row itself - C# has no type alias to keep the old name alive with, and an
+    // empty subclass would be a type a bag's own row could never satisfy.
 
     /// <summary>One kernel bag with its store path prefix (world / story /
     /// box.&lt;id&gt; / deck.&lt;id&gt; / hand.&lt;id&gt; / value.&lt;id&gt;): the state logger's
@@ -347,9 +346,11 @@ namespace StoryletStudio.StoryletEngine
             return outList;
         }
 
-        private static PropertyBag BagFromDecls(IEnumerable<PropertyDecl> decls)
+        // pathPrefix carries its own separator, so a bag composes its rows' addresses itself
+        // ("story.gold", "deck.tavern.drawn") instead of every caller pasting a prefix on.
+        private static PropertyBag BagFromDecls(IEnumerable<PropertyDecl> decls, string pathPrefix)
         {
-            return new PropertyBag(decls, n => n);
+            return new PropertyBag(decls, n => n, pathPrefix);
         }
 
         private sealed class SelfWorldScope : IScopeSource
@@ -425,15 +426,15 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Build the shared stores and the @world seam.</summary>
         private void InitShared()
         {
-            var shared = new Partition { Story = BagFromDecls(Half("story", _bundle.Story.Properties, true)) };
+            var shared = new Partition { Story = BagFromDecls(Half("story", _bundle.Story.Properties, true), "story.") };
             foreach (var box in _bundle.Boxes)
             {
-                shared.Box.Set(box.Id, BagFromDecls(Half("box", box.Properties, true)));
-                foreach (var deck in box.Decks) shared.Deck.Set(deck.Id, BagFromDecls(Half("deck", deck.Properties, true)));
-                foreach (var hand in box.Hands) shared.Hand.Set(hand.Id, BagFromDecls(Half("hand", HandDecls(hand), true)));
+                shared.Box.Set(box.Id, BagFromDecls(Half("box", box.Properties, true), $"box.{box.Id}."));
+                foreach (var deck in box.Decks) shared.Deck.Set(deck.Id, BagFromDecls(Half("deck", deck.Properties, true), $"deck.{deck.Id}."));
+                foreach (var hand in box.Hands) shared.Hand.Set(hand.Id, BagFromDecls(Half("hand", HandDecls(hand), true), $"hand.{hand.Id}."));
                 foreach (var group in box.TagGroups)
                     foreach (var tag in group.Tags)
-                        shared.Value.Set(tag.Id, BagFromDecls(Half("value", tag.Properties ?? new List<PropertyDecl>(), true)));
+                        shared.Value.Set(tag.Id, BagFromDecls(Half("value", tag.Properties ?? new List<PropertyDecl>(), true), $"value.{tag.Id}."));
             }
             _shared = shared;
             if (_hostWorld == null)
@@ -441,7 +442,7 @@ namespace StoryletStudio.StoryletEngine
                 // Standalone: self-backed from the declared defaults. Still
                 // FOREIGN in spirit - never in SaveGame(); a host that wants
                 // @world to persist saves the container itself.
-                _selfWorld = BagFromDecls(_bundle.World.Properties);
+                _selfWorld = BagFromDecls(_bundle.World.Properties, "world.");
             }
         }
 
@@ -476,11 +477,11 @@ namespace StoryletStudio.StoryletEngine
 
         internal Partition BuildFlowPartition()
         {
-            var p = new Partition { Story = BagFromDecls(_flowStoryDecls) };
-            foreach (var pair in _flowBoxDecls) p.Box.Set(pair.Key, BagFromDecls(pair.Value));
-            foreach (var pair in _flowDeckDecls) p.Deck.Set(pair.Key, BagFromDecls(pair.Value));
-            foreach (var pair in _flowHandDecls) p.Hand.Set(pair.Key, BagFromDecls(pair.Value));
-            foreach (var pair in _flowValueDecls) p.Value.Set(pair.Key, BagFromDecls(pair.Value));
+            var p = new Partition { Story = BagFromDecls(_flowStoryDecls, "story.") };
+            foreach (var pair in _flowBoxDecls) p.Box.Set(pair.Key, BagFromDecls(pair.Value, $"box.{pair.Key}."));
+            foreach (var pair in _flowDeckDecls) p.Deck.Set(pair.Key, BagFromDecls(pair.Value, $"deck.{pair.Key}."));
+            foreach (var pair in _flowHandDecls) p.Hand.Set(pair.Key, BagFromDecls(pair.Value, $"hand.{pair.Key}."));
+            foreach (var pair in _flowValueDecls) p.Value.Set(pair.Key, BagFromDecls(pair.Value, $"value.{pair.Key}."));
             return p;
         }
 
@@ -695,12 +696,12 @@ namespace StoryletStudio.StoryletEngine
             }
         }
 
-        internal void AddWorldRows(List<PropertyView> rows)
+        internal void AddWorldRows(List<PropertyRow> rows)
         {
             if (_bundle.World.Properties == null) return;
             foreach (var d in _bundle.World.Properties)
             {
-                rows.Add(new PropertyView
+                rows.Add(new PropertyRow
                 {
                     Path = $"world.{d.Name}",
                     Name = d.Name,
@@ -717,25 +718,18 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>The shared surface as examiner rows: @world (read through
         /// the resolver) then the shared partitions. Per-flow rows live on each
         /// Flow.</summary>
-        public List<PropertyView> ListProperties()
+        public List<PropertyRow> ListProperties()
         {
-            var rows = new List<PropertyView>();
+            var rows = new List<PropertyRow>();
             AddWorldRows(rows);
+            // The bag composes each row's address from its own PathPrefix, so this copies
+            // nothing: the row arrives addressed. `prefix` stays as the caller's label for
+            // the mount, which is what the state logger enumerates by.
             void Add(string prefix, PropertyBag bag)
             {
                 foreach (var row in bag.Rows())
                 {
-                    rows.Add(new PropertyView
-                    {
-                        Path = $"{prefix}.{row.Name}",
-                        Name = row.Name,
-                        Type = row.Type,
-                        Value = row.Value,
-                        Default = row.Default,
-                        Values = row.Values,
-                        Stages = row.Stages,
-                        Writable = row.Writable,
-                    });
+                    rows.Add(row);
                 }
             }
             Add("story", _shared.Story);

@@ -262,7 +262,7 @@ namespace StoryletStudio.StoryletEngine.Editor
         /// no-label overload: that overload reaches Style.DrawPrefixLabel with a
         /// null GUIContent and throws ("may not be called with GUIContent that is
         /// null"). These rows draw their own label, so none is the right content.</summary>
-        private StoryletValue DrawValueField(PropertyView row)
+        private StoryletValue DrawValueField(PropertyRow row)
         {
             switch (row.Type)
             {

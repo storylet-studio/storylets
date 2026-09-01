@@ -220,11 +220,13 @@ namespace storylets
     };
 
     /** One examiner row, addressed by the property-path grammar
-     *  (getProperty / setProperty take the same path). */
-    struct PropertyView : PropertyRow
-    {
-        std::string path;
-    };
+     *  (getProperty / setProperty take the same path).
+     *
+     *  An ALIAS. This was the shared row plus a `path`, and Patterplay had forked the same
+     *  row for the same reason in its own runtimes; `path` moved onto the shared
+     *  PropertyRow on 2026-09-02, so there is nothing left to add. An empty derived struct
+     *  would be worse than an alias here: a bag's own row could never satisfy it. */
+    using PropertyView = PropertyRow;
 
     /** One kernel bag with its store path prefix (world / story / box.<id> /
      *  deck.<id> / hand.<id> / value.<id>): the state logger's mount surface
@@ -469,11 +471,14 @@ namespace storylets
 
         // Stores are shared-kernel bags: identity normalisation because
         // storylets property names are case-significant as authored.
-        static std::shared_ptr<PropertyBag> bagFromDecls(const std::vector<PropertyDecl>& decls)
+        // pathPrefix carries its own separator, so a bag composes its rows' addresses
+        // itself ("story.gold", "deck.tavern.drawn") instead of each caller pasting one on.
+        static std::shared_ptr<PropertyBag> bagFromDecls(const std::vector<PropertyDecl>& decls,
+                                                         const std::string& pathPrefix)
         {
             // PropertyDecl extends ScopeDeclaration; seed a plain declaration list.
             std::vector<ScopeDeclaration> plain(decls.begin(), decls.end());
-            return std::make_shared<PropertyBag>(&plain, [](const std::string& n) { return n; });
+            return std::make_shared<PropertyBag>(&plain, [](const std::string& n) { return n; }, pathPrefix);
         }
 
         const std::vector<PropertyDecl>& handDecls(const Hand& hand) const
@@ -499,23 +504,23 @@ namespace storylets
         void initShared()
         {
             detail::Partition shared;
-            shared.story = bagFromDecls(half("story", bundle_->story.properties, true));
+            shared.story = bagFromDecls(half("story", bundle_->story.properties, true), "story.");
             for (const auto& box : bundle_->boxes)
             {
-                shared.box.set(box.id, bagFromDecls(half("box", box.properties, true)));
+                shared.box.set(box.id, bagFromDecls(half("box", box.properties, true), "box." + box.id + "."));
                 for (const auto& deck : box.decks)
                 {
-                    shared.deck.set(deck.id, bagFromDecls(half("deck", deck.properties, true)));
+                    shared.deck.set(deck.id, bagFromDecls(half("deck", deck.properties, true), "deck." + deck.id + "."));
                 }
                 for (const auto& hand : box.hands)
                 {
-                    shared.hand.set(hand.id, bagFromDecls(half("hand", handDecls(hand), true)));
+                    shared.hand.set(hand.id, bagFromDecls(half("hand", handDecls(hand), true), "hand." + hand.id + "."));
                 }
                 for (const auto& group : box.tagGroups)
                 {
                     for (const auto& tag : group.tags)
                     {
-                        shared.value.set(tag.id, bagFromDecls(half("value", tag.properties, true)));
+                        shared.value.set(tag.id, bagFromDecls(half("value", tag.properties, true), "value." + tag.id + "."));
                     }
                 }
             }
@@ -525,7 +530,7 @@ namespace storylets
                 // Standalone: self-backed from the declared defaults. Still
                 // FOREIGN in spirit - never in saveGame(); a host that wants
                 // @world to persist saves the container itself.
-                selfWorld_ = bagFromDecls(bundle_->world.properties);
+                selfWorld_ = bagFromDecls(bundle_->world.properties, "world.");
             }
         }
 
@@ -627,11 +632,11 @@ namespace storylets
             : engine_(engine), id_(std::move(id)), prng_(seed)
         {
             const detail::FlowDecls& fd = engine_->flowDecls_;
-            stores_.story = Engine::bagFromDecls(fd.story);
-            for (const auto& pair : fd.box) stores_.box.set(pair.first, Engine::bagFromDecls(pair.second));
-            for (const auto& pair : fd.deck) stores_.deck.set(pair.first, Engine::bagFromDecls(pair.second));
-            for (const auto& pair : fd.hand) stores_.hand.set(pair.first, Engine::bagFromDecls(pair.second));
-            for (const auto& pair : fd.value) stores_.value.set(pair.first, Engine::bagFromDecls(pair.second));
+            stores_.story = Engine::bagFromDecls(fd.story, "story.");
+            for (const auto& pair : fd.box) stores_.box.set(pair.first, Engine::bagFromDecls(pair.second, "box." + pair.first + "."));
+            for (const auto& pair : fd.deck) stores_.deck.set(pair.first, Engine::bagFromDecls(pair.second, "deck." + pair.first + "."));
+            for (const auto& pair : fd.hand) stores_.hand.set(pair.first, Engine::bagFromDecls(pair.second, "hand." + pair.first + "."));
+            for (const auto& pair : fd.value) stores_.value.set(pair.first, Engine::bagFromDecls(pair.second, "value." + pair.first + "."));
             for (const auto& box : engine_->bundle_->boxes)
             {
                 turnCounts_.set(box.id, 0);
@@ -2304,17 +2309,10 @@ namespace storylets
                 if (!bag) return;
                 for (const auto& row : bag->rows())
                 {
-                    PropertyView r;
-                    r.path = prefix + "." + row.name;
-                    r.name = row.name;
-                    r.type = row.type;
-                    r.value = row.value;
-                    r.defaultValue = row.defaultValue;
-                    r.values = row.values;
-                r.stages = row.stages;
-                    r.stages = row.stages;
-                    r.writable = row.writable;
-                    rows.push_back(std::move(r));
+                    // The bag composes the address from its own pathPrefix, so the row
+                    // arrives complete and this field-by-field copy is gone - including
+                    // the `r.stages = row.stages;` that appeared twice in it.
+                    rows.push_back(row);
                 }
             };
             add("story", engine_->shared_.story.get());
@@ -2716,19 +2714,8 @@ namespace storylets
         }
         auto add = [&rows](const std::string& prefix, const PropertyBag& bag)
         {
-            for (const auto& row : bag.rows())
-            {
-                PropertyView r;
-                r.path = prefix + "." + row.name;
-                r.name = row.name;
-                r.type = row.type;
-                r.value = row.value;
-                r.defaultValue = row.defaultValue;
-                r.values = row.values;
-                r.stages = row.stages;
-                r.writable = row.writable;
-                rows.push_back(std::move(r));
-            }
+            // The bag composes the address from its own pathPrefix: the row arrives complete.
+            for (const auto& row : bag.rows()) rows.push_back(row);
         };
         add("story", *shared_.story);
         for (const auto& pair : shared_.box) add("box." + pair.first, *pair.second);

@@ -254,8 +254,10 @@ interface AskDescriptor {
 // Stores are shared-kernel bags (@wildwinter/scoperegistry, the properties
 // implementer Patter shares): identity normalisation because storylets
 // property names are case-significant as authored.
-const bagFromDecls = (decls: PropertyDecl[]): StateBag =>
-  new StateBag(decls, { normalise: (n) => n });
+// `pathPrefix` carries its own separator, so a bag composes its rows' addresses itself
+// (`story.gold`, `deck.tavern.drawn`) instead of every caller pasting a prefix onto a row.
+const bagFromDecls = (decls: PropertyDecl[], pathPrefix: string): StateBag =>
+  new StateBag(decls, { normalise: (n) => n, pathPrefix });
 
 // Truthiness for a bare condition. Booleans and numbers as you would expect;
 // a string passes when non-empty and a flag list when non-empty, matching
@@ -276,10 +278,14 @@ function conditionPasses(v: ScalarValue): boolean {
 }
 
 /** One examiner row, addressed by the property-path grammar
- *  (getProperty / setProperty take the same `path`). */
-export interface PropertyView extends PropertyRow {
-  path: string;
-}
+ *  (getProperty / setProperty take the same `path`).
+ *
+ *  An ALIAS now. This was the shared row plus a `path`, declared here because the shared
+ *  row had no address field - and Patterplay had forked it for the same reason, in the
+ *  same shape, in its own runtimes. `path` moved onto the shared PropertyRow on
+ *  2026-09-02 and a bag composes it from its own pathPrefix, so there is nothing left to
+ *  add; the name stays because it is exported API and reads well at call sites. */
+export type PropertyView = PropertyRow;
 
 /** One kernel bag with its store path prefix (story / box.<id> / deck.<id>
  *  / hand.<id> / value.<id>): the state logger's mount surface
@@ -387,16 +393,16 @@ const handDeclsOf = (internals: Internals, hand: Hand<Expression>): PropertyDecl
 const buildPartition = (internals: Internals, half: (scope: FlaggedScope, decls: PropertyDecl[]) => PropertyDecl[]): Partition => {
   const b = internals.bundle;
   return {
-    story: bagFromDecls(half("story", b.story.properties)),
-    box: new Map(b.boxes.map((box) => [box.id, bagFromDecls(half("box", box.properties))])),
+    story: bagFromDecls(half("story", b.story.properties), "story."),
+    box: new Map(b.boxes.map((box) => [box.id, bagFromDecls(half("box", box.properties), `box.${box.id}.`)])),
     deck: new Map(b.boxes.flatMap((box) => box.decks.map(
-      (deck): [string, StateBag] => [deck.id, bagFromDecls(half("deck", deck.properties))]))),
+      (deck): [string, StateBag] => [deck.id, bagFromDecls(half("deck", deck.properties), `deck.${deck.id}.`)]))),
     // A template instance inherits the template's property declarations;
     // a standalone hand declares its own (schema 2.6).
     hand: new Map(b.boxes.flatMap((box) => box.hands.map(
-      (hand): [string, StateBag] => [hand.id, bagFromDecls(half("hand", handDeclsOf(internals, hand)))]))),
+      (hand): [string, StateBag] => [hand.id, bagFromDecls(half("hand", handDeclsOf(internals, hand)), `hand.${hand.id}.`)]))),
     value: new Map(b.boxes.flatMap((box) => box.tagGroups.flatMap((group) => group.tags.map(
-      (tag): [string, StateBag] => [tag.id, bagFromDecls(half("value", tag.properties ?? []))])))),
+      (tag): [string, StateBag] => [tag.id, bagFromDecls(half("value", tag.properties ?? []), `value.${tag.id}.`)])))),
   };
 };
 
@@ -516,7 +522,7 @@ export class Engine {
       // Standalone: self-backed from the declared defaults. Still FOREIGN
       // in spirit - never in saveGame(); a host that wants @world to
       // persist saves the container itself (play-helpers ships one).
-      const bag = bagFromDecls(internals.bundle.world.properties);
+      const bag = bagFromDecls(internals.bundle.world.properties, "world.");
       internals.worldResolver = {
         get: (n) => bag.get(n),
         set: (n, v) => { bag.set(n, v); },
@@ -727,10 +733,17 @@ export class Engine {
         value: value ?? d.default, default: d.default,
         ...(d.values !== undefined ? { values: d.values } : {}),
         ...(d.stages !== undefined ? { stages: d.stages } : {}),
-      } as PropertyView);
+        // @world is FOREIGN - a host resolver backs it - so writability is whether that
+        // resolver can be written at all, which is the shared registry's own rule for a
+        // foreign scope. The `as PropertyView` cast this replaces was hiding the field's
+        // absence: the row type has always required it, and these rows shipped without one.
+        writable: this.internals.worldResolver.set !== undefined,
+      });
     }
-    const add = (prefix: string, bag: StateBag): void => {
-      for (const row of bag.rows()) out.push({ path: `${prefix}.${row.name}`, ...row });
+    // The bag composes its rows' addresses from its own pathPrefix, so the prefix here is
+    // only the caller's label for the mount; the row arrives already addressed.
+    const add = (_prefix: string, bag: StateBag): void => {
+      for (const row of bag.rows()) out.push(row);
     };
     add("story", this.internals.shared.story);
     for (const [id, bag] of this.internals.shared.box) add(`box.${id}`, bag);
@@ -1796,12 +1809,17 @@ export class Flow {
         value: value ?? d.default, default: d.default,
         ...(d.values !== undefined ? { values: d.values } : {}),
         ...(d.stages !== undefined ? { stages: d.stages } : {}),
-      } as PropertyView);
+        // @world is FOREIGN - a host resolver backs it - so writability is whether that
+        // resolver can be written at all, which is the shared registry's own rule for a
+        // foreign scope. The `as PropertyView` cast this replaces was hiding the field's
+        // absence: the row type has always required it, and these rows shipped without one.
+        writable: this.internals.worldResolver.set !== undefined,
+      });
     }
-    const add = (prefix: string, shared: StateBag | undefined, own: StateBag | undefined): void => {
+    const add = (_prefix: string, shared: StateBag | undefined, own: StateBag | undefined): void => {
       for (const bag of [shared, own]) {
         if (bag === undefined) continue;
-        for (const row of bag.rows()) out.push({ path: `${prefix}.${row.name}`, ...row });
+        for (const row of bag.rows()) out.push(row);
       }
     };
     add("story", this.internals.shared.story, this.stores.story);
