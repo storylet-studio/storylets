@@ -74,7 +74,7 @@ const SURFACES = {
       "ports/unity/StoryletEngine/Runtime/Flow.cs",
       "ports/unity/StoryletEngine/Runtime/DescribeBundle.cs",
       "ports/unity/StoryletEngine/Runtime/StateLogger.cs",
-      "ports/unity/StoryletEngine/Runtime/PropertyBag.cs",
+      "ports/unity/StoryletEngine/Runtime/Expr/PropertyBag.cs",   // vendored from expr/ports/unity
       "ports/unity/StoryletEngine/Runtime/ScopeRegistry.cs",
       "ports/unity/StoryletEngine/Runtime/Json/StoryletSave.cs",
       "ports/unity/StoryletEngine/Runtime/Unity/StoryletDebug.cs",
@@ -123,7 +123,7 @@ const SURFACES = {
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/Save.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/DescribeBundle.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/StateLogger.h",
-      "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/PropertyBag.h",
+      "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/Expr/PropertyBag.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/ScopeRegistry.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Private/StoryletSaveJson.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/StoryletDebug.h",

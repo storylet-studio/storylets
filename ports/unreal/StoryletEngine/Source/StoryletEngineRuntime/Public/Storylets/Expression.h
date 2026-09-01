@@ -18,7 +18,7 @@
 
 #include "Storylets/Ast.h"
 #include "Storylets/Expr/Expr.h"
-#include "Storylets/OrderedMap.h"
+#include "Storylets/Expr/OrderedMap.h"
 #include "Storylets/StoryletValue.h"
 
 namespace storylets

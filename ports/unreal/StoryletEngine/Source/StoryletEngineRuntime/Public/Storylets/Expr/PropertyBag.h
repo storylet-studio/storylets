@@ -1,3 +1,5 @@
+// GENERATED - vendored from expr/ports/unreal/PropertyBag.h by scripts/vendor-ports.mjs.
+// Do not edit here; edit the shared source and re-run the script.
 // The state kernel's unit of state: a typed, declared property bag with
 // defaults, the firing rule (engine writes notify subscribers; host writes are
 // silent but always auditable), examiner rows, one sanctioned clone door, and
@@ -14,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-#include "Storylets/OrderedMap.h"
+#include "Storylets/Expr/OrderedMap.h"
 #include "Storylets/StoryletValue.h"
 
 namespace storylets
@@ -113,7 +115,7 @@ namespace storylets
 
         /** Name normalisation policy: lowercase by default (the registry's
          *  long-standing contract); a product whose names are case-significant
-         *  passes identity (storylets does). */
+         *  passes identity instead. */
         explicit PropertyBag(const std::vector<ScopeDeclaration>* declarations = nullptr, Normalise normalise = nullptr)
             : norm_(normalise ? std::move(normalise) : Normalise(&LowercaseName))
         {

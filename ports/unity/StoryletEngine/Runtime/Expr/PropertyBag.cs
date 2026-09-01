@@ -1,3 +1,5 @@
+// GENERATED - vendored from expr/ports/unity/PropertyBag.cs by scripts/vendor-ports.mjs.
+// Do not edit here; edit the shared source and re-run the script.
 // The state kernel's unit of state: a typed, declared property bag with
 // defaults, the firing rule (engine writes notify subscribers; host writes are
 // silent but always auditable), examiner rows, one sanctioned clone door, and

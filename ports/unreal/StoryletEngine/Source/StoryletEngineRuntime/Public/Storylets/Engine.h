@@ -62,8 +62,8 @@
 #include "Storylets/Dialect.h"
 #include "Storylets/Expression.h"
 #include "Storylets/Mulberry32.h"
-#include "Storylets/OrderedMap.h"
-#include "Storylets/PropertyBag.h"
+#include "Storylets/Expr/OrderedMap.h"
+#include "Storylets/Expr/PropertyBag.h"
 #include "Storylets/Specificity.h"
 #include "Storylets/StoryletValue.h"
 

@@ -24,8 +24,8 @@
 #include <utility>
 #include <vector>
 
-#include "Storylets/OrderedMap.h"
-#include "Storylets/PropertyBag.h"
+#include "Storylets/Expr/OrderedMap.h"
+#include "Storylets/Expr/PropertyBag.h"
 #include "Storylets/Engine.h"
 #include "Storylets/StoryletValue.h"
 
