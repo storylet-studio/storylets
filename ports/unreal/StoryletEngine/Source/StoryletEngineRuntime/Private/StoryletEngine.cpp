@@ -59,7 +59,7 @@ namespace
 	 *  back). */
 	FString DisplayString(const storylets::StoryletValue& V)
 	{
-		switch (V.kind())
+		switch (V.kind)
 		{
 			case storylets::StoryletKind::Bool:
 				return V.asBool() ? TEXT("true") : TEXT("false");
@@ -84,7 +84,7 @@ namespace
 	FStoryletValue ConvertValue(const storylets::StoryletValue& V)
 	{
 		FStoryletValue Out;
-		switch (V.kind())
+		switch (V.kind)
 		{
 			case storylets::StoryletKind::Bool:
 				Out.Kind = EStoryletValueKind::Boolean;

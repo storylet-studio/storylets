@@ -1158,12 +1158,11 @@ namespace storylets
             AskDescriptor ask;
         };
 
-        static bool conditionPasses(const StoryletValue& v)
-        {
-            if (v.isBool()) return v.asBool();
-            if (v.isNumber()) return v.asNumber() != 0;
-            return false;
-        }
+        /** Truthiness for a bare condition. One line, because the rule is on the
+         *  SHARED value type: the two families disagreed about it until
+         *  2026-09-01, and they share a property registry, so the same value
+         *  read from the same registry must answer the same question. */
+        static bool conditionPasses(const StoryletValue& v) { return v.truthy(); }
 
         bool tracing() const { return !traceHandlers_.empty() || engine_->logCap_.has_value() || engine_->engineTracing(); }
 

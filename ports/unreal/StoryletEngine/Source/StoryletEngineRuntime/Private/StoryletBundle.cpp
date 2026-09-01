@@ -72,7 +72,7 @@ namespace
 	FStoryletValue ConvertValue(const storylets::StoryletValue& V)
 	{
 		FStoryletValue Out;
-		switch (V.kind())
+		switch (V.kind)
 		{
 			case storylets::StoryletKind::Bool:
 				Out.Kind = EStoryletValueKind::Boolean;

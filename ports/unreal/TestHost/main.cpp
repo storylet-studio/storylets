@@ -16,6 +16,8 @@
 // against a recording sink (LiveLinkFixture.h).
 
 #include <fstream>
+#include <limits>
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -952,6 +954,83 @@ static size_t runLiveLink(const std::string& corpusPath, const std::string& dump
 
 // -- main ----------------------------------------------------------------------------
 
+
+// --- the @wildwinter/expr parity corpus ------------------------------------
+//
+// A SECOND corpus, authored in ../expr and vendored here, holding the
+// primitives both product families share and neither family's own corpus
+// tests: seed coercion, the PRNG draw and state sequence, operator typing,
+// short-circuiting, value equality and the comparison rules. The evaluator is
+// exercised only incidentally by the storylet corpus (through dealing), so a
+// divergence in expr itself failed nothing anywhere until this existed.
+//
+// Its `expressions` section has the same shape as ours and goes through the
+// same runExpressions above. Only the PRNG section is new.
+
+static double exprSeed(const JsonValue& v)
+{
+    // JSON has no literal for the non-finite doubles, and they are exactly the
+    // interesting coercion cases, so the corpus carries them as strings.
+    if (v.type == JsonValue::String)
+    {
+        if (v.str == "NaN") return std::numeric_limits<double>::quiet_NaN();
+        if (v.str == "Infinity") return std::numeric_limits<double>::infinity();
+        if (v.str == "-Infinity") return -std::numeric_limits<double>::infinity();
+        throw std::runtime_error("unknown seed literal: " + v.str);
+    }
+    return v.num;
+}
+
+static int runExprPrng(const JsonValue& cases)
+{
+    int pass = 0;
+    for (const auto& c : cases.arr)
+    {
+        std::string name = c.strOr("name");
+        Mulberry32 prng(exprSeed(c.at("seed")));
+
+        const uint32_t wantSeed = static_cast<uint32_t>(c.numOr("expectSeedState", 0));
+        if (prng.state() != wantSeed)
+        {
+            fail("expr/prng", name, "seed state " + std::to_string(prng.state())
+                + ", expected " + std::to_string(wantSeed));
+            continue;
+        }
+
+        const auto& states = c.at("expectStates").arr;
+        const auto& draws = c.at("expectDraws").arr;
+        bool ok = true;
+        for (size_t i = 0; i < states.size() && ok; ++i)
+        {
+            const double d = prng.next();
+            // The corpus pins the draw's NUMERATOR, an exact uint32, so no port
+            // is held to another language's float printing.
+            const uint32_t gotDraw = static_cast<uint32_t>(llround(d * 4294967296.0));
+            const uint32_t wantDraw = static_cast<uint32_t>(draws[i].num);
+            const uint32_t wantState = static_cast<uint32_t>(states[i].num);
+            if (gotDraw != wantDraw)
+            {
+                fail("expr/prng", name, "draw " + std::to_string(i + 1) + " is "
+                    + std::to_string(gotDraw) + ", expected " + std::to_string(wantDraw));
+                ok = false;
+            }
+            else if (prng.state() != wantState)
+            {
+                fail("expr/prng", name, "state after draw " + std::to_string(i + 1) + " is "
+                    + std::to_string(prng.state()) + ", expected " + std::to_string(wantState));
+                ok = false;
+            }
+            else if (!(d >= 0.0 && d < 1.0))
+            {
+                fail("expr/prng", name, "draw " + std::to_string(i + 1) + " outside [0, 1)");
+                ok = false;
+            }
+        }
+        if (ok) ++pass;
+    }
+    return pass;
+}
+
 int main(int argc, char** argv)
 {
     std::string path = argc > 1 ? argv[1] : "packages/conformance/corpus.json";
@@ -993,6 +1072,31 @@ int main(int argc, char** argv)
             << "  peek: " << p << "/" << peek.arr.size()
             << "  scripted: " << s << "/" << scripted.arr.size() << "\n";
         std::cout << "live-link fixture: " << live << "/" << liveTotal << " frames\n";
+
+        // The expr parity corpus sits beside ours, vendored from ../expr.
+        // Absent is a FAILURE, not a skip: a parity gate that quietly does
+        // nothing when its fixture is missing is the shape of check this
+        // codebase has shipped before and been bitten by.
+        const size_t slash = path.find_last_of("/\\");
+        const std::string exprPath =
+            (slash == std::string::npos ? std::string() : path.substr(0, slash + 1)) + "expr-corpus.json";
+        std::ifstream exprFile(exprPath);
+        if (!exprFile)
+        {
+            std::cerr << "expr parity corpus not found: " << exprPath << "\n";
+            return 2;
+        }
+        std::stringstream exprBuffer;
+        exprBuffer << exprFile.rdbuf();
+        JsonParser exprParser(exprBuffer.str());
+        JsonValue exprRoot = exprParser.parse();
+        const JsonValue& exprPrng = exprRoot.at("prng");
+        const JsonValue& exprExprs = exprRoot.at("expressions");
+        int xp = runExprPrng(exprPrng);
+        int xe = runExpressions(exprExprs);
+        std::cout << "expr corpus v" << static_cast<int>(exprRoot.numOr("version", 0))
+            << " - prng: " << xp << "/" << exprPrng.arr.size()
+            << "  expressions: " << xe << "/" << exprExprs.arr.size() << "\n";
         std::cout << (g_fails == 0 ? "ALL PASS" : std::to_string(g_fails) + " FAILED") << "\n";
         return g_fails == 0 ? 0 : 1;
     }

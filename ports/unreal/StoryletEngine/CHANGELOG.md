@@ -2,6 +2,50 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: a bare non-boolean condition now passes when it is non-empty.** A
+  condition that resolves to a string or a flag list previously always FAILED;
+  it now passes when the string is non-empty or the list has members, which is
+  what Patterplay has always done and what JavaScript coerces.
+
+  This is a behaviour change to existing content: a card gated on a bare
+  `@story.title` was unreachable and now is not. Booleans and numbers are
+  unaffected.
+
+  The two engines share a property registry, so the same value read from the
+  same registry answered a condition differently depending on which engine
+  asked. That was drift from writing them at different times rather than a
+  decision, and this is the side that was wrong.
+
+- **Flags compare as a SET.** `==` and `!=` on a flags value now ignore order.
+  They are compared as multisets, so a duplicated flag still counts. The stored
+  order was an artefact of the order somebody happened to add things in, and
+  `set_flags` sorting its result only held while every producer sorted, which a
+  declared default or a host-supplied list does not. `set_flags` still sorts, now
+  purely so a save is byte-reproducible.
+
+### Fixed
+
+- **Numbers render the way JavaScript's `String(n)` renders them.** This is
+  described as the cross-runtime number-rendering contract and it did not hold.
+  The C++ runtime was already correct here, and is what the shared
+  implementation now carries for every runtime.
+- **A bundle that did not compile now says so in the Inspector, whatever the
+  reason.** The details view tested `LoadError` alone, so an asset that never
+  parsed and carried an empty one fell through to a default-constructed
+  description and showed BLANK fields rather than a fault. Patterplay's
+  equivalent already distinguished the two.
+
+### Changed
+
+- `StoryletValue`, `StoryletKind`, `Mulberry32`, the AST node and the evaluator
+  moved to `Public/Storylets/Expr/`, generated from a single shared source also
+  used by Patterplay. Types, namespace and members are unchanged.
+- `Mulberry32` takes a `double` seed rather than an `int64_t`, matching the JS
+  API, so the coercion happens once rather than at every call site.
+
+
 ## [0.1.0] - 2026-08-30
 
 ### Added

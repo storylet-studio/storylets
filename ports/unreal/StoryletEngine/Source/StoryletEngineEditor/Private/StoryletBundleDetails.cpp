@@ -47,8 +47,17 @@ void FStoryletBundleDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 		TEXT("Bundle"), LOCTEXT("BundleCategory", "Bundle"), ECategoryPriority::Important);
 
 	// A broken bundle still imports: say so first, and loudly.
-	if (!Bundle->LoadError.IsEmpty())
+	// A bundle that did not compile says so, WHATEVER the reason. Testing
+	// LoadError alone was not enough: an asset that never parsed can carry an
+	// empty one, and this then fell through to DescribeBundle(), which returns a
+	// default-constructed description - so the Inspector showed blank fields
+	// rather than a fault. Patterplay's copy of this file already distinguished
+	// the two; ours did not, which is the drift this pair is prone to.
+	if (!Bundle->IsCompiled() || !Bundle->LoadError.IsEmpty())
 	{
+		const FString Why = Bundle->LoadError.IsEmpty()
+			? LOCTEXT("LoadErrorUnknown", "the bundle has not been parsed").ToString()
+			: Bundle->LoadError;
 		BundleCategory.AddCustomRow(LOCTEXT("LoadErrorFilter", "Load error"))
 		.WholeRowContent()
 		[
@@ -56,7 +65,7 @@ void FStoryletBundleDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 			.AutoWrapText(true)
 			.ColorAndOpacity(FLinearColor::Red)
 			.Text(FText::Format(LOCTEXT("LoadErrorRow", "This bundle failed to compile:\n{0}"),
-				FText::FromString(Bundle->LoadError)))
+				FText::FromString(Why)))
 		];
 		return;
 	}
