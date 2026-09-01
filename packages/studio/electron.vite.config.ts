@@ -14,6 +14,7 @@ const workspacePkgs = [
   "@storylet-studio/runtime",
   "@storylet-studio/ops",
   "@wildwinter/expr",
+  "@wildwinter/toolkit",
   "@wildwinter/expr-specificity",
   "@wildwinter/expr-editor",
 ];

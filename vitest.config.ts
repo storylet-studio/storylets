@@ -8,8 +8,8 @@ import { existsSync } from "node:fs";
 // When a `../expr` checkout exists (maintainers, CI), alias to its source so the repos can
 // evolve together; otherwise fall back to the published npm packages in node_modules, so a
 // plain clone runs the whole suite with no sibling checkout. (The Patter pattern, verbatim.)
-const expr = (pkg: string): string | undefined => {
-  const src = new URL(`../expr/packages/${pkg}/src/index.ts`, import.meta.url);
+const expr = (pkg: string, entry = "index"): string | undefined => {
+  const src = new URL(`../expr/packages/${pkg}/src/${entry}.ts`, import.meta.url);
   return existsSync(src) ? fileURLToPath(src) : undefined;
 };
 
