@@ -9,6 +9,7 @@
     "packages/*"
   ],
   "scripts": {
+    "prepare": "git config core.hooksPath scripts/git-hooks || true",
     "typecheck": "tsc --noEmit && npm run typecheck -w @storylet-studio/studio",
     "test": "vitest run",
     "bump:play": "node scripts/bump-play-version.mjs",
@@ -23,9 +24,14 @@
     "studio": "npm run dev -w @storylet-studio/studio",
     "website": "npm --prefix website run dev",
     "bump:app": "node scripts/bump-app-version.mjs app",
-    "bump:cli": "node scripts/bump-app-version.mjs cli"
+    "bump:cli": "node scripts/bump-app-version.mjs cli",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "npm run typecheck && npm run build:libs && npm test && changeset publish",
+    "release:guard": "node scripts/release-guard.mjs"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.1",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^22.10.0",

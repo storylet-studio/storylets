@@ -1,13 +1,11 @@
 {
   "name": "@storylet-studio/cli",
   "version": "0.3.0",
+  "private": true,
   "description": "storyletengine - the Storylet Engine CLI: init, new, validate, format, export, peek, deal, merge, coverage. A thin front-end over @storylet-studio/ops; pack lands next.",
   "type": "module",
   "license": "MIT",
   "author": "Ian Thomas",
-  "publishConfig": {
-    "access": "public"
-  },
   "bin": {
     "storyletengine": "./dist/cli.js"
   },

@@ -27,8 +27,8 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@storylet-studio/dialect": "0.0.0",
-    "@storylet-studio/model": "0.0.0",
+    "@storylet-studio/dialect": "^0.1.0",
+    "@storylet-studio/model": "^0.1.0",
     "@wildwinter/expr": "^0.5.0",
     "@wildwinter/expr-specificity": "^0.1.0",
     "@wildwinter/scoperegistry": "^0.3.0"

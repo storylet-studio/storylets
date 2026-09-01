@@ -1,0 +1,94 @@
+name: Release
+
+# Changesets drives the npm side: on every push to main it either opens/updates a
+# "Version Packages" PR (consuming the accumulated changesets) or, once that PR is
+# merged, builds + publishes the bumped @storylet-studio/* packages to npm.
+#
+# THREE packages reach npm: model, dialect and runtime. Everything else in packages/
+# is `private` and listed in .changeset/config.json's `ignore`. Several of them sit at
+# 0.0.0, so `private` is doing real work here, not tidiness: a public 0.0.0 package is
+# one workflow run away from being on the registry forever.
+#
+# @storylet-studio/runtime is NOT versioned by Changesets. It is the JS member of the
+# lockstep runtime set, versioned by `npm run bump:play` with the Unity, Unreal and
+# Godot ports, because one version number has to mean one runtime behaviour across all
+# four. It still publishes here, because `changeset publish` ships any public package
+# whose version is ahead of the registry. `npm run release:guard` refuses a changeset
+# that names it.
+#
+# Publishing authenticates via npm TRUSTED PUBLISHING (OIDC): each @storylet-studio
+# package trusts this repo + this workflow file on npmjs.com, so no token is stored
+# anywhere and provenance attestations are generated automatically. Requirements:
+# `id-token: write` below, and an OIDC-aware npm CLI (>= 11.5.1) on the runner.
+#
+# Modelled on Patterplay's .github/workflows/release.yml.
+
+on:
+  push:
+    branches: [main]
+
+concurrency: release-${{ github.ref }}
+
+permissions:
+  contents: write        # push the Version PR branch + git tags
+  pull-requests: write   # open/update the Version Packages PR
+  id-token: write        # npm trusted publishing (OIDC) + provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout storylets
+        uses: actions/checkout@v5
+        with:
+          path: storylets
+          fetch-depth: 0
+      # tsconfig + vitest alias @wildwinter/expr to a sibling ../expr checkout, so the
+      # suite this workflow gates on runs against the same tree CI does.
+      - name: Checkout @wildwinter/expr (sibling source)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/expr
+          path: expr
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: storylets/package-lock.json
+      # Needs >= 11.5.1 for OIDC trusted publishing. Pinned to the 11.x line on purpose:
+      # npm 12.0.0 ships a broken provenance path ("Cannot find module 'sigstore'"),
+      # which aborted every publish once `@latest` rolled over to it - npm/cli#9722.
+      - name: OIDC-aware npm (>= 11.5.1; pin off the broken npm 12.x)
+        run: npm install -g npm@11
+      # Pre-seed ~/.npmrc so the changesets action doesn't write its own token line
+      # (there is no token); npm's OIDC detection handles auth by itself.
+      - run: echo "# auth via npm trusted publishing (OIDC) - no token" > ~/.npmrc
+      - run: npm ci
+        working-directory: storylets
+      - name: Create Version PR or publish to npm
+        uses: changesets/action@v1
+        with:
+          cwd: storylets
+          version: npm run version-packages
+          # `npm run release` is typecheck + build:libs + test + `changeset publish`, in that
+          # order. The gate lives in the SCRIPT rather than in a `needs:` on CI, because CI on
+          # main runs in PARALLEL with this workflow and nothing would make the publish wait for
+          # it: a bad merge would reach npm before the suite finished, and npm versions cannot
+          # meaningfully be unpublished.
+          #
+          # The PR-side gate does not exist despite appearances. A run on the bot's
+          # changeset-release/main branch waits for a maintainer to approve it, and the PR is
+          # merged before anyone does, so that tick has never once actually run. Patterplay
+          # learned this the expensive way; the gate here is in the script for that reason.
+          #
+          # build:libs, not build: the full build also compiles Storyletter and the village
+          # client, neither of which npm ever sees.
+          publish: npm run release
+          # Publish to npm + push git tags, but do NOT create GitHub Release objects for the
+          # @storylet-studio/* packages. Those empty releases (npm is the real artifact) steal
+          # GitHub's "Latest" badge, which is what electron-updater reads - which would break
+          # Storyletter's Check for Updates, since a non-Storyletter "Latest" has no latest.yml
+          # and answers 404. Only storyletter.yml's vX.Y.Z release should ever be "Latest".
+          createGithubReleases: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

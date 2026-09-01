@@ -1,13 +1,11 @@
 {
   "name": "@storylet-studio/ops",
   "version": "0.0.0",
+  "private": true,
   "description": "Pure-function operations layer shared by the CLI, the editor and CI: init, new box, export, validate, format, ask (peek / deal), merge, coverage. Returns planned writes; callers commit them through the VC layer.",
   "type": "module",
   "license": "MIT",
   "author": "Ian Thomas",
-  "publishConfig": {
-    "access": "public"
-  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -30,7 +28,7 @@
   },
   "dependencies": {
     "@storylet-studio/compiler": "0.0.0",
-    "@storylet-studio/model": "0.0.0",
+    "@storylet-studio/model": "0.1.0",
     "@storylet-studio/runtime": "0.2.0",
     "@wildwinter/expr": "^0.5.0",
     "@wildwinter/toolkit": "^0.1.0",
