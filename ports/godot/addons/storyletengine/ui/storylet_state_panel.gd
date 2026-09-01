@@ -244,12 +244,20 @@ func _build_property_row(s: StoryletFlow, row: Dictionary) -> void:
 
 	var widget := _make_widget(s, row)
 	widget.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# A declared read-only property is shown and not edited, as the Unity and Unreal
+	# panels have always done. This one ignored `writable` entirely until 2026-09-01,
+	# so the same property was editable here and locked in the other two.
+	var writable: bool = bool(row.get("writable", true))
+	if not writable:
+		widget.set_deferred("disabled", true)      # Button / OptionButton / CheckBox
+		widget.set_deferred("editable", false)     # LineEdit / SpinBox
+		widget.tooltip_text = "Declared read-only"
 	line.add_child(widget)
 
 	var reset := Button.new()
 	reset.text = "↺"
 	reset.tooltip_text = "Reset to default"
-	reset.disabled = StoryletValues.value_equals(row["value"], row["default"])
+	reset.disabled = not writable or StoryletValues.value_equals(row["value"], row["default"])
 	reset.pressed.connect(_reset.bind(s, row["path"], row["default"]))
 	line.add_child(reset)
 	_body.add_child(line)

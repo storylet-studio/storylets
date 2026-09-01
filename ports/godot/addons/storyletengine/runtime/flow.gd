@@ -1278,7 +1278,11 @@ func list_properties() -> Array:
 	for d in _engine._bundle["world"].get("properties", []):
 		var value = (_engine._world["get"] as Callable).call(d["name"])
 		var row := {"path": "world.%s" % d["name"], "name": d["name"], "type": d.get("type", "string"),
-			"value": value if value != null else d.get("default"), "default": d.get("default")}
+			"value": value if value != null else d.get("default"), "default": d.get("default"),
+			# The bag rows carry this from PropertyBag.rows(); the @world rows are built
+			# here by hand and were missing it, so a read-only world property looked
+			# writable to an examiner.
+			"writable": bool(d.get("writable", true))}
 		if d.has("values"):
 			row["values"] = d["values"]
 		if d.has("stages"):
