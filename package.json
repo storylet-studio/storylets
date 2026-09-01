@@ -21,7 +21,9 @@
     "build:libs": "npm run build -w @storylet-studio/model -w @storylet-studio/dialect -w @storylet-studio/compiler -w @storylet-studio/runtime -w @storylet-studio/ops -w @storylet-studio/cli",
     "build": "npm run build:libs && npm run build -w @storylet-studio/studio && npm run build -w @storylet-studio/village-client",
     "studio": "npm run dev -w @storylet-studio/studio",
-    "website": "npm --prefix website run dev"
+    "website": "npm --prefix website run dev",
+    "bump:app": "node scripts/bump-app-version.mjs app",
+    "bump:cli": "node scripts/bump-app-version.mjs cli"
   },
   "devDependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
