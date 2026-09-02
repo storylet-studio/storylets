@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: `PropertyView` is gone; `ListProperties()` returns `List<PropertyRow>`.** It was
+  `PropertyRow` plus a `Path`, and `Path` is on the shared row now. C# has no type alias to keep
+  the old name alive with, and an empty subclass would be a type a bag's own row could never
+  satisfy. `ScopePropertyRow` (which adds the scope token) is unaffected.
+- **A property bag composes its rows' addresses.** Each bag is built knowing the path it answers
+  to (`story.`, `box.<id>.`, `deck.<id>.`, `hand.<id>.`, `value.<id>.`, `world.`), so a row
+  arrives addressed instead of having a prefix pasted onto it by each caller. **The addresses are
+  unchanged** - this is where they are composed, not what they are.
+
+### Fixed
+
+- **A quality row carries its ladder.** `stages` was on the examiner row so an editor could
+  offer the stages instead of a free-text box, and the shared code that builds rows never filled
+  it in - on this runtime and two others. Every quality row came out without one.
+
+- **`@world` rows report `writable`.** They are built by hand rather than by a bag (a host
+  resolver backs them) and were pushed through a cast that hid the missing field, which the row
+  type has always required. They now say whether the resolver can be written at all - the shared
+  registry's own rule for a foreign scope.
+
 ## [0.2.0] - 2026-09-01
 
 ### Changed
