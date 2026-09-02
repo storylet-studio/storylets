@@ -65,6 +65,9 @@ const SURFACES = {
       "packages/play-helpers/src/live-link.ts",
       "packages/play-helpers/src/refresh.ts",
       "../expr/packages/scoperegistry/src/index.ts",
+      // The kernel state logger: diffState and the logger class are declared there and
+      // re-exported here, the same way the bag already is.
+      "../expr/packages/scoperegistry/src/state-logger.ts",
     ],
   },
   unity: {
@@ -75,6 +78,7 @@ const SURFACES = {
       "ports/unity/StoryletEngine/Runtime/DescribeBundle.cs",
       "ports/unity/StoryletEngine/Runtime/StateLogger.cs",
       "ports/unity/StoryletEngine/Runtime/Expr/PropertyBag.cs",   // vendored from expr/ports/unity
+      "ports/unity/StoryletEngine/Runtime/Expr/StateLogger.cs",   // likewise: the logger core
       "ports/unity/StoryletEngine/Runtime/ScopeRegistry.cs",
       "ports/unity/StoryletEngine/Runtime/Json/StoryletSave.cs",
       "ports/unity/StoryletEngine/Runtime/Unity/StoryletDebug.cs",
@@ -98,6 +102,9 @@ const SURFACES = {
       // missing. Both, because the shim is where StoryletPropertyBag is declared.
       "ports/godot/addons/storyletengine/runtime/property_bag.gd",
       "ports/godot/addons/storyletengine/runtime/expr/property_bag.gd",
+      // Same again for the logger: the shim carries the class_name, the vendored core
+      // carries diff_state and the instance half.
+      "ports/godot/addons/storyletengine/runtime/expr/state_logger.gd",
       "ports/godot/addons/storyletengine/runtime/scope_registry.gd",
       "ports/godot/addons/storyletengine/runtime/save.gd",
       "ports/godot/addons/storyletengine/runtime/live_link.gd",
@@ -124,6 +131,7 @@ const SURFACES = {
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/DescribeBundle.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/StateLogger.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/Expr/PropertyBag.h",
+      "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/Expr/StateLogger.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/Storylets/ScopeRegistry.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Private/StoryletSaveJson.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/StoryletDebug.h",
