@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-02
+
 ### Changed
 
 - **BREAKING: `PropertyView` is gone; `listProperties()` returns `PropertyRow`.** It was the

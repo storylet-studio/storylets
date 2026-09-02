@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-02
+
 ### Changed
 
 - **BREAKING: `PropertyView` is gone; `ListProperties()` returns `List<PropertyRow>`.** It was

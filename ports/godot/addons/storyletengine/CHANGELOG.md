@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-02
+
 ### Changed
 - **A property bag composes its rows' addresses.** Each bag is built knowing the path it answers
   to (`story.`, `box.<id>.`, `deck.<id>.`, `hand.<id>.`, `value.<id>.`, `world.`), so a row

@@ -1,6 +1,6 @@
 {
   "name": "com.storylet-studio.storyletengine",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "displayName": "Storylet Engine",
   "description": "Storylet Engine for Unity - the native C# runtime for Storyletter. Loads a compiled .storyletsc bundle and deals, peeks and plays storylets directly in Unity (no web runtime, JS, or IPC). Every Storylet Engine runtime plays the same bundle with the same behaviour.",
   "unity": "2021.3",

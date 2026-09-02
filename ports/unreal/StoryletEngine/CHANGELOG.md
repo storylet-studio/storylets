@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-02
+
 ### Changed
 
 - **BREAKING: the C++ core's `storylets::PropertyView` is gone; `listProperties()` returns

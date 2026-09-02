@@ -1,6 +1,6 @@
 {
   "name": "@storylet-studio/runtime",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Storylet Engine JS reference runtime: the session (peek / deal / play / outcomes / board / save), held to the conformance corpus.",
   "type": "module",
   "license": "MIT",
