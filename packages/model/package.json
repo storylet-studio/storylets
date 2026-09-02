@@ -4,6 +4,11 @@
   "description": "Storylets data-model types: source shards (project / box / tags / hands / deck), the compiled bundle, the save envelope. The shape source-of-truth.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/storylet-studio/storylets.git",
+    "directory": "packages/model"
+  },
   "author": "Ian Thomas",
   "publishConfig": {
     "access": "public"

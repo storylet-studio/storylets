@@ -4,6 +4,11 @@
   "description": "Storylet Engine JS reference runtime: the session (peek / deal / play / outcomes / board / save), held to the conformance corpus.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/storylet-studio/storylets.git",
+    "directory": "packages/runtime"
+  },
   "author": "Ian Thomas",
   "publishConfig": {
     "access": "public"

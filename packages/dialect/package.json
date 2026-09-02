@@ -4,6 +4,11 @@
   "description": "The storylets expression dialect for @wildwinter/expr: five scopes (@story default), the function set (random, flags, play history). One dialect drives runtime eval and publish-time validation.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/storylet-studio/storylets.git",
+    "directory": "packages/dialect"
+  },
   "author": "Ian Thomas",
   "publishConfig": {
     "access": "public"
