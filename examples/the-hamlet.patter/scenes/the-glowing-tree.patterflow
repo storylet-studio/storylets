@@ -1,0 +1,86 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_5ddd00b7",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_5ddd00b7",
+            "type": "snippet",
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "touch-the-bark",
+                        },
+                        "id": "E_d329680d",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_d329680d",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_d329680d",
+                "prompt": {
+                  "id": "L_339162b1",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "observe-carefully",
+                        },
+                        "id": "E_9d3a0829",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_9d3a0829",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_9d3a0829",
+                "prompt": {
+                  "id": "L_5ede4b2d",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+            ],
+            "id": "g_768f2de6",
+            "selector": "choice",
+            "type": "group",
+          },
+        ],
+        "id": "blk_9ddbb1b0",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "the-glowing-tree",
+    "name": "The Glowing Tree at Night",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

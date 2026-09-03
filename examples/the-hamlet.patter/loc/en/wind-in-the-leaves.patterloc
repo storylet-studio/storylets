@@ -1,0 +1,9 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "wind-in-the-leaves",
+  "schema": "patter/strings@0",
+  "strings": {
+    "T_8a7f142c": "STUB: Wind in the Leaves. Replace with the scene.",
+  },
+}

@@ -1,0 +1,9 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "the-tree-blooms",
+  "schema": "patter/strings@0",
+  "strings": {
+    "T_f2fd9755": "STUB: The Tree Blooms. Replace with the scene.",
+  },
+}

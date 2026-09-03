@@ -1,0 +1,86 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_07a7313f",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_07a7313f",
+            "type": "snippet",
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "admire-the-work",
+                        },
+                        "id": "E_52308ecb",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_52308ecb",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_52308ecb",
+                "prompt": {
+                  "id": "L_7d4a7ebc",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "ask-if-hes-hiring",
+                        },
+                        "id": "E_872167c9",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_872167c9",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_872167c9",
+                "prompt": {
+                  "id": "L_55b237b4",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+            ],
+            "id": "g_1d4b3599",
+            "selector": "choice",
+            "type": "group",
+          },
+        ],
+        "id": "blk_aefdbeea",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "known-at-the-forge",
+    "name": "Make Yourself Known at the Forge",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

@@ -1,0 +1,9 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "arrive-at-the-gate",
+  "schema": "patter/strings@0",
+  "strings": {
+    "T_ac3557d9": "STUB: Arrive at the Village Gate. Replace with the scene.",
+  },
+}

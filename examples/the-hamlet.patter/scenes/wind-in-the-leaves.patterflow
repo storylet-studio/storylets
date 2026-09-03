@@ -1,0 +1,43 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_8a7f142c",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_8a7f142c",
+            "type": "snippet",
+          },
+          {
+            "beats": [
+              {
+                "gameData": {
+                  "outcome": "continue",
+                },
+                "id": "E_577cb55b",
+                "kind": "gameEvent",
+              },
+            ],
+            "id": "sn_577cb55b",
+            "jump": {
+              "to": "END",
+            },
+            "type": "snippet",
+          },
+        ],
+        "id": "blk_ef8d12f1",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "wind-in-the-leaves",
+    "name": "Wind in the Leaves",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

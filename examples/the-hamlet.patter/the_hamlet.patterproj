@@ -1,0 +1,15 @@
+{
+  "locales": {
+    "all": [
+      "en",
+    ],
+    "default": "en",
+  },
+  "project": {
+    "id": "proj_mfj6p1i9",
+    "name": "The Hamlet",
+  },
+  "schema": "patter/project@0",
+  "vcs": "git",
+  "voiced": true,
+}

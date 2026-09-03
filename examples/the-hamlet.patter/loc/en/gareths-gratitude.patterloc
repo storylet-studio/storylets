@@ -1,0 +1,9 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "gareths-gratitude",
+  "schema": "patter/strings@0",
+  "strings": {
+    "T_acf6f963": "STUB: Gareth's Gratitude. Replace with the scene.",
+  },
+}

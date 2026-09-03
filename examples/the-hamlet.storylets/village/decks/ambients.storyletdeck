@@ -10,7 +10,7 @@
   cards: [
     {
       fields: {
-        scene: "scn_amb_forest",
+        music: "forest",
       },
       gameId: "wind-in-the-leaves",
       id: "c_amb_forest",
@@ -34,7 +34,7 @@
     },
     {
       fields: {
-        scene: "scn_amb_forge",
+        music: "forge",
       },
       gameId: "ring-of-the-anvil",
       id: "c_amb_forge",
@@ -58,7 +58,7 @@
     },
     {
       fields: {
-        scene: "scn_amb_market",
+        music: "market",
       },
       gameId: "market-bustle",
       id: "c_amb_market",
@@ -83,7 +83,7 @@
     {
       condition: "@world.time_of_day == \"night\"",
       fields: {
-        scene: "scn_amb_night",
+        music: "night",
       },
       gameId: "night-settles",
       id: "c_amb_night",

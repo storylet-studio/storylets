@@ -33,6 +33,8 @@ describe("runExportXlsx on the example project", async () => {
   const loaded = loadProject(exampleDir);
   const source = loaded.source!;
   const { result, wb } = await exported(source);
+  // The card-field columns are read from the project, not named in the tests.
+  const cardFields = ((source.boxes[0]!.box.box.fields ?? []) as { name: string }[]).map((f) => f.name);
 
   it("lays out Overview, one sheet per deck in authored order, then Outcomes, Hands, Tag groups", () => {
     // Ambients carries order 0.5 and the rest fall back to file position, so it
@@ -67,8 +69,15 @@ describe("runExportXlsx on the example project", async () => {
     // its internal name, and it appears because the Hamlet's cards use it.
     // Shared and In the world sit beside Copies: they are the same question
     // (how many of this card exist) asked of the world rather than of a board.
+    //
+    // The card-field columns come FROM THE PROJECT rather than being named here.
+    // What this pins is the layout - one column per declared field, between the
+    // tag groups and Purpose - not which fields the Hamlet happens to carry. The
+    // hard-coded list broke the day the example's field changed, which taught
+    // nothing: the column is the mechanism, its name is content.
+    expect(cardFields.length).toBeGreaterThan(0);   // or this test proves nothing
     expect(headers(arrival)).toEqual(["Title", "gameId", "When", "Priority", "Redraw", "Copies",
-      "Shared", "In the world", "area", "Place", "scene", "Purpose", "Outcomes"]);
+      "Shared", "In the world", "area", "Place", ...cardFields, "Purpose", "Outcomes"]);
     expect(arrival.views[0]).toMatchObject({ state: "frozen", ySplit: 1 });
     expect(arrival.getRow(1).font?.bold).toBe(true);
   });
@@ -92,7 +101,10 @@ describe("runExportXlsx on the example project", async () => {
     // of it (see "Market Bustle" below).
     expect(row[9]).toBe("");                // area: not a regional card
     expect(row[10]).toBe("the-inn");        // Place: the reserved home group
-    expect(row[11]).toBe("scn_inn");        // the box's card field
+    // Again from the project: that the card's own field VALUE reaches its column.
+    const inn = loaded.source!.boxes[0]!.decks
+      .flatMap((d) => d.shard.cards ?? []).find((c) => c.gameId === "settle-at-the-inn")!;
+    expect(row[11]).toBe(String(inn.fields?.[cardFields[0]!] ?? ""));
     // The mirror: a card that IS regional fills area and leaves Place empty.
     const bustle = rowWhere(wb.getWorksheet("Ambients")!, 2, "market-bustle");
     expect(bustle[9]).toBe("village");

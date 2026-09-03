@@ -1,0 +1,43 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_434207f4",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_434207f4",
+            "type": "snippet",
+          },
+          {
+            "beats": [
+              {
+                "gameData": {
+                  "outcome": "continue",
+                },
+                "id": "E_79ef8094",
+                "kind": "gameEvent",
+              },
+            ],
+            "id": "sn_79ef8094",
+            "jump": {
+              "to": "END",
+            },
+            "type": "snippet",
+          },
+        ],
+        "id": "blk_06226685",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "the-forest-turns",
+    "name": "The Forest Turns Wary",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

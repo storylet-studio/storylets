@@ -1,0 +1,43 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_ac3557d9",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_ac3557d9",
+            "type": "snippet",
+          },
+          {
+            "beats": [
+              {
+                "gameData": {
+                  "outcome": "step-through",
+                },
+                "id": "E_26b66aa1",
+                "kind": "gameEvent",
+              },
+            ],
+            "id": "sn_26b66aa1",
+            "jump": {
+              "to": "END",
+            },
+            "type": "snippet",
+          },
+        ],
+        "id": "blk_d4fdedb1",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "arrive-at-the-gate",
+    "name": "Arrive at the Village Gate",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

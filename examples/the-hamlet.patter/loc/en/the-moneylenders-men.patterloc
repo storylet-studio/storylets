@@ -1,0 +1,12 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "the-moneylenders-men",
+  "schema": "patter/strings@0",
+  "strings": {
+    "L_2f959091": "Walk away; it isn't your fight",
+    "L_5cd828ac": "Stand with Gareth against them",
+    "L_ac695055": "Pay the debt yourself",
+    "T_374799a6": "STUB: The Moneylender's Men. Replace with the scene.",
+  },
+}

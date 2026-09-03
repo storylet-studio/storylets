@@ -1,0 +1,86 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_985d8f12",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_985d8f12",
+            "type": "snippet",
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "ask-about-history",
+                        },
+                        "id": "E_ddf6ce30",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_ddf6ce30",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_ddf6ce30",
+                "prompt": {
+                  "id": "L_35ae96fb",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "ask-about-the-road-north",
+                        },
+                        "id": "E_cacb7640",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_cacb7640",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_cacb7640",
+                "prompt": {
+                  "id": "L_79adade3",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+            ],
+            "id": "g_64e912f6",
+            "selector": "choice",
+            "type": "group",
+          },
+        ],
+        "id": "blk_9b4bcd47",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "settle-at-the-inn",
+    "name": "Get Settled at the Inn",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

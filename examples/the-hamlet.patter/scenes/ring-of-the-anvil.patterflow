@@ -1,0 +1,43 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_f8c5f777",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_f8c5f777",
+            "type": "snippet",
+          },
+          {
+            "beats": [
+              {
+                "gameData": {
+                  "outcome": "continue",
+                },
+                "id": "E_9673e074",
+                "kind": "gameEvent",
+              },
+            ],
+            "id": "sn_9673e074",
+            "jump": {
+              "to": "END",
+            },
+            "type": "snippet",
+          },
+        ],
+        "id": "blk_f2fafc81",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "ring-of-the-anvil",
+    "name": "The Ring of the Anvil",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

@@ -69,10 +69,32 @@ describe("runReplace", () => {
   });
 
   it("replaces a card's string field, and leaves numbers and booleans alone", () => {
-    const plan = runReplace(loaded, { query: "scn_gate", replacement: "scn_door" });
-    expect(plan.hits).toEqual([{
-      id: "c_arrive", kind: "card", field: "field:scene", location: ["Village", "Arrival"],
-      before: "scn_gate", after: "scn_door",
+    // Taken FROM the project rather than written in: which card fields the
+    // example declares, and what it puts in them, is content, and hard-coding
+    // it made this test break for a reason that had nothing to do with Replace.
+    // What is being pinned is that a card field is reachable and rewritable,
+    // and that the hit names it `field:<name>`.
+    const field = ((loaded.source!.boxes[0]!.box.box.fields ?? []) as { name: string }[])[0]!.name;
+    const cards = loaded.source!.boxes[0]!.decks.flatMap((d) => d.shard.cards ?? []);
+    // A value only ONE card carries, so exactly one card-field hit is expected.
+    const counts = new Map<string, number>();
+    for (const c of cards) {
+      const v = c.fields?.[field];
+      if (typeof v === "string" && v) counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+    const unique = [...counts].find(([, n]) => n === 1)?.[0];
+    expect(unique, `a ${field} value carried by exactly one card`).toBeDefined();
+    const deck = loaded.source!.boxes[0]!.decks
+      .find((d) => (d.shard.cards ?? []).some((c) => c.fields?.[field] === unique))!;
+    const owner = (deck.shard.cards ?? []).find((c) => c.fields?.[field] === unique)!;
+
+    // The value may also occur in prose, which is not this test's business, so
+    // narrow to the field hits: exactly one, on the owning card, rewritten.
+    const plan = runReplace(loaded, { query: unique!, replacement: "zzz-replaced" });
+    expect(plan.hits.filter((h) => h.field === `field:${field}`)).toEqual([{
+      id: owner.id, kind: "card", field: `field:${field}`,
+      location: [loaded.source!.boxes[0]!.box.box.title, deck.shard.deck.title],
+      before: unique, after: "zzz-replaced",
     }]);
   });
 
@@ -93,7 +115,8 @@ describe("runReplace", () => {
     expect(runReplace(loaded, { query: "hammer", replacement: "x", onlyId: "c_amb_forge" }).hits).toHaveLength(1);
     expect(runReplace(loaded, { query: "hammer", replacement: "x", onlyId: "c_nobody" }).hits).toHaveLength(0);
     const both = runReplace(loaded, { query: "gareth", replacement: "g", onlyId: "c_gareth_troubled" });
-    expect(both.hits.map((h) => h.field).sort()).toEqual(["field:scene", "purpose", "title"]);
+    // Only two now: this card's `music` cue is "unease", which has no "gareth" in it.
+    expect(both.hits.map((h) => h.field).sort()).toEqual(["purpose", "title"]);
     const one = runReplace(loaded, { query: "gareth", replacement: "g", onlyId: "c_gareth_troubled", onlyField: "title" });
     expect(one.hits.map((h) => h.field)).toEqual(["title"]);
   });

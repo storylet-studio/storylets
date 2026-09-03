@@ -1,0 +1,9 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "mira-seems-distracted",
+  "schema": "patter/strings@0",
+  "strings": {
+    "T_1d6e17eb": "STUB: Mira Seems Distracted. Replace with the scene.",
+  },
+}

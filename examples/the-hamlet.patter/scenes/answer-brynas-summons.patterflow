@@ -1,0 +1,86 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_77a352f0",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_77a352f0",
+            "type": "snippet",
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "pledge-your-help",
+                        },
+                        "id": "E_cda5bb9d",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_cda5bb9d",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_cda5bb9d",
+                "prompt": {
+                  "id": "L_60d0e4ea",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "keep-your-distance",
+                        },
+                        "id": "E_67c680a3",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_67c680a3",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_67c680a3",
+                "prompt": {
+                  "id": "L_2fc9040b",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+            ],
+            "id": "g_e1d25c9a",
+            "selector": "choice",
+            "type": "group",
+          },
+        ],
+        "id": "blk_f6013e57",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "answer-brynas-summons",
+    "name": "Answer Bryna's Summons",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

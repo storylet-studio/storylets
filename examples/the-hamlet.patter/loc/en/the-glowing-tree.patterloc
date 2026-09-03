@@ -1,0 +1,11 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "the-glowing-tree",
+  "schema": "patter/strings@0",
+  "strings": {
+    "L_339162b1": "Touch the glowing bark",
+    "L_5ede4b2d": "Step back and observe carefully",
+    "T_5ddd00b7": "STUB: The Glowing Tree at Night. Replace with the scene.",
+  },
+}

@@ -1,0 +1,86 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_665628bb",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_665628bb",
+            "type": "snippet",
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "ask-what-is-wrong",
+                        },
+                        "id": "E_672a15ee",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_672a15ee",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_672a15ee",
+                "prompt": {
+                  "id": "L_77ea940b",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "leave-him-be",
+                        },
+                        "id": "E_ee91b888",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_ee91b888",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_ee91b888",
+                "prompt": {
+                  "id": "L_46a74010",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+            ],
+            "id": "g_b9fc9adc",
+            "selector": "choice",
+            "type": "group",
+          },
+        ],
+        "id": "blk_05abdf20",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "gareth-looks-troubled",
+    "name": "Gareth Looks Troubled",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

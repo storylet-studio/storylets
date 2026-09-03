@@ -1,0 +1,43 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_2083f3db",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_2083f3db",
+            "type": "snippet",
+          },
+          {
+            "beats": [
+              {
+                "gameData": {
+                  "outcome": "continue",
+                },
+                "id": "E_79024986",
+                "kind": "gameEvent",
+              },
+            ],
+            "id": "sn_79024986",
+            "jump": {
+              "to": "END",
+            },
+            "type": "snippet",
+          },
+        ],
+        "id": "blk_5ebe696f",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "market-bustle",
+    "name": "Market Bustle",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

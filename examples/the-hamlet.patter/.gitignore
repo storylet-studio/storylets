@@ -1,0 +1,7 @@
+# Patter generated artifacts - not source (see vcs-setup.md).
+# Packed document (the send-and-return envelope):
+*.patterpack
+# Unresolved merge sidecar:
+*.patterconflict
+# Compiled bundle (built in CI, not committed under this posture):
+*.patterc

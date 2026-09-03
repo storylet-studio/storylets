@@ -1,0 +1,43 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_acf6f963",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_acf6f963",
+            "type": "snippet",
+          },
+          {
+            "beats": [
+              {
+                "gameData": {
+                  "outcome": "clasp-his-hand",
+                },
+                "id": "E_6e0421a4",
+                "kind": "gameEvent",
+              },
+            ],
+            "id": "sn_6e0421a4",
+            "jump": {
+              "to": "END",
+            },
+            "type": "snippet",
+          },
+        ],
+        "id": "blk_4010212e",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "gareths-gratitude",
+    "name": "Gareth's Gratitude",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

@@ -26,7 +26,7 @@
     {
       condition: "@deck.debt == \"troubled\"",
       fields: {
-        scene: "scn_gareth_men",
+        music: "threat",
       },
       gameId: "the-moneylenders-men",
       id: "c_gareth_men",
@@ -79,7 +79,7 @@
     {
       condition: "@deck.helped",
       fields: {
-        scene: "scn_gareth_thanks",
+        music: "warmth",
       },
       gameId: "gareths-gratitude",
       id: "c_gareth_thanks",
@@ -106,7 +106,7 @@
     {
       condition: "@act >= \"act-1\" and check_flags(@rel_blacksmith, +met) and @deck.debt == \"quiet\"",
       fields: {
-        scene: "scn_gareth_troubled",
+        music: "unease",
       },
       gameId: "gareth-looks-troubled",
       id: "c_gareth_troubled",

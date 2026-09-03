@@ -1,0 +1,9 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "night-settles",
+  "schema": "patter/strings@0",
+  "strings": {
+    "T_b7c23642": "STUB: Night Settles on the Village. Replace with the scene.",
+  },
+}

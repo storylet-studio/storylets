@@ -1,0 +1,86 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_32e27eb0",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_32e27eb0",
+            "type": "snippet",
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "read-it",
+                        },
+                        "id": "E_30d9a900",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_30d9a900",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_30d9a900",
+                "prompt": {
+                  "id": "L_4293104b",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "return-it-unread",
+                        },
+                        "id": "E_2fbfd133",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_2fbfd133",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_2fbfd133",
+                "prompt": {
+                  "id": "L_3cd263e4",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+            ],
+            "id": "g_4df2f3a0",
+            "selector": "choice",
+            "type": "group",
+          },
+        ],
+        "id": "blk_b25b8f86",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "the-sealed-letter",
+    "name": "The Sealed Letter",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

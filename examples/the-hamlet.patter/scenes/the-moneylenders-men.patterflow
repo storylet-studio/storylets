@@ -1,0 +1,112 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_374799a6",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_374799a6",
+            "type": "snippet",
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "stand-with-gareth",
+                        },
+                        "id": "E_2f6a1015",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_2f6a1015",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_2f6a1015",
+                "prompt": {
+                  "id": "L_5cd828ac",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "pay-them-off",
+                        },
+                        "id": "E_398f0035",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_398f0035",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_398f0035",
+                "prompt": {
+                  "id": "L_ac695055",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+              {
+                "children": [
+                  {
+                    "beats": [
+                      {
+                        "gameData": {
+                          "outcome": "walk-away",
+                        },
+                        "id": "E_26b6c079",
+                        "kind": "gameEvent",
+                      },
+                    ],
+                    "id": "sn_26b6c079",
+                    "jump": {
+                      "to": "END",
+                    },
+                    "type": "snippet",
+                  },
+                ],
+                "id": "opt_26b6c079",
+                "prompt": {
+                  "id": "L_2f959091",
+                  "kind": "text",
+                },
+                "type": "group",
+              },
+            ],
+            "id": "g_b224a138",
+            "selector": "choice",
+            "type": "group",
+          },
+        ],
+        "id": "blk_925abfd9",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "the-moneylenders-men",
+    "name": "The Moneylender's Men",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

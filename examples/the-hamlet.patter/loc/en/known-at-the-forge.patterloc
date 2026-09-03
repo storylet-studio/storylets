@@ -1,0 +1,11 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "known-at-the-forge",
+  "schema": "patter/strings@0",
+  "strings": {
+    "L_55b237b4": "Talk straight: ask if he's hiring",
+    "L_7d4a7ebc": "Admire the work openly and specifically",
+    "T_07a7313f": "STUB: Make Yourself Known at the Forge. Replace with the scene.",
+  },
+}

@@ -1,0 +1,43 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_1d6e17eb",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_1d6e17eb",
+            "type": "snippet",
+          },
+          {
+            "beats": [
+              {
+                "gameData": {
+                  "outcome": "hold-her-gaze",
+                },
+                "id": "E_55c97035",
+                "kind": "gameEvent",
+              },
+            ],
+            "id": "sn_55c97035",
+            "jump": {
+              "to": "END",
+            },
+            "type": "snippet",
+          },
+        ],
+        "id": "blk_28fa8503",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "mira-seems-distracted",
+    "name": "Mira Seems Distracted",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

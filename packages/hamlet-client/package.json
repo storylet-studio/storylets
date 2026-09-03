@@ -1,0 +1,21 @@
+{
+  "name": "@storylet-studio/hamlet-client",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "The Hamlet as a playable browser game: the Storylet Engine choosing the beat and Patter performing it, in one host.",
+  "type": "module",
+  "scripts": {
+    "prebuild": "npm run build:libs --prefix ../..",
+    "build": "node scripts/build.mjs",
+    "serve": "node scripts/build.mjs && node -e \"import('node:http').then(h=>import('node:fs').then(f=>h.createServer((q,s)=>{const p='dist'+(q.url==='/'?'/index.html':q.url.split('?')[0]);try{s.end(f.readFileSync(p))}catch{s.statusCode=404;s.end('no '+p)}}).listen(5181,()=>console.log('http://localhost:5181'))))\""
+  },
+  "dependencies": {
+    "@patterkit/runtime": "^0.10.0"
+  },
+  "devDependencies": {
+    "@patterkit/cli": "^0.3.3",
+    "@patterkit/ops": "^0.7.1",
+    "esbuild": "^0.25.12"
+  }
+}

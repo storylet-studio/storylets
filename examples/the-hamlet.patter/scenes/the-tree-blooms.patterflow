@@ -1,0 +1,43 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_f2fd9755",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_f2fd9755",
+            "type": "snippet",
+          },
+          {
+            "beats": [
+              {
+                "gameData": {
+                  "outcome": "breathe-it-in",
+                },
+                "id": "E_ddb38efc",
+                "kind": "gameEvent",
+              },
+            ],
+            "id": "sn_ddb38efc",
+            "jump": {
+              "to": "END",
+            },
+            "type": "snippet",
+          },
+        ],
+        "id": "blk_3a9dd204",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "the-tree-blooms",
+    "name": "The Tree Blooms",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

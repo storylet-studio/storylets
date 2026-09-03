@@ -11,7 +11,7 @@
     {
       condition: "@act == \"arrival\"",
       fields: {
-        scene: "scn_gate",
+        music: "arrival",
       },
       gameId: "arrive-at-the-gate",
       id: "c_arrive",
@@ -39,7 +39,7 @@
     {
       condition: "@act >= \"act-1\" and check_flags(@rel_innkeeper, +met) and check_flags(@rel_blacksmith, +met)",
       fields: {
-        scene: "scn_elder",
+        music: "elder",
       },
       gameId: "answer-brynas-summons",
       id: "c_bryna",
@@ -81,7 +81,7 @@
     {
       condition: "not check_flags(@rel_blacksmith, +met)",
       fields: {
-        scene: "scn_forge",
+        music: "forge",
       },
       gameId: "known-at-the-forge",
       id: "c_forge_first",
@@ -119,7 +119,7 @@
     {
       condition: "not check_flags(@rel_innkeeper, +met)",
       fields: {
-        scene: "scn_inn",
+        music: "inn",
       },
       gameId: "settle-at-the-inn",
       id: "c_inn_first",

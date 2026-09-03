@@ -1,0 +1,11 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "gareth-looks-troubled",
+  "schema": "patter/strings@0",
+  "strings": {
+    "L_46a74010": "Leave him be",
+    "L_77ea940b": "Ask him what's wrong",
+    "T_665628bb": "STUB: Gareth Looks Troubled. Replace with the scene.",
+  },
+}

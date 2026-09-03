@@ -1,0 +1,11 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "the-sealed-letter",
+  "schema": "patter/strings@0",
+  "strings": {
+    "L_3cd263e4": "Return it unread",
+    "L_4293104b": "Read it while you can",
+    "T_32e27eb0": "STUB: The Sealed Letter. Replace with the scene.",
+  },
+}

@@ -1,0 +1,11 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "answer-brynas-summons",
+  "schema": "patter/strings@0",
+  "strings": {
+    "L_2fc9040b": "Stay polite but keep your distance",
+    "L_60d0e4ea": "Pledge your help to the village",
+    "T_77a352f0": "STUB: Answer Bryna's Summons. Replace with the scene.",
+  },
+}

@@ -11,7 +11,7 @@
     {
       condition: "@hand.peril >= 1",
       fields: {
-        scene: "scn_forest_peril",
+        music: "unease",
       },
       gameId: "the-forest-turns",
       id: "c_forest_peril",
@@ -36,7 +36,7 @@
     {
       condition: "check_flags(@world_events, +tree_bloomed)",
       fields: {
-        scene: "scn_tree_bloom",
+        music: "wonder",
       },
       id: "c_tree_bloom",
       outcomes: [
@@ -62,7 +62,7 @@
     {
       condition: "@village_open and @world.time_of_day == \"night\"",
       fields: {
-        scene: "scn_tree_night",
+        music: "wonder",
       },
       gameId: "the-glowing-tree",
       id: "c_tree_night",

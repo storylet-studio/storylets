@@ -1,0 +1,9 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "market-bustle",
+  "schema": "patter/strings@0",
+  "strings": {
+    "T_2083f3db": "STUB: Market Bustle. Replace with the scene.",
+  },
+}
