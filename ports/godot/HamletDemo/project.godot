@@ -1,0 +1,13 @@
+; The Hamlet on Godot: one game, two engines. Open this folder in Godot 4.7+
+; after running build.sh once (it fetches the two addons and the two bundles).
+config_version=5
+
+[application]
+
+config/name="The Hamlet (Godot)"
+run/main_scene="res://hamlet.tscn"
+config/features=PackedStringArray("4.7")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/storyletengine/plugin.cfg", "res://addons/patterplay/plugin.cfg")

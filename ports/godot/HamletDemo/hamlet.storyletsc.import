@@ -1,0 +1,14 @@
+[remap]
+
+importer="storyletengine.bundle"
+type="Resource"
+uid="uid://dwb32w1qvqo7q"
+path="res://.godot/imported/hamlet.storyletsc-8c6e42eff6b853f2538172a876f91109.tres"
+
+[deps]
+
+source_file="res://hamlet.storyletsc"
+dest_files=["res://.godot/imported/hamlet.storyletsc-8c6e42eff6b853f2538172a876f91109.tres"]
+
+[params]
+
