@@ -75,6 +75,10 @@ export interface PropListOptions {
    *  to "where do I see everything that reads or writes this?", which the
    *  audit found the window could not give at the property itself. */
   rowExtras?: (decl: PropertyDeclDto) => HTMLElement | null;
+  /** The @world list only: offer the Read-only switch (`writable: false`),
+   *  the story's promise not to write a value the game owns. Patterpad has the
+   *  same switch on its World Properties, in the same words. */
+  readOnlySwitch?: boolean;
 }
 
 /** Mount the declaration list into `host`. Mutates `decls` in place. */
@@ -114,6 +118,16 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
         changed();
       });
       details.push(labelled("Purpose", purpose));
+      if (opts.readOnlySwitch) {
+        // Checked means writable: false. Unticking DELETES the key rather than
+        // writing true, so a shard that never had the flag is not rewritten.
+        const ro = el("input") as HTMLInputElement;
+        ro.type = "checkbox"; ro.checked = p.writable === false;
+        ro.addEventListener("change", () => { if (ro.checked) p.writable = false; else delete p.writable; changed(); });
+        const roLabel = labelled("Read-only", ro);
+        roLabel.dataset.tip = "Read-only: the story can read this value but not set it (the game owns it). Writing to it is then a validation error.";
+        details.push(roLabel);
+      }
       if (p.type === "enum" || p.type === "flags") {
         details.push(labelled("Values", tagChips(p as { values?: string[] }, () => {
           const nd = defaultControl(p, changed); def.replaceWith(nd); def = nd; changed();

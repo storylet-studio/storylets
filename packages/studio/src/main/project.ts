@@ -53,11 +53,12 @@ const chipValues = (
 
 const blank = (src: string | undefined): boolean => src === undefined || src.trim() === "";
 
-const declDto = (d: { name: string; type: string; default?: unknown; values?: string[]; stages?: string[]; purpose?: string }): { name: string; type: string; default: string; values?: string[]; stages?: string[]; purpose?: string } => ({
+const declDto = (d: { name: string; type: string; default?: unknown; values?: string[]; stages?: string[]; writable?: boolean; purpose?: string }): { name: string; type: string; default: string; values?: string[]; stages?: string[]; writable?: boolean; purpose?: string } => ({
   name: d.name, type: d.type,
   default: d.default === undefined ? "" : typeof d.default === "string" ? d.default : JSON.stringify(d.default),
   ...(d.values !== undefined ? { values: d.values } : {}),
   ...(d.stages !== undefined ? { stages: d.stages } : {}),
+  ...(d.writable !== undefined ? { writable: d.writable } : {}),
   ...(d.purpose !== undefined ? { purpose: d.purpose } : {}),
 });
 

@@ -838,7 +838,7 @@ export function boxCatalogue(session: ProjectSession, boxId: string): ConditionP
 function catalogueFor(session: ProjectSession, box: SourceBox, deck: SourceDeck | undefined): ConditionProperty[] {
   const project = session.loaded.source!.project;
   const out: ConditionProperty[] = [];
-  const add = (scope: string, decls: { name: string; type: string; values?: string[]; stages?: string[]; purpose?: string }[]): void => {
+  const add = (scope: string, decls: { name: string; type: string; values?: string[]; stages?: string[]; writable?: boolean; purpose?: string }[]): void => {
     for (const d of decls) {
       out.push({
         scope, name: d.name, type: d.type as ConditionProperty["type"],
@@ -846,6 +846,7 @@ function catalogueFor(session: ProjectSession, box: SourceBox, deck: SourceDeck 
         // A quality's ladder, without which expr-editor can offer the property
         // and then no stage to compare it against (expr-editor 0.11.0).
         ...(d.stages !== undefined ? { stages: d.stages } : {}),
+        ...(d.writable !== undefined ? { writable: d.writable } : {}),
         ...(d.purpose !== undefined ? { purpose: d.purpose } : {}),
       });
     }
@@ -913,6 +914,7 @@ const declFromDto = (d: PropertyDeclDto): PropertyDecl => ({
   default: d.type === "quality" && d.default.trim() === "" ? (d.stages?.[0] ?? "") : coerceDefault(d.default, d.type),
   ...(d.values !== undefined ? { values: d.values } : {}),
   ...(d.stages !== undefined ? { stages: d.stages } : {}),
+  ...(d.writable !== undefined ? { writable: d.writable } : {}),
   // Blank means no purpose: an emptied field deletes rather than storing "".
   ...(d.purpose !== undefined && d.purpose.trim() !== "" ? { purpose: d.purpose.trim() } : {}),
 });
@@ -1238,6 +1240,7 @@ export function tagGroupDetail(session: ProjectSession, boxId: string, groupId: 
     name: p.name, type: p.type, default: asString(p.default),
     ...(p.values !== undefined ? { values: p.values } : {}),
     ...(p.stages !== undefined ? { stages: p.stages } : {}),
+    ...(p.writable !== undefined ? { writable: p.writable } : {}),
     ...(p.purpose !== undefined ? { purpose: p.purpose } : {}),
   });
   return {

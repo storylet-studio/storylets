@@ -416,6 +416,10 @@ export interface PropertyDeclDto {
   values?: string[];
   /** A quality's ordered ladder of stage names (design/quality.md). */
   stages?: string[];
+  /** `@world` only: `false` is the story's promise not to write this value
+   *  (Reboot.md 10). The compiler keeps the promise; the switch lives on the
+   *  Project Settings world list, as Patterpad's does. Absent = writable. */
+  writable?: boolean;
   /** What this property is for: the hover tip on its pills (expr-editor's
    *  propertyTip), and a word to the next designer. */
   purpose?: string;

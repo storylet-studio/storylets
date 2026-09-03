@@ -49,7 +49,7 @@ export function createProjectSettings(studio: StudioApi, onSaved: (result: OpenR
         // declarations say what the game owns, the drivers say what the test
         // harness should feed them (Patterpad's World Properties tab).
         { id: "world", label: "World", group: "State", mount: (h) => {
-          const props = mountPropertyList(h, data!.world);
+          const props = mountPropertyList(h, data!.world, { readOnlySwitch: true });
           h.append(el("h3", { className: "set-cap", text: "Coverage drivers" }));
           h.append(el("p", { className: "set-note", text: "Values the coverage test feeds these properties, so cards gated on them get dealt." }));
           // Tolerate a DTO without the field rather than blanking the panel:
