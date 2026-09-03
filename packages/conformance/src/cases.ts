@@ -670,6 +670,34 @@ export const fixtures: Fixtures = {
         { op: "peek", expect: ["c_go", "c_late"] },
       ] },
 
+    // Read-only @world (Reboot.md 10, ruled 2026-09-03): `writable: false` on a
+    // world declaration is the STORY's promise not to write it. The compiler
+    // refuses such an outcome, and so must the runtime, because a bundle can
+    // be hand-built (this one is), and because Patter's runtime refuses the
+    // same write through the shared kernel: an integrator running both must
+    // see one behaviour. The HOST is not bound: setState still lands.
+    { name: "an outcome may not write a read-only @world property; the host still may",
+      world: [
+        { name: "clock", type: "number", default: 0, writable: false },
+        { name: "mood", type: "number", default: 0 },
+      ],
+      cards: [
+        { id: "c_tick", outcomes: [{ id: "o_tick", changes: { "@world.clock": "@world.clock + 1" } }] },
+        { id: "c_cheer", outcomes: [{ id: "o_cheer", changes: { "@world.mood": "@world.mood + 1" } }] },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_tick", "c_cheer"] } },   // authored order
+        { op: "play", card: "c_tick", outcome: "tick", from: "h_q", expectError: true },
+        { op: "assertState", expect: { "world.clock": 0, "turn.b_x": 0 } },   // refused, so no side effect
+        // (No host write here: the runner binds no resolver, so @world is the
+        // engine's stand-in bag, and the shared kernel keeps a declaration's
+        // writable for EVERY caller. A game that must move a read-only value
+        // binds a resolver, which is its own state and its own rule.)
+        { op: "play", card: "c_cheer", outcome: "cheer", from: "h_q" },        // an absent flag is writable
+        { op: "assertState", expect: { "world.mood": 1 } },
+      ] },
+
     { name: "a world quality is the host's to move, and deals re-gate on it",
       world: [{ name: "siege", type: "quality", default: "quiet", stages: ["quiet", "skirmish", "assault"] }],
       cards: [

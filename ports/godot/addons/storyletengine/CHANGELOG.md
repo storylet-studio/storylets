@@ -8,6 +8,8 @@ the same version number always means the same runtime behaviour.
 
 ### Added
 
+- **Read-only `@world` refused at runtime**: an outcome writing a `writable: false` property is refused with `'@world.x' is read-only`. Parity with the JS runtime and with Patterplay, corpus-pinned.
+
 - **`on_replaced_flow`** create option, a `Callable(id: String, dealt: int)`:
   fired when `open_flow` replaces a flow that still held dealt cards. Parity with
   the JS runtime's `onReplacedFlow`, added the same day, and for the same reason:

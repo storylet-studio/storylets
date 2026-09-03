@@ -131,6 +131,9 @@ namespace storylets
          *  box, deck, hand and tag properties per-flow). Never valid on a
          *  @world declaration (the compiler refuses it). */
         std::optional<bool> shared;
+        /** @world only: false is the story's promise not to write it (Reboot.md 10).
+         *  Absent = writable. Mirrors Patter's HostScopeDecl.writable. */
+        std::optional<bool> writable;
         std::string purpose;
     };
 
@@ -539,6 +542,8 @@ namespace storylets
                 d.stages = ParseStringList(item.find("stages"));
                 const JsonValue* sharedFlag = item.find("shared");
                 if (sharedFlag && sharedFlag->isBool()) d.shared = sharedFlag->b;
+                const JsonValue* writableFlag = item.find("writable");
+                if (writableFlag && writableFlag->isBool()) d.writable = writableFlag->b;
                 d.purpose = item.strOr("purpose");
                 decls.push_back(std::move(d));
             }

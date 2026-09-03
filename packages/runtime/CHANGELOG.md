@@ -10,6 +10,8 @@ section for it.
 
 ### Added
 
+- **A read-only `@world` property is refused at runtime too.** `play()` of an outcome that writes a property declared `writable: false` throws `'@world.x' is read-only` and changes nothing; the host's own `setProperty` is not bound. The compiler already refused it; the runtime now keeps the promise for hand-built bundles, and so that an integrator running Patter beside this sees one behaviour, since Patter's runtime refuses the same write through the shared kernel. Corpus case first, in all four runtimes.
+
 - **`onReplacedFlow`**, an opt-in diagnostics hook on `EngineOptions`, fired when
   `openFlow` replaces a flow that still had cards dealt, with the flow id and the
   count. Behaviour is unchanged: replacing is deliberate, and the same in Patter.

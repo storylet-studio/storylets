@@ -313,6 +313,8 @@ func _run_scripted(cases: Array) -> int:
 	var pass_count := 0
 	for c in cases:
 		var failures := _run_scripted_case(c)
+		if str(c["name"]).begins_with("an outcome may not write a read-only"):
+			failures.append_array(_read_only_world_probe(c["bundle"]))
 		if failures.is_empty():
 			pass_count += 1
 		else:
@@ -558,4 +560,36 @@ func _run_scripted_case(c: Dictionary) -> Array:
 
 			_:
 				failures.append("%s: unknown op" % at)
+	return failures
+
+
+# Read-only @world with a HOST resolver bound (Reboot.md 10). The corpus case
+# of this name pins the self-backed path, where @world is the engine's stand-in
+# bag, the shared kernel, which keeps `writable` for every caller. A game that
+# binds its own resolver takes the engine's writes straight, and only the
+# engine's own check stands between a story and the host: this is the one
+# place that check is exercised. Same probe in the JS, C# and C++ harnesses.
+func _read_only_world_probe(bundle: Dictionary) -> Array:
+	var failures: Array = []
+	var vals := {"clock": 0, "mood": 0}
+	var sets: Array = []
+	var engine := StoryletEngine.create(bundle, {"seed": 0, "world": {
+		"get": func(n: String): return vals.get(n),
+		"set": func(n: String, v) -> void: sets.append(n); vals[n] = v}})
+	if engine == null:
+		return ["bound-world probe: engine would not create"]
+	var flow := engine.open_flow("main")
+	flow.deal("h_q")
+	var err := flow.play("c_tick", "tick", "h_q")
+	if err == "":
+		failures.append("bound-world probe: the story wrote a read-only @world value and was not refused")
+	elif err.find("is read-only") < 0:
+		failures.append("bound-world probe: refused, but not as read-only: " + err)
+	if not sets.is_empty():
+		failures.append("bound-world probe: the host's set was called for a read-only write: %s" % str(sets))
+	var ok := flow.play("c_cheer", "cheer", "h_q")
+	if ok != "":
+		failures.append("bound-world probe: a writable property was refused: " + ok)
+	if sets != ["mood"]:
+		failures.append("bound-world probe: expected the host's set once, for mood; got %s" % str(sets))
 	return failures

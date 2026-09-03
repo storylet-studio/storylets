@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Read-only `@world` refused at runtime**: an outcome writing a `writable: false` property throws `'@world.x' is read-only`; the loader now reads the flag. Parity with the JS runtime and with Patterplay, corpus-pinned.
+
 - **`EngineOptions.OnReplacedFlow`** (`Action<string, int>`): fired when `OpenFlow`
   replaces a flow that still held dealt cards, naming the flow and the count.
   Parity with the JS runtime's `onReplacedFlow`, added the same day, and for the

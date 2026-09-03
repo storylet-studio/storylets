@@ -409,6 +409,7 @@ namespace StoryletStudio.StoryletEngine
                     Values = ParseStringList(o["values"]),
                     Stages = ParseStringList(o["stages"]),
                     Shared = o["shared"] != null ? (bool?)o["shared"].Value<bool>() : null,
+                    Writable = o["writable"] != null ? (bool?)o["writable"].Value<bool>() : null,
                     Purpose = o.Value<string>("purpose"),
                 });
             }

@@ -263,6 +263,15 @@ func _init_ladders() -> void:
 ## state is untouched. There is no default flow: "main" is a caller
 ## convention, not an engine rule. Options: {"seed": int} overrides the
 ## engine's default for this flow's PRNG.
+## The story's promise about a @world value (writable: false on its declaration).
+## Read by a flow before it writes; the host's own set_property never asks.
+func world_read_only(name: String) -> bool:
+	for d in _bundle.get("world", {}).get("properties", []):
+		if d.get("name", "") == name:
+			return d.get("writable", true) == false
+	return false
+
+
 func open_flow(id: String, opts: Dictionary = {}) -> StoryletFlow:
 	for key in opts:
 		if key != "seed":

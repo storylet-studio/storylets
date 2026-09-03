@@ -376,6 +376,9 @@ interface Internals {
   shared: Partition;
   /** @world: the host's resolver, or the self-backed bag's. */
   worldResolver: ScopeResolver;
+  /** @world names declared `writable: false`: the story's promise, kept at
+   *  runtime as the compiler keeps it at publish (Reboot.md 10). */
+  worldReadOnly: Set<string>;
   /** `turn` is the box clock the event happened on, where the caller knows it
    *  - the same stamp the flow's own log carries. Unity and Unreal passed it
    *  from the start; JS and Godot dropped it, so their examiners printed "[-]"
@@ -463,6 +466,7 @@ export class Engine {
       flowDecls: { story: [], box: new Map(), deck: new Map(), hand: new Map(), value: new Map() },
       shared: undefined as unknown as Partition,
       worldResolver: undefined as unknown as ScopeResolver,
+      worldReadOnly: new Set<string>(),
       emitEngine: (flow, event, turn) => {
         if (this.internals.logCap !== undefined) {
           this.engineLog.push({ ...event, flow, seq: this.engineSeq++, ...(turn !== undefined ? { turn } : {}) });
@@ -523,6 +527,7 @@ export class Engine {
   private initShared(hostWorld?: ScopeResolver): void {
     const internals = this.internals;
     internals.shared = buildPartition(internals, sharedHalf);
+    internals.worldReadOnly = new Set(internals.bundle.world.properties.filter((d) => d.writable === false).map((d) => d.name));
     if (hostWorld !== undefined) {
       internals.worldResolver = hostWorld;
     } else {
@@ -1750,6 +1755,10 @@ export class Flow {
       case "world": {
         const resolver = this.internals.worldResolver;
         if (!resolver.set) throw new Error(`@world.${name} cannot be written: the host bound @world read-only`);
+        // The story's own promise, kept here as the compiler keeps it at publish;
+        // the host's setProperty is its own path and never asks. Patter's runtime
+        // refuses the same write through the shared kernel, so both read one way.
+        if (this.internals.worldReadOnly.has(name)) throw new Error(`'@world.${name}' is read-only (writable: false)`);
         const prev = resolver.get(name);
         resolver.set(name, value);
         return { path: `world.${name}`, ...(prev !== undefined ? { prev } : {}) };

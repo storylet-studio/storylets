@@ -6661,6 +6661,192 @@
       ]
     },
     {
+      "name": "an outcome may not write a read-only @world property; the host still may",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": [
+            {
+              "name": "clock",
+              "type": "number",
+              "default": 0,
+              "writable": false
+            },
+            {
+              "name": "mood",
+              "type": "number",
+              "default": 0
+            }
+          ]
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_cheer",
+                    "gameId": "cheer",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_cheer",
+                        "gameId": "cheer",
+                        "changes": {
+                          "@world.mood": {
+                            "src": "@world.mood + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "world",
+                                "mood"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "c_tick",
+                    "gameId": "tick",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_tick",
+                        "gameId": "tick",
+                        "changes": {
+                          "@world.clock": {
+                            "src": "@world.clock + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "world",
+                                "clock"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_tick",
+              "c_cheer"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_tick",
+          "outcome": "tick",
+          "from": "h_q",
+          "expectError": true
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "world.clock": 0,
+            "turn.b_x": 0
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_cheer",
+          "outcome": "cheer",
+          "from": "h_q"
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "world.mood": 1
+          }
+        }
+      ]
+    },
+    {
       "name": "a world quality is the host's to move, and deals re-gate on it",
       "bundle": {
         "schema": "storylets/bundle@0",

@@ -54,6 +54,15 @@ namespace StoryletStudio.StoryletEngine.TestHost
             int sp = RunSpecificity(specificity);
             int p = RunPeek(peek);
             int s = RunScripted(scripted);
+            // Read-only @world with a HOST resolver bound: the corpus case pins the
+            // self-backed (kernel) path; this reaches the engine's own check, which
+            // only a bound resolver does. Same probe in the JS, C++ and Godot harnesses.
+            foreach (var c in scripted)
+            {
+                var cname = c.Value<string>("name") ?? "";
+                if (!cname.StartsWith("an outcome may not write a read-only")) continue;
+                foreach (var f in RunReadOnlyWorldProbe((JObject)c["bundle"])) { Fail("scripted", cname, f); s = Math.Max(0, s - 1); }
+            }
             int d = RunDescribe(peek);
             int m = RunDescribeMaps();
             int l = RunLiveLinkFixture(path);
@@ -518,6 +527,32 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 Fail("describe", name, ex.Message);
                 return 0;
             }
+        }
+
+        sealed class RecordingWorld : IScopeResolver
+        {
+            public readonly Dictionary<string, StoryletValue> Values = new Dictionary<string, StoryletValue>();
+            public readonly List<string> Sets = new List<string>();
+            public StoryletValue Get(string name) => Values.TryGetValue(name, out var v) ? v : null;
+            public bool CanSet => true;
+            public void Set(string name, StoryletValue value) { Sets.Add(name); Values[name] = value; }
+        }
+
+        static List<string> RunReadOnlyWorldProbe(JObject bundleJson)
+        {
+            var failures = new List<string>();
+            var world = new RecordingWorld();
+            world.Values["clock"] = StoryletValue.Num(0);
+            world.Values["mood"] = StoryletValue.Num(0);
+            var bundle = BundleLoader.Parse(bundleJson);
+            var flow = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = 0, World = world }).OpenFlow("main");
+            flow.Deal("h_q");
+            try { flow.Play("c_tick", "tick", "h_q"); failures.Add("bound-world probe: the story wrote a read-only @world value and was not refused"); }
+            catch (StoryletError ex) { if (!ex.Message.Contains("is read-only")) failures.Add("bound-world probe: refused, but not as read-only: " + ex.Message); }
+            if (world.Sets.Count != 0) failures.Add("bound-world probe: the host's Set was called for a read-only write: " + string.Join(",", world.Sets));
+            try { flow.Play("c_cheer", "cheer", "h_q"); } catch (StoryletError ex) { failures.Add("bound-world probe: a writable property was refused: " + ex.Message); }
+            if (world.Sets.Count != 1 || world.Sets[0] != "mood") failures.Add("bound-world probe: expected the host's Set once, for mood; got " + string.Join(",", world.Sets));
+            return failures;
         }
 
         // -- scripted -----------------------------------------------------------------

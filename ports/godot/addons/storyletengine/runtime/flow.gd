@@ -1193,6 +1193,11 @@ func _apply_write(target: String, value, entry: Dictionary, hand_env: Dictionary
 			var setter = _engine._world.get("set")
 			if setter == null:
 				return {"error": "@world.%s cannot be written: the host bound @world read-only" % name}
+			# The story's own promise (writable: false on the declaration), kept
+			# at runtime as the compiler keeps it at publish. The host is not bound:
+			# set_property is its own path. Parity with the JS runtime and Patterplay.
+			if _engine.world_read_only(name):
+				return {"error": "'@world.%s' is read-only (writable: false)" % name}
 			var prev = (_engine._world["get"] as Callable).call(name)
 			(setter as Callable).call(name, value)
 			var out := {"path": "world.%s" % name}

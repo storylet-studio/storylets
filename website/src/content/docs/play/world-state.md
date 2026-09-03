@@ -27,12 +27,27 @@ Your game doesn't declare anything. It fills in what's already declared.
 @world.chapter    string   default "one"   read-only
 ```
 
-**Read-only** is the story's promise about a value: it will read it and never write it. Mark
-`@world.chapter` read-only and a condition can still ask `@world.chapter == "two"`, but an
-outcome that sets it is a compile error, so a card cannot move the game's clock by mistake.
-It is the same switch Patter has, name for name (`writable: false` in the shard), and if you run
-both engines it is worth setting the same way in both projects. Your game is not bound by it:
-the game owns `@world` and moves it through its resolver whenever it likes.
+### Read-only
+
+Four things, and they are the same four in Patter, in the same order, so a game running both
+engines sees one rule:
+
+1. **Read-only is the story's promise, declared on the property** (`writable: false` in the
+   shard, the Read-only switch in Storyletter). A condition can still read
+   `@world.chapter`; an outcome that sets it is a **compile error**, so a card cannot move
+   the game's clock by mistake.
+2. **The runtime keeps the promise too.** If a bundle somehow carries such a write, `play()`
+   refuses it with `'@world.chapter' is read-only` and nothing changes. Your resolver's `set`
+   is never called for a read-only property.
+3. **A resolver with no `set` makes the whole of `@world` read-only to the story**, whatever
+   the declarations say. That is the game's policy rather than the story's promise; both apply.
+4. **Your game is never bound, through its own resolver.** Bind one and the game moves
+   `@world` whenever it likes, read-only or not. Bind none, and the engine's stand-in bag keeps
+   the declaration for every caller, `setProperty("world.chapter", ...)` included: a read-only
+   value then holds its default for the whole run. If the game must move it, bind a resolver.
+
+There is no write-only: a declared property can always be read by the story. If the game holds
+a value the story should not see, do not declare it.
 
 A name that isn't declared can't be referenced: the compiler refuses `@world.isNight` if
 nothing declares `isNight`. Property names are lower case (see [the format](/format/shards/)).

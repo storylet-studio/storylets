@@ -32,6 +32,8 @@
 // runtimes, and until 2026-08-29 the only build that touched this header was a
 // full UE compile - which is how a save-shape change reached it uncaught. The
 // cheap gate compiles it now, and runSave gives it one real call.
+#include <map>
+#include <optional>
 #include "Storylets/StateLogger.h"
 #include "LiveLinkFixture.h"
 #include "Storylets/Bundle.h"
@@ -693,6 +695,35 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
     return failures;
 }
 
+// Read-only @world with a HOST resolver bound (Reboot.md 10). The corpus case of
+// this name pins the self-backed path, where @world is the engine's stand-in bag,
+// the shared kernel, which keeps `writable` for every caller. A game that binds
+// its own resolver takes the engine's writes straight, and only the engine's own
+// check stands between a story and the host: this is the one place that check is
+// exercised. Same probe in the JS, C# and Godot harnesses.
+static std::vector<std::string> runReadOnlyWorldProbe(const JsonValue& c)
+{
+    std::vector<std::string> failures;
+    std::map<std::string, StoryletValue> vals{{"clock", StoryletValue::Num(0)}, {"mood", StoryletValue::Num(0)}};
+    std::vector<std::string> sets;
+    WorldResolver world;
+    world.get = [&](const std::string& n) -> std::optional<StoryletValue> {
+        auto it = vals.find(n); if (it == vals.end()) return std::nullopt; return it->second; };
+    world.set = [&](const std::string& n, const StoryletValue& v) { sets.push_back(n); vals[n] = v; };
+    EngineOptions opts; opts.world = world;
+    BundlePtr bundle = ParseBundle(c.at("bundle"));
+    Engine engine(bundle, opts);
+    Flow& flow = *engine.openFlow("main");
+    flow.deal("h_q");
+    try { flow.play("c_tick", "tick", "h_q"); failures.push_back("bound-world probe: the story wrote a read-only @world value and was not refused"); }
+    catch (const StoryletError& ex) { if (std::string(ex.what()).find("is read-only") == std::string::npos) failures.push_back(std::string("bound-world probe: refused, but not as read-only: ") + ex.what()); }
+    if (!sets.empty()) failures.push_back("bound-world probe: the host's set was called for a read-only write");
+    try { flow.play("c_cheer", "cheer", "h_q"); }
+    catch (const StoryletError& ex) { failures.push_back(std::string("bound-world probe: a writable property was refused: ") + ex.what()); }
+    if (sets.size() != 1 || sets[0] != "mood") failures.push_back("bound-world probe: expected the host's set once, for mood; got " + std::to_string(sets.size()));
+    return failures;
+}
+
 static int runScripted(const JsonValue& cases)
 {
     int pass = 0;
@@ -702,6 +733,11 @@ static int runScripted(const JsonValue& cases)
         try
         {
             std::vector<std::string> failures = runScriptedCase(c);
+            if (name.rfind("an outcome may not write a read-only", 0) == 0)
+            {
+                std::vector<std::string> extra = runReadOnlyWorldProbe(c);
+                failures.insert(failures.end(), extra.begin(), extra.end());
+            }
             if (failures.empty()) ++pass;
             else for (const auto& f : failures) fail("scripted", name, f);
         }

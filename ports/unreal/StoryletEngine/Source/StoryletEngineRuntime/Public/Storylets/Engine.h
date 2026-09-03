@@ -437,6 +437,16 @@ namespace storylets
             return selfWorld_->get(name);
         }
 
+        /** The story's promise about a @world value (writable == false on its declaration),
+         *  kept at runtime as the compiler keeps it at publish. Asked by a flow's outcome
+         *  write; the host's own setProperty never asks. */
+        bool worldReadOnly(const std::string& name) const
+        {
+            for (const auto& d : bundle_->world.properties)
+                if (d.name == name) return d.writable.has_value() && !*d.writable;
+            return false;
+        }
+
         bool worldCanSet() const
         {
             return hostWorld_.has_value() ? static_cast<bool>(hostWorld_->set) : true;
@@ -2139,6 +2149,10 @@ namespace storylets
                 if (!engine_->worldCanSet())
                 {
                     throw StoryletError("@world." + name + " cannot be written: the host bound @world read-only");
+                }
+                if (engine_->worldReadOnly(name))
+                {
+                    throw StoryletError("'@world." + name + "' is read-only (writable: false)");
                 }
                 WriteResult result;
                 result.path = "world." + name;

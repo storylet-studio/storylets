@@ -83,6 +83,9 @@ namespace StoryletStudio.StoryletEngine
         /// box, deck, hand and tag properties per-flow). Never valid on a
         /// @world declaration (the compiler refuses it).</summary>
         public bool? Shared;
+        /// <summary>@world only: false is the story's promise not to write it
+        /// (Reboot.md 10). Absent = writable. Mirrors Patter's HostScopeDecl.Writable.</summary>
+        public bool? Writable;
         public string Purpose;
     }
 

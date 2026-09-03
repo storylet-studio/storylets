@@ -501,6 +501,16 @@ namespace StoryletStudio.StoryletEngine
             return _hostWorld != null ? _hostWorld.Get(name) : _selfWorld.Get(name);
         }
 
+        /// <summary>The story's promise about a @world value (Writable == false on its
+        /// declaration), kept at runtime as the compiler keeps it at publish. Asked by a
+        /// flow's outcome write; the host's own SetProperty never asks.</summary>
+        internal bool WorldReadOnly(string name)
+        {
+            if (_bundle.World.Properties == null) return false;
+            foreach (var d in _bundle.World.Properties) if (d.Name == name) return d.Writable == false;
+            return false;
+        }
+
         internal bool WorldCanSet => _hostWorld != null ? _hostWorld.CanSet : true;
 
         internal void WorldSet(string name, StoryletValue value)

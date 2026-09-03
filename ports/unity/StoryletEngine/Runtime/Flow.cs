@@ -1262,6 +1262,7 @@ namespace StoryletStudio.StoryletEngine
                 case "world":
                 {
                     if (!_engine.WorldCanSet) throw new StoryletError($"@world.{name} cannot be written: the host bound @world read-only");
+                    if (_engine.WorldReadOnly(name)) throw new StoryletError($"'@world.{name}' is read-only (writable: false)");
                     var prev = _engine.WorldGet(name);
                     _engine.WorldSet(name, value);
                     return new WriteResult { Path = $"world.{name}", Prev = prev };
