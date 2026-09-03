@@ -335,6 +335,33 @@ describe("card mutations", () => {
     expect("purpose" in decl).toBe(false);
   });
 
+  // Read-only @world (Reboot.md 10): the flag must survive the trip through
+  // the studio, shard -> DTO -> switch -> DTO -> shard, or the switch would
+  // show a value the save then dropped. The DTO is a typed copy, so this is
+  // where a missed mapping would hide.
+  it("round-trips writable on a @world property, and writes no key when the flag is off", () => {
+    const session = scratchProject();
+    const before = projectSettings(session);
+    const next = {
+      ...before,
+      world: [
+        { name: "clock", type: "number", default: "0", writable: false },
+        { name: "gold", type: "number", default: "0" },
+      ],
+    };
+    expect("error" in saveProjectSettings(session, next)).toBe(false);
+
+    const reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    const written = reopened.session.loaded.source!.project.world.properties;
+    expect(written.find((d) => d.name === "clock")).toMatchObject({ writable: false });
+    expect("writable" in written.find((d) => d.name === "gold")!).toBe(false);
+    // And back up into the DTO the switch reads.
+    const dto = projectSettings(reopened.session).world;
+    expect(dto.find((d) => d.name === "clock")?.writable).toBe(false);
+    expect("writable" in dto.find((d) => d.name === "gold")!).toBe(false);
+  });
+
   it("edits coverage drivers beside the world properties, and prunes the inert ones", () => {
     const session = scratchProject();
     const before = projectSettings(session);
