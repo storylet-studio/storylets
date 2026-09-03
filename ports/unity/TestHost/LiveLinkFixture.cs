@@ -119,6 +119,23 @@ namespace StoryletStudio.StoryletEngine.TestHost
             session.AdvanceTurns("village", 2);
             var before = StoryletLiveLink.BoardJson(session);
 
+            // OnReplacedFlow (parity with the JS runtime's onReplacedFlow): OpenFlow on an
+            // id that exists REPLACES it, and the hook says so when the old flow still held
+            // a dealt hand - the trap a host falls into calling OpenFlow instead of GetFlow
+            // after LoadGame. The corpus never exercises the hook, so this is where it runs.
+            var hookHits = new List<(string, int)>();
+            var probe = new Engine(bundle, new EngineOptions { Seed = 7, OnReplacedFlow = (id, n) => hookHits.Add((id, n)) });
+            int held = 0;
+            foreach (var hand in probe.OpenFlow("main").DealMany()) held += hand.Value.Count;
+            probe.OpenFlow("main");
+            if (held > 0 && (hookHits.Count != 1 || hookHits[0].Item1 != "main" || hookHits[0].Item2 != held))
+            {
+                failures.Add($"OnReplacedFlow: expected one call (main, {held}), got {string.Join(";", hookHits)}");
+            }
+            if (held == 0 && hookHits.Count != 0) failures.Add("OnReplacedFlow fired for a flow holding nothing");
+            probe.OpenFlow("main");   // replacing an EMPTY flow is routine: no call
+            if (hookHits.Count != 1) failures.Add("OnReplacedFlow fired for a flow holding nothing");
+
             // The frame as the editor sends it: data is the bundle JSON as a string.
             var push = new JObject { ["t"] = "bundle", ["v"] = 1, ["build"] = "next", ["data"] = json }.ToString(Formatting.None);
             if (!StoryletLiveBundle.TryParsePush(push, out var build, out var data) || build != "next" || data != json)

@@ -25,7 +25,7 @@
 class_name StoryletEngine
 extends RefCounted
 
-const CREATE_OPTION_KEYS := ["seed", "log", "world"]
+const CREATE_OPTION_KEYS := ["seed", "log", "world", "on_replaced_flow"]
 
 var _bundle: Dictionary
 var _seed: int
@@ -70,6 +70,7 @@ var _shared: Dictionary = {}
 # from the declared defaults when not.
 var _world: Dictionary = {}
 var _host_world = null
+var _on_replaced_flow = null
 
 var _flows: Dictionary = {}             # id -> StoryletFlow, open order
 var _engine_trace_handlers: Array[Callable] = []
@@ -139,6 +140,12 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 	_dialect = StoryletDialect.dialect()
 	if opts.has("world"):
 		_host_world = opts["world"]
+	# Diagnostics hook (opt-in, dev only): a Callable(id: String, dealt: int)
+	# fired when open_flow REPLACES a flow that still had cards dealt. Behaviour
+	# is unchanged; this makes observable the host that calls open_flow straight
+	# after load_game and discards the restored hand - get_flow is the call.
+	# Parity with the JS runtime's onReplacedFlow. Zero cost when unset.
+	_on_replaced_flow = opts.get("on_replaced_flow")
 
 	for box in _bundle["boxes"]:
 		_boxes_by_id[box["id"]] = box
@@ -263,6 +270,10 @@ func open_flow(id: String, opts: Dictionary = {}) -> StoryletFlow:
 			return null
 	var old = _flows.get(id)
 	if old != null:
+		# Say so BEFORE the old flow goes inert, while its board is readable.
+		var dealt := (old as StoryletFlow).held_card_ids().size()
+		if dealt > 0 and _on_replaced_flow is Callable and (_on_replaced_flow as Callable).is_valid():
+			(_on_replaced_flow as Callable).call(id, dealt)
 		(old as StoryletFlow).mark_closed()
 	var flow := StoryletFlow.new(self, id, int(opts.get("seed", _seed)))
 	_flows[id] = flow

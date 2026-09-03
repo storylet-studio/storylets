@@ -103,6 +103,16 @@ export interface EngineOptions {
    * once, each engine saves its own envelope (design/flows.md).
    */
   world?: ScopeResolver;
+  /**
+   * Diagnostics hook (opt-in, dev tooling only): fired when `openFlow` REPLACES
+   * a flow that still had cards dealt, with the flow id and how many. The
+   * behaviour is unchanged - replacing is deliberate and the same in Patter -
+   * this only makes it observable, because the case it catches is a host
+   * calling `openFlow` straight after `loadGame` to "re-take" its handle and
+   * silently discarding the hand the save just restored (`getFlow` is the
+   * call). Zero cost when unset; leave it unset in shipped games.
+   */
+  onReplacedFlow?: (id: string, dealt: number) => void;
 }
 
 export interface OpenFlowOptions {
@@ -426,6 +436,7 @@ const loadPartition = (p: Partition, values: PropsPartition | undefined): void =
 export class Engine {
   private readonly internals: Internals;
   private readonly seed: number;
+  private readonly onReplacedFlow: EngineOptions["onReplacedFlow"];
   private readonly flowsById = new Map<string, Flow>();
   private readonly engineTraceHandlers = new Set<EngineTraceHandler>();
   /** The host's @world binding, if the engine was built with one: it
@@ -435,6 +446,7 @@ export class Engine {
 
   constructor(bundle: Bundle, opts: EngineOptions = {}) {
     this.seed = opts.seed ?? 0;
+    this.onReplacedFlow = opts.onReplacedFlow;
     if (opts.world !== undefined) this.hostWorld = opts.world;
     const internals: Internals = {
       bundle,
@@ -568,7 +580,13 @@ export class Engine {
     // `saveGame` keys its flows in that order, a different `.storyletsave`
     // byte stream for the same run (2026-08-29). markClosed without dropFlow
     // is the difference: the old handle goes inert, the slot stays put.
-    this.flowsById.get(id)?.markClosed();
+    const existing = this.flowsById.get(id);
+    if (existing) {
+      // Say so BEFORE the old flow goes inert, while its board is still readable.
+      const dealt = existing.heldCardIds().length;
+      if (dealt > 0) this.onReplacedFlow?.(id, dealt);
+      existing.markClosed();
+    }
     const flow = new Flow(this, this.internals, id, opts.seed ?? this.seed);
     this.flowsById.set(id, flow);
     return flow;

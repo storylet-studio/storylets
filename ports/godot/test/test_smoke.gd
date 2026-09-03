@@ -37,6 +37,30 @@ func _initialize() -> void:
 	var session := engine.open_flow("main")
 	_check("flow opened", session != null)
 
+	# on_replaced_flow (parity with the JS runtime's onReplacedFlow): open_flow on
+	# an id that exists REPLACES it, and the hook says so when the old flow still
+	# held a dealt hand - the trap a host falls into calling open_flow instead of
+	# get_flow after a load. A throwaway engine, so the smoke's own deal below is
+	# not perturbed; the corpus never exercises the hook, so this is where it runs.
+	var hook_hits: Array = []
+	var hook_engine := StoryletEngine.create(bundle, {"seed": 7,
+		"on_replaced_flow": func(id: String, dealt: int): hook_hits.append([id, dealt])})
+	_check("hook engine accepts on_replaced_flow", hook_engine != null)
+	if hook_engine != null:
+		var hook_flow := hook_engine.open_flow("main")
+		var held := 0   # no guessed hand id: deal everything, count what landed
+		for hand in hook_flow.deal_many().values():
+			held += (hand as Array).size()
+		hook_engine.open_flow("main")   # replaces the flow holding that hand
+		if held > 0:
+			_check("on_replaced_flow fired once, naming the flow and its held count",
+				hook_hits.size() == 1 and hook_hits[0][0] == "main" and int(hook_hits[0][1]) == held,
+				str(hook_hits))
+		else:
+			_check("on_replaced_flow is silent for a flow holding nothing", hook_hits.is_empty(), str(hook_hits))
+		hook_engine.open_flow("main")   # replacing an EMPTY flow is routine: no call
+		_check("on_replaced_flow is silent when nothing was held", hook_hits.size() == 1, str(hook_hits))
+
 	# The bundle inspector (design/engine-runtimes.md 2, piece 6): a
 	# bundle-level API with no corpus family of its own. Hold it to the two
 	# contracts that could silently drift - the criteria surface it advertises

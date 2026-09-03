@@ -109,7 +109,9 @@ to whoever finds it first. That's [How a deal is decided](/play/dealing/#copies-
 
 `saveGame()` returns the whole run: the shared state once (with anything a shared one-shot has
 taken out of the world), then every flow's own state, turn counters, cooldowns, board contents
-and random stream position. `loadGame(envelope)` restores it, rebuilding every flow.
+and random stream position. `loadGame(envelope)` restores it, rebuilding every flow, so
+re-take your handles with `getFlow`, never `openFlow`, which would replace the restored flow
+and its dealt hand (see [JavaScript, Save and load](/play/javascript/#save-and-load)).
 
 **`@world` is deliberately not in the envelope.** It's your game's state - the engine only
 borrows it - so your game saves it, next to the envelope. That's also what makes a game that

@@ -123,7 +123,15 @@ const world = createWorldContainer(bundle);     // or bind your own resolver
 const text = serializeState(engine, world.values());   // write this to a .storyletsave
 const savedWorld = deserializeState(engine, text);     // read one back...
 if (savedWorld) world.load(savedWorld);                // ...and apply the world half yourself
+flow = engine.getFlow("main");                         // and RE-TAKE your handles: a load rebuilds every flow
 ```
+
+Two things about that last line. The `flow` you held before the load is now inert, so
+you must take a fresh one. And take it with `getFlow`, **not `openFlow`**: `openFlow` on
+an id that exists *replaces* it, which here discards the hand the file just restored, and
+you find out later when `play()` refuses the card as not dealt. The engine can tell you
+when that happens: pass `onReplacedFlow: (id, dealt) => console.warn(...)` in its
+options during development, and leave it unset in a shipped game.
 
 A foreign, malformed or wrong-project blob is refused, so a bad file can't corrupt a run.
 

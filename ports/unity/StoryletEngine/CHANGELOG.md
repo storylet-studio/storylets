@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`EngineOptions.OnReplacedFlow`** (`Action<string, int>`): fired when `OpenFlow`
+  replaces a flow that still held dealt cards, naming the flow and the count.
+  Parity with the JS runtime's `onReplacedFlow`, added the same day, and for the
+  same reason: a host calling `OpenFlow` instead of `GetFlow` after `LoadGame`
+  silently discards the restored hand. Zero cost when unset.
+
 ## [0.3.0] - 2026-09-02
 
 ### Changed

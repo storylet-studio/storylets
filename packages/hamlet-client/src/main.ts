@@ -49,7 +49,14 @@ async function boot(): Promise<void> {
   // copies kept in step is the bug this design exists to make impossible.
   world = new World({ time_of_day: "day" });
 
-  storylets = new StoryletEngine(storyletBundle, { seed: SEED, world: world.resolver });
+  storylets = new StoryletEngine(storyletBundle, {
+    seed: SEED,
+    world: world.resolver,
+    // Dev diagnostic, wired here because the runtime never touches the console
+    // itself. This is the trap the first cut of this client fell into.
+    onReplacedFlow: (id, dealt) => console.warn(
+      `openFlow("${id}") replaced a flow holding ${dealt} dealt card(s): after a load, use getFlow`),
+  });
   patter = new PatterEngine(patterBundle, { seed: SEED, world: world.resolver });
 
   story = storylets.openFlow(FLOW);

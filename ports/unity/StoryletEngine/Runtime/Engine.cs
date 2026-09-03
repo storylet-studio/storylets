@@ -86,6 +86,13 @@ namespace StoryletStudio.StoryletEngine
         /// Null = self-backed from the declared defaults. Engine-level, shared
         /// by all flows, never in SaveGame().</summary>
         public IScopeResolver World = null;
+        /// <summary>Diagnostics hook (opt-in, dev only): fired when OpenFlow
+        /// REPLACES a flow that still had cards dealt (flow id, count). The
+        /// behaviour is unchanged; this makes observable the host that calls
+        /// OpenFlow straight after LoadGame and discards the restored hand -
+        /// GetFlow is the call. Parity with the JS runtime's onReplacedFlow.
+        /// Zero cost when unset.</summary>
+        public Action<string, int> OnReplacedFlow = null;
     }
 
     public sealed class OpenFlowOptions
@@ -280,6 +287,7 @@ namespace StoryletStudio.StoryletEngine
     {
         internal readonly Bundle _bundle;
         private readonly double _seed;
+        private readonly Action<string, int> _onReplacedFlow;
         internal readonly int? _logCap;
 
         // Lookups (bundle is immutable; built once). Shared with every flow.
@@ -364,6 +372,7 @@ namespace StoryletStudio.StoryletEngine
             opts = opts ?? new EngineOptions();
             _bundle = bundle;
             _seed = opts.Seed;
+            _onReplacedFlow = opts.OnReplacedFlow;
             if (opts.Log) _logCap = opts.LogCap;
             _hostWorld = opts.World;
             foreach (var box in bundle.Boxes)
@@ -509,7 +518,15 @@ namespace StoryletStudio.StoryletEngine
         public Flow OpenFlow(string id, OpenFlowOptions opts = null)
         {
             opts = opts ?? new OpenFlowOptions();
-            _flows.GetOrDefault(id)?.MarkClosed();
+            var existing = _flows.GetOrDefault(id);
+            if (existing != null)
+            {
+                // Say so BEFORE the old flow goes inert, while its board is readable.
+                int dealt = 0;
+                foreach (var _ in existing.HeldCardIds()) dealt++;
+                if (dealt > 0) _onReplacedFlow?.Invoke(id, dealt);
+                existing.MarkClosed();
+            }
             var flow = new Flow(this, id, opts.Seed ?? _seed);
             _flows.Set(id, flow);
             return flow;

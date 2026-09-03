@@ -736,6 +736,29 @@ static int runSave(const JsonValue& cases)
     try
     {
         BundlePtr bundle = ParseBundle(cases.arr.front().at("bundle"));
+
+        // onReplacedFlow (parity with the JS runtime's): openFlow on an id that
+        // exists REPLACES it, and the hook says so when the old flow still held a
+        // dealt hand - the trap a host falls into calling openFlow instead of
+        // getFlow after loadGame. The corpus never exercises the hook, so it runs
+        // here, on this bundle, beside the save path it exists to protect.
+        {
+            std::vector<std::pair<std::string, int>> hits;
+            EngineOptions hooked;
+            hooked.onReplacedFlow = [&](const std::string& id, int n) { hits.emplace_back(id, n); };
+            Engine probe(bundle, hooked);
+            Flow& first = *probe.openFlow("main");
+            int held = 0;
+            for (const auto& hand : first.dealMany()) held += static_cast<int>(hand.second.size());
+            probe.openFlow("main");
+            if (held > 0 && (hits.size() != 1 || hits[0].first != "main" || hits[0].second != held))
+                fail("save", "onReplacedFlow", "expected one call (main, " + std::to_string(held) + "), got " + std::to_string(hits.size()));
+            if (held == 0 && !hits.empty())
+                fail("save", "onReplacedFlow", "fired for a flow holding nothing");
+            probe.openFlow("main");   // replacing an EMPTY flow is routine: no call
+            if (hits.size() > 1) fail("save", "onReplacedFlow", "fired again for an empty flow");
+        }
+
         Engine engine(bundle, EngineOptions{});
         Flow& flow = *engine.openFlow("main");
         flow.dealMany();

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`EngineOptions::onReplacedFlow`** (`std::function<void(const std::string&, int)>`):
+  fired when `openFlow` replaces a flow that still held dealt cards, naming the
+  flow and the count. Parity with the JS runtime's `onReplacedFlow`, added the
+  same day, and for the same reason: a host calling `openFlow` instead of
+  `getFlow` after `loadGame` silently discards the restored hand. Zero cost when
+  unset.
+
 ## [0.3.0] - 2026-09-02
 
 ### Changed

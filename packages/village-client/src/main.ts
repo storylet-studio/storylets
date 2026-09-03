@@ -60,7 +60,13 @@ async function start(): Promise<void> {
   const bundle = await fetch("village.storyletsc").then((r) => r.json()) as Bundle;
   maps = await fetch("maps.json").then((r) => r.json()) as VillageMap[];
 
-  engine = new Engine(bundle, { seed: SEED });
+  engine = new Engine(bundle, {
+    seed: SEED,
+    // Dev diagnostic: the runtime never writes to the console itself. This
+    // names the trap `resume` below avoids, should anyone reintroduce it.
+    onReplacedFlow: (id, dealt) => console.warn(
+      `openFlow("${id}") replaced a flow holding ${dealt} dealt card(s): after a load, use getFlow`),
+  });
   flow = engine.openFlow(FLOW);
 
   // What am I playing? `describeBundle` is the bundle read back: its identity

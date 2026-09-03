@@ -6,6 +6,14 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Added
+
+- **`on_replaced_flow`** create option, a `Callable(id: String, dealt: int)`:
+  fired when `open_flow` replaces a flow that still held dealt cards. Parity with
+  the JS runtime's `onReplacedFlow`, added the same day, and for the same reason:
+  a host calling `open_flow` instead of `get_flow` after `load_game` silently
+  discards the restored hand. Zero cost when unset.
+
 ## [0.3.0] - 2026-09-02
 
 ### Changed

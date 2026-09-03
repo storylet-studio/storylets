@@ -8,6 +8,19 @@ section for it.
 
 ## [Unreleased]
 
+### Added
+
+- **`onReplacedFlow`**, an opt-in diagnostics hook on `EngineOptions`, fired when
+  `openFlow` replaces a flow that still had cards dealt, with the flow id and the
+  count. Behaviour is unchanged: replacing is deliberate, and the same in Patter.
+  What it makes observable is a host calling `openFlow` straight after `loadGame`
+  to "re-take" its handle, which silently discards the hand the save restored and
+  surfaces later as `play()` refusing a card as not dealt. `getFlow` is the call,
+  and `deserializeState`'s doc and the JavaScript page now say so in as many
+  words. Found building the joint Storylets + Patter demo, where the sample was
+  written with the Village client open and fell into the trap that file names.
+  Zero cost when unset; leave it unset in shipped games.
+
 ## [0.3.0] - 2026-09-02
 
 ### Changed

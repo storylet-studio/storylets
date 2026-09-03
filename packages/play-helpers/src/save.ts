@@ -39,8 +39,12 @@ export function saveState(engine: Engine, world?: PropertyBag): SaveFile {
   };
 }
 
-/** Restore a {@link saveState} file into an engine (every flow is rebuilt;
- *  re-take your Flow handles afterwards). Throws on a foreign or malformed
+/** Restore a {@link saveState} file into an engine. EVERY FLOW IS REBUILT, so
+ *  the Flow handles you held before are inert: re-take them with
+ *  `engine.getFlow(id)`, NOT `engine.openFlow(id)`. `openFlow` on an existing
+ *  id REPLACES it, which here throws away the hand the file just restored, and
+ *  the failure lands later, as `play()` refusing a card as "not dealt". (The
+ *  engine's `onReplacedFlow` hook reports exactly this.) Throws on a foreign or malformed
  *  file, and the runtime's own project check still applies. Returns the file's
  *  @world values, if any - the HOST applies them to its container; the engine
  *  never touches them. */

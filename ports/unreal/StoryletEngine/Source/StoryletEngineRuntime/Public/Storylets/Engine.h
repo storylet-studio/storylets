@@ -90,6 +90,12 @@ namespace storylets
         /** The host's @world binding; absent = self-backed from the declared
          *  defaults. Engine-level, shared by all flows, never in saveGame(). */
         std::optional<WorldResolver> world;
+        /** Diagnostics hook (opt-in, dev only): fired when openFlow REPLACES a
+         *  flow that still had cards dealt (flow id, count). Behaviour is
+         *  unchanged; this makes observable the host that calls openFlow straight
+         *  after loadGame and discards the restored hand - getFlow is the call.
+         *  Parity with the JS runtime's onReplacedFlow. Zero cost when unset. */
+        std::function<void(const std::string&, int)> onReplacedFlow;
     };
 
     struct OpenFlowOptions
@@ -570,6 +576,7 @@ namespace storylets
 
         BundlePtr bundle_;
         double seed_ = 0;
+        std::function<void(const std::string&, int)> onReplacedFlow_;
         std::optional<int> logCap_;
         std::optional<WorldResolver> hostWorld_;
         std::shared_ptr<PropertyBag> selfWorld_;
@@ -2493,7 +2500,7 @@ namespace storylets
     // --- Engine methods that need the complete Flow ------------------------------
 
     inline Engine::Engine(BundlePtr bundle, const EngineOptions& opts)
-        : bundle_(std::move(bundle)), seed_(opts.seed)
+        : bundle_(std::move(bundle)), seed_(opts.seed), onReplacedFlow_(opts.onReplacedFlow)
     {
         if (opts.log) logCap_ = opts.logCap;
         if (opts.world.has_value()) hostWorld_ = opts.world;
@@ -2579,7 +2586,13 @@ namespace storylets
     inline FlowPtr Engine::openFlow(const std::string& id, const OpenFlowOptions& opts)
     {
         const FlowPtr* existing = flows_.get(id);
-        if (existing) (*existing)->markClosed();
+        if (existing)
+        {
+            // Say so BEFORE the old flow goes inert, while its board is readable.
+            const int dealt = static_cast<int>((*existing)->heldCardIds().size());
+            if (dealt > 0 && onReplacedFlow_) onReplacedFlow_(id, dealt);
+            (*existing)->markClosed();
+        }
         FlowPtr flow = std::make_shared<Flow>(this, id, opts.seed.has_value() ? *opts.seed : seed_);
         flows_.set(id, flow);
         return flow;
