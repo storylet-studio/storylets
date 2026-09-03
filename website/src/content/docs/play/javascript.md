@@ -62,7 +62,7 @@ no retained log the flow does no trace work at all.
 
 ```js
 // Refresh every hand. Returns what was dealt, keyed by hand gameId. A refresh evicts
-// what is no longer eligible and fills EMPTY slots; a still-eligible card keeps its seat.
+// what is no longer eligible and fills EMPTY slots; a still-eligible card stays dealt.
 const dealt = flow.dealMany();
 
 // Or one hand by name.

@@ -52,6 +52,19 @@ The zip carries `dist/` to open offline and `src/` to read: under 500 lines of f
 TypeScript. If you want to know what building on the engine actually looks like, this is the
 shortest honest answer.
 
+## The Hamlet: two engines in one game
+
+The same idea with [Patter](https://patterkit.dev) in the room. The Storylet Engine decides which
+beat happens; Patter performs its dialogue; the game owns the world and hands one resolver to both.
+Seventeen cards, seventeen scenes, one save that restores both engines and a conversation paused
+mid-choice. The scenes are stubs, deliberately: the plumbing is real, the words are placeholders.
+
+<Downloads kind="hamlet" />
+
+Read `src/world.ts` first (the shared world, forty-five lines), then `src/performance.ts` (the
+handoff). The two projects are joined by a naming convention and nothing else, and the build
+checks the convention holds.
+
 ## The CLI
 
 `storyletengine` validates, compiles, deals and tests projects from the terminal, which is

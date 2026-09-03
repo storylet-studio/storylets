@@ -1,0 +1,91 @@
+name: The Hamlet release
+
+# Tagging `hamlet-vX.Y.Z` builds the playable Hamlet client and attaches one zip to the
+# matching GitHub Release: `dist/` to open and play with no build step, `src/` to read.
+# The Village's arrangement, cloned, with one difference that matters: this client runs
+# TWO engines, and its Patter half comes from npm (@patterkit/runtime, @patterkit/ops),
+# never a checkout of ../patter, so there is no second repository to check out here.
+# The build's own cross-checks (scripts/pairing.mjs) run as part of `npm run build`,
+# so a card with no scene fails the release before it fails a player.
+#
+# Its own family, versioned independently, like the Village.
+on:
+  push:
+    tags: ["hamlet-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout storylets
+        uses: actions/checkout@v5
+        with:
+          path: storylets
+      - name: Checkout @wildwinter/expr (the client bundles the runtime, which inlines it)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/expr
+          path: expr
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: storylets/package-lock.json
+      - run: npm ci
+        working-directory: storylets
+
+      - name: Check the tag matches the client version
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#hamlet-v}"
+          manifest=$(node -p "require('./packages/hamlet-client/package.json').version")
+          [ "$manifest" = "$version" ] || { echo "package.json says $manifest but the tag says $version"; exit 1; }
+          grep -q "^## \[${version}\] - [0-9]" packages/hamlet-client/CHANGELOG.md \
+            || { echo "CHANGELOG.md has no dated ${version} section"; exit 1; }
+
+      - name: Verify it still plays (the gated scripted playthroughs)
+        working-directory: storylets
+        run: npx vitest run packages/hamlet-client
+
+      - name: Build the client
+        working-directory: storylets
+        run: npm run build -w @storylet-studio/hamlet-client
+
+      - name: Assemble the zip
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#hamlet-v}"
+          pkg="the-hamlet-${version}"
+          out="/tmp/${pkg}"
+          mkdir -p "$out"
+          # dist/ to play, src/ to read, and the two files that explain both.
+          cp -R packages/hamlet-client/dist "$out/dist"
+          cp -R packages/hamlet-client/src "$out/src"
+          cp packages/hamlet-client/README.md packages/hamlet-client/CHANGELOG.md \
+             packages/hamlet-client/hamlet.css packages/hamlet-client/index.html "$out/"
+          cp LICENSE "$out/"
+          ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
+          echo "HAMLET_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"
+
+      - name: Release notes = this version's changelog section
+        id: relnotes
+        run: |
+          version="${GITHUB_REF_NAME#hamlet-v}"
+          awk -v ver="$version" 'index($0, "## [" ver "]") == 1 {f=1; next} /^## \[/ {f=0} f' \
+            storylets/packages/hamlet-client/CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          [ -s "$RUNNER_TEMP/release-notes.md" ] || { echo "no changelog section for ${version}"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: false  # never claim GitHub's Latest badge - that stays on Storyletter for the updater
+          name: The Hamlet ${{ steps.relnotes.outputs.version }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          files: ${{ env.HAMLET_ZIP }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

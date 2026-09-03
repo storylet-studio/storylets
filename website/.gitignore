@@ -7,3 +7,5 @@ node_modules/
 # Generated from packages/village-client + examples/the-village.storylets, so it is
 # never committed: 4.5 MB of build output with a source of truth two directories away.
 public/village/
+# The playable Hamlet, likewise (scripts/build-hamlet.mjs): two engines, one build, never committed.
+public/hamlet/
