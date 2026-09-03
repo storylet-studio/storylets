@@ -12,3 +12,13 @@ StoryletEngineDemo/Saved/
 StoryletEngineDemo/DerivedDataCache/
 StoryletEngineDemo/.vscode/
 StoryletEngineDemo/*.xcworkspace
+
+# The Hamlet demo: build output, and what build.sh generates (Patter's plugin from its
+# pinned release as a sibling, and the two bundles).
+HamletDemo/Binaries/
+HamletDemo/Intermediate/
+HamletDemo/Saved/
+HamletDemo/DerivedDataCache/
+HamletDemo/Demos/*.storyletsc
+HamletDemo/Demos/*.patterc
+Patterplay/

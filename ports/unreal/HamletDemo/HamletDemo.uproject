@@ -1,0 +1,14 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.7",
+	"Category": "Samples",
+	"Description": "The Hamlet: one game, two engines. The Storylet Engine chooses the beat, Patter performs it, the game owns @world and hands one object to both. Finds both plugins in the sibling folder (AdditionalPluginDirectories); run build.sh once to fetch Patter's from its pinned release.",
+	"Modules": [
+		{ "Name": "HamletDemo", "Type": "Runtime", "LoadingPhase": "Default" }
+	],
+	"Plugins": [
+		{ "Name": "StoryletEngine", "Enabled": true },
+		{ "Name": "Patterplay", "Enabled": true }
+	],
+	"AdditionalPluginDirectories": [ ".." ]
+}

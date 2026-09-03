@@ -98,6 +98,21 @@ jobs:
           ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" "${pkg}-sibling" )
           echo "HAMLET_UNITY_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"
 
+      - name: Assemble the Unreal project zip (open the .uproject in Unreal 5.7+, let it build, press Play)
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#hamlet-v}"
+          bash ports/unreal/HamletDemo/build.sh
+          pkg="the-hamlet-unreal-${version}"
+          rm -rf "/tmp/${pkg}"; mkdir -p "/tmp/${pkg}"
+          # Three siblings, as the .uproject expects: the project, our plugin, Patter's plugin.
+          ( cd ports/unreal/HamletDemo && tar --exclude=Binaries --exclude=Intermediate --exclude=Saved --exclude=DerivedDataCache -cf - . ) | ( mkdir -p "/tmp/${pkg}/HamletDemo" && cd "/tmp/${pkg}/HamletDemo" && tar -xf - )
+          cp -R ports/unreal/StoryletEngine "/tmp/${pkg}/StoryletEngine"
+          cp -R ports/unreal/Patterplay "/tmp/${pkg}/Patterplay"
+          cp LICENSE "/tmp/${pkg}/"
+          ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
+          echo "HAMLET_UNREAL_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"
+
       - name: Release notes = this version's changelog section
         id: relnotes
         run: |
@@ -117,6 +132,7 @@ jobs:
             ${{ env.HAMLET_ZIP }}
             ${{ env.HAMLET_GODOT_ZIP }}
             ${{ env.HAMLET_UNITY_ZIP }}
+            ${{ env.HAMLET_UNREAL_ZIP }}
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
