@@ -124,7 +124,7 @@ func wait() -> void:
 func save() -> Dictionary:
 	var env := {
 		"storylets": StoryletSave.serialize_state(story_engine),
-		"patter": patter.save_game(),
+		"patter": PatterSave.serialize_state(patter),   # Patter's own patter/save@0 text, as ours is a .storyletsave text
 		"world": world.duplicate(),
 		"at": at,
 		"performing": null,
@@ -137,7 +137,11 @@ func save() -> Dictionary:
 func load(env: Dictionary) -> bool:
 	world = env.get("world", world).duplicate()
 	if StoryletSave.deserialize_state(story_engine, str(env["storylets"])) == null and not env.has("storylets"): return false
-	patter.load_game(env["patter"])
+	var pt = env["patter"]
+	var patter_ok := PatterSave.deserialize_state(patter, pt) if pt is String else true
+	if not (pt is String): patter.load_game(pt)
+	if not patter_ok:
+		push_error("Patter's half of the envelope did not load (PatterSave.deserialize_state refused it)"); return false
 	# A LOAD REBUILDS THE FLOWS, and open_flow on an id that exists REPLACES it,
 	# hand and all. get_flow is the call. (The JS client fell into this.)
 	story = story_engine.get_flow(FLOW)

@@ -83,6 +83,21 @@ jobs:
           ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
           echo "HAMLET_GODOT_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"
 
+      - name: Assemble the Unity project zip (open it in Unity 6000.4+ and press Play)
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#hamlet-v}"
+          bash ports/unity/HamletDemo/build.sh
+          pkg="the-hamlet-unity-${version}"
+          rm -rf "/tmp/${pkg}"; mkdir -p "/tmp/${pkg}"
+          # The project as it opens: source, Patter's embedded package, both bundles; and OUR
+          # package copied beside it, since the manifest's file: reference expects a sibling.
+          ( cd ports/unity/HamletDemo && tar --exclude=Library --exclude=Logs --exclude=Temp --exclude=UserSettings --exclude=obj --exclude='TestHost/bin' --exclude='TestHost/obj' -cf - . ) | ( cd "/tmp/${pkg}" && tar -xf - )
+          mkdir -p "/tmp/${pkg}-sibling"; cp -R ports/unity/StoryletEngine "/tmp/${pkg}-sibling/StoryletEngine"
+          cp LICENSE "/tmp/${pkg}/"
+          ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" "${pkg}-sibling" )
+          echo "HAMLET_UNITY_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"
+
       - name: Release notes = this version's changelog section
         id: relnotes
         run: |
@@ -101,6 +116,7 @@ jobs:
           files: |
             ${{ env.HAMLET_ZIP }}
             ${{ env.HAMLET_GODOT_ZIP }}
+            ${{ env.HAMLET_UNITY_ZIP }}
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

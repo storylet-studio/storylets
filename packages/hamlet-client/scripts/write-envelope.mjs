@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { Engine as StoryletEngine } from "@storylet-studio/runtime";
 import { serializeState } from "@storylet-studio/play-helpers";
 import { Engine as PatterEngine } from "@patterkit/runtime";
+import { serializeState as patterSerialize } from "@patterkit/play-helpers";
 
 const pkg = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const mid = process.argv.includes("--mid");
@@ -29,7 +30,7 @@ if (mid) {
     if (s.type === "line") shown.push({ kind: "line", character: s.characterName ?? s.character ?? "", text: s.text });
     if (s.type === "choice") break; }
   mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, JSON.stringify({ storylets: serializeState(storylets), patter: patter.saveGame(), world: Object.fromEntries(world), at: "the-inn",
+  writeFileSync(out, JSON.stringify({ storylets: serializeState(storylets), patter: patterSerialize(patter), world: Object.fromEntries(world), at: "the-inn",
     performing: { card: { id: settle.id, gameId: settle.gameId, title: settle.title }, shown, outcome: null }, _expect_choices: 2 }, null, 2));
   console.log(`wrote ${out}: mid-scene at the inn, 2 choices pending`); process.exit(0);
 }
@@ -41,5 +42,5 @@ for (;;) { const s = flow.advance();
 story.play(settle.id, outcome, "the-inn"); story.dealMany();
 const at = "the-mystic-tree"; const hand = story.deal(at).map((c) => c.gameId);
 mkdirSync(dirname(out), { recursive: true });
-writeFileSync(out, JSON.stringify({ storylets: serializeState(storylets), patter: patter.saveGame(), world: Object.fromEntries(world), at, performing: null, _expect_hand: hand }, null, 2));
+writeFileSync(out, JSON.stringify({ storylets: serializeState(storylets), patter: patterSerialize(patter), world: Object.fromEntries(world), at, performing: null, _expect_hand: hand }, null, 2));
 console.log(`wrote ${out}: at ${at}, hand [${hand}], knows_road ${world.get("knows_road")}`);

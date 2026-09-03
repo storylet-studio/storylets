@@ -18,6 +18,7 @@ import { Engine as StoryletEngine, describeBundle } from "@storylet-studio/runti
 import type { DealtCard, Flow as StoryletFlow } from "@storylet-studio/runtime";
 import { serializeState, deserializeState } from "@storylet-studio/play-helpers";
 import { Engine as PatterEngine } from "@patterkit/runtime";
+import { serializeState as patterSerialize, deserializeState as patterDeserialize } from "@patterkit/play-helpers";
 import type { Flow as PatterFlow } from "@patterkit/runtime";
 import { World } from "./world.js";
 import { perform, resume, answer, type Performance, type Shown } from "./performance.js";
@@ -147,7 +148,10 @@ const storyletBundle_boxGameId = (): string => story.listBoxes()[0]!.gameId;
 function save(): void {
   localStorage.setItem(SAVE_KEY, JSON.stringify({
     storylets: serializeState(storylets),
-    patter: patter.saveGame(),
+    // Patter's half as ITS OWN text envelope (patter/save@0, via its play-helpers),
+    // exactly as the storylet half above is ours. Never the raw saveGame() object:
+    // the family's serializer is what the other runtimes load.
+    patter: patterSerialize(patter),
     world: world.save(),
     at,
     // A save taken MID-SCENE is the one that matters, and the one a first cut
@@ -170,7 +174,7 @@ function restore(): boolean {
     const s = JSON.parse(raw);
     world.load(s.world ?? {});
     deserializeState(storylets, s.storylets);
-    patter.loadGame(s.patter);
+    if (typeof s.patter === "string") patterDeserialize(patter, s.patter); else patter.loadGame(s.patter);
     // A LOAD REBUILDS THE FLOWS, and `openFlow` on an id that exists REPLACES
     // it with a fresh one - so calling it here would throw away the hand the
     // save just restored, and finishing a resumed card would be refused with
