@@ -222,4 +222,21 @@ describe("the Hamlet client", () => {
     const source = { boxes: [{ box: { box: { gameId: "village" } }, decks: [{ shard: { cards: [{ id: "c_x", title: "The Tree Blooms" }] } }] }] };
     expect(checkPinnedGameIds(source, ["village"]).join("\n")).toMatch(/no pinned gameId/);
   });
+
+  it("restarts: forgets the save and boots fresh", async () => {
+    const first = open();
+    await settled(first.doc);
+    click(byText(first.doc, ".place", "The Inn"));
+    click(byText(first.doc, ".card", "Get Settled at the Inn"));
+    click(byText(first.doc, ".option", "Ask only about the road north"));
+    const w = first.doc.defaultView as unknown as Window & { location: { reload: () => void } };
+    expect(w.localStorage.getItem("the-hamlet/save@1")).not.toBeNull();
+    // jsdom's reload is a no-op, so assert the half the handler owns: the save is gone.
+    first.doc.getElementById("restart")!.click();
+    expect(w.localStorage.getItem("the-hamlet/save@1")).toBeNull();
+    const second = open();
+    await settled(second.doc);
+    expect(second.doc.getElementById("clock")!.textContent).toBe("day");
+    expect(buttons(second.doc, ".card")).toHaveLength(0);   // nowhere yet
+  });
 });

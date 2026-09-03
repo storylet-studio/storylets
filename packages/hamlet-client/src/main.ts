@@ -255,4 +255,7 @@ function render(): void {
 
 $("wait").onclick = wait;
 $("leave").onclick = () => go(null);
+// A restart is the one thing the engines cannot do for you: their state is the
+// playthrough. Forget the save and boot again from the bundles.
+$("restart").onclick = () => { localStorage.removeItem(SAVE_KEY); location.reload(); };
 void boot();
