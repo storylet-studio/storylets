@@ -81,6 +81,35 @@ jobs:
   # a stale copy is worse than none: every port would pass a contract that no longer
   # matches the one Patterplay is held to, which is the exact drift this whole
   # exercise exists to stop.
+  # The Hamlet on Godot: both addons in one project, played headless. Its own
+  # job because it needs Node (the bundles come from the JS client's build)
+  # as well as Godot, and the addon job deliberately has no Node in it.
+  hamlet-godot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Fetch Godot ${{ env.GODOT_VERSION }} (headless)
+        run: |
+          base="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          curl -fsSL -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/${base}.zip"
+          unzip -q godot.zip
+          chmod +x "$base"
+          echo "GODOT=$PWD/$base" >> "$GITHUB_ENV"
+      - name: Assemble the demo (our addon, Patter's pinned addon, both bundles)
+        run: bash ports/godot/HamletDemo/build.sh
+      - name: Import
+        run: |
+          "$GODOT" --headless --path ports/godot/HamletDemo --import || true
+      - name: Play it headless (the loop, a mid-scene save, a save the JS client wrote)
+        run: |
+          "$GODOT" --headless --path ports/godot/HamletDemo --script res://test/test_hamlet.gd
+
   expr-corpus-sync:
     runs-on: ubuntu-latest
     steps:

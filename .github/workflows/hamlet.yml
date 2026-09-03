@@ -70,6 +70,19 @@ jobs:
           ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
           echo "HAMLET_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"
 
+      - name: Assemble the Godot project zip (open it in Godot 4.7+ and press Play)
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#hamlet-v}"
+          bash ports/godot/HamletDemo/build.sh
+          pkg="the-hamlet-godot-${version}"
+          rm -rf "/tmp/${pkg}"; mkdir -p "/tmp/${pkg}"
+          # The project as it opens: source, both addons, both bundles. Not .godot/, not the save.
+          ( cd ports/godot/HamletDemo && tar --exclude=.godot --exclude=envelope.json -cf - . ) | ( cd "/tmp/${pkg}" && tar -xf - )
+          cp LICENSE "/tmp/${pkg}/"
+          ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
+          echo "HAMLET_GODOT_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"
+
       - name: Release notes = this version's changelog section
         id: relnotes
         run: |
@@ -85,7 +98,9 @@ jobs:
           make_latest: false  # never claim GitHub's Latest badge - that stays on Storyletter for the updater
           name: The Hamlet ${{ steps.relnotes.outputs.version }}
           body_path: ${{ runner.temp }}/release-notes.md
-          files: ${{ env.HAMLET_ZIP }}
+          files: |
+            ${{ env.HAMLET_ZIP }}
+            ${{ env.HAMLET_GODOT_ZIP }}
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
