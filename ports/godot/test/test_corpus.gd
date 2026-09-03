@@ -68,8 +68,16 @@ func _initialize() -> void:
 	var x_expr: Array = expr_root["expressions"]
 	var xp := _run_expr_prng(x_prng)
 	var xe := _run_expressions(x_expr)
-	print("expr corpus v%d - prng: %d/%d  expressions: %d/%d" % [
-		int(expr_root["version"]), xp, x_prng.size(), xe, x_expr.size()])
+	# A family the corpus carries and this harness does not run is a check that
+	# cannot fail here, so a missing key is a failure, not a skip.
+	if not expr_root.has("registry"):
+		push_error("expr parity corpus has no registry family")
+		quit(2)
+		return
+	var x_reg: Array = expr_root["registry"]
+	var xr := _run_expr_registry(x_reg)
+	print("expr corpus v%d - prng: %d/%d  expressions: %d/%d  registry: %d/%d" % [
+		int(expr_root["version"]), xp, x_prng.size(), xe, x_expr.size(), xr, x_reg.size()])
 
 	print("ALL PASS" if _fails == 0 else "%d FAILED" % _fails)
 	quit(0 if _fails == 0 else 1)
@@ -593,3 +601,67 @@ func _read_only_world_probe(bundle: Dictionary) -> Array:
 	if sets != ["mood"]:
 		failures.append("bound-world probe: expected the host's set once, for mood; got %s" % str(sets))
 	return failures
+
+
+# -- the expr parity corpus: registry ---------------------------------------------
+#
+# The scope kernel's `writable` rule: decl.writable ?? scope.writable ?? true. A case
+# with no "scope" seeds a StoryletPropertyBag and writes to it; one with a "scope"
+# mounts the declarations as a FOREIGN scope on a StoryletScopeRegistry over a plain
+# Dictionary, with the scope default, and writes through the registry - the
+# registry's own rule, not the bag's. The value is read back on BOTH outcomes: a
+# refusal that half-wrote is a failure, and so is a "landed" write that went nowhere.
+func _run_expr_registry(cases: Array) -> int:
+	var pass_count := 0
+	for c in cases:
+		var name: String = c["name"]
+		var decls: Array = []
+		for d in c["declarations"]:
+			var decl: Dictionary = (d as Dictionary).duplicate()
+			decl["default"] = StoryletValues.to_value(d["default"])
+			decls.append(decl)
+		var set_name: String = c["set"]["name"]
+		var value = StoryletValues.to_value(c["set"]["value"])
+		var expect_error: bool = c.get("expectError", false)
+		var expected = StoryletValues.to_value(c["expected"])
+
+		var error := ""
+		var read_back = null
+		if not c.has("scope"):
+			var bag := StoryletPropertyBag.new(decls)
+			var change: Dictionary = bag.set_value(set_name, value)
+			if change.has("error"):
+				error = str(change["error"])
+			read_back = bag.get_value(set_name)
+		else:
+			var store := {}
+			for d in decls:
+				store[str(d["name"]).to_lower()] = d["default"]
+			var resolver := {
+				"get": func(n: String): return store.get(n),
+				"set": func(n: String, v) -> void: store[n] = v,
+			}
+			var scope: Dictionary = c["scope"]
+			var registry := StoryletScopeRegistry.new().define_foreign(
+				"s", resolver, decls, bool(scope.get("writable", true)))
+			error = registry.set_value("s", set_name, value)
+			read_back = registry.get_value("s", set_name)
+
+		var ok := true
+		if expect_error:
+			if error == "":
+				_fail("expr/registry", name, "expected a read-only refusal, the write landed")
+				ok = false
+			elif not error.contains("is read-only"):
+				_fail("expr/registry", name, "refused, but not as read-only: " + error)
+				ok = false
+		elif error != "":
+			_fail("expr/registry", name, "unexpected refusal: " + error)
+			ok = false
+		if not StoryletValues.value_equals(read_back, expected):
+			_fail("expr/registry", name, "read back %s, expected %s" % [
+				StoryletValues.show(read_back), StoryletValues.show(expected)])
+			ok = false
+		if ok:
+			pass_count += 1
+	return pass_count
