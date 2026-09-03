@@ -211,6 +211,10 @@ describe("the Hamlet client", () => {
     delete drifted.scopeRegistry.scopes[0].declarations[1];
     drifted.scopeRegistry.scopes[0].declarations = drifted.scopeRegistry.scopes[0].declarations.filter(Boolean);
     expect(checkWorld(s, drifted).join("\n")).toMatch(/knows_road is declared by the storylet project and not/);
+    // A card writing a property Patter holds read-only: legal on our side, so only this catches it.
+    const writes = structuredClone(s);
+    writes.boxes[0].decks[0].cards[0].outcomes[0].changes = { "@world.time_of_day": { src: "\"night\"", ast: ["s", "night"] } };
+    expect(checkWorld(writes, p).join("\n")).toMatch(/writes @world\.time_of_day, which the Patter project declares read-only/);
     const source = { boxes: [{ box: { box: { gameId: "village" } }, decks: [{ shard: { cards: [{ id: "c_x", title: "The Tree Blooms" }] } }] }] };
     expect(checkPinnedGameIds(source, ["village"]).join("\n")).toMatch(/no pinned gameId/);
   });

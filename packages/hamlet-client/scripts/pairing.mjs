@@ -106,6 +106,30 @@ export function checkWorld(storyletBundle, patterBundle) {
   for (const name of theirs.keys()) {
     if (!ours.has(name)) problems.push(`@world.${name} is declared by the Patter project and not by the storylet project`);
   }
+  // Read-only is a Patter-side concept: `writable: false` makes a property
+  // read-only TO THE STORY, validated at compile time there. The storylet
+  // format has no such flag, and a card's outcome may write any @world value
+  // (checked: it compiles, and play() calls the resolver's set). So a property
+  // Patter has declared nobody-but-the-host-moves can still be moved by a card,
+  // and only this sees it.
+  const scopeWritable = scope?.writable !== false;
+  for (const box of storyletBundle.boxes ?? []) {
+    for (const deck of box.decks ?? []) {
+      for (const card of deck.cards ?? []) {
+        for (const outcome of card.outcomes ?? []) {
+          for (const target of Object.keys(outcome.changes ?? {})) {
+            const m = /^@world\.([a-z][a-z0-9_-]*)$/.exec(target);
+            if (!m) continue;
+            const q = theirs.get(m[1]);
+            const writable = q?.writable ?? scopeWritable;
+            if (q && !writable) {
+              problems.push(`outcome "${outcome.gameId}" of card "${card.gameId}" writes @world.${m[1]}, which the Patter project declares read-only (writable: false)`);
+            }
+          }
+        }
+      }
+    }
+  }
   return problems;
 }
 
