@@ -918,9 +918,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .set-rowline input.set-values { flex: 1 1 12rem; min-width: 6rem; }
 .set-actions { display: flex; gap: 8px; }
 
-/* --- toast ------------------------------------------------------------------ */
-.toast { position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%); color: var(--surface); padding: 8px 16px; border-radius: var(--radius-md); box-shadow: var(--shadow-3); font-size: 0.85rem; z-index: 100; }
-.toast.error { background: var(--danger); } .toast.ok { background: var(--ok); }
+/* --- toast: the shell's now (@wildwinter/app-shell/toast.css) ---------------- */
 
 /* --- Live Link chip (design/live-link.md; Patterpad's .debuglink, lifted) ------
    Bottom-right, fixed: one coloured connect icon, the copiable address beside

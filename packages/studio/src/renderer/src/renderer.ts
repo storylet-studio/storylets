@@ -28,6 +28,7 @@ import "@wildwinter/app-shell/vc.css";
 import "@wildwinter/app-shell/identity.css";
 import "@wildwinter/app-shell/notes-editor.css";
 import "@wildwinter/app-shell/comments.css";
+import "@wildwinter/app-shell/toast.css";
 import "@wildwinter/expr-editor/styles.css";
 import { applyTheme } from "./theme.js";
 import { baseName } from "./paths.js";
@@ -53,7 +54,7 @@ import type { Detail, Inspected, InspectorHost } from "./inspector.js";
 import { createProjectSettings } from "./project-settings.js";
 import { mountPropertyList } from "./prop-list.js";
 import { setPropertyNavigator } from "./expr-panels.js";
-import { createNavHistory, historyNav } from "@wildwinter/app-shell";
+import { createNavHistory, historyNav, toast } from "@wildwinter/app-shell";
 import type { MountedNodeView } from "./node-view.js";
 import type { MountedMapView } from "./map-view.js";
 import type { SearchSelection } from "./search.js";
@@ -1316,7 +1317,6 @@ const saveEl = saveIndicator();
 // chrome: hidden entirely on the clean, writable, up-to-date common case).
 const vcEl = el("span", { className: "vcstat" });
 vcEl.hidden = true;
-let toastNode: HTMLElement | undefined;
 
 let shell!: PaneShell;
 function mountShell(): void {
@@ -2087,12 +2087,10 @@ async function saveIdentity(): Promise<void> {
   if (answer) await studio.setIdentity(answer);
 }
 
-function flash(message: string, kind: "error" | "ok" = "error"): void {
-  toastNode?.remove();
-  toastNode = el("div", { className: `toast ${kind}`, text: message });
-  document.body.append(toastNode);
-  setTimeout(() => { toastNode?.remove(); toastNode = undefined; }, 4000);
-}
+// The toast is the shell's (@wildwinter/app-shell toast.ts): both apps had one and agreed on
+// nothing but the sentences. `flash` keeps this file's name and its default - here an
+// unqualified remark has always meant something went wrong.
+const flash = (message: string, kind: "error" | "ok" = "error"): void => toast(message, kind);
 const flashError = (m: string): void => flash(m, "error");
 
 // Project Settings dialog (the shared settings shell + storylet sections). A

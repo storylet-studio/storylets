@@ -30,7 +30,7 @@
     "@storylet-studio/model": "0.1.0",
     "@storylet-studio/ops": "0.0.0",
     "@storylet-studio/runtime": "0.3.0",
-    "@wildwinter/app-shell": "^0.36.0",
+    "@wildwinter/app-shell": "^0.37.0",
     "@wildwinter/expr-editor": "^0.15.1",
     "@wildwinter/simple-vc-lib": "^0.4.1",
     "konva": "^10.3.0",

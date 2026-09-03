@@ -1,0 +1,1233 @@
+{
+  "cast": [
+    {
+      "name": "MIRA"
+    },
+    {
+      "name": "PLAYER"
+    },
+    {
+      "name": "GARETH"
+    },
+    {
+      "name": "BRYNA"
+    }
+  ],
+  "content": {
+    "hash": "0v7sdqv",
+    "project": "proj_mfj6p1i9",
+    "structureHash": "1iosqr6"
+  },
+  "locales": {
+    "default": "en",
+    "included": [
+      "en"
+    ]
+  },
+  "scenes": {
+    "answer-brynas-summons": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_77a352f0",
+                  "kind": "text"
+                },
+                {
+                  "character": "BRYNA",
+                  "id": "L_fvqkrpvr",
+                  "kind": "line"
+                }
+              ],
+              "id": "sn_77a352f0",
+              "type": "snippet"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "character": "PLAYER",
+                          "id": "L_rw9nw1pw",
+                          "kind": "line"
+                        },
+                        {
+                          "character": "BRYNA",
+                          "id": "L_uovzn5vn",
+                          "kind": "line"
+                        },
+                        {
+                          "gameData": {
+                            "outcome": "pledge-your-help"
+                          },
+                          "id": "E_cda5bb9d",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_cda5bb9d",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_cda5bb9d",
+                  "prompt": {
+                    "id": "L_60d0e4ea",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                },
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "character": "PLAYER",
+                          "id": "L_sbhl9llk",
+                          "kind": "line"
+                        },
+                        {
+                          "character": "BRYNA",
+                          "id": "L_91ogw8pc",
+                          "kind": "line"
+                        },
+                        {
+                          "gameData": {
+                            "outcome": "keep-your-distance"
+                          },
+                          "id": "E_67c680a3",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_67c680a3",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_67c680a3",
+                  "prompt": {
+                    "id": "L_2fc9040b",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                }
+              ],
+              "id": "g_e1d25c9a",
+              "selector": "choice",
+              "type": "group"
+            }
+          ],
+          "id": "blk_f6013e57",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "answer-brynas-summons",
+      "name": "Answer Bryna's Summons",
+      "type": "scene"
+    },
+    "arrive-at-the-gate": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_ac3557d9",
+                  "kind": "text"
+                },
+                {
+                  "gameData": {
+                    "outcome": "step-through"
+                  },
+                  "id": "E_26b66aa1",
+                  "kind": "gameEvent"
+                }
+              ],
+              "id": "sn_ac3557d9",
+              "jump": {
+                "to": "END"
+              },
+              "type": "snippet"
+            }
+          ],
+          "id": "blk_d4fdedb1",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "arrive-at-the-gate",
+      "name": "Arrive at the Village Gate",
+      "type": "scene"
+    },
+    "gareth-looks-troubled": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_665628bb",
+                  "kind": "text"
+                }
+              ],
+              "id": "sn_665628bb",
+              "type": "snippet"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "gameData": {
+                            "outcome": "ask-what-is-wrong"
+                          },
+                          "id": "E_672a15ee",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_672a15ee",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_672a15ee",
+                  "prompt": {
+                    "id": "L_77ea940b",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                },
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "gameData": {
+                            "outcome": "leave-him-be"
+                          },
+                          "id": "E_ee91b888",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_ee91b888",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_ee91b888",
+                  "prompt": {
+                    "id": "L_46a74010",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                }
+              ],
+              "id": "g_b9fc9adc",
+              "selector": "choice",
+              "type": "group"
+            }
+          ],
+          "id": "blk_05abdf20",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "gareth-looks-troubled",
+      "name": "Gareth Looks Troubled",
+      "type": "scene"
+    },
+    "gareths-gratitude": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_acf6f963",
+                  "kind": "text"
+                },
+                {
+                  "gameData": {
+                    "outcome": "clasp-his-hand"
+                  },
+                  "id": "E_6e0421a4",
+                  "kind": "gameEvent"
+                }
+              ],
+              "id": "sn_acf6f963",
+              "jump": {
+                "to": "END"
+              },
+              "type": "snippet"
+            }
+          ],
+          "id": "blk_4010212e",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "gareths-gratitude",
+      "name": "Gareth's Gratitude",
+      "type": "scene"
+    },
+    "known-at-the-forge": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_07a7313f",
+                  "kind": "text"
+                }
+              ],
+              "id": "sn_07a7313f",
+              "type": "snippet"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "character": "PLAYER",
+                          "id": "L_j8kzoojp",
+                          "kind": "line"
+                        },
+                        {
+                          "character": "GARETH",
+                          "id": "L_brs8i80t",
+                          "kind": "line"
+                        },
+                        {
+                          "gameData": {
+                            "outcome": "admire-the-work"
+                          },
+                          "id": "E_52308ecb",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_52308ecb",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_52308ecb",
+                  "prompt": {
+                    "id": "L_7d4a7ebc",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                },
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "character": "PLAYER",
+                          "id": "L_knp4fifu",
+                          "kind": "line"
+                        },
+                        {
+                          "character": "GARETH",
+                          "id": "L_z5ox6on8",
+                          "kind": "line"
+                        },
+                        {
+                          "gameData": {
+                            "outcome": "ask-if-hes-hiring"
+                          },
+                          "id": "E_872167c9",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_872167c9",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_872167c9",
+                  "prompt": {
+                    "id": "L_55b237b4",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                }
+              ],
+              "id": "g_1d4b3599",
+              "selector": "choice",
+              "type": "group"
+            }
+          ],
+          "id": "blk_aefdbeea",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "known-at-the-forge",
+      "name": "Make Yourself Known at the Forge",
+      "type": "scene"
+    },
+    "market-bustle": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "children": [
+                {
+                  "beats": [
+                    {
+                      "id": "T_2083f3db",
+                      "kind": "text"
+                    }
+                  ],
+                  "id": "sn_2083f3db",
+                  "type": "snippet"
+                },
+                {
+                  "beats": [
+                    {
+                      "id": "L_7b4a6gin",
+                      "kind": "text"
+                    }
+                  ],
+                  "id": "sn_7v9did6b",
+                  "type": "snippet"
+                },
+                {
+                  "beats": [
+                    {
+                      "id": "L_tqr5bzh5",
+                      "kind": "text"
+                    }
+                  ],
+                  "id": "sn_vigoi3ho",
+                  "type": "snippet"
+                },
+                {
+                  "beats": [
+                    {
+                      "id": "L_puz4l9h5",
+                      "kind": "text"
+                    }
+                  ],
+                  "id": "sn_e20tyajy",
+                  "type": "snippet"
+                }
+              ],
+              "id": "g_hetvsryw",
+              "options": {
+                "exhaust": "repeat",
+                "order": "shuffle"
+              },
+              "selector": "sequence",
+              "type": "group"
+            },
+            {
+              "beats": [
+                {
+                  "gameData": {
+                    "outcome": "continue"
+                  },
+                  "id": "E_79024986",
+                  "kind": "gameEvent"
+                }
+              ],
+              "id": "sn_rx56qu4s",
+              "jump": {
+                "to": "END"
+              },
+              "type": "snippet"
+            }
+          ],
+          "id": "blk_5ebe696f",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "market-bustle",
+      "name": "Market Bustle",
+      "type": "scene"
+    },
+    "mira-seems-distracted": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_1d6e17eb",
+                  "kind": "text"
+                },
+                {
+                  "gameData": {
+                    "outcome": "hold-her-gaze"
+                  },
+                  "id": "E_55c97035",
+                  "kind": "gameEvent"
+                }
+              ],
+              "id": "sn_1d6e17eb",
+              "jump": {
+                "to": "END"
+              },
+              "type": "snippet"
+            }
+          ],
+          "id": "blk_28fa8503",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "mira-seems-distracted",
+      "name": "Mira Seems Distracted",
+      "type": "scene"
+    },
+    "night-settles": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_b7c23642",
+                  "kind": "text"
+                },
+                {
+                  "gameData": {
+                    "outcome": "continue"
+                  },
+                  "id": "E_e61ead22",
+                  "kind": "gameEvent"
+                }
+              ],
+              "id": "sn_b7c23642",
+              "jump": {
+                "to": "END"
+              },
+              "type": "snippet"
+            }
+          ],
+          "id": "blk_8ed9ad0d",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "night-settles",
+      "name": "Night Settles on the Village",
+      "type": "scene"
+    },
+    "ring-of-the-anvil": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_f8c5f777",
+                  "kind": "text"
+                },
+                {
+                  "gameData": {
+                    "outcome": "continue"
+                  },
+                  "id": "E_9673e074",
+                  "kind": "gameEvent"
+                }
+              ],
+              "id": "sn_f8c5f777",
+              "jump": {
+                "to": "END"
+              },
+              "type": "snippet"
+            }
+          ],
+          "id": "blk_f2fafc81",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "ring-of-the-anvil",
+      "name": "The Ring of the Anvil",
+      "type": "scene"
+    },
+    "settle-at-the-inn": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_985d8f12",
+                  "kind": "text"
+                },
+                {
+                  "character": "MIRA",
+                  "id": "L_a24x6snq",
+                  "kind": "line"
+                }
+              ],
+              "id": "sn_985d8f12",
+              "type": "snippet"
+            },
+            {
+              "children": [
+                {
+                  "beats": [
+                    {
+                      "id": "T_inn_night",
+                      "kind": "text"
+                    }
+                  ],
+                  "condition": {
+                    "ast": [
+                      "bin",
+                      "==",
+                      [
+                        "sv",
+                        "world",
+                        "time_of_day"
+                      ],
+                      [
+                        "s",
+                        "night"
+                      ]
+                    ],
+                    "src": "@world.time_of_day == \"night\""
+                  },
+                  "id": "sn_inn_night",
+                  "type": "snippet"
+                },
+                {
+                  "beats": [
+                    {
+                      "id": "L_zgv6v66a",
+                      "kind": "text"
+                    }
+                  ],
+                  "id": "sn_ouzpu6hk",
+                  "type": "snippet"
+                }
+              ],
+              "id": "g_qnxe8o86",
+              "selector": "branch",
+              "type": "group"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "character": "PLAYER",
+                          "direction": "warmly",
+                          "id": "L_0fo3qd00",
+                          "kind": "line"
+                        },
+                        {
+                          "id": "L_xscc5c4p",
+                          "kind": "text"
+                        },
+                        {
+                          "gameData": {
+                            "outcome": "ask-about-history"
+                          },
+                          "id": "E_ddf6ce30",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_ddf6ce30",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_ddf6ce30",
+                  "prompt": {
+                    "id": "L_35ae96fb",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                },
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "character": "PLAYER",
+                          "id": "L_u61bszwi",
+                          "kind": "line"
+                        },
+                        {
+                          "id": "L_r41z2eh1",
+                          "kind": "text"
+                        },
+                        {
+                          "gameData": {
+                            "outcome": "ask-about-the-road-north"
+                          },
+                          "id": "E_cacb7640",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_cacb7640",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "onExit": [
+                        {
+                          "kind": "set",
+                          "target": "@world.knows_road",
+                          "value": {
+                            "ast": [
+                              "b",
+                              true
+                            ],
+                            "src": "true"
+                          }
+                        }
+                      ],
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_cacb7640",
+                  "prompt": {
+                    "id": "L_79adade3",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                }
+              ],
+              "id": "g_64e912f6",
+              "selector": "choice",
+              "type": "group"
+            }
+          ],
+          "id": "blk_9b4bcd47",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "settle-at-the-inn",
+      "name": "Get Settled at the Inn",
+      "type": "scene"
+    },
+    "the-forest-turns": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_434207f4",
+                  "kind": "text"
+                },
+                {
+                  "gameData": {
+                    "outcome": "continue"
+                  },
+                  "id": "E_79ef8094",
+                  "kind": "gameEvent"
+                }
+              ],
+              "id": "sn_434207f4",
+              "jump": {
+                "to": "END"
+              },
+              "type": "snippet"
+            }
+          ],
+          "id": "blk_06226685",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "the-forest-turns",
+      "name": "The Forest Turns Wary",
+      "type": "scene"
+    },
+    "the-glowing-tree": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_5ddd00b7",
+                  "kind": "text"
+                }
+              ],
+              "id": "sn_5ddd00b7",
+              "type": "snippet"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "gameData": {
+                            "outcome": "touch-the-bark"
+                          },
+                          "id": "E_d329680d",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_d329680d",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_d329680d",
+                  "prompt": {
+                    "id": "L_339162b1",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                },
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "gameData": {
+                            "outcome": "observe-carefully"
+                          },
+                          "id": "E_9d3a0829",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_9d3a0829",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_9d3a0829",
+                  "prompt": {
+                    "id": "L_5ede4b2d",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                }
+              ],
+              "id": "g_768f2de6",
+              "selector": "choice",
+              "type": "group"
+            }
+          ],
+          "id": "blk_9ddbb1b0",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "the-glowing-tree",
+      "name": "The Glowing Tree at Night",
+      "type": "scene"
+    },
+    "the-moneylenders-men": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_374799a6",
+                  "kind": "text"
+                }
+              ],
+              "id": "sn_374799a6",
+              "type": "snippet"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "gameData": {
+                            "outcome": "stand-with-gareth"
+                          },
+                          "id": "E_2f6a1015",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_2f6a1015",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_2f6a1015",
+                  "prompt": {
+                    "id": "L_5cd828ac",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                },
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "gameData": {
+                            "outcome": "pay-them-off"
+                          },
+                          "id": "E_398f0035",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_398f0035",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_398f0035",
+                  "prompt": {
+                    "id": "L_ac695055",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                },
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "gameData": {
+                            "outcome": "walk-away"
+                          },
+                          "id": "E_26b6c079",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_26b6c079",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_26b6c079",
+                  "prompt": {
+                    "id": "L_2f959091",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                }
+              ],
+              "id": "g_b224a138",
+              "selector": "choice",
+              "type": "group"
+            }
+          ],
+          "id": "blk_925abfd9",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "the-moneylenders-men",
+      "name": "The Moneylender's Men",
+      "type": "scene"
+    },
+    "the-road-north": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_711f18c2",
+                  "kind": "text"
+                },
+                {
+                  "gameData": {
+                    "outcome": "continue"
+                  },
+                  "id": "E_dda03b95",
+                  "kind": "gameEvent"
+                }
+              ],
+              "id": "sn_711f18c2",
+              "jump": {
+                "to": "END"
+              },
+              "type": "snippet"
+            }
+          ],
+          "id": "blk_3406704c",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "the-road-north",
+      "name": "The Road North",
+      "type": "scene"
+    },
+    "the-sealed-letter": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_32e27eb0",
+                  "kind": "text"
+                }
+              ],
+              "id": "sn_32e27eb0",
+              "type": "snippet"
+            },
+            {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "gameData": {
+                            "outcome": "read-it"
+                          },
+                          "id": "E_30d9a900",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_30d9a900",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_30d9a900",
+                  "prompt": {
+                    "id": "L_4293104b",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                },
+                {
+                  "children": [
+                    {
+                      "beats": [
+                        {
+                          "gameData": {
+                            "outcome": "return-it-unread"
+                          },
+                          "id": "E_2fbfd133",
+                          "kind": "gameEvent"
+                        }
+                      ],
+                      "id": "sn_2fbfd133",
+                      "jump": {
+                        "to": "END"
+                      },
+                      "type": "snippet"
+                    }
+                  ],
+                  "id": "opt_2fbfd133",
+                  "prompt": {
+                    "id": "L_3cd263e4",
+                    "kind": "text"
+                  },
+                  "type": "group"
+                }
+              ],
+              "id": "g_4df2f3a0",
+              "selector": "choice",
+              "type": "group"
+            }
+          ],
+          "id": "blk_b25b8f86",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "the-sealed-letter",
+      "name": "The Sealed Letter",
+      "type": "scene"
+    },
+    "the-tree-blooms": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_f2fd9755",
+                  "kind": "text"
+                },
+                {
+                  "gameData": {
+                    "outcome": "breathe-it-in"
+                  },
+                  "id": "E_ddb38efc",
+                  "kind": "gameEvent"
+                }
+              ],
+              "id": "sn_f2fd9755",
+              "jump": {
+                "to": "END"
+              },
+              "type": "snippet"
+            }
+          ],
+          "id": "blk_3a9dd204",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "the-tree-blooms",
+      "name": "The Tree Blooms",
+      "type": "scene"
+    },
+    "wind-in-the-leaves": {
+      "blocks": [
+        {
+          "children": [
+            {
+              "beats": [
+                {
+                  "id": "T_8a7f142c",
+                  "kind": "text"
+                },
+                {
+                  "gameData": {
+                    "outcome": "continue"
+                  },
+                  "id": "E_577cb55b",
+                  "kind": "gameEvent"
+                }
+              ],
+              "id": "sn_8a7f142c",
+              "jump": {
+                "to": "END"
+              },
+              "type": "snippet"
+            }
+          ],
+          "id": "blk_ef8d12f1",
+          "name": "Main",
+          "type": "block"
+        }
+      ],
+      "id": "wind-in-the-leaves",
+      "name": "Wind in the Leaves",
+      "type": "scene"
+    }
+  },
+  "schema": "patter/bundle@0",
+  "scopeRegistry": {
+    "scopes": [
+      {
+        "declarations": [
+          {
+            "default": "day",
+            "name": "time_of_day",
+            "purpose": "The host owns time. Declared here so scenes may READ it; read-only so no scene can move it. Must agree with the storylet project, which declares the same property: the demo build checks that.",
+            "type": "enum",
+            "values": [
+              "day",
+              "night"
+            ],
+            "writable": false
+          },
+          {
+            "default": false,
+            "name": "knows_road",
+            "purpose": "Set by dialogue (asking Mira about the road north) and read by a storylet card: the one value in this demo that flows FROM Patter TO the Storylet Engine, through the shared @world.",
+            "type": "boolean",
+            "writable": true
+          }
+        ],
+        "token": "world"
+      }
+    ],
+    "version": 1
+  },
+  "strings": {
+    "en": {
+      "L_0fo3qd00": "Tell me about the village's history?",
+      "L_2f959091": "Walk away; it isn't your fight",
+      "L_2fc9040b": "Stay polite but keep your distance",
+      "L_339162b1": "Touch the glowing bark",
+      "L_35ae96fb": "Ask warmly about the village's history",
+      "L_3cd263e4": "Return it unread",
+      "L_4293104b": "Read it while you can",
+      "L_46a74010": "Leave him be",
+      "L_55b237b4": "Talk straight: ask if he's hiring",
+      "L_5cd828ac": "Stand with Gareth against them",
+      "L_5ede4b2d": "Step back and observe carefully",
+      "L_60d0e4ea": "Pledge your help to the village",
+      "L_77ea940b": "Ask him what's wrong",
+      "L_79adade3": "Ask only about the road north",
+      "L_7b4a6gin": "The square is alive with haggling and gossip.",
+      "L_7d4a7ebc": "Admire the work openly",
+      "L_91ogw8pc": "I can take a hint.",
+      "L_a24x6snq": "Hello - I'm Mira. Welcome to our village. Can I help you, stranger?",
+      "L_ac695055": "Pay the debt yourself",
+      "L_brs8i80t": "Thanks, I'm glad you like it. I'm Gareth, by the way.",
+      "L_fvqkrpvr": "Hello! I hear you're looking for things to do in the village. Could you help us?",
+      "L_j8kzoojp": "Wow! That's amazing!",
+      "L_knp4fifu": "Are you hiring?",
+      "L_puz4l9h5": "A child runs off with an apple and a trader shakes his fist.",
+      "L_r41z2eh1": "Mira tells you how to find the road north.",
+      "L_rw9nw1pw": "I'll help you!",
+      "L_sbhl9llk": "It's good to meet you.",
+      "L_tqr5bzh5": "There is laughter from the square.",
+      "L_u61bszwi": "Tell me about the road north.",
+      "L_uovzn5vn": "Wonderful!",
+      "L_xscc5c4p": "Mira explains about the village's history.",
+      "L_z5ox6on8": "Not right now I'm afraid. By the way, I'm Gareth. Nice to meet a straight-talker.",
+      "L_zgv6v66a": "The inn is busy with customers, sunlight streaming through the windows.",
+      "T_07a7313f": "The blacksmith barely looks up from the anvil. He's focused on a wrought-iron candlestick of rosebuds and leaves.",
+      "T_1d6e17eb": "STUB: Mira Seems Distracted. Replace with the scene.",
+      "T_2083f3db": "A the trader is loudly overselling turnips. ",
+      "T_32e27eb0": "STUB: The Sealed Letter. Replace with the scene.",
+      "T_374799a6": "STUB: The Moneylender's Men. Replace with the scene.",
+      "T_434207f4": "STUB: The Forest Turns Wary. Replace with the scene.",
+      "T_5ddd00b7": "STUB: The Glowing Tree at Night. Replace with the scene.",
+      "T_665628bb": "STUB: Gareth Looks Troubled. Replace with the scene.",
+      "T_711f18c2": "You can see the track Mira described, that leads north through the forest.",
+      "T_77a352f0": "Rumour reaches you that Bryna, the village elder, would like to visit you. So you head to her house to talk to her.",
+      "T_8a7f142c": "The forest breathes around you. The trail markers are older than the village.",
+      "T_985d8f12": "You step into the inn.",
+      "T_ac3557d9": "The road ends at a weathered gate; smoke rises from the Inn beyond. Welcome to the village of Ham.",
+      "T_acf6f963": "STUB: Gareth's Gratitude. Replace with the scene.",
+      "T_b7c23642": "Lamps gutter; the well stands black and still. Something feels watchful after dark.",
+      "T_f2fd9755": "STUB: The Tree Blooms. Replace with the scene.",
+      "T_f8c5f777": "A hammer keeps time across the village from the forge, steady as a heartbeat.",
+      "T_inn_night": "The common room is quiet this late."
+    }
+  },
+  "voiced": true
+}

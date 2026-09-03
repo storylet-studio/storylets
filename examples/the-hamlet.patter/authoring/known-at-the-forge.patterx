@@ -1,0 +1,12 @@
+{
+  "edits": {
+    "T_07a7313f": {
+      "modifiedAt": "2026-09-03T20:56:02.188Z",
+    },
+    "known-at-the-forge": {
+      "by": "Ian Thomas",
+      "modifiedAt": "2026-09-03T20:56:02.188Z",
+    },
+  },
+  "schema": "patter/authoring@0",
+}
