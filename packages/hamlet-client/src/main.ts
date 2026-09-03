@@ -114,7 +114,14 @@ function finishIfDone(): void {
   story.play(card.id, state.outcome, at!);
   log.unshift(`${card.title ?? card.gameId}: ${state.outcome}`);
   playing = null;
-  if (at !== null) story.deal(at);
+  // Re-prime EVERYWHERE, not just here: the outcome's changes, and anything the
+  // scene wrote to @world, may have re-gated content in another place. The
+  // Village does the same after a play. Know what a refresh does, though:
+  // `dealMany` evicts cards no longer eligible and fills EMPTY slots, and a
+  // card that is still eligible keeps its seat. So a card that became eligible
+  // in a full hand (the tree has one slot) waits until the player acts there.
+  // That is the engine's stability rule, not a bug, and the test pins it.
+  story.dealMany();
   save();
 }
 
@@ -196,7 +203,9 @@ function restore(): boolean {
 // --- drawing ----------------------------------------------------------------
 
 function render(): void {
-  $("clock").textContent = String(world.get("time_of_day") ?? "");
+  // The whole shared @world, as one line: what BOTH engines currently see.
+  $("clock").textContent = Object.entries(world.save())
+    .map(([k, v]) => (typeof v === "boolean" ? (v ? k : "") : String(v))).filter(Boolean).join(" · ");
   $("places").replaceChildren(...places.map((p) => {
     const b = document.createElement("button");
     b.textContent = p.title;

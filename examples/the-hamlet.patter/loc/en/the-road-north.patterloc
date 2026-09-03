@@ -1,0 +1,9 @@
+{
+  "default": true,
+  "locale": "en",
+  "scene": "the-road-north",
+  "schema": "patter/strings@0",
+  "strings": {
+    "T_711f18c2": "STUB: The Road North. A faint track between the trees, exactly where Mira said. Replace with the scene.",
+  },
+}

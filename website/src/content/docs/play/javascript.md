@@ -61,7 +61,8 @@ no retained log the flow does no trace work at all.
 ## Deal, peek, outcomes, play
 
 ```js
-// Refresh every hand. Returns what was dealt, keyed by hand gameId.
+// Refresh every hand. Returns what was dealt, keyed by hand gameId. A refresh evicts
+// what is no longer eligible and fills EMPTY slots; a still-eligible card keeps its seat.
 const dealt = flow.dealMany();
 
 // Or one hand by name.

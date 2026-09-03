@@ -7,5 +7,6 @@
     "L_35ae96fb": "Ask warmly about the village's history",
     "L_79adade3": "Ask only about the road north",
     "T_985d8f12": "STUB: Get Settled at the Inn. Replace with the scene.",
+    "T_inn_night": "STUB (night only): The common room is quiet this late; Mira is banking the fire. This line exists because the scene READS @world.time_of_day, which the host moves and both engines see.",
   },
 }

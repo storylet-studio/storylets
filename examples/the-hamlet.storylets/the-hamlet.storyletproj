@@ -7,6 +7,13 @@
   },
   coverage: {
     drivers: {
+      "@world.knows_road": {
+        cadence: "sometimes",
+        kind: "recurring",
+        values: [
+          true,
+        ],
+      },
       "@world.time_of_day": {
         cadence: "sometimes",
         kind: "recurring",
@@ -92,6 +99,12 @@
   templates: {},
   world: {
     properties: [
+      {
+        default: false,
+        name: "knows_road",
+        purpose: "Written by DIALOGUE (Mira, about the road north) and read here: the one value in the joint demo that flows from Patter to the Storylet Engine, through the shared @world. Declared in both projects; the demo build checks they agree.",
+        type: "boolean",
+      },
       {
         default: "day",
         name: "time_of_day",

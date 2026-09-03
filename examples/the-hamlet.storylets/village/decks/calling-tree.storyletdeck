@@ -38,6 +38,7 @@
       fields: {
         music: "wonder",
       },
+      gameId: "the-tree-blooms",
       id: "c_tree_bloom",
       outcomes: [
         {

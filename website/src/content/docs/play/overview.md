@@ -82,8 +82,8 @@ On a **flow** (one playthrough):
 | Call | Does |
 |---|---|
 | `peek(box, criteria, n)` | Look at the top of a box through tag criteria, without dealing anything |
-| `deal(hand)` | Refresh one hand; returns its new contents |
-| `dealMany(hands?)` | Refresh several or all hands; returns what was dealt, keyed by hand |
+| `deal(hand)` | Refresh one hand; returns its new contents. A refresh evicts cards no longer eligible and fills empty slots; a card that is still eligible keeps its seat, so a newly eligible card waits for a free slot |
+| `dealMany(hands?)` | Refresh several or all hands, same rule; returns what was dealt, keyed by hand |
 | `board(box?)` | The current contents of every hand, or of one box's hands |
 | `outcomes(card, hand)` | This card's outcomes with availability, evaluated against current state |
 | `play(card, outcome, hand, { advanceTurns })` | Apply an outcome |

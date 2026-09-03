@@ -106,5 +106,31 @@
       },
       title: "Night Settles on the Village",
     },
+    {
+      condition: "@world.knows_road",
+      fields: {
+        music: "forest",
+      },
+      gameId: "the-road-north",
+      id: "c_road_north",
+      order: 4,
+      outcomes: [
+        {
+          changes: {},
+          gameId: "continue",
+          id: "c_road_north_o",
+          title: "Follow it a little way",
+        },
+      ],
+      priority: 1,
+      purpose: "The track north Mira described, faint between the trees. This beat exists to show the OTHER direction of the shared world: its gate, @world.knows_road, is set by dialogue (asking Mira about the road), so a choice made inside Patter puts a card on the table here. Priority 1 so it takes the tree's single slot over the ambient.",
+      redraw: "always",
+      tags: {
+        d_zone: [
+          "v_forest",
+        ],
+      },
+      title: "The Road North",
+    },
   ],
 }

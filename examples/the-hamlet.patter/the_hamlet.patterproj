@@ -10,6 +10,34 @@
     "name": "The Hamlet",
   },
   "schema": "patter/project@0",
+  "scopeRegistry": {
+    "scopes": [
+      {
+        "declarations": [
+          {
+            "default": "day",
+            "name": "time_of_day",
+            "purpose": "The host owns time. Declared here so scenes may READ it; read-only so no scene can move it. Must agree with the storylet project, which declares the same property: the demo build checks that.",
+            "type": "enum",
+            "values": [
+              "day",
+              "night",
+            ],
+            "writable": false,
+          },
+          {
+            "default": false,
+            "name": "knows_road",
+            "purpose": "Set by dialogue (asking Mira about the road north) and read by a storylet card: the one value in this demo that flows FROM Patter TO the Storylet Engine, through the shared @world.",
+            "type": "boolean",
+            "writable": true,
+          },
+        ],
+        "token": "world",
+      },
+    ],
+    "version": 1,
+  },
   "vcs": "git",
   "voiced": true,
 }

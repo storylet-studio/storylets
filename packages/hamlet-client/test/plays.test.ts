@@ -14,7 +14,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { JSDOM } from "jsdom";
-import { checkPairing } from "../scripts/pairing.mjs";
+import { checkPairing, checkWorld, checkPinnedGameIds } from "../scripts/pairing.mjs";
 
 const pkg = fileURLToPath(new URL("..", import.meta.url));
 const dist = join(pkg, "dist");
@@ -156,5 +156,62 @@ describe("the Hamlet client", () => {
     click(byText(second.doc, ".option", "Ask only about the road north"));
     expect(second.doc.getElementById("log")!.textContent).toContain("ask-about-the-road-north");
     expect(buttons(second.doc, ".card").map((b) => b.textContent)).not.toContain("Get Settled at the Inn");
+  });
+
+  // @world in BOTH directions. Until this test the sharing was proven one way
+  // only: the host moved time and storylet content re-gated. Here a Patter
+  // scene READS the world (a night-only line) and WRITES it (knows_road), and
+  // the Storylet Engine deals a card because of what was said in dialogue.
+  it("lets a Patter scene read @world, and write a value a storylet card then gates on", async () => {
+    const { doc } = open();
+    await settled(doc);
+    // "The Road North" is a forest beat gated ONLY on @world.knows_road. The tree
+    // hand has one slot and the card outranks the ambient, so it is unmissable.
+    const forest = () => { click(byText(doc, ".place", "The Mystic Tree")); return buttons(doc, ".card").map((b) => b.textContent); };
+    expect(forest()).not.toContain("The Road North");   // nobody has asked about the road yet
+
+    // READ: by day the inn scene has no night line; at night it does.
+    click(byText(doc, ".place", "The Inn"));
+    click(byText(doc, ".card", "Get Settled at the Inn"));
+    const byDay = [...doc.querySelectorAll("p")].map((p) => p.textContent ?? "");
+    expect(byDay.some((l) => l.includes("night only"))).toBe(false);
+    // WRITE: asking about the road sets @world.knows_road from inside Patter...
+    click(byText(doc, ".option", "Ask only about the road north"));
+    expect(doc.getElementById("clock")!.textContent).toContain("knows_road");
+    // ...and the Storylet Engine, holding the same resolver, can now deal the card
+    // gated on it. NOT yet at the tree, though: that hand has one slot, and the
+    // ambient already holding it is still eligible, so it keeps its seat. A
+    // refresh evicts the ineligible and fills empty slots; it never displaces a
+    // survivor. That is the engine's rule, and it is easy to read as "the
+    // dialogue did nothing", so it is pinned here on purpose.
+    expect(forest()).toEqual(["Wind in the Leaves"]);
+    // Act there (play the ambient), and the seat frees: the road card lands.
+    click(byText(doc, ".card", "Wind in the Leaves"));
+    expect(doc.getElementById("log")!.textContent).toContain("Wind in the Leaves");
+    expect(forest()).toContain("The Road North");
+  });
+
+  it("shows the night line when the world says night (the read direction, on its own)", async () => {
+    const { doc } = open();
+    await settled(doc);
+    doc.getElementById("wait")!.click();                     // day -> night, by the HOST
+    click(byText(doc, ".place", "The Inn"));
+    click(byText(doc, ".card", "Get Settled at the Inn"));
+    const lines = [...doc.querySelectorAll("p")].map((p) => p.textContent ?? "");
+    expect(lines.some((l) => l.includes("night only"))).toBe(true);
+  });
+
+  it("refuses a @world declaration the two projects disagree on, and an unpinned gameId", () => {
+    const s = JSON.parse(readFileSync(join(dist, "hamlet.storyletsc"), "utf8"));
+    const p = JSON.parse(readFileSync(join(dist, "hamlet.patterc"), "utf8"));
+    expect(checkWorld(s, p)).toEqual([]);
+    const drifted = structuredClone(p);
+    drifted.scopeRegistry.scopes[0].declarations.find((d: { name: string }) => d.name === "time_of_day").values = ["day", "dusk", "night"];
+    expect(checkWorld(s, drifted).join("\n")).toMatch(/time_of_day has values/);
+    delete drifted.scopeRegistry.scopes[0].declarations[1];
+    drifted.scopeRegistry.scopes[0].declarations = drifted.scopeRegistry.scopes[0].declarations.filter(Boolean);
+    expect(checkWorld(s, drifted).join("\n")).toMatch(/knows_road is declared by the storylet project and not/);
+    const source = { boxes: [{ box: { box: { gameId: "village" } }, decks: [{ shard: { cards: [{ id: "c_x", title: "The Tree Blooms" }] } }] }] };
+    expect(checkPinnedGameIds(source, ["village"]).join("\n")).toMatch(/no pinned gameId/);
   });
 });

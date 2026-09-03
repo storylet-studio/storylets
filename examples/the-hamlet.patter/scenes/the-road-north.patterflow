@@ -1,0 +1,43 @@
+{
+  "scene": {
+    "blocks": [
+      {
+        "children": [
+          {
+            "beats": [
+              {
+                "id": "T_711f18c2",
+                "kind": "text",
+              },
+            ],
+            "id": "sn_711f18c2",
+            "type": "snippet",
+          },
+          {
+            "beats": [
+              {
+                "gameData": {
+                  "outcome": "continue",
+                },
+                "id": "E_dda03b95",
+                "kind": "gameEvent",
+              },
+            ],
+            "id": "sn_dda03b95",
+            "jump": {
+              "to": "END",
+            },
+            "type": "snippet",
+          },
+        ],
+        "id": "blk_3406704c",
+        "name": "Main",
+        "type": "block",
+      },
+    ],
+    "id": "the-road-north",
+    "name": "The Road North",
+    "type": "scene",
+  },
+  "schema": "patter/flow@0",
+}

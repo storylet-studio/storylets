@@ -70,8 +70,12 @@ if (!patterBundle) die(`the Hamlet's Patter project does not compile (${patterPr
 // changes nothing today; it is passed so the parameter is exercised rather than
 // being untested surface waiting for a second box.
 const PATTER_BACKED = ["village"];
-const { checkPairing } = await import("./pairing.mjs");
-const problems = checkPairing(bundle, patterBundle, PATTER_BACKED);
+const { checkPairing, checkWorld, checkPinnedGameIds } = await import("./pairing.mjs");
+const problems = [
+  ...checkPairing(bundle, patterBundle, PATTER_BACKED),
+  ...checkWorld(bundle, patterBundle),
+  ...checkPinnedGameIds(loaded.source, PATTER_BACKED),
+];
 if (problems.length) {
   die(`the two projects do not line up:\n  ${problems.join("\n  ")}`);
 }

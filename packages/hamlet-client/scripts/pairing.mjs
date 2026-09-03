@@ -78,3 +78,57 @@ export function checkPairing(storyletBundle, patterBundle, boxes) {
   }
   return problems;
 }
+
+/**
+ * @world is the surface the two engines share, and each project DECLARES it
+ * separately: ours under `world.properties`, Patter's under
+ * `scopeRegistry.scopes[token = "world"].declarations`. Two declarations of one
+ * thing drift, and a drift here is invisible at runtime in this host (both
+ * engines are handed the same resolver, so they agree by construction) and
+ * visible everywhere else: Storyletter's Board and Patterpad's Play window each
+ * self-back @world from THEIR declaration, and would disagree. So: every
+ * property either side declares must be declared by both, same type, same
+ * values, same default.
+ */
+export function checkWorld(storyletBundle, patterBundle) {
+  const problems = [];
+  const ours = new Map((storyletBundle.world?.properties ?? []).map((p) => [p.name, p]));
+  const scope = (patterBundle.scopeRegistry?.scopes ?? []).find((s) => s.token === "world");
+  const theirs = new Map((scope?.declarations ?? []).map((p) => [p.name, p]));
+  const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  for (const [name, p] of ours) {
+    const q = theirs.get(name);
+    if (!q) { problems.push(`@world.${name} is declared by the storylet project and not by the Patter project`); continue; }
+    if (p.type !== q.type) problems.push(`@world.${name} is ${p.type} in the storylet project and ${q.type} in the Patter project`);
+    if (!same(p.values, q.values)) problems.push(`@world.${name} has values ${JSON.stringify(p.values)} here and ${JSON.stringify(q.values)} in the Patter project`);
+    if (!same(p.default, q.default)) problems.push(`@world.${name} defaults to ${JSON.stringify(p.default)} here and ${JSON.stringify(q.default)} in the Patter project`);
+  }
+  for (const name of theirs.keys()) {
+    if (!ours.has(name)) problems.push(`@world.${name} is declared by the Patter project and not by the storylet project`);
+  }
+  return problems;
+}
+
+/**
+ * A card in a Patter-backed box must PIN its gameId. `effectiveGameId` derives
+ * an unpinned one from the title, so editing the title silently renames the
+ * card, and with it the scene the convention says it plays. `checkPairing`
+ * catches the break after it happens; this catches the card that can break.
+ * Reads the SOURCE project, because the compiled bundle has already resolved
+ * every gameId and cannot tell a pinned one from a derived one.
+ */
+export function checkPinnedGameIds(source, boxes) {
+  const problems = [];
+  for (const box of source.boxes ?? []) {
+    const boxId = box.box.box.gameId;
+    if (boxes && !boxes.includes(boxId)) continue;
+    for (const deck of box.decks ?? []) {
+      for (const card of deck.shard.cards ?? []) {
+        if (!card.gameId || !card.gameId.trim()) {
+          problems.push(`card "${card.title ?? card.id}" (${card.id}) has no pinned gameId: its scene name is derived from its title and would change with it`);
+        }
+      }
+    }
+  }
+  return problems;
+}
