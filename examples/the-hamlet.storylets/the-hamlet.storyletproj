@@ -108,11 +108,13 @@
       {
         default: "day",
         name: "time_of_day",
+        purpose: "The host owns time. Read-only to the story, as the Patter project declares it too, and the game refuses a write at runtime as well: three places saying one thing, on purpose.",
         type: "enum",
         values: [
           "day",
           "night",
         ],
+        writable: false,
       },
     ],
     registry: {},

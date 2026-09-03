@@ -24,8 +24,15 @@ Your game doesn't declare anything. It fills in what's already declared.
 ```
 @world.is_night   boolean  default false
 @world.gold       number   default 0
-@world.chapter    string   default "one"
+@world.chapter    string   default "one"   read-only
 ```
+
+**Read-only** is the story's promise about a value: it will read it and never write it. Mark
+`@world.chapter` read-only and a condition can still ask `@world.chapter == "two"`, but an
+outcome that sets it is a compile error, so a card cannot move the game's clock by mistake.
+It is the same switch Patter has, name for name (`writable: false` in the shard), and if you run
+both engines it is worth setting the same way in both projects. Your game is not bound by it:
+the game owns `@world` and moves it through its resolver whenever it likes.
 
 A name that isn't declared can't be referenced: the compiler refuses `@world.isNight` if
 nothing declares `isNight`. Property names are lower case (see [the format](/format/shards/)).

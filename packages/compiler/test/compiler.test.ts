@@ -293,6 +293,53 @@ describe("publish-gate validation", () => {
     expect(result.bundle).toBeUndefined();
   });
 
+  // --- read-only @world (Reboot.md 10, ruled 2026-09-03) ---------------------
+  // The story's promise about a game value: "I read this, I never write it".
+  // Mirrors Patter's HostScopeDecl.writable name for name. Contract first.
+
+  const worldProject = (props: object[], cards: object[]) => {
+    const files = minimal(cards as never);
+    files[0] = shard("p.storyletproj", {
+      schema: "storylets/project@0",
+      project: { id: "p", name: "P", version: "0.0.1" },
+      settings: { playAdvancesTurns: 1 },
+      world: { properties: props },
+      story: { properties: [] },
+      templates: {},
+      export: { bundle: "dist/p.storyletsc", metadata: "full" },
+    });
+    return compileFiles(files);
+  };
+  const clock = { name: "clock", type: "number", default: 0 };
+  const writesClock = [{ id: "c_1", gameId: "c1", outcomes: [{ id: "o_1", gameId: "o1", changes: { "@world.clock": "@world.clock + 1" } }] }];
+
+  it("refuses an outcome that writes a @world property declared writable: false", () => {
+    const result = worldProject([{ ...clock, writable: false }], writesClock);
+    const msgs = errors(result.issues);
+    expect(msgs.join()).toContain("@world.clock");
+    expect(msgs.join()).toMatch(/read-only/);
+    expect(result.issues.find((i) => i.message.includes("read-only"))?.field).toBe("changes");
+    expect(result.bundle).toBeUndefined();
+  });
+
+  it("still lets a condition READ a read-only @world property, and carries the flag to the bundle", () => {
+    const result = worldProject([{ ...clock, writable: false }],
+      [{ id: "c_1", gameId: "c1", condition: "@world.clock > 3", outcomes: [] }]);
+    expect(errors(result.issues)).toEqual([]);
+    expect(result.bundle!.world.properties[0]).toMatchObject({ name: "clock", writable: false });
+  });
+
+  it("treats an absent flag as writable, which is every project written before the flag existed", () => {
+    expect(errors(worldProject([clock], writesClock).issues)).toEqual([]);
+  });
+
+  it("ignores the flag on scopes the story owns: @story is the story's to write", () => {
+    const result = compileFiles(minimal(
+      [{ id: "c_1", gameId: "c1", outcomes: [{ id: "o_1", gameId: "o1", changes: { "@story.turns": "@story.turns + 1" } }] }] as never,
+      { story: [{ name: "turns", type: "number", default: 0, writable: false }] } as never));
+    expect(errors(result.issues)).toEqual([]);
+  });
+
   it("carries the sharing flag through to the bundle on the scopes that take it", () => {
     const result = compileFiles(minimal([], {
       story: [{ name: "turns", type: "number", default: 0, shared: false }],

@@ -215,6 +215,10 @@ describe("the Hamlet client", () => {
     const writes = structuredClone(s);
     writes.boxes[0].decks[0].cards[0].outcomes[0].changes = { "@world.time_of_day": { src: "\"night\"", ast: ["s", "night"] } };
     expect(checkWorld(writes, p).join("\n")).toMatch(/writes @world\.time_of_day, which the Patter project declares read-only/);
+    // The two promises must match: read-only on one side and writable on the other is drift.
+    const loosened = structuredClone(s);
+    loosened.world.properties.find((d: { name: string }) => d.name === "time_of_day").writable = true;
+    expect(checkWorld(loosened, p).join("\n")).toMatch(/time_of_day is writable in the storylet project and read-only in the Patter project/);
     const source = { boxes: [{ box: { box: { gameId: "village" } }, decks: [{ shard: { cards: [{ id: "c_x", title: "The Tree Blooms" }] } }] }] };
     expect(checkPinnedGameIds(source, ["village"]).join("\n")).toMatch(/no pinned gameId/);
   });

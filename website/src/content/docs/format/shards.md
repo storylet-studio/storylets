@@ -376,6 +376,7 @@ without one.
 | `default` | required, so a declared property always has a value |
 | `values` | for `enum` and `flags`. On a TAG, `values` means something else: this tag's starting values for the properties its group declares |
 | `stages` | for `quality`: the ladder, in order, lowest first |
+| `writable` | `@world` only. `false` makes the property read-only to the story: a condition may read it, an outcome that writes it is a compile error. The game still moves it through its resolver. Default `true` |
 | `purpose` | author metadata |
 
 Card template fields use the same shape. The difference is what they're for: a property is

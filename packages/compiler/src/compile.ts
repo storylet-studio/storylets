@@ -626,6 +626,19 @@ export function compileProject(source: SourceProject): CompileResult {
                 });
               }
             }
+            // Read-only @world (Reboot.md 10): the story's own promise not to
+            // write a game value, `writable: false` on the declaration, kept
+            // here so a card that moves the clock is an error before it is a
+            // bug. The game is not bound by it; its resolver is its policy.
+            if (scope === "world") {
+              const name = target.slice(1).split(".")[1]!;
+              const decl = (source.project.world?.properties ?? []).find((d) => d.name === name);
+              if (decl && decl.writable === false) {
+                report({ severity: "error", path, where: `${effectiveGameId(card)}/${effectiveGameId(outcome)}`, field: "changes",
+                  message: `change target "${target}" is read-only to the story (writable: false): the game owns it, and a condition may read it but an outcome may not write it` });
+                continue;
+              }
+            }
             const value = expr(src, deckSchema, path, `${effectiveGameId(card)}/${effectiveGameId(outcome)}`, `change ${target}`, "changes");
             if (value) changes[target] = value;
           }

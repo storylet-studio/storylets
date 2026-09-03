@@ -47,7 +47,9 @@ async function boot(): Promise<void> {
   // ONE world, handed to BOTH. This is the coexistence design, and it is a
   // single shared object rather than two copies kept in step, because two
   // copies kept in step is the bug this design exists to make impossible.
-  world = new World({ time_of_day: "day" });
+  // Time is the game's alone: neither story may move it. Both projects say the
+  // same (writable: false); this is the game holding them to it at runtime.
+  world = new World({ time_of_day: "day", knows_road: false }, ["time_of_day"]);
 
   storylets = new StoryletEngine(storyletBundle, {
     seed: SEED,

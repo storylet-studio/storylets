@@ -32,6 +32,15 @@ export interface PropertyDecl {
    */
   stages?: string[];
   /**
+   * `@world` only. `false` makes the property read-only TO THE STORY: a
+   * condition may read it, an outcome that writes it is a compile error. The
+   * game still moves it through its resolver; this is the story's statement
+   * of intent, not the game's policy. Mirrors Patter's `HostScopeDecl.writable`
+   * name for name (Reboot.md 10, ruled 2026-09-03). Ignored on every other
+   * scope. Absent = writable.
+   */
+  writable?: boolean;
+  /**
    * The sharing axis (design/flows.md, Patter's flag adopted): is this
    * property's value one world value across all flows, or a copy per flow?
    * It does NOT change reference syntax - sharing is set here, on the

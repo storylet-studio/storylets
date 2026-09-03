@@ -106,13 +106,21 @@ export function checkWorld(storyletBundle, patterBundle) {
   for (const name of theirs.keys()) {
     if (!ours.has(name)) problems.push(`@world.${name} is declared by the Patter project and not by the storylet project`);
   }
-  // Read-only is a Patter-side concept: `writable: false` makes a property
-  // read-only TO THE STORY, validated at compile time there. The storylet
-  // format has no such flag, and a card's outcome may write any @world value
-  // (checked: it compiles, and play() calls the resolver's set). So a property
-  // Patter has declared nobody-but-the-host-moves can still be moved by a card,
-  // and only this sees it.
+  // Read-only is each story's PROMISE about a value ("I read this, I never
+  // write it"), `writable: false` on its declaration, name for name in both
+  // formats. The two promises must match, and a card or scene that breaks
+  // its own project's promise is that project's compiler's business; what
+  // only this can see is a card writing a value the PATTER project holds
+  // read-only, or vice versa, because each compiler sees one project.
   const scopeWritable = scope?.writable !== false;
+  const writableOurs = (p) => p.writable !== false;
+  const writableTheirs = (q) => q.writable ?? scopeWritable;
+  for (const [name, p] of ours) {
+    const q = theirs.get(name);
+    if (q && writableOurs(p) !== writableTheirs(q)) {
+      problems.push(`@world.${name} is ${writableOurs(p) ? "writable" : "read-only"} in the storylet project and ${writableTheirs(q) ? "writable" : "read-only"} in the Patter project`);
+    }
+  }
   for (const box of storyletBundle.boxes ?? []) {
     for (const deck of box.decks ?? []) {
       for (const card of deck.cards ?? []) {
@@ -121,8 +129,7 @@ export function checkWorld(storyletBundle, patterBundle) {
             const m = /^@world\.([a-z][a-z0-9_-]*)$/.exec(target);
             if (!m) continue;
             const q = theirs.get(m[1]);
-            const writable = q?.writable ?? scopeWritable;
-            if (q && !writable) {
+            if (q && !writableTheirs(q)) {
               problems.push(`outcome "${outcome.gameId}" of card "${card.gameId}" writes @world.${m[1]}, which the Patter project declares read-only (writable: false)`);
             }
           }
