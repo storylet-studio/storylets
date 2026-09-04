@@ -18,7 +18,7 @@ import { Engine } from "../src/index.js";
 // The shipped Hamlet: real hands, deterministic, and the very bundle the
 // mistake was made against.
 const bundle = () => JSON.parse(readFileSync(
-  fileURLToPath(new URL("../../../examples/the-hamlet.storylets/dist/the-hamlet.storyletsc", import.meta.url)), "utf8"));
+  fileURLToPath(new URL("../../../packages/play-helpers/demo/the-hamlet.storyletsc", import.meta.url)   /* the pinned demo bundle, not the example's ignored publish */), "utf8"));
 const ids = (cards: { gameId: string }[]) => cards.map((c) => c.gameId);
 
 describe("openFlow after a load", () => {

@@ -23,8 +23,12 @@ const dist = join(pkg, "dist");
 // is what makes the ops/compiler `dist/` this build reads exist, and skipping
 // it passes locally and fails on the first clean CI run.
 beforeAll(() => {
+  // CI tests before it builds, and the client copies the drop-in the play-helpers
+  // package builds: build the libraries first when it is missing (local runs skip this).
+  const dropIn = join(pkg, "../play-helpers/dist/storyletengine.min.js");
+  if (!existsSync(dropIn)) execFileSync("npm", ["run", "build:libs"], { cwd: join(pkg, "../.."), stdio: "pipe" });
   execFileSync("npm", ["run", "build"], { cwd: pkg, stdio: "pipe" });
-}, 300_000);
+}, 600_000);
 
 function open(storage?: Record<string, string>): { doc: Document } {
   // No bundle to inline: the page is five classic scripts, each inlined from dist/ in order.
