@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-04
+
 ### Added
 
 - **Read-only switch on the World list** (Project Settings > World, behind the row's expander), as Patterpad has it: ticked writes `writable: false` on the declaration, the story's promise that only the game moves the value; the compiler refuses a card that writes it and every runtime refuses one at run time. Unticked deletes the key.
