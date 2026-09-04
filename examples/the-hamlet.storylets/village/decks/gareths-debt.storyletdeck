@@ -118,14 +118,14 @@
           },
           gameId: "ask-what-is-wrong",
           id: "c_gt_ask",
+          order: 0,
           title: "Ask him what's wrong",
         },
         {
-          changes: {
-            "@deck.debt": "advance(@deck.debt)",
-          },
+          changes: {},
           gameId: "leave-him-be",
           id: "c_gt_leave",
+          order: 1,
           title: "Leave him be",
         },
       ],

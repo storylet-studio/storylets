@@ -22,6 +22,8 @@ bool FHamletLoopTest::RunTest(const FString& Parameters)
 	// The demo opens with one card: arriving at the gate moves the act and deals the village.
 	{ const FStoryletDealtCard* gate = nullptr; auto opening = g.Hand(); for (const auto& c : opening) if (c.GameId == TEXT("arrive-at-the-gate")) gate = &c;
 	  if (!TestNotNull(TEXT("the demo opens with the gate"), gate)) return false; g.Start(*gate); }
+	// The scene ENDS but its outcome waits: the player reads it, then continues.
+	TestTrue(TEXT("the gate's words wait on Continue"), g.Playing && g.Playing->bDone && g.Log.Num() == 0); g.Finish();
 	const FStoryletDealtCard* settle = nullptr; auto hand = g.Hand();
 	for (const auto& c : hand) if (c.GameId == TEXT("settle-at-the-inn")) settle = &c;
 	TestNotNull(TEXT("the inn deals settle-at-the-inn"), settle);
@@ -32,10 +34,11 @@ bool FHamletLoopTest::RunTest(const FString& Parameters)
 	FHamletGame g2; if (!Fresh(g2)) return false; FString e2;
 	TestTrue(TEXT("a mid-scene envelope loads and the conversation is back"), g2.Load(mid, e2) && g2.Playing && g2.Playing->Choices.Num() == 2);
 	for (const auto& ch : g2.Playing->Choices) if (ch.Text.Contains(TEXT("road north"))) { g2.Choose(ch.Id); break; }
+	TestTrue(TEXT("the branch's closing words wait on Continue"), g2.Playing && g2.Playing->bDone); g2.Finish();
 	TestTrue(TEXT("Patter wrote @world.knows_road"), g2.World.Store->GetBool(TEXT("knows_road")));
 	g2.Go(TEXT("the-mystic-tree"));
 	TestEqual(TEXT("tree shows the ambient only (survivor rule)"), Join(g2.Hand()), FString(TEXT("wind-in-the-leaves")));
-	g2.Start(g2.Hand()[0]);
+	g2.Start(g2.Hand()[0]); g2.Finish();   // no choice at all: it ends, and Continue plays it
 	TestTrue(TEXT("The Road North lands once the seat frees"), Join(g2.Hand()).Contains(TEXT("the-road-north")));
 	// Cross-host, maintainers' checkout only: envelopes the JS client wrote.
 	const FString fixtures = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("../../godot/HamletDemo/test/fixtures"));

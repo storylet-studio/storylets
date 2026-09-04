@@ -10,11 +10,9 @@
                 "kind": "text",
               },
               {
-                "gameData": {
-                  "outcome": "clasp-his-hand",
-                },
-                "id": "E_6e0421a4",
-                "kind": "gameEvent",
+                "character": "GARETH",
+                "id": "L_1sq4geok",
+                "kind": "line",
               },
             ],
             "id": "sn_acf6f963",

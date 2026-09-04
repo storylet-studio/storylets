@@ -29,13 +29,6 @@
                         "id": "L_brs8i80t",
                         "kind": "line",
                       },
-                      {
-                        "gameData": {
-                          "outcome": "admire-the-work",
-                        },
-                        "id": "E_52308ecb",
-                        "kind": "gameEvent",
-                      },
                     ],
                     "id": "sn_52308ecb",
                     "jump": {
@@ -44,6 +37,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "admire-the-work",
+                },
                 "id": "opt_52308ecb",
                 "prompt": {
                   "id": "L_7d4a7ebc",
@@ -65,13 +61,6 @@
                         "id": "L_z5ox6on8",
                         "kind": "line",
                       },
-                      {
-                        "gameData": {
-                          "outcome": "ask-if-hes-hiring",
-                        },
-                        "id": "E_872167c9",
-                        "kind": "gameEvent",
-                      },
                     ],
                     "id": "sn_872167c9",
                     "jump": {
@@ -80,6 +69,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "ask-if-hes-hiring",
+                },
                 "id": "opt_872167c9",
                 "prompt": {
                   "id": "L_55b237b4",

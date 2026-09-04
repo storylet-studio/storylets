@@ -21,22 +21,38 @@ Two names, both of which you already write:
 - **A card's `gameId` is the name of its Patter scene.** `gameId` is the stable id the engine
   reports a card by, shown as the chip beside the card's title in Storyletter. Give the scene
   the same name.
-- **An outcome's `gameId` is what the scene reports back.** At the end of whichever branch the
-  player took, the scene sends a `gameEvent` with `outcome` in its Game Data, naming one of the
-  card's outcomes. Your game plays that outcome.
+- **An outcome's `gameId` is what the scene names.** Put it in the Game Data on a choice
+  option, and taking that option means reaching that outcome.
 
 Which boxes get performed by Patter is your game's decision, not the project's. A box of ambient
 cards can stay text-only beside a box whose every card opens a conversation.
 
 In `the-hamlet.storylets`, the village card `settle-at-the-inn` has outcomes `ask-about-history`
-and `ask-about-the-road-north`. In `the-hamlet.patter`, the scene `settle-at-the-inn` ends each
-branch with a `gameEvent` carrying `outcome: "ask-about-history"` or
-`outcome: "ask-about-the-road-north"`. That is the whole link.
+and `ask-about-the-road-north`. In `the-hamlet.patter`, the scene `settle-at-the-inn` offers two
+options, one carrying each of those names. That is the whole link.
+
+### Which outcome a scene reached
+
+Your host resolves it in three steps, and the last word wins:
+
+1. **A `gameEvent`** with `outcome` in its Game Data, wherever one fires, beats anything before
+   it. This is the scene deciding late, having played the dialogue.
+2. **Otherwise the outcome named on the option the player took.**
+3. **Otherwise the card's only outcome**, when it declares exactly one.
+
+Most scenes never reach step one. A card with a single outcome needs no Game Data anywhere, so a
+scene of pure narration says nothing at all; a card with several is answered by labelling its
+options. Reserve the `gameEvent` for a branch that cannot know its outcome until it has played,
+and note that it overrules whatever the option promised.
+
+If a scene reaches its end having said nothing, and its card declares more than one outcome, your
+host cannot know what happened. Throw. Do not guess, because the wrong outcome moves the world
+the wrong way, and the build catches this shape long before a player can.
 
 ## The loop
 
-Every host that plays Patter has a step loop. Yours differs only in what it does with the
-`gameEvent`:
+Every host that plays Patter has a step loop. Yours differs in what it does with a choice and
+with a `gameEvent`:
 
 ```ts
 // Once, when the game starts: ONE Patter flow for the box you perform, named after it.
@@ -45,16 +61,20 @@ const flow = patter.openFlow("village");
 // The player picked a card: enter its scene by name, on that flow.
 flow.goto(card.gameId);
 
+// Which outcomes the Storylet Engine will accept right now. Read it again at every
+// stop: a scene can write @world mid-performance and change what is open under itself.
+const open = new Set(storyFlow.outcomes(card.id, handId).filter((o) => o.available).map((o) => o.gameId));
+
 for (;;) {
   const step = flow.advance();
   if (step.type === "line" || step.type === "text") show(step);
-  if (step.type === "choice") { offer(step.options); return; }   // wait for the player
-  if (step.type === "gameEvent") outcome = step.gameData?.outcome;
+  if (step.type === "choice") { offer(step.options, open); return; }   // wait for the player
+  if (step.type === "gameEvent") outcome = step.gameData?.outcome;     // the last word
   if (step.type === "end") break;
 }
 
-// The scene said what happened: play it through the Storylet Engine.
-storyFlow.play(card.id, outcome, handId);
+// Which outcome, by the three steps above, then play it through the Storylet Engine.
+storyFlow.play(card.id, outcome ?? labelled ?? onlyOutcome, handId);
 storyFlow.dealMany();   // refresh every hand; a card still eligible keeps its place
 ```
 
@@ -63,7 +83,22 @@ open a new flow per card: a fresh flow starts Patter's random sequence over and 
 visit counts, so a scene that shuffles its lines would show the same one every time. A `goto`
 moves the cursor and resets nothing, and a flow whose last scene ended resumes at the new
 address. A bigger project keeps one flow per box it performs. After a choice, call
-`flow.choose(optionId)` and run the loop again.
+`flow.choose(optionId)` and run the loop again, remembering the outcome that option named
+before you do: by the end of the branch it is gone.
+
+### Two gates on one option
+
+An option can be shut by either engine, on state the other cannot see, so check both and let
+each own its own:
+
+- **Patter's `eligible`**, its own condition on the option.
+- **The Storylet Engine's `available`**, from `outcomes(cardId, handId)`, on the outcome that
+  option leads to. A condition on `@story` or `@deck` is invisible to Patter.
+
+Offer an option only when both agree. Show the rest greyed rather than hidden, as Patter's own
+runtime does with an ineligible option: a player who can see the door they cannot open is being
+told something, and a player who sees nothing is being told nothing. The Hamlet's Moneylenders'
+Men is the worked case, where paying the debt off needs a reputation you may not have yet.
 
 ## The world
 
@@ -120,8 +155,10 @@ Because nothing declares the link, the build checks it, on the two published bun
 Hamlet's `scripts/pairing.mjs` runs before every build and fails it when:
 
 - a card in a performed box has no scene of its name, or a scene belongs to no card;
-- a scene reports no outcome, reports one its card does not declare, or never reports one the
-  card does declare;
+- a scene names an outcome its card does not declare;
+- a card with several outcomes has an option that names none and fires no `gameEvent`, so
+  taking that branch would leave the host guessing;
+- a card with several outcomes declares one that no option and no event can ever name;
 - a `@world` property is declared in one project and not the other, or with a different type,
   values, default or `writable` flag, or an outcome writes a property Patter's project declares
   read-only.

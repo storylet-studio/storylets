@@ -4,8 +4,10 @@
   "scene": "the-sealed-letter",
   "schema": "patter/strings@0",
   "strings": {
+    "L_10aefzf6": "You return the letter to the desk, and close the door.",
     "L_3cd263e4": "Return it unread",
     "L_4293104b": "Read it while you can",
-    "T_32e27eb0": "STUB: The Sealed Letter. Replace with the scene.",
+    "L_vu6x9v9q": "You sneak a peek at it. This is interesting - it bears a strange symbol that you think you've seen elsewhere in this town.",
+    "T_32e27eb0": "The back door behind the bar is open, and a gust of air wafts an unopened letter from Mira's desk out on to the taproom floor.",
   },
 }

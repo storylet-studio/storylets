@@ -91,7 +91,53 @@ void FHamletGame::Start(const FStoryletDealtCard& Card)
 	Run();
 }
 
-void FHamletGame::Choose(const FString& OptionId) { if (!Playing) return; Playing->Flow->Choose(OptionId); Playing->Choices.Empty(); Run(); }
+void FHamletGame::Choose(const FString& OptionId)
+{
+	if (!Playing) return;
+	// The label rides with the option, so it is taken HERE, while the host still knows
+	// which option was clicked. By the end of the branch it is gone.
+	for (const FChoice& ch : Playing->Choices) if (ch.Id == OptionId && !ch.Outcome.IsEmpty()) Playing->Labelled = S(ch.Outcome);
+	Playing->Flow->Choose(OptionId); Playing->Choices.Empty(); Run();
+}
+
+/** The outcome ids the storylet side will accept for this card RIGHT NOW. Read afresh at
+ *  every stop: a scene can write @world mid-performance and change what is open under itself. */
+TSet<FString> FHamletGame::OpenOutcomes() const
+{
+	TSet<FString> Open;
+	for (const FStoryletOutcomeView& o : Story->Outcomes(Playing->Card.Id, At)) if (o.bAvailable) Open.Add(o.GameId);
+	return Open;
+}
+
+/** The choices a step offers, with BOTH engines' gates applied. Patter says whether the option
+ *  can be offered at all; the Storylet Engine says whether the outcome it leads to is open.
+ *  Clickable only when both agree. */
+void FHamletGame::ChoicesFrom(const TArray<FPatterOption>& Options)
+{
+	const TSet<FString> Open = OpenOutcomes();
+	for (const FPatterOption& opt : Options)
+	{
+		FString Outcome;
+		for (const FPatterGameDataEntry& e : opt.GameData) if (e.Name == TEXT("outcome")) Outcome = e.Value;
+		const bool bShut = !Outcome.IsEmpty() && !Open.Contains(Outcome);
+		Playing->Choices.Add({opt.Id, opt.Text.IsEmpty() ? opt.Id : opt.Text, Outcome, opt.bEligible && !bShut,
+			!opt.bEligible ? TEXT("not available here") : bShut ? TEXT("requirements not met") : TEXT("")});
+	}
+}
+
+/** An explicit gameEvent, else the option the player took, else the card's only outcome.
+ *  Loud when none of the three answers: guessing would move the world the wrong way, and
+ *  the build catches this shape first (scripts/pairing.mjs). */
+std::string FHamletGame::ResolveOutcome() const
+{
+	if (!Playing->Outcome.empty()) return Playing->Outcome;
+	if (!Playing->Labelled.empty()) return Playing->Labelled;
+	TArray<FString> Declared;
+	for (const FStoryletOutcomeView& o : Story->Outcomes(Playing->Card.Id, At)) Declared.Add(o.GameId);
+	if (Declared.Num() == 1) return S(Declared[0]);
+	throw StoryletError("scene \"" + S(Playing->Card.GameId) + "\" ended without saying which outcome it reached, and its card declares "
+		+ std::to_string(Declared.Num()) + " (" + S(FString::Join(Declared, TEXT(", "))) + ")");
+}
 
 void FHamletGame::Run()
 {
@@ -107,17 +153,21 @@ void FHamletGame::Run()
 			for (const FPatterGameDataEntry& e : step.GameData) if (e.Name == TEXT("outcome")) Playing->Outcome = S(e.Value);
 			break;
 		case EPatterStepType::Choice:
-			for (const FPatterOption& opt : step.Options) if (opt.bEligible) Playing->Choices.Add({opt.Id, opt.Text.IsEmpty() ? opt.Id : opt.Text});
+			ChoicesFrom(step.Options);
 			return;
-		default: Finish(); return;
+		default:
+			// The scene has ENDED but its outcome is not played yet: its closing lines, and
+			// the whole of a scene with no choice, would vanish under the redeal before
+			// anyone read them. The player presses Continue.
+			Playing->bDone = true;
+			return;
 		}
 	}
 }
 
 void FHamletGame::Finish()
 {
-	const FStoryletDealtCard card = Playing->Card; const std::string outcome = Playing->Outcome;
-	if (outcome.empty()) throw StoryletError("scene \"" + S(card.GameId) + "\" ended without reporting an outcome");
+	const FStoryletDealtCard card = Playing->Card; const std::string outcome = ResolveOutcome();
 	FString PlayError;
 	if (!Story->Play(card.Id, F(outcome), At, PlayError)) throw StoryletError(S(PlayError));   // the wrapper reports; this demo throws, as the JS client does
 	Log.Insert((card.Title.IsEmpty() ? card.GameId : card.Title) + TEXT(": ") + F(outcome), 0);
@@ -160,6 +210,8 @@ FString FHamletGame::Save() const
 		for (const auto& s : Playing->Shown) { auto o = MakeShared<FJsonObject>(); o->SetStringField(TEXT("kind"), s.Kind); o->SetStringField(TEXT("character"), s.Character); o->SetStringField(TEXT("text"), s.Text); shown.Add(MakeShared<FJsonValueObject>(o)); }
 		p->SetArrayField(TEXT("shown"), shown);
 		p->SetStringField(TEXT("outcome"), F(Playing->Outcome));
+		p->SetStringField(TEXT("labelled"), F(Playing->Labelled));
+		p->SetBoolField(TEXT("done"), Playing->bDone);
 		env->SetObjectField(TEXT("performing"), p);
 	}
 	else env->SetField(TEXT("performing"), MakeShared<FJsonValueNull>());
@@ -203,11 +255,33 @@ bool FHamletGame::Load(const FString& Json, FString& OutError)
 				o->TryGetStringField(TEXT("kind"), kind); o->TryGetStringField(TEXT("character"), character); o->TryGetStringField(TEXT("text"), text);
 				p->Shown.Add({kind, character, text});
 			}
-			FString outcome; (*perf)->TryGetStringField(TEXT("outcome"), outcome); p->Outcome = S(outcome);
+			FString outcome, labelled;
+			(*perf)->TryGetStringField(TEXT("outcome"), outcome); p->Outcome = S(outcome);
+			(*perf)->TryGetStringField(TEXT("labelled"), labelled); p->Labelled = S(labelled);
+			(*perf)->TryGetBoolField(TEXT("done"), p->bDone);
+			const bool bWasDone = p->bDone;
+			Playing = MoveTemp(p);   // ChoicesFrom reads Playing->Card for the card's outcomes
+			// A scene that had ended and not been continued needs nothing from Patter: the
+			// transcript and the outcome are the envelope's, and Continue is waiting.
 			// The pending choice, read from the core flow: the wrapper has no choice listing, and Advance() is the next step.
-			if (const patter::Flow* core = Patter->Raw() ? Patter->Raw()->getFlow(S(BoxFlowId)) : nullptr)
-				for (const auto& opt : core->getChoices()) if (opt.eligible) p->Choices.Add({F(opt.id), F(opt.prompt ? opt.prompt->text : opt.id)});
-			Playing = MoveTemp(p);
+			const patter::Flow* core = bWasDone ? nullptr : (Patter->Raw() ? Patter->Raw()->getFlow(S(BoxFlowId)) : nullptr);
+			if (core)
+			{
+				TArray<FPatterOption> Pending;
+				for (const auto& opt : core->getChoices())
+				{
+					FPatterOption o; o.Id = F(opt.id); o.Text = F(opt.prompt ? opt.prompt->text : opt.id); o.bEligible = opt.eligible;
+					// gameData is a shared_ptr to the map, and a value knows how to show itself.
+					if (opt.gameData)
+						for (const auto& g : *opt.gameData)
+						{
+							FPatterGameDataEntry E; E.Name = F(g.first); E.Value = F(g.second.toDisplayString());
+							o.GameData.Add(MoveTemp(E));
+						}
+					Pending.Add(MoveTemp(o));
+				}
+				ChoicesFrom(Pending);
+			}
 		}
 		return true;
 	}

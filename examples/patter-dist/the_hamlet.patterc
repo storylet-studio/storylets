@@ -14,9 +14,9 @@
     }
   ],
   "content": {
-    "hash": "19eh5l5",
+    "hash": "02fw8n0",
     "project": "proj_mfj6p1i9",
-    "structureHash": "1cq14pv"
+    "structureHash": "19a73c7"
   },
   "locales": {
     "default": "en",
@@ -59,13 +59,6 @@
                           "character": "BRYNA",
                           "id": "L_uovzn5vn",
                           "kind": "line"
-                        },
-                        {
-                          "gameData": {
-                            "outcome": "pledge-your-help"
-                          },
-                          "id": "E_cda5bb9d",
-                          "kind": "gameEvent"
                         }
                       ],
                       "id": "sn_cda5bb9d",
@@ -75,6 +68,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "pledge-your-help"
+                  },
                   "id": "opt_cda5bb9d",
                   "prompt": {
                     "id": "L_60d0e4ea",
@@ -95,13 +91,6 @@
                           "character": "BRYNA",
                           "id": "L_91ogw8pc",
                           "kind": "line"
-                        },
-                        {
-                          "gameData": {
-                            "outcome": "keep-your-distance"
-                          },
-                          "id": "E_67c680a3",
-                          "kind": "gameEvent"
                         }
                       ],
                       "id": "sn_67c680a3",
@@ -111,6 +100,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "keep-your-distance"
+                  },
                   "id": "opt_67c680a3",
                   "prompt": {
                     "id": "L_2fc9040b",
@@ -142,13 +134,6 @@
                 {
                   "id": "T_ac3557d9",
                   "kind": "text"
-                },
-                {
-                  "gameData": {
-                    "outcome": "step-through"
-                  },
-                  "id": "E_26b66aa1",
-                  "kind": "gameEvent"
                 }
               ],
               "id": "sn_ac3557d9",
@@ -188,11 +173,14 @@
                     {
                       "beats": [
                         {
-                          "gameData": {
-                            "outcome": "ask-what-is-wrong"
-                          },
-                          "id": "E_672a15ee",
-                          "kind": "gameEvent"
+                          "character": "PLAYER",
+                          "id": "L_mugh0agc",
+                          "kind": "line"
+                        },
+                        {
+                          "character": "GARETH",
+                          "id": "L_ry8ctl75",
+                          "kind": "line"
                         }
                       ],
                       "id": "sn_672a15ee",
@@ -202,6 +190,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "ask-what-is-wrong"
+                  },
                   "id": "opt_672a15ee",
                   "prompt": {
                     "id": "L_77ea940b",
@@ -214,11 +205,8 @@
                     {
                       "beats": [
                         {
-                          "gameData": {
-                            "outcome": "leave-him-be"
-                          },
-                          "id": "E_ee91b888",
-                          "kind": "gameEvent"
+                          "id": "L_duorb56a",
+                          "kind": "text"
                         }
                       ],
                       "id": "sn_ee91b888",
@@ -228,6 +216,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "leave-him-be"
+                  },
                   "id": "opt_ee91b888",
                   "prompt": {
                     "id": "L_46a74010",
@@ -261,11 +252,9 @@
                   "kind": "text"
                 },
                 {
-                  "gameData": {
-                    "outcome": "clasp-his-hand"
-                  },
-                  "id": "E_6e0421a4",
-                  "kind": "gameEvent"
+                  "character": "GARETH",
+                  "id": "L_1sq4geok",
+                  "kind": "line"
                 }
               ],
               "id": "sn_acf6f963",
@@ -313,13 +302,6 @@
                           "character": "GARETH",
                           "id": "L_brs8i80t",
                           "kind": "line"
-                        },
-                        {
-                          "gameData": {
-                            "outcome": "admire-the-work"
-                          },
-                          "id": "E_52308ecb",
-                          "kind": "gameEvent"
                         }
                       ],
                       "id": "sn_52308ecb",
@@ -329,6 +311,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "admire-the-work"
+                  },
                   "id": "opt_52308ecb",
                   "prompt": {
                     "id": "L_7d4a7ebc",
@@ -349,13 +334,6 @@
                           "character": "GARETH",
                           "id": "L_z5ox6on8",
                           "kind": "line"
-                        },
-                        {
-                          "gameData": {
-                            "outcome": "ask-if-hes-hiring"
-                          },
-                          "id": "E_872167c9",
-                          "kind": "gameEvent"
                         }
                       ],
                       "id": "sn_872167c9",
@@ -365,6 +343,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "ask-if-hes-hiring"
+                  },
                   "id": "opt_872167c9",
                   "prompt": {
                     "id": "L_55b237b4",
@@ -443,15 +424,7 @@
               "type": "group"
             },
             {
-              "beats": [
-                {
-                  "gameData": {
-                    "outcome": "continue"
-                  },
-                  "id": "E_79024986",
-                  "kind": "gameEvent"
-                }
-              ],
+              "beats": [],
               "id": "sn_rx56qu4s",
               "jump": {
                 "to": "END"
@@ -477,13 +450,6 @@
                 {
                   "id": "T_1d6e17eb",
                   "kind": "text"
-                },
-                {
-                  "gameData": {
-                    "outcome": "hold-her-gaze"
-                  },
-                  "id": "E_55c97035",
-                  "kind": "gameEvent"
                 }
               ],
               "id": "sn_1d6e17eb",
@@ -511,13 +477,6 @@
                 {
                   "id": "T_b7c23642",
                   "kind": "text"
-                },
-                {
-                  "gameData": {
-                    "outcome": "continue"
-                  },
-                  "id": "E_e61ead22",
-                  "kind": "gameEvent"
                 }
               ],
               "id": "sn_b7c23642",
@@ -545,13 +504,6 @@
                 {
                   "id": "T_f8c5f777",
                   "kind": "text"
-                },
-                {
-                  "gameData": {
-                    "outcome": "continue"
-                  },
-                  "id": "E_9673e074",
-                  "kind": "gameEvent"
                 }
               ],
               "id": "sn_f8c5f777",
@@ -647,13 +599,6 @@
                         {
                           "id": "L_xscc5c4p",
                           "kind": "text"
-                        },
-                        {
-                          "gameData": {
-                            "outcome": "ask-about-history"
-                          },
-                          "id": "E_ddf6ce30",
-                          "kind": "gameEvent"
                         }
                       ],
                       "id": "sn_ddf6ce30",
@@ -663,6 +608,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "ask-about-history"
+                  },
                   "id": "opt_ddf6ce30",
                   "prompt": {
                     "id": "L_35ae96fb",
@@ -682,13 +630,6 @@
                         {
                           "id": "L_r41z2eh1",
                           "kind": "text"
-                        },
-                        {
-                          "gameData": {
-                            "outcome": "ask-about-the-road-north"
-                          },
-                          "id": "E_cacb7640",
-                          "kind": "gameEvent"
                         }
                       ],
                       "id": "sn_cacb7640",
@@ -711,6 +652,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "ask-about-the-road-north"
+                  },
                   "id": "opt_cacb7640",
                   "prompt": {
                     "id": "L_79adade3",
@@ -742,13 +686,6 @@
                 {
                   "id": "T_434207f4",
                   "kind": "text"
-                },
-                {
-                  "gameData": {
-                    "outcome": "continue"
-                  },
-                  "id": "E_79ef8094",
-                  "kind": "gameEvent"
                 }
               ],
               "id": "sn_434207f4",
@@ -788,11 +725,8 @@
                     {
                       "beats": [
                         {
-                          "gameData": {
-                            "outcome": "touch-the-bark"
-                          },
-                          "id": "E_d329680d",
-                          "kind": "gameEvent"
+                          "id": "L_z8x2nipw",
+                          "kind": "text"
                         }
                       ],
                       "id": "sn_d329680d",
@@ -802,6 +736,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "touch-the-bark"
+                  },
                   "id": "opt_d329680d",
                   "prompt": {
                     "id": "L_339162b1",
@@ -814,11 +751,8 @@
                     {
                       "beats": [
                         {
-                          "gameData": {
-                            "outcome": "observe-carefully"
-                          },
-                          "id": "E_9d3a0829",
-                          "kind": "gameEvent"
+                          "id": "L_fi6ap28z",
+                          "kind": "text"
                         }
                       ],
                       "id": "sn_9d3a0829",
@@ -828,6 +762,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "observe-carefully"
+                  },
                   "id": "opt_9d3a0829",
                   "prompt": {
                     "id": "L_5ede4b2d",
@@ -871,11 +808,13 @@
                     {
                       "beats": [
                         {
-                          "gameData": {
-                            "outcome": "stand-with-gareth"
-                          },
-                          "id": "E_2f6a1015",
-                          "kind": "gameEvent"
+                          "character": "PLAYER",
+                          "id": "L_avnruj0i",
+                          "kind": "line"
+                        },
+                        {
+                          "id": "L_oop87xn6",
+                          "kind": "text"
                         }
                       ],
                       "id": "sn_2f6a1015",
@@ -885,6 +824,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "stand-with-gareth"
+                  },
                   "id": "opt_2f6a1015",
                   "prompt": {
                     "id": "L_5cd828ac",
@@ -897,11 +839,18 @@
                     {
                       "beats": [
                         {
-                          "gameData": {
-                            "outcome": "pay-them-off"
-                          },
-                          "id": "E_398f0035",
-                          "kind": "gameEvent"
+                          "character": "PLAYER",
+                          "id": "L_erzeenoy",
+                          "kind": "line"
+                        },
+                        {
+                          "character": "GARETH",
+                          "id": "L_3xcu3to1",
+                          "kind": "line"
+                        },
+                        {
+                          "id": "L_6rt8t6k5",
+                          "kind": "text"
                         }
                       ],
                       "id": "sn_398f0035",
@@ -911,6 +860,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "pay-them-off"
+                  },
                   "id": "opt_398f0035",
                   "prompt": {
                     "id": "L_ac695055",
@@ -923,11 +875,8 @@
                     {
                       "beats": [
                         {
-                          "gameData": {
-                            "outcome": "walk-away"
-                          },
-                          "id": "E_26b6c079",
-                          "kind": "gameEvent"
+                          "id": "L_qawld22y",
+                          "kind": "text"
                         }
                       ],
                       "id": "sn_26b6c079",
@@ -937,6 +886,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "walk-away"
+                  },
                   "id": "opt_26b6c079",
                   "prompt": {
                     "id": "L_2f959091",
@@ -968,13 +920,6 @@
                 {
                   "id": "T_711f18c2",
                   "kind": "text"
-                },
-                {
-                  "gameData": {
-                    "outcome": "continue"
-                  },
-                  "id": "E_dda03b95",
-                  "kind": "gameEvent"
                 }
               ],
               "id": "sn_711f18c2",
@@ -1014,11 +959,8 @@
                     {
                       "beats": [
                         {
-                          "gameData": {
-                            "outcome": "read-it"
-                          },
-                          "id": "E_30d9a900",
-                          "kind": "gameEvent"
+                          "id": "L_vu6x9v9q",
+                          "kind": "text"
                         }
                       ],
                       "id": "sn_30d9a900",
@@ -1028,6 +970,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "read-it"
+                  },
                   "id": "opt_30d9a900",
                   "prompt": {
                     "id": "L_4293104b",
@@ -1040,11 +985,8 @@
                     {
                       "beats": [
                         {
-                          "gameData": {
-                            "outcome": "return-it-unread"
-                          },
-                          "id": "E_2fbfd133",
-                          "kind": "gameEvent"
+                          "id": "L_10aefzf6",
+                          "kind": "text"
                         }
                       ],
                       "id": "sn_2fbfd133",
@@ -1054,6 +996,9 @@
                       "type": "snippet"
                     }
                   ],
+                  "gameData": {
+                    "outcome": "return-it-unread"
+                  },
                   "id": "opt_2fbfd133",
                   "prompt": {
                     "id": "L_3cd263e4",
@@ -1085,13 +1030,6 @@
                 {
                   "id": "T_f2fd9755",
                   "kind": "text"
-                },
-                {
-                  "gameData": {
-                    "outcome": "breathe-it-in"
-                  },
-                  "id": "E_ddb38efc",
-                  "kind": "gameEvent"
                 }
               ],
               "id": "sn_f2fd9755",
@@ -1119,13 +1057,6 @@
                 {
                   "id": "T_8a7f142c",
                   "kind": "text"
-                },
-                {
-                  "gameData": {
-                    "outcome": "continue"
-                  },
-                  "id": "E_577cb55b",
-                  "kind": "gameEvent"
                 }
               ],
               "id": "sn_8a7f142c",
@@ -1176,17 +1107,21 @@
   "strings": {
     "en": {
       "L_0fo3qd00": "Tell me about the village's history?",
+      "L_10aefzf6": "You return the letter to the desk, and close the door.",
+      "L_1sq4geok": "Thank you!",
       "L_2f959091": "Walk away; it isn't your fight",
       "L_2fc9040b": "Stay polite but keep your distance",
       "L_339162b1": "Touch the glowing bark",
       "L_35ae96fb": "Ask warmly about the village's history",
       "L_3cd263e4": "Return it unread",
+      "L_3xcu3to1": "Oh! Thank you!",
       "L_4293104b": "Read it while you can",
       "L_46a74010": "Leave him be",
       "L_55b237b4": "Talk straight: ask if he's hiring",
       "L_5cd828ac": "Stand with Gareth against them",
       "L_5ede4b2d": "Step back and observe carefully",
       "L_60d0e4ea": "Pledge your help to the village",
+      "L_6rt8t6k5": "The men leave, satisfied.",
       "L_77ea940b": "Ask him what's wrong",
       "L_79adade3": "Ask only about the road north",
       "L_7b4a6gin": "The square is alive with haggling and gossip.",
@@ -1194,36 +1129,46 @@
       "L_91ogw8pc": "I can take a hint.",
       "L_a24x6snq": "Hello - I'm Mira. Welcome to our village. Can I help you, stranger?",
       "L_ac695055": "Pay the debt yourself",
+      "L_avnruj0i": "Leave Gareth alone!",
       "L_brs8i80t": "Thanks, I'm glad you like it. I'm Gareth, by the way.",
+      "L_duorb56a": "You leave the blacksmith be.",
+      "L_erzeenoy": "I'll pay the debt.",
+      "L_fi6ap28z": "It's beautiful.",
       "L_fvqkrpvr": "Hello! I hear you're looking for things to do in the village. Could you help us?",
       "L_j8kzoojp": "Wow! That's amazing!",
       "L_knp4fifu": "Are you hiring?",
+      "L_mugh0agc": "What's wrong?",
+      "L_oop87xn6": "With you beside Gareth, the men decide not to take action... this time.",
       "L_puz4l9h5": "A child runs off with an apple and a trader shakes his fist.",
+      "L_qawld22y": "You walk away, not feeling guilty about it in the least, as you hear the sounds of the blacksmith being beaten up behind you.",
       "L_r41z2eh1": "Mira tells you how to find the road north.",
       "L_rw9nw1pw": "I'll help you!",
+      "L_ry8ctl75": "I've got money troubles. I'm worried Aldric might come to collect, and I can't pay.",
       "L_sbhl9llk": "It's good to meet you.",
       "L_tqr5bzh5": "There is laughter from the square.",
       "L_u61bszwi": "Tell me about the road north.",
       "L_uovzn5vn": "Wonderful!",
+      "L_vu6x9v9q": "You sneak a peek at it. This is interesting - it bears a strange symbol that you think you've seen elsewhere in this town.",
       "L_xscc5c4p": "Mira explains about the village's history.",
       "L_z5ox6on8": "Not right now I'm afraid. By the way, I'm Gareth. Nice to meet a straight-talker.",
+      "L_z8x2nipw": "You feel a tingling sensation, and your fingers leave bright marks on the bark.",
       "L_zgv6v66a": "The inn is busy with customers, sunlight streaming through the windows.",
       "T_07a7313f": "The blacksmith barely looks up from the anvil. He's focused on a wrought-iron candlestick of rosebuds and leaves.",
-      "T_1d6e17eb": "STUB: Mira Seems Distracted. Replace with the scene.",
+      "T_1d6e17eb": "Mira keeps glancing at the sealed door behind the bar. She catches you noticing and tries to look away. You hold her gaze for a moment.",
       "T_2083f3db": "A trader is loudly overselling turnips. ",
-      "T_32e27eb0": "STUB: The Sealed Letter. Replace with the scene.",
-      "T_374799a6": "STUB: The Moneylender's Men. Replace with the scene.",
-      "T_434207f4": "STUB: The Forest Turns Wary. Replace with the scene.",
-      "T_5ddd00b7": "STUB: The Glowing Tree at Night. Replace with the scene.",
-      "T_665628bb": "STUB: Gareth Looks Troubled. Replace with the scene.",
+      "T_32e27eb0": "The back door behind the bar is open, and a gust of air wafts an unopened letter from Mira's desk out on to the taproom floor.",
+      "T_374799a6": "Two of Aldric's men lean on the forge door. Seems they've turned up to talk about a debt.",
+      "T_434207f4": "Something you did has unsettled the wood. The trail markers no longer seem to point the same way twice.",
+      "T_5ddd00b7": "Deep in the forest the Mystic Tree burns with a soft light, as if it has been waiting to be addressed.",
+      "T_665628bb": "The hammer has gone quiet. Gareth is staring at a letter he keeps folding and unfolding.",
       "T_711f18c2": "You can see the track Mira described, that leads north through the forest.",
       "T_77a352f0": "Rumour reaches you that Bryna, the village elder, would like to visit you. So you head to her house to talk to her.",
       "T_8a7f142c": "The forest breathes around you. The trail markers are older than the village.",
       "T_985d8f12": "You step into the inn.",
       "T_ac3557d9": "The road ends at a weathered gate; smoke rises from the Inn beyond. Welcome to the village of Ham.",
-      "T_acf6f963": "STUB: Gareth's Gratitude. Replace with the scene.",
+      "T_acf6f963": "You talk to Gareth after Aldric's men have left.",
       "T_b7c23642": "Lamps gutter; the well stands black and still. Something feels watchful after dark.",
-      "T_f2fd9755": "STUB: The Tree Blooms. Replace with the scene.",
+      "T_f2fd9755": "Where you touched the bark, blossom spreads in the dark. The forest holds its breath.",
       "T_f8c5f777": "A hammer keeps time across the village from the forge, steady as a heartbeat.",
       "T_inn_night": "The common room is quiet this late."
     }

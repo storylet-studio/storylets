@@ -1,9 +1,15 @@
 {
   "edits": {
+    "T_1d6e17eb": {
+      "modifiedAt": "2026-09-04T18:44:06.921Z",
+    },
     "mira-seems-distracted": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:16:23.927Z",
+      "modifiedAt": "2026-09-04T18:44:06.921Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "T_1d6e17eb": "draft 1",
+  },
 }

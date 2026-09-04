@@ -20,11 +20,8 @@
                   {
                     "beats": [
                       {
-                        "gameData": {
-                          "outcome": "read-it",
-                        },
-                        "id": "E_30d9a900",
-                        "kind": "gameEvent",
+                        "id": "L_vu6x9v9q",
+                        "kind": "text",
                       },
                     ],
                     "id": "sn_30d9a900",
@@ -34,6 +31,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "read-it",
+                },
                 "id": "opt_30d9a900",
                 "prompt": {
                   "id": "L_4293104b",
@@ -46,11 +46,8 @@
                   {
                     "beats": [
                       {
-                        "gameData": {
-                          "outcome": "return-it-unread",
-                        },
-                        "id": "E_2fbfd133",
-                        "kind": "gameEvent",
+                        "id": "L_10aefzf6",
+                        "kind": "text",
                       },
                     ],
                     "id": "sn_2fbfd133",
@@ -60,6 +57,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "return-it-unread",
+                },
                 "id": "opt_2fbfd133",
                 "prompt": {
                   "id": "L_3cd263e4",

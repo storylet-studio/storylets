@@ -9,13 +9,6 @@
                 "id": "T_f2fd9755",
                 "kind": "text",
               },
-              {
-                "gameData": {
-                  "outcome": "breathe-it-in",
-                },
-                "id": "E_ddb38efc",
-                "kind": "gameEvent",
-              },
             ],
             "id": "sn_f2fd9755",
             "jump": {

@@ -1,9 +1,15 @@
 {
   "edits": {
+    "T_f2fd9755": {
+      "modifiedAt": "2026-09-04T18:51:17.092Z",
+    },
     "the-tree-blooms": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:15:52.911Z",
+      "modifiedAt": "2026-09-04T18:51:17.092Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "T_f2fd9755": "draft 1",
+  },
 }

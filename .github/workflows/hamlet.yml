@@ -1,12 +1,18 @@
 name: The Hamlet release
 
-# Tagging `hamlet-vX.Y.Z` builds the playable Hamlet client and attaches one zip to the
-# matching GitHub Release: `dist/` to open and play with no build step, `src/` to read.
-# The Village's arrangement, cloned, with one difference that matters: this client runs
-# TWO engines, and its Patter half comes from npm (@patterkit/runtime, @patterkit/ops),
-# never a checkout of ../patter, so there is no second repository to check out here.
-# The build's own cross-checks (scripts/pairing.mjs) run as part of `npm run build`,
-# so a card with no scene fails the release before it fails a player.
+# Tagging `hamlet-vX.Y.Z` builds the Hamlet and attaches FOUR zips to the matching GitHub
+# Release: the web client (`dist/` to open and play with no build step, `src/` to read),
+# and the Godot, Unity and Unreal projects to open in their editors.
+#
+# The Village's arrangement, cloned, with one difference that matters: this one runs TWO
+# engines. Everything of Patter's comes from a PUBLISHED release, never a checkout of
+# ../patter: the browser file and the three engine plugins are fetched by version, and
+# `@patterkit/runtime` from npm for the fixture writer. There is no second repository to
+# check out here.
+#
+# The build's own cross-checks (scripts/pairing.mjs) run as part of `npm run build`, so a
+# card with no scene, or a branch that never says which outcome it reached, fails the
+# release before it fails a player.
 #
 # Its own family, versioned independently, like the Village.
 on:
@@ -49,6 +55,12 @@ jobs:
       - name: Verify it still plays (the gated scripted playthroughs)
         working-directory: storylets
         run: npx vitest run packages/hamlet-client
+
+      # The client copies in the browser drop-in that @storylet-studio/play-helpers builds,
+      # so the libraries are built EXPLICITLY here. The test step above happens to build
+      # them too, but a release should not rest on a side effect of its own gate.
+      - name: Build the libraries the client copies from
+        run: npm run build:libs
 
       - name: Build the client
         working-directory: storylets

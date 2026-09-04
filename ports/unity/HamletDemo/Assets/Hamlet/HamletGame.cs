@@ -46,8 +46,13 @@ namespace StoryletStudio.Hamlet
         {
             public DealtCard Card; public PFlow Flow;
             public List<(string kind, string character, string text)> Shown = new List<(string, string, string)>();
-            public List<(string id, string text)> Choices = new List<(string, string)>();
+            public List<(string id, string text, string outcome, bool enabled, string why)> Choices
+                = new List<(string, string, string, bool, string)>();
             public string Outcome;
+            /// <summary>The outcome named on the option the player took, when no gameEvent overrules it.</summary>
+            public string Labelled;
+            /// <summary>The scene has ENDED and its closing words are on screen, waiting for Continue.</summary>
+            public bool Done;
         }
 
         public void Setup(string storyletJson, string patterJson)
@@ -80,7 +85,14 @@ namespace StoryletStudio.Hamlet
             Playing = new Performing { Card = card, Flow = Performance };
             Run();
         }
-        public void Choose(string optionId) { if (Playing == null) return; Playing.Flow.Choose(optionId); Playing.Choices.Clear(); Run(); }
+        public void Choose(string optionId)
+        {
+            if (Playing == null) return;
+            // The label rides with the option, so it is taken HERE, while the host still
+            // knows which option was clicked. By the end of the branch it is gone.
+            var picked = Playing.Choices.FirstOrDefault(c => c.id == optionId);
+            if (!string.IsNullOrEmpty(picked.outcome)) Playing.Labelled = picked.outcome;
+            Playing.Flow.Choose(optionId); Playing.Choices.Clear(); Run(); }
 
         private void Run()
         {
@@ -96,17 +108,58 @@ namespace StoryletStudio.Hamlet
                         if (step.GameData != null && step.GameData.TryGetValue("outcome", out var o) && o.IsString) Playing.Outcome = o.AsString;
                         break;
                     case StepType.Choice:
-                        foreach (var opt in step.Options.Where(x => x.Eligible)) Playing.Choices.Add((opt.Id, opt.Prompt?.Text ?? opt.Id));
+                        Playing.Choices.AddRange(ChoicesFrom(step.Options));
                         return;
-                    default: Finish(); return;
+                    default:
+                        // The scene has ENDED but its outcome is not played yet: its closing lines,
+                        // and the whole of a scene with no choice, would vanish under the redeal
+                        // before anyone read them. The player presses Continue.
+                        Playing.Done = true;
+                        return;
                 }
             }
         }
 
-        private void Finish()
+        /// <summary>The outcome ids the storylet side will accept for this card RIGHT NOW. Read
+        /// afresh at every stop: a scene can write @world mid-performance and change what is open
+        /// under itself.</summary>
+        private HashSet<string> OpenOutcomes() =>
+            new HashSet<string>(Story.Outcomes(Playing.Card.Id, At).Where(o => o.Available).Select(o => o.GameId));
+
+        /// <summary>The choices a step offers, with BOTH engines' gates applied. Patter says whether
+        /// the option can be offered at all; the Storylet Engine says whether the outcome it leads
+        /// to is open. Clickable only when both agree.</summary>
+        private List<(string, string, string, bool, string)> ChoicesFrom(IEnumerable<Patterkit.Patterplay.ChoiceOption> options)
         {
-            var card = Playing.Card; var outcome = Playing.Outcome;
-            if (string.IsNullOrEmpty(outcome)) throw new InvalidOperationException($"scene \"{card.GameId}\" ended without reporting an outcome");
+            var open = OpenOutcomes();
+            var made = new List<(string, string, string, bool, string)>();
+            foreach (var opt in options)
+            {
+                var outcome = opt.GameData != null && opt.GameData.TryGetValue("outcome", out var g) && g.IsString ? g.AsString : null;
+                var shut = outcome != null && !open.Contains(outcome);
+                made.Add((opt.Id, opt.Prompt?.Text ?? opt.Id, outcome, opt.Eligible && !shut,
+                    !opt.Eligible ? "not available here" : shut ? "requirements not met" : ""));
+            }
+            return made;
+        }
+
+        /// <summary>An explicit gameEvent, else the option the player took, else the card's only
+        /// outcome. Loud when none of the three answers: guessing would move the world the wrong
+        /// way, and the build catches this shape first (scripts/pairing.mjs).</summary>
+        private string ResolveOutcome()
+        {
+            if (!string.IsNullOrEmpty(Playing.Outcome)) return Playing.Outcome;
+            if (!string.IsNullOrEmpty(Playing.Labelled)) return Playing.Labelled;
+            var declared = Story.Outcomes(Playing.Card.Id, At).Select(o => o.GameId).ToList();
+            if (declared.Count == 1) return declared[0];
+            throw new InvalidOperationException($"scene \"{Playing.Card.GameId}\" ended without saying which outcome"
+                + $" it reached, and its card declares {declared.Count} ({string.Join(", ", declared)})");
+        }
+
+        /// <summary>Called by the Continue button, once the player has read what the scene said.</summary>
+        public void Finish()
+        {
+            var card = Playing.Card; var outcome = ResolveOutcome();
             Story.Play(card.Id, outcome, At);
             Log.Insert(0, $"{card.Title ?? card.GameId}: {outcome}");
             Playing = null;
@@ -138,6 +191,8 @@ namespace StoryletStudio.Hamlet
                     ["card"] = new JObject { ["id"] = Playing.Card.Id, ["gameId"] = Playing.Card.GameId, ["title"] = Playing.Card.Title },
                     ["shown"] = new JArray(Playing.Shown.Select(s => new JObject { ["kind"] = s.kind, ["character"] = s.character, ["text"] = s.text })),
                     ["outcome"] = Playing.Outcome,
+                    ["labelled"] = Playing.Labelled,
+                    ["done"] = Playing.Done,
                 },
             };
             return env.ToString(Newtonsoft.Json.Formatting.None);
@@ -161,9 +216,13 @@ namespace StoryletStudio.Hamlet
             {
                 var flow = Performance;
                 var card = new DealtCard { Id = perf["card"]["id"].Value<string>(), GameId = perf["card"]["gameId"].Value<string>(), Title = perf["card"]["title"]?.Value<string>() };
-                var pl = new Performing { Card = card, Flow = flow, Outcome = perf["outcome"]?.Value<string>() };
+                var pl = new Performing { Card = card, Flow = flow, Outcome = perf["outcome"]?.Value<string>(),
+                    Labelled = perf["labelled"]?.Value<string>(), Done = perf["done"]?.Value<bool>() ?? false };
                 foreach (var s in perf["shown"] as JArray ?? new JArray()) pl.Shown.Add((s["kind"].Value<string>(), s["character"]?.Value<string>() ?? "", s["text"]?.Value<string>() ?? ""));
-                foreach (var opt in flow.GetChoices().Where(x => x.Eligible)) pl.Choices.Add((opt.Id, opt.Prompt?.Text ?? opt.Id));
+                Playing = pl;   // ChoicesFrom reads Playing.Card for the card's outcomes
+                // A scene that had ended and not been continued needs nothing from Patter:
+                // the transcript and the outcome are the envelope's, and Continue is waiting.
+                if (!pl.Done) pl.Choices.AddRange(ChoicesFrom(flow.GetChoices()));
                 Playing = pl;
             }
             return true;

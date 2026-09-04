@@ -57,7 +57,9 @@ public:
 	static constexpr const TCHAR* BoxFlowId = TEXT("village");
 
 	struct FShown { FString Kind; FString Character; FString Text; };
-	struct FChoice { FString Id; FString Text; };
+	/** One choice on screen. `Outcome` is what this option leads to when the scene does not
+	 *  overrule it; `bEnabled` is false when EITHER engine has it shut, and Why says which. */
+	struct FChoice { FString Id; FString Text; FString Outcome; bool bEnabled = true; FString Why; };
 	struct FPerforming
 	{
 		FStoryletDealtCard Card;
@@ -65,6 +67,10 @@ public:
 		TArray<FShown> Shown;
 		TArray<FChoice> Choices;
 		std::string Outcome;
+		/** The outcome named on the option the player took, when no gameEvent overrules it. */
+		std::string Labelled;
+		/** The scene has ENDED and its closing words are on screen, waiting for Continue. */
+		bool bDone = false;
 	};
 
 	FHamletWorld World;
@@ -95,7 +101,12 @@ public:
 	FString Save() const;
 	bool Load(const FString& Json, FString& OutError);
 
+	/** Called by the Continue button, once the player has read what the scene said. */
+	void Finish();
+
 private:
 	void Run();
-	void Finish();
+	TSet<FString> OpenOutcomes() const;
+	void ChoicesFrom(const TArray<FPatterOption>& Options);
+	std::string ResolveOutcome() const;
 };

@@ -35,15 +35,22 @@ if (mid) {
     if (s.type === "choice") break; }
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify({ storylets: serializeState(storylets), patter: patterSerialize(patter), world: Object.fromEntries(world), at: "the-inn",
-    performing: { card: { id: settle.id, gameId: settle.gameId, title: settle.title }, shown, outcome: null }, _expect_choices: 2 }, null, 2));
+    performing: { card: { id: settle.id, gameId: settle.gameId, title: settle.title }, shown, outcome: null, labelled: null }, _expect_choices: 2 }, null, 2));
   console.log(`wrote ${out}: mid-scene at the inn, 2 choices pending`); process.exit(0);
 }
-let outcome = null;
+// The resolution rule, as the client has it: an event wins, else the outcome
+// named on the option taken, else the card's only outcome (performance.js).
+let outcome = null, labelled = null;
 for (;;) { const s = flow.advance();
-  if (s.type === "choice") { flow.choose(s.options.find((o) => o.prompt?.text?.includes("road north")).id); continue; }
+  if (s.type === "choice") {
+    const picked = s.options.find((o) => o.prompt?.text?.includes("road north"));
+    labelled = picked.gameData?.outcome ?? labelled;
+    flow.choose(picked.id); continue;
+  }
   if (s.type === "gameEvent") outcome = s.gameData?.outcome;
   if (s.type === "end") break; }
-story.play(settle.id, outcome, "the-inn"); story.dealMany();
+const declared = story.outcomes(settle.id, "the-inn").map((o) => o.gameId);
+story.play(settle.id, outcome ?? labelled ?? (declared.length === 1 ? declared[0] : null), "the-inn"); story.dealMany();
 const at = "the-mystic-tree"; const hand = story.deal(at).map((c) => c.gameId);
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, JSON.stringify({ storylets: serializeState(storylets), patter: patterSerialize(patter), world: Object.fromEntries(world), at, performing: null, _expect_hand: hand }, null, 2));

@@ -55,15 +55,7 @@
             "type": "group",
           },
           {
-            "beats": [
-              {
-                "gameData": {
-                  "outcome": "continue",
-                },
-                "id": "E_79024986",
-                "kind": "gameEvent",
-              },
-            ],
+            "beats": [],
             "id": "sn_rx56qu4s",
             "jump": {
               "to": "END",

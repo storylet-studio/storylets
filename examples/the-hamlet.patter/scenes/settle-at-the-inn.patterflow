@@ -62,13 +62,6 @@
                         "id": "L_xscc5c4p",
                         "kind": "text",
                       },
-                      {
-                        "gameData": {
-                          "outcome": "ask-about-history",
-                        },
-                        "id": "E_ddf6ce30",
-                        "kind": "gameEvent",
-                      },
                     ],
                     "id": "sn_ddf6ce30",
                     "jump": {
@@ -77,6 +70,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "ask-about-history",
+                },
                 "id": "opt_ddf6ce30",
                 "prompt": {
                   "id": "L_35ae96fb",
@@ -97,13 +93,6 @@
                         "id": "L_r41z2eh1",
                         "kind": "text",
                       },
-                      {
-                        "gameData": {
-                          "outcome": "ask-about-the-road-north",
-                        },
-                        "id": "E_cacb7640",
-                        "kind": "gameEvent",
-                      },
                     ],
                     "id": "sn_cacb7640",
                     "jump": {
@@ -119,6 +108,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "ask-about-the-road-north",
+                },
                 "id": "opt_cacb7640",
                 "prompt": {
                   "id": "L_79adade3",

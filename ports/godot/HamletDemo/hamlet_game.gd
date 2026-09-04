@@ -6,8 +6,9 @@
 #   this class owns @world, and hands the SAME resolver to both
 #
 # Neither engine is told the other exists. What joins them is a naming
-# convention (a card's gameId is its scene id; an outcome's gameId is what the
-# scene reports in a gameEvent's gameData.outcome) and the world dictionary.
+# convention (a card's gameId is its scene id; an outcome's gameId is what its
+# scene names, on the option taken or in a gameEvent, with a single-outcome card
+# needing neither) and the world dictionary.
 class_name HamletGame
 
 const SEED := 7
@@ -29,7 +30,7 @@ var patter: PatterEngine
 var places: Array = []           # [{gameId, title}]
 var at: String = ""              # the hand the player stands at, "" = nowhere
 ## The card being performed, and the flow performing it. null when at the hand.
-var playing = null               # {card, flow, shown: Array, choices: Array, outcome: String}
+var playing = null               # {card, flow, shown, choices, outcome, labelled, done}
 var log: Array = []
 
 func _resolver() -> Dictionary:
@@ -78,13 +79,41 @@ func hand() -> Array:
 ## The scene is found BY NAME, the card's own gameId.
 func start(card: Dictionary) -> void:
 	if not performance.goto(card["gameId"]): push_error("no Patter scene " + str(card["gameId"])); return
-	playing = {"card": card, "flow": performance, "shown": [], "choices": [], "outcome": ""}
+	playing = {"card": card, "flow": performance, "shown": [], "choices": [], "outcome": "", "labelled": "", "done": false}
 	_run()
 
 func choose(option_id: String) -> void:
 	if playing == null: return
+	# The label rides with the option, so it is taken HERE, while the host still
+	# knows which option was clicked. By the end of the branch it is gone.
+	for ch in playing["choices"]:
+		if ch["id"] == option_id and str(ch.get("outcome", "")) != "": playing["labelled"] = str(ch["outcome"])
 	playing["flow"].choose(option_id); playing["choices"] = []
 	_run()
+
+## The outcome ids the storylet side will accept for this card RIGHT NOW.
+## Read afresh at every stop: a scene can write @world mid-performance and
+## change what is open under itself.
+func _open_outcomes() -> Dictionary:
+	var open := {}
+	for o in story.outcomes(playing["card"]["id"], at):
+		if o.get("available", true): open[str(o["gameId"])] = true
+	return open
+
+## The choices a step offers, with BOTH engines' gates applied. Patter says
+## whether the option can be offered at all; the Storylet Engine says whether
+## the outcome it leads to is open. Clickable only when both agree.
+func _choices_from(options: Array) -> Array:
+	var open := _open_outcomes()
+	var out: Array = []
+	for opt in options:
+		var outcome := str(opt.get("gameData", {}).get("outcome", ""))
+		var shut := outcome != "" and not open.has(outcome)
+		var eligible: bool = opt.get("eligible", true)
+		out.append({"id": opt["id"], "text": str(opt.get("text", opt["id"])), "outcome": outcome,
+			"enabled": eligible and not shut,
+			"why": ("not available here" if not eligible else ("requirements not met" if shut else ""))})
+	return out
 
 ## Patter's step loop, the ordinary one. The only unusual line is what it does
 ## with a gameEvent: that is the scene saying which outcome it reached.
@@ -99,20 +128,36 @@ func _run() -> void:
 				var o = step.get("gameData", {}).get("outcome", null)
 				if o != null: playing["outcome"] = str(o)
 			"choice":
-				for opt in step.get("options", []):
-					if opt.get("eligible", true):
-						playing["choices"].append({"id": opt["id"], "text": str(opt.get("text", opt["id"]))})
+				playing["choices"] = _choices_from(step.get("options", []))
 				return
 			_:
-				_finish(); return
+				# The scene has ENDED but its outcome is not played yet: its closing
+				# lines, and the whole of a scene with no choice, would vanish under
+				# the redeal before anyone read them. The player presses Continue.
+				playing["done"] = true
+				return
 
 ## The scene ended and reported an outcome; THAT is what the storylet engine
 ## plays. The world moves because of what was said in dialogue.
-func _finish() -> void:
+## An explicit gameEvent, else the option the player took, else the card's only
+## outcome. Loud when none of the three answers: guessing would move the world
+## the wrong way, and the build catches this shape first (scripts/pairing.mjs).
+func _resolve_outcome() -> String:
+	if str(playing["outcome"]) != "": return str(playing["outcome"])
+	if str(playing["labelled"]) != "": return str(playing["labelled"])
+	var declared: Array = []
+	for o in story.outcomes(playing["card"]["id"], at): declared.append(str(o["gameId"]))
+	if declared.size() == 1: return declared[0]
+	push_error('scene "%s" ended without saying which outcome it reached, and its card declares %d (%s)'
+		% [playing["card"]["gameId"], declared.size(), ", ".join(declared)])
+	return ""
+
+## Called by the UI's Continue button, once the player has read what the scene said.
+func finish() -> void:
 	var card: Dictionary = playing["card"]
-	var outcome: String = playing["outcome"]
+	var outcome: String = _resolve_outcome()
 	if outcome == "":
-		push_error('scene "%s" ended without reporting an outcome' % card["gameId"]); playing = null; return
+		playing = null; return
 	var err := story.play(card["id"], outcome, at)
 	if err != "": push_error(err)
 	log.push_front("%s: %s" % [card.get("title", card["gameId"]), outcome])
@@ -143,7 +188,7 @@ func save() -> Dictionary:
 	}
 	if playing != null:
 		env["performing"] = {"card": {"id": playing["card"]["id"], "gameId": playing["card"]["gameId"], "title": playing["card"].get("title", "")},
-			"shown": playing["shown"], "outcome": playing["outcome"]}
+			"shown": playing["shown"], "outcome": playing["outcome"], "labelled": playing["labelled"], "done": playing["done"]}
 	return env
 
 func load(env: Dictionary) -> bool:
@@ -166,10 +211,12 @@ func load(env: Dictionary) -> bool:
 	if p != null:
 		var flow := performance
 		if flow != null:
-			var choices: Array = []
-			for opt in flow.get_choices():
-				if opt.get("eligible", true): choices.append({"id": opt["id"], "text": str(opt.get("text", opt["id"]))})
-			playing = {"card": p["card"], "flow": flow, "shown": p.get("shown", []), "choices": choices, "outcome": str(p.get("outcome", ""))}
+			playing = {"card": p["card"], "flow": flow, "shown": p.get("shown", []), "choices": [],
+				"outcome": str(p.get("outcome", "")), "labelled": str(p.get("labelled", "")), "done": bool(p.get("done", false))}
+			# A scene that had ended and not been continued needs nothing from Patter:
+			# the transcript and the outcome are the envelope's, and Continue is waiting.
+			if not playing["done"]:
+				playing["choices"] = _choices_from(flow.get_choices())
 	return true
 
 func world_line() -> String:

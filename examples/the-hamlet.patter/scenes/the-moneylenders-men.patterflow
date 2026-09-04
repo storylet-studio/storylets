@@ -20,11 +20,13 @@
                   {
                     "beats": [
                       {
-                        "gameData": {
-                          "outcome": "stand-with-gareth",
-                        },
-                        "id": "E_2f6a1015",
-                        "kind": "gameEvent",
+                        "character": "PLAYER",
+                        "id": "L_avnruj0i",
+                        "kind": "line",
+                      },
+                      {
+                        "id": "L_oop87xn6",
+                        "kind": "text",
                       },
                     ],
                     "id": "sn_2f6a1015",
@@ -34,6 +36,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "stand-with-gareth",
+                },
                 "id": "opt_2f6a1015",
                 "prompt": {
                   "id": "L_5cd828ac",
@@ -46,11 +51,18 @@
                   {
                     "beats": [
                       {
-                        "gameData": {
-                          "outcome": "pay-them-off",
-                        },
-                        "id": "E_398f0035",
-                        "kind": "gameEvent",
+                        "character": "PLAYER",
+                        "id": "L_erzeenoy",
+                        "kind": "line",
+                      },
+                      {
+                        "character": "GARETH",
+                        "id": "L_3xcu3to1",
+                        "kind": "line",
+                      },
+                      {
+                        "id": "L_6rt8t6k5",
+                        "kind": "text",
                       },
                     ],
                     "id": "sn_398f0035",
@@ -60,6 +72,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "pay-them-off",
+                },
                 "id": "opt_398f0035",
                 "prompt": {
                   "id": "L_ac695055",
@@ -72,11 +87,8 @@
                   {
                     "beats": [
                       {
-                        "gameData": {
-                          "outcome": "walk-away",
-                        },
-                        "id": "E_26b6c079",
-                        "kind": "gameEvent",
+                        "id": "L_qawld22y",
+                        "kind": "text",
                       },
                     ],
                     "id": "sn_26b6c079",
@@ -86,6 +98,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "walk-away",
+                },
                 "id": "opt_26b6c079",
                 "prompt": {
                   "id": "L_2f959091",

@@ -4,6 +4,6 @@
   "scene": "mira-seems-distracted",
   "schema": "patter/strings@0",
   "strings": {
-    "T_1d6e17eb": "STUB: Mira Seems Distracted. Replace with the scene.",
+    "T_1d6e17eb": "Mira keeps glancing at the sealed door behind the bar. She catches you noticing and tries to look away. You hold her gaze for a moment.",
   },
 }

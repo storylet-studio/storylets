@@ -17,7 +17,7 @@
 // patterplay.min.js) define the two globals this page reads: `StoryletEngine`,
 // the runtime with its helpers on it, and `Patterplay`, Patter's. world.js and
 // performance.js are plain scripts loaded before this one, so `World`,
-// `perform`, `resume` and `answer` are already here.
+// `perform`, `resume`, `answer` and `resolveOutcome` are already here.
 const { describeBundle, serializeState, deserializeState } = StoryletEngine;
 const { serializeState: patterSerialize, deserializeState: patterDeserialize } = Patterplay;
 const SAVE_KEY = "the-hamlet/save@1";
@@ -90,15 +90,21 @@ function go(place) {
 /** Pick a card: the storylet side has chosen the beat, so Patter now performs
  *  it. The scene is found BY NAME - the card's own gameId - and nothing had to
  *  be declared to make that work. */
+/** The outcome ids the storylet side will accept for this card RIGHT NOW.
+ *  Recomputed at every stop, because a scene can write @world mid-performance
+ *  and change what is open under itself. */
+function openOutcomes(card) {
+    return new Set(story.outcomes(card.id, at).filter((o) => o.available).map((o) => o.gameId));
+}
 function start(card) {
-    playing = { card, state: perform(performance, card.gameId) };
+    playing = { card, state: perform(performance, card.gameId, openOutcomes(card)) };
     save(); // mid-scene is a savable moment, not just between cards
     render();
 }
 function choose(optionId) {
     if (!playing)
         return;
-    playing.state = answer(performance, playing.state, optionId);
+    playing.state = answer(performance, playing.state, optionId, openOutcomes(playing.card));
     save();
     render();
 }
@@ -112,13 +118,12 @@ function finish() {
     if (!playing || !playing.state.done)
         return;
     const { card, state } = playing;
-    if (state.outcome === null) {
-        // Loud, not silent. The build-time cross-check should have caught this, so
-        // reaching it means the bundles on disk are not the ones that were checked.
-        throw new Error(`scene "${card.gameId}" ended without reporting an outcome`);
-    }
-    story.play(card.id, state.outcome, at);
-    log.unshift(`${card.title ?? card.gameId}: ${state.outcome}`);
+    // An explicit gameEvent, else the option the player took, else the card's
+    // only outcome. Loud when none of the three answers, because guessing would
+    // move the world the wrong way (performance.js, resolveOutcome).
+    const outcome = resolveOutcome(state, story.outcomes(card.id, at).map((o) => o.gameId), card.gameId);
+    story.play(card.id, outcome, at);
+    log.unshift(`${card.title ?? card.gameId}: ${outcome}`);
     playing = null;
     // Re-prime EVERYWHERE, not just here: the outcome's changes, and anything the
     // scene wrote to @world, may have re-gated content in another place. The
@@ -164,6 +169,7 @@ function save() {
             card: { id: playing.card.id, gameId: playing.card.gameId, title: playing.card.title },
             shown: playing.state.shown,
             outcome: playing.state.outcome,
+            labelled: playing.state.labelled,
             done: playing.state.done,
         },
     }));
@@ -201,13 +207,14 @@ function restore() {
         if (s.performing) {
             const shown = (s.performing.shown ?? []);
             const outcome = s.performing.outcome ?? null;
+            const labelled = s.performing.labelled ?? null;
             if (s.performing.done) {
                 // The scene had ended and the player had not yet continued: nothing
                 // to ask Patter for, the transcript and the outcome are the envelope's.
-                playing = { card: s.performing.card, state: { shown, choices: [], outcome, done: true } };
+                playing = { card: s.performing.card, state: { shown, choices: [], outcome, labelled, done: true } };
             }
             else {
-                playing = { card: s.performing.card, state: resume(performance, shown, outcome) };
+                playing = { card: s.performing.card, state: resume(performance, shown, outcome, labelled, openOutcomes(s.performing.card)) };
             }
         }
         return true;
@@ -239,9 +246,12 @@ function render() {
         });
         const opts = playing.state.choices.map((c) => {
             const b = document.createElement("button");
-            b.textContent = c.text;
-            b.className = "option";
-            b.onclick = () => choose(c.id);
+            b.textContent = c.enabled ? c.text : `${c.text}  (${c.why})`;
+            b.className = c.enabled ? "option" : "option shut";
+            // Shown and unclickable, rather than hidden: the player sees what the
+            // scene could have offered, which is half the point of gating it.
+            b.disabled = !c.enabled;
+            if (c.enabled) b.onclick = () => choose(c.id);
             return b;
         });
         if (playing.state.done) {

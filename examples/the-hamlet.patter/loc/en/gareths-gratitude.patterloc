@@ -4,6 +4,7 @@
   "scene": "gareths-gratitude",
   "schema": "patter/strings@0",
   "strings": {
-    "T_acf6f963": "STUB: Gareth's Gratitude. Replace with the scene.",
+    "L_1sq4geok": "Thank you!",
+    "T_acf6f963": "You talk to Gareth after Aldric's men have left.",
   },
 }

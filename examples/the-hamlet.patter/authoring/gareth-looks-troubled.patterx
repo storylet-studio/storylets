@@ -1,12 +1,32 @@
 {
   "edits": {
+    "L_8u6turzg": {
+      "modifiedAt": "2026-09-04T18:35:00.107Z",
+    },
+    "L_duorb56a": {
+      "modifiedAt": "2026-09-04T18:35:19.760Z",
+    },
+    "L_mugh0agc": {
+      "modifiedAt": "2026-09-04T18:34:19.058Z",
+    },
+    "L_ry8ctl75": {
+      "modifiedAt": "2026-09-04T18:35:58.391Z",
+    },
     "T_665628bb": {
       "modifiedAt": "2026-09-04T18:32:55.525Z",
     },
     "gareth-looks-troubled": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-04T18:32:55.525Z",
+      "modifiedAt": "2026-09-04T18:35:58.391Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "L_46a74010": "draft 1",
+    "L_77ea940b": "draft 1",
+    "L_duorb56a": "draft 1",
+    "L_mugh0agc": "draft 1",
+    "L_ry8ctl75": "draft 1",
+    "T_665628bb": "draft 1",
+  },
 }

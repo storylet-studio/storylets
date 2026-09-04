@@ -972,20 +972,7 @@
                   "title": "Ask him what's wrong"
                 },
                 {
-                  "changes": {
-                    "@deck.debt": {
-                      "ast": [
-                        "call",
-                        "advance",
-                        [
-                          "sv",
-                          "deck",
-                          "debt"
-                        ]
-                      ],
-                      "src": "advance(@deck.debt)"
-                    }
-                  },
+                  "changes": {},
                   "gameId": "leave-him-be",
                   "id": "c_gt_leave",
                   "title": "Leave him be"
@@ -1589,7 +1576,7 @@
     }
   ],
   "content": {
-    "hash": "01szyob",
+    "hash": "1tft0wf",
     "project": "proj_village",
     "version": "0.1.0"
   },

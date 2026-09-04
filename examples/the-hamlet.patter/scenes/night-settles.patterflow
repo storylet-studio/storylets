@@ -9,13 +9,6 @@
                 "id": "T_b7c23642",
                 "kind": "text",
               },
-              {
-                "gameData": {
-                  "outcome": "continue",
-                },
-                "id": "E_e61ead22",
-                "kind": "gameEvent",
-              },
             ],
             "id": "sn_b7c23642",
             "jump": {

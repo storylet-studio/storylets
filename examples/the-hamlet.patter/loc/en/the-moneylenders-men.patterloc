@@ -5,8 +5,14 @@
   "schema": "patter/strings@0",
   "strings": {
     "L_2f959091": "Walk away; it isn't your fight",
+    "L_3xcu3to1": "Oh! Thank you!",
     "L_5cd828ac": "Stand with Gareth against them",
+    "L_6rt8t6k5": "The men leave, satisfied.",
     "L_ac695055": "Pay the debt yourself",
-    "T_374799a6": "STUB: The Moneylender's Men. Replace with the scene.",
+    "L_avnruj0i": "Leave Gareth alone!",
+    "L_erzeenoy": "I'll pay the debt.",
+    "L_oop87xn6": "With you beside Gareth, the men decide not to take action... this time.",
+    "L_qawld22y": "You walk away, not feeling guilty about it in the least, as you hear the sounds of the blacksmith being beaten up behind you.",
+    "T_374799a6": "Two of Aldric's men lean on the forge door. Seems they've turned up to talk about a debt.",
   },
 }

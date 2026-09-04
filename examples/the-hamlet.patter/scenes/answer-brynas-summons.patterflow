@@ -34,13 +34,6 @@
                         "id": "L_uovzn5vn",
                         "kind": "line",
                       },
-                      {
-                        "gameData": {
-                          "outcome": "pledge-your-help",
-                        },
-                        "id": "E_cda5bb9d",
-                        "kind": "gameEvent",
-                      },
                     ],
                     "id": "sn_cda5bb9d",
                     "jump": {
@@ -49,6 +42,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "pledge-your-help",
+                },
                 "id": "opt_cda5bb9d",
                 "prompt": {
                   "id": "L_60d0e4ea",
@@ -70,13 +66,6 @@
                         "id": "L_91ogw8pc",
                         "kind": "line",
                       },
-                      {
-                        "gameData": {
-                          "outcome": "keep-your-distance",
-                        },
-                        "id": "E_67c680a3",
-                        "kind": "gameEvent",
-                      },
                     ],
                     "id": "sn_67c680a3",
                     "jump": {
@@ -85,6 +74,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "keep-your-distance",
+                },
                 "id": "opt_67c680a3",
                 "prompt": {
                   "id": "L_2fc9040b",

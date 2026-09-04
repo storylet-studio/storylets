@@ -18,6 +18,8 @@ static class Program
         var g = Fresh(); g.Go("the-inn");
         // The demo opens with one card: arriving at the gate moves the act and deals the village.
         var gate = g.Hand().FirstOrDefault(c => c.GameId == "arrive-at-the-gate"); Check(gate != null, "the demo opens with the gate"); g.Start(gate);
+        // The scene ENDS but its outcome waits: the player reads it, then continues.
+        Check(g.Playing != null && g.Playing.Done && g.Log.Count == 0, "the gate's words wait on Continue"); g.Finish();
         var settle = g.Hand().FirstOrDefault(c => c.GameId == "settle-at-the-inn");
         Check(settle != null, "the inn deals settle-at-the-inn");
         g.Start(settle);
@@ -25,10 +27,11 @@ static class Program
         var mid = g.Save(); var g2 = Fresh();
         Check(g2.Load(mid) && g2.Playing != null && g2.Playing.Choices.Count == 2, "a mid-scene envelope loads and the conversation is back");
         g2.Choose(g2.Playing.Choices.First(c => c.text.Contains("road north")).id);
+        Check(g2.Playing != null && g2.Playing.Done, "the branch's closing words wait on Continue"); g2.Finish();
         Check(Equals(g2.World.Values["knows_road"], true), "Patter wrote @world.knows_road");
         g2.Go("the-mystic-tree");
         Check(string.Join(",", g2.Hand().Select(c => c.GameId)) == "wind-in-the-leaves", "tree shows the ambient only (survivor rule)");
-        g2.Start(g2.Hand()[0]);
+        g2.Start(g2.Hand()[0]); g2.Finish();   // no choice at all: it ends, and Continue plays it
         Check(g2.Hand().Any(c => c.GameId == "the-road-north"), "The Road North lands once the seat frees");
         var fx = Path.GetFullPath(Path.Combine(sa, "../../../../godot/HamletDemo/test/fixtures/envelope-from-js-mid.json"));   // ports/unity/HamletDemo/Assets/StreamingAssets -> ports/godot/...
         Console.WriteLine("cross-host fixture: " + (File.Exists(fx) ? "found" : "MISSING at " + fx));

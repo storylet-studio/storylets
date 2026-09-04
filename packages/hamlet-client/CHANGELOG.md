@@ -7,6 +7,13 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+### Added
+
+- **A gated outcome greys its option, in all four hosts.** An option is offered only when Patter calls it eligible AND the Storylet Engine reports the outcome it leads to as available; the rest are shown unclickable with a reason. Nothing showed the storylet side's gate before, so a player could take a branch the engine would then refuse, and only the developer console said so.
+- **The outcome a scene reached is resolved in three steps, last word wins**: a `gameEvent`, else the outcome named on the option the player took, else the card's only outcome. A card with one outcome needs no Game Data at all, which is ten of the Hamlet's seventeen scenes; a card with several is answered by labelling its options. The host throws, naming card and scene, when none of the three answers.
+- **Three build checks for the rule**: an option that names no outcome and fires no event on a multi-outcome card, a name the card does not declare, and an outcome nothing can ever reach.
+
+
 ### Changed
 
 - **Plain JavaScript, no build step.** The page is `index.html`, two script tags for the runtimes' browser files (`storyletengine.min.js`, `patterplay.min.js` from Patterplay 0.12.0, both carrying their save helpers) and three plain scripts, `world.js`, `performance.js`, `main.js`. `npm run build` only copies; esbuild and the bundled `hamlet.js` are gone.

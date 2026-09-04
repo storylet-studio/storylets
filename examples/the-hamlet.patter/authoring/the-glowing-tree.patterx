@@ -1,12 +1,25 @@
 {
   "edits": {
+    "L_fi6ap28z": {
+      "modifiedAt": "2026-09-04T18:50:49.288Z",
+    },
+    "L_z8x2nipw": {
+      "modifiedAt": "2026-09-04T18:50:28.254Z",
+    },
     "T_5ddd00b7": {
       "modifiedAt": "2026-09-04T18:49:24.387Z",
     },
     "the-glowing-tree": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-04T18:49:24.387Z",
+      "modifiedAt": "2026-09-04T18:50:49.288Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "L_339162b1": "draft 1",
+    "L_5ede4b2d": "draft 1",
+    "L_fi6ap28z": "draft 1",
+    "L_z8x2nipw": "draft 1",
+    "T_5ddd00b7": "draft 1",
+  },
 }

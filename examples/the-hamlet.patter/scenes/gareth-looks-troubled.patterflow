@@ -20,11 +20,14 @@
                   {
                     "beats": [
                       {
-                        "gameData": {
-                          "outcome": "ask-what-is-wrong",
-                        },
-                        "id": "E_672a15ee",
-                        "kind": "gameEvent",
+                        "character": "PLAYER",
+                        "id": "L_mugh0agc",
+                        "kind": "line",
+                      },
+                      {
+                        "character": "GARETH",
+                        "id": "L_ry8ctl75",
+                        "kind": "line",
                       },
                     ],
                     "id": "sn_672a15ee",
@@ -34,6 +37,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "ask-what-is-wrong",
+                },
                 "id": "opt_672a15ee",
                 "prompt": {
                   "id": "L_77ea940b",
@@ -46,11 +52,8 @@
                   {
                     "beats": [
                       {
-                        "gameData": {
-                          "outcome": "leave-him-be",
-                        },
-                        "id": "E_ee91b888",
-                        "kind": "gameEvent",
+                        "id": "L_duorb56a",
+                        "kind": "text",
                       },
                     ],
                     "id": "sn_ee91b888",
@@ -60,6 +63,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "leave-him-be",
+                },
                 "id": "opt_ee91b888",
                 "prompt": {
                   "id": "L_46a74010",

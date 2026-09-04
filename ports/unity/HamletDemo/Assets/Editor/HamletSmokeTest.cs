@@ -26,6 +26,8 @@ namespace StoryletStudio.Hamlet.Editor
             g.Go("the-inn");
             // The demo opens with one card: arriving at the gate moves the act and deals the village.
             var gate = g.Hand().FirstOrDefault(c => c.GameId == "arrive-at-the-gate"); if (gate == null) throw new System.Exception("the demo opens with the gate"); g.Start(gate);
+            // The scene ENDS but its outcome waits: the player reads it, then continues.
+            Check(g.Playing != null && g.Playing.Done, "the gate's words wait on Continue"); g.Finish();
             var settle = g.Hand().FirstOrDefault(c => c.GameId == "settle-at-the-inn");
             Check(settle != null, "the inn deals settle-at-the-inn", string.Join(",", g.Hand().Select(c => c.GameId)));
             g.Start(settle);
@@ -34,10 +36,11 @@ namespace StoryletStudio.Hamlet.Editor
             var g2 = Fresh();
             Check(g2.Load(mid) && g2.Playing != null && g2.Playing.Choices.Count == 2, "a mid-scene envelope loads and the conversation is back");
             g2.Choose(g2.Playing.Choices.First(c => c.text.Contains("road north")).id);
+            Check(g2.Playing != null && g2.Playing.Done, "the branch's closing words wait on Continue"); g2.Finish();
             Check(Equals(g2.World.Values["knows_road"], true), "Patter wrote @world.knows_road", g2.World.Values["knows_road"]?.ToString());
             g2.Go("the-mystic-tree");
             Check(string.Join(",", g2.Hand().Select(c => c.GameId)) == "wind-in-the-leaves", "tree shows the ambient only (survivor rule)");
-            g2.Start(g2.Hand()[0]);
+            g2.Start(g2.Hand()[0]); g2.Finish();   // no choice at all: it ends, and Continue plays it
             Check(g2.Hand().Any(c => c.GameId == "the-road-north"), "The Road North lands once the seat frees", string.Join(",", g2.Hand().Select(c => c.GameId)));
             // Cross-host: the JS client's envelopes, when this is the maintainers' checkout.
             var fixtures = Path.GetFullPath(Path.Combine(Application.dataPath, "../../../godot/HamletDemo/test/fixtures"));

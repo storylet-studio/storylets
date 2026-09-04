@@ -27,19 +27,42 @@ func _ready() -> void:
 func _button(parent: Control, text: String, on_press: Callable) -> Button:
 	var b := Button.new(); b.text = text; b.pressed.connect(on_press); parent.add_child(b); return b
 
+## The accent the other three demos use for the place you are standing in: a filled
+## panel with dark text, held across every state so it never looks pressable.
+func _mark_selected(b: Button) -> void:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.44, 0.64, 0.57)
+	sb.set_corner_radius_all(4)
+	sb.set_content_margin_all(6)
+	for state in ["normal", "hover", "pressed", "focus"]:
+		b.add_theme_stylebox_override(state, sb)
+	for colour in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(colour, Color(0.05, 0.07, 0.07))
+
 func _render() -> void:
 	header.text = "The Storylet Engine chooses the beat. Patter performs it.    " + game.world_line()
 	for c in places.get_children(): c.queue_free()
 	for p in game.places:
-		var b := _button(places, p["title"], func(): game.go(p["gameId"]); _save(); _render())
-		if p["gameId"] == game.at: b.disabled = true
+		# The place you are standing in is SELECTED, not disabled: greying it out says
+		# "you may not go here", which is the opposite of what it means. It takes the
+		# accent instead, and its press does nothing.
+		var here: bool = p["gameId"] == game.at
+		var b := _button(places, p["title"], func(): if not here: game.go(p["gameId"]); _save(); _render())
+		if here: _mark_selected(b)
 	for c in stage.get_children(): c.queue_free()
 	if game.playing != null:
 		for s in game.playing["shown"]:
 			var l := Label.new(); l.autowrap_mode = TextServer.AUTOWRAP_WORD
 			l.text = ("%s: %s" % [s["character"], s["text"]]) if s["kind"] == "line" else s["text"]; stage.add_child(l)
+		if game.playing["done"]:
+			# The scene has ended and the outcome plays when the player has read it.
+			_button(stage, "Continue", func(): game.finish(); _save(); _render())
 		for ch in game.playing["choices"]:
-			_button(stage, ch["text"], func(): game.choose(ch["id"]); _save(); _render())
+			# Shut options are shown and unclickable, rather than hidden: the player
+			# sees what the scene could have offered, which is half the point.
+			var b := _button(stage, ch["text"] if ch["enabled"] else "%s  (%s)" % [ch["text"], ch["why"]],
+				func(): if ch["enabled"]: game.choose(ch["id"]); _save(); _render())
+			b.disabled = not ch["enabled"]
 	elif game.at == "":
 		var l := Label.new(); l.text = "Choose somewhere to be."; stage.add_child(l)
 	else:

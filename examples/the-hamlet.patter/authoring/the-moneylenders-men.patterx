@@ -1,12 +1,42 @@
 {
   "edits": {
+    "L_3xcu3to1": {
+      "modifiedAt": "2026-09-04T18:37:32.807Z",
+    },
+    "L_6rt8t6k5": {
+      "modifiedAt": "2026-09-04T18:37:46.106Z",
+    },
+    "L_avnruj0i": {
+      "modifiedAt": "2026-09-04T18:36:35.892Z",
+    },
+    "L_erzeenoy": {
+      "modifiedAt": "2026-09-04T18:37:26.692Z",
+    },
+    "L_oop87xn6": {
+      "modifiedAt": "2026-09-04T18:37:07.574Z",
+    },
+    "L_qawld22y": {
+      "modifiedAt": "2026-09-04T18:38:11.641Z",
+    },
     "T_374799a6": {
-      "modifiedAt": "2026-09-04T18:35:39.824Z",
+      "modifiedAt": "2026-09-04T18:36:15.841Z",
     },
     "the-moneylenders-men": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-04T18:35:39.824Z",
+      "modifiedAt": "2026-09-04T18:38:11.641Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "L_2f959091": "draft 1",
+    "L_3xcu3to1": "draft 1",
+    "L_5cd828ac": "draft 1",
+    "L_6rt8t6k5": "draft 1",
+    "L_ac695055": "draft 1",
+    "L_avnruj0i": "draft 1",
+    "L_erzeenoy": "draft 1",
+    "L_oop87xn6": "draft 1",
+    "L_qawld22y": "draft 1",
+    "T_374799a6": "draft 1",
+  },
 }

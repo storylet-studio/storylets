@@ -21,3 +21,6 @@ p.text { opacity:.85; font-style:italic; }
 footer { margin-top:1.5rem; display:flex; flex-wrap:wrap; gap:.5rem; align-items:flex-start; }
 #log { flex:1 1 100%; list-style:none; padding:0; margin:1rem 0 0;
   font-size:.85rem; opacity:.7; }
+
+/* An option one engine or the other has shut: visible, and plainly not for clicking. */
+.option.shut { opacity: 0.45; border-style: dotted; cursor: default; }

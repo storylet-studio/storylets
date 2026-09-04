@@ -47,7 +47,17 @@ private:
 
 	void Refresh();
 	void Save();
-	UButton* MakeButton(const FString& Label);
-	UTextBlock* MakeLabel(const FString& Text, float Size);
+	UButton* MakeButton(const FString& Label, bool bWide = false, bool bSelected = false);
+	UTextBlock* MakeLabel(const FString& Text, float Size, const FLinearColor& Colour, bool bItalic = false);
+	void AddToRow(UHorizontalBox* Row, UButton* B);
+	void AddToStage(UButton* B);
+
+	// One small palette, so the panel reads as a decision rather than as defaults.
+	static constexpr FLinearColor Panel{0.04f, 0.04f, 0.05f, 0.96f};   // behind everything
+	static constexpr FLinearColor Ink{0.91f, 0.90f, 0.87f, 1.f};       // speech, titles, button labels
+	static constexpr FLinearColor Dim{0.63f, 0.62f, 0.59f, 1.f};       // narration, the header, the log
+	static constexpr FLinearColor Face{0.17f, 0.18f, 0.20f, 1.f};      // a button against the panel
+	static constexpr FLinearColor Accent{0.44f, 0.64f, 0.57f, 1.f};    // the place you are standing in
+	static constexpr FLinearColor OnAccent{0.05f, 0.07f, 0.07f, 1.f};  // its label, dark enough to read on that
 	UHamletClickProxy* MakeProxy(const FString& Kind, const FString& Id, const FString& GameId, const FString& Title);
 };

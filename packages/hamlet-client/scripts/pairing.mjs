@@ -1,13 +1,13 @@
 // The cross-check that makes the naming convention safe.
 //
 // Reboot.md 10: a card's `gameId` IS its Patter scene id, and an outcome's
-// `gameId` IS the id its scene reports back in a `gameEvent`'s
-// `gameData.outcome`. Nothing declares that link, so nothing validates it -
-// which is the one real objection to convention over a field. This is the
-// answer to the objection, and it is why it runs in the BUILD and not only in
-// a test: the failure it catches is a card that performs no dialogue, or a
-// scene that ends without saying what happened, and both of those look exactly
-// like content somebody meant to write that way.
+// `gameId` is what its scene names, on the option the player takes or in a
+// `gameEvent`, with a single-outcome card needing neither. Nothing declares
+// those links, so nothing validates them - which is the one real objection to
+// convention over a field. This is the answer to the objection, and it is why
+// it runs in the BUILD and not only in a test: the failure it catches is a card
+// that performs no dialogue, or a branch that ends without saying what
+// happened, and both look exactly like content somebody meant to write.
 //
 // Deliberately symmetric. A scene with no card is as wrong as a card with no
 // scene: it is dialogue the game can never reach.
@@ -27,12 +27,44 @@ export function outcomesReported(scene) {
 }
 
 /**
+ * Every CHOICE OPTION in a compiled scene: an option is a group carrying a
+ * prompt. `outcome` is the label it puts on itself, and `overrides` says
+ * whether its branch fires a gameEvent that would win over that label.
+ */
+export function optionsOf(scene) {
+  const found = [];
+  (function walk(node, insideOption) {
+    if (Array.isArray(node)) return node.forEach((n) => walk(n, insideOption));
+    if (!node || typeof node !== "object") return;
+    const isOption = node.type === "group" && node.prompt !== undefined;
+    if (isOption) {
+      found.push({
+        id: node.id,
+        outcome: typeof node.gameData?.outcome === "string" ? node.gameData.outcome : null,
+        overrides: outcomesReported(node.children ?? []),
+      });
+    }
+    // The prompt is text, never structure: walking it would find nothing and
+    // could mistake a nested group for an option of this one.
+    for (const [k, v] of Object.entries(node)) if (k !== "prompt") walk(v, insideOption || isOption);
+  })(scene);
+  return found;
+}
+
+/**
  * Compare a compiled storylet bundle with a compiled Patter bundle.
  * Returns a list of human-readable problems; empty means they line up.
  *
  * `boxes` limits the check to the boxes the host performs through Patter,
  * because the opt-in is the HOST'S and not the project's (Reboot.md 10): a
  * project may hold boxes that have no dialogue at all.
+ *
+ * THE RESOLUTION RULE this enforces, which is the host's too (performance.js):
+ * a gameEvent wins, else the label on the option the player took, else the
+ * card's only outcome. So a scene whose card has ONE outcome need say nothing
+ * at all, and a scene whose card has several must leave no path that says
+ * nothing. That last is the check worth having: it is the mistake nobody sees
+ * until a player takes the one branch that was never labelled.
  */
 export function checkPairing(storyletBundle, patterBundle, boxes) {
   const problems = [];
@@ -50,23 +82,42 @@ export function checkPairing(storyletBundle, patterBundle, boxes) {
           continue;
         }
         const declared = (card.outcomes ?? []).map((o) => o.gameId);
-        const reported = outcomesReported(scene);
-        if (reported.length === 0) {
-          problems.push(`scene "${card.gameId}" reports no outcome at all`);
-          continue;
-        }
-        for (const r of new Set(reported)) {
-          if (!declared.includes(r)) {
-            problems.push(`scene "${card.gameId}" reports outcome "${r}", which that card does not declare`
+        const options = optionsOf(scene);
+        const events = outcomesReported(scene);
+        const named = [...new Set([...events, ...options.map((o) => o.outcome).filter(Boolean)])];
+
+        for (const n of named) {
+          if (!declared.includes(n)) {
+            problems.push(`scene "${card.gameId}" names outcome "${n}", which that card does not declare`
               + ` (it declares: ${declared.join(", ") || "none"})`);
           }
         }
-        // A declared outcome no branch reaches is not an error - a scene may
+
+        // Can every path say which outcome it reached? With one outcome the
+        // answer is always yes, and the scene is spared the bookkeeping.
+        if (declared.length > 1) {
+          if (options.length === 0 && events.length === 0) {
+            problems.push(`scene "${card.gameId}" says nothing about its outcome, and its card declares`
+              + ` ${declared.length} (${declared.join(", ")}): label its options, or fire a gameEvent`);
+          }
+          for (const o of options) {
+            if (!o.outcome && o.overrides.length === 0) {
+              problems.push(`option "${o.id}" in scene "${card.gameId}" names no outcome and fires no gameEvent,`
+                + ` so taking it leaves the host guessing between ${declared.join(", ")}`);
+            }
+          }
+        }
+
+        // A declared outcome nothing can reach is not an error - a scene may
         // legitimately be unable to reach one yet, mid-writing - but the host
         // could never play it, so it is worth saying.
-        for (const d of declared) {
-          if (!reported.includes(d)) {
-            problems.push(`outcome "${d}" of card "${card.gameId}" is reported by no branch of its scene`);
+        // Only worth saying when there was a choice to make: a card with one
+        // outcome is reached by saying nothing, which is the point of the rule.
+        if (declared.length > 1) {
+          for (const d of declared) {
+            if (!named.includes(d)) {
+              problems.push(`outcome "${d}" of card "${card.gameId}" is named by no option and no gameEvent`);
+            }
           }
         }
       }

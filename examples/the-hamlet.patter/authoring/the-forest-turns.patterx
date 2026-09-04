@@ -1,9 +1,15 @@
 {
   "edits": {
+    "T_434207f4": {
+      "modifiedAt": "2026-09-04T18:48:59.687Z",
+    },
     "the-forest-turns": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:16:07.495Z",
+      "modifiedAt": "2026-09-04T18:48:59.687Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "T_434207f4": "draft 1",
+  },
 }

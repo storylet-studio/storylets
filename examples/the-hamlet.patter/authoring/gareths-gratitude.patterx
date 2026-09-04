@@ -1,9 +1,19 @@
 {
   "edits": {
+    "L_1sq4geok": {
+      "modifiedAt": "2026-09-04T18:42:13.239Z",
+    },
+    "T_acf6f963": {
+      "modifiedAt": "2026-09-04T18:42:06.524Z",
+    },
     "gareths-gratitude": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:16:33.777Z",
+      "modifiedAt": "2026-09-04T18:42:13.239Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "L_1sq4geok": "draft 1",
+    "T_acf6f963": "draft 1",
+  },
 }

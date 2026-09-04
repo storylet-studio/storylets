@@ -22,6 +22,9 @@ func _init() -> void:
 	for c in g.hand(): if c["gameId"] == "arrive-at-the-gate": gate = c
 	check("the demo opens with the gate", gate != null, str(ids(g.hand())))
 	g.start(gate)
+	# The scene ENDS but its outcome waits: the player reads it, then continues.
+	check("the gate's words wait on Continue", g.playing != null and g.playing["done"] and g.log.is_empty())
+	g.finish()
 	var settle = null
 	for c in g.hand(): if c["gameId"] == "settle-at-the-inn": settle = c
 	check("the inn deals settle-at-the-inn", settle != null, str(ids(g.hand())))
@@ -34,11 +37,13 @@ func _init() -> void:
 	check("a mid-scene envelope loads", g2.load(mid))
 	check("the conversation is back at the same point", g2.playing != null and g2.playing["choices"].size() == 2, str(g2.playing))
 	choose_text(g2, "road north")
+	check("the branch's closing words wait on Continue", g2.playing != null and g2.playing["done"])
+	g2.finish()
 	check("Patter wrote @world.knows_road", g2.world["knows_road"] == true, str(g2.world))
 	check("the outcome was played and logged", not g2.log.is_empty() and str(g2.log[0]).find("ask-about-the-road-north") >= 0, str(g2.log))
 	g2.go("the-mystic-tree")
 	check("tree shows the ambient only (survivor rule)", ids(g2.hand()) == ["wind-in-the-leaves"], str(ids(g2.hand())))
-	g2.start(g2.hand()[0])   # no choice: ends, plays continue
+	g2.start(g2.hand()[0]); g2.finish()   # no choice at all: it ends, and Continue plays it
 	check("The Road North lands once the seat frees", ids(g2.hand()).has("the-road-north"), str(ids(g2.hand())))
 	# Cross-host: a save the JS client wrote at the same point.
 	if FileAccess.file_exists("res://test/fixtures/envelope-from-js.json"):

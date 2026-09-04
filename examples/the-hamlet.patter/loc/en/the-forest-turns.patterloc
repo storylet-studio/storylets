@@ -4,6 +4,6 @@
   "scene": "the-forest-turns",
   "schema": "patter/strings@0",
   "strings": {
-    "T_434207f4": "STUB: The Forest Turns Wary. Replace with the scene.",
+    "T_434207f4": "Something you did has unsettled the wood. The trail markers no longer seem to point the same way twice.",
   },
 }

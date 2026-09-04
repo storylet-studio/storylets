@@ -14,7 +14,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { JSDOM } from "jsdom";
-import { checkPairing, checkWorld } from "../scripts/pairing.mjs";
+import { checkPairing, checkWorld, optionsOf } from "../scripts/pairing.mjs";
 
 const pkg = fileURLToPath(new URL("..", import.meta.url));
 const dist = join(pkg, "dist");
@@ -282,6 +282,75 @@ describe("the Hamlet client", () => {
     click(byText(second.doc, ".continue", "Continue"));
     expect(second.doc.getElementById("log")!.textContent).toContain("Wind in the Leaves");
     expect(JSON.parse((second.doc.defaultView as unknown as Window).localStorage.getItem("the-hamlet/save@1")!).performing).toBeNull();
+  });
+
+  // The resolution rule, on its own. These are plain functions in the page's
+  // scripts, so the harness reaches them the way the page does: off the window.
+  it("resolves the outcome by last word wins: a gameEvent, then the option's label, then the only one", async () => {
+    const { doc } = open();
+    await settled(doc);
+    const w = doc.defaultView as unknown as Record<string, Function>;
+    const state = (over: object) => ({ shown: [], choices: [], outcome: null, labelled: null, done: true, ...over });
+
+    // 1. an event beats the label the player's option carried
+    expect(w.resolveOutcome(state({ outcome: "changed-my-mind", labelled: "pay-them-off" }), ["a", "b"], "s")).toBe("changed-my-mind");
+    // 2. the label, when the scene fired no event
+    expect(w.resolveOutcome(state({ labelled: "pay-them-off" }), ["pay-them-off", "walk-away"], "s")).toBe("pay-them-off");
+    // 3. the only outcome the card has, when the scene said nothing at all
+    expect(w.resolveOutcome(state({}), ["continue"], "s")).toBe("continue");
+    // and loudly, rather than a guess, when nothing answers
+    expect(() => w.resolveOutcome(state({}), ["a", "b"], "the-scene")).toThrow(/the-scene.*declares 2/s);
+  });
+
+  it("greys an option whose outcome the storylet side has shut, and one Patter itself refuses", async () => {
+    const { doc } = open();
+    await settled(doc);
+    const w = doc.defaultView as unknown as Record<string, Function>;
+    const options = [
+      { id: "o1", eligible: true, prompt: { text: "Pay them off" }, gameData: { outcome: "pay-them-off" } },
+      { id: "o2", eligible: true, prompt: { text: "Walk away" }, gameData: { outcome: "walk-away" } },
+      { id: "o3", eligible: false, prompt: { text: "Never spoken" } },
+      { id: "o4", eligible: true, prompt: { text: "Unlabelled" } },
+    ];
+    const choices = w.choicesFrom(options, new Set(["walk-away"])) as { id: string; enabled: boolean; why: string }[];
+    expect(choices.map((c) => [c.id, c.enabled])).toEqual([["o1", false], ["o2", true], ["o3", false], ["o4", true]]);
+    expect(choices[0]!.why, "the storylet side gates it").toBeTruthy();
+    expect(choices[2]!.why, "Patter gates it").toBeTruthy();
+  });
+
+  it("fails the build when a branch leaves the host guessing, and lets a single-outcome scene say nothing", () => {
+    const storylets = JSON.parse(readFileSync(join(dist, "hamlet.storyletsc"), "utf8"));
+    const patter = JSON.parse(readFileSync(join(dist, "hamlet.patterc"), "utf8"));
+    expect(checkPairing(storylets, patter, ["village"]), "the Hamlet as it stands").toEqual([]);
+
+    // Ten of its scenes name no outcome at all, and are right not to.
+    const silent = Object.entries(patter.scenes).filter(([, s]) => optionsOf(s).length === 0);
+    expect(silent.length).toBeGreaterThan(0);
+
+    // Strip the label off one option of a card that has more than one outcome.
+    const hobbled = structuredClone(patter);
+    const scene = hobbled.scenes["the-moneylenders-men"];
+    const opts = optionsOf(scene);
+    expect(opts.length).toBeGreaterThan(1);
+    (function strip(node: unknown): void {
+      if (Array.isArray(node)) return node.forEach(strip);
+      if (!node || typeof node !== "object") return;
+      const n = node as Record<string, unknown>;
+      if (n.id === opts[0]!.id) delete n.gameData;
+      for (const [k, v] of Object.entries(n)) if (k !== "prompt") strip(v);
+    })(scene);
+    expect(checkPairing(storylets, hobbled, ["village"]).join("\n")).toMatch(/names no outcome and fires no gameEvent/);
+
+    // And a label naming an outcome the card does not have.
+    const wrong = structuredClone(patter);
+    (function relabel(node: unknown): void {
+      if (Array.isArray(node)) return node.forEach(relabel);
+      if (!node || typeof node !== "object") return;
+      const n = node as Record<string, unknown>;
+      if (n.id === opts[0]!.id) n.gameData = { outcome: "no-such-outcome" };
+      for (const [k, v] of Object.entries(n)) if (k !== "prompt") relabel(v);
+    })(wrong.scenes["the-moneylenders-men"]);
+    expect(checkPairing(storylets, wrong, ["village"]).join("\n")).toMatch(/names outcome "no-such-outcome", which that card does not declare/);
   });
 
   it("restarts: forgets the save and boots fresh", async () => {

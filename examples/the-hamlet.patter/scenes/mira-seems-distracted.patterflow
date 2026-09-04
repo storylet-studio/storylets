@@ -9,13 +9,6 @@
                 "id": "T_1d6e17eb",
                 "kind": "text",
               },
-              {
-                "gameData": {
-                  "outcome": "hold-her-gaze",
-                },
-                "id": "E_55c97035",
-                "kind": "gameEvent",
-              },
             ],
             "id": "sn_1d6e17eb",
             "jump": {

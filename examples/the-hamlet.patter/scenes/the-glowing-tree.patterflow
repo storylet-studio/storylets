@@ -20,11 +20,8 @@
                   {
                     "beats": [
                       {
-                        "gameData": {
-                          "outcome": "touch-the-bark",
-                        },
-                        "id": "E_d329680d",
-                        "kind": "gameEvent",
+                        "id": "L_z8x2nipw",
+                        "kind": "text",
                       },
                     ],
                     "id": "sn_d329680d",
@@ -34,6 +31,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "touch-the-bark",
+                },
                 "id": "opt_d329680d",
                 "prompt": {
                   "id": "L_339162b1",
@@ -46,11 +46,8 @@
                   {
                     "beats": [
                       {
-                        "gameData": {
-                          "outcome": "observe-carefully",
-                        },
-                        "id": "E_9d3a0829",
-                        "kind": "gameEvent",
+                        "id": "L_fi6ap28z",
+                        "kind": "text",
                       },
                     ],
                     "id": "sn_9d3a0829",
@@ -60,6 +57,9 @@
                     "type": "snippet",
                   },
                 ],
+                "gameData": {
+                  "outcome": "observe-carefully",
+                },
                 "id": "opt_9d3a0829",
                 "prompt": {
                   "id": "L_5ede4b2d",
