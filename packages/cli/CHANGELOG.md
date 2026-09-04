@@ -19,6 +19,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-04
+
 ### Changed
 
 - **`init` publishes beside the project, never inside it**: a new project's `export.bundle` is `../storylet-dist/<name>.storyletsc`, and `export` on a project that pins none writes there too (it was `dist/` inside the `.storylets` folder, which is the document). Patterpad's `../patter-dist/<name>.patterc`, name for name.
