@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-04
+
+### Changed
+
+- **Lockstep with the Godot addon's 0.4.1**, which could not open a project. No change of its own: one version number means one runtime behaviour across all four.
+
 ## [0.4.0] - 2026-09-04
 
 ### Added

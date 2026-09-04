@@ -29,7 +29,7 @@
     "@storylet-studio/dialect": "0.1.0",
     "@storylet-studio/model": "0.2.0",
     "@storylet-studio/ops": "0.0.0",
-    "@storylet-studio/runtime": "0.4.0",
+    "@storylet-studio/runtime": "0.4.1",
     "@wildwinter/app-shell": "^0.37.0",
     "@wildwinter/expr-editor": "^0.15.1",
     "@wildwinter/simple-vc-lib": "^0.4.1",

@@ -1,6 +1,6 @@
 {
   "name": "@storylet-studio/play-helpers",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Storylet Engine JS dev-experience layer: the state logger, save-file plumbing, and the in-page property examiner/editor. The runtime stays pure (no DOM, no I/O); everything that touches the host environment lives here.",
   "license": "MIT",
   "repository": {
@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@storylet-studio/model": ">=0.1.0 <1.0.0",
-    "@storylet-studio/runtime": "0.4.0",
+    "@storylet-studio/runtime": "0.4.1",
     "@wildwinter/scoperegistry": "^0.5.0"
   }
 }
