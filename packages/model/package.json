@@ -1,6 +1,6 @@
 {
   "name": "@storylet-studio/model",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Storylets data-model types: source shards (project / box / tags / hands / deck), the compiled bundle, the save envelope. The shape source-of-truth.",
   "type": "module",
   "license": "MIT",
