@@ -26,6 +26,9 @@ name: Release
 on:
   push:
     branches: [main]
+  # A fresh run by hand (a re-run keeps its original permissions; a setting changed
+  # after the fact needs a new one): Actions > Release > Run workflow.
+  workflow_dispatch:
 
 concurrency: release-${{ github.ref }}
 
