@@ -14,9 +14,9 @@
     }
   ],
   "content": {
-    "hash": "0v7sdqv",
+    "hash": "19eh5l5",
     "project": "proj_mfj6p1i9",
-    "structureHash": "1iosqr6"
+    "structureHash": "1cq14pv"
   },
   "locales": {
     "default": "en",
@@ -1158,8 +1158,7 @@
             "values": [
               "day",
               "night"
-            ],
-            "writable": false
+            ]
           },
           {
             "default": false,
@@ -1211,7 +1210,7 @@
       "L_zgv6v66a": "The inn is busy with customers, sunlight streaming through the windows.",
       "T_07a7313f": "The blacksmith barely looks up from the anvil. He's focused on a wrought-iron candlestick of rosebuds and leaves.",
       "T_1d6e17eb": "STUB: Mira Seems Distracted. Replace with the scene.",
-      "T_2083f3db": "A the trader is loudly overselling turnips. ",
+      "T_2083f3db": "A trader is loudly overselling turnips. ",
       "T_32e27eb0": "STUB: The Sealed Letter. Replace with the scene.",
       "T_374799a6": "STUB: The Moneylender's Men. Replace with the scene.",
       "T_434207f4": "STUB: The Forest Turns Wary. Replace with the scene.",

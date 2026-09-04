@@ -9,12 +9,6 @@
                 "id": "T_1d6e17eb",
                 "kind": "text",
               },
-            ],
-            "id": "sn_1d6e17eb",
-            "type": "snippet",
-          },
-          {
-            "beats": [
               {
                 "gameData": {
                   "outcome": "hold-her-gaze",
@@ -23,7 +17,7 @@
                 "kind": "gameEvent",
               },
             ],
-            "id": "sn_55c97035",
+            "id": "sn_1d6e17eb",
             "jump": {
               "to": "END",
             },

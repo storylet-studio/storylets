@@ -1,12 +1,36 @@
 {
   "edits": {
+    "L_7d4a7ebc": {
+      "modifiedAt": "2026-09-03T20:56:51.353Z",
+    },
+    "L_brs8i80t": {
+      "modifiedAt": "2026-09-03T20:57:18.921Z",
+    },
+    "L_j8kzoojp": {
+      "modifiedAt": "2026-09-03T20:57:00.388Z",
+    },
+    "L_knp4fifu": {
+      "modifiedAt": "2026-09-03T20:57:26.257Z",
+    },
+    "L_z5ox6on8": {
+      "modifiedAt": "2026-09-03T20:57:43.403Z",
+    },
     "T_07a7313f": {
-      "modifiedAt": "2026-09-03T20:56:02.188Z",
+      "modifiedAt": "2026-09-03T20:56:44.753Z",
     },
     "known-at-the-forge": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:56:02.188Z",
+      "modifiedAt": "2026-09-03T20:57:43.403Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "L_55b237b4": "draft 1",
+    "L_7d4a7ebc": "draft 1",
+    "L_brs8i80t": "draft 1",
+    "L_j8kzoojp": "draft 1",
+    "L_knp4fifu": "draft 1",
+    "L_z5ox6on8": "draft 1",
+    "T_07a7313f": "draft 1",
+  },
 }

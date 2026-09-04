@@ -9,12 +9,6 @@
                 "id": "T_acf6f963",
                 "kind": "text",
               },
-            ],
-            "id": "sn_acf6f963",
-            "type": "snippet",
-          },
-          {
-            "beats": [
               {
                 "gameData": {
                   "outcome": "clasp-his-hand",
@@ -23,7 +17,7 @@
                 "kind": "gameEvent",
               },
             ],
-            "id": "sn_6e0421a4",
+            "id": "sn_acf6f963",
             "jump": {
               "to": "END",
             },

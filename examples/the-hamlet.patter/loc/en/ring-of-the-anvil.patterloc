@@ -4,6 +4,6 @@
   "scene": "ring-of-the-anvil",
   "schema": "patter/strings@0",
   "strings": {
-    "T_f8c5f777": "STUB: The Ring of the Anvil. Replace with the scene.",
+    "T_f8c5f777": "A hammer keeps time across the village from the forge, steady as a heartbeat.",
   },
 }

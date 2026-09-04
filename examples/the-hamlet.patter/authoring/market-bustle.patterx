@@ -1,9 +1,30 @@
 {
   "edits": {
+    "L_7b4a6gin": {
+      "modifiedAt": "2026-09-03T20:20:10.779Z",
+    },
+    "L_cxhui2c0": {
+      "modifiedAt": "2026-09-03T20:19:41.662Z",
+    },
+    "L_puz4l9h5": {
+      "modifiedAt": "2026-09-03T20:22:47.513Z",
+    },
+    "L_tqr5bzh5": {
+      "modifiedAt": "2026-09-03T20:22:27.012Z",
+    },
+    "T_2083f3db": {
+      "modifiedAt": "2026-09-03T22:07:30.640Z",
+    },
     "market-bustle": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:16:28.211Z",
+      "modifiedAt": "2026-09-03T22:07:30.640Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "L_7b4a6gin": "draft 1",
+    "L_puz4l9h5": "draft 1",
+    "L_tqr5bzh5": "draft 1",
+    "T_2083f3db": "draft 1",
+  },
 }

@@ -9,20 +9,42 @@
                 "id": "T_985d8f12",
                 "kind": "text",
               },
+              {
+                "character": "MIRA",
+                "id": "L_a24x6snq",
+                "kind": "line",
+              },
             ],
             "id": "sn_985d8f12",
             "type": "snippet",
           },
           {
-            "beats": [
+            "children": [
               {
-                "id": "T_inn_night",
-                "kind": "text",
+                "beats": [
+                  {
+                    "id": "T_inn_night",
+                    "kind": "text",
+                  },
+                ],
+                "condition": "@world.time_of_day == \"night\"",
+                "id": "sn_inn_night",
+                "type": "snippet",
+              },
+              {
+                "beats": [
+                  {
+                    "id": "L_zgv6v66a",
+                    "kind": "text",
+                  },
+                ],
+                "id": "sn_ouzpu6hk",
+                "type": "snippet",
               },
             ],
-            "condition": "@world.time_of_day == \"night\"",
-            "id": "sn_inn_night",
-            "type": "snippet",
+            "id": "g_qnxe8o86",
+            "selector": "branch",
+            "type": "group",
           },
           {
             "children": [
@@ -30,6 +52,16 @@
                 "children": [
                   {
                     "beats": [
+                      {
+                        "character": "PLAYER",
+                        "direction": "warmly",
+                        "id": "L_0fo3qd00",
+                        "kind": "line",
+                      },
+                      {
+                        "id": "L_xscc5c4p",
+                        "kind": "text",
+                      },
                       {
                         "gameData": {
                           "outcome": "ask-about-history",
@@ -56,6 +88,15 @@
                 "children": [
                   {
                     "beats": [
+                      {
+                        "character": "PLAYER",
+                        "id": "L_u61bszwi",
+                        "kind": "line",
+                      },
+                      {
+                        "id": "L_r41z2eh1",
+                        "kind": "text",
+                      },
                       {
                         "gameData": {
                           "outcome": "ask-about-the-road-north",

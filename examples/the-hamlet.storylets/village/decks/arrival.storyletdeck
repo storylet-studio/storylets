@@ -37,7 +37,7 @@
       title: "Arrive at the Village Gate",
     },
     {
-      condition: "@act >= \"act-1\" and check_flags(@rel_innkeeper, +met) and check_flags(@rel_blacksmith, +met)",
+      condition: "@act > arrival and check_flags(@rel_innkeeper, +met) and check_flags(@rel_blacksmith, +met)",
       fields: {
         music: "elder",
       },
@@ -79,7 +79,7 @@
       title: "Answer Bryna's Summons",
     },
     {
-      condition: "not check_flags(@rel_blacksmith, +met)",
+      condition: "not check_flags(@rel_blacksmith, +met) and @act > arrival",
       fields: {
         music: "forge",
       },
@@ -117,7 +117,7 @@
       title: "Make Yourself Known at the Forge",
     },
     {
-      condition: "not check_flags(@rel_innkeeper, +met)",
+      condition: "not check_flags(@rel_innkeeper, +met) and @act > arrival",
       fields: {
         music: "inn",
       },

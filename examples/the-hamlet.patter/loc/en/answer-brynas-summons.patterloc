@@ -6,6 +6,11 @@
   "strings": {
     "L_2fc9040b": "Stay polite but keep your distance",
     "L_60d0e4ea": "Pledge your help to the village",
-    "T_77a352f0": "STUB: Answer Bryna's Summons. Replace with the scene.",
+    "L_91ogw8pc": "I can take a hint.",
+    "L_fvqkrpvr": "Hello! I hear you're looking for things to do in the village. Could you help us?",
+    "L_rw9nw1pw": "I'll help you!",
+    "L_sbhl9llk": "It's good to meet you.",
+    "L_uovzn5vn": "Wonderful!",
+    "T_77a352f0": "Rumour reaches you that Bryna, the village elder, would like to visit you. So you head to her house to talk to her.",
   },
 }

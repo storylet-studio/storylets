@@ -9,12 +9,6 @@
                 "id": "T_ac3557d9",
                 "kind": "text",
               },
-            ],
-            "id": "sn_ac3557d9",
-            "type": "snippet",
-          },
-          {
-            "beats": [
               {
                 "gameData": {
                   "outcome": "step-through",
@@ -23,7 +17,7 @@
                 "kind": "gameEvent",
               },
             ],
-            "id": "sn_26b66aa1",
+            "id": "sn_ac3557d9",
             "jump": {
               "to": "END",
             },

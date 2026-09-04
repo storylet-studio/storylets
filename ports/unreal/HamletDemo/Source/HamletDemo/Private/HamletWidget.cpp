@@ -52,7 +52,7 @@ void UHamletWidget::Clicked(const UHamletClickProxy& P)
 	try
 	{
 		if (P.Kind == TEXT("place")) Game.Go(P.Id);
-		else if (P.Kind == TEXT("card")) { for (const auto& c : Game.Hand()) if (c.id == TCHAR_TO_UTF8(*P.Id)) { Game.Start(c); break; } }
+		else if (P.Kind == TEXT("card")) { for (const auto& c : Game.Hand()) if (c.Id == P.Id) { Game.Start(c); break; } }
 		else if (P.Kind == TEXT("option")) Game.Choose(P.Id);
 	}
 	catch (const std::exception& ex) { UE_LOG(LogTemp, Error, TEXT("Hamlet: %s"), UTF8_TO_TCHAR(ex.what())); }
@@ -91,11 +91,11 @@ void UHamletWidget::Refresh()
 	else
 	{
 		auto hand = Game.Hand();
-		if (hand.empty()) Stage->AddChildToVerticalBox(MakeLabel(TEXT("Nothing here just now."), 12.f));
+		if (hand.IsEmpty()) Stage->AddChildToVerticalBox(MakeLabel(TEXT("Nothing here just now."), 12.f));
 		for (const auto& c : hand)
 		{
-			const FString Title = UTF8_TO_TCHAR((c.title.empty() ? c.gameId : c.title).c_str());
-			UButton* B = MakeButton(Title); B->OnClicked.AddDynamic(MakeProxy(TEXT("card"), UTF8_TO_TCHAR(c.id.c_str()), UTF8_TO_TCHAR(c.gameId.c_str()), Title), &UHamletClickProxy::OnClicked);
+			const FString Title = c.Title.IsEmpty() ? c.GameId : c.Title;
+			UButton* B = MakeButton(Title); B->OnClicked.AddDynamic(MakeProxy(TEXT("card"), c.Id, c.GameId, Title), &UHamletClickProxy::OnClicked);
 			Stage->AddChildToVerticalBox(B);
 		}
 	}

@@ -1,9 +1,15 @@
 {
   "edits": {
+    "T_711f18c2": {
+      "modifiedAt": "2026-09-03T20:23:56.829Z",
+    },
     "the-road-north": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:16:00.194Z",
+      "modifiedAt": "2026-09-03T20:23:56.829Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "T_711f18c2": "draft 1",
+  },
 }

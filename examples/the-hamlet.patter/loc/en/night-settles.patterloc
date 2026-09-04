@@ -4,6 +4,6 @@
   "scene": "night-settles",
   "schema": "patter/strings@0",
   "strings": {
-    "T_b7c23642": "STUB: Night Settles on the Village. Replace with the scene.",
+    "T_b7c23642": "Lamps gutter; the well stands black and still. Something feels watchful after dark.",
   },
 }

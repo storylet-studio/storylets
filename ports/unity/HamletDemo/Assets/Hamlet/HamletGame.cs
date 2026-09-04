@@ -27,7 +27,11 @@ namespace StoryletStudio.Hamlet
     {
         public const double Seed = 7;
         public const string Flow = "main";
-        public const string Performance = "performance";
+        /// <summary>The box this host performs through Patter, and the name of its ONE Patter flow: opened once,
+        /// found again after a load, entered per card with Goto. Never re-opened, so the flow's visit counts,
+        /// shuffle cursors and PRNG carry on between performances.</summary>
+        public const string Box = "village";
+        public PFlow Performance;
 
         public HamletWorld World { get; private set; }
         public SEngine Storylets { get; private set; }
@@ -48,7 +52,7 @@ namespace StoryletStudio.Hamlet
 
         public void Setup(string storyletJson, string patterJson)
         {
-            World = new HamletWorld(new Dictionary<string, object> { ["time_of_day"] = "day", ["knows_road"] = false }, "time_of_day");
+            World = new HamletWorld(new Dictionary<string, object> { ["time_of_day"] = "day", ["knows_road"] = false });   // nothing read-only: both projects let a scene or a card move time
             var sb = BundleLoader.Parse(storyletJson);
             Storylets = new SEngine(sb, new StoryletStudio.StoryletEngine.EngineOptions { Seed = Seed, World = World });
             // ONE resolver, both engines. Patter's Unity package takes it under
@@ -56,9 +60,13 @@ namespace StoryletStudio.Hamlet
             Patter = new PEngine(PatterBundleLoader.Parse(patterJson), new Patterkit.Patterplay.EngineOptions
                 { Seed = Seed, HostScopes = new Dictionary<string, IHostScope> { ["world"] = World } });
             Story = Storylets.OpenFlow(Flow);
+            Performance = Patter.OpenFlow(Box);
             Places.Clear();
             foreach (var h in sb.Boxes[0].Hands) Places.Add((h.GameId, h.Title ?? h.GameId));
             Story.DealMany();
+            // Open where there is something to do: the first hand that deals a card. The project
+            // does not order its hands for this (the demo opens with one card, at the gate).
+            foreach (var p in Places) if (Story.Deal(p.Item1).Count > 0) { At = p.Item1; break; }
         }
 
         /// Arrive somewhere. A place is a HAND, so arriving means dealing it.
@@ -68,7 +76,8 @@ namespace StoryletStudio.Hamlet
         /// Pick a card: the storylet side chose the beat; Patter performs it, found BY NAME.
         public void Start(DealtCard card)
         {
-            Playing = new Performing { Card = card, Flow = Patter.OpenFlow(Performance, card.GameId) };
+            if (!Performance.Goto(card.GameId)) throw new InvalidOperationException($"no Patter scene \"{card.GameId}\"");
+            Playing = new Performing { Card = card, Flow = Performance };
             Run();
         }
         public void Choose(string optionId) { if (Playing == null) return; Playing.Flow.Choose(optionId); Playing.Choices.Clear(); Run(); }
@@ -144,12 +153,13 @@ namespace StoryletStudio.Hamlet
             // A load rebuilds the flows, and OpenFlow on an existing id REPLACES it, hand and all: GetFlow.
             Story = Storylets.GetFlow(Flow);
             if (Story == null) return false;
+            Performance = Patter.GetFlow(Box);
+            if (Performance == null) throw new InvalidOperationException($"the save has no \"{Box}\" Patter flow");
             At = env["at"]?.Value<string>() ?? "";
             var perf = env["performing"] as JObject;
             if (perf != null)
             {
-                var flow = Patter.GetFlow(Performance);
-                if (flow == null) throw new InvalidOperationException("the envelope says a scene was in flight, and Patter's half did not restore it");
+                var flow = Performance;
                 var card = new DealtCard { Id = perf["card"]["id"].Value<string>(), GameId = perf["card"]["gameId"].Value<string>(), Title = perf["card"]["title"]?.Value<string>() };
                 var pl = new Performing { Card = card, Flow = flow, Outcome = perf["outcome"]?.Value<string>() };
                 foreach (var s in perf["shown"] as JArray ?? new JArray()) pl.Shown.Add((s["kind"].Value<string>(), s["character"]?.Value<string>() ?? "", s["text"]?.Value<string>() ?? ""));

@@ -9,12 +9,6 @@
                 "id": "T_f2fd9755",
                 "kind": "text",
               },
-            ],
-            "id": "sn_f2fd9755",
-            "type": "snippet",
-          },
-          {
-            "beats": [
               {
                 "gameData": {
                   "outcome": "breathe-it-in",
@@ -23,7 +17,7 @@
                 "kind": "gameEvent",
               },
             ],
-            "id": "sn_ddb38efc",
+            "id": "sn_f2fd9755",
             "jump": {
               "to": "END",
             },

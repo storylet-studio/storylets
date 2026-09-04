@@ -17,27 +17,33 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include "Storylets/Engine.h"
+#include "UObject/StrongObjectPtr.h"
+#include "StoryletBundle.h"
+#include "StoryletEngine.h"
+#include "StoryletTypes.h"
+#include "StoryletWorld.h"
+#include "Storylets/StoryletValue.h"
+#include "PatterBundle.h"
+#include "PatterEngine.h"
+#include "PatterWorld.h"
+#include "HamletWorldSync.h"
 #include "Patter/Engine.h"
 
-/** The shared world: one map of plain values behind both engines' resolver
- *  shapes. The GAME's read-only policy lives here: a story that tries to move a
- *  read-only value is refused loudly. */
+/** The shared world: ONE set of values behind the two plugins' containers.
+ *  UStoryletWorld is bound at UStoryletEngine::Create, UPatterWorld at
+ *  UPatterEngine::Create, and UHamletWorldSync keeps them equal. The GAME's
+ *  read-only policy is set on both, so either story's attempt to move such a
+ *  value is refused by its own container. */
 class HAMLETDEMO_API FHamletWorld
 {
 public:
-	std::map<std::string, storylets::StoryletValue> Values;   // our value type, used as the plain store
-	std::vector<std::string> ReadOnly;
-
-	storylets::WorldResolver ForStorylets();
-	patter::HostScope ForPatter();
-	/** The host's own write, which the read-only policy does not bind. */
-	void Host(const std::string& Name, const storylets::StoryletValue& Value) { Values[Name] = Value; }
+	TStrongObjectPtr<UStoryletWorld> Store;    // strong: this class is not a UObject, so GC must be told
+	TStrongObjectPtr<UPatterWorld> Mirror;
+	TStrongObjectPtr<UHamletWorldSync> Sync;
+	void Create();
+	/** The host's own write, which the read-only policy does not bind; mirrored across. */
+	void Host(const std::string& Name, const storylets::StoryletValue& Value) { Store->HostSet(Name, Value); }
 	FString Line() const;
-
-private:
-	patter::PatterValue Slot;   // HostScope::get returns a pointer that must outlive the call
-	void Write(const std::string& Name, const storylets::StoryletValue& Value);
 };
 
 class HAMLETDEMO_API FHamletGame
@@ -45,37 +51,43 @@ class HAMLETDEMO_API FHamletGame
 public:
 	static constexpr double Seed = 7;
 	static constexpr const char* FlowId = "main";
-	static constexpr const char* PerformanceId = "performance";
+	/** The box this host performs through Patter, and the name of its ONE Patter flow: opened once,
+	 *  found again after a load, entered per card with Goto. Never re-opened, so the flow's visit
+	 *  counts, shuffle cursors and PRNG carry on between performances. */
+	static constexpr const TCHAR* BoxFlowId = TEXT("village");
 
 	struct FShown { FString Kind; FString Character; FString Text; };
 	struct FChoice { FString Id; FString Text; };
 	struct FPerforming
 	{
-		storylets::DealtCard Card;
-		patter::Flow* Flow = nullptr;   // engine-owned; Patter's openFlow/getFlow hand out raw pointers
+		FStoryletDealtCard Card;
+		TStrongObjectPtr<UPatterFlow> Flow;   // the wrapper's flow (the engine holds its wrappers weakly)
 		TArray<FShown> Shown;
 		TArray<FChoice> Choices;
 		std::string Outcome;
 	};
 
 	FHamletWorld World;
-	std::unique_ptr<storylets::Engine> Storylets;
-	storylets::FlowPtr Story;
-	std::shared_ptr<patter::Bundle> PatterBundle;   // the engine takes the bundle by reference, so this owns it
-	std::unique_ptr<patter::Engine> Patter;
+	TStrongObjectPtr<UStoryletBundle> StoryletBundle;
+	TStrongObjectPtr<UStoryletEngine> Storylets;   // the plugin's wrapper, bound to World.Store
+	TStrongObjectPtr<UStoryletFlow> Story;
+	TArray<FString> HandRefs;   // every hand, for DealMany
+	TStrongObjectPtr<UPatterBundle> PatterBundle;
+	TStrongObjectPtr<UPatterEngine> Patter;   // Patterplay's wrapper, bound to World.Mirror
+	TStrongObjectPtr<UPatterFlow> Performance;   // the one flow, see BoxFlowId
 	TArray<TPair<FString, FString>> Places;   // gameId, title
 	FString At;
 	TUniquePtr<FPerforming> Playing;
 	TArray<FString> Log;
 
-	/** Both bundles as JSON text; Patter's is parsed by its own plugin (UPatterBundle) and copied
-	 *  into a core bundle so THIS code can build patter::Engine with the shared world, which the
-	 *  core accepts only at construction. Ours is parsed by the core's public JsonParser. */
+	/** Both bundles as JSON text, each through its plugin's wrapper: UStoryletBundle then
+	 *  UStoryletEngine::Create(Bundle, Seed, false, World.Store); UPatterBundle then
+	 *  UPatterEngine::Create(Bundle, World.Mirror). Two Create calls, one world: the whole story. */
 	bool Setup(const FString& StoryletJson, const FString& PatterJson, FString& OutError);
 
 	void Go(const FString& Place);
-	std::vector<storylets::DealtCard> Hand();
-	void Start(const storylets::DealtCard& Card);
+	TArray<FStoryletDealtCard> Hand();
+	void Start(const FStoryletDealtCard& Card);
 	void Choose(const FString& OptionId);
 	void Wait();
 

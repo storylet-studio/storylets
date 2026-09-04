@@ -1,9 +1,15 @@
 {
   "edits": {
+    "T_ac3557d9": {
+      "modifiedAt": "2026-09-03T21:01:15.621Z",
+    },
     "arrive-at-the-gate": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:16:40.895Z",
+      "modifiedAt": "2026-09-03T21:01:15.621Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "T_ac3557d9": "draft 1",
+  },
 }

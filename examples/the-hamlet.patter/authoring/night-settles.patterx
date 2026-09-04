@@ -1,9 +1,15 @@
 {
   "edits": {
+    "T_b7c23642": {
+      "modifiedAt": "2026-09-03T20:18:43.553Z",
+    },
     "night-settles": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:16:19.878Z",
+      "modifiedAt": "2026-09-03T20:18:43.553Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "T_b7c23642": "draft 1",
+  },
 }

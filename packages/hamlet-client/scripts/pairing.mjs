@@ -140,26 +140,3 @@ export function checkWorld(storyletBundle, patterBundle) {
   return problems;
 }
 
-/**
- * A card in a Patter-backed box must PIN its gameId. `effectiveGameId` derives
- * an unpinned one from the title, so editing the title silently renames the
- * card, and with it the scene the convention says it plays. `checkPairing`
- * catches the break after it happens; this catches the card that can break.
- * Reads the SOURCE project, because the compiled bundle has already resolved
- * every gameId and cannot tell a pinned one from a derived one.
- */
-export function checkPinnedGameIds(source, boxes) {
-  const problems = [];
-  for (const box of source.boxes ?? []) {
-    const boxId = box.box.box.gameId;
-    if (boxes && !boxes.includes(boxId)) continue;
-    for (const deck of box.decks ?? []) {
-      for (const card of deck.shard.cards ?? []) {
-        if (!card.gameId || !card.gameId.trim()) {
-          problems.push(`card "${card.title ?? card.id}" (${card.id}) has no pinned gameId: its scene name is derived from its title and would change with it`);
-        }
-      }
-    }
-  }
-  return problems;
-}

@@ -12,12 +12,16 @@ class_name HamletGame
 
 const SEED := 7
 const FLOW := "main"
-const PERFORMANCE := "performance"
+## The box this host performs through Patter, and the name of its ONE Patter flow:
+## opened once, found again after a load, entered per card with goto. Never re-opened,
+## so the flow's visit counts, shuffle cursors and PRNG carry on between performances.
+const BOX := "village"
 
 var world := {"time_of_day": "day", "knows_road": false}
 ## The GAME's policy, as opposed to either story's promise: names nothing but
 ## the host may move. A story that tries is refused loudly.
-var read_only := ["time_of_day"]
+var performance: PatterFlow
+var read_only: Array[String] = []   # nothing read-only: both projects let a scene or a card move time
 
 var story_engine: StoryletEngine
 var story: StoryletFlow
@@ -47,10 +51,18 @@ func setup(storylet_bundle: Dictionary, patter_bundle: Dictionary) -> void:
 	# resolver, two option names (findings 10).
 	patter = PatterEngine.new(patter_bundle, {"host_scopes": {"world": resolver}})
 	story = story_engine.open_flow(FLOW)
+	performance = patter.open_flow(BOX)
 	places = []
 	for h in storylet_bundle["boxes"][0].get("hands", []):
 		places.append({"gameId": h["gameId"], "title": h.get("title", h["gameId"])})
 	story.deal_many()
+	# Open where there is something to do: the first hand that deals a card. The
+	# project does not order its hands for this (the demo opens with one card, at
+	# the gate), so the host looks rather than guessing a place.
+	for p in places:
+		if story.deal(p["gameId"]).size() > 0:
+			at = p["gameId"]
+			break
 
 # --- the loop ---------------------------------------------------------------
 
@@ -65,8 +77,8 @@ func hand() -> Array:
 ## Pick a card: the storylet side has chosen the beat, so Patter performs it.
 ## The scene is found BY NAME, the card's own gameId.
 func start(card: Dictionary) -> void:
-	var flow := patter.open_flow(PERFORMANCE, card["gameId"])
-	playing = {"card": card, "flow": flow, "shown": [], "choices": [], "outcome": ""}
+	if not performance.goto(card["gameId"]): push_error("no Patter scene " + str(card["gameId"])); return
+	playing = {"card": card, "flow": performance, "shown": [], "choices": [], "outcome": ""}
 	_run()
 
 func choose(option_id: String) -> void:
@@ -146,13 +158,13 @@ func load(env: Dictionary) -> bool:
 	# hand and all. get_flow is the call. (The JS client fell into this.)
 	story = story_engine.get_flow(FLOW)
 	if story == null: return false
+	performance = patter.get_flow(BOX)
+	if performance == null:
+		push_error("the save has no \"" + BOX + "\" Patter flow: this save's Patter part is not in the shape this addon loads"); return false
 	at = str(env.get("at", ""))
 	var p = env.get("performing", null)
 	if p != null:
-		var flow := patter.get_flow(PERFORMANCE)
-		if flow == null:
-			push_error("the envelope says a scene was in flight, and Patter's half did not restore it: this save's Patter part is not in the shape this addon loads")
-			return false
+		var flow := performance
 		if flow != null:
 			var choices: Array = []
 			for opt in flow.get_choices():

@@ -9,12 +9,6 @@
                 "id": "T_8a7f142c",
                 "kind": "text",
               },
-            ],
-            "id": "sn_8a7f142c",
-            "type": "snippet",
-          },
-          {
-            "beats": [
               {
                 "gameData": {
                   "outcome": "continue",
@@ -23,7 +17,7 @@
                 "kind": "gameEvent",
               },
             ],
-            "id": "sn_577cb55b",
+            "id": "sn_8a7f142c",
             "jump": {
               "to": "END",
             },

@@ -5,7 +5,11 @@
   "schema": "patter/strings@0",
   "strings": {
     "L_55b237b4": "Talk straight: ask if he's hiring",
-    "L_7d4a7ebc": "Admire the work openly and specifically",
-    "T_07a7313f": "STUB: Make Yourself Known at the Forge. Replace with the scene.",
+    "L_7d4a7ebc": "Admire the work openly",
+    "L_brs8i80t": "Thanks, I'm glad you like it. I'm Gareth, by the way.",
+    "L_j8kzoojp": "Wow! That's amazing!",
+    "L_knp4fifu": "Are you hiring?",
+    "L_z5ox6on8": "Not right now I'm afraid. By the way, I'm Gareth. Nice to meet a straight-talker.",
+    "T_07a7313f": "The blacksmith barely looks up from the anvil. He's focused on a wrought-iron candlestick of rosebuds and leaves.",
   },
 }

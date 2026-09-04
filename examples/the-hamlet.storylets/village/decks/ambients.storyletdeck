@@ -1,6 +1,7 @@
 {
   schema: "storylets/deck@0",
   deck: {
+    condition: "@act > arrival",
     gameId: "ambients",
     id: "k_ambients",
     properties: [],
@@ -57,6 +58,7 @@
       title: "The Ring of the Anvil",
     },
     {
+      condition: "@world.time_of_day == day",
       fields: {
         music: "market",
       },
@@ -67,6 +69,7 @@
           changes: {},
           gameId: "continue",
           id: "c_amb_market_o",
+          order: 0,
           title: "Continue",
         },
       ],

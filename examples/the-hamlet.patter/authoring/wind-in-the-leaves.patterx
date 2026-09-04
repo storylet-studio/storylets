@@ -1,9 +1,15 @@
 {
   "edits": {
+    "T_8a7f142c": {
+      "modifiedAt": "2026-09-03T19:27:39.233Z",
+    },
     "wind-in-the-leaves": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T19:27:23.417Z",
+      "modifiedAt": "2026-09-03T20:15:42.561Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "T_8a7f142c": "draft 1",
+  },
 }

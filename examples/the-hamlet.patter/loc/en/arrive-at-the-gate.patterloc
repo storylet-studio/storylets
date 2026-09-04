@@ -4,6 +4,6 @@
   "scene": "arrive-at-the-gate",
   "schema": "patter/strings@0",
   "strings": {
-    "T_ac3557d9": "STUB: Arrive at the Village Gate. Replace with the scene.",
+    "T_ac3557d9": "The road ends at a weathered gate; smoke rises from the Inn beyond. Welcome to the village of Ham.",
   },
 }

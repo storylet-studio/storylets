@@ -17,6 +17,11 @@ func choose_text(g: HamletGame, needle: String) -> void:
 func _init() -> void:
 	var g := fresh()
 	g.go("the-inn")
+	# The demo opens with one card: arriving at the gate moves the act and deals the village.
+	var gate = null
+	for c in g.hand(): if c["gameId"] == "arrive-at-the-gate": gate = c
+	check("the demo opens with the gate", gate != null, str(ids(g.hand())))
+	g.start(gate)
 	var settle = null
 	for c in g.hand(): if c["gameId"] == "settle-at-the-inn": settle = c
 	check("the inn deals settle-at-the-inn", settle != null, str(ids(g.hand())))

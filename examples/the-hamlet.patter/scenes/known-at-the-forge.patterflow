@@ -20,6 +20,16 @@
                   {
                     "beats": [
                       {
+                        "character": "PLAYER",
+                        "id": "L_j8kzoojp",
+                        "kind": "line",
+                      },
+                      {
+                        "character": "GARETH",
+                        "id": "L_brs8i80t",
+                        "kind": "line",
+                      },
+                      {
                         "gameData": {
                           "outcome": "admire-the-work",
                         },
@@ -45,6 +55,16 @@
                 "children": [
                   {
                     "beats": [
+                      {
+                        "character": "PLAYER",
+                        "id": "L_knp4fifu",
+                        "kind": "line",
+                      },
+                      {
+                        "character": "GARETH",
+                        "id": "L_z5ox6on8",
+                        "kind": "line",
+                      },
                       {
                         "gameData": {
                           "outcome": "ask-if-hes-hiring",

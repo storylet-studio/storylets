@@ -16,6 +16,8 @@ static class Program
         if (args.Length > 0) sa = args[0];
         HamletGame Fresh() { var g = new HamletGame(); g.Setup(File.ReadAllText(Path.Combine(sa, "hamlet.storyletsc")), File.ReadAllText(Path.Combine(sa, "hamlet.patterc"))); return g; }
         var g = Fresh(); g.Go("the-inn");
+        // The demo opens with one card: arriving at the gate moves the act and deals the village.
+        var gate = g.Hand().FirstOrDefault(c => c.GameId == "arrive-at-the-gate"); Check(gate != null, "the demo opens with the gate"); g.Start(gate);
         var settle = g.Hand().FirstOrDefault(c => c.GameId == "settle-at-the-inn");
         Check(settle != null, "the inn deals settle-at-the-inn");
         g.Start(settle);

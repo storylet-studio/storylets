@@ -1,13 +1,34 @@
 {
+  "cast": [
+    {
+      "name": "MIRA"
+    },
+    {
+      "name": "PLAYER"
+    },
+    {
+      "name": "GARETH"
+    },
+    {
+      "name": "BRYNA"
+    }
+  ],
+  "dictionary": {
+    "language": "en-GB",
+    "words": [
+      "Bryna's",
+      "Bryna"
+    ]
+  },
   "locales": {
     "all": [
-      "en",
+      "en"
     ],
-    "default": "en",
+    "default": "en"
   },
   "project": {
     "id": "proj_mfj6p1i9",
-    "name": "The Hamlet",
+    "name": "The Hamlet"
   },
   "schema": "patter/project@0",
   "scopeRegistry": {
@@ -21,23 +42,22 @@
             "type": "enum",
             "values": [
               "day",
-              "night",
-            ],
-            "writable": false,
+              "night"
+            ]
           },
           {
             "default": false,
             "name": "knows_road",
             "purpose": "Set by dialogue (asking Mira about the road north) and read by a storylet card: the one value in this demo that flows FROM Patter TO the Storylet Engine, through the shared @world.",
             "type": "boolean",
-            "writable": true,
-          },
+            "writable": true
+          }
         ],
-        "token": "world",
-      },
+        "token": "world"
+      }
     ],
-    "version": 1,
+    "version": 1
   },
   "vcs": "git",
-  "voiced": true,
+  "voiced": true
 }

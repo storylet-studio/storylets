@@ -4,14 +4,55 @@
       {
         "children": [
           {
-            "beats": [
+            "children": [
               {
-                "id": "T_2083f3db",
-                "kind": "text",
+                "beats": [
+                  {
+                    "id": "T_2083f3db",
+                    "kind": "text",
+                  },
+                ],
+                "id": "sn_2083f3db",
+                "type": "snippet",
+              },
+              {
+                "beats": [
+                  {
+                    "id": "L_7b4a6gin",
+                    "kind": "text",
+                  },
+                ],
+                "id": "sn_7v9did6b",
+                "type": "snippet",
+              },
+              {
+                "beats": [
+                  {
+                    "id": "L_tqr5bzh5",
+                    "kind": "text",
+                  },
+                ],
+                "id": "sn_vigoi3ho",
+                "type": "snippet",
+              },
+              {
+                "beats": [
+                  {
+                    "id": "L_puz4l9h5",
+                    "kind": "text",
+                  },
+                ],
+                "id": "sn_e20tyajy",
+                "type": "snippet",
               },
             ],
-            "id": "sn_2083f3db",
-            "type": "snippet",
+            "id": "g_hetvsryw",
+            "options": {
+              "exhaust": "repeat",
+              "order": "shuffle",
+            },
+            "selector": "sequence",
+            "type": "group",
           },
           {
             "beats": [
@@ -23,7 +64,7 @@
                 "kind": "gameEvent",
               },
             ],
-            "id": "sn_79024986",
+            "id": "sn_rx56qu4s",
             "jump": {
               "to": "END",
             },

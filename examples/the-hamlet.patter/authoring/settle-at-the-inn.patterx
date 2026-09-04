@@ -1,12 +1,51 @@
 {
   "edits": {
+    "L_0fo3qd00": {
+      "modifiedAt": "2026-09-03T20:54:21.490Z",
+    },
+    "L_35ae96fb": {
+      "modifiedAt": "2026-09-03T20:27:14.050Z",
+    },
+    "L_a24x6snq": {
+      "modifiedAt": "2026-09-03T20:25:06.531Z",
+    },
+    "L_gsixrqf3": {
+      "modifiedAt": "2026-09-03T20:24:37.863Z",
+    },
+    "L_r41z2eh1": {
+      "modifiedAt": "2026-09-03T20:55:34.903Z",
+    },
+    "L_u61bszwi": {
+      "modifiedAt": "2026-09-03T20:55:31.071Z",
+    },
+    "L_xscc5c4p": {
+      "modifiedAt": "2026-09-03T20:54:45.137Z",
+    },
+    "L_zgv6v66a": {
+      "modifiedAt": "2026-09-03T20:26:09.548Z",
+    },
     "T_985d8f12": {
-      "modifiedAt": "2026-09-03T20:24:24.999Z",
+      "modifiedAt": "2026-09-03T20:24:37.863Z",
+    },
+    "T_inn_night": {
+      "modifiedAt": "2026-09-03T20:26:16.517Z",
     },
     "settle-at-the-inn": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:24:24.999Z",
+      "modifiedAt": "2026-09-03T21:08:08.106Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "L_0fo3qd00": "draft 1",
+    "L_35ae96fb": "draft 1",
+    "L_79adade3": "draft 1",
+    "L_a24x6snq": "draft 1",
+    "L_r41z2eh1": "draft 1",
+    "L_u61bszwi": "draft 1",
+    "L_xscc5c4p": "draft 1",
+    "L_zgv6v66a": "draft 1",
+    "T_985d8f12": "draft 1",
+    "T_inn_night": "draft 1",
+  },
 }

@@ -1,9 +1,15 @@
 {
   "edits": {
+    "T_f8c5f777": {
+      "modifiedAt": "2026-09-03T20:19:15.912Z",
+    },
     "ring-of-the-anvil": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:16:15.895Z",
+      "modifiedAt": "2026-09-03T20:19:15.912Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "T_f8c5f777": "draft 1",
+  },
 }

@@ -4,9 +4,15 @@
   "scene": "settle-at-the-inn",
   "schema": "patter/strings@0",
   "strings": {
+    "L_0fo3qd00": "Tell me about the village's history?",
     "L_35ae96fb": "Ask warmly about the village's history",
     "L_79adade3": "Ask only about the road north",
-    "T_985d8f12": "STUB: Get Settled at the Inn. Replace with the scene.",
-    "T_inn_night": "STUB (night only): The common room is quiet this late; Mira is banking the fire. This line exists because the scene READS @world.time_of_day, which the host moves and both engines see.",
+    "L_a24x6snq": "Hello - I'm Mira. Welcome to our village. Can I help you, stranger?",
+    "L_r41z2eh1": "Mira tells you how to find the road north.",
+    "L_u61bszwi": "Tell me about the road north.",
+    "L_xscc5c4p": "Mira explains about the village's history.",
+    "L_zgv6v66a": "The inn is busy with customers, sunlight streaming through the windows.",
+    "T_985d8f12": "You step into the inn.",
+    "T_inn_night": "The common room is quiet this late.",
   },
 }

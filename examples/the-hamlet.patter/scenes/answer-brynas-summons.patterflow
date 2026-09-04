@@ -9,6 +9,11 @@
                 "id": "T_77a352f0",
                 "kind": "text",
               },
+              {
+                "character": "BRYNA",
+                "id": "L_fvqkrpvr",
+                "kind": "line",
+              },
             ],
             "id": "sn_77a352f0",
             "type": "snippet",
@@ -19,6 +24,16 @@
                 "children": [
                   {
                     "beats": [
+                      {
+                        "character": "PLAYER",
+                        "id": "L_rw9nw1pw",
+                        "kind": "line",
+                      },
+                      {
+                        "character": "BRYNA",
+                        "id": "L_uovzn5vn",
+                        "kind": "line",
+                      },
                       {
                         "gameData": {
                           "outcome": "pledge-your-help",
@@ -45,6 +60,16 @@
                 "children": [
                   {
                     "beats": [
+                      {
+                        "character": "PLAYER",
+                        "id": "L_sbhl9llk",
+                        "kind": "line",
+                      },
+                      {
+                        "character": "BRYNA",
+                        "id": "L_91ogw8pc",
+                        "kind": "line",
+                      },
                       {
                         "gameData": {
                           "outcome": "keep-your-distance",

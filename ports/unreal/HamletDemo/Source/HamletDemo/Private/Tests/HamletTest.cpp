@@ -12,15 +12,18 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHamletLoopTest, "StoryletStudio.Hamlet.Loop",
 	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::ProductFilter)
 
 static FString Demo(const TCHAR* Name) { FString T; FFileHelper::LoadFileToString(T, *(FPaths::ProjectDir() / TEXT("Demos") / Name)); return T; }
-static FString Join(const std::vector<storylets::DealtCard>& H) { FString S; for (const auto& c : H) { if (!S.IsEmpty()) S += TEXT(","); S += UTF8_TO_TCHAR(c.gameId.c_str()); } return S; }
+static FString Join(const TArray<FStoryletDealtCard>& H) { FString S; for (const auto& c : H) { if (!S.IsEmpty()) S += TEXT(","); S += c.GameId; } return S; }
 
 bool FHamletLoopTest::RunTest(const FString& Parameters)
 {
 	auto Fresh = [&](FHamletGame& G) { FString E; const bool ok = G.Setup(Demo(TEXT("hamlet.storyletsc")), Demo(TEXT("hamlet.patterc")), E); TestTrue(FString::Printf(TEXT("setup: %s"), *E), ok); return ok; };
 	FHamletGame g; if (!Fresh(g)) return false;
 	g.Go(TEXT("the-inn"));
-	const storylets::DealtCard* settle = nullptr; auto hand = g.Hand();
-	for (const auto& c : hand) if (c.gameId == "settle-at-the-inn") settle = &c;
+	// The demo opens with one card: arriving at the gate moves the act and deals the village.
+	{ const FStoryletDealtCard* gate = nullptr; auto opening = g.Hand(); for (const auto& c : opening) if (c.GameId == TEXT("arrive-at-the-gate")) gate = &c;
+	  if (!TestNotNull(TEXT("the demo opens with the gate"), gate)) return false; g.Start(*gate); }
+	const FStoryletDealtCard* settle = nullptr; auto hand = g.Hand();
+	for (const auto& c : hand) if (c.GameId == TEXT("settle-at-the-inn")) settle = &c;
 	TestNotNull(TEXT("the inn deals settle-at-the-inn"), settle);
 	if (!settle) return false;
 	g.Start(*settle);
@@ -29,7 +32,7 @@ bool FHamletLoopTest::RunTest(const FString& Parameters)
 	FHamletGame g2; if (!Fresh(g2)) return false; FString e2;
 	TestTrue(TEXT("a mid-scene envelope loads and the conversation is back"), g2.Load(mid, e2) && g2.Playing && g2.Playing->Choices.Num() == 2);
 	for (const auto& ch : g2.Playing->Choices) if (ch.Text.Contains(TEXT("road north"))) { g2.Choose(ch.Id); break; }
-	TestTrue(TEXT("Patter wrote @world.knows_road"), g2.World.Values["knows_road"].isBool() && g2.World.Values["knows_road"].asBool());
+	TestTrue(TEXT("Patter wrote @world.knows_road"), g2.World.Store->GetBool(TEXT("knows_road")));
 	g2.Go(TEXT("the-mystic-tree"));
 	TestEqual(TEXT("tree shows the ambient only (survivor rule)"), Join(g2.Hand()), FString(TEXT("wind-in-the-leaves")));
 	g2.Start(g2.Hand()[0]);
@@ -40,7 +43,7 @@ bool FHamletLoopTest::RunTest(const FString& Parameters)
 	if (FFileHelper::LoadFileToString(between, *(fixtures / TEXT("envelope-from-js.json"))))
 	{
 		FHamletGame g3; if (Fresh(g3)) { FString e3; const bool ok = g3.Load(between, e3);
-			if (ok) TestTrue(TEXT("the JS client's envelope loads here, same place and world"), g3.At == TEXT("the-mystic-tree") && g3.World.Values["knows_road"].asBool());
+			if (ok) TestTrue(TEXT("the JS client's envelope loads here, same place and world"), g3.At == TEXT("the-mystic-tree") && g3.World.Store->GetBool(TEXT("knows_road")));
 			else AddInfo(TEXT("KNOWN GAP (findings 11): the JS client's envelope did not load here: ") + e3); }
 	}
 	else AddInfo(TEXT("SKIP cross-host: no fixtures at ") + fixtures);

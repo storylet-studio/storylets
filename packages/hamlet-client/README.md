@@ -5,8 +5,8 @@ One browser game, two engines. The **Storylet Engine** decides which beat happen
 resolver to both. The design is Reboot.md section 10 in the workshop repo; this
 is it running.
 
-Play it: `npm run serve` here, then open the printed URL. Or read it, which is
-the point: `src/world.ts` is the shared surface (45 lines), `src/performance.ts`
+Play it: `npm run serve` here, then open the printed URL. There is no build: the page is two script tags for the runtimes' browser files and three plain scripts. The two bundles it plays are the PUBLISHED ones, `examples/storylet-dist/the-hamlet.storyletsc` and `examples/patter-dist/the_hamlet.patterc`, read on every request: Publish from Storyletter or Patterpad, then refresh. Or read it, which is
+the point: `src/world.js` is the shared surface, `src/performance.js`
 is the handoff, `src/main.ts` is the game around them.
 
 ## The contract, by name

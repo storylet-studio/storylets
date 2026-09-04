@@ -7,7 +7,7 @@
 # their shards. FAILS rather than skips.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"; root="$(cd "$here/../../.." && pwd)"
-PATTER_UNITY_VERSION="0.10.0"
+PATTER_UNITY_VERSION="0.12.0"
 zip="patterplay-unity-${PATTER_UNITY_VERSION}.zip"
 url="https://github.com/patterkit/patter/releases/download/play-unity-v${PATTER_UNITY_VERSION}/${zip}"
 tmp="$(mktemp -d)"
@@ -15,7 +15,6 @@ curl -fsSL -o "$tmp/$zip" "$url" || { echo "build: could not fetch Patter's Unit
 unzip -q "$tmp/$zip" -d "$tmp/unz"
 [ -f "$tmp/unz/Patterplay/package.json" ] || { echo "build: $zip did not contain Patterplay/package.json"; exit 1; }
 rm -rf "$here/Packages/Patterplay"; cp -R "$tmp/unz/Patterplay" "$here/Packages/Patterplay"
-( cd "$root" && npm run build -w @storylet-studio/hamlet-client >/dev/null )
 mkdir -p "$here/Assets/StreamingAssets"
-cp "$root/packages/hamlet-client/dist/hamlet.storyletsc" "$root/packages/hamlet-client/dist/hamlet.patterc" "$here/Assets/StreamingAssets/"
+cp "$root/examples/storylet-dist/the-hamlet.storyletsc" "$here/Assets/StreamingAssets/hamlet.storyletsc"; cp "$root/examples/patter-dist/the_hamlet.patterc" "$here/Assets/StreamingAssets/hamlet.patterc"
 echo "build: The Hamlet (Unity) is ready: StoryletEngine via manifest, Patterplay $PATTER_UNITY_VERSION embedded, both bundles in StreamingAssets"

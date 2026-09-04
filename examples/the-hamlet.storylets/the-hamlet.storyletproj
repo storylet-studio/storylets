@@ -24,7 +24,7 @@
     },
   },
   export: {
-    bundle: "dist/the-hamlet.storyletsc",
+    bundle: "../storylet-dist/the-hamlet.storyletsc",
     metadata: "full",
   },
   settings: {
@@ -114,7 +114,6 @@
           "day",
           "night",
         ],
-        writable: false,
       },
     ],
     registry: {},

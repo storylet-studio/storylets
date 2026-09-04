@@ -1,12 +1,37 @@
 {
   "edits": {
+    "L_91ogw8pc": {
+      "modifiedAt": "2026-09-03T21:00:10.322Z",
+    },
+    "L_fvqkrpvr": {
+      "modifiedAt": "2026-09-03T20:59:38.472Z",
+    },
+    "L_rw9nw1pw": {
+      "modifiedAt": "2026-09-03T20:59:49.687Z",
+    },
+    "L_sbhl9llk": {
+      "modifiedAt": "2026-09-03T21:00:06.039Z",
+    },
+    "L_uovzn5vn": {
+      "modifiedAt": "2026-09-03T20:59:55.105Z",
+    },
     "T_77a352f0": {
-      "modifiedAt": "2026-09-03T20:58:29.304Z",
+      "modifiedAt": "2026-09-03T20:58:54.770Z",
     },
     "answer-brynas-summons": {
       "by": "Ian Thomas",
-      "modifiedAt": "2026-09-03T20:58:29.304Z",
+      "modifiedAt": "2026-09-03T21:00:10.322Z",
     },
   },
   "schema": "patter/authoring@0",
+  "writing": {
+    "L_2fc9040b": "draft 1",
+    "L_60d0e4ea": "draft 1",
+    "L_91ogw8pc": "draft 1",
+    "L_fvqkrpvr": "draft 1",
+    "L_rw9nw1pw": "draft 1",
+    "L_sbhl9llk": "draft 1",
+    "L_uovzn5vn": "draft 1",
+    "T_77a352f0": "draft 1",
+  },
 }

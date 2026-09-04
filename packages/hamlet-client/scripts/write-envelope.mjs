@@ -19,8 +19,12 @@ const pb = JSON.parse(readFileSync(join(pkg, "dist/hamlet.patterc"), "utf8"));
 const storylets = new StoryletEngine(sb, { seed: 7, world: resolver });
 const patter = new PatterEngine(pb, { seed: 7, world: resolver });
 const story = storylets.openFlow("main"); story.dealMany();
+// The demo opens with one card: arrive at the gate, which moves the act and deals the village.
+const gate = story.deal("the-inn").find((c) => c.gameId === "arrive-at-the-gate");
+if (!gate) throw new Error("the inn did not deal arrive-at-the-gate");
+story.play(gate.id, "step-through", "the-inn"); story.dealMany();
 const settle = story.deal("the-inn").find((c) => c.gameId === "settle-at-the-inn");
-const flow = patter.openFlow("performance", { scene: "settle-at-the-inn" });
+const flow = patter.openFlow("village"); if (!flow.goto("settle-at-the-inn")) throw new Error("no scene settle-at-the-inn");   // ONE flow per performed box; a card is a goto
 if (mid) {
   // Stop at the choice: a save taken MID-SCENE. Loading this elsewhere must bring
   // the conversation back with its options, which only Patter's half can do.

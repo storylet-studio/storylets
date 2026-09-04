@@ -7,45 +7,6 @@
       purpose: "Where in the world this beat belongs.",
       tags: [
         {
-          gameId: "cave",
-          id: "v_cave",
-          order: 3,
-          templates: {
-            spatial: {
-              polygon: [
-                {
-                  x: 87,
-                  y: 294,
-                },
-                {
-                  x: -72,
-                  y: 378,
-                },
-                {
-                  x: 446,
-                  y: 393,
-                },
-                {
-                  x: 371,
-                  y: 313,
-                },
-                {
-                  x: 322,
-                  y: 328,
-                },
-                {
-                  x: 249,
-                  y: 313,
-                },
-                {
-                  x: 137,
-                  y: 334,
-                },
-              ],
-            },
-          },
-        },
-        {
           gameId: "forest",
           id: "v_forest",
           order: 1,
@@ -74,34 +35,6 @@
                 {
                   x: 670,
                   y: 144,
-                },
-              ],
-            },
-          },
-        },
-        {
-          gameId: "lair",
-          id: "v_lair",
-          order: 4,
-        },
-        {
-          gameId: "mountain",
-          id: "v_mountain",
-          order: 2,
-          templates: {
-            spatial: {
-              polygon: [
-                {
-                  x: 502,
-                  y: 22,
-                },
-                {
-                  x: 435,
-                  y: 80,
-                },
-                {
-                  x: 608,
-                  y: 96,
                 },
               ],
             },

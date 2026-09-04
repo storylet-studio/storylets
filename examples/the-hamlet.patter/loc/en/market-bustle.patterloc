@@ -4,6 +4,9 @@
   "scene": "market-bustle",
   "schema": "patter/strings@0",
   "strings": {
-    "T_2083f3db": "STUB: Market Bustle. Replace with the scene.",
+    "L_7b4a6gin": "The square is alive with haggling and gossip.",
+    "L_puz4l9h5": "A child runs off with an apple and a trader shakes his fist.",
+    "L_tqr5bzh5": "There is laughter from the square.",
+    "T_2083f3db": "A trader is loudly overselling turnips. ",
   },
 }
