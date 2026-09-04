@@ -5,7 +5,7 @@ attaches one zip to the matching GitHub Release, with `make_latest: false` so
 it never takes Storyletter's Latest badge from electron-updater. The release
 job reads the section for the tagged version out of this file.
 
-## [Unreleased]
+## [0.1.0] - 2026-09-04
 
 ### Added
 

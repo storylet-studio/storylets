@@ -28,7 +28,7 @@ const REPO = dirname(WEBSITE);
 // loudly on every build, not the quiet no-op the rule above forbids: flip it to
 // true in the same commit as the release. The download page's play button is
 // gated on its own, by the release existing.
-const HAMLET_RELEASED = false;
+const HAMLET_RELEASED = true;
 if (!HAMLET_RELEASED) {
   console.log("build-hamlet: GATED (HAMLET_RELEASED = false): no /hamlet/ route until hamlet-v0.1.0 ships.");
   process.exit(0);
