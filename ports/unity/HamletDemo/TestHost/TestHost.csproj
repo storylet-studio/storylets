@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Hamlet's pure-logic core, compiled and played with no Unity: our runtime
+       from the sibling package, Patter's from the embedded package build.sh fetched.
+       The cheap pre-check; the editor run (HamletSmokeTest) is the gate. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../Assets/Hamlet/HamletWorld.cs" />
+    <Compile Include="../Assets/Hamlet/HamletGame.cs" />
+    <Compile Include="../../StoryletEngine/Runtime/**/*.cs" />
+    <Compile Remove="../../StoryletEngine/Runtime/Unity/**/*.cs" />
+    <Compile Include="../Packages/Patterplay/Runtime/**/*.cs" />
+    <Compile Remove="../Packages/Patterplay/Runtime/Unity/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>

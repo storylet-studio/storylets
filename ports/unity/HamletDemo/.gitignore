@@ -12,3 +12,6 @@ obj/
 *.slnx
 TestHost/bin/
 TestHost/obj/
+
+# The headless test host (a plain dotnet project, not Unity-generated): its project file is source.
+!TestHost/TestHost.csproj

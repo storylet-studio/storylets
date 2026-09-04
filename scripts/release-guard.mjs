@@ -16,7 +16,7 @@
 // A `changeset-check` on pull requests cannot catch it. Both families work directly on
 // main, so the check has to run on the push path, which is what this does.
 //
-// TWO PACKAGES ARE NOT ORDINARY. The JS runtime and its play helpers, named below, are the JS member of the lockstep
+// ONE PACKAGE (OR PAIR) IS NOT ORDINARY. The JS runtime named below is the JS member of the lockstep
 // runtime set, versioned by `npm run bump:play` together with the Unity, Unreal and Godot
 // ports, because one version number has to mean one runtime behaviour across all four. A
 // changeset naming it would bump it out of step with three ports that never had that
@@ -42,9 +42,9 @@ const base = positional[0] ?? "origin/main";
 const head = positional[1] ?? "HEAD";
 
 /** The JS runtime's version comes from bump:play, never from a changeset. */
-/** The JS member of the lockstep set is TWO packages: the runtime and the play helpers,
- *  which ship in the runtime's zip, pin it exactly, and publish at its version. */
-const LOCKSTEP = new Set(["@storylet-studio/runtime", "@storylet-studio/play-helpers"]);
+/** The lockstep member(s) on npm: one package, or a comma-separated list when a family ships
+ *  a helpers package inside the runtime's zip at the runtime's version (Storylets does). */
+const LOCKSTEP = new Set("@storylet-studio/runtime,@storylet-studio/play-helpers".split(",").map((s) => s.trim()).filter(Boolean));
 const LOCKSTEP_NAMES = [...LOCKSTEP].join(" and ");
 
 // --- which packages publish -------------------------------------------------
@@ -143,14 +143,14 @@ if (missing.length) {
 }
 if ([...LOCKSTEP].some((n) => covered.has(n))) {
   problems.push(
-    `${LOCKSTEP_NAMES}: one of these is named by a changeset, and must not be.`,
-    "  It is versioned by `npm run bump:play` as the JS member of the lockstep runtime set.",
+    `${LOCKSTEP_NAMES}: named by a changeset, and must not be.`,
+    "  Versioned by `npm run bump:play` as the JS member of the lockstep runtime set.",
     "  Remove it from the changeset; release it with the other three runtimes instead.",
   );
 }
 if (lockstepChanged) {
   // Not a failure on its own: the lockstep release is a separate, deliberate act.
-  console.error(`release-guard: note - ${LOCKSTEP_NAMES} source changed; they ship via 'npm run bump:play' and its four tags, not a changeset.`);
+  console.error(`release-guard: note - ${LOCKSTEP_NAMES} source changed; ships via 'npm run bump:play' and its four tags, not a changeset.`);
 }
 
 if (problems.length === 0) process.exit(0);
