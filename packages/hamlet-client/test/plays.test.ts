@@ -76,6 +76,13 @@ const arrive = (doc: Document): void => {
   click(byText(doc, ".continue", "Continue"));
 };
 
+/** The two plain functions the page's own scripts declare, which the harness reaches the
+ *  way the page does: off the window. Named here so the test is typed, not indexed. */
+interface PageScripts {
+  resolveOutcome: (state: object, declared: string[], cardGameId: string) => string;
+  choicesFrom: (options: object[], open: Set<string>) => { id: string; text: string; outcome: string | null; enabled: boolean; why: string }[];
+}
+
 let linesByDay: string[] = [];
 
 describe("the Hamlet client", () => {
@@ -289,7 +296,7 @@ describe("the Hamlet client", () => {
   it("resolves the outcome by last word wins: a gameEvent, then the option's label, then the only one", async () => {
     const { doc } = open();
     await settled(doc);
-    const w = doc.defaultView as unknown as Record<string, Function>;
+    const w = doc.defaultView as unknown as PageScripts;
     const state = (over: object) => ({ shown: [], choices: [], outcome: null, labelled: null, done: true, ...over });
 
     // 1. an event beats the label the player's option carried
@@ -305,7 +312,7 @@ describe("the Hamlet client", () => {
   it("greys an option whose outcome the storylet side has shut, and one Patter itself refuses", async () => {
     const { doc } = open();
     await settled(doc);
-    const w = doc.defaultView as unknown as Record<string, Function>;
+    const w = doc.defaultView as unknown as PageScripts;
     const options = [
       { id: "o1", eligible: true, prompt: { text: "Pay them off" }, gameData: { outcome: "pay-them-off" } },
       { id: "o2", eligible: true, prompt: { text: "Walk away" }, gameData: { outcome: "walk-away" } },
