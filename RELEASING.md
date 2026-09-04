@@ -114,6 +114,16 @@ The job needs `id-token: write`, and an OIDC-aware npm.
 (`Cannot find module 'sigstore'`, npm/cli#9722) which aborts every publish once `@latest` rolls
 over to it. Patter hit this.
 
+### The lockstep pair and a model bump
+
+`@storylet-studio/runtime` and `@storylet-studio/play-helpers` depend on `@storylet-studio/model`
+through the wide range `>=0.1.0 <1.0.0`, not a caret, so a model MINOR does not cascade a patch
+bump into them: their versions are the four runtimes' version and come only from `npm run
+bump:play`. A caret let the first Version Packages PR (2026-09-04) propose runtime 0.4.1 with an
+empty changelog, which the lockstep forbids. Patter's `packages/runtime` carries the same range
+for the same reason. Their other internal dependencies are caret ranges, which patch bumps stay
+inside, and the exact pin of the helpers on the runtime is rewritten by `bump:play`.
+
 ### Three settings that are not optional
 
 - **Allow GitHub Actions to create and approve pull requests**, under Settings > Actions >
