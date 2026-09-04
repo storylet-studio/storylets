@@ -78,7 +78,7 @@ describe("the Hamlet client", () => {
   it("pairs every card with a scene, and every scene with a card", () => {
     const storylets = JSON.parse(readFileSync(join(dist, "hamlet.storyletsc"), "utf8"));
     const patter = JSON.parse(readFileSync(join(dist, "hamlet.patterc"), "utf8"));
-    expect(checkPairing(storylets, patter)).toEqual([]);
+    expect(checkPairing(storylets, patter, ["village"])).toEqual([]);   // the box the host performs, as the build checks it
   });
 
   it("deals a hand, hands the card to Patter, and plays what the scene reports back", async () => {

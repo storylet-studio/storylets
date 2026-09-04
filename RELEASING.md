@@ -114,7 +114,12 @@ The job needs `id-token: write`, and an OIDC-aware npm.
 (`Cannot find module 'sigstore'`, npm/cli#9722) which aborts every publish once `@latest` rolls
 over to it. Patter hit this.
 
-### Two settings that are not optional
+### Three settings that are not optional
+
+- **Allow GitHub Actions to create and approve pull requests**, under Settings > Actions >
+  General > Workflow permissions. The changesets action opens the Version Packages PR, and
+  without this the first changeset fails the Release run with "GitHub Actions is not permitted
+  to create or approve pull requests" (2026-09-04, the model's `writable` changeset).
 
 - **`createGithubReleases: false`** in the changesets action. Its default creates an empty
   GitHub Release per published package, and those releases take GitHub's "Latest" badge. That
