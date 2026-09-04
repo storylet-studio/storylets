@@ -1,0 +1,122 @@
+{
+  schema: "storylets/project@0",
+  project: {
+    id: "proj_village",
+    name: "The Hamlet",
+    version: "0.1.0",
+  },
+  coverage: {
+    drivers: {
+      "@world.knows_road": {
+        cadence: "sometimes",
+        kind: "recurring",
+        values: [
+          true,
+        ],
+      },
+      "@world.time_of_day": {
+        cadence: "sometimes",
+        kind: "recurring",
+        values: [
+          "night",
+        ],
+      },
+    },
+  },
+  export: {
+    bundle: "dist/the-hamlet.storyletsc",
+    metadata: "full",
+  },
+  settings: {
+    playAdvancesTurns: 1,
+  },
+  story: {
+    properties: [
+      {
+        default: "arrival",
+        name: "act",
+        purpose: "How far the story has come. An ordered ladder, so gates ask for act 1 or later rather than listing the acts that are not arrival.",
+        stages: [
+          "arrival",
+          "act-1",
+          "act-2",
+        ],
+        type: "quality",
+      },
+      {
+        default: 0,
+        name: "reputation",
+        type: "number",
+      },
+      {
+        default: false,
+        name: "village_open",
+        type: "boolean",
+      },
+      {
+        default: [],
+        name: "rel_innkeeper",
+        type: "flags",
+        values: [
+          "met",
+          "warm",
+          "trusts",
+          "reported",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_blacksmith",
+        type: "flags",
+        values: [
+          "met",
+          "warm",
+          "grateful",
+          "angry",
+        ],
+      },
+      {
+        default: [],
+        name: "rel_elder",
+        type: "flags",
+        values: [
+          "met",
+          "has_favour",
+        ],
+      },
+      {
+        default: [],
+        name: "world_events",
+        type: "flags",
+        values: [
+          "tree_bloomed",
+          "curse_lifted",
+          "legend_forged",
+        ],
+      },
+    ],
+  },
+  templates: {},
+  world: {
+    properties: [
+      {
+        default: false,
+        name: "knows_road",
+        purpose: "Written by DIALOGUE (Mira, about the road north) and read here: the one value in the joint demo that flows from Patter to the Storylet Engine, through the shared @world. Declared in both projects; the demo build checks they agree.",
+        type: "boolean",
+      },
+      {
+        default: "day",
+        name: "time_of_day",
+        purpose: "The host owns time. Read-only to the story, as the Patter project declares it too, and the game refuses a write at runtime as well: three places saying one thing, on purpose.",
+        type: "enum",
+        values: [
+          "day",
+          "night",
+        ],
+        writable: false,
+      },
+    ],
+    registry: {},
+  },
+}

@@ -63,7 +63,7 @@ export function createProjectSettings(studio: StudioApi, onSaved: (result: OpenR
           });
           return { firstInvalid: () => props.firstInvalid?.() ?? drivers.firstInvalid?.() ?? null };
         } },
-        { id: "export", label: "Export", group: "Build", mount: (h) => {
+        { id: "export", label: "Publish", group: "Project", mount: (h) => {
           const d = data!;
           const meta = el("select");
           for (const m of ["full", "stripped"]) { const o = el("option", { text: m }); o.value = m; if (d.metadata === m) o.selected = true; meta.append(o); }

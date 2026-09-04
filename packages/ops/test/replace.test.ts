@@ -15,7 +15,7 @@ import type { DeckShard } from "@storylet-studio/model";
 import { loadProject } from "../src/load.js";
 import { runReplace } from "../src/replace.js";
 
-const exampleDir = fileURLToPath(new URL("../../../examples/the-hamlet.storylets", import.meta.url));
+const exampleDir = fileURLToPath(new URL("./fixtures/the-hamlet.storylets", import.meta.url));
 const loaded = loadProject(exampleDir);
 
 describe("runReplace", () => {

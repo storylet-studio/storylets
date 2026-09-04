@@ -124,7 +124,7 @@ Compile to the bundle.
 
 ```
 $ storyletengine export tavern.storylets
-exported .../tavern.storylets/dist/the-tavern.storyletsc
+exported .../storylet-dist/the-tavern.storyletsc
 ```
 
 It writes to the path the project shard declares. `-o file` overrides it; `-o -` writes to
@@ -149,7 +149,7 @@ wrote The Hamlet.html (78 KB)
 
 | Flag | Does |
 |---|---|
-| `-o FILE` | Where to write the page. Without it, the page lands beside the bundle under the bundle's name (`dist/the-hamlet.html` for the example). `-o -` writes it to standard output. |
+| `-o FILE` | Where to write the page. Without it, the page lands beside the bundle under the bundle's name (`storylet-dist/the-hamlet.html` for the example). `-o -` writes it to standard output. |
 
 The page is the Board: every hand as a labelled group of cards, outcomes under the open
 card, **Deal all hands**, **Next turn**, **Restart**, and a transcript - and the project's

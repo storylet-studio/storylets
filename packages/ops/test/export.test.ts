@@ -133,7 +133,7 @@ describe("a bundle that was", () => {
 
     expect(result.assets).toHaveLength(1);
     // Beside the bundle, at exactly the path the bundle names.
-    expect(result.assets[0]!.path).toBe(join(dir, "dist", "assets", "encounters", "site-plan.png"));
+    expect(result.assets[0]!.path).toBe(join(dir, "..", "storylet-dist", "assets", "encounters", "site-plan.png"));   // beside the bundle, beside the project
     expect(Buffer.from(result.assets[0]!.bytes)).toEqual(PNG);
   });
 
@@ -197,6 +197,6 @@ describe("stdout", () => {
     const result = runExport(loadProject(dir), "-");
     expect(result.assets).toEqual([]);
     expect(result.write).toBeUndefined();
-    expect(existsSync(join(dir, "dist"))).toBe(false);
+    expect(existsSync(join(dir, "..", "storylet-dist"))).toBe(false);   // stdout: nothing lands beside the project either
   });
 });

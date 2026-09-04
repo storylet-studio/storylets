@@ -6,7 +6,7 @@
     version: "0.1.0",
   },
   export: {
-    bundle: "dist/the-village.storyletsc",
+    bundle: "../storylet-dist/the-village.storyletsc",
     metadata: "full",
   },
   settings: {

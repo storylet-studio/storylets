@@ -217,8 +217,9 @@ A few notes:
 - **World**: the `@world` property declarations (your game's state), and the
   [coverage drivers](/production/coverage-testing/#writing-drivers-by-hand) that stand in
   for them during a test run.
-- **Export**: the bundle path, whether metadata is `full` or `stripped`, and how many
-  turns a play advances.
+- **Publish** (under Project, as in Patterpad): the bundle path (by default a `storylet-dist/`
+  folder beside the project, never inside it), whether metadata is `full` or `stripped`, and
+  how many turns a play advances.
 
 Every property list in the app is the same control, and the editor for a value follows
 its type: boolean and enum values are pickers, not free text.

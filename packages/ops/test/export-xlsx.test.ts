@@ -12,7 +12,7 @@ import { loadProject } from "../src/load.js";
 import { runExportXlsx, spreadsheetFileName } from "../src/export-xlsx.js";
 import type { SourceProject } from "@storylet-studio/compiler";
 
-const exampleDir = fileURLToPath(new URL("../../../examples/the-hamlet.storylets", import.meta.url));
+const exampleDir = fileURLToPath(new URL("./fixtures/the-hamlet.storylets", import.meta.url));
 
 const headers = (ws: ExcelJS.Worksheet): string[] => (ws.getRow(1).values as string[]).filter(Boolean);
 const text = (v: ExcelJS.CellValue): string => (v == null ? "" : typeof v === "object" && "richText" in v ? v.richText.map((r) => r.text).join("") : String(v));

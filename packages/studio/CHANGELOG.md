@@ -10,6 +10,22 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **Read-only switch on the World list** (Project Settings > World, behind the row's expander), as Patterpad has it: ticked writes `writable: false` on the declaration, the story's promise that only the game moves the value; the compiler refuses a card that writes it and every runtime refuses one at run time. Unticked deletes the key.
+
+### Fixed
+
+- **Publish defaults beside the project, never inside it.** A new project's bundle path is `../storylet-dist/<name>.storyletsc`, and a project that pins none publishes there too; it was `dist/` inside the `.storylets` folder, which is the document. Patterpad's `../patter-dist/<name>.patterc`, name for name. The shipped examples now say the same.
+- **The Read-only flag survives a save.** 0.4.0 did not know the key, so saving Project Settings on a project whose file declared `writable: false` silently dropped it; the flag now rides shard to dialog and back, pinned by a round-trip test.
+- **The Purpose field behind a property's expander fills its line** instead of the browser's default twenty characters.
+
+### Changed
+
+- **Project Settings: Export is now Publish, under Project**, where Patterpad has it (Project Settings > Project > Publish), so the two apps read the same. The project file's `export` block is unchanged.
+- **The toast is the shell's** (`@wildwinter/app-shell` 0.37.0): one drawing for Patterpad and Storyletter, bottom-right, with an `ok` kind; `flash` and `flashError` are unchanged for callers.
+
+
 ## [0.4.0] - 2026-09-01
 
 ### Changed

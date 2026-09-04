@@ -24,7 +24,10 @@ It:
    and `purpose`.
 
 The output is a single strict-JSON `.storyletsc` file at the path the project shard's
-`export.bundle` names.
+`export.bundle` names. New projects point it at a `storylet-dist/` folder beside the project,
+named after it (`../storylet-dist/the-hamlet.storyletsc`), and that is the default when the
+shard names nothing. The project folder is the document; a build output never goes inside it.
+Patterpad publishes to `../patter-dist/` in the same way.
 
 ## What's in it
 

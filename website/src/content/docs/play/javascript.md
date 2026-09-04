@@ -19,11 +19,25 @@ Download the JavaScript zip from the [download page](/download/). It carries thr
 - **`@storylet-studio/play-helpers`**: everything that touches the browser or the host: the
   save-file plumbing, the state logger, the in-page property examiner and the bundle
   inspector.
-- **A browser drop-in** for a plain HTML page with no build step.
+- **A browser drop-in**, `storyletengine.min.js`: the runtime and the helpers in one classic
+  script that defines a `StoryletEngine` global. Two script tags and no build step:
+
+  ```html
+  <script src="storyletengine.min.js"></script>
+  <script>
+    const engine = new StoryletEngine.Engine(bundle, { seed: 7 });
+    const text = StoryletEngine.serializeState(engine);   // the save helpers are on it too
+  </script>
+  ```
 
 Each package folder has a `dist/` with `index.js` (ESM), `index.cjs` and `index.d.ts`. Copy
 the folders into your project and import from them with your bundler, or with a plain path
-import. The packages aren't on npm; the zip is the distribution.
+import. Both are also on npm (`@storylet-studio/runtime`, `@storylet-studio/play-helpers`),
+and the drop-in is on a CDN, straight from the npm package:
+
+```html
+<script src="https://unpkg.com/@storylet-studio/play-helpers/dist/storyletengine.min.js"></script>
+```
 
 ```js
 import { Engine } from "@storylet-studio/runtime";
@@ -187,6 +201,11 @@ build and serve it.
 
 The same Board demo ships with the Unity, Unreal and Godot runtimes: same content, same control
 labels, same transcript, one idiom each.
+
+**The Hamlet on the web** is the second demo: the same project with [Patter](https://patterkit.dev)
+performing each card's dialogue, two engines in one game. It ships as a project zip on the
+[download page](/download/#the-hamlet-two-engines-in-one-game); `src/performance.ts` is the whole
+integration, and [Running it with Patter](/play/with-patter/) explains the handoff.
 
 ## Next
 

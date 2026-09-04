@@ -63,7 +63,10 @@ export function runInit(opts: InitOptions): InitResult {
       properties: [{ name: "started", type: "boolean", default: false }],
     },
     templates: {},
-    export: { bundle: `dist/${stem}${BUNDLE_EXTENSION}`, metadata: "full" },
+    // Published BESIDE the project, never inside it: a `.storylets` folder is
+    // the document (on macOS a package), and a build output has no place in
+    // it. Patterpad's own default, `../patter-dist/<name>.patterc`, name for name.
+    export: { bundle: `../storylet-dist/${stem}${BUNDLE_EXTENSION}`, metadata: "full" },
   };
   const box: BoxShard = {
     schema: "storylets/box@0",

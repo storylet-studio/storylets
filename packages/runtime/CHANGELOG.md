@@ -8,6 +8,11 @@ section for it.
 
 ## [Unreleased]
 
+### Changed
+
+- **`@storylet-studio/play-helpers` is on npm** from this release, at the runtime's version and bumped with it (the JS member of the lockstep is two packages), so the drop-in is one CDN line away: `https://unpkg.com/@storylet-studio/play-helpers/dist/storyletengine.min.js`. The zip is unchanged.
+- **`storyletengine.min.js` carries the helpers.** The browser drop-in now defines the runtime AND `@storylet-studio/play-helpers` on the `StoryletEngine` global, so a plain page saves and loads the family's `.storyletsave` text from two script tags with no build step; it used to carry the runtime alone. Built by the helpers package now, the one that depends on both; the release zip still ships it at its root.
+
 ### Added
 
 - **A read-only `@world` property is refused at runtime too.** `play()` of an outcome that writes a property declared `writable: false` throws `'@world.x' is read-only` and changes nothing; the host's own `setProperty` is not bound. The compiler already refused it; the runtime now keeps the promise for hand-built bundles, and so that an integrator running Patter beside this sees one behaviour, since Patter's runtime refuses the same write through the shared kernel. Corpus case first, in all four runtimes.

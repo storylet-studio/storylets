@@ -17,9 +17,9 @@
 
 FString StoryletSaveStateToJson(const storylets::Engine& Engine)
 {
-	// This wrapper self-backs @world in the engine, so the file carries the
-	// engine's current world values and a load applies them back - "host saves
-	// its container once" (design/flows.md).
+	// The file carries the engine's current @world values (read through the
+	// bound container when there is one, else the self-backed bag) and a load
+	// applies them back - "host saves its container once" (design/flows.md).
 	storylets::OrderedMap<std::string, storylets::StoryletValue> World;
 	for (const storylets::PropertyRow& Row : Engine.listProperties())
 	{
@@ -28,7 +28,8 @@ FString StoryletSaveStateToJson(const storylets::Engine& Engine)
 	return FString(UTF8_TO_TCHAR(storylets::serializeState(Engine, World).c_str()));
 }
 
-bool StoryletLoadStateFromJson(storylets::Engine& Engine, const FString& Json, FString& OutError)
+bool StoryletLoadStateWorld(storylets::Engine& Engine, const FString& Json,
+	storylets::OrderedMap<std::string, storylets::StoryletValue>& OutWorld, FString& OutError)
 {
 	// Parsed with Unreal's own JSON reader (the plugin already carries it) and
 	// handed to the core as a neutral tree; the core owns every rule about
@@ -40,15 +41,7 @@ bool StoryletLoadStateFromJson(storylets::Engine& Engine, const FString& Json, F
 	}
 	try
 	{
-		const storylets::OrderedMap<std::string, storylets::StoryletValue> World =
-			storylets::loadState(Engine, Tree);
-		// The file's @world values land over the reseeded container - the HOST
-		// applies them; the envelope never carries them.
-		for (const auto& Pair : World)
-		{
-			try { Engine.setProperty("world." + Pair.first, Pair.second); }
-			catch (const std::exception&) { /* an orphaned key: dropped */ }
-		}
+		OutWorld = storylets::loadState(Engine, Tree);
 		OutError.Reset();
 		return true;
 	}
@@ -57,4 +50,20 @@ bool StoryletLoadStateFromJson(storylets::Engine& Engine, const FString& Json, F
 		OutError = FString(UTF8_TO_TCHAR(Ex.what()));
 		return false;
 	}
+}
+
+bool StoryletLoadStateFromJson(storylets::Engine& Engine, const FString& Json, FString& OutError)
+{
+	storylets::OrderedMap<std::string, storylets::StoryletValue> World;
+	if (!StoryletLoadStateWorld(Engine, Json, World, OutError)) return false;
+	// The file's @world values land over the reseeded container - the HOST
+	// applies them; the envelope never carries them. On a bound engine this
+	// goes through the resolver's set (the story's path); UStoryletSave
+	// restores a bound container directly instead, so use that from a wrapper.
+	for (const auto& Pair : World)
+	{
+		try { Engine.setProperty("world." + Pair.first, Pair.second); }
+		catch (const std::exception&) { /* an orphaned key: dropped */ }
+	}
+	return true;
 }

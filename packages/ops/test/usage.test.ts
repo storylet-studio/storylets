@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { loadProject } from "../src/load.js";
 import { parsePropertyQuery, runPropertyUsage } from "../src/usage.js";
 
-const exampleDir = fileURLToPath(new URL("../../../examples/the-hamlet.storylets", import.meta.url));
+const exampleDir = fileURLToPath(new URL("./fixtures/the-hamlet.storylets", import.meta.url));
 const loaded = loadProject(exampleDir);
 
 const brief = (q: string) => runPropertyUsage(loaded, q).map((u) => `${u.use} ${u.item.kind} ${u.item.id} ${u.where}`);

@@ -4,6 +4,9 @@
 
 ### Added
 
+- **`UStoryletWorld`, the game's `@world` container, bound at `UStoryletEngine::Create(Bundle, Seed, bRetainLog, World)`**: Blueprint-callable typed `Set*`/`Get*`, `Names`, an `OnChanged` event (host writes and story writes told apart), and `SetReadOnly` for the GAME's policy (a story write to such a name is refused with `@world.x is the game's alone`, surfacing as `Play` returning false). The engine reads and writes `@world` through it, so the game, the story and anything else bound to the same object (Patterplay's host scope, in the Hamlet demo) share one set of values. `GetBoundWorld()` returns it; the binding survives `ApplyLiveBundle`. Without one the engine self-backs `@world` exactly as before. The last of the four runtimes to gain a host binding; `StoryletEngine.World` is the automation case.
+- **A load restores a bound container directly**: `UStoryletSave::LoadStateFromJson` hands the file's `@world` values to the bound `UStoryletWorld` as the host (its read-only policy binds the story, not a load); a self-backed engine is written through `setProperty` as before. Saves already carried the values, read through whichever backing the engine has.
+
 - **Read-only `@world` refused at runtime**: an outcome writing a `writable: false` property throws `'@world.x' is read-only`; the loader now reads the flag. Parity with the JS runtime and with Patterplay, corpus-pinned.
 
 - **`EngineOptions::onReplacedFlow`** (`std::function<void(const std::string&, int)>`):

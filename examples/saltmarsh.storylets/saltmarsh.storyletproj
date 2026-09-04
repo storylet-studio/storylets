@@ -6,7 +6,7 @@
     version: "0.1.0",
   },
   export: {
-    bundle: "dist/saltmarsh.storyletsc",
+    bundle: "../storylet-dist/saltmarsh.storyletsc",
     metadata: "full",
   },
   settings: {

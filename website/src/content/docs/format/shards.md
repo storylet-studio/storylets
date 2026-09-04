@@ -92,7 +92,7 @@ One per project, at the root. It holds everything that isn't specific to a box.
     },
   },
   export: {
-    bundle: "dist/the-hamlet.storyletsc",
+    bundle: "../storylet-dist/the-hamlet.storyletsc",
     metadata: "full",
   },
   settings: {

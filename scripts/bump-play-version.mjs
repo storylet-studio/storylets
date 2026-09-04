@@ -9,6 +9,7 @@
 //
 //   1. writes the version into every runtime manifest
 //        packages/runtime/package.json                       "version"
+//        packages/play-helpers/package.json                  "version" (same, see below)
 //        ports/unity/StoryletEngine/package.json             "version"
 //        ports/unreal/StoryletEngine/StoryletEngine.uplugin  "VersionName" (+ "Version"++)
 //        ports/godot/addons/storyletengine/plugin.cfg        version=
@@ -57,6 +58,9 @@ const bumpJsonVersion = (p) => {
 };
 
 bumpJsonVersion("packages/runtime/package.json");
+// The play helpers ship inside the JS runtime's zip, pin the runtime exactly, and
+// publish to npm at the SAME version: the JS member of the lockstep is two packages.
+bumpJsonVersion("packages/play-helpers/package.json");
 bumpJsonVersion("ports/unity/StoryletEngine/package.json");
 
 // The JS runtime is a WORKSPACE package that its siblings depend on by EXACT

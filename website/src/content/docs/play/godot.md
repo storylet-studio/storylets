@@ -162,6 +162,11 @@ three runtimes. Open the scene and press Play. The smallest part to read first i
 is UI. Delete
 the folder freely; nothing depends on it.
 
+**The Hamlet on Godot** is the second demo: the same project with [Patter](https://patterkit.dev)
+performing each card's dialogue, two engines in one game. It ships as a project zip on the
+[download page](/download/#the-hamlet-two-engines-in-one-game); `hamlet_game.gd` is the whole
+integration, and [Running it with Patter](/play/with-patter/) explains the handoff.
+
 ## Next
 
 - What every runtime shares: [Dev tools](/play/dev-tools/).

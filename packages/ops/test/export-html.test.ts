@@ -15,7 +15,7 @@ import { loadProject } from "../src/load.js";
 import { playableFileName, runExportHtml } from "../src/export-html.js";
 import { PLAYABLE_PLAYER_JS } from "../src/playable-player.js";
 
-const exampleDir = fileURLToPath(new URL("../../../examples/the-hamlet.storylets", import.meta.url));
+const exampleDir = fileURLToPath(new URL("./fixtures/the-hamlet.storylets", import.meta.url));
 const villageDir = fileURLToPath(new URL("../../../examples/the-village.storylets", import.meta.url));
 const meridianDir = fileURLToPath(new URL("../../../examples/port-meridian.storylets", import.meta.url));
 

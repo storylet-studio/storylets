@@ -13,7 +13,6 @@
     "@storylet-studio/conformance",
     "@storylet-studio/compiler",
     "@storylet-studio/ops",
-    "@storylet-studio/cli",
-    "@storylet-studio/play-helpers"
+    "@storylet-studio/cli"
   ]
 }

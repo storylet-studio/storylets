@@ -86,12 +86,33 @@ hand; nothing changes in that case.
 
 ## Your game's state
 
-Properties cross the Blueprint boundary through typed accessors, path-addressed:
+Give the engine your `@world` values in a `UStoryletWorld` when you create it. The engine
+reads them through it before every deal, outcomes write back into it, and anything else you
+bind to the same object sees the same values:
 
 ```cpp
-Flow->SetPropertyString(TEXT("world.time_of_day"), TEXT("night"));   // write before you deal
-double Gold = Flow->GetPropertyNumber(TEXT("world.gold"));
-// Also GetPropertyBool / GetPropertyFlags and their setters.
+UStoryletWorld* World = NewObject<UStoryletWorld>(this);
+World->SetString(TEXT("time_of_day"), TEXT("night"));
+World->SetReadOnly(TEXT("time_of_day"), true);   // yours alone: a story write is refused
+UStoryletEngine* Engine = UStoryletEngine::Create(Bundle, 0, false, World);
+
+bool Known = World->GetBool(TEXT("knows_road"));   // what the story has told you
+World->OnChanged.AddDynamic(this, &AMyGame::OnWorldChanged);   // (Name, Value, bFromStory)
+```
+
+`SetReadOnly` is your policy: a story write to that name makes `Play` return false with
+`@world.x is the game's alone`. It is distinct from `writable: false` on the property's
+declaration, which is the story's own promise, checked when the project compiles and refused
+by every runtime. Your own `Set*` calls and a load are never refused by either. Leave the
+world out and the engine self-backs `@world` from the declared defaults, written through the
+path accessors below; fine for a run that never leaves the engine.
+
+The other properties cross the Blueprint boundary through typed accessors, path-addressed:
+
+```cpp
+Flow->SetPropertyNumber(TEXT("story.gold"), 5);
+double Gold = Flow->GetPropertyNumber(TEXT("story.gold"));
+// Also GetPropertyBool / GetPropertyString / GetPropertyFlags and their setters.
 
 Flow->AdvanceTurns(TEXT("village"), 1);
 double Turn = Flow->GetTurn(TEXT("village"));
@@ -107,7 +128,9 @@ enum options. The paths, and when to write them: [Your game's state](/play/world
 `.storyletsave` string boundary, in the runtime module and Blueprint-callable (the shape of
 Patterplay's `UPatterSave`). The file carries the engine's envelope, every live flow inside
 it, plus the current `@world` values, and a load applies all of it, so a round trip preserves
-the whole run ([why `@world` rides beside the envelope](/play/world-state/#saving-it)). A
+the whole run ([why `@world` rides beside the envelope](/play/world-state/#saving-it)). With
+a `UStoryletWorld` bound, the load restores its values as you would, so your read-only names
+are restored too. A
 foreign or malformed blob returns false and leaves the engine untouched. Flow objects your
 game is already holding survive the load: they re-bind by name, so a Blueprint variable
 pointing at a flow keeps working.
@@ -146,6 +169,11 @@ you a board you can play with the mouse, with a transcript of every action. Open
 State panel beside it to watch the run live. The smallest part to read first is
 `CreateBoardSession()` plus `OnDealAllHandsClicked()` in `UStoryletBoardDemoWidget`; the rest
 is UI.
+
+**The Hamlet on Unreal** is the second demo: the same project with [Patter](https://patterkit.dev)
+performing each card's dialogue, two engines in one game. It ships as a project zip on the
+[download page](/download/#the-hamlet-two-engines-in-one-game); `Source/HamletDemo/Private/HamletGame.cpp` is the whole
+integration, and [Running it with Patter](/play/with-patter/) explains the handoff.
 
 ## How it's built
 

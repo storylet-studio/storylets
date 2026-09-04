@@ -139,18 +139,30 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, "/"); // for the engine ic
     root.innerHTML = `${play} ${dl}${meta(r, ver)}`;
   }
 
-  // The Village renderer, cloned: a second playable example, its own tag family.
+  // The Hamlet: playable in the browser like the Village, and ONE release carries
+  // four zips (the JS client and the Godot, Unity and Unreal projects), so each
+  // is offered by name rather than the first .zip found.
   function renderHamlet(root: HTMLElement, releases: Release[]): void {
     const play = `<a class="pt-dl-btn" href="/hamlet/">Play it in your browser</a>`;
     const r = releases.find((x) => /^hamlet-v\d/.test(x.tag_name));
     if (!r) {
-      root.innerHTML = `${play}<p class="pt-dl-sub">The downloadable zip will appear here once the first release ships.</p>`;
+      root.innerHTML = `${play}<p class="pt-dl-sub">The downloadable zips will appear here once the first release ships.</p>`;
       return;
     }
     const ver = r.tag_name.replace(/^hamlet-v/, "");
-    const zip = r.assets.find((a) => /\.zip$/i.test(a.name));
-    const dl = zip ? `<a class="pt-dl-btn" href="${esc(zip.browser_download_url)}">Download the zip</a>` : "";
-    root.innerHTML = `${play} ${dl}${meta(r, ver)}`;
+    const find = (re: RegExp) => r.assets.find((a) => re.test(a.name));
+    const zips = [
+      { re: /^the-hamlet-\d[\w.-]*\.zip$/i, label: "JavaScript client (source + dist)" },
+      { re: /-godot-.*\.zip$/i, label: "Godot project" },
+      { re: /-unity-.*\.zip$/i, label: "Unity project" },
+      { re: /-unreal-.*\.zip$/i, label: "Unreal project" },
+    ];
+    const btns = zips
+      .map((z) => ({ z, a: find(z.re) }))
+      .filter((x) => x.a)
+      .map((x) => `<a class="pt-dl-btn" href="${esc(x.a!.browser_download_url)}">${esc(x.z.label)}</a>`)
+      .join(" ");
+    root.innerHTML = `${play} ${btns}${meta(r, ver)}`;
   }
 
   function empty(root: HTMLElement, what: string): void {

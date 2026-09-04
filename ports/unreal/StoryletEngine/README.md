@@ -45,7 +45,7 @@ transliteration in C#; the three stay in lockstep.
   across flows, not just the state it reads: one goblin in the world, and a
   shared `redraw: never` spent for everyone the moment anyone plays it.
   `sharedCopies` is the world cap and defaults to `copies`.
-- **Play**: `UStoryletEngine::Create(Bundle, Seed)` then
+- **Play**: `UStoryletEngine::Create(Bundle, Seed, bRetainLog, World)` (`World` optional: a `UStoryletWorld`, the game's `@world` container, read and written by every flow, with `SetReadOnly` for the game's own policy) then
   `Engine->OpenFlow("main")` for a flow to play on (open one per parallel
   playthrough; `GetFlow` / `Flows` / `CloseFlow` manage them). On the flow:
   `Deal` /

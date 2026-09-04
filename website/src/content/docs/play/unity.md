@@ -163,6 +163,11 @@ the Runtime State window beside it to watch the run live.
 The smallest part to read first is `Start()` plus `DealAllHands()` in `Assets/Demo/BoardDemo.cs`:
 load the bundle, build an engine, open a flow, deal, read `Board()`. Everything else in that file is UI.
 
+**The Hamlet on Unity** is the second demo: the same project with [Patter](https://patterkit.dev)
+performing each card's dialogue, two engines in one game. It ships as a project zip on the
+[download page](/download/#the-hamlet-two-engines-in-one-game); `Assets/Hamlet/HamletGame.cs` is the whole
+integration, and [Running it with Patter](/play/with-patter/) explains the handoff.
+
 ## How it's built
 
 The package is four assemblies, so the boundaries are enforced by the compiler:

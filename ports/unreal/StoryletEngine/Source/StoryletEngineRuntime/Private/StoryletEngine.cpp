@@ -1,4 +1,5 @@
 #include "StoryletEngine.h"
+#include "StoryletWorld.h"
 
 #include "StoryletBundle.h"
 #include "StoryletCompiledBundle.h"
@@ -140,7 +141,7 @@ namespace
 	}
 }
 
-UStoryletEngine* UStoryletEngine::Create(UStoryletBundle* Bundle, int32 Seed, bool bRetainLog)
+UStoryletEngine* UStoryletEngine::Create(UStoryletBundle* Bundle, int32 Seed, bool bRetainLog, UStoryletWorld* World)
 {
 	if (!Bundle || !Bundle->GetCompiled() || !Bundle->GetCompiled()->Bundle)
 	{
@@ -154,6 +155,12 @@ UStoryletEngine* UStoryletEngine::Create(UStoryletBundle* Bundle, int32 Seed, bo
 		storylets::EngineOptions Opts;
 		Opts.seed = static_cast<double>(Seed);
 		Opts.log = bRetainLog;
+		if (World)
+		{
+			// Held in Options too, so the ApplyLiveBundle rebuild keeps the binding.
+			Opts.world = World->MakeResolver();
+			E->WorldRef = World;
+		}
 		TPimplPtr<FStoryletEngineImpl> Impl = MakePimpl<FStoryletEngineImpl>();
 		Impl->Bundle = Bundle->GetCompiled()->Bundle;
 		Impl->Options = Opts;
@@ -1026,6 +1033,11 @@ void UStoryletEngine::RebindFlowsAfterLoad()
 			Wrapper->Rebind(Impl->Engine->getFlow(Std(Wrapper->GetFlowId())));
 		}
 	}
+}
+
+UStoryletWorld* UStoryletEngine::GetBoundWorld() const
+{
+	return WorldRef;
 }
 
 void UStoryletEngine::BeginDestroy()

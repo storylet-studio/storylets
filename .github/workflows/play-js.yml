@@ -75,7 +75,7 @@ jobs:
           cp packages/play-helpers/package.json "${out}/@storylet-studio/play-helpers/"
 
           # The drop-in, loose at the top where somebody looking for one file finds it.
-          cp packages/runtime/dist/storyletengine.min.js packages/runtime/dist/storyletengine.min.js.map "${out}/"
+          cp packages/play-helpers/dist/storyletengine.min.js packages/play-helpers/dist/storyletengine.min.js.map "${out}/"
           cp LICENSE "${out}/"
 
           ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
@@ -98,7 +98,7 @@ jobs:
           body_path: ${{ runner.temp }}/release-notes.md
           files: |
             ${{ env.JS_ZIP }}
-            storylets/packages/runtime/dist/storyletengine.min.js
+            storylets/packages/play-helpers/dist/storyletengine.min.js
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

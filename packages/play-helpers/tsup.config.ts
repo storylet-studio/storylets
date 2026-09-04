@@ -8,11 +8,27 @@ import { defineConfig } from "tsup";
 // optimisation: play-helpers wraps a LIVE engine, so bundling its own private
 // copy would give the host two runtimes and a save written by one that the other
 // has never heard of.
-export default defineConfig({
-  entry: ["src/index.ts"],
-  format: ["esm", "cjs"],
-  dts: true,
-  clean: true,
-  sourcemap: true,
-  noExternal: [/^@storylet-studio\/(?!runtime)/, /^@wildwinter\//],
-});
+export default defineConfig([
+  {
+    entry: ["src/index.ts"],
+    format: ["esm", "cjs"],
+    dts: true,
+    clean: true,
+    sourcemap: true,
+    noExternal: [/^@storylet-studio\/(?!runtime)/, /^@wildwinter\//],
+  },
+  {
+    // The browser drop-in (src/browser.ts): runtime + helpers under one global.
+    // Inline EVERYTHING so the script needs no loader, no import map and no
+    // network beyond itself. Lives here, not in the runtime, because this is
+    // the one package that depends on both.
+    entry: { storyletengine: "src/browser.ts" },
+    format: ["iife"],
+    globalName: "StoryletEngine",
+    platform: "browser",
+    minify: true,
+    sourcemap: true,
+    noExternal: [/.*/],
+    outExtension: () => ({ js: ".min.js" }),
+  },
+]);

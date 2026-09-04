@@ -1,0 +1,136 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    gameId: "ambients",
+    id: "k_ambients",
+    properties: [],
+    purpose: "Background colour that never blocks a real beat.",
+    title: "Ambients",
+  },
+  cards: [
+    {
+      fields: {
+        music: "forest",
+      },
+      gameId: "wind-in-the-leaves",
+      id: "c_amb_forest",
+      outcomes: [
+        {
+          changes: {},
+          gameId: "continue",
+          id: "c_amb_forest_o",
+          title: "Continue",
+        },
+      ],
+      priority: 0,
+      purpose: "The forest breathes around you. The trail markers are older than the village.",
+      redraw: "always",
+      tags: {
+        d_zone: [
+          "v_forest",
+        ],
+      },
+      title: "Wind in the Leaves",
+    },
+    {
+      fields: {
+        music: "forge",
+      },
+      gameId: "ring-of-the-anvil",
+      id: "c_amb_forge",
+      outcomes: [
+        {
+          changes: {},
+          gameId: "continue",
+          id: "c_amb_forge_o",
+          title: "Continue",
+        },
+      ],
+      priority: 0,
+      purpose: "Gareth's hammer keeps time across the village, steady as a heartbeat.",
+      redraw: "always",
+      tags: {
+        place: [
+          "h_forge",
+        ],
+      },
+      title: "The Ring of the Anvil",
+    },
+    {
+      fields: {
+        music: "market",
+      },
+      gameId: "market-bustle",
+      id: "c_amb_market",
+      outcomes: [
+        {
+          changes: {},
+          gameId: "continue",
+          id: "c_amb_market_o",
+          title: "Continue",
+        },
+      ],
+      priority: 0,
+      purpose: "Torin the trader is loudly overselling turnips. The square is alive with haggling and gossip.",
+      redraw: "always",
+      tags: {
+        d_zone: [
+          "v_village",
+        ],
+      },
+      title: "Market Bustle",
+    },
+    {
+      condition: "@world.time_of_day == \"night\"",
+      fields: {
+        music: "night",
+      },
+      gameId: "night-settles",
+      id: "c_amb_night",
+      order: 0.5,
+      outcomes: [
+        {
+          changes: {},
+          gameId: "continue",
+          id: "c_amb_night_o",
+          title: "Continue",
+        },
+      ],
+      priority: 0,
+      purpose: "Lamps gutter; the well stands black and still. Something feels watchful after dark.",
+      redraw: "always",
+      tags: {
+        d_zone: [
+          "v_village",
+        ],
+      },
+      title: "Night Settles on the Village",
+    },
+    {
+      condition: "@world.knows_road",
+      fields: {
+        music: "forest",
+      },
+      gameId: "the-road-north",
+      id: "c_road_north",
+      order: 4,
+      outcomes: [
+        {
+          changes: {},
+          gameId: "continue",
+          id: "c_road_north_o",
+          title: "Follow it a little way",
+        },
+      ],
+      priority: 1,
+      purpose: "The track north Mira described, faint between the trees. This beat exists to show the OTHER direction of the shared world: its gate, @world.knows_road, is set by dialogue (asking Mira about the road), so a choice made inside Patter puts a card on the table here. Priority 1 so it takes the tree's single slot over the ambient.",
+      redraw: "always",
+      tags: {
+        d_zone: [
+          "v_forest",
+        ],
+      },
+      title: "The Road North",
+    },
+  ],
+}

@@ -29,16 +29,6 @@ export default defineConfig([
     // registry. Inlining is what makes the documented instruction true.
     noExternal: [/^@storylet-studio\//, /^@wildwinter\//],
   },
-  {
-    entry: { storyletengine: "src/index.ts" },
-    format: ["iife"],
-    globalName: "StoryletEngine",
-    platform: "browser",
-    minify: true,
-    sourcemap: true,
-    // Inline EVERYTHING - the workspace packages and the @wildwinter/* ones -
-    // so the script needs no loader, no import map and no network beyond itself.
-    noExternal: [/.*/],
-    outExtension: () => ({ js: ".min.js" }),
-  },
+  // The browser drop-in (storyletengine.min.js) is built by play-helpers,
+  // the one package that depends on the runtime AND the helpers it carries.
 ]);

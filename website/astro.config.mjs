@@ -111,6 +111,7 @@ export default defineConfig({
             "play/unity",
             "play/unreal",
             "play/godot",
+            "play/with-patter",
             "play/dev-tools",
             "play/live-link",
             "compatibility",

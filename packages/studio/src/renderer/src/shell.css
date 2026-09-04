@@ -916,6 +916,12 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .set-scope { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
 .set-ref input.set-name { min-width: 4rem; }
 .set-rowline input.set-values { flex: 1 1 12rem; min-width: 6rem; }
+/* A text field behind the expander (Purpose, on every list) fills its line
+   instead of sitting at the browser's default twenty characters: a purpose is
+   a sentence. Checkboxes and selects keep their own width. Patterpad's Purpose
+   is as narrow, and `labelled` + `.set-details` are the shell's, so this rule
+   is the shell's to take (app-shell settings.css); drop it here when it does. */
+.set-details .shell-labelled > input:not([type=checkbox]):not([type=radio]) { flex: 1; min-width: 0; }
 .set-actions { display: flex; gap: 8px; }
 
 /* --- toast: the shell's now (@wildwinter/app-shell/toast.css) ---------------- */

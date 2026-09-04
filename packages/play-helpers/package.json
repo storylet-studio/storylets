@@ -1,10 +1,17 @@
 {
   "name": "@storylet-studio/play-helpers",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.3.0",
   "description": "Storylet Engine JS dev-experience layer: the state logger, save-file plumbing, and the in-page property examiner/editor. The runtime stays pure (no DOM, no I/O); everything that touches the host environment lives here.",
-  "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/storylet-studio/storylets.git",
+    "directory": "packages/play-helpers"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
   "author": "Ian Thomas",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

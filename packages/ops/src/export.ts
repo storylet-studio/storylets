@@ -5,10 +5,10 @@
 
 import { sidecarIssues } from "./merge.js";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, basename } from "node:path";
 import { compileProject, serialiseBundle } from "@storylet-studio/compiler";
 import type { Issue } from "@storylet-studio/compiler";
-import { BUNDLE_EXTENSION, backgroundsOf, bundleAssetPath, effectiveGameId, isSpatial } from "@storylet-studio/model";
+import { BUNDLE_EXTENSION, PROJECT_FOLDER_EXTENSION, backgroundsOf, bundleAssetPath, effectiveGameId, isSpatial } from "@storylet-studio/model";
 import type { Bundle } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
 import { assetPath } from "./assets.js";
@@ -44,9 +44,12 @@ export interface ExportOptions {
 }
 
 /** The bundle output path: the project's `export.bundle`, resolved against
- *  the project folder. */
+ *  the project folder; when the project pins none, a sibling `storylet-dist/`
+ *  folder named after the project, never a path inside it (the folder is the
+ *  document). Patterpad's `../patter-dist/<name>.patterc`, name for name. */
 export function bundleOutputPath(loaded: LoadedProject): string {
-  const declared = loaded.source?.project.export?.bundle ?? `dist/bundle${BUNDLE_EXTENSION}`;
+  const stem = basename(loaded.dir).replace(new RegExp(`${PROJECT_FOLDER_EXTENSION.replace(".", "\\.")}$`), "");
+  const declared = loaded.source?.project.export?.bundle ?? `../storylet-dist/${stem}${BUNDLE_EXTENSION}`;
   return isAbsolute(declared) ? declared : join(loaded.dir, declared);
 }
 

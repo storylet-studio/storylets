@@ -138,7 +138,7 @@ describe("runResolve", () => {
   });
 
   it("resolves against a real project on disk", () => {
-    const village = loadProject(fileURLToPath(new URL("../../../examples/the-hamlet.storylets", import.meta.url)));
+    const village = loadProject(fileURLToPath(new URL("./fixtures/the-hamlet.storylets", import.meta.url)));
     const [hit] = runResolve(village, "arrive-at-the-gate");
     expect(hit).toMatchObject({ kind: "card", id: "c_arrive", location: ["Village", "Arrival"], file: "village/decks/arrival.storyletdeck" });
   });

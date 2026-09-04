@@ -24,7 +24,7 @@
     },
   },
   export: {
-    bundle: "dist/port-meridian.storyletsc",
+    bundle: "../storylet-dist/port-meridian.storyletsc",
     metadata: "full",
   },
   settings: {

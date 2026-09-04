@@ -126,7 +126,7 @@ describe("lifecycle: init -> draw -> export -> validate -> format", () => {
 
   it("export writes the bundle; validate stays clean", async () => {
     expect((await call("export", dir)).code).toBe(0);
-    expect(existsSync(join(dir, "dist", "demo.storyletsc"))).toBe(true);
+    expect(existsSync(join(dir, "..", "storylet-dist", "demo.storyletsc"))).toBe(true);   // published BESIDE the project
     expect((await call("validate", dir)).code).toBe(0);
   });
 
@@ -148,9 +148,9 @@ describe("lifecycle: init -> draw -> export -> validate -> format", () => {
 
     const off = (await call("export", dir));
     expect(off.code).toBe(0);
-    const bundlePath = join(dir, "dist", "demo.storyletsc");
+    const bundlePath = join(dir, "..", "storylet-dist", "demo.storyletsc");
     expect(JSON.parse(readFileSync(bundlePath, "utf8")).maps).toBeUndefined();
-    expect(existsSync(join(dir, "dist", "assets"))).toBe(false);
+    expect(existsSync(join(dir, "..", "storylet-dist", "assets"))).toBe(false);
 
     const on = (await call("export", dir, "--map"));
     expect(on.err).toEqual([]);
@@ -159,7 +159,7 @@ describe("lifecycle: init -> draw -> export -> validate -> format", () => {
     const maps = JSON.parse(readFileSync(bundlePath, "utf8")).maps;
     expect(maps[0].group).toBe("zone");
     expect(maps[0].backgrounds[0].file).toBe("assets/new-box/plan.png");
-    expect(existsSync(join(dir, "dist", "assets", "new-box", "plan.png"))).toBe(true);
+    expect(existsSync(join(dir, "..", "storylet-dist", "assets", "new-box", "plan.png"))).toBe(true);
 
     // Put the project back the way the rest of this lifecycle expects it.
     (await call("export", dir));
@@ -522,7 +522,7 @@ describe("resolve: the --at lookup from the terminal", () => {
 });
 
 describe("export-html: the playable page", () => {
-  const villageDir = fileURLToPath(new URL("../../../examples/the-hamlet.storylets", import.meta.url));
+  const villageDir = fileURLToPath(new URL("../../ops/test/fixtures/the-hamlet.storylets", import.meta.url));
 
   it("writes one self-contained page to -o and reports its size", async () => {
     const out = join(mkdtempSync(join(tmpdir(), "html-")), "The Hamlet.html");
@@ -553,7 +553,7 @@ describe("export-html: the playable page", () => {
 });
 
 describe("export-xlsx: the readable workbook", () => {
-  const villageDir = fileURLToPath(new URL("../../../examples/the-hamlet.storylets", import.meta.url));
+  const villageDir = fileURLToPath(new URL("../../ops/test/fixtures/the-hamlet.storylets", import.meta.url));
 
   it("writes the workbook to -o and reports what it holds", async () => {
     const out = join(mkdtempSync(join(tmpdir(), "xlsx-")), "The Hamlet.xlsx");

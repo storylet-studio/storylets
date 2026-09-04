@@ -8,6 +8,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Storylets/StoryletValue.h"
+#include "Storylets/Expr/OrderedMap.h"
+#include <string>
 
 namespace storylets { class Engine; }
 
@@ -20,3 +23,10 @@ FString StoryletSaveStateToJson(const storylets::Engine& Engine);
  *  valid JSON, a missing/foreign schema tag, or a save for another
  *  project. The engine is untouched on failure. */
 bool StoryletLoadStateFromJson(storylets::Engine& Engine, const FString& Json, FString& OutError);
+
+/** The same load, but the file's @world values are RETURNED for the caller to
+ *  apply rather than written through the engine: a bound container is restored
+ *  directly (the host restoring, which its read-only policy does not bind),
+ *  a self-backed engine through setProperty. */
+bool StoryletLoadStateWorld(storylets::Engine& Engine, const FString& Json,
+	storylets::OrderedMap<std::string, storylets::StoryletValue>& OutWorld, FString& OutError);

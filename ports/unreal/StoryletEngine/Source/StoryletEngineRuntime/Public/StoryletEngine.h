@@ -31,6 +31,7 @@ class UStoryletEngine;
 namespace storylets { class Engine; class Flow; struct TraceEvent; }
 
 /** Pimpl holders (defined in StoryletEngine.cpp). */
+class UStoryletWorld;
 struct FStoryletEngineImpl;
 struct FStoryletFlowImpl;
 
@@ -243,10 +244,19 @@ public:
 	 *  PRNG (schema 3.3; seed 0 is the cross-runtime default). bRetainLog
 	 *  switches on the retained per-flow log (schema 5; the other runtimes'
 	 *  log option): every trace event, sequence-stamped, capped at 1000
-	 *  entries, read back through a flow's Log(). Returns nullptr (and logs)
-	 *  on a null or uncompiled bundle. */
+	 *  entries, read back through a flow's Log(). World, when given, is the
+	 *  game's @world container (StoryletWorld.h): the engine reads and writes
+	 *  @world through it, shared by every flow and by whatever else the game
+	 *  binds to the same object (Patterplay's host scope in the Hamlet demo).
+	 *  Absent, @world is self-backed from the declared defaults. The binding
+	 *  survives ApplyLiveBundle. Returns nullptr (and logs) on a null or
+	 *  uncompiled bundle. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	static UStoryletEngine* Create(UStoryletBundle* Bundle, int32 Seed = 0, bool bRetainLog = false);
+	static UStoryletEngine* Create(UStoryletBundle* Bundle, int32 Seed = 0, bool bRetainLog = false, UStoryletWorld* World = nullptr);
+
+	/** The @world container given to Create, or null when self-backed. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
+	UStoryletWorld* GetBoundWorld() const;
 
 	// --- flows (design/flows.md) ---------------------------------------------
 
@@ -389,6 +399,11 @@ public:
 private:
 	UPROPERTY()
 	TObjectPtr<UStoryletBundle> BundleRef = nullptr;
+
+	/** The bound @world container (null = self-backed); held here so the
+	 *  resolver's weak reference stays live for as long as this engine does. */
+	UPROPERTY()
+	TObjectPtr<UStoryletWorld> WorldRef = nullptr;
 
 	/** Every wrapper handed out by OpenFlow, so a live swap can re-bind them
 	 *  by id (weak: a flow the game dropped must not be kept alive here). */

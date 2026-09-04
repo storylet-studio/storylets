@@ -1,0 +1,100 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    gameId: "calling-tree",
+    id: "k_tree",
+    properties: [],
+    purpose: "The Mystic Tree remembers the founding, and it is waking.",
+    title: "The Calling Tree",
+  },
+  cards: [
+    {
+      condition: "@hand.peril >= 1",
+      fields: {
+        music: "unease",
+      },
+      gameId: "the-forest-turns",
+      id: "c_forest_peril",
+      outcomes: [
+        {
+          changes: {},
+          gameId: "continue",
+          id: "c_forest_peril_o",
+          title: "Continue",
+        },
+      ],
+      priority: 1,
+      purpose: "Something you did has unsettled the wood. The trail markers no longer seem to point the same way twice.",
+      redraw: "always",
+      tags: {
+        d_zone: [
+          "v_forest",
+        ],
+      },
+      title: "The Forest Turns Wary",
+    },
+    {
+      condition: "check_flags(@world_events, +tree_bloomed)",
+      fields: {
+        music: "wonder",
+      },
+      gameId: "the-tree-blooms",
+      id: "c_tree_bloom",
+      outcomes: [
+        {
+          changes: {
+            "@story.reputation": "@reputation + 1",
+          },
+          gameId: "breathe-it-in",
+          id: "c_tb_o",
+          title: "Breathe it in",
+        },
+      ],
+      priority: 2,
+      purpose: "Where you touched the bark, blossom spreads in the dark. The forest holds its breath.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_tree",
+        ],
+      },
+      title: "The Tree Blooms",
+    },
+    {
+      condition: "@village_open and @world.time_of_day == \"night\"",
+      fields: {
+        music: "wonder",
+      },
+      gameId: "the-glowing-tree",
+      id: "c_tree_night",
+      outcomes: [
+        {
+          changes: {},
+          gameId: "observe-carefully",
+          id: "c_tn_observe",
+          order: 1,
+          title: "Step back and observe carefully",
+        },
+        {
+          changes: {
+            "@hand.peril": "@hand.peril + 1",
+            "@story.world_events": "set_flags(@world_events, +tree_bloomed)",
+          },
+          gameId: "touch-the-bark",
+          id: "c_tn_touch",
+          order: 0,
+          title: "Touch the glowing bark",
+        },
+      ],
+      priority: 3,
+      purpose: "Deep in the forest the Mystic Tree burns with a soft light, as if it has been waiting to be addressed.",
+      redraw: "never",
+      tags: {
+        place: [
+          "h_tree",
+        ],
+      },
+      title: "The Glowing Tree at Night",
+    },
+  ],
+}

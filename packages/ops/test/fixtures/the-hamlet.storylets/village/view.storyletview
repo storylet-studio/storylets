@@ -1,0 +1,93 @@
+{
+  schema: "storylets/view@0",
+  canvases: {
+    k_ambients: {
+      cards: {
+        c_3ftq28te: {
+          x: 344,
+          y: -29,
+        },
+      },
+    },
+    k_arrival: {
+      cards: {
+        c_arrive: {
+          x: 540,
+          y: 120,
+        },
+        c_bryna: {
+          x: 300,
+          y: 120,
+        },
+        c_forge_first: {
+          x: 60,
+          y: 236,
+        },
+        c_inn_first: {
+          x: 60,
+          y: 120,
+        },
+      },
+    },
+    k_gareth: {
+      cards: {
+        c_gareth_men: {
+          x: 300,
+          y: 60,
+        },
+        c_gareth_thanks: {
+          x: 540,
+          y: 60,
+        },
+        c_gareth_troubled: {
+          x: 60,
+          y: 60,
+        },
+      },
+    },
+    k_mira: {
+      cards: {
+        c_mira_distracted: {
+          x: 60,
+          y: 60,
+        },
+        c_mira_letter: {
+          x: 300,
+          y: 60,
+        },
+      },
+    },
+    k_tree: {
+      cards: {
+        c_forest_peril: {
+          x: 20,
+          y: -20,
+        },
+        c_tree_bloom: {
+          x: 300,
+          y: 176,
+        },
+        c_tree_night: {
+          x: 60,
+          y: 176,
+        },
+      },
+    },
+  },
+  map: {
+    sites: {
+      h_forge: {
+        x: -57,
+        y: 172,
+      },
+      h_inn: {
+        x: 232,
+        y: 179,
+      },
+      h_tree: {
+        x: 547,
+        y: 226,
+      },
+    },
+  },
+}

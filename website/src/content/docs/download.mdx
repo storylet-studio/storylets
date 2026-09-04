@@ -36,8 +36,14 @@ runtimes are the same version and [tested to match](/compatibility/):
 <Downloads kind="plugins" />
 
 The JavaScript zip carries the runtime, the dev helpers and a browser drop-in, so there's no
-package manager to set up. See [Playing in your game](/play/overview/) and the per-engine
-guides to get started.
+package manager to set up. The JS runtime is also on npm as `@storylet-studio/runtime` (plus
+the optional `@storylet-studio/play-helpers`), or from a CDN:
+
+```html
+<script src="https://unpkg.com/@storylet-studio/play-helpers/dist/storyletengine.min.js"></script>
+```
+
+See [Playing in your game](/play/overview/) and the per-engine guides to get started.
 
 ## The Village: see it working
 
@@ -61,9 +67,10 @@ mid-choice. The scenes are stubs, deliberately: the plumbing is real, the words 
 
 <Downloads kind="hamlet" />
 
-Read `src/world.ts` first (the shared world, forty-five lines), then `src/performance.ts` (the
-handoff). The two projects are joined by a naming convention and nothing else, and the build
-checks the convention holds.
+One release, four zips: the JavaScript client (`src/` to read, `dist/` to open offline) and the
+same game as a Godot, Unity and Unreal project, each with Patter's plugin included. Read
+`src/world.js` first (the shared world), then `src/performance.js` (the handoff). How the two projects are joined, and what the build checks:
+[Running it with Patter](/play/with-patter/).
 
 ## The CLI
 
