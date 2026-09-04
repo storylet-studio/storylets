@@ -60,6 +60,7 @@ jobs:
       # so the libraries are built EXPLICITLY here. The test step above happens to build
       # them too, but a release should not rest on a side effect of its own gate.
       - name: Build the libraries the client copies from
+        working-directory: storylets
         run: npm run build:libs
 
       - name: Build the client
