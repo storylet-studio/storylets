@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-04
+
 ### Changed
 
 - **`@storylet-studio/play-helpers` is on npm** from this release, at the runtime's version and bumped with it (the JS member of the lockstep is two packages), so the drop-in is one CDN line away: `https://unpkg.com/@storylet-studio/play-helpers/dist/storyletengine.min.js`. The zip is unchanged.

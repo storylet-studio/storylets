@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-04
+
 ### Added
 
 - **Read-only `@world` refused at runtime**: an outcome writing a `writable: false` property throws `'@world.x' is read-only`; the loader now reads the flag. Parity with the JS runtime and with Patterplay, corpus-pinned.

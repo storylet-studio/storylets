@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-04
+
 ### Added
 
 - **`UStoryletWorld`, the game's `@world` container, bound at `UStoryletEngine::Create(Bundle, Seed, bRetainLog, World)`**: Blueprint-callable typed `Set*`/`Get*`, `Names`, an `OnChanged` event (host writes and story writes told apart), and `SetReadOnly` for the GAME's policy (a story write to such a name is refused with `@world.x is the game's alone`, surfacing as `Play` returning false). The engine reads and writes `@world` through it, so the game, the story and anything else bound to the same object (Patterplay's host scope, in the Hamlet demo) share one set of values. `GetBoundWorld()` returns it; the binding survives `ApplyLiveBundle`. Without one the engine self-backs `@world` exactly as before. The last of the four runtimes to gain a host binding; `StoryletEngine.World` is the automation case.
