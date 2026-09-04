@@ -6,6 +6,12 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Board demo would not parse, so a project carrying this addon failed to open.** `board_demo.gd` held a statement at column 0 inside `_on_bundle_pushed`, which GDScript reads as an identifier in the class body: `Unexpected identifier "StoryletDebug" in class body`. Godot parses every script in a project when it opens, so this broke the whole project for anyone who dropped the addon in, and it has shipped that way since 2026-08-29. The headless suites run named scripts and never touched the demo, so nothing caught it; CI now parses every script in the addon.
+- The same botched edit had added `StoryletDebug.unregister_link(_link)` to the live-refresh path, where it would have dropped the Live Link from the state panel for good: the link object survives a refresh and nothing re-registers it. Removed; the old engine is still unregistered, as it was before.
+
+
 ## [0.4.0] - 2026-09-04
 
 ### Added

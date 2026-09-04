@@ -10,8 +10,8 @@ sidebar:
   <p>The pure GDScript runtime. No native extension to compile, no web view: it loads a <code>.storyletsc</code> bundle and deals from it directly, held to the same <a href="/compatibility/">shared test suite</a> as every other engine.</p>
 </div>
 
-> Requires Godot 4.x; verified on 4.7. The runtime uses only plain GDScript, so it also runs
-> headless.
+> Needs Godot 4.7 or newer, which is the version the addon declares and the one every
+> release is tested against. The runtime uses only plain GDScript, so it also runs headless.
 
 ## Install
 

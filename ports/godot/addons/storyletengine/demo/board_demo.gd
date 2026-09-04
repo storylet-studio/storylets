@@ -117,8 +117,7 @@ func _on_bundle_pushed(build: String, data: String) -> void:
 	if not r["ok"]:
 		_append("! live link: " + str(r["error"]))   # bad JSON, another project: keep the run we have
 		return
-StoryletDebug.unregister_link(_link)
-		StoryletDebug.unregister(_engine)
+	StoryletDebug.unregister(_engine)   # the OLD engine leaves the panel; the link is unchanged and stays registered
 	_bundle = r["bundle"]
 	_engine = r["engine"]
 	_session = _engine.get_flow("main")

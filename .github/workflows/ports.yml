@@ -56,6 +56,22 @@ jobs:
           "$GODOT" --headless --path ports/godot --import
       # Each prints its own PASS/FAIL lines and exits non-zero on failure, so
       # they are separate steps: the log says which one went, not just that one did.
+      # Every script in the ADDON parses. The suites below run named scripts, so a
+      # file none of them touches can ship broken and only fail when a user opens
+      # their project, which is every script in it at once: board_demo.gd shipped
+      # with a statement at column 0 from 2026-08-29 until 0.4.1 found it this way.
+      - name: Every addon script parses
+        run: |
+          broken=0
+          for f in $(find ports/godot/addons/storyletengine -name '*.gd' | sort); do
+            rel="${f#ports/godot/}"
+            if "$GODOT" --headless --path ports/godot --check-only --script "res://$rel" 2>&1 \
+                 | grep -E 'Parse Error|SCRIPT ERROR'; then
+              echo "::error file=$f::$rel does not parse"
+              broken=$((broken+1))
+            fi
+          done
+          [ "$broken" -eq 0 ] || { echo "$broken addon script(s) do not parse"; exit 1; }
       - name: Conformance corpus
         run: |
           "$GODOT" --headless --path ports/godot --script res://test/test_corpus.gd

@@ -30,8 +30,8 @@ addons/storyletengine/
 Drop this `storyletengine/` folder into your project's `addons/` directory
 and enable the plugin in *Project > Project Settings > Plugins*. The runtime
 works with or without the editor plugin enabled; enabling it registers the
-`.storyletsc` importer so bundles become first-class assets. Requires
-Godot 4.x.
+`.storyletsc` importer so bundles become first-class assets. Needs Godot 4.7
+or newer, the version this addon declares and every release is tested on.
 
 ## Quickstart
 
