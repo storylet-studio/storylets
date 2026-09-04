@@ -11,8 +11,8 @@ the world both of them read. Nothing in either project knows about the other. Th
 naming convention your game follows, and a build-time check keeps it honest.
 
 **The Hamlet** is the worked example: seventeen cards, seventeen scenes, one save. It is playable
-[in your browser](/hamlet/), and the same game ships as source for JavaScript, Godot, Unity and
-Unreal on the [download page](/download/#the-hamlet-two-engines-in-one-game).
+in your browser and ships as source for JavaScript, Godot, Unity and Unreal, all from the
+[download page](/download/#the-hamlet-two-engines-in-one-game) once its first release is out.
 
 ## The convention
 

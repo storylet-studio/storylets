@@ -182,5 +182,5 @@ Open, reactive, ever-growing stories that still hang together. That is the appea
   rest of the documentation uses.
 - [Getting started](/getting-started/): install it and open a worked example.
 - [The Village](/village/): a complete storylet project, playable in your browser.
-- [The Hamlet](/hamlet/): the same idea with Patter performing the dialogue, two engines in one game.
+- [The Hamlet](/download/#the-hamlet-two-engines-in-one-game): the same idea with Patter performing the dialogue, two engines in one game.
 - [Why Storylet Studio](/why/): whether this is the right tool for what you are building.

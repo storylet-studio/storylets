@@ -143,10 +143,12 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, "/"); // for the engine ic
   // four zips (the JS client and the Godot, Unity and Unreal projects), so each
   // is offered by name rather than the first .zip found.
   function renderHamlet(root: HTMLElement, releases: Release[]): void {
+    // Gated on the release existing: no play button and no zips until hamlet-v* ships,
+    // because the site builds no /hamlet/ route until then (website/scripts/build-hamlet.mjs).
     const play = `<a class="pt-dl-btn" href="/hamlet/">Play it in your browser</a>`;
     const r = releases.find((x) => /^hamlet-v\d/.test(x.tag_name));
     if (!r) {
-      root.innerHTML = `${play}<p class="pt-dl-sub">The downloadable zips will appear here once the first release ships.</p>`;
+      root.innerHTML = `<p class="pt-dl-sub">Coming with its first release: the words are being written. The Village above is playable now.</p>`;
       return;
     }
     const ver = r.tag_name.replace(/^hamlet-v/, "");

@@ -23,6 +23,17 @@ import { fileURLToPath } from "node:url";
 
 const WEBSITE = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPO = dirname(WEBSITE);
+// THE GATE. The Hamlet's words are being written; until hamlet-v0.1.0 ships, the
+// site builds no /hamlet/ route. This is a deliberate, dated switch, printed
+// loudly on every build, not the quiet no-op the rule above forbids: flip it to
+// true in the same commit as the release. The download page's play button is
+// gated on its own, by the release existing.
+const HAMLET_RELEASED = false;
+if (!HAMLET_RELEASED) {
+  console.log("build-hamlet: GATED (HAMLET_RELEASED = false): no /hamlet/ route until hamlet-v0.1.0 ships.");
+  process.exit(0);
+}
+
 const CLIENT = join(REPO, "packages", "hamlet-client");
 const OUT = join(WEBSITE, "public", "hamlet");
 
