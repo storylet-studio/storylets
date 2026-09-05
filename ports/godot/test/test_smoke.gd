@@ -88,6 +88,7 @@ func _initialize() -> void:
 			{"x": 0, "y": 0}, {"x": 4, "y": 0}, {"x": 4, "y": 3}]}],
 		"backgrounds": [{"file": "assets/village/plan.png",
 			"x": 1, "y": 2, "width": 8, "height": 6, "opacity": 0.6}],
+		"sites": [{"hand": "the-forge", "x": 5, "y": 6}, {"hand": "the-well", "x": 7, "y": 8}],
 	}]
 	var mapped_loaded := StoryletBundle.load_from_dict(mapped)
 	_check("a bundle carrying a map still loads", mapped_loaded["ok"],
@@ -98,12 +99,18 @@ func _initialize() -> void:
 	if map_rows.size() == 1:
 		_check("the map keeps its box, group and counts",
 			str(map_rows[0]["box"]) == "village" and str(map_rows[0]["group"]) == "zone"
-			and int(map_rows[0]["zones"]) == 1 and int(map_rows[0]["backgrounds"]) == 1,
+			and int(map_rows[0]["zones"]) == 1 and int(map_rows[0]["backgrounds"]) == 1
+			and int(map_rows[0]["sites"]) == 2,
 			str(map_rows[0]))
 	# The geometry itself needs no accessor here: the parsed Dictionary IS the
 	# bundle, so a host reads it straight off.
 	_check("the geometry is readable by a host",
 		int(mapped["maps"][0]["zones"][0]["polygon"][2]["x"]) == 4)
+	# The placed hands (design/engine-server.md 4.3): a position is content in a
+	# physical experience, so it travels in the block with the rest.
+	_check("the placed hands are readable by a host",
+		str(mapped["maps"][0]["sites"][0]["hand"]) == "the-forge"
+		and int(mapped["maps"][0]["sites"][0]["x"]) == 5)
 	_check("an ordinary bundle reports no maps",
 		(described.get("maps", []) as Array).is_empty())
 	# Inert means inert: an engine over it still runs.

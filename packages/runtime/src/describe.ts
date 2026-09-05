@@ -18,7 +18,7 @@
 // template's declarations, exactly as the session's hand bags do).
 // ---------------------------------------------------------------------------
 
-import { effectiveGameId } from "@storylet-studio/model";
+import { effectiveGameId, isHoleRef } from "@storylet-studio/model";
 import type {
   Box, Bundle, Expression, Hand, PropertyDecl, PropertyType, ScalarValue,
 } from "@storylet-studio/model";
@@ -37,6 +37,14 @@ export interface BundleIdentity {
   metadata: string;
 }
 
+/** One hole this hand fills from a property rather than with a tag: the hand
+ *  MOVES when that property is written (design/engine-server.md 4.6). `group`
+ *  is the tag group's gameId, `from` the reference exactly as authored. */
+export interface MovableHole {
+  group: string;
+  from: string;
+}
+
 /** One hand: the deal() surface. `gameId` is the name deal() is called with. */
 export interface HandSummary {
   gameId: string;
@@ -48,6 +56,16 @@ export interface HandSummary {
   slots: number | "unbounded";
   /** The hand template's gameId; absent for a standalone (inline-rule) hand. */
   template?: string;
+  /**
+   * The holes filled from a property, in bundle order. Absent when the hand
+   * has none, which is the ordinary case.
+   *
+   * Reported because it is the one thing about a hand an integrator cannot see
+   * from its name: a movable hole means writing that property MOVES the hand,
+   * so it is the difference between a fixed kiosk and a performer who walks
+   * about. `setProperty` is the whole verb; there is no other.
+   */
+  movable?: MovableHole[];
 }
 
 /** One tag group and its tags, by gameId: the peek() criteria surface (a
@@ -63,6 +81,17 @@ export interface BoxSummary {
   title?: string;
   /** The only per-box ranking policy (Reboot 2.2). */
   ranking: { specificity: boolean };
+  /** Present on a TIMED box (design/engine-server.md 4.8): how long one of
+   *  its turns lasts. An integrator reading a bundle needs it to know which
+   *  boxes their host must tick, and how often. Absent is the ordinary box. */
+  turn?: { seconds: number };
+  /** How many cards in this box are DURABLE (design/engine-server.md 4.2):
+   *  their `redraw: "never"` spend outlives the run, and a server has to lift
+   *  and restore it. A count rather than a list, like every other number here:
+   *  an integrator needs to know whether this box has any such cards at all,
+   *  and which ones is the authoring tool's question. Absent when there are
+   *  none, which is the ordinary bundle. */
+  durableCards?: number;
   tagGroups: TagGroupSummary[];
   counts: {
     decks: number;
@@ -80,6 +109,11 @@ export interface PropertySummary {
   default: ScalarValue;
   /** Enum / flags options, where declared. */
   values?: string[];
+  /** Declared DURABLE (design/engine-server.md 4.2): the value survives a run,
+   *  and a server lifts and restores it across one. The engine never reads it;
+   *  it is reported because it is the difference between a value an integrator
+   *  may reset and one somebody is going to expect back. Absent = run-scoped. */
+  durable?: true;
   purpose?: string;
 }
 
@@ -113,6 +147,9 @@ export interface MapSummary {
   group: string;
   zones: number;
   backgrounds: number;
+  /** Placed hands standing on this map (design/engine-server.md 4.3): where the
+   *  kiosks are, in a bundle that carries geometry at all. */
+  sites: number;
 }
 
 /** What a bundle offers a host, read from the asset alone. */
@@ -145,8 +182,15 @@ const summarise = (decls: PropertyDecl[]): PropertySummary[] =>
     type: d.type,
     default: d.default,
     ...(d.values !== undefined ? { values: d.values } : {}),
+    ...(d.durable === true ? { durable: true as const } : {}),
     ...(d.purpose !== undefined ? { purpose: d.purpose } : {}),
   }));
+
+/** How many cards in a box are durable: the card's own flag, else its deck's
+ *  (design/engine-server.md 4.2, the same inheritance `shared` has). */
+const durableCardCount = (box: Box<Expression>): number =>
+  box.decks.reduce((n, deck) =>
+    n + deck.cards.filter((card) => (card.durable ?? deck.durable) === true).length, 0);
 
 /** A hand's declared @hand state: a template instance inherits its template's
  *  declarations, a standalone hand declares its own (schema 2.6) - the same
@@ -156,6 +200,22 @@ const handDecls = (hand: Hand<Expression>, box: Box<Expression>): PropertyDecl[]
     return box.handTemplates.find((t) => t.id === hand.template)?.properties ?? [];
   }
   return hand.properties ?? [];
+};
+
+/** The hand's movable holes, in the bundle's own key order: every `chosen` /
+ *  rule-binding value that is a property reference rather than a tag (4.6).
+ *  A group id the bundle does not carry is skipped rather than reported under
+ *  its raw id: the description speaks gameIds throughout. */
+const movableHoles = (hand: Hand<Expression>, box: Box<Expression>): MovableHole[] => {
+  const filled = hand.template !== undefined ? hand.chosen : hand.rule?.bindings;
+  const out: MovableHole[] = [];
+  for (const [groupId, value] of Object.entries(filled ?? {})) {
+    if (!isHoleRef(value)) continue;
+    const group = box.tagGroups.find((g) => g.id === groupId);
+    if (group === undefined) continue;
+    out.push({ group: effectiveGameId(group), from: value });
+  }
+  return out;
 };
 
 /** The effective slot cap, resolved the way the session resolves capacity. */
@@ -186,6 +246,8 @@ export function describeBundle(bundle: Bundle): BundleDescription {
       gameId: boxGameId,
       ...(box.title !== undefined ? { title: box.title } : {}),
       ranking: { specificity: box.ranking.specificity },
+      ...(box.turn !== undefined ? { turn: { seconds: box.turn.seconds } } : {}),
+      ...(durableCardCount(box) > 0 ? { durableCards: durableCardCount(box) } : {}),
       tagGroups: box.tagGroups.map((group) => ({
         gameId: effectiveGameId(group),
         tags: group.tags.map((tag) => effectiveGameId(tag)),
@@ -209,12 +271,14 @@ export function describeBundle(bundle: Bundle): BundleDescription {
       const template = hand.template !== undefined
         ? box.handTemplates.find((t) => t.id === hand.template)
         : undefined;
+      const movable = movableHoles(hand, box);
       hands.push({
         gameId: effectiveGameId(hand),
         ...(hand.title !== undefined ? { title: hand.title } : {}),
         box: boxGameId,
         slots: handSlots(hand, box),
         ...(template !== undefined ? { template: effectiveGameId(template) } : {}),
+        ...(movable.length > 0 ? { movable } : {}),
       });
     }
 
@@ -254,6 +318,7 @@ export function describeBundle(bundle: Bundle): BundleDescription {
       group: map.group,
       zones: map.zones.length,
       backgrounds: map.backgrounds?.length ?? 0,
+      sites: map.sites?.length ?? 0,
     })),
   };
 }

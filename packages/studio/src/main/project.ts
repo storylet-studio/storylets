@@ -6,17 +6,18 @@
 // ---------------------------------------------------------------------------
 
 import { basename, dirname, join } from "node:path";
-import { loadProject, runExport, runInit, runValidate } from "@storylet-studio/ops";
+import { contractNotes, loadProject, runExport, runInit, runValidate } from "@storylet-studio/ops";
 import { mkdirSync } from "node:fs";
 import type { LoadedProject } from "@storylet-studio/ops";
 import { writeBinaryFile, writeTextFiles as vcWrite } from "@wildwinter/simple-vc-lib";
-import { compileProject, projectHash } from "@storylet-studio/compiler";
+import { compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder } from "@storylet-studio/compiler";
 import { writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { SHARD_EXTENSIONS, effectiveGameId, isSpatial, openThreadCounts, PLACE_GROUP } from "@storylet-studio/model";
-import type { Bundle, Card, CoverageDriver, HandTemplate } from "@storylet-studio/model";
+import type { Bundle, Card, CoverageDriver, HandTemplate, PlayRung, PropertyDecl } from "@storylet-studio/model";
 import type { SourceBox } from "@storylet-studio/compiler";
 import type {
-  BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectSettingsDto, ShardVcDto, VcStatusDto,
+  BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectSettingsDto,
+  PropertyDeclDto, ShardVcDto, VcStatusDto,
 } from "../shared/api.js";
 import { History } from "./history.js";
 import { resetShardStatus, shardStatus } from "./vc.js";
@@ -53,12 +54,17 @@ const chipValues = (
 
 const blank = (src: string | undefined): boolean => src === undefined || src.trim() === "";
 
-const declDto = (d: { name: string; type: string; default?: unknown; values?: string[]; stages?: string[]; writable?: boolean; purpose?: string }): { name: string; type: string; default: string; values?: string[]; stages?: string[]; writable?: boolean; purpose?: string } => ({
+// `shared` and `durable` ride along even where no list draws a switch for them
+// (design/flows.md and engine-server.md 4.2): a declaration list saves whole, so
+// a flag the DTO drops is a flag the next save deletes from the shard.
+const declDto = (d: PropertyDecl): PropertyDeclDto => ({
   name: d.name, type: d.type,
   default: d.default === undefined ? "" : typeof d.default === "string" ? d.default : JSON.stringify(d.default),
   ...(d.values !== undefined ? { values: d.values } : {}),
   ...(d.stages !== undefined ? { stages: d.stages } : {}),
   ...(d.writable !== undefined ? { writable: d.writable } : {}),
+  ...(d.shared !== undefined ? { shared: d.shared } : {}),
+  ...(d.durable !== undefined ? { durable: d.durable } : {}),
   ...(d.purpose !== undefined ? { purpose: d.purpose } : {}),
 });
 
@@ -82,6 +88,7 @@ const cardDto = (box: SourceBox, card: Card<string>): CardDto => ({
   copies: card.copies === undefined || card.copies === 1 ? "" : String(card.copies),
   ...(card.shared !== undefined ? { shared: card.shared } : {}),
   sharedCopies: card.sharedCopies === undefined ? "" : String(card.sharedCopies),
+  ...(card.durable !== undefined ? { durable: card.durable } : {}),
   // The deck's own flag, so the card page can say what inheriting means here
   // rather than making an author open the deck to find out.
   fields: Object.entries(card.fields ?? {}).map(([name, value]) => ({ name, value: typeof value === "string" ? value : JSON.stringify(value) })),
@@ -129,10 +136,21 @@ const templateDto = (box: SourceBox, template: HandTemplate<string>): BoxDto["te
 
 export function toDto(loaded: LoadedProject): ProjectDto {
   const source = loaded.source!;
+  // What each venue depends on (design/engine-server.md 4.11), derived ONCE for
+  // the whole project rather than per box: it is one walk of a handful of
+  // contracts, and most projects have none at all.
+  const venues = contractNotes(source);
+  const noted = (key: string): string[] | undefined => {
+    const lines = venues.get(key);
+    return lines === undefined ? undefined : lines.map((n) => n.line);
+  };
   return {
     dir: loaded.dir,
     name: source.project.project.name,
     storyPropertyCount: (source.project.story?.properties ?? []).length,
+    // The play ladder's rung (design/engine-server.md 4.10): every surface in
+    // the window asks play-ladder.ts, and this is what seeds it.
+    play: playRungOf(source.project.settings),
     // Every box's note counts in one map. Cheap (a count per noted id, and most
     // projects note a handful of things) and it saves the editor asking main
     // about each row it draws.
@@ -147,6 +165,9 @@ export function toDto(loaded: LoadedProject): ProjectDto {
       ...(box.box.box.title !== undefined ? { title: box.box.box.title } : {}),
       ...(box.box.box.purpose !== undefined ? { purpose: box.box.box.purpose } : {}),
       ranking: { specificity: box.box.box.ranking?.specificity ?? true },
+      ...(noted(`box:${effectiveGameId(box.box.box)}`) !== undefined
+        ? { contract: noted(`box:${effectiveGameId(box.box.box)}`)! } : {}),
+      ...(box.box.box.turn !== undefined ? { turn: { seconds: box.box.box.turn.seconds } } : {}),
       fields: (box.box.box.fields ?? []).map(declDto),
       properties: (box.box.box.properties ?? []).map(declDto),
       decks: box.decks
@@ -160,6 +181,7 @@ export function toDto(loaded: LoadedProject): ProjectDto {
         ...(d.shard.deck.purpose !== undefined ? { purpose: d.shard.deck.purpose } : {}),
         ...(!blank(d.shard.deck.condition) ? { gate: d.shard.deck.condition } : {}),
         ...(d.shard.deck.shared !== undefined ? { shared: d.shard.deck.shared } : {}),
+        ...(d.shard.deck.durable !== undefined ? { durable: d.shard.deck.durable } : {}),
         properties: (d.shard.deck.properties ?? []).map(declDto),
         // Display order: the authored `order` field, id position as the fallback
         // (storage is id-sorted). A stable sort keeps ties in id order.
@@ -312,13 +334,22 @@ export function projectSettings(session: ProjectSession): ProjectSettingsDto {
     metadata: p.export.metadata,
     exportMap: p.export.map === true,
     playAdvancesTurns: p.settings.playAdvancesTurns,
+    play: playRungOf(p.settings),
+    // What sits above each of the two lower rungs, counted by the compiler's
+    // own check so the dialog's refusal and the validate warning can never
+    // disagree. Computed on open rather than on change: the dialog holds a
+    // whole DTO and saves whole, and nothing it edits moves these counts.
+    ladder: {
+      solo: summariseLadder(contentAboveRung(session.loaded.source!, "solo")),
+      shared: summariseLadder(contentAboveRung(session.loaded.source!, "shared")),
+    },
     warnUnreadWrites: p.validation?.warnUnreadWrites === true,
   };
 }
 
 /** Compile the freshly re-read project to a bundle for the Board (files are
  *  the truth: the live session reflects the latest saved state). */
-export function compileBundle(session: ProjectSession): { bundle: Bundle; name: string } | { error: string } {
+export function compileBundle(session: ProjectSession): { bundle: Bundle; name: string; play: PlayRung } | { error: string } {
   const loaded = loadProject(session.loaded.dir);
   if (!loaded.source) {
     return { error: loaded.issues.map((i) => i.message).join("; ") || "not a storylets project" };
@@ -328,7 +359,10 @@ export function compileBundle(session: ProjectSession): { bundle: Bundle; name: 
     const errors = issues.filter((i) => i.severity === "error").map((i) => `${i.where ? `${i.where}: ` : ""}${i.message}`);
     return { error: `the project does not compile:\n${errors.join("\n")}` };
   }
-  return { bundle, name: loaded.source.project.project.name };
+  // The rung comes WITH the bundle rather than in it: the Board is a window of
+  // its own and needs it to know whether to offer New run (4.2), and the
+  // setting is authoring shape that the bundle deliberately does not carry.
+  return { bundle, name: loaded.source.project.project.name, play: playRungOf(loaded.source.project.settings) };
 }
 
 /** The current source content hash (freshly re-read from disk), or null if the

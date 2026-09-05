@@ -321,6 +321,158 @@ static std::string mapped(const std::unordered_map<std::string, std::string>& na
     return it != names.end() ? it->second : id;
 }
 
+// -- the load report (design/engine-server.md 4.9) ----------------------------------
+//
+// A report's lists are compared as SORTED lists of canonical strings, not as
+// structs: field order is not a contract, and four runtimes have four idioms for
+// one of these entries. An absent flow (the shared half) canonicalises to the
+// empty string, which is why the separator is a character no id, gameId or
+// property name can hold.
+
+static const char* const kFieldSep = "\x1f";
+
+static std::string joinFields(const std::vector<std::string>& parts)
+{
+    std::string out;
+    for (size_t i = 0; i < parts.size(); ++i)
+    {
+        if (i) out += kFieldSep;
+        out += parts[i];
+    }
+    return out;
+}
+
+static std::string showList(std::vector<std::string> list)
+{
+    std::string out = "[";
+    for (size_t i = 0; i < list.size(); ++i)
+    {
+        if (i) out += ",";
+        out += "\"" + list[i] + "\"";
+    }
+    return out + "]";
+}
+
+static std::string showSorted(std::vector<std::string> list)
+{
+    std::sort(list.begin(), list.end());
+    return showList(std::move(list));
+}
+
+/** The keys named by an expectReport array of objects, sorted. */
+static std::string wantKeys(const JsonValue& array, const std::vector<std::string>& fields)
+{
+    std::vector<std::string> keys;
+    for (const auto& entry : array.arr)
+    {
+        std::vector<std::string> parts;
+        for (const auto& f : fields) parts.push_back(entry.strOr(f));
+        keys.push_back(joinFields(parts));
+    }
+    return showSorted(std::move(keys));
+}
+
+static std::string evictionKeys(const std::vector<LoadEviction>& list)
+{
+    std::vector<std::string> keys;
+    for (const auto& e : list) keys.push_back(joinFields({e.flow, e.hand, e.card, e.reason}));
+    return showSorted(std::move(keys));
+}
+
+static std::string cooldownKeys(const std::vector<LoadCooldown>& list)
+{
+    std::vector<std::string> keys;
+    for (const auto& x : list) keys.push_back(joinFields({x.flow, x.card}));
+    return showSorted(std::move(keys));
+}
+
+static std::string propertyKeys(const std::vector<LoadProperty>& list)
+{
+    std::vector<std::string> keys;
+    for (const auto& p : list) keys.push_back(joinFields({p.flow, p.path}));
+    return showSorted(std::move(keys));
+}
+
+/** The whole report as one comparable string, for "did the preview predict the
+ *  restore". */
+static std::string reportShape(const LoadReport& r)
+{
+    return std::string(r.exact ? "exact" : "inexact") + " " + r.project + " "
+        + r.version.saved + " " + r.version.bundle + " " + r.hash.saved + " " + r.hash.bundle + " "
+        + showList(r.flows) + " " + evictionKeys(r.evicted) + " " + cooldownKeys(r.droppedCooldowns)
+        + " " + showList(r.droppedSpent) + " " + propertyKeys(r.droppedProperties)
+        + " " + propertyKeys(r.defaultedProperties) + " " + propertyKeys(r.retypedProperties);
+}
+
+/** Check the fields expectReport names, and only those. */
+static void checkReport(const std::string& at, const JsonValue* expected, const LoadReport& actual,
+    std::vector<std::string>& failures)
+{
+    if (!expected || !expected->isObject()) return;
+    auto cmp = [&](const std::string& field, const std::string& want, const std::string& got)
+    {
+        if (want != got) failures.push_back(at + ": report." + field + " expected " + want + ", got " + got);
+    };
+    if (const JsonValue* v = expected->find("exact"))
+    {
+        cmp("exact", v->b ? "true" : "false", actual.exact ? "true" : "false");
+    }
+    if (const JsonValue* v = expected->find("project")) cmp("project", v->str, actual.project);
+    if (const JsonValue* v = expected->find("version"))
+    {
+        cmp("version.saved", v->strOr("saved"), actual.version.saved);
+        cmp("version.bundle", v->strOr("bundle"), actual.version.bundle);
+    }
+    if (const JsonValue* v = expected->find("hash"))
+    {
+        cmp("hash.saved", v->strOr("saved"), actual.hash.saved);
+        cmp("hash.bundle", v->strOr("bundle"), actual.hash.bundle);
+    }
+    if (const JsonValue* v = expected->find("flows"))
+    {
+        std::vector<std::string> want;
+        for (const auto& x : v->arr) want.push_back(x.str);
+        cmp("flows", showList(want), showList(actual.flows));
+    }
+    if (const JsonValue* v = expected->find("evicted"))
+    {
+        cmp("evicted", wantKeys(*v, {"flow", "hand", "card", "reason"}), evictionKeys(actual.evicted));
+    }
+    if (const JsonValue* v = expected->find("droppedCooldowns"))
+    {
+        cmp("droppedCooldowns", wantKeys(*v, {"flow", "card"}), cooldownKeys(actual.droppedCooldowns));
+    }
+    if (const JsonValue* v = expected->find("droppedSpent"))
+    {
+        std::vector<std::string> want;
+        for (const auto& x : v->arr) want.push_back(x.str);
+        cmp("droppedSpent", showSorted(std::move(want)), showSorted(actual.droppedSpent));
+    }
+    const std::pair<const char*, const std::vector<LoadProperty>*> propFields[] = {
+        {"droppedProperties", &actual.droppedProperties},
+        {"defaultedProperties", &actual.defaultedProperties},
+        {"retypedProperties", &actual.retypedProperties},
+    };
+    for (const auto& field : propFields)
+    {
+        if (const JsonValue* v = expected->find(field.first))
+        {
+            cmp(field.first, wantKeys(*v, {"flow", "path"}), propertyKeys(*field.second));
+        }
+    }
+}
+
+/** Ops that run ON a flow, and so open one lazily. The rest - engine reads, flow
+ *  management, save/load - must NOT, or a harness quietly opens "main" where the
+ *  JS reference does not and assertFlows answers differently for no engine
+ *  reason. */
+static bool needsFlow(const std::string& kind)
+{
+    return kind == "setState" || kind == "peek" || kind == "deal" || kind == "assertBoard"
+        || kind == "play" || kind == "advanceTurns" || kind == "assertOutcomes"
+        || kind == "assertOutcomeOrder" || kind == "assertState";
+}
+
 /** Execute the ops in order; every expect must match exactly, expectError ops
  *  must fail without side effects. */
 static std::vector<std::string> runScriptedCase(const JsonValue& c)
@@ -344,6 +496,25 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
     // fires one event per hand, so the sink accumulates across them;
     // subscribing is also what switches tracing on.
     std::unordered_map<std::string, std::string> verdicts;
+    // What the ask SAID, as opposed to what it dealt. A hole filled from a
+    // property that names no tag deals a wildcard hand (4.6), which is
+    // indistinguishable on a board read from a hole that was never movable:
+    // the diagnostic is the only place the difference lives.
+    std::vector<std::string> diagnostics;
+    // Parked flow blobs, by the name they were parked under. Held OUTSIDE the
+    // engine on purpose: a park survives a content swap, which is the case that
+    // makes a resume interesting.
+    std::unordered_map<std::string, FlowSave> parked;
+    auto watch = [&verdicts, &diagnostics](const FlowPtr& f) -> FlowPtr
+    {
+        f->subscribeTrace([&verdicts, &diagnostics](const TraceEvent& e)
+        {
+            if (e.kind == TraceEvent::Kind::Diagnostic) { diagnostics.push_back(e.message); return; }
+            if (e.kind != TraceEvent::Kind::Deal && e.kind != TraceEvent::Kind::Peek) return;
+            for (const auto& card : e.cards) verdicts[card.id] = VerdictWire(card.verdict);
+        });
+        return f;
+    };
     auto flowOf = [&](const JsonValue& op) -> Flow&
     {
         std::string flowName = op.strOr("flow");
@@ -351,12 +522,7 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
         auto it = handles.find(flowName);
         if (it == handles.end())
         {
-            it = handles.emplace(flowName, engine->openFlow(flowName)).first;
-            it->second->subscribeTrace([&verdicts](const TraceEvent& e)
-            {
-                if (e.kind != TraceEvent::Kind::Deal && e.kind != TraceEvent::Kind::Peek) return;
-                for (const auto& card : e.cards) verdicts[card.id] = VerdictWire(card.verdict);
-            });
+            it = handles.emplace(flowName, watch(engine->openFlow(flowName))).first;
         }
         return *it->second;
     };
@@ -376,6 +542,20 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             }
         }
     };
+    auto checkDiagnostic = [&](const std::string& at, const JsonValue& op)
+    {
+        const JsonValue* expected = op.find("expectDiagnostic");
+        if (!expected || !expected->isString()) return;
+        const std::string want = expected->str;
+        for (const std::string& said : diagnostics)
+        {
+            if (said.find(want) != std::string::npos) return;
+        }
+        std::string got;
+        for (const std::string& said : diagnostics) got += (got.empty() ? "" : ", ") + said;
+        failures.push_back(at + ": expected a diagnostic containing \"" + want
+            + "\", got " + (got.empty() ? "none" : got));
+    };
     std::unordered_map<std::string, std::string> names = handGameIds(*bundle);
 
     const JsonValue& script = c.at("script");
@@ -384,8 +564,7 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
         const JsonValue& op = script.arr[index];
         std::string kind = op.strOr("op");
         std::string at = "op " + std::to_string(index) + " (" + kind + ")";
-        Flow& sessionRef = flowOf(op);
-        Flow* session = &sessionRef;
+        Flow* session = needsFlow(kind) ? &flowOf(op) : nullptr;
         if (kind == "setState")
         {
             applyState(*session, op);
@@ -395,6 +574,7 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             std::vector<std::string> actual;
             std::optional<std::string> peekError;
             verdicts.clear();
+            diagnostics.clear();
             try
             {
                 RankedList list = session->peek(op.strOr("box", "box"), criteriaOf(op), peekCap(op));
@@ -430,8 +610,10 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             std::optional<std::vector<std::string>> handRefs;
             if (hands && hands->isArray()) handRefs = stringList(*hands);
             verdicts.clear();
+            diagnostics.clear();
             OrderedMap<std::string, std::vector<DealtCard>> dealt = session->dealMany(handRefs);
             checkVerdicts(at, op);
+            checkDiagnostic(at, op);
             const JsonValue* expectBoard = op.find("expectBoard");
             if (expectBoard && expectBoard->isObject())
             {
@@ -677,10 +859,89 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             // re-taken.
             SaveEnvelope envelope = engine->saveGame();
             BundlePtr into = op.strOr("into") == "B" ? bundleB : bundle;
-            engine = std::make_unique<Engine>(into, opts);
-            engine->loadGame(envelope);
-            handles.clear();
-            for (const FlowPtr& f : engine->flows()) handles[f->id()] = f;
+            auto target = std::make_unique<Engine>(into, opts);
+            const JsonValue* previewOnly = op.find("previewOnly");
+            if (previewOnly && previewOnly->b)
+            {
+                // The purity claim, checked rather than asserted: the engine
+                // that was asked what a load would cost writes the same envelope
+                // after the question as before it. The LIVE engine is not
+                // replaced, so the ops after this one prove the load did not
+                // happen.
+                const std::string before = serializeState(*target);
+                const LoadReport previewReport = target->previewLoad(envelope);
+                if (serializeState(*target) != before)
+                {
+                    failures.push_back(at + ": previewLoad changed the engine it was asked about");
+                }
+                checkReport(at, op.find("expectReport"), previewReport, failures);
+            }
+            else
+            {
+                engine = std::move(target);
+                checkReport(at, op.find("expectReport"), engine->loadGame(envelope), failures);
+                handles.clear();
+                for (const FlowPtr& f : engine->flows()) handles[f->id()] = f;
+            }
+        }
+        else if (kind == "parkFlow")
+        {
+            // Park: take the blob, then close. Closing is what releases the
+            // shared claims, which is the whole reason a visit parks rather than
+            // idling.
+            const std::string name = op.strOr("flow");
+            // Through the STRING boundary, because that is the only door
+            // Blueprint has (UStoryletEngine::SaveFlowToJson /
+            // OpenFlowFromJson) and nothing else would ever exercise it: a
+            // writer nothing runs is a writer that breaks. The blob that lands
+            // in `parked` is the one that survived the round trip, so a
+            // divergence shows up as a failing case rather than a UE-only bug.
+            parked[name] = deserializeFlow(serializeFlow(engine->saveFlow(name)));
+            engine->closeFlow(name);
+        }
+        else if (kind == "resumeFlow")
+        {
+            const std::string name = op.strOr("flow");
+            auto found = parked.find(name);
+            if (found == parked.end())
+            {
+                failures.push_back(at + ": nothing is parked under \"" + name + "\"");
+            }
+            else
+            {
+                // Ask before doing, then require the two answers to agree: a
+                // preview that does not predict the restore is worse than no
+                // preview.
+                const LoadReport preview = engine->previewFlowRestore(name, found->second);
+                bool reported = false;
+                LoadReport applied;
+                OpenFlowOptions resumeOpts;
+                resumeOpts.restore = found->second;
+                resumeOpts.onRestoreReport = [&applied, &reported](const LoadReport& r)
+                {
+                    applied = r;
+                    reported = true;
+                };
+                if (const JsonValue* seedJson = op.find("seed")) resumeOpts.seed = seedJson->num;
+                handles[name] = watch(engine->openFlow(name, resumeOpts));
+                if (!reported)
+                {
+                    failures.push_back(at + ": the restore produced no report");
+                }
+                else if (reportShape(preview) != reportShape(applied))
+                {
+                    failures.push_back(at + ": previewFlowRestore said " + reportShape(preview)
+                        + ", the restore did " + reportShape(applied));
+                }
+                checkReport(at, op.find("expectReport"), reported ? applied : preview, failures);
+                // The report's string face (the Unreal wrapper's boundary) is
+                // only reachable from Blueprint, so it is exercised here rather
+                // than nowhere: a writer nothing runs is a writer that breaks.
+                if (storylets::reportToJson(preview).empty())
+                {
+                    failures.push_back(at + ": reportToJson wrote nothing");
+                }
+            }
         }
         else if (kind == "reset")
         {
@@ -946,7 +1207,9 @@ static int runDescribeMaps()
             "zones": [{ "tag": "tavern", "polygon": [
                 { "x": 0, "y": 0 }, { "x": 4, "y": 0 }, { "x": 4, "y": 3 }] }],
             "backgrounds": [{ "file": "assets/village/plan.png",
-                "x": 1, "y": 2, "width": 8, "height": 6, "opacity": 0.6 }]
+                "x": 1, "y": 2, "width": 8, "height": 6, "opacity": 0.6 }],
+            "sites": [{ "hand": "the-forge", "x": 5, "y": 6 },
+                { "hand": "the-well", "x": 7, "y": 8 }]
         }]
     })";
     try
@@ -962,9 +1225,17 @@ static int runDescribeMaps()
         if (map.zones[0].polygon[2].x != 4 || map.zones[0].polygon[2].y != 3) { fail("describe", "maps", "a point moved"); return 0; }
         if (map.backgrounds.size() != 1 || map.backgrounds[0].file != "assets/village/plan.png") { fail("describe", "maps", "the picture lost its path"); return 0; }
         if (map.backgrounds[0].opacity != 0.6) { fail("describe", "maps", "opacity lost"); return 0; }
+        // The placed hands (design/engine-server.md 4.3): a position is content
+        // in a physical experience, so it travels in the block like the rest.
+        if (map.sites.size() != 2) { fail("describe", "maps", "the sites did not parse"); return 0; }
+        if (map.sites[0].hand != "the-forge" || map.sites[0].x != 5 || map.sites[0].y != 6)
+        {
+            fail("describe", "maps", "a site moved");
+            return 0;
+        }
 
         BundleDescription d = describeBundle(*bundle);
-        if (d.maps.size() != 1 || d.maps[0].zones != 1 || d.maps[0].backgrounds != 1)
+        if (d.maps.size() != 1 || d.maps[0].zones != 1 || d.maps[0].backgrounds != 1 || d.maps[0].sites != 2)
         {
             fail("describe", "maps", "the description does not report the map");
             return 0;

@@ -75,10 +75,11 @@ import { storyletsDialect, NEVER_PLAYED } from "@storylet-studio/dialect";
 const tagKey = (groupId: string, tagId: string): string => `${groupId}\u001f${tagId}`;
 
 import type { StoryletsHost } from "@storylet-studio/dialect";
-import { PLACE_GROUP, effectiveGameId } from "@storylet-studio/model";
+import { PLACE_GROUP, effectiveGameId, isHoleRef, parseHoleRef } from "@storylet-studio/model";
 import type {
-  Box, Bundle, Card, Deck, Expression, FlowSave, Hand, HandTemplate,
-  PlayRecord, PropertyBag, PropertyDecl, PropsPartition, SaveEnvelope, Tag, TagGroup,
+  Box, Bundle, BundleContent, Card, Deck, Expression, FlowSave, Hand, HandTemplate,
+  LoadEviction, LoadProperty, LoadReport, PlayRecord, PropertyBag, PropertyDecl, PropsPartition,
+  SaveEnvelope, Tag, TagGroup,
 } from "@storylet-studio/model";
 import { PropertyBag as StateBag } from "@wildwinter/scoperegistry";
 import type { PropertyRow } from "@wildwinter/scoperegistry";
@@ -118,6 +119,25 @@ export interface EngineOptions {
 export interface OpenFlowOptions {
   /** Seed for this flow's PRNG (defaults to the engine's `seed`). */
   seed?: number;
+  /**
+   * Open this flow AS IT WAS: a blob from `saveFlow`, applied to the freshly
+   * opened (or replaced) flow before the handle comes back
+   * (design/engine-server.md 4.1).
+   *
+   * An option on `openFlow` rather than a `Flow.restore` verb on purpose:
+   * restoring INTO a running flow is the trap hosts keep falling into
+   * (openFlow REPLACES), and "open this flow as it was" is one act. Drift is
+   * tolerated exactly as `loadGame` tolerates it, with one addition, because
+   * this restore lands in a LIVE engine: a shared card whose world copies are
+   * all held by the OTHER open flows is not put back, and is reported as
+   * `claimed-elsewhere`. Ask `previewFlowRestore` first to see that coming.
+   */
+  restore?: FlowSave;
+  /** Handed the `restore`'s LoadReport as it happens - the same report
+   *  `previewFlowRestore` returns for the same blob. Ignored without
+   *  `restore`; the report has nowhere else to go, since `openFlow` returns
+   *  the handle. */
+  onRestoreReport?: (report: LoadReport) => void;
 }
 
 /** A card view in a dealt hand or a peeked list. Carries NO outcome
@@ -147,7 +167,8 @@ export interface RankedList {
 }
 
 export interface PlayOptions {
-  /** Turn advance override; default settings.playAdvancesTurns. */
+  /** Turn advance override; default settings.playAdvancesTurns, or 0 when the
+   *  card's box is timed (design/engine-server.md 4.8). */
   advanceTurns?: number;
 }
 
@@ -326,6 +347,17 @@ const sharedHalf = (scope: FlaggedScope, decls: PropertyDecl[]): PropertyDecl[] 
 const flowHalf = (scope: FlaggedScope, decls: PropertyDecl[]): PropertyDecl[] =>
   decls.filter((d) => !isShared(scope, d));
 
+/** One side's five declaration lists, keyed by owner id where the scope has
+ *  owners. The bags are built from these; so is the load report's answer to
+ *  "what does this build declare that the save does not carry". */
+interface DeclSet {
+  story: PropertyDecl[];
+  box: Map<string, PropertyDecl[]>;
+  deck: Map<string, PropertyDecl[]>;
+  hand: Map<string, PropertyDecl[]>;
+  value: Map<string, PropertyDecl[]>;
+}
+
 /** One side's five stores (shared on the engine, per-flow on each flow). */
 interface Partition {
   story: StateBag;
@@ -371,7 +403,12 @@ interface Internals {
   hasShared: boolean;
   /** The per-flow halves of every declaration list, precomputed once: each
    *  new flow builds its bags from these. */
-  flowDecls: { story: PropertyDecl[]; box: Map<string, PropertyDecl[]>; deck: Map<string, PropertyDecl[]>; hand: Map<string, PropertyDecl[]>; value: Map<string, PropertyDecl[]> };
+  flowDecls: DeclSet;
+  /** The shared halves, the same way. Not used to build anything - the shared
+   *  bags are built straight from the bundle - but a load report has to say
+   *  what the shared side WOULD hold without building a bag, which is what
+   *  makes previewLoad pure. */
+  sharedDecls: DeclSet;
   /** The shared stores. Reassigned wholesale by loadGame/reset. */
   shared: Partition;
   /** @world: the host's resolver, or the self-backed bag's. */
@@ -434,6 +471,141 @@ const loadPartition = (p: Partition, values: PropsPartition | undefined): void =
   }
 };
 
+// --- the load report (design/engine-server.md 4.9) ---------------------------
+//
+// One walk, two entry points. `previewLoad` runs it and returns the report;
+// `loadGame` runs it, returns the same report and then applies the CLEANED
+// blob the walk produced. Two implementations of "what does this save cost"
+// would drift the first time one of them was fixed, so there is one, and the
+// apply half consumes its output rather than repeating its decisions.
+
+/** The report under construction: unsorted, until finishReport orders it. */
+interface ReportDraft {
+  evicted: LoadEviction[];
+  droppedCooldowns: { flow: string; card: string }[];
+  droppedSpent: string[];
+  droppedProperties: LoadProperty[];
+  defaultedProperties: LoadProperty[];
+  retypedProperties: LoadProperty[];
+}
+
+const emptyDraft = (): ReportDraft => ({
+  evicted: [], droppedCooldowns: [], droppedSpent: [],
+  droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+});
+
+/** The sort key separator: a UNIT SEPARATOR, as the play-history indexes use,
+ *  because it cannot occur in an id, a gameId or a property name. */
+const SORT_SEP = "\u001f";
+
+const byKey = <T>(items: T[], key: (item: T) => string): T[] =>
+  [...items].map((item) => ({ item, k: key(item) }))
+    .sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0))
+    .map((e) => e.item);
+
+const propKey = (p: LoadProperty): string => `${p.flow ?? ""}${SORT_SEP}${p.path}`;
+
+/**
+ * Does a saved value still fit its declaration?
+ *
+ * The type first, then the declaration's own vocabulary: an enum value or a
+ * quality stage the edit struck out is still a string of the right type and
+ * still no longer a legal value, and a condition comparing against the ladder
+ * would answer nonsense about it. A declaration with no vocabulary (`values` /
+ * `stages` absent) constrains nothing, so anything of the right type fits.
+ */
+function valueFits(decl: PropertyDecl, value: ScalarValue): boolean {
+  switch (decl.type) {
+    case "boolean": return typeof value === "boolean";
+    case "number": return typeof value === "number";
+    case "string": return typeof value === "string";
+    case "enum":
+      return typeof value === "string" && (decl.values === undefined || decl.values.includes(value));
+    case "quality":
+      return typeof value === "string" && (decl.stages === undefined || decl.stages.includes(value));
+    case "flags":
+      return Array.isArray(value) && (decl.values === undefined || value.every((f) => decl.values!.includes(f)));
+    default: return true;
+  }
+}
+
+/** Walk one bag's worth of saved values against one bag's worth of
+ *  declarations: report the orphans, the newcomers and the misfits, and
+ *  return the values that survive. */
+function walkScope(
+  decls: PropertyDecl[] | undefined,
+  saved: PropertyBag | undefined,
+  path: (name: string) => string,
+  flow: string | undefined,
+  draft: ReportDraft,
+): PropertyBag {
+  const at = (name: string): LoadProperty =>
+    ({ ...(flow !== undefined ? { flow } : {}), path: path(name) });
+  const byName = new Map((decls ?? []).map((d) => [d.name, d]));
+  const values = saved ?? {};
+  const clean: PropertyBag = {};
+  for (const [name, value] of Object.entries(values)) {
+    const decl = byName.get(name);
+    if (decl === undefined) { draft.droppedProperties.push(at(name)); continue; }
+    if (!valueFits(decl, value)) { draft.retypedProperties.push(at(name)); continue; }
+    clean[name] = value;
+  }
+  for (const decl of decls ?? []) {
+    if (!(decl.name in values)) draft.defaultedProperties.push(at(decl.name));
+  }
+  return clean;
+}
+
+/** The same walk over all five scopes of one partition. An owner the save
+ *  carries and the build no longer has drops whole (its bag is gone, so its
+ *  values have nowhere to land); an owner the build has and the save lacks
+ *  keeps every default. */
+function walkPartition(
+  decls: DeclSet,
+  values: PropsPartition | undefined,
+  flow: string | undefined,
+  draft: ReportDraft,
+): PropsPartition {
+  const out: PropsPartition = {
+    story: walkScope(decls.story, values?.story, (n) => `story.${n}`, flow, draft),
+    box: {}, deck: {}, hand: {}, value: {},
+  };
+  for (const kind of ["box", "deck", "hand", "value"] as const) {
+    const savedKind = values?.[kind] ?? {};
+    const ids = [...new Set([...decls[kind].keys(), ...Object.keys(savedKind)])].sort();
+    for (const id of ids) {
+      out[kind][id] = walkScope(decls[kind].get(id), savedKind[id],
+        (n) => `${kind}.${id}.${n}`, flow, draft);
+    }
+  }
+  return out;
+}
+
+/** Order the draft and answer the identity questions. `saved` is the content
+ *  block the save carries; for a single-flow restore there is none, so the
+ *  caller passes the bundle's own and no drift is reported. */
+function finishReport(bundle: BundleContent, saved: BundleContent, flows: string[], draft: ReportDraft): LoadReport {
+  const drift = saved.version !== bundle.version || saved.hash !== bundle.hash;
+  const evicted = byKey(draft.evicted, (e) => [e.flow, e.hand, e.card, e.reason].join(SORT_SEP));
+  const droppedCooldowns = byKey(draft.droppedCooldowns, (c) => `${c.flow}${SORT_SEP}${c.card}`);
+  const droppedSpent = [...draft.droppedSpent].sort();
+  const droppedProperties = byKey(draft.droppedProperties, propKey);
+  const defaultedProperties = byKey(draft.defaultedProperties, propKey);
+  const retypedProperties = byKey(draft.retypedProperties, propKey);
+  return {
+    // `flows` is what the load restores, not something it had to change, so
+    // it never makes a report inexact.
+    exact: !drift && evicted.length === 0 && droppedCooldowns.length === 0 && droppedSpent.length === 0
+      && droppedProperties.length === 0 && defaultedProperties.length === 0 && retypedProperties.length === 0,
+    project: bundle.project,
+    version: { saved: saved.version, bundle: bundle.version },
+    hash: { saved: saved.hash, bundle: bundle.hash },
+    flows,
+    evicted, droppedCooldowns, droppedSpent,
+    droppedProperties, defaultedProperties, retypedProperties,
+  };
+}
+
 // --- the Engine ---------------------------------------------------------------
 
 export class Engine {
@@ -464,6 +636,7 @@ export class Engine {
       hasQualities: false,
       hasShared: false,
       flowDecls: { story: [], box: new Map(), deck: new Map(), hand: new Map(), value: new Map() },
+      sharedDecls: { story: [], box: new Map(), deck: new Map(), hand: new Map(), value: new Map() },
       shared: undefined as unknown as Partition,
       worldResolver: undefined as unknown as ScopeResolver,
       worldReadOnly: new Set<string>(),
@@ -506,18 +679,21 @@ export class Engine {
     }
     this.initLadders();
 
-    // The per-flow halves, precomputed once (a bundle's declarations never
-    // change): each openFlow builds its bags from these.
-    internals.flowDecls = {
-      story: flowHalf("story", bundle.story.properties),
-      box: new Map(bundle.boxes.map((box) => [box.id, flowHalf("box", box.properties)])),
+    // Both halves, precomputed once (a bundle's declarations never change):
+    // each openFlow builds its bags from the per-flow half, and a load report
+    // asks either half what it declares without building anything at all.
+    const declSet = (half: (scope: FlaggedScope, decls: PropertyDecl[]) => PropertyDecl[]): DeclSet => ({
+      story: half("story", bundle.story.properties),
+      box: new Map(bundle.boxes.map((box) => [box.id, half("box", box.properties)])),
       deck: new Map(bundle.boxes.flatMap((box) => box.decks.map(
-        (deck): [string, PropertyDecl[]] => [deck.id, flowHalf("deck", deck.properties)]))),
+        (deck): [string, PropertyDecl[]] => [deck.id, half("deck", deck.properties)]))),
       hand: new Map(bundle.boxes.flatMap((box) => box.hands.map(
-        (hand): [string, PropertyDecl[]] => [hand.id, flowHalf("hand", handDeclsOf(internals, hand))]))),
+        (hand): [string, PropertyDecl[]] => [hand.id, half("hand", handDeclsOf(internals, hand))]))),
       value: new Map(bundle.boxes.flatMap((box) => box.tagGroups.flatMap((group) => group.tags.map(
-        (tag): [string, PropertyDecl[]] => [tag.id, flowHalf("value", tag.properties ?? [])])))),
-    };
+        (tag): [string, PropertyDecl[]] => [tag.id, half("value", tag.properties ?? [])])))),
+    });
+    internals.flowDecls = declSet(flowHalf);
+    internals.sharedDecls = declSet(sharedHalf);
 
     this.initShared(this.hostWorld);
   }
@@ -578,6 +754,10 @@ export class Engine {
    *  state; shared state is untouched. There is no default flow: "main" is
    *  a caller convention, not an engine rule. */
   openFlow(id: string, opts: OpenFlowOptions = {}): Flow {
+    // The world's claims as they stand WITHOUT this name, taken before the
+    // replace: a resume competes with the other flows, never with the flow it
+    // is replacing (which is about to release everything it holds).
+    const otherClaims = opts.restore !== undefined ? this.sharedClaimsExcept(id) : undefined;
     // Replacing an existing id KEEPS its place in the order. `close()` would
     // drop the key, and a JS Map re-inserts a deleted key at the END, so
     // openFlow("a"); openFlow("b"); openFlow("a") listed [b, a] here and
@@ -594,6 +774,15 @@ export class Engine {
     }
     const flow = new Flow(this, this.internals, id, opts.seed ?? this.seed);
     this.flowsById.set(id, flow);
+    if (opts.restore !== undefined) {
+      const draft = emptyDraft();
+      // Cloned: a caller holding one blob may resume two flows from it, and
+      // an aliased playLog would then grow in both.
+      const clean = this.planFlowRestore(id, structuredClone(opts.restore), otherClaims, draft);
+      flow.restore(clean);
+      const content = this.internals.bundle.content;
+      opts.onRestoreReport?.(finishReport(content, content, [id], draft));
+    }
     return flow;
   }
 
@@ -683,6 +872,17 @@ export class Engine {
     const counts = new Map<string, number>();
     for (const flow of this.flowsById.values()) {
       for (const id of flow.heldCardIds()) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    return counts;
+  }
+
+  /** The same ledger with one name left out: what the REST of the world
+   *  holds, which is the question a resume under that name has to ask. */
+  private sharedClaimsExcept(id: string): Map<string, number> {
+    const counts = new Map<string, number>();
+    for (const [flowId, flow] of this.flowsById) {
+      if (flowId === id) continue;
+      for (const cardId of flow.heldCardIds()) counts.set(cardId, (counts.get(cardId) ?? 0) + 1);
     }
     return counts;
   }
@@ -802,20 +1002,151 @@ export class Engine {
     });
   }
 
+  /** ONE flow's blob, to park a visit that is walking away: the same shape
+   *  the envelope carries per flow, and the same shape `openFlow`'s `restore`
+   *  option takes back (design/engine-server.md 4.1). Saving the whole
+   *  envelope to park one of four hundred players is wrong in cost and in
+   *  meaning. Throws for a name that is not open - a closed flow has nothing
+   *  left to save. */
+  saveFlow(id: string): FlowSave {
+    const flow = this.flowsById.get(id);
+    if (!flow) throw new Error(`unknown flow "${id}"`);
+    return structuredClone(flow.snapshot());
+  }
+
+  /** What `loadGame(envelope)` would do that is not a plain restore, without
+   *  doing any of it (design/engine-server.md 4.9). Pure: nothing on this
+   *  engine moves. A project mismatch is refused here exactly as `loadGame`
+   *  refuses it - it is the one thing neither call will tolerate. */
+  previewLoad(envelope: SaveEnvelope): LoadReport {
+    this.assertSameProject(envelope);
+    return this.planLoad(envelope).report;
+  }
+
+  /** What `openFlow(id, { restore: saved })` would do to a flow of that name,
+   *  without doing it: the same report shape, since a visit parked under one
+   *  build and resumed under the next raises the same questions. Pure. */
+  previewFlowRestore(id: string, saved: FlowSave): LoadReport {
+    const draft = emptyDraft();
+    this.planFlowRestore(id, saved, this.sharedClaimsExcept(id), draft);
+    const content = this.internals.bundle.content;
+    return finishReport(content, content, [id], draft);
+  }
+
   /** Restore: shared state once, then every flow REBUILT from its blob.
    *  Handles held from before the load are closed and inert (Patter's
-   *  rule); take fresh ones from getFlow()/flows(). */
-  loadGame(envelope: SaveEnvelope): void {
+   *  rule); take fresh ones from getFlow()/flows().
+   *
+   *  Returns the report `previewLoad` would have given for this envelope: the
+   *  drift tolerance that makes a load forgiving is what hides its cost, so
+   *  the cost comes back with the load whether or not anybody looked first. */
+  loadGame(envelope: SaveEnvelope): LoadReport {
+    this.assertSameProject(envelope);
+    const plan = this.planLoad(structuredClone(envelope));
+    this.reset();
+    loadPartition(this.internals.shared, plan.shared);
+    for (const id of plan.spent) this.spent.add(id);
+    for (const [id, clean] of plan.flows) this.openFlow(id).restore(clean);
+    return plan.report;
+  }
+
+  private assertSameProject(envelope: SaveEnvelope): void {
     if (envelope.content.project !== this.internals.bundle.content.project) {
       throw new Error(`save is for project "${envelope.content.project}", bundle is "${this.internals.bundle.content.project}"`);
     }
-    const env = structuredClone(envelope);
-    this.reset();
-    loadPartition(this.internals.shared, env.shared.props);
-    for (const id of env.shared.spent ?? []) this.spent.add(id);
-    for (const [id, saved] of Object.entries(env.flows ?? {})) {
-      this.openFlow(id).restore(saved);
+  }
+
+  /** The whole-envelope walk: the report, and the cleaned state the apply
+   *  half writes. Nothing here touches the engine, which is what lets
+   *  previewLoad and loadGame share it. */
+  private planLoad(envelope: SaveEnvelope): {
+    report: LoadReport;
+    shared: PropsPartition;
+    spent: string[];
+    flows: [string, FlowSave][];
+  } {
+    const draft = emptyDraft();
+    const shared = walkPartition(this.internals.sharedDecls,
+      envelope.shared?.props, undefined, draft);
+    const spent: string[] = [];
+    for (const cardId of envelope.shared?.spent ?? []) {
+      if (this.internals.cardsById.has(cardId)) spent.push(cardId);
+      else draft.droppedSpent.push(cardId);
     }
+    const flows: [string, FlowSave][] = [];
+    for (const [id, saved] of Object.entries(envelope.flows ?? {})) {
+      flows.push([id, this.planFlowRestore(id, saved, undefined, draft)]);
+    }
+    return {
+      report: finishReport(this.internals.bundle.content, envelope.content, flows.map(([id]) => id), draft),
+      shared, spent, flows,
+    };
+  }
+
+  /** One flow's walk. `otherClaims` is the rest of the world's shared ledger
+   *  and is present only for a SINGLE-flow restore into a live engine: a
+   *  whole-envelope load rebuilds every flow from one consistent moment, so
+   *  there is nobody else to compete with. */
+  private planFlowRestore(
+    id: string,
+    saved: FlowSave,
+    otherClaims: Map<string, number> | undefined,
+    draft: ReportDraft,
+  ): FlowSave {
+    const internals = this.internals;
+    const props = walkPartition(internals.flowDecls, saved.props, id, draft);
+
+    const cooldowns: Record<string, number> = {};
+    for (const [cardId, turn] of Object.entries(saved.cooldowns ?? {})) {
+      if (internals.cardsById.has(cardId)) cooldowns[cardId] = turn;
+      else draft.droppedCooldowns.push({ flow: id, card: cardId });
+    }
+
+    // A deleted entity has no gameId left, so it is named by the id the save
+    // carries; everything the build still knows is named by its gameId.
+    const cardName = (cardId: string): string => {
+      const entry = internals.cardsById.get(cardId);
+      return entry ? effectiveGameId(entry.card) : cardId;
+    };
+    const board: Record<string, string[]> = {};
+    const restored = new Map<string, number>();
+    for (const [handId, ids] of Object.entries(saved.board ?? {})) {
+      const known = internals.handsById.get(handId);
+      if (known === undefined) {
+        for (const cardId of ids) {
+          draft.evicted.push({ flow: id, hand: handId, card: cardName(cardId), reason: "hand-vanished" });
+        }
+        continue;
+      }
+      const hand = effectiveGameId(known.hand);
+      const kept: string[] = [];
+      for (const cardId of ids) {
+        const entry = internals.cardsById.get(cardId);
+        if (entry === undefined) {
+          draft.evicted.push({ flow: id, hand, card: cardId, reason: "vanished" });
+          continue;
+        }
+        if (otherClaims !== undefined && cardIsShared(entry.card, entry.deck.shared ?? false)) {
+          const held = (otherClaims.get(cardId) ?? 0) + (restored.get(cardId) ?? 0);
+          if (held >= sharedCap(entry.card)) {
+            draft.evicted.push({ flow: id, hand, card: effectiveGameId(entry.card), reason: "claimed-elsewhere" });
+            continue;
+          }
+          restored.set(cardId, (restored.get(cardId) ?? 0) + 1);
+        }
+        kept.push(cardId);
+      }
+      board[handId] = kept;
+    }
+
+    return {
+      props,
+      turns: saved.turns ?? {},
+      prng: saved.prng,
+      cooldowns,
+      board,
+      playLog: saved.playLog ?? [],
+    };
   }
 }
 
@@ -1146,6 +1477,12 @@ export class Flow {
         boundTags.set(groupId, tagId);
       }
       for (const [groupId, tagId] of Object.entries(hand.chosen ?? {})) {
+        // A hole filled from a property rather than with a tag: resolve it
+        // now, before tag composition (4.6, the hand that moves).
+        if (isHoleRef(tagId)) {
+          this.fillHoleFromProperty(hand, groupId, tagId, boundTags, askNames);
+          continue;
+        }
         boundTags.set(groupId, tagId);
         const found = this.internals.groupsById.get(groupId);
         const tag = found?.group.tags.find((t) => t.id === tagId);
@@ -1154,6 +1491,10 @@ export class Flow {
       condition = template.condition;
     } else {
       for (const [groupId, tagId] of Object.entries(hand.rule?.bindings ?? {})) {
+        if (isHoleRef(tagId)) {
+          this.fillHoleFromProperty(hand, groupId, tagId, boundTags, askNames);
+          continue;
+        }
         boundTags.set(groupId, tagId);
         // ...and name it, exactly as the template branch above does: a card
         // reading @hand.<group> must not care HOW the group got bound
@@ -1192,6 +1533,62 @@ export class Flow {
     }
     this.bindStateGroups(box, boundTags, askNames);
     return { box, boundTags, askNames };
+  }
+
+  /**
+   * Fill one hole from the property its value names: the hand that moves
+   * (design/engine-server.md 4.6).
+   *
+   * The semantics are `bindStateGroups`' below, word for word, applied per
+   * HOLE instead of per group: resolved at ask time, and a value naming no tag
+   * leaves the hole UNBOUND (a wildcard) with a diagnostic rather than dealing
+   * a silently empty hand. What is added is the `@hand` scope - the asking
+   * hand's OWN declared state, read here from the flow's merged view (the
+   * shared half under the flow's own, so a `shared: true` declaration moves
+   * the hole for every flow and a per-flow one moves it for this flow alone).
+   *
+   * Read BEFORE tag composition, which is the whole reason it is safe: the
+   * @hand bag a card sees is built from the bound tags, so resolving a hole
+   * from it would be circular. A hand's own declarations are not, so they are.
+   */
+  private fillHoleFromProperty(
+    hand: Hand<Expression>, groupId: string, ref: string,
+    boundTags: Map<string, string>, askNames: Record<string, string>,
+  ): void {
+    const found = this.internals.groupsById.get(groupId);
+    const groupName = found ? effectiveGameId(found.group) : groupId;
+    const where = `hand ${effectiveGameId(hand)}, tag group ${groupName}`;
+    const parsed = parseHoleRef(ref);
+    if (!parsed) {
+      this.emit({ type: "diagnostic", where, message: `"${ref}" is not a @hand, @world or @story property reference` });
+      return;
+    }
+    if (!found) {
+      this.emit({ type: "diagnostic", where, message: `"${ref}" fills a tag group that is not in this box` });
+      return;
+    }
+    let value: ScalarValue | undefined;
+    if (parsed.scope === "hand") {
+      value = this.valuesOf("hand", hand.id)[parsed.name];
+    } else {
+      try {
+        value = this.getProperty(`${parsed.scope}.${parsed.name}`);
+      } catch {
+        value = undefined;
+      }
+    }
+    if (value === undefined) {
+      this.emit({ type: "diagnostic", where, message: `"${ref}" names a property that is not declared` });
+      return;
+    }
+    const wanted = typeof value === "string" ? value : String(value);
+    const tag = found.group.tags.find((t) => effectiveGameId(t) === wanted);
+    if (!tag) {
+      this.emit({ type: "diagnostic", where, message: `${ref} is "${wanted}", which is not one of the tags of "${groupName}"` });
+      return;
+    }
+    boundTags.set(groupId, tag.id);
+    askNames[groupName] = effectiveGameId(tag);
   }
 
   /**
@@ -1693,8 +2090,14 @@ export class Flow {
 
     // The played card's box's clock advances (schema 3.4); computed up
     // front so the play and its writes log as one action, one turn stamp.
-    const newTurn = (this.turnCounts.get(entry.box.id) ?? 0)
-      + (opts.advanceTurns ?? this.internals.bundle.settings.playAdvancesTurns);
+    //
+    // A TIMED box (design/engine-server.md 4.8) defaults to advancing
+    // NOTHING: its clock is time, the host ticks it, and a play is not a
+    // tick. A call that names `advanceTurns` still gets what it asked for,
+    // in either kind of box, because the call says otherwise. This is the
+    // whole of `turn`'s effect on the engine: the seconds are never read.
+    const perPlay = entry.box.turn !== undefined ? 0 : this.internals.bundle.settings.playAdvancesTurns;
+    const newTurn = (this.turnCounts.get(entry.box.id) ?? 0) + (opts.advanceTurns ?? perPlay);
 
     // Every right-hand side evaluates against PRE-play state, then all
     // writes land (schema 3.7).

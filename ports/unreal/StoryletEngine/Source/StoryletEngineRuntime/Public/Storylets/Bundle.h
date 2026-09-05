@@ -36,6 +36,36 @@ namespace storylets
      *  it to its own name; a homed card is available only to its hand. */
     inline const char* const PLACE_GROUP = "place";
 
+    /** Is this `chosen` / binding value MEANT as a property reference rather
+     *  than a tag id (design/engine-server.md 4.6)? The leading '@' alone,
+     *  deliberately: a value that starts with one and does not parse is a
+     *  mistyped reference, not an odd tag id. */
+    inline bool IsHoleRef(const std::string& value)
+    {
+        return !value.empty() && value[0] == '@';
+    }
+
+    /** Parse a hole reference into scope and name; false when the value is not
+     *  one. Spelled out rather than <regex>, which the std core deliberately
+     *  avoids, and the NAME is checked as well as the scope word: JS applies
+     *  ^@(hand|world|story)\.([a-z][a-z0-9_-]*)$ and the four runtimes have to
+     *  refuse the same strings (the boundBy divergence of 2026-08-29). */
+    inline bool ParseHoleRef(const std::string& ref, std::string& scope, std::string& name)
+    {
+        const size_t dot = ref.find('.');
+        if (ref.size() < 2 || ref[0] != '@' || dot == std::string::npos) return false;
+        scope = ref.substr(1, dot - 1);
+        name = ref.substr(dot + 1);
+        if (scope != "hand" && scope != "world" && scope != "story") return false;
+        if (name.empty() || name[0] < 'a' || name[0] > 'z') return false;
+        for (char c : name)
+        {
+            const bool ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+            if (!ok) return false;
+        }
+        return true;
+    }
+
     /** JS Number.MAX_SAFE_INTEGER: the "never" cooldown (deliberately not
      *  Infinity, which JSON-serialises to null). */
     constexpr double MAX_SAFE_INTEGER = 9007199254740991.0;
@@ -131,6 +161,14 @@ namespace storylets
          *  box, deck, hand and tag properties per-flow). Never valid on a
          *  @world declaration (the compiler refuses it). */
         std::optional<bool> shared;
+        /** The durability axis (design/engine-server.md 4.2), valid wherever
+         *  `shared` is and orthogonal to it: `shared` says whose value this is
+         *  WITHIN a run, `durable` says whether it survives the run at all.
+         *  INERT here - the engine partitions by `shared` alone and never reads
+         *  this; a server lifts and restores durable values across a run
+         *  boundary through GetProperty / SetProperty. Never valid on a @world
+         *  declaration (the compiler refuses it). */
+        std::optional<bool> durable;
         /** @world only: false is the story's promise not to write it (Reboot.md 10).
          *  Absent = writable. Mirrors Patter's HostScopeDecl.writable. */
         std::optional<bool> writable;
@@ -205,6 +243,11 @@ namespace storylets
         /** How many hands ACROSS EVERY FLOW may hold this at once. Read only
          *  when shared; defaults to copies. */
         std::optional<double> sharedCopies;
+        /** Does this card's `redraw: never` spend survive the run (4.2)? Absent
+         *  takes the deck's flag. INERT here: the server lifts the durable
+         *  spends at a run boundary and puts them back through
+         *  OpenFlow(id, restore) and MarkTaken. */
+        std::optional<bool> durable;
         /** Card-template data: field name -> value. */
         OrderedMap<std::string, StoryletValue> fields;
         std::vector<Outcome> outcomes;
@@ -221,6 +264,9 @@ namespace storylets
         /** This pile is scarce across flows: every card in it is shared unless
          *  the card says otherwise (design/shared-scarcity.md). */
         std::optional<bool> shared;
+        /** Every `redraw: never` card in this pile is spent past the end of the
+         *  run unless the card says otherwise (4.2). Inert here. */
+        std::optional<bool> durable;
         std::vector<PropertyDecl> properties;
         std::vector<Card> cards;
     };
@@ -318,6 +364,12 @@ namespace storylets
         std::string title;
         std::string purpose;
         RankingPolicy ranking;
+        /** Set on a TIMED box (design/engine-server.md 4.8): its clock counts
+         *  real time, one turn every `seconds` of the run. A play in such a box
+         *  advances nothing by default; the host ticks it with advanceTurns, and
+         *  a card's `redraw: N` reads as N x seconds. Empty is the ordinary box,
+         *  whose turn is a play. The number is inert to the runtime. */
+        std::optional<double> turnSeconds;
         /** The card template: what every card in this box carries. */
         std::vector<FieldDecl> fields;
         std::vector<PropertyDecl> properties;
@@ -379,6 +431,15 @@ namespace storylets
         std::vector<MapPoint> polygon;
     };
 
+    /** Where a placed hand stands on a map, by hand gameId
+     *  (design/engine-server.md 4.3). Sorted by that gameId in the bundle. */
+    struct MapSite
+    {
+        std::string hand;                       // the hand standing here, by gameId
+        double x = 0;
+        double y = 0;
+    };
+
     /**
      * A map the build was asked to carry: one spatial tag group's geometry
      * (design/graphical-views.md 2, "The map MAY ship with a bundle").
@@ -394,6 +455,8 @@ namespace storylets
         std::string group;                      // the tag group, by gameId
         std::vector<MapZone> zones;
         std::vector<MapBackground> backgrounds;
+        /** Where the placed hands stand: empty when nobody put a hand here. */
+        std::vector<MapSite> sites;
     };
 
     struct Bundle
@@ -475,6 +538,96 @@ namespace storylets
         OrderedMap<std::string, FlowSave> flows;
     };
 
+    // --- the load report (design/engine-server.md 4.9) -------------------------
+    //
+    // loadGame is forgiving by design: a card the bundle no longer has drops off
+    // the board, a property the save does not carry keeps its default, and a
+    // version two builds newer loads without a word. That forgiveness is what
+    // makes a save survive an edit, and it is also what hides the cost of a
+    // content update from whoever is about to apply one. The report is the same
+    // walk, itemised: previewLoad computes it and changes nothing, loadGame
+    // computes it and applies it, and previewFlowRestore answers the same
+    // questions for one flow.
+    //
+    // Identities are GAME IDS. The one exception is an entity the edit DELETED -
+    // a vanished card, a vanished hand - which has no gameId left to give, so
+    // the report carries the id the save itself carries.
+
+    /** One card a restore refused to put back on the board. "claimed-elsewhere"
+     *  is only ever a single-flow restore into a LIVE engine: the card is shared
+     *  and the other open flows already hold every copy the world has. */
+    struct LoadEviction
+    {
+        std::string flow;
+        std::string hand;
+        std::string card;
+        /** "vanished" | "hand-vanished" | "claimed-elsewhere". */
+        std::string reason;
+    };
+
+    /** One cooldown the restore forgot, because its card is gone. */
+    struct LoadCooldown
+    {
+        std::string flow;
+        std::string card;
+    };
+
+    /** One property the restore could not put back as it was. `flow` names the
+     *  flow whose half it belongs to; empty is the shared half.
+     *
+     *  `path` is the engine's property address, spelled exactly as
+     *  listProperties() prints it and exactly as getProperty and setProperty
+     *  accept it: "story.name" for the story scope, "scope.owner.name" for the
+     *  box, deck, hand and tag scopes. No "@", which belongs to the expression
+     *  language and not to an address. The owner segment is the engine's own id
+     *  today, the same gap every other address in the API has; design change 4.4
+     *  moves property addresses and trace events to gameIds together, in all
+     *  four runtimes. */
+    struct LoadProperty
+    {
+        std::string flow;
+        std::string path;
+    };
+
+    /** What the save said against what this build says. Equal means no drift on
+     *  that axis. */
+    struct LoadIdentity
+    {
+        std::string saved;
+        std::string bundle;
+    };
+
+    /** What a load or a flow restore would do that is not a plain restore.
+     *  Vectors are sorted, so two runtimes given the same save and bundle
+     *  produce the same answer; `flows` alone keeps the envelope's own order,
+     *  because a caller re-takes its handles in it. */
+    struct LoadReport
+    {
+        /** No drift and nothing dropped, defaulted or retyped. `flows` is not a
+         *  divergence and does not count. */
+        bool exact = true;
+        std::string project;
+        /** Drift when the two differ; reported, never refused. */
+        LoadIdentity version;
+        /** Drift when the two differ; reported, never refused. */
+        LoadIdentity hash;
+        /** The flows this restores, in the order it restores them. */
+        std::vector<std::string> flows;
+        std::vector<LoadEviction> evicted;
+        /** Cooldowns held for cards the bundle no longer has. */
+        std::vector<LoadCooldown> droppedCooldowns;
+        /** Shared `redraw: never` entries for cards the bundle no longer has. */
+        std::vector<std::string> droppedSpent;
+        /** In the save, not declared any more. */
+        std::vector<LoadProperty> droppedProperties;
+        /** Declared, not in the save: it takes the declaration's default. */
+        std::vector<LoadProperty> defaultedProperties;
+        /** In the save, still declared, but the saved value no longer fits the
+         *  declaration (its type changed, or an enum value / quality stage was
+         *  edited away). It takes the declaration's default. */
+        std::vector<LoadProperty> retypedProperties;
+    };
+
     // --- the bundle loader (neutral JsonValue -> compiled model) ---------------
 
     namespace bundleloader
@@ -542,6 +695,8 @@ namespace storylets
                 d.stages = ParseStringList(item.find("stages"));
                 const JsonValue* sharedFlag = item.find("shared");
                 if (sharedFlag && sharedFlag->isBool()) d.shared = sharedFlag->b;
+                const JsonValue* durableFlag = item.find("durable");
+                if (durableFlag && durableFlag->isBool()) d.durable = durableFlag->b;
                 const JsonValue* writableFlag = item.find("writable");
                 if (writableFlag && writableFlag->isBool()) d.writable = writableFlag->b;
                 d.purpose = item.strOr("purpose");
@@ -630,6 +785,8 @@ namespace storylets
             if (cardShared && cardShared->isBool()) card.shared = cardShared->b;
             const JsonValue* sharedCopies = o.find("sharedCopies");
             if (sharedCopies && sharedCopies->isNumber()) card.sharedCopies = sharedCopies->num;
+            const JsonValue* cardDurable = o.find("durable");
+            if (cardDurable && cardDurable->isBool()) card.durable = cardDurable->b;
             const JsonValue* fields = o.find("fields");
             if (fields && fields->isObject())
             {
@@ -653,6 +810,8 @@ namespace storylets
             deck.condition = OptionalExpression(o, "condition");
             const JsonValue* deckShared = o.find("shared");
             if (deckShared && deckShared->isBool()) deck.shared = deckShared->b;
+            const JsonValue* deckDurable = o.find("durable");
+            if (deckDurable && deckDurable->isBool()) deck.durable = deckDurable->b;
             const JsonValue* props = o.find("properties");
             if (props && props->isArray()) deck.properties = ParsePropertyDecls(*props);
             const JsonValue* cards = o.find("cards");
@@ -772,6 +931,18 @@ namespace storylets
                     map.backgrounds.push_back(std::move(background));
                 }
             }
+            const JsonValue* sites = o.find("sites");
+            if (sites && sites->isArray())
+            {
+                for (const auto& s : sites->arr)
+                {
+                    MapSite site;
+                    site.hand = s.strOr("hand");
+                    site.x = s.numOr("x", 0);
+                    site.y = s.numOr("y", 0);
+                    map.sites.push_back(std::move(site));
+                }
+            }
             return map;
         }
 
@@ -784,6 +955,8 @@ namespace storylets
             box.purpose = o.strOr("purpose");
             const JsonValue* ranking = o.find("ranking");
             if (ranking && ranking->isObject()) box.ranking.specificity = ranking->boolOr("specificity");
+            const JsonValue* turn = o.find("turn");
+            if (turn && turn->isObject()) box.turnSeconds = turn->numOr("seconds", 0);
             const JsonValue* fields = o.find("fields");
             if (fields && fields->isArray())
             {

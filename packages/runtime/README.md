@@ -3,7 +3,8 @@
 The Storylet Engine **JS reference runtime**: the Engine and Flow surface of
 [the bundle format](https://storylet.studio/format/bundle/) section 5 -
 the engine (`openFlow` / `getFlow` / `flows` / `closeFlow` / `reset` /
-`saveGame` / `loadGame` / `subscribeTrace` / `log` / `clearLog` /
+`saveGame` / `loadGame` / `saveFlow` / `previewLoad` / `previewFlowRestore` /
+`subscribeTrace` / `log` / `clearLog` /
 `getProperty` / `setProperty` / `listProperties` / `listBags` /
 `sharedClaims`) and the flow it hands back
 (`peek` / `deal` / `dealMany` / `board` / `outcomes` / `play` /

@@ -19,13 +19,14 @@ import { whereModel, whereWarning } from "./where.js";
 // The DERIVED address, computed for placeholders and previews. From the model
 // rather than the shell: this is the same rule the compiler and the CLI use, and
 // model/test/id-parity.test.ts holds the two copies to each other.
-import { gameIdify, PLACE_GROUP } from "@storylet-studio/model";
+import { gameIdify, isHoleRef, turnSpan, PLACE_GROUP } from "@storylet-studio/model";
 import { el } from "./dom.js";
 
 import { openContextMenu, openPopover } from "./context-menu.js";
 import { chipDot } from "./views.js";
 import { mountChanges, mountCondition, previewCondition } from "./expr-panels.js";
 import { mountPropertyList, valueControl } from "./prop-list.js";
+import { shows } from "./play-ladder.js";
 import { hoistableProperties, hoistProperty } from "./tag-hoist.js";
 import type {
   BindingDto, BoxDto, BoxEdit, CardDto, CardEdit, ConditionProperty, DeckDto, DeckEdit,
@@ -189,6 +190,7 @@ function editFromCard(card: CardDto): Required<CardEdit> {
     // null is the third state: inherit the deck's flag rather than override it.
     shared: card.shared === undefined ? null : card.shared,
     sharedCopies: card.sharedCopies,
+    durable: card.durable === undefined ? null : card.durable,
     title: card.title ?? "",
     purpose: card.purpose ?? "",
     condition: card.condition ?? "",
@@ -209,12 +211,18 @@ function editFromCard(card: CardDto): Required<CardEdit> {
 // back to auto. `refresh` repaints it when the title it derives from changes.
 function gameIdField(
   get: () => string, set: (v: string) => void, derived: () => string, commit: () => void,
+  /** What a venue depends on this address being (design/engine-server.md 4.11).
+   *  It reads as the field's HINT and not as a refusal: the refusal is the
+   *  server's, on push (9.1), and a rename field that simply would not type
+   *  would leave a designer with no way to see why. */
+  contract?: string[],
 ): { root: HTMLElement; refresh: () => void } {
   const root = el("button", { className: "gid" });
   const paint = (): void => {
     const pinned = get().trim();
-    root.className = `gid${pinned ? "" : " gid-auto"}`;
-    root.title = pinned ? "Game id - fixed by hand (click to edit)" : "Game id - follows the title (click to override)";
+    root.className = `gid${pinned ? "" : " gid-auto"}${contract?.length ? " gid-bound" : ""}`;
+    const usual = pinned ? "Game id - fixed by hand (click to edit)" : "Game id - follows the title (click to override)";
+    root.title = contract?.length ? [...contract, usual].join("\n") : usual;
     root.replaceChildren(
       el("span", { className: "gid-value", text: pinned || derived() || "(unnamed)" }),
       el("span", { className: "gid-tag", text: pinned ? "pinned" : "auto" }),
@@ -327,7 +335,19 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     }
     const turns = el("input", { className: "insp-input insp-mono insp-short" });
     turns.value = isNumber ? (edit.redraw ?? "") : ""; turns.placeholder = "N"; turns.disabled = !isNumber;
-    turns.addEventListener("input", () => { if (/^\d+$/.test(turns.value)) edit.redraw = turns.value; });
+    // In a TIMED box the number here is a length of time, not a count of plays
+    // (design/engine-server.md 4.8), so the field says what it comes to as the
+    // designer types rather than leaving the arithmetic to them. Nothing is
+    // added in an ordinary box, where a turn is a play and there is nothing to
+    // convert.
+    const unit = box.turn?.seconds;
+    const asTime = el("span", { className: "insp-note" });
+    const sayTime = (): void => {
+      asTime.textContent = unit !== undefined && /^\d+$/.test(turns.value)
+        ? `${turns.value} turns (${turnSpan(Number(turns.value), unit, true)})` : "";
+    };
+    sayTime();
+    turns.addEventListener("input", () => { if (/^\d+$/.test(turns.value)) edit.redraw = turns.value; sayTime(); });
     turns.addEventListener("change", commit);
     const copies = textField(edit.copies ?? "", "insp-input insp-mono insp-short", (v) => { edit.copies = v; }, commit);
     copies.placeholder = "1";
@@ -338,34 +358,63 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
      *  shared" or an author cannot tell why a card in a shared pile is
      *  scarce. The default choice names what the deck actually says, so the
      *  answer is on the card page rather than one click away. */
-    const sharedRows = (): HTMLElement[] => {
+    /** The three-state control the two axes share: not set / on / off, with
+     *  the "not set" choice naming what the DECK actually says, so the answer
+     *  is on the card page rather than one click away. */
+    const threeState = (
+      value: boolean | null, deckSays: boolean, word: string,
+      set: (v: boolean | null) => void,
+    ): HTMLElement => {
       const seg = el("div", { className: "insp-seg" });
       const states: [string, boolean | null][] = [
-        [deck.shared === true ? "deck (shared)" : "deck (not shared)", null],
-        ["shared", true],
-        ["not shared", false],
+        [deckSays ? `deck (${word})` : `deck (not ${word})`, null],
+        [word, true],
+        [`not ${word}`, false],
       ];
-      for (const [label, value] of states) {
-        const on = edit.shared === value;
-        const b = el("button", { className: on ? "on" : "", text: label });
-        b.addEventListener("click", () => { edit.shared = value; commit(); drawCentre(); });
+      for (const [label, v] of states) {
+        const b = el("button", { className: value === v ? "on" : "", text: label });
+        b.addEventListener("click", () => { set(v); commit(); drawCentre(); });
         seg.append(b);
       }
+      return seg;
+    };
+
+    const sharedRows = (): HTMLElement[] => {
+      const rows: HTMLElement[] = [];
       const effective = edit.shared === null ? deck.shared === true : edit.shared === true;
-      const rows = [cfgRow("Shared across playthroughs",
-        "One in the world rather than one each: dealt to one participant, it cannot be dealt to another, "
-        + "and a Redraw of never spends it for everyone. A single-player game is unaffected.",
-        seg)];
-      // Only when it can do something: sharedCopies on an unshared card is a
-      // dead setting, and the compiler says so. Better not to offer it.
-      if (effective) {
-        const world = textField(edit.sharedCopies ?? "", "insp-input insp-mono insp-short",
-          (v) => { edit.sharedCopies = v; }, commit);
-        world.placeholder = edit.copies.trim() || "1";
-        rows.push(cfgRow("In the world",
-          "How many hands may hold it anywhere, across every playthrough. Blank means the same as Copies, "
-          + "so leave it alone for one-in-the-world; set both for five in the world, one to a customer.",
-          world));
+      // Below the shared rung the project has no second playthrough to share
+      // with, so none of this is drawn at all (design/engine-server.md 4.10).
+      if (shows("sharing")) {
+        rows.push(cfgRow("Shared across playthroughs",
+          "One in the world rather than one each: dealt to one participant, it cannot be dealt to another, "
+          + "and a Redraw of never spends it for everyone. A single-player game is unaffected.",
+          threeState(edit.shared, deck.shared === true, "shared", (v) => { edit.shared = v; })));
+        // Only when it can do something: sharedCopies on an unshared card is a
+        // dead setting, and the compiler says so. Better not to offer it.
+        if (effective) {
+          const world = textField(edit.sharedCopies ?? "", "insp-input insp-mono insp-short",
+            (v) => { edit.sharedCopies = v; }, commit);
+          world.placeholder = edit.copies.trim() || "1";
+          rows.push(cfgRow("In the world",
+            "How many hands may hold it anywhere, across every playthrough. Blank means the same as Copies, "
+            + "so leave it alone for one-in-the-world; set both for five in the world, one to a customer.",
+            world));
+        }
+      }
+      // Durability across the RUN (design/engine-server.md 4.2). Only where
+      // there is a spend to carry: on any redraw but "never" the flag means
+      // nothing past the run and the compiler says so, so the card page does
+      // not offer it rather than offering a setting that earns a warning.
+      //
+      // A card that ALREADY says durable keeps the control at every rung: the
+      // way out the compiler names for a flag above its rung is "remove the
+      // flag", venue being the server's to set, so the control an author
+      // removes it with cannot be one the rung takes away.
+      if ((shows("durable") || edit.durable === true) && edit.redraw === "never") {
+        rows.push(cfgRow("Durable",
+          "The card stays played after the run ends: tomorrow it is still gone for whoever played it, "
+          + "or for everyone if it is also shared. Only a Redraw of never can be durable.",
+          threeState(edit.durable, deck.durable === true, "durable", (v) => { edit.durable = v; })));
       }
       return rows;
     };
@@ -378,7 +427,10 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       cfgRow("Priority", box.ranking.specificity
         ? "Higher goes first. Rank by specificity is on, so this only breaks ties between equally specific cards."
         : "Higher goes first, and decides the order outright.", priority),
-      cfgRow("Redraw", "Whether a played card can be dealt again.", el("div", { className: "insp-segrow" }, seg, turns)),
+      cfgRow("Redraw", unit === undefined
+        ? "Whether a played card can be dealt again."
+        : `Whether a played card can be dealt again. A turn in this box is ${turnSpan(1, unit, true)} (its Turns setting), so the number here is a length of time.`,
+        el("div", { className: "insp-segrow" }, seg, turns, asTime)),
       cfgRow("Copies", "How many hands may hold this card at once, in one playthrough. One copy is the rule; more is for interchangeable filler.", copies),
       ...sharedRows(),
     ));
@@ -544,9 +596,14 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
 // shard file.
 /** The shared declaration list (rule 6), wrapped for centre editors: mounts
  *  into a fresh host and feeds every change to the caller's autosave. */
-function propList(decls: PropertyDeclDto[], onChange: () => void, addLabel: string): HTMLElement {
+function propList(
+  decls: PropertyDeclDto[], onChange: () => void, addLabel: string,
+  /** A card TEMPLATE's fields, which are data for the host and carry no state:
+   *  neither sharing axis applies to them. */
+  opts: { sharingSwitches?: boolean } = {},
+): HTMLElement {
   const host = el("div", { className: "prop-list" });
-  mountPropertyList(host, decls, { onChange, addLabel });
+  mountPropertyList(host, decls, { onChange, addLabel, ...opts });
   return host;
 }
 
@@ -564,6 +621,10 @@ export function documentHeading(label: string, opts: {
   /** The gameId auto/pin chip, in the header for every titled entity
    *  (tab-grammar 2): identity is never hidden by a tab switch. */
   gameId?: IdentityField & { fallback: string; deriveFrom: () => string; commit: () => void };
+  /** One line per installation that depends on this entity
+   *  (design/engine-server.md 4.11), in the density grammar: quiet, and only
+   *  when there IS a venue, which is almost never. */
+  contract?: string[];
   purpose?: IdentityField & { placeholder?: string; commit: () => void; commitOn?: "input" | "blur" };
   menu?: { label: string; danger?: boolean; onClick: () => void }[];
   /** The comment-thread opener, in the TOPLINE beside the ⋯ menu: the row that
@@ -602,7 +663,7 @@ export function documentHeading(label: string, opts: {
   let gid: { root: HTMLElement; refresh: () => void } | undefined;
   if (opts.gameId) {
     const g = opts.gameId;
-    gid = gameIdField(g.get, g.set, () => gameIdify(g.deriveFrom()) || g.fallback, g.commit);
+    gid = gameIdField(g.get, g.set, () => gameIdify(g.deriveFrom()) || g.fallback, g.commit, opts.contract);
   }
   // The title and the address share ONE ROW, the address right-aligned. It used
   // to have a row of its own under the title, which cost a line of vertical space
@@ -627,6 +688,12 @@ export function documentHeading(label: string, opts: {
   }
   if (gid) titleRow.append(el("div", { className: "doc-gid" }, gid.root));
   if (titleRow.childElementCount > 0) head.append(titleRow);
+  // The venue's claim on this entity, under the name it claims. One line per
+  // installation and nothing at all otherwise, which is the density rule: a
+  // project with no server has no venue to be told about.
+  for (const line of opts.contract ?? []) {
+    head.append(el("p", { className: "doc-contract", text: line }));
+  }
   if (opts.purpose) {
     const p = opts.purpose;
     // LABELLED, and the same word on all seven types that have this field
@@ -832,6 +899,42 @@ function outcomeBody(o: OutcomeEdit, catalogue: ConditionProperty[], commit: () 
 // (chosen tags fill its holes; everything unset follows the template live) or
 // standalone with its own inline rule.
 
+/**
+ * The hole picker's second half: "from a property" (design/engine-server.md
+ * 4.6). The tags come first because filling a hole with one is what a hand
+ * usually does; a property reference is the same control saying "wherever this
+ * says", so it belongs in the same list rather than behind a mode switch.
+ *
+ * Nothing is appended when the project declares nothing that could name a tag,
+ * which is most projects: an empty group would teach a reader to expect a
+ * choice that is not there.
+ */
+function appendPropertyFills(sel: HTMLSelectElement, from: string[], current: string): void {
+  // A hand that moves is a general engine feature, offered at every rung
+  // (ruling of 2026-09-05: it was gated at venue, and a hole filled from a
+  // property is not a venue's). Asked of the ladder rather than assumed, so
+  // one table stays the whole answer; a reference already in the shard shows
+  // whatever the answer, since hiding must never silently drop content.
+  if (!shows("propertyHole") && !isHoleRef(current)) return;
+  if (from.length === 0 && !isHoleRef(current)) return;
+  const group = document.createElement("optgroup");
+  group.label = "from a property";
+  for (const ref of from) {
+    const o = el("option", { text: ref });
+    o.value = ref;
+    if (ref === current) o.selected = true;
+    group.append(o);
+  }
+  sel.append(group);
+  // A reference the project no longer declares still has to show, or saving
+  // this hand would silently drop the hole's fill.
+  if (isHoleRef(current) && !from.includes(current)) {
+    const o = el("option", { text: `${current} (not declared)` });
+    o.value = current; o.selected = true;
+    group.append(o);
+  }
+}
+
 export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: HandDetail, catalogue: ConditionProperty[], h: InspectorHost): void {
   const boxId = box.id;
   const edit: HandEdit & { gameId: string; title: string; purpose: string; slots: string } = {
@@ -865,6 +968,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
       purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "<what sits here, and why>", commit },
       menu: [{ label: "Delete hand", danger: true, onClick: () => h.deleteHand(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.title || detail.gameId, a) },
+      ...(detail.contract !== undefined ? { contract: detail.contract } : {}),
     }));
     const declared = standalone() ? edit.rule?.slots ?? "unbounded" : templateNow?.slots ?? "unbounded";
     const slotsNow = /^\d+$/.test(edit.slots) ? Number(edit.slots)
@@ -947,6 +1051,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
       // One chosen row per hole: the tags that make this instance concrete.
       const holes = templateNow?.chooses ?? [];
       if (holes.length > 0) {
+        let moves = false;
         const rows = holes.map((group) => {
           const current = edit.chosen?.find((c) => c.group === group)?.value ?? "";
           const options = detail.groups.find((g) => g.gameId === group)?.values
@@ -954,14 +1059,18 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
           const sel = el("select", { className: "insp-input insp-mono" });
           const none = el("option", { text: "(choose)" }); none.value = ""; sel.append(none);
           for (const v of options) { const o = el("option", { text: v }); o.value = v; if (v === current) o.selected = true; sel.append(o); }
+          appendPropertyFills(sel, detail.movableFrom, current);
+          if (isHoleRef(current)) moves = true;
           sel.addEventListener("change", () => {
             edit.chosen = (edit.chosen ?? []).filter((c) => c.group !== group);
             if (sel.value) edit.chosen.push({ group, value: sel.value });
-            commit();
+            commit(); redraw();
           });
           return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label" }, chipDot(group), group), sel);
         });
-        view.append(section("Chosen tags", "filling the template's holes - a hand is fully concrete", ...rows));
+        view.append(section("Chosen tags",
+          moves ? "filling the template's holes - one of them moves with a property"
+            : "filling the template's holes - a hand is fully concrete", ...rows));
       } else {
         view.append(emptySection("Chosen tags", "this template has no holes"));
       }
@@ -969,19 +1078,24 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
       // The inline rule: bindings + its own When.
       const rule = edit.rule;
       if (detail.groups.length > 0) {
+        let moves = false;
         const rows = detail.groups.map((group) => {
           const current = rule.bindings?.find((b) => b.group === group.gameId);
           const sel = el("select", { className: "insp-input insp-mono" });
           const none = el("option", { text: "(any)" }); none.value = ""; sel.append(none);
           for (const v of group.values) { const o = el("option", { text: v }); o.value = v; if (current?.value === v) o.selected = true; sel.append(o); }
+          appendPropertyFills(sel, detail.movableFrom, current?.value ?? "");
+          if (isHoleRef(current?.value ?? "")) moves = true;
           sel.addEventListener("change", () => {
             rule.bindings = (rule.bindings ?? []).filter((b) => b.group !== group.gameId);
             if (sel.value) rule.bindings.push({ group: group.gameId, value: sel.value });
-            commit();
+            commit(); redraw();
           });
           return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label" }, chipDot(group.gameId), group.gameId), sel);
         });
-        view.append(section("Pulls cards tagged", "the rule's bindings; an unbound group is any", ...rows));
+        view.append(section("Pulls cards tagged",
+          moves ? "the rule's bindings; one of them moves with a property"
+            : "the rule's bindings; an unbound group is any", ...rows));
       } else {
         view.append(emptySection("Pulls cards tagged", "no tag groups in this box"));
       }
@@ -1019,9 +1133,69 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     view.append(el("div", { className: "doc-panel cfg-panel" },
       cfgRow("Rank by specificity", "More specific cards win ties; otherwise ties break by priority alone.",
         cfgCheck(specificity, (v) => { specificity = v; h.saveBox(box.id, { ranking: { specificity: v } }); }))));
+
+    // WHAT A TURN IS in this box (design/engine-server.md 4.8). Two answers,
+    // and the second is a declaration rather than a policy: saying "every 60
+    // seconds" is what stops plays advancing the clock, so a designer cannot
+    // set the convention and then forget to switch play-advance off. The
+    // consequence is spelt out under the choice rather than left to be
+    // discovered on the Board, because it changes what Redraw MEANS on every
+    // card in the box.
+    let seconds: number | undefined = box.turn?.seconds;
+    const turnsHost = el("div");
+    const drawTurns = (): void => {
+      const timed = seconds !== undefined;
+      const seg = el("div", { className: "insp-seg" });
+      for (const [label, on] of [["a play", !timed], ["every N seconds of play", timed]] as [string, boolean][]) {
+        const b = el("button", { className: on ? "on" : "", text: label });
+        // A click on the choice already made does nothing: it must not reset a
+        // seconds the designer has typed.
+        if (!on) b.addEventListener("click", () => {
+          seconds = timed ? undefined : 60;
+          h.saveBox(box.id, { turn: seconds === undefined ? null : { seconds } });
+          drawTurns();
+        });
+        seg.append(b);
+      }
+      const field = el("input", { className: "insp-input insp-mono insp-short" });
+      field.value = timed ? String(seconds) : "";
+      // "N", as the Redraw field does: the placeholder convention is a shown
+      // default of one character, and the label above already says what N is.
+      field.placeholder = "N"; field.disabled = !timed;
+      const note = el("p", { className: "insp-note" });
+      const say = (n: number | undefined): void => {
+        note.textContent = n === undefined ? "" : "Plays in this box do not advance its turns; the game's clock does. "
+          + `Redraw times on its cards are read as time, so a Redraw of 30 means ${turnSpan(30, n, true)}.`;
+      };
+      const typed = (): number | undefined => {
+        const n = Number(field.value);
+        return /^\d+$/.test(field.value.trim()) && Number.isInteger(n) && n > 0 ? n : undefined;
+      };
+      field.addEventListener("input", () => say(typed()));
+      field.addEventListener("change", () => {
+        const n = typed();
+        if (n !== undefined) { seconds = n; h.saveBox(box.id, { turn: { seconds: n } }); }
+      });
+      say(seconds);
+      turnsHost.replaceChildren(
+        el("div", { className: "cfg-panel" },
+          cfgRow("A turn is", "A play, as everywhere else; or a length of time the game's clock counts out.",
+            el("div", { className: "insp-segrow" }, seg, field))),
+        note);
+    };
+    // A timed box is a general engine feature, shown at every rung (ruling of
+    // 2026-09-05: it was gated at venue, and a clock is not a venue's). The
+    // question still goes through the ladder rather than around it, so that
+    // one table stays the whole answer to what a rung shows; the `seconds`
+    // arm keeps a box that is ALREADY timed showing its section whatever any
+    // future rule says, since hiding must never swallow content in use.
+    if (shows("timedBox") || seconds !== undefined) {
+      drawTurns();
+      view.append(section("Turns", "what a turn is in this box", turnsHost));
+    }
   } else if (tab === "template") {
     const fields: FieldDeclDto[] = box.fields.map((f) => ({ ...f, values: f.values ? [...f.values] : undefined }));
-    view.append(el("div", { className: `doc-panel${fields.length === 0 ? " empty" : ""}` }, propList(fields, () => h.saveBox(box.id, { fields }), "+ Field")),
+    view.append(el("div", { className: `doc-panel${fields.length === 0 ? " empty" : ""}` }, propList(fields, () => h.saveBox(box.id, { fields }), "+ Field", { sharingSwitches: false })),
       el("p", { className: "doc-tab-note", text: "The template for this box's cards: the fields every card can carry." }));
   } else {
     const properties: PropertyDeclDto[] = box.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
@@ -1047,12 +1221,26 @@ export function renderDeckTabBody(host: HTMLElement, box: BoxDto, deck: DeckDto,
     // Scarcity across playthroughs (design/shared-scarcity.md). The deck is
     // where this normally goes: a pile that is scarce AS A PILE says so once,
     // and a card only overrides it when it alone is unique.
-    view.append(el("div", { className: "doc-panel cfg-panel" },
-      cfgRow("Shared across playthroughs",
+    const deckRows: HTMLElement[] = [];
+    if (shows("sharing")) {
+      deckRows.push(cfgRow("Shared across playthroughs",
         "One pile for everyone: a card dealt to one participant cannot be dealt to another, "
         + "and a card whose Redraw is never is spent for the whole world the first time anyone plays it. "
         + "A single-player game is unaffected.",
-        cfgCheck(deck.shared === true, (on) => h.saveDeckConfig(deck.id, { shared: on })))));
+        cfgCheck(deck.shared === true, (on) => h.saveDeckConfig(deck.id, { shared: on }))));
+    }
+    // Durability across the RUN (design/engine-server.md 4.2): the pile is
+    // where this normally goes too, and a card overrides it the same way. A
+    // pile already flagged keeps its switch at every rung, for the reason the
+    // card page does: "remove the flag" is the only way out of a durable flag
+    // below venue, and it needs a control to be removed with.
+    if (shows("durable") || deck.durable === true) {
+      deckRows.push(cfgRow("Durable",
+        "Cards in this pile stay played after the run ends: tomorrow they are still gone for whoever "
+        + "played them. Only a card whose Redraw is never has anything to carry.",
+        cfgCheck(deck.durable === true, (on) => h.saveDeckConfig(deck.id, { durable: on }))));
+    }
+    if (deckRows.length > 0) view.append(el("div", { className: "doc-panel cfg-panel" }, ...deckRows));
   } else {
     const properties: PropertyDeclDto[] = deck.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
     view.append(el("div", { className: `doc-panel${properties.length === 0 ? " empty" : ""}` }, propList(properties, () => h.saveDeckConfig(deck.id, { properties }), "+ Property")),

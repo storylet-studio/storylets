@@ -12,6 +12,7 @@
 // the answer.
 
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEditor;
 using UnityEngine;
 
@@ -90,7 +91,7 @@ namespace StoryletStudio.StoryletEngine.Editor
                 string template = string.IsNullOrEmpty(hand.Template) ? "" : $", template {hand.Template}";
                 EditorGUILayout.LabelField(
                     "  " + (string.IsNullOrEmpty(hand.Title) ? hand.GameId : $"{hand.GameId} ({hand.Title})"),
-                    $"box {hand.Box}, slots {hand.SlotsLabel}{template}");
+                    $"box {hand.Box}, slots {hand.SlotsLabel}{template}{Moves(hand)}");
             }
         }
 
@@ -143,12 +144,15 @@ namespace StoryletStudio.StoryletEngine.Editor
             return $"{scope.Scope} {scope.Owner}{group}";
         }
 
-        /// <summary>"type = default", plus enum/flags options where declared.</summary>
+        /// <summary>"type = default", plus enum/flags options where declared,
+        /// plus "(durable)" where the value outlives a run (4.2). Nothing is
+        /// added for the ordinary run-scoped property.</summary>
         internal static string PropertyLabel(PropertySummary p)
         {
             string options = p.Values != null && p.Values.Count > 0 ? $" [{string.Join(", ", p.Values)}]" : "";
             string def = p.Default != null ? p.Default.ToJsonString() : "<unset>";
-            return $"{p.Type} = {def}{options}";
+            string durable = p.Durable ? " (durable)" : "";
+            return $"{p.Type} = {def}{options}{durable}";
         }
 
         private static void DrawMaps(BundleDescription description)
@@ -156,7 +160,8 @@ namespace StoryletStudio.StoryletEngine.Editor
             EditorGUILayout.LabelField("Geometry the build was asked to carry. The engine ignores it.", EditorStyles.miniLabel);
             foreach (var map in description.Maps)
             {
-                EditorGUILayout.LabelField($"{map.Box} - {map.Group}: zones {map.Zones}, pictures {map.Backgrounds}");
+                EditorGUILayout.LabelField(
+                    $"{map.Box} - {map.Group}: zones {map.Zones}, pictures {map.Backgrounds}, sites {map.Sites}");
             }
         }
 
@@ -169,9 +174,19 @@ namespace StoryletStudio.StoryletEngine.Editor
             foreach (var box in description.Boxes)
             {
                 var c = box.Counts;
+                // A timed box says its unit here (design/engine-server.md 4.8),
+                // because this is the line an integrator reads to find out what
+                // their host has to tick. Nothing is added for an ordinary box.
+                string timed = box.TurnSeconds.HasValue
+                    ? ", turn = " + box.TurnSeconds.Value.ToString("R", CultureInfo.InvariantCulture) + "s"
+                    : "";
+                // Durable cards (4.2), only when there are any: what a server
+                // has to lift over a run boundary.
+                string durable = box.DurableCards > 0 ? $", durable cards {box.DurableCards}" : "";
                 EditorGUILayout.LabelField("  " + box.GameId,
                     $"decks {c.Decks}, cards {c.Cards}, hands {c.Hands}, templates {c.Templates}, "
-                    + $"tag groups {c.TagGroups}, ranking.specificity {(box.RankingSpecificity ? "on" : "off")}");
+                    + $"tag groups {c.TagGroups}, ranking.specificity {(box.RankingSpecificity ? "on" : "off")}"
+                    + timed + durable);
             }
         }
 
@@ -202,9 +217,19 @@ namespace StoryletStudio.StoryletEngine.Editor
             foreach (var hand in description.Hands)
             {
                 string template = string.IsNullOrEmpty(hand.Template) ? "" : $", template {hand.Template}";
-                lines.Add($"{hand.GameId}: box {hand.Box}, slots {hand.SlotsLabel}{template}");
+                lines.Add($"{hand.GameId}: box {hand.Box}, slots {hand.SlotsLabel}{template}{Moves(hand)}");
             }
             return lines;
+        }
+
+        /// <summary>A movable hole is the one thing about a hand its name
+        /// cannot say: write that property and the hand moves (4.6).</summary>
+        private static string Moves(HandSummary hand)
+        {
+            if (hand.Movable == null || hand.Movable.Count == 0) return "";
+            var parts = new List<string>();
+            foreach (var hole in hand.Movable) parts.Add($"{hole.Group} from {hole.From}");
+            return ", moves " + string.Join(" and ", parts);
         }
     }
 }

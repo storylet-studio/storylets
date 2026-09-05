@@ -6,7 +6,7 @@ import { searchIndex, searchMatch } from "./search.js";
 import type { ProjectDto } from "../../shared/api.js";
 
 const project: ProjectDto = {
-  dir: "/p", name: "Saltmarsh", threads: {}, storyPropertyCount: 0,
+  dir: "/p", name: "Saltmarsh", threads: {}, storyPropertyCount: 0, play: "solo",
   boxes: [{
     id: "b_1", gameId: "encounters", ranking: { specificity: true }, fields: [], properties: [],
     decks: [{

@@ -41,9 +41,14 @@ Getting around and editing:
 - Inside a card, `Esc` goes back to the deck, and the stepper beside the trail (`↑` / `↓`)
   moves to the previous or next card without going back.
 
-The deck's other tabs are **Dealing** (the condition for any card in this deck, and
+The deck's other tabs are **Dealing** (the condition for any card in this deck, plus
 **Shared across playthroughs**, which makes the whole pile scarce in the world rather than
 one each per playthrough) and **Properties** (the deck's own `@deck` state).
+
+Whether you're shown **Shared across playthroughs** depends on the project's
+[Play setting](/storyletter/workspace/#play-how-much-of-the-app-you-see): a solo project
+hasn't got it. A project served by a Storylet Server also gets **Durable** beside it; see the
+Storylet Server documentation.
 
 ## The card document
 
@@ -85,6 +90,8 @@ Everything about how this card gets dealt, on one page.
   effectively shared. Offered only then, because on an unshared card it does nothing.
   Defaults to **Copies**, so the common "one in the world, one to a customer" needs
   nothing set.
+- **Durable** appears on a project served by a Storylet Server, beside Shared and in the same
+  three settings; see the Storylet Server documentation.
 - **Where**: the one you reach for most. It answers "where does this
   card come up?" in a sentence: **Anywhere**, or **The Inn**, or **anywhere in the
   forest**, or a combination. **Change** opens a picker with two sections, **Places**

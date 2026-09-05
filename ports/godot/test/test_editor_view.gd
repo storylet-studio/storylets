@@ -67,11 +67,12 @@ func _run() -> void:
 			{"x": 0, "y": 0}, {"x": 4, "y": 0}, {"x": 4, "y": 3}]}],
 		"backgrounds": [{"file": "assets/village/plan.png",
 			"x": 1, "y": 2, "width": 8, "height": 6}],
+		"sites": [{"hand": "the-forge", "x": 5, "y": 6}, {"hand": "the-well", "x": 7, "y": 8}],
 	}]
 	view.set_bundle_resource(StoryletBundleResource.from_json_text(JSON.stringify(mapped)))
 	var mapped_text := _text_of(view)
 	_check("the map section appears", mapped_text.contains("MAPS (CARRIED, NOT READ)"))
-	_check("it counts what is in the map", mapped_text.contains("village - zone: zones 1, pictures 1"),
+	_check("it counts what is in the map", mapped_text.contains("village - zone: zones 1, pictures 1, sites 2"),
 		mapped_text.substr(0, 120))
 	_check("it says the engine ignores it", mapped_text.contains("The engine ignores it"))
 

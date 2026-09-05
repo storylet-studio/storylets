@@ -19,6 +19,7 @@ import { bindPropertyName, dupGuard, expandableRow, firstIllegalPropertyName, fo
   labelled, moveItem, PROPERTY_NAME_HINT, tagChips } from "@wildwinter/app-shell";
 import type { SettingsSectionHandle } from "@wildwinter/app-shell";
 import type { PropertyDeclDto } from "../../shared/api.js";
+import { shows } from "./play-ladder.js";
 
 export const PROP_TYPES = ["string", "number", "boolean", "enum", "flags", "quality"];
 
@@ -79,6 +80,21 @@ export interface PropListOptions {
    *  the story's promise not to write a value the game owns. Patterpad has the
    *  same switch on its World Properties, in the same words. */
   readOnlySwitch?: boolean;
+  /**
+   * Offer the two axes a declaration can sit on: Shared (design/flows.md) and
+   * Durable (design/engine-server.md 4.2). Default true.
+   *
+   * Off for the @world list, where both are compile errors (@world is the
+   * game's own state), and off for a box's card TEMPLATE, whose fields are
+   * data for the host and carry no state at all. The play ladder decides
+   * whether either one is drawn even where they are offered.
+   */
+  sharingSwitches?: boolean;
+  /** Is this scope shared unless the declaration says otherwise? True for
+   *  @story, false for box / deck / hand / tag - the runtime's own defaults.
+   *  The switch writes the flag only when it DIFFERS from this, so a shard
+   *  keeps saying what the author chose rather than what the app assumed. */
+  sharedByDefault?: boolean;
 }
 
 /** Mount the declaration list into `host`. Mutates `decls` in place. */
@@ -127,6 +143,44 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
         const roLabel = labelled("Read-only", ro);
         roLabel.dataset.tip = "Read-only: the story can read this value but not set it (the game owns it). Writing to it is then a validation error.";
         details.push(roLabel);
+      }
+      // The two axes (design/flows.md; design/engine-server.md 4.2), drawn only
+      // where the project's rung shows them - absent, never greyed, since the
+      // answer in a solo project is "not in this kind of project" and the Play
+      // field in Project Settings is where that is said.
+      if (opts.sharingSwitches !== false) {
+        const shareDefault = opts.sharedByDefault === true;
+        if (shows("sharing")) {
+          const sh = el("input") as HTMLInputElement;
+          sh.type = "checkbox"; sh.checked = p.shared ?? shareDefault;
+          sh.addEventListener("change", () => {
+            if (sh.checked === shareDefault) delete p.shared; else p.shared = sh.checked;
+            changed();
+          });
+          const shLabel = labelled("Shared", sh);
+          shLabel.dataset.tip = shareDefault
+            ? "Shared: one value for everyone playing, rather than a copy each. On by default for story state; untick it for a value each playthrough keeps to itself."
+            : "Shared: one value for everyone playing, rather than a copy each. A single-player game is unaffected.";
+          details.push(shLabel);
+        }
+        // A declaration that is ALREADY durable keeps its switch at every
+        // rung. Hiding must not swallow content in use, and here it would
+        // strand it: venue is the Storylet Server's rung to set, so the only
+        // way out the compiler can name is "remove the flag", and a control
+        // that is not drawn is one an author cannot use to remove it. Sharing
+        // needs no such escape: moving up a rung is a move Storyletter offers.
+        if (shows("durable") || p.durable === true) {
+          // Durable is never a scope default: absent means run-scoped everywhere.
+          const du = el("input") as HTMLInputElement;
+          du.type = "checkbox"; du.checked = p.durable === true;
+          du.addEventListener("change", () => {
+            if (du.checked) p.durable = true; else delete p.durable;
+            changed();
+          });
+          const duLabel = labelled("Durable", du);
+          duLabel.dataset.tip = "Durable: the value survives the end of a run. Shared and durable is the installation's memory; durable on its own is what one player carries back with them.";
+          details.push(duLabel);
+        }
       }
       if (p.type === "enum" || p.type === "flags") {
         details.push(labelled("Values", tagChips(p as { values?: string[] }, () => {

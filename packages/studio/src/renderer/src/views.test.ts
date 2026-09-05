@@ -26,7 +26,7 @@ const box: BoxDto = {
   tagGroups: [{ id: "d_1", gameId: "zone", values: ["docks", "market"] }],
   hands: [{ id: "h_1", gameId: "docks-street", template: "street-hands", slots: 2, tags: {} }],
 };
-const project: ProjectDto = { dir: "/p", name: "Saltmarsh", threads: {}, storyPropertyCount: 0, boxes: [box] };
+const project: ProjectDto = { dir: "/p", name: "Saltmarsh", threads: {}, storyPropertyCount: 0, play: "venue", boxes: [box] };
 
 const stubActions = (over: Partial<ViewActions> = {}): ViewActions => ({
   openThreads: () => 0, showComments: vi.fn(), focus: vi.fn(), toggleNav: vi.fn(), openProjectSettings: vi.fn(), revealProject: vi.fn(), inspectCard: vi.fn(), inspectTemplate: vi.fn(), inspectTagGroup: vi.fn(), inspectHand: vi.fn(),
@@ -145,6 +145,46 @@ describe("the shard keys items carry (data-vc, for the lock / read-only badges)"
     renderBoxCentre(host, box, () => {}, stubActions());
     expect(host.querySelector<HTMLElement>("[data-vc-scope]")!.dataset["vcScope"]).toBe("tags:b_1");
     setDocTab("box:b_1", "contents");   // leave the shared tab state clean
+  });
+});
+
+// What a VENUE depends on (design/engine-server.md 4.11). Quiet, one line per
+// installation, and NOTHING at all on an ordinary project - which is the shape
+// the density rule asks for, and the half worth testing hardest.
+describe("the contract line on a box page", () => {
+  it("says nothing when no venue depends on this box", () => {
+    const host = document.createElement("div");
+    setDocTab("box:b_1", "contents");
+    renderBoxCentre(host, box, () => {}, stubActions());
+    expect(host.querySelector(".doc-contract")).toBeNull();
+  });
+
+  it("says what the venue does with it, under the name it claims", () => {
+    const host = document.createElement("div");
+    setDocTab("box:b_1", "contents");
+    renderBoxCentre(host, { ...box, contract: ["Ticked at the-park every 60s"] }, () => {}, stubActions());
+    const lines = [...host.querySelectorAll(".doc-contract")].map((n) => n.textContent);
+    expect(lines).toEqual(["Ticked at the-park every 60s"]);
+  });
+
+  it("marks the rename field and puts the same sentence in its hint, rather than refusing", () => {
+    const host = document.createElement("div");
+    setDocTab("box:b_1", "contents");
+    renderBoxCentre(host, { ...box, contract: ["Ticked at the-park every 60s"] }, () => {}, stubActions());
+    const gid = host.querySelector<HTMLElement>(".doc-gid .gid")!;
+    expect(gid.classList.contains("gid-bound")).toBe(true);
+    expect(gid.title).toContain("Ticked at the-park every 60s");
+    // Marked, never disabled: the refusal is the server's, on push.
+    expect(gid.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("says one line per venue for a project that tours", () => {
+    const host = document.createElement("div");
+    setDocTab("box:b_1", "contents");
+    renderBoxCentre(host, {
+      ...box, contract: ["Ticked at the-park every 60s", "Ticked at the-pier every 90s"],
+    }, () => {}, stubActions());
+    expect(host.querySelectorAll(".doc-contract")).toHaveLength(2);
   });
 });
 

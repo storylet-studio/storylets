@@ -102,6 +102,26 @@ namespace storylets
     {
         /** Seed for this flow's PRNG (absent = the engine's seed). */
         std::optional<double> seed;
+        /**
+         * Open this flow AS IT WAS: a blob from saveFlow, applied to the freshly
+         * opened (or replaced) flow before the handle comes back
+         * (design/engine-server.md 4.1).
+         *
+         * An option on openFlow rather than a Flow::restore verb on purpose:
+         * restoring INTO a running flow is the trap hosts keep falling into
+         * (openFlow REPLACES), and "open this flow as it was" is one act. Drift
+         * is tolerated exactly as loadGame tolerates it, with one addition,
+         * because this restore lands in a LIVE engine: a shared card whose world
+         * copies are all held by the OTHER open flows is not put back, and is
+         * reported as claimed-elsewhere. Ask previewFlowRestore first to see
+         * that coming.
+         */
+        std::optional<FlowSave> restore;
+        /** Handed the restore's LoadReport as it happens - the same report
+         *  previewFlowRestore returns for the same blob. Ignored without
+         *  `restore`; the report has nowhere else to go, since openFlow returns
+         *  the handle. */
+        std::function<void(const LoadReport&)> onRestoreReport;
     };
 
     /** A card view in a dealt hand or a peeked list. Carries NO outcome
@@ -311,6 +331,159 @@ namespace storylets
             OrderedMap<std::string, std::vector<PropertyDecl>> hand;
             OrderedMap<std::string, std::vector<PropertyDecl>> value;
         };
+
+        // --- the load report (design/engine-server.md 4.9) --------------------
+        //
+        // One walk, two entry points. previewLoad runs it and returns the
+        // report; loadGame runs it, returns the same report and then applies the
+        // CLEANED blob the walk produced. Two implementations of "what does this
+        // save cost" would drift the first time one of them was fixed, so there
+        // is one, and the apply half consumes its output rather than repeating
+        // its decisions.
+
+        /** The report under construction: unsorted, until FinishReport orders it. */
+        struct ReportDraft
+        {
+            std::vector<LoadEviction> evicted;
+            std::vector<LoadCooldown> droppedCooldowns;
+            std::vector<std::string> droppedSpent;
+            std::vector<LoadProperty> droppedProperties;
+            std::vector<LoadProperty> defaultedProperties;
+            std::vector<LoadProperty> retypedProperties;
+        };
+
+        /** The sort key separator: a UNIT SEPARATOR, because it cannot occur in
+         *  an id, a gameId or a property name. */
+        inline const char* const ReportSep = "\x1f";
+
+        inline bool Contains(const std::optional<std::vector<std::string>>& list, const std::string& item)
+        {
+            if (!list.has_value()) return true;   // no vocabulary constrains nothing
+            return std::find(list->begin(), list->end(), item) != list->end();
+        }
+
+        /**
+         * Does a saved value still fit its declaration?
+         *
+         * The type first, then the declaration's own vocabulary: an enum value
+         * or a quality stage the edit struck out is still a string of the right
+         * type and still no longer a legal value. A declaration with no
+         * vocabulary constrains nothing, so anything of the right type fits.
+         */
+        inline bool ValueFits(const PropertyDecl& decl, const StoryletValue& value)
+        {
+            if (decl.type == PropertyTypes::Boolean) return value.isBool();
+            if (decl.type == PropertyTypes::Number) return value.isNumber();
+            if (decl.type == PropertyTypes::String) return value.isString();
+            if (decl.type == PropertyTypes::Enum) return value.isString() && Contains(decl.values, value.asString());
+            if (decl.type == PropertyTypes::Quality) return value.isString() && Contains(decl.stages, value.asString());
+            if (decl.type == PropertyTypes::Flags)
+            {
+                if (!value.isFlags()) return false;
+                for (const auto& f : value.asFlags()) if (!Contains(decl.values, f)) return false;
+                return true;
+            }
+            return true;
+        }
+
+        /** Walk one bag's worth of saved values against one bag's worth of
+         *  declarations: report the orphans, the newcomers and the misfits, and
+         *  return the values that survive. */
+        inline OrderedMap<std::string, StoryletValue> WalkScope(
+            const std::vector<PropertyDecl>* decls,
+            const OrderedMap<std::string, StoryletValue>* saved,
+            const std::string& prefix, const std::string& flow, ReportDraft& draft)
+        {
+            std::unordered_map<std::string, const PropertyDecl*> byName;
+            if (decls) for (const auto& d : *decls) byName[d.name] = &d;
+            OrderedMap<std::string, StoryletValue> clean;
+            if (saved)
+            {
+                for (const auto& pair : *saved)
+                {
+                    auto found = byName.find(pair.first);
+                    if (found == byName.end())
+                    {
+                        draft.droppedProperties.push_back(LoadProperty{flow, prefix + pair.first});
+                        continue;
+                    }
+                    if (!ValueFits(*found->second, pair.second))
+                    {
+                        draft.retypedProperties.push_back(LoadProperty{flow, prefix + pair.first});
+                        continue;
+                    }
+                    clean.set(pair.first, pair.second);
+                }
+            }
+            if (decls)
+            {
+                for (const auto& d : *decls)
+                {
+                    if (!saved || !saved->contains(d.name))
+                    {
+                        draft.defaultedProperties.push_back(LoadProperty{flow, prefix + d.name});
+                    }
+                }
+            }
+            return clean;
+        }
+
+        inline std::string JoinKey(const std::vector<std::string>& parts)
+        {
+            std::string out;
+            for (size_t i = 0; i < parts.size(); ++i)
+            {
+                if (i) out += ReportSep;
+                out += parts[i];
+            }
+            return out;
+        }
+
+        /** Order the draft and answer the identity questions. `saved` is the
+         *  content block the save carries; for a single-flow restore there is
+         *  none, so the caller passes the bundle's own and no drift is
+         *  reported. */
+        inline LoadReport FinishReport(const BundleContent& bundle, const BundleContent& saved,
+            const std::vector<std::string>& flows, ReportDraft& draft)
+        {
+            std::sort(draft.evicted.begin(), draft.evicted.end(),
+                [](const LoadEviction& a, const LoadEviction& b)
+                {
+                    return JoinKey({a.flow, a.hand, a.card, a.reason}) < JoinKey({b.flow, b.hand, b.card, b.reason});
+                });
+            std::sort(draft.droppedCooldowns.begin(), draft.droppedCooldowns.end(),
+                [](const LoadCooldown& a, const LoadCooldown& b)
+                {
+                    return JoinKey({a.flow, a.card}) < JoinKey({b.flow, b.card});
+                });
+            std::sort(draft.droppedSpent.begin(), draft.droppedSpent.end());
+            const auto byPath = [](const LoadProperty& a, const LoadProperty& b)
+            {
+                return JoinKey({a.flow, a.path}) < JoinKey({b.flow, b.path});
+            };
+            std::sort(draft.droppedProperties.begin(), draft.droppedProperties.end(), byPath);
+            std::sort(draft.defaultedProperties.begin(), draft.defaultedProperties.end(), byPath);
+            std::sort(draft.retypedProperties.begin(), draft.retypedProperties.end(), byPath);
+
+            LoadReport report;
+            const bool drift = saved.version != bundle.version || saved.hash != bundle.hash;
+            // `flows` is what the load restores, not something it had to change,
+            // so it never makes a report inexact.
+            report.exact = !drift && draft.evicted.empty() && draft.droppedCooldowns.empty()
+                && draft.droppedSpent.empty() && draft.droppedProperties.empty()
+                && draft.defaultedProperties.empty() && draft.retypedProperties.empty();
+            report.project = bundle.project;
+            report.version = LoadIdentity{saved.version, bundle.version};
+            report.hash = LoadIdentity{saved.hash, bundle.hash};
+            report.flows = flows;
+            report.evicted = std::move(draft.evicted);
+            report.droppedCooldowns = std::move(draft.droppedCooldowns);
+            report.droppedSpent = std::move(draft.droppedSpent);
+            report.droppedProperties = std::move(draft.droppedProperties);
+            report.defaultedProperties = std::move(draft.defaultedProperties);
+            report.retypedProperties = std::move(draft.retypedProperties);
+            return report;
+        }
     }
 
     class Flow;
@@ -370,6 +543,10 @@ namespace storylets
          *  a flow was holding: its board leaves the map with it. */
         std::unordered_map<std::string, int> sharedClaims() const;
 
+        /** The same ledger with one name left out: what the REST of the world
+         *  holds, which is the question a resume under that name has to ask. */
+        std::unordered_map<std::string, int> sharedClaimsExcept(const std::string& id) const;
+
         // --- the run's log (design/shared-scarcity.md 8.2) --------------------
 
         /** Every flow's events in one ordered stream, each tagged with its flow.
@@ -424,10 +601,35 @@ namespace storylets
          *  every live flow keyed by its id. @world is NEVER here. */
         SaveEnvelope saveGame() const;
 
+        /** ONE flow's blob, to park a visit that is walking away: the same
+         *  shape the envelope carries per flow, and the same shape openFlow's
+         *  `restore` option takes back (design/engine-server.md 4.1). Saving the
+         *  whole envelope to park one of four hundred players is wrong in cost
+         *  and in meaning. Throws for a name that is not open - a closed flow
+         *  has nothing left to save. */
+        FlowSave saveFlow(const std::string& id) const;
+
+        /** What loadGame(envelope) would do that is not a plain restore, without
+         *  doing any of it (design/engine-server.md 4.9). Pure: nothing on this
+         *  engine moves. A project mismatch is refused here exactly as loadGame
+         *  refuses it - it is the one thing neither call will tolerate. */
+        LoadReport previewLoad(const SaveEnvelope& envelope) const;
+
+        /** What openFlow(id, { restore: saved }) would do to a flow of that
+         *  name, without doing it: the same report shape, since a visit parked
+         *  under one build and resumed under the next raises the same questions.
+         *  Pure. */
+        LoadReport previewFlowRestore(const std::string& id, const FlowSave& saved) const;
+
         /** Restore: shared state once, then every flow REBUILT from its
          *  blob. Handles held from before the load are closed and inert;
-         *  take fresh ones from getFlow()/flows(). */
-        void loadGame(const SaveEnvelope& envelope);
+         *  take fresh ones from getFlow()/flows().
+         *
+         *  Returns the report previewLoad would have given for this envelope:
+         *  the drift tolerance that makes a load forgiving is what hides its
+         *  cost, so the cost comes back with the load whether or not anybody
+         *  looked first. */
+        LoadReport loadGame(const SaveEnvelope& envelope);
 
         // --- the @world seam (used by flows and hosts alike) -----------------
 
@@ -590,8 +792,33 @@ namespace storylets
         std::optional<int> logCap_;
         std::optional<WorldResolver> hostWorld_;
         std::shared_ptr<PropertyBag> selfWorld_;
+        /** The walk both entry points share, and what the apply half writes. */
+        struct LoadPlan
+        {
+            LoadReport report;
+            PropsPartition shared;
+            std::vector<std::string> spent;
+            OrderedMap<std::string, FlowSave> flows;
+        };
+        void assertSameProject(const SaveEnvelope& envelope) const;
+        LoadPlan planLoad(const SaveEnvelope& envelope) const;
+        /** One flow's walk. `otherClaims` is the rest of the world's shared
+         *  ledger and is present only for a SINGLE-flow restore into a live
+         *  engine: a whole-envelope load rebuilds every flow from one consistent
+         *  moment, so there is nobody else to compete with. */
+        FlowSave planFlowRestore(const std::string& id, const FlowSave& saved,
+            const std::unordered_map<std::string, int>* otherClaims, detail::ReportDraft& draft) const;
+        /** The scope walk over all five scopes of one partition. */
+        PropsPartition walkPartition(const detail::FlowDecls& decls, const PropsPartition* values,
+            const std::string& flow, detail::ReportDraft& draft) const;
+
         detail::Partition shared_;
         detail::FlowDecls flowDecls_;
+        /** The shared halves, the same way. Not used to build anything - the
+         *  shared bags are built straight from the bundle - but a load report
+         *  has to say what the shared side WOULD hold without building a bag,
+         *  which is what makes previewLoad pure. */
+        detail::FlowDecls sharedDecls_;
         OrderedMap<std::string, FlowPtr> flows_;
         /** The shared spend ledger; see isTaken / markTaken. */
         std::unordered_set<std::string> spent_;
@@ -1033,8 +1260,16 @@ namespace storylets
 
             // The played card's box's clock advances (schema 3.4); computed up
             // front so the play and its writes log as one action, one turn stamp.
+            //
+            // A TIMED box (design/engine-server.md 4.8) defaults to advancing
+            // NOTHING: its clock is time, the host ticks it, and a play is not a
+            // tick. A call that names advanceTurns still gets what it asked for,
+            // in either kind of box, because the call says otherwise. This is the
+            // whole of turn's effect on the engine: the seconds are never read.
+            const double perPlay = entry.box->turnSeconds.has_value()
+                ? 0.0 : engine_->bundle_->settings.playAdvancesTurns;
             double newTurn = turnCounts_.getOr(entry.box->id, 0)
-                + (opts.advanceTurns.has_value() ? *opts.advanceTurns : engine_->bundle_->settings.playAdvancesTurns);
+                + (opts.advanceTurns.has_value() ? *opts.advanceTurns : perPlay);
 
             // Every right-hand side evaluates against PRE-play state, then all
             // writes land (schema 3.7).
@@ -1555,6 +1790,13 @@ namespace storylets
                 for (const auto& pair : t.bindings) ask.boundTags.set(pair.first, pair.second);
                 for (const auto& pair : hand.chosen)
                 {
+                    // A hole filled from a property rather than with a tag:
+                    // resolve it now, before tag composition (4.6).
+                    if (IsHoleRef(pair.second))
+                    {
+                        fillHoleFromProperty(hand, pair.first, pair.second, ask);
+                        continue;
+                    }
                     ask.boundTags.set(pair.first, pair.second);
                     const GroupInBox* group = engine_->groupsById_.get(pair.first);
                     const Tag* tag = group ? tagById(*group->group, pair.second) : nullptr;
@@ -1571,6 +1813,11 @@ namespace storylets
                 {
                     for (const auto& pair : hand.rule->bindings)
                     {
+                        if (IsHoleRef(pair.second))
+                        {
+                            fillHoleFromProperty(hand, pair.first, pair.second, ask);
+                            continue;
+                        }
                         ask.boundTags.set(pair.first, pair.second);
                         // ...and name it, as the template branch does: a card
                         // reading @hand.<group> must not care HOW it was bound.
@@ -1625,6 +1872,69 @@ namespace storylets
             }
             bindStateGroups(box, ask);
             return ask;
+        }
+
+        /** Fill one hole from the property its value names: the hand that moves
+         *  (design/engine-server.md 4.6).
+         *
+         *  The semantics are bindStateGroups' below, word for word, applied per
+         *  HOLE instead of per group: resolved at ask time, and a value naming
+         *  no tag leaves the hole UNBOUND (a wildcard) with a diagnostic rather
+         *  than dealing a silently empty hand. What is added is the @hand
+         *  scope - the asking hand's OWN declared state, read from the flow's
+         *  merged view, so a shared declaration moves the hole for every flow
+         *  and a per-flow one moves it for this flow alone.
+         *
+         *  Read BEFORE tag composition, which is what makes it safe: the @hand
+         *  bag a card sees is built from the bound tags, so resolving a hole
+         *  from it would be circular. A hand's own declarations are not. */
+        void fillHoleFromProperty(const Hand& hand, const std::string& groupId,
+                                  const std::string& ref, AskDescriptor& ask) const
+        {
+            const GroupInBox* found = engine_->groupsById_.get(groupId);
+            const std::string groupName = found ? EffectiveGameId(*found->group) : groupId;
+            const std::string where = "hand " + EffectiveGameId(hand) + ", tag group " + groupName;
+            std::string scope, name;
+            if (!ParseHoleRef(ref, scope, name))
+            {
+                diagnose(where, "\"" + ref + "\" is not a @hand, @world or @story property reference");
+                return;
+            }
+            if (!found)
+            {
+                diagnose(where, "\"" + ref + "\" fills a tag group that is not in this box");
+                return;
+            }
+            std::optional<StoryletValue> value;
+            if (scope == "hand")
+            {
+                // The merged view: the flow's own bag first, the shared bag
+                // behind it. Names are disjoint, so "first" is routing.
+                const PropertyBag* own = bagOf(stores_.hand, hand.id);
+                const PropertyBag* shared = bagOf(engine_->shared_.hand, hand.id);
+                if (own) value = own->get(name);
+                if (!value.has_value() && shared) value = shared->get(name);
+            }
+            else
+            {
+                try { value = getProperty(scope + "." + name); }
+                catch (const StoryletError&) { value.reset(); }
+            }
+            if (!value.has_value())
+            {
+                diagnose(where, "\"" + ref + "\" names a property that is not declared");
+                return;
+            }
+            const std::string wanted = value->isString() ? value->asString() : value->toJsonString();
+            const Tag* tag = nullptr;
+            for (const auto& t : found->group->tags) { if (EffectiveGameId(t) == wanted) { tag = &t; break; } }
+            if (!tag)
+            {
+                diagnose(where, ref + " is \"" + wanted + "\", which is not one of the tags of \"" + groupName + "\"");
+                return;
+            }
+            ask.boundTags.set(groupId, tag->id);
+            ask.askNames.set(groupName, EffectiveGameId(*tag));
         }
 
         /** Bind every state-bound group in the box from the property it names.
@@ -2322,20 +2632,18 @@ namespace storylets
             assertOpen();
             std::vector<PropertyRow> rows;
             addWorldRows(rows);
-            auto add = [&rows](const std::string& prefix, const PropertyBag* bag)
+            // No path prefix passed in: the bag composes the address from its
+            // own pathPrefix, so the row arrives complete - which is also why
+            // the field-by-field copy this used to do is gone, including the
+            // `r.stages = row.stages;` that appeared twice in it.
+            auto add = [&rows](const PropertyBag* bag)
             {
                 if (!bag) return;
-                for (const auto& row : bag->rows())
-                {
-                    // The bag composes the address from its own pathPrefix, so the row
-                    // arrives complete and this field-by-field copy is gone - including
-                    // the `r.stages = row.stages;` that appeared twice in it.
-                    rows.push_back(row);
-                }
+                for (const auto& row : bag->rows()) rows.push_back(row);
             };
-            add("story", engine_->shared_.story.get());
-            add("story", stores_.story.get());
-            auto addKind = [&](const char* kind,
+            add(engine_->shared_.story.get());
+            add(stores_.story.get());
+            auto addKind = [&](
                 const OrderedMap<std::string, std::shared_ptr<PropertyBag>>& shared,
                 const OrderedMap<std::string, std::shared_ptr<PropertyBag>>& own)
             {
@@ -2346,14 +2654,14 @@ namespace storylets
                 }
                 for (const auto& id : ids)
                 {
-                    add(std::string(kind) + "." + id, bagOf(shared, id));
-                    add(std::string(kind) + "." + id, bagOf(own, id));
+                    add(bagOf(shared, id));
+                    add(bagOf(own, id));
                 }
             };
-            addKind("box", engine_->shared_.box, stores_.box);
-            addKind("deck", engine_->shared_.deck, stores_.deck);
-            addKind("hand", engine_->shared_.hand, stores_.hand);
-            addKind("value", engine_->shared_.value, stores_.value);
+            addKind(engine_->shared_.box, stores_.box);
+            addKind(engine_->shared_.deck, stores_.deck);
+            addKind(engine_->shared_.hand, stores_.hand);
+            addKind(engine_->shared_.value, stores_.value);
             return rows;
         }
 
@@ -2550,24 +2858,31 @@ namespace storylets
             }
         }
         initLadders();
-        // The per-flow halves, precomputed once (a bundle never changes).
+        // Both halves, precomputed once (a bundle never changes): each openFlow
+        // builds its bags from the per-flow half, and a load report asks either
+        // half what it declares without building anything at all.
         flowDecls_.story = half("story", bundle_->story.properties, false);
+        sharedDecls_.story = half("story", bundle_->story.properties, true);
         for (const auto& box : bundle_->boxes)
         {
             flowDecls_.box.set(box.id, half("box", box.properties, false));
+            sharedDecls_.box.set(box.id, half("box", box.properties, true));
             for (const auto& deck : box.decks)
             {
                 flowDecls_.deck.set(deck.id, half("deck", deck.properties, false));
+                sharedDecls_.deck.set(deck.id, half("deck", deck.properties, true));
             }
             for (const auto& hand : box.hands)
             {
                 flowDecls_.hand.set(hand.id, half("hand", handDecls(hand), false));
+                sharedDecls_.hand.set(hand.id, half("hand", handDecls(hand), true));
             }
             for (const auto& group : box.tagGroups)
             {
                 for (const auto& tag : group.tags)
                 {
                     flowDecls_.value.set(tag.id, half("value", tag.properties, false));
+                    sharedDecls_.value.set(tag.id, half("value", tag.properties, true));
                 }
             }
         }
@@ -2599,6 +2914,11 @@ namespace storylets
 
     inline FlowPtr Engine::openFlow(const std::string& id, const OpenFlowOptions& opts)
     {
+        // The world's claims as they stand WITHOUT this name, taken before the
+        // replace: a resume competes with the other flows, never with the flow
+        // it is replacing (which is about to release everything it holds).
+        std::unordered_map<std::string, int> otherClaims;
+        if (opts.restore.has_value()) otherClaims = sharedClaimsExcept(id);
         const FlowPtr* existing = flows_.get(id);
         if (existing)
         {
@@ -2609,6 +2929,16 @@ namespace storylets
         }
         FlowPtr flow = std::make_shared<Flow>(this, id, opts.seed.has_value() ? *opts.seed : seed_);
         flows_.set(id, flow);
+        if (opts.restore.has_value())
+        {
+            detail::ReportDraft draft;
+            const FlowSave clean = planFlowRestore(id, *opts.restore, &otherClaims, draft);
+            flow->restore(clean);
+            if (opts.onRestoreReport)
+            {
+                opts.onRestoreReport(detail::FinishReport(bundle_->content, bundle_->content, {id}, draft));
+            }
+        }
         return flow;
     }
 
@@ -2644,6 +2974,17 @@ namespace storylets
         for (const auto& pair : flows_)
         {
             for (const auto& id : pair.second->heldCardIds()) ++counts[id];
+        }
+        return counts;
+    }
+
+    inline std::unordered_map<std::string, int> Engine::sharedClaimsExcept(const std::string& id) const
+    {
+        std::unordered_map<std::string, int> counts;
+        for (const auto& pair : flows_)
+        {
+            if (pair.first == id) continue;
+            for (const auto& cardId : pair.second->heldCardIds()) ++counts[cardId];
         }
         return counts;
     }
@@ -2736,16 +3077,17 @@ namespace storylets
             r.writable = worldCanSet();
             rows.push_back(std::move(r));
         }
-        auto add = [&rows](const std::string& prefix, const PropertyBag& bag)
+        // No path prefix passed in: the bag composes the address from its own
+        // pathPrefix, so the row arrives complete.
+        auto add = [&rows](const PropertyBag& bag)
         {
-            // The bag composes the address from its own pathPrefix: the row arrives complete.
             for (const auto& row : bag.rows()) rows.push_back(row);
         };
-        add("story", *shared_.story);
-        for (const auto& pair : shared_.box) add("box." + pair.first, *pair.second);
-        for (const auto& pair : shared_.deck) add("deck." + pair.first, *pair.second);
-        for (const auto& pair : shared_.hand) add("hand." + pair.first, *pair.second);
-        for (const auto& pair : shared_.value) add("value." + pair.first, *pair.second);
+        add(*shared_.story);
+        for (const auto& pair : shared_.box) add(*pair.second);
+        for (const auto& pair : shared_.deck) add(*pair.second);
+        for (const auto& pair : shared_.hand) add(*pair.second);
+        for (const auto& pair : shared_.value) add(*pair.second);
         return rows;
     }
 
@@ -2764,23 +3106,175 @@ namespace storylets
         return envelope;
     }
 
-    inline void Engine::loadGame(const SaveEnvelope& envelope)
+    inline FlowSave Engine::saveFlow(const std::string& id) const
+    {
+        const FlowPtr* found = flows_.get(id);
+        if (!found) throw StoryletError("unknown flow \"" + id + "\"");
+        return (*found)->snapshot();
+    }
+
+    inline void Engine::assertSameProject(const SaveEnvelope& envelope) const
     {
         if (envelope.content.project != bundle_->content.project)
         {
             throw StoryletError("save is for project \"" + envelope.content.project
                 + "\", bundle is \"" + bundle_->content.project + "\"");
         }
+    }
+
+    inline LoadReport Engine::previewLoad(const SaveEnvelope& envelope) const
+    {
+        assertSameProject(envelope);
+        return planLoad(envelope).report;
+    }
+
+    inline LoadReport Engine::previewFlowRestore(const std::string& id, const FlowSave& saved) const
+    {
+        detail::ReportDraft draft;
+        const std::unordered_map<std::string, int> otherClaims = sharedClaimsExcept(id);
+        planFlowRestore(id, saved, &otherClaims, draft);
+        return detail::FinishReport(bundle_->content, bundle_->content, {id}, draft);
+    }
+
+    inline LoadReport Engine::loadGame(const SaveEnvelope& envelope)
+    {
+        assertSameProject(envelope);
+        LoadPlan plan = planLoad(envelope);
         reset();
-        shared_.story->load(envelope.shared.props.story);
-        Flow::loadKind(shared_.box, envelope.shared.props.box);
-        Flow::loadKind(shared_.deck, envelope.shared.props.deck);
-        Flow::loadKind(shared_.hand, envelope.shared.props.hand);
-        Flow::loadKind(shared_.value, envelope.shared.props.value);
-        for (const auto& id : envelope.shared.spent) spent_.insert(id);
-        for (const auto& pair : envelope.flows)
+        shared_.story->load(plan.shared.story);
+        Flow::loadKind(shared_.box, plan.shared.box);
+        Flow::loadKind(shared_.deck, plan.shared.deck);
+        Flow::loadKind(shared_.hand, plan.shared.hand);
+        Flow::loadKind(shared_.value, plan.shared.value);
+        for (const auto& id : plan.spent) spent_.insert(id);
+        for (const auto& pair : plan.flows)
         {
             openFlow(pair.first)->restore(pair.second);
         }
+        return plan.report;
+    }
+
+    inline PropsPartition Engine::walkPartition(const detail::FlowDecls& decls, const PropsPartition* values,
+        const std::string& flow, detail::ReportDraft& draft) const
+    {
+        PropsPartition out;
+        out.story = detail::WalkScope(&decls.story, values ? &values->story : nullptr, "story.", flow, draft);
+        struct KindView
+        {
+            const char* name;
+            const OrderedMap<std::string, std::vector<PropertyDecl>>* decls;
+            const OrderedMap<std::string, OrderedMap<std::string, StoryletValue>>* saved;
+            OrderedMap<std::string, OrderedMap<std::string, StoryletValue>>* out;
+        };
+        const KindView kinds[] = {
+            {"box", &decls.box, values ? &values->box : nullptr, &out.box},
+            {"deck", &decls.deck, values ? &values->deck : nullptr, &out.deck},
+            {"hand", &decls.hand, values ? &values->hand : nullptr, &out.hand},
+            {"value", &decls.value, values ? &values->value : nullptr, &out.value},
+        };
+        for (const auto& kind : kinds)
+        {
+            // An owner the save carries and the build no longer has drops whole
+            // (its bag is gone, so its values have nowhere to land); an owner the
+            // build has and the save lacks keeps every default.
+            std::vector<std::string> ids = kind.decls->keys();
+            if (kind.saved)
+            {
+                for (const auto& id : kind.saved->keys())
+                {
+                    if (!kind.decls->contains(id)) ids.push_back(id);
+                }
+            }
+            std::sort(ids.begin(), ids.end());
+            for (const auto& id : ids)
+            {
+                const std::string prefix = std::string(kind.name) + "." + id + ".";
+                kind.out->set(id, detail::WalkScope(kind.decls->get(id),
+                    kind.saved ? kind.saved->get(id) : nullptr, prefix, flow, draft));
+            }
+        }
+        return out;
+    }
+
+    inline Engine::LoadPlan Engine::planLoad(const SaveEnvelope& envelope) const
+    {
+        detail::ReportDraft draft;
+        LoadPlan plan;
+        plan.shared = walkPartition(sharedDecls_, &envelope.shared.props, std::string(), draft);
+        for (const auto& cardId : envelope.shared.spent)
+        {
+            if (cardsById_.contains(cardId)) plan.spent.push_back(cardId);
+            else draft.droppedSpent.push_back(cardId);
+        }
+        std::vector<std::string> ids;
+        for (const auto& pair : envelope.flows)
+        {
+            ids.push_back(pair.first);
+            plan.flows.set(pair.first, planFlowRestore(pair.first, pair.second, nullptr, draft));
+        }
+        plan.report = detail::FinishReport(bundle_->content, envelope.content, ids, draft);
+        return plan;
+    }
+
+    inline FlowSave Engine::planFlowRestore(const std::string& id, const FlowSave& saved,
+        const std::unordered_map<std::string, int>* otherClaims, detail::ReportDraft& draft) const
+    {
+        FlowSave clean;
+        clean.props = walkPartition(flowDecls_, &saved.props, id, draft);
+        clean.turns = saved.turns;
+        clean.prng = saved.prng;
+        clean.playLog = saved.playLog;
+        for (const auto& pair : saved.cooldowns)
+        {
+            if (cardsById_.contains(pair.first)) clean.cooldowns.set(pair.first, pair.second);
+            else draft.droppedCooldowns.push_back(LoadCooldown{id, pair.first});
+        }
+        // A deleted entity has no gameId left, so it is named by the id the save
+        // carries; everything the build still knows is named by its gameId.
+        auto cardName = [this](const std::string& cardId) -> std::string
+        {
+            const detail::CardEntry* entry = cardsById_.get(cardId);
+            return entry ? EffectiveGameId(*entry->card) : cardId;
+        };
+        std::unordered_map<std::string, int> restored;
+        for (const auto& pair : saved.board)
+        {
+            const detail::HandInBox* known = handsById_.get(pair.first);
+            if (!known)
+            {
+                for (const auto& cardId : pair.second)
+                {
+                    draft.evicted.push_back(LoadEviction{id, pair.first, cardName(cardId), "hand-vanished"});
+                }
+                continue;
+            }
+            const std::string hand = EffectiveGameId(*known->hand);
+            std::vector<std::string> kept;
+            for (const auto& cardId : pair.second)
+            {
+                const detail::CardEntry* entry = cardsById_.get(cardId);
+                if (!entry)
+                {
+                    draft.evicted.push_back(LoadEviction{id, hand, cardId, "vanished"});
+                    continue;
+                }
+                if (otherClaims
+                    && Flow::cardIsShared(*entry->card, entry->deck->shared.has_value() && *entry->deck->shared))
+                {
+                    const auto elsewhere = otherClaims->find(cardId);
+                    const int held = (elsewhere == otherClaims->end() ? 0 : elsewhere->second) + restored[cardId];
+                    if (static_cast<double>(held) >= Flow::sharedCap(*entry->card))
+                    {
+                        draft.evicted.push_back(
+                            LoadEviction{id, hand, EffectiveGameId(*entry->card), "claimed-elsewhere"});
+                        continue;
+                    }
+                    ++restored[cardId];
+                }
+                kept.push_back(cardId);
+            }
+            clean.board.set(pair.first, std::move(kept));
+        }
+        return clean;
     }
 }

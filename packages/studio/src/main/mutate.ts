@@ -10,7 +10,7 @@ import { basename, join } from "node:path";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
 import type { SourceBox, SourceDeck } from "@storylet-studio/compiler";
 import {
-  analyseInfluence, ASSETS_DIR, freeAssetName, imageSize, isSafeAssetName, layoutByDependency, mapSites, newId,
+  analyseInfluence, ASSETS_DIR, contractNotes, freeAssetName, imageSize, isSafeAssetName, layoutByDependency, mapSites, newId,
   planCanvasFurniture, planCardPositions, planComments, planForgetSites, planMapSites, proposeCoverage, runNewBox,
   boxFolderWrites,
 } from "@storylet-studio/ops";
@@ -77,7 +77,7 @@ function bindSitesToZones(
   return changed;
 }
 import {
-  DECK_SCHEMA, PLACE_GROUP, SHARD_EXTENSIONS, backgroundsOf, bindHand, droppedRect, effectiveGameId, freeGameId, freeTitle, isValidGameId, gameIdify,
+  DECK_SCHEMA, PLACE_GROUP, SHARD_EXTENSIONS, backgroundsOf, bindHand, droppedRect, effectiveGameId, freeGameId, freeTitle, isHoleRef, isValidGameId, gameIdify,
   handBinding, isSpatial, polygonOf, restack, unbindHand, withBackgrounds, withPolygon, withSpatialGroup, withZ,
   zOf, zoneAt,
 } from "@storylet-studio/model";
@@ -205,6 +205,12 @@ function applyEdit(box: SourceBox, existing: Card<string>, edit: CardEdit): Card
     const n = Number(edit.sharedCopies);
     if (edit.sharedCopies.trim() && Number.isInteger(n) && n >= 1) next.sharedCopies = n;
     else delete next.sharedCopies;
+  }
+  // Durability across the RUN (design/engine-server.md 4.2), the same three
+  // states for the same reason: null clears the card's override and lets the
+  // deck's flag stand.
+  if (edit.durable !== undefined) {
+    if (edit.durable === null) delete next.durable; else next.durable = edit.durable;
   }
   if (edit.fields !== undefined) {
     const fields: Record<string, ScalarValue> = {};
@@ -708,6 +714,10 @@ export function renameDeck(session: ProjectSession, deckId: string, edit: DeckEd
     if (edit.shared) found.deck.shard.deck.shared = true;
     else delete found.deck.shard.deck.shared;
   }
+  if (edit.durable !== undefined) {
+    if (edit.durable) found.deck.shard.deck.durable = true;
+    else delete found.deck.shard.deck.durable;
+  }
   if (edit.properties !== undefined) {
     found.deck.shard.deck.properties = edit.properties.filter((d) => d.name.trim()).map(declFromDto);
   }
@@ -759,6 +769,12 @@ export function saveProjectSettings(session: ProjectSession, dto: ProjectSetting
   if (dto.exportMap) p.export.map = true; else delete p.export.map;
   if (dto.warnUnreadWrites) p.validation = { warnUnreadWrites: true }; else delete p.validation;
   p.settings.playAdvancesTurns = dto.playAdvancesTurns;
+  // The play ladder's rung (design/engine-server.md 4.10). Written whatever it
+  // is, "solo" included: it is a three-way choice, not an off/on flag, and a
+  // shard that names its rung is one an author can read. The dialog refuses a
+  // move down while content sits above the rung, so nothing arrives here that
+  // would hide something the project contains.
+  p.settings.play = dto.play;
   writeDrivers(p, dto.drivers);
   const path = join(session.loaded.dir, source.path);
   return commit(session, "Project settings", `struct:${structCounter++}`,
@@ -907,6 +923,18 @@ const coerceDefault = (raw: string, type: string): ScalarValue => {
   if (type === "flags") { try { const v = parseSource(t); return Array.isArray(v) ? (v as string[]) : []; } catch { return []; } }
   return t;   // string / enum
 };
+/** A hand's or template's @hand declaration as the editor's row. The two axes
+ *  ride along for the reason `declFromDto` carries them back: the list saves
+ *  whole. */
+const handDeclDto = (p: PropertyDecl): PropertyDeclDto => ({
+  name: p.name, type: p.type,
+  default: typeof p.default === "string" ? p.default : JSON.stringify(p.default),
+  ...(p.values !== undefined ? { values: p.values } : {}),
+  ...(p.stages !== undefined ? { stages: p.stages } : {}),
+  ...(p.shared !== undefined ? { shared: p.shared } : {}),
+  ...(p.durable !== undefined ? { durable: p.durable } : {}),
+  ...(p.purpose !== undefined ? { purpose: p.purpose } : {}),
+});
 const declFromDto = (d: PropertyDeclDto): PropertyDecl => ({
   name: d.name, type: d.type as PropertyDecl["type"],
   // A quality with no explicit default starts at its first stage; the compile
@@ -915,6 +943,11 @@ const declFromDto = (d: PropertyDeclDto): PropertyDecl => ({
   ...(d.values !== undefined ? { values: d.values } : {}),
   ...(d.stages !== undefined ? { stages: d.stages } : {}),
   ...(d.writable !== undefined ? { writable: d.writable } : {}),
+  // The two axes (design/flows.md, engine-server.md 4.2). Carried whether or
+  // not the project's rung draws a switch for them: a list saves whole, so a
+  // flag that does not survive the round trip is a flag the next save deletes.
+  ...(d.shared !== undefined ? { shared: d.shared } : {}),
+  ...(d.durable !== undefined ? { durable: d.durable } : {}),
   // Blank means no purpose: an emptied field deletes rather than storing "".
   ...(d.purpose !== undefined && d.purpose.trim() !== "" ? { purpose: d.purpose.trim() } : {}),
 });
@@ -933,6 +966,10 @@ export function saveBox(session: ProjectSession, boxId: string, edit: BoxEdit): 
   if (edit.gameId !== undefined) { const g = gameIdify(edit.gameId); if (g) b.gameId = g; else delete b.gameId; }
   if (edit.purpose !== undefined) { if (edit.purpose.trim()) b.purpose = edit.purpose; else delete b.purpose; }
   if (edit.ranking !== undefined) b.ranking = { specificity: edit.ranking.specificity };
+  // Turns: an object makes the box timed, null puts it back to counting plays.
+  // Deleted rather than written as absent, so a box that is not timed carries
+  // no `turn` key at all and the shard reads as it always did.
+  if (edit.turn !== undefined) { if (edit.turn === null) delete b.turn; else b.turn = { seconds: edit.turn.seconds }; }
   if (edit.fields !== undefined) b.fields = edit.fields.map(declFromDto);
   if (edit.properties !== undefined) b.properties = edit.properties.map(declFromDto);
   return commit(session, "Edit box", `box:${boxId}`, [{ path: boxFile(session, box), content: canonicalStringify(box.box) }]);
@@ -952,8 +989,13 @@ function bindingRows(box: SourceBox, bindings: Record<string, string> | undefine
   });
 }
 
-/** Resolve binding rows back to stored form (fixed bindings + chooses). */
-function resolveBindingRows(box: SourceBox, rows: BindingDto[]): { bindings: Record<string, string>; chooses: string[] } {
+/** Resolve binding rows back to stored form (fixed bindings + chooses).
+ *
+ *  `allowRefs` is a HAND's rule: a standalone hand may fill a binding from a
+ *  property, and the reference is stored as authored. A TEMPLATE may not - its
+ *  bindings are the same for every instance, so a hole that moves belongs on
+ *  the hand, and the compiler says so. */
+function resolveBindingRows(box: SourceBox, rows: BindingDto[], allowRefs = false): { bindings: Record<string, string>; chooses: string[] } {
   const bindings: Record<string, string> = {};
   const chooses: string[] = [];
   for (const b of rows) {
@@ -961,6 +1003,7 @@ function resolveBindingRows(box: SourceBox, rows: BindingDto[]): { bindings: Rec
     if (!group) continue;
     if (b.hole) { chooses.push(group.id); continue; }
     if (b.value) {
+      if (allowRefs && isHoleRef(b.value)) { bindings[group.id] = b.value; continue; }
       const tag = group.tags.find((x) => effectiveGameId(x) === b.value);
       if (tag) bindings[group.id] = tag.id;
     }
@@ -978,10 +1021,7 @@ export function templateDetail(session: ProjectSession, boxId: string, templateI
     bindings: bindingRows(box, template.bindings, template.chooses),
     ...(!blank(template.condition) ? { condition: template.condition } : {}),
     slots: String(template.slots ?? "unbounded"),
-    properties: (template.properties ?? []).map((p) => ({
-      name: p.name, type: p.type, default: typeof p.default === "string" ? p.default : JSON.stringify(p.default),
-      ...(p.values !== undefined ? { values: p.values } : {}),
-    })),
+    properties: (template.properties ?? []).map(handDeclDto),
     groups: byDisplay(box.tags.groups).map((d) => ({ gameId: effectiveGameId(d), values: byDisplay(d.tags).map((v) => effectiveGameId(v)) })),
     instances: box.hands.hands.filter((h) => h.template === template.id).map((h) => h.title ?? effectiveGameId(h)),
   };
@@ -1112,20 +1152,40 @@ export function handDetail(session: ProjectSession, boxId: string, handId: strin
   const template = hand.template !== undefined
     ? box.hands.templates.find((t) => t.id === hand.template)
     : undefined;
-  // One chosen row per hole of the template, carrying any stored tag.
+  // One chosen row per hole of the template, carrying any stored tag - or the
+  // property reference the hole is filled from, which passes through as it was
+  // authored (it names no tag, so there is nothing to resolve here).
   const chosen = (template?.chooses ?? []).map((groupId) => {
     const group = box.tags.groups.find((d) => d.id === groupId);
     const tagId = hand.chosen?.[groupId];
     const tag = group?.tags.find((x) => x.id === tagId);
     return {
       group: group ? effectiveGameId(group) : groupId,
-      value: tag ? effectiveGameId(tag) : "",
+      value: tagId !== undefined && isHoleRef(tagId) ? tagId : (tag ? effectiveGameId(tag) : ""),
       values: byDisplay(group?.tags ?? []).map((v) => effectiveGameId(v)),
     };
   });
+  // What "from a property" may offer: this hand's own @hand state (its
+  // template's, when it instances one - the same pair the engine composes
+  // from), plus the declared @story and @world properties. String and enum
+  // only: the value has to be able to NAME a tag.
+  const handDecls = template !== undefined ? template.properties ?? [] : hand.properties ?? [];
+  const project = session.loaded.source!.project;
+  const canName = (d: PropertyDecl): boolean => d.type === "string" || d.type === "enum";
+  const movableFrom = [
+    ...handDecls.filter(canName).map((d) => `@hand.${d.name}`),
+    ...(project.story?.properties ?? []).filter(canName).map((d) => `@story.${d.name}`),
+    ...(project.world?.properties ?? []).filter(canName).map((d) => `@world.${d.name}`),
+  ];
+  // What a venue depends on about this hand (design/engine-server.md 4.11).
+  // Derived here beside `movableFrom`, and for the same reason: it exists only
+  // for the editor, and a second reading of the shard in the renderer is how the
+  // line and the refusal come to disagree.
+  const venue = contractNotes(session.loaded.source!).get(`hand:${effectiveGameId(hand)}`);
   return {
     id: hand.id,
     gameId: effectiveGameId(hand),
+    ...(venue !== undefined ? { contract: venue.map((n) => n.line) } : {}),
     ...(!blank(hand.gameId) ? { gameIdPinned: hand.gameId } : {}),
     ...(hand.title !== undefined ? { title: hand.title } : {}),
     ...(hand.purpose !== undefined ? { purpose: hand.purpose } : {}),
@@ -1139,10 +1199,8 @@ export function handDetail(session: ProjectSession, boxId: string, handId: strin
       },
     } : {}),
     slots: hand.slots === undefined ? "" : String(hand.slots),
-    properties: (hand.properties ?? []).map((p) => ({
-      name: p.name, type: p.type, default: typeof p.default === "string" ? p.default : JSON.stringify(p.default),
-      ...(p.values !== undefined ? { values: p.values } : {}),
-    })),
+    properties: (hand.properties ?? []).map(handDeclDto),
+    movableFrom,
     templates,
     groups,
   };
@@ -1177,14 +1235,18 @@ export function saveHand(session: ProjectSession, boxId: string, handId: string,
     const chosen: Record<string, string> = {};
     for (const c of edit.chosen) {
       const group = box.tags.groups.find((d) => effectiveGameId(d) === c.group);
-      const tag = group?.tags.find((x) => effectiveGameId(x) === c.value);
-      if (group && tag) chosen[group.id] = tag.id;
+      if (!group) continue;
+      // A property reference is stored as authored: it names no tag, and the
+      // runtime resolves it at ask time (the hand that moves).
+      if (isHoleRef(c.value)) { chosen[group.id] = c.value; continue; }
+      const tag = group.tags.find((x) => effectiveGameId(x) === c.value);
+      if (tag) chosen[group.id] = tag.id;
     }
     if (Object.keys(chosen).length > 0) hand.chosen = chosen; else delete hand.chosen;
   }
   if (edit.rule !== undefined && hand.rule !== undefined) {
     if (edit.rule.bindings !== undefined) {
-      const { bindings } = resolveBindingRows(box, edit.rule.bindings);
+      const { bindings } = resolveBindingRows(box, edit.rule.bindings, true);
       if (Object.keys(bindings).length > 0) hand.rule.bindings = bindings; else delete hand.rule.bindings;
     }
     if (edit.rule.condition !== undefined) {
@@ -1241,6 +1303,8 @@ export function tagGroupDetail(session: ProjectSession, boxId: string, groupId: 
     ...(p.values !== undefined ? { values: p.values } : {}),
     ...(p.stages !== undefined ? { stages: p.stages } : {}),
     ...(p.writable !== undefined ? { writable: p.writable } : {}),
+    ...(p.shared !== undefined ? { shared: p.shared } : {}),
+    ...(p.durable !== undefined ? { durable: p.durable } : {}),
     ...(p.purpose !== undefined ? { purpose: p.purpose } : {}),
   });
   return {

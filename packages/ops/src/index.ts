@@ -41,6 +41,8 @@ export type { ReplaceOptions, ReplaceHit, ReplaceField, ReplacePlan } from "./re
 export {
   ASSETS_DIR, assetPath, assetUse, freeAssetName, imageSize, isSafeAssetName, orphanAssetPaths,
 } from "./assets.js";
+export { contractIssues, contractNotes } from "./contract.js";
+export type { ContractNote } from "./contract.js";
 export { canvasFurniture, cardPositions, deckCanvas, mapSites, planCanvasFurniture, planCardPositions, planForgetCanvas, planForgetSites, planMapSites, viewPath } from "./view.js";
 export type { CanvasRef } from "./view.js";
 export { notesPath, planComments } from "./comments.js";

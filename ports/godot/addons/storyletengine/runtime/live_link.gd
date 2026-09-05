@@ -235,9 +235,14 @@ static func apply_live_bundle(engine: StoryletEngine, data: String, opts: Dictio
 	var next := StoryletEngine.create(loaded["bundle"], opts)
 	if next == null:
 		return {"ok": false, "error": "pushed bundle: could not create an engine (bad options)"}
-	var err := next.load_game(engine.save_game())
-	if err != "":
-		return {"ok": false, "error": err}
+	var envelope := engine.save_game()
+	# The refusal is asked for by name: load_game answers with a LoadReport now,
+	# and a pushed bundle for another project has to come back as an error the
+	# caller can show.
+	var refusal: String = next._project_mismatch(envelope)
+	if refusal != "":
+		return {"ok": false, "error": refusal}
+	next.load_game(envelope)
 	return {"ok": true, "engine": next, "bundle": loaded["bundle"]}
 
 

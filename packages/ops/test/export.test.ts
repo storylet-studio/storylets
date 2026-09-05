@@ -63,6 +63,13 @@ function askForMaps(dir: string): void {
   writeFileSync(projFile, text.replace(/export: \{/, "export: {\n    map: true,"));
 }
 
+/** Put the box's one hand on the map, in the view sidecar where a drag records
+ *  it. `docks-street` is `h_docks` in the example. */
+function placeHand(dir: string, sites: Record<string, { x: number; y: number }> = { h_docks: { x: 12, y: 34 } }): void {
+  writeFileSync(join(dir, "encounters", "view.storyletview"),
+    canonicalStringify({ schema: "storylets/view@0", map: { sites } }));
+}
+
 function withPicture(dir: string, name = "site-plan.png"): void {
   mkdirSync(join(dir, "encounters", "assets"), { recursive: true });
   writeFileSync(join(dir, "encounters", "assets", name), PNG);
@@ -160,6 +167,28 @@ describe("a bundle that was", () => {
     const result = runExport(loadProject(dir));
     expect(result.bundle!.maps![0]!.backgrounds).toHaveLength(1);
     expect(result.assets).toEqual([]);
+  });
+
+  it("carries where the hands stand, by gameId (design/engine-server.md 4.3)", () => {
+    const dir = scratch();
+    drawMap(dir);
+    withPicture(dir);
+    placeHand(dir);
+    askForMaps(dir);
+
+    const map = runExport(loadProject(dir), "-").bundle!.maps![0]!;
+    expect(map.sites).toEqual([{ hand: "docks-street", x: 12, y: 34 }]);
+    // The site's ZONE is not repeated here: the hand's own binding is what the
+    // runtime deals from, and a second copy could only go on to disagree.
+    expect(JSON.stringify(map.sites)).not.toContain("v_docks");
+  });
+
+  it("carries no sites key when nobody has been placed", () => {
+    const dir = scratch();
+    drawMap(dir);
+    withPicture(dir);
+    askForMaps(dir);
+    expect(runExport(loadProject(dir), "-").bundle!.maps![0]!.sites).toBeUndefined();
   });
 
   it("says nothing at all when the map was never drawn", () => {

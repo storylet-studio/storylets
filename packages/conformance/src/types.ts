@@ -17,7 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AstNode, ScalarValue } from "@wildwinter/expr";
-import type { Bundle, PropertyDecl, RedrawPolicy } from "@storylet-studio/model";
+import type { Bundle, LoadReport, PropertyDecl, RedrawPolicy } from "@storylet-studio/model";
 
 export type ScopeBag = Record<string, ScalarValue>;
 
@@ -112,8 +112,14 @@ export type ScriptOp =
    *  Refresh hands (all when omitted). expectBoard is keyed by hand ID and
    *  read from board(); expectDealt is asserted against dealMany's RETURN,
    *  which holds exactly the hands this call dealt (the dealt slice) - its
-   *  key set must match, so an extra or missing hand in the return fails. */
-  | { op: "deal"; flow?: string; hands?: string[]; expectBoard?: Record<string, string[]>; expectDealt?: Record<string, string[]>; expectVerdicts?: Record<string, TraceVerdictKind> }
+   *  key set must match, so an extra or missing hand in the return fails.
+   *
+   *  `expectDiagnostic` pins that the deal SAID something: at least one
+   *  `diagnostic` trace event whose message contains this substring. A
+   *  substring rather than the whole message because the message is prose an
+   *  author reads, not a contract - what is pinned is that the runtime spoke
+   *  up rather than filling a hole silently (4.6). */
+  | { op: "deal"; flow?: string; hands?: string[]; expectBoard?: Record<string, string[]>; expectDealt?: Record<string, string[]>; expectVerdicts?: Record<string, TraceVerdictKind>; expectDiagnostic?: string }
   /** Read the board and check it WHOLE: `expect` is keyed by hand ID and its
    *  key set must MATCH, not merely be included - that is what pins the
    *  filter. `box` (a box gameId or id) narrows the read to one box's hands;
@@ -154,8 +160,21 @@ export type ScriptOp =
   /** Serialise the WHOLE engine (shared partitions + every flow, and NOT
    *  @world), discard it, restore into a fresh one - built from `bundleB`
    *  when `into: "B"` (the drifted-content contract: orphaned state drops
-   *  harmlessly, never a crash). Every flow is rebuilt. */
-  | { op: "saveLoad"; into?: "B" }
+   *  harmlessly, never a crash). Every flow is rebuilt.
+   *
+   *  `expectReport` pins the LoadReport the load returns, field by field: only
+   *  the named fields are checked, arrays compared sorted. `previewOnly` calls
+   *  `previewLoad` and NOT `loadGame`, so the ops after it prove the preview
+   *  touched nothing. */
+  | { op: "saveLoad"; into?: "B"; expectReport?: Partial<LoadReport>; previewOnly?: true }
+  /** Park a flow: `saveFlow(flow)` kept under that name in the runner, then
+   *  `closeFlow(flow)`. A parked flow is gone from the engine, so it holds no
+   *  shared claim - which is the whole point of parking one (4.1). */
+  | { op: "parkFlow"; flow: string }
+  /** Resume a parked flow: `openFlow(flow, { restore: <the parked blob> })`.
+   *  The runner asks `previewFlowRestore` first and requires it to equal the
+   *  report the restore itself produces, then checks `expectReport`. */
+  | { op: "resumeFlow"; flow: string; seed?: number; expectReport?: Partial<LoadReport> }
   | { op: "reset" };
 
 export interface ScriptedCase {
@@ -258,7 +277,9 @@ export interface TemplateFixture {
 }
 
 export interface HandRuleFixture {
-  /** Tag group gameId -> tag gameId. */
+  /** Tag group gameId -> tag gameId, or a property reference ("@hand.zone",
+   *  "@story.where", "@world.place") the runtime resolves at ask time (4.6).
+   *  A reference passes through the gameId resolution untouched. */
   bindings?: Record<string, string>;
   condition?: string;
   slots?: number | "unbounded";
@@ -268,7 +289,9 @@ export interface HandFixture {
   id: string;
   /** Template id (exactly one of template / rule). */
   template?: string;
-  /** Hole fills: tag group gameId -> tag gameId. */
+  /** Hole fills: tag group gameId -> tag gameId, or a property reference
+   *  ("@hand.zone", "@story.where", "@world.place") - the hand that moves
+   *  (4.6). A reference passes through the gameId resolution untouched. */
   chosen?: Record<string, string>;
   rule?: HandRuleFixture;
   slots?: number;
@@ -293,6 +316,9 @@ export interface OtherBoxFixture {
   hands?: HandFixture[];
   /** Box ranking override; default { specificity: true }. */
   ranking?: { specificity: boolean };
+  /** Makes `b_y` a TIMED box (design/engine-server.md 4.8), so a case can pin
+   *  that one box being timed leaves the other counting plays as before. */
+  turn?: { seconds: number };
 }
 
 /** An extra tag group beyond the scaffold's `d_zone`, for the cases that pin
@@ -308,6 +334,11 @@ export interface GroupFixture {
 }
 
 export interface BundleFixture {
+  /** Overrides on the bundle's identity block, which is otherwise the fixed
+   *  `{ project: "conf", version: "0.0.0", hash: "" }`. A `bundleB` that
+   *  changes only its version is how the corpus pins that a load REPORTS
+   *  content drift instead of tolerating it silently (4.9). */
+  content?: { project?: string; version?: string; hash?: string };
   /** @story declarations. */
   story?: PropertyDecl[];
   /** @world declarations (engine-owned in fixtures). */
@@ -319,6 +350,9 @@ export interface BundleFixture {
   settings?: { playAdvancesTurns?: number };
   /** Box ranking override; default { specificity: true }. */
   ranking?: { specificity: boolean };
+  /** Makes `b_x` a TIMED box (design/engine-server.md 4.8): its plays advance
+   *  nothing and the host's tick is the only thing that moves its clock. */
+  turn?: { seconds: number };
   /** Shorthand: these cards go in the default deck `k_main`. */
   cards?: CardFixture[];
   /** Full deck list; overrides `cards`. */

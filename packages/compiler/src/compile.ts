@@ -15,9 +15,10 @@ import { storyletsDialect } from "@storylet-studio/dialect";
 import type {
   Box, Bundle, Card, Deck, Hand, HandTemplate, Outcome, PropertyDecl, ScalarValue, TagGroup,
 } from "@storylet-studio/model";
-import { BUNDLE_SCHEMA, PLACE_GROUP, effectiveGameId, isValidGameId,
-  isValidPropertyName, propertyNameify, RESERVED_PROPERTY_NAMES, byDisplayOrder, inferDeclFromWrite } from "@storylet-studio/model";
+import { BUNDLE_SCHEMA, PLACE_GROUP, effectiveGameId, isHoleRef, isValidGameId,
+  isValidPropertyName, parseHoleRef, propertyNameify, RESERVED_PROPERTY_NAMES, byDisplayOrder, inferDeclFromWrite } from "@storylet-studio/model";
 import type { Issue, SourceBox, SourceProject } from "./project.js";
+import { contentAboveRung, ladderWarning, playRungOf } from "./play-ladder.js";
 import { canonicalStringify } from "./serialize.js";
 import { compileMaps } from "./maps.js";
 import { hash32 } from "./hash.js";
@@ -249,6 +250,15 @@ export function compileProject(source: SourceProject): CompileResult {
         message: `@world.${d.name} declares "shared" - @world is the game's own state and is always shared across flows; the flag belongs on @story, box, deck, hand or tag properties`,
       });
     }
+    // The durability axis stops at the same door, for the same reason
+    // (design/engine-server.md 4.2): @world is the game's own state, so how
+    // long the game keeps it is the game's business and not the story's.
+    if (d.durable !== undefined) {
+      report({
+        severity: "error", path: source.path, where: `world.${d.name}`,
+        message: `@world.${d.name} declares "durable" - @world is the game's own state and the game decides how long it keeps it; the flag belongs on @story, box, deck, hand or tag properties`,
+      });
+    }
   }
   const storySchema = bagSchema(source.project.story?.properties ?? []);
   const worldSchema = bagSchema(source.project.world?.properties ?? []);
@@ -369,6 +379,16 @@ export function compileProject(source: SourceProject): CompileResult {
     checkGameId("box", boxDecl, boxPath);
     uniqueGameIds("box", boxGameIds, effectiveGameId(boxDecl), boxPath);
     legalPropertyName("box", boxDecl.properties, boxPath);
+
+    // A timed box (design/engine-server.md 4.8): `seconds` is how long one of
+    // this box's turns lasts, so a fraction or a zero says nothing a host
+    // could tick to.
+    const timed = boxDecl.turn !== undefined
+      && Number.isInteger(boxDecl.turn.seconds) && boxDecl.turn.seconds > 0;
+    if (boxDecl.turn !== undefined && !timed) {
+      report({ severity: "error", path: boxPath, where: effectiveGameId(boxDecl), field: "turn",
+        message: `turn.seconds must be an integer >= 1 (got ${JSON.stringify(boxDecl.turn.seconds)})` });
+    }
 
     // Tag groups. A group gameId is addressed through the box that owns it
     // (peek names a box; the play-history functions resolve against the box
@@ -561,6 +581,18 @@ export function compileProject(source: SourceProject): CompileResult {
         if (card.sharedCopies !== undefined && (card.shared ?? deckDecl.shared) !== true) {
           report({ severity: "warning", path, where: effectiveGameId(card), field: "sharedCopies", message: "sharedCopies is set but the card is not shared, so it does nothing" });
         }
+        // Durability crosses the RUN boundary, and only `redraw: "never"` means
+        // the same thing on both sides of it (design/engine-server.md 4.2). A
+        // finite cooldown is an absolute turn of a box clock and the clock
+        // resets with the run; "always" spends nothing to carry. Warned rather
+        // than refused, because a redraw is the field an author changes while
+        // the flag stays put - and only where the CARD set the flag, since a
+        // durable deck says it once and the deck's own warning below covers a
+        // pile with nothing in it to carry.
+        if (card.durable === true && (card.redraw ?? "always") !== "never") {
+          report({ severity: "warning", path, where: effectiveGameId(card), field: "durable",
+            message: `durable, but its redraw is ${JSON.stringify(card.redraw ?? "always")}: only "never" means anything past the run, since a cooldown is a turn of a clock that resets with it` });
+        }
 
         for (const [name, value] of Object.entries(card.fields ?? {})) {
           const decl = fieldDecls.get(name);
@@ -669,6 +701,7 @@ export function compileProject(source: SourceProject): CompileResult {
           ...(card.copies !== undefined ? { copies: card.copies } : {}),
           ...(card.shared !== undefined ? { shared: card.shared } : {}),
           ...(card.sharedCopies !== undefined ? { sharedCopies: card.sharedCopies } : {}),
+          ...(card.durable !== undefined ? { durable: card.durable } : {}),
           ...(card.tags !== undefined ? { tags: sortRecord(card.tags) } : {}),
           ...(card.fields !== undefined ? { fields: sortRecord(card.fields) } : {}),
           outcomes,   // already in display order: the loop above walked them that way
@@ -683,16 +716,96 @@ export function compileProject(source: SourceProject): CompileResult {
           ? { condition: expr(deckDecl.condition!, schemaFor(sourceBox, deckDecl.properties ?? []), path, effectiveGameId(deckDecl), "deck gate", "condition") }
           : {}),
         ...(deckDecl.shared !== undefined ? { shared: deckDecl.shared } : {}),
+        ...(deckDecl.durable !== undefined ? { durable: deckDecl.durable } : {}),
         properties: deckDecl.properties ?? [],
         cards: byId(cards),
       });
+      // A durable pile with nothing spent for good in it. Said once, on the
+      // deck, rather than once per card: the flag is the container's, and the
+      // per-card warning above only fires where a card set the flag itself.
+      // Empty piles are left alone, exactly as a timed box with no cards is.
+      if (deckDecl.durable === true && cards.length > 0 && cards.every((c) => c.redraw !== "never")) {
+        report({ severity: "warning", path, where: effectiveGameId(deckDecl), field: "durable",
+          message: "durable, but nothing in it is spent for good: every card here can be dealt again, and only a redraw of \"never\" means anything past the run" });
+      }
     }
 
     // Hand templates and hands (schema 2.6).
     const handsPath = `${sourceBox.path}/hands`;
     const handSchema = schemaFor(sourceBox, undefined);
-    const checkBindings = (where: string, bindings: Record<string, string> | undefined): void => {
+    // A hole filled from a property (design/engine-server.md 4.6). The rules
+    // are `boundBy`'s, applied per HOLE rather than per group, and the wording
+    // is deliberately the same wording: an author who has met one has met both.
+    // The extra scope is `@hand`, which must name a property the asking hand
+    // actually carries - the template's for an instance, its own for a
+    // standalone hand, exactly the pair the runtime builds its @hand bag from.
+    //
+    // Caught here rather than at runtime for the reason the group rule is: a
+    // hole bound to nothing silently wildcards, so every card in the axis
+    // becomes available and the fault reads as content rather than config.
+    const checkHoleRef = (
+      where: string, groupId: string, ref: string, handDecls: PropertyDecl[],
+    ): void => {
+      const bad = (message: string): void => { report({ severity: "error", path: handsPath, where, message }); };
+      if (groupId === PLACE_GROUP) {
+        bad(`"${PLACE_GROUP}" cannot be filled from a property: it is the hand's own name, not an axis`);
+        return;
+      }
+      const group = groupsById.get(groupId);
+      if (!group) {
+        bad(`binds a tag group that is not in this box (id ${groupId})`);
+        return;
+      }
+      const named = `"${ref}" for "${effectiveGameId(group)}"`;
+      const parsed = parseHoleRef(ref);
+      if (!parsed) {
+        bad(`${named} must be a @hand, @world or @story property reference`);
+        return;
+      }
+      const decls = parsed.scope === "hand" ? handDecls
+        : parsed.scope === "world" ? source.project.world?.properties
+        : source.project.story?.properties;
+      const decl = (decls ?? []).find((d) => d.name === parsed.name);
+      if (!decl) {
+        bad(parsed.scope === "hand"
+          ? `${named} is not a property this hand declares`
+          : `${named} is not a declared ${parsed.scope} property`);
+        return;
+      }
+      if (decl.type !== "string" && decl.type !== "enum") {
+        bad(`${named} is a ${decl.type} property; a hole filled from a property needs a string or enum, whose value names one of the group's tags`);
+        return;
+      }
+      if (decl.type === "enum" && decl.values !== undefined) {
+        // An enum's whole point is a closed set, so a value that can never
+        // name a tag is a mistake worth naming at publish time.
+        const names = new Set(group.tags.map((t) => effectiveGameId(t)));
+        const stray = decl.values.filter((v) => !names.has(v));
+        if (stray.length === decl.values.length) {
+          bad(`${named} can never name a tag in that group (its values are ${decl.values.join(", ")})`);
+        } else if (stray.length > 0) {
+          report({ severity: "warning", path: handsPath, where,
+            message: `${named} may hold ${stray.join(", ")}, which name no tag there; the hole goes unbound then, so every card in the axis is eligible` });
+        }
+      }
+    };
+    const checkBindings = (
+      where: string, bindings: Record<string, string> | undefined,
+      /** A standalone hand's declarations, when references are allowed here at
+       *  all. Omitted for a hand TEMPLATE, whose bindings are fixed for every
+       *  instance and so stay literal tags. */
+      handDecls?: PropertyDecl[],
+    ): void => {
       for (const [groupId, tagId] of Object.entries(bindings ?? {})) {
+        if (isHoleRef(tagId)) {
+          if (handDecls === undefined) {
+            report({ severity: "error", path: handsPath, where,
+              message: `binds "${tagId}", a property reference; a template's own bindings are the same for every instance, so a hole that moves belongs on the hand` });
+            continue;
+          }
+          checkHoleRef(where, groupId, tagId, handDecls);
+          continue;
+        }
         const group = groupsById.get(groupId);
         if (!group) {
           report({ severity: "error", path: handsPath, where, message: `binds a tag group that is not in this box (id ${groupId})` });
@@ -749,7 +862,12 @@ export function compileProject(source: SourceProject): CompileResult {
         for (const groupId of template.chooses ?? []) {
           const tagId = hand.chosen?.[groupId];
           const group = groupsById.get(groupId);
-          if (tagId === undefined) {
+          if (tagId !== undefined && isHoleRef(tagId)) {
+            // A movable hole: the instance filled it from a property rather
+            // than with a tag (4.6). An instance's @hand state is its
+            // TEMPLATE's declarations, which is what the runtime composes.
+            checkHoleRef(effectiveGameId(hand), groupId, tagId, template.properties);
+          } else if (tagId === undefined) {
             // The one an author meets by accident: dragging a pin off every zone
             // empties this. It names the group and says what is expected of the
             // hand, because "missing chosen tag for group d_zone" told somebody
@@ -771,7 +889,7 @@ export function compileProject(source: SourceProject): CompileResult {
           }
         }
       } else if (hand.rule) {
-        checkBindings(effectiveGameId(hand), hand.rule.bindings);
+        checkBindings(effectiveGameId(hand), hand.rule.bindings, hand.properties ?? []);
       }
       hands.push({
         id: hand.id,
@@ -795,12 +913,26 @@ export function compileProject(source: SourceProject): CompileResult {
       });
     }
 
+    // Declaring a box timed buys one thing: cooldowns that read as minutes.
+    // A box whose every card is re-eligible the moment it is played has no
+    // cooldown to read, so the declaration does nothing and the author has
+    // probably mistaken it for something else. A warning, not an error: an
+    // empty box being filled in is a fair state to save a project in.
+    if (timed) {
+      const boxCards = decks.flatMap((d) => d.cards);
+      if (boxCards.length > 0 && boxCards.every((c) => c.redraw === "always")) {
+        report({ severity: "warning", path: boxPath, where: effectiveGameId(boxDecl), field: "turn",
+          message: `timed, but nothing in it rests: every card here says redraw "always", so no cooldown ever reads the clock` });
+      }
+    }
+
     boxes.push({
       id: boxDecl.id,
       gameId: effectiveGameId(boxDecl),
       ...(title(boxDecl.title) !== undefined ? { title: boxDecl.title } : {}),
       ...(title(boxDecl.purpose) !== undefined ? { purpose: boxDecl.purpose } : {}),
       ranking: { specificity: boxDecl.ranking?.specificity ?? true },
+      ...(timed ? { turn: { seconds: boxDecl.turn!.seconds } } : {}),
       fields: boxDecl.fields ?? [],
       properties: boxDecl.properties ?? [],
       tagGroups: byId(tagGroups),
@@ -808,6 +940,17 @@ export function compileProject(source: SourceProject): CompileResult {
       handTemplates: byId(handTemplates),
       hands: byId(hands),
     });
+  }
+
+  // The play ladder (design/engine-server.md 4.10). The editor refuses a move
+  // DOWN the ladder while content sits above the rung; this is the same check
+  // run over a file the editor never touched, so a hand-edited shard and the
+  // setting cannot disagree in silence. A warning, never an error: nothing
+  // here is wrong, the project just contains more than its rung shows.
+  const rung = playRungOf(source.project.settings);
+  for (const item of contentAboveRung(source, rung)) {
+    report({ severity: "warning", path: item.path, where: item.where, field: "play",
+      message: ladderWarning(rung, item) });
   }
 
   // The coverage block (authoring config, never compiled) still validates at

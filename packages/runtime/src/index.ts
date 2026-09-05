@@ -9,8 +9,8 @@ export type {
 } from "./engine.js";
 export { describeBundle } from "./describe.js";
 export type {
-  BoxSummary, BundleDescription, BundleIdentity, HandSummary, MapSummary, PropertyScopeKind,
-  PropertyScopeSummary, PropertySummary, TagGroupSummary,
+  BoxSummary, BundleDescription, BundleIdentity, HandSummary, MapSummary, MovableHole,
+  PropertyScopeKind, PropertyScopeSummary, PropertySummary, TagGroupSummary,
 } from "./describe.js";
 export { makePrng, shuffleInPlace } from "./prng.js";
 export type { Prng } from "./prng.js";

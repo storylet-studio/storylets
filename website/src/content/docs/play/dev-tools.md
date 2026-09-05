@@ -62,9 +62,11 @@ Storyletter. It shows:
 - **boxes, tag groups and tags**, by gameId, plus each box's ranking policy. This is what you
   can `peek()`;
 - **declared properties** per scope with their types: what conditions read and what your game
-  may set;
-- **counts** of decks, cards and templates, for orientation. Not card lists: cards are the
-  engine's business.
+  may set, with the
+  [durable](/play/world-state/#durable-state-that-outlives-a-run) ones marked, since those are
+  the values somebody will expect back after a restart;
+- **counts** of decks, cards and templates, for orientation, plus how many of a box's cards
+  are durable. Not card lists: cards are the engine's business.
 
 The runtime half is `describeBundle(bundle)`, a bundle-level function in all four languages.
 The view sits on the imported asset, read-only, where each engine makes it natural: Unity's

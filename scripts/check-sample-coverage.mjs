@@ -96,6 +96,15 @@ const OMITTED = [
   { member: "log", why: "the run log is a diagnostic. The client writes a journal from what it played, which is what a game shows a player" },
   { member: "clearLog", why: "belongs to the run log" },
 
+  // --- parking a visit, and pricing a load (design/engine-server.md 4.1, 4.9) ---
+  // The Village is one player at one machine: it saves its whole engine and it
+  // only ever plays the build it was served with. Parking ONE of many flows,
+  // and asking what a content update would cost a running show, are the venue's
+  // questions - a server, or Storyletter's Board offering Restore.
+  { member: "saveFlow", why: "one flow's blob, for a venue parking one of four hundred visits. A single-player client saves the whole engine and has one flow to save" },
+  { member: "previewLoad", why: "what a load would drop, before it drops it. A client loads its OWN save, written by the build it is running, so the answer is always nothing; the caller who needs it is a hot swap" },
+  { member: "previewFlowRestore", why: "the same question for one parked flow, and the client parks none" },
+
   // --- engine internals exposed for ports and tests --------------------------
   { member: "makePrng", why: "the seeded PRNG is the engine's own; a game passes a seed and lets it get on with it" },
   { member: "shuffleInPlace", why: "an internal of the deal, exported for the ports and the corpus" },

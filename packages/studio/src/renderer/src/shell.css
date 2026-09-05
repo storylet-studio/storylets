@@ -441,6 +441,11 @@ button.pname:hover { color: var(--accent); }
   font: 600 0.66rem/1 var(--font-ui); text-transform: uppercase;
   letter-spacing: 0.07em; color: var(--muted); margin-top: 2px;
 }
+/* What a VENUE depends on about this entity (design/engine-server.md 4.11).
+   Always visible, unlike the teaching lines around it: it is not a gloss on the
+   page, it is a fact about the world outside the project, and it is drawn only
+   when there IS a venue - which on every project written so far is never. */
+.doc-contract { margin: 0; font-size: 0.76rem; line-height: 1.4; color: var(--muted); }
 .deck-card .sub { color: var(--muted); font-size: 0.75rem; }
 /* read-only condition preview on a card face: restrained (Patterpad's "if"
    idiom) - a quiet prefix and toned-down pills, not a loud chip strip. */
@@ -517,6 +522,7 @@ button.chip { cursor: pointer; }
 .doc-sect:hover .doc-sect-hint, .doc-sect:focus-within .doc-sect-hint,
 .cfg-row:hover .cfg-cap small, .cfg-row:focus-within .cfg-cap small,
 .doc-panel:hover + .doc-tab-note, .doc-panel + .doc-tab-note:hover,
+.cfg-row:hover .insp-note, .cfg-row:focus-within .insp-note,
 .doc-sect:hover .insp-note, .doc-sect:focus-within .insp-note {
   opacity: 1;
 }
@@ -608,6 +614,9 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .gid-value { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gid-tag { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); flex: none; }
 .gid-auto .gid-value { color: var(--muted); font-style: italic; }
+/* the address a VENUE is bound to (design/engine-server.md 4.11): marked, never
+   disabled. The refusal is the server's, on push; here it is a hint. */
+.gid-bound { border-style: dashed; }
 /* the override popover */
 .gid-pop { display: flex; flex-direction: column; gap: 8px; min-width: 240px; }
 .gid-pop-note { margin: 0; font-size: 0.74rem; line-height: 1.4; color: var(--muted); }
@@ -890,6 +899,11 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 /* the inspector holds a card's mechanical settings; a small note gives the
    priority number meaning against how the box ranks. */
 .insp-note { margin: -4px 0 0; font-size: 0.76rem; line-height: 1.35; color: var(--muted); }
+/* The tuck above is for a note that is a flex child of the panel, where it
+   trims the panel's own gap. A note that follows a cfg-panel instead (the
+   timed box's consequence line) has no gap to trim, so the tuck lands it on
+   top of the row's description; it sits clear of it. */
+.cfg-panel + .insp-note { margin-top: 8px; }
 
 /* --- project settings (sections over the shared settings dialog) ------------ */
 /* The gap is load-bearing since app-shell 0.22.0: a settings row is a WELL now,
@@ -907,6 +921,11 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
    Project Settings > World). */
 .set-note .linklike { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .set-note .linklike:hover { color: var(--accent-strong, var(--accent)); }
+/* A refusal, in the note's own place under the field it belongs to: the play
+   ladder's "not while the project uses it" (design/engine-server.md 4.10).
+   Empty until there is something to say, so it takes no room until it does. */
+.set-note.refusal { color: var(--danger); }
+.set-note.refusal:empty { display: none; }
 .set-empty { margin: 4px 0; font-size: 0.8rem; color: var(--muted); }
 /* The driver ref: fixed "@world." chrome, so only the name is typed. The
    property name needs only its own width; the VALUE POOL is the field that

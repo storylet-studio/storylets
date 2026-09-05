@@ -135,6 +135,8 @@ FStoryletBundleDescription UStoryletBundle::DescribeBundle() const
 		Box.GameId = Ue(B.gameId);
 		Box.Title = Ue(B.title);
 		Box.bRankingSpecificity = B.rankingSpecificity;
+		Box.TurnSeconds = B.turnSeconds.has_value() ? *B.turnSeconds : 0.0;
+		Box.DurableCards = B.durableCards;
 		for (const storylets::TagGroupSummary& G : B.tagGroups)
 		{
 			FStoryletTagGroupSummary Group;
@@ -159,6 +161,13 @@ FStoryletBundleDescription UStoryletBundle::DescribeBundle() const
 		Hand.Slots = H.slots;
 		Hand.SlotsLabel = Ue(storylets::SlotsLabel(H.slots));
 		Hand.Template = Ue(H.templateGameId);
+		for (const storylets::MovableHole& M : H.movable)
+		{
+			FStoryletMovableHole Hole;
+			Hole.Group = Ue(M.group);
+			Hole.From = Ue(M.from);
+			Hand.Movable.Add(MoveTemp(Hole));
+		}
 		Out.Hands.Add(MoveTemp(Hand));
 	}
 
@@ -177,11 +186,25 @@ FStoryletBundleDescription UStoryletBundle::DescribeBundle() const
 			Row.Type = PropertyTypeFrom(P.type);
 			Row.Default = ConvertValue(P.defaultValue);
 			for (const std::string& V : P.values) Row.Values.Add(Ue(V));
+			Row.bDurable = P.durable;
 			Row.Purpose = Ue(P.purpose);
 			Row.Label = Ue(storylets::PropertyLabel(P));
 			Scope.Properties.Add(MoveTemp(Row));
 		}
 		Out.Properties.Add(MoveTemp(Scope));
+	}
+
+	// Inert payload, and therefore worth saying out loud: a bundle that silently
+	// carried a map would fail the promise this API makes.
+	for (const storylets::MapSummary& M : D.maps)
+	{
+		FStoryletMapSummary Map;
+		Map.Box = Ue(M.box);
+		Map.Group = Ue(M.group);
+		Map.Zones = M.zones;
+		Map.Backgrounds = M.backgrounds;
+		Map.Sites = M.sites;
+		Out.Maps.Add(MoveTemp(Map));
 	}
 	return Out;
 }

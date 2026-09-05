@@ -12,6 +12,7 @@ import type { Issue, SourceBox, SourceProject } from "@storylet-studio/compiler"
 import { backgroundsOf, effectiveGameId, isSpatial, polygonOf, SPATIAL } from "@storylet-studio/model";
 import type { Bundle, TagGroup } from "@storylet-studio/model";
 import { ASSETS_DIR, assetPath } from "./assets.js";
+import { contractIssues } from "./contract.js";
 import { deadStateIssues } from "./deadstate.js";
 import { reachabilityIssues } from "./reachability.js";
 import type { LoadedProject } from "./load.js";
@@ -60,6 +61,10 @@ export function runValidate(loaded: LoadedProject, opts: ValidateOptions = {}): 
     const compiled = compileProject(loaded.source);
     issues.push(...compiled.issues);
     issues.push(...spatialIssues(loaded.source, loaded.dir));
+    // What a VENUE depends on (design/engine-server.md 4.11, net 1). Errors, and
+    // the earliest of the three nets: CI refuses the pull request, which is
+    // where a break against a live installation is cheapest.
+    issues.push(...contractIssues(loaded.source));
     // Dead state: half-wired latches and flags (deadstate.ts says why this is
     // static rather than coverage's job). Reuses the compile from just above.
     issues.push(...deadStateIssues(loaded.source, compiled.bundle));

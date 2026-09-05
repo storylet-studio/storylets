@@ -45,10 +45,14 @@ static func load_state(engine: StoryletEngine, file) -> Variant:
 			or (file["engine"] as Dictionary).get("schema") != StoryletBundle.SAVE_SCHEMA:
 		push_error("StoryletSave.load_state: not a %s file" % SCHEMA)
 		return null
-	var err: String = engine.load_game(file["engine"])
-	if err != "":
-		push_error("StoryletSave.load_state: " + err)
+	# Asked before the load rather than read from its return: load_game answers
+	# with a LoadReport now, and the one thing it refuses (a foreign project)
+	# needs a message this call can pass on.
+	var refusal: String = engine._project_mismatch(file["engine"])
+	if refusal != "":
+		push_error("StoryletSave.load_state: " + refusal)
 		return null
+	engine.load_game(file["engine"])
 	return file.get("world", {})
 
 

@@ -13,7 +13,7 @@ import { matchedSpecificity } from "@wildwinter/expr-specificity";
 import { storyletsDialect } from "@storylet-studio/dialect";
 import { Engine, Flow, makePrng } from "@storylet-studio/runtime";
 import { effectiveGameId } from "@storylet-studio/model";
-import type { Bundle } from "@storylet-studio/model";
+import type { Bundle, FlowSave, LoadProperty, LoadReport } from "@storylet-studio/model";
 import type { ExpressionCase, PeekCase, ScriptedCase, SpecificityCase, StateSelector } from "./types.js";
 
 /** Truthiness for a bare condition; mirrors the runtime's `conditionPasses`,
@@ -103,6 +103,59 @@ export function runPeekCase(c: PeekCase): string[] {
 const handGameIds = (bundle: Bundle): Map<string, string> =>
   new Map(bundle.boxes.flatMap((b) => b.hands.map((h) => [h.id, effectiveGameId(h)])));
 
+// --- the load report (design/engine-server.md 4.9) ---------------------------
+//
+// A report's lists are compared as SORTED lists of canonical strings, not as
+// objects: key order in a struct is not a contract, and four runtimes have
+// four idioms for one of these entries. An absent `flow` (the shared half)
+// canonicalises to the empty string, which is why the separator is a
+// character no id, gameId or property name can hold.
+
+const FIELD_SEP = "\u001f";
+
+const evictionKeys = (list: LoadReport["evicted"]): string[] =>
+  list.map((e) => [e.flow, e.hand, e.card, e.reason].join(FIELD_SEP)).sort();
+const cooldownKeys = (list: LoadReport["droppedCooldowns"]): string[] =>
+  list.map((c) => [c.flow, c.card].join(FIELD_SEP)).sort();
+const propertyKeys = (list: LoadProperty[]): string[] =>
+  list.map((p) => [p.flow ?? "", p.path].join(FIELD_SEP)).sort();
+
+/** Check the fields `expectReport` names, and only those. */
+const checkReport = (
+  at: string,
+  expected: Partial<LoadReport> | undefined,
+  actual: LoadReport,
+  failures: string[],
+): void => {
+  if (!expected) return;
+  const cmp = (field: string, want: unknown, got: unknown): void => {
+    if (!same(want, got)) failures.push(`${at}: report.${field} expected ${show(want)}, got ${show(got)}`);
+  };
+  if (expected.exact !== undefined) cmp("exact", expected.exact, actual.exact);
+  if (expected.project !== undefined) cmp("project", expected.project, actual.project);
+  if (expected.version !== undefined) {
+    cmp("version.saved", expected.version.saved, actual.version.saved);
+    cmp("version.bundle", expected.version.bundle, actual.version.bundle);
+  }
+  if (expected.hash !== undefined) {
+    cmp("hash.saved", expected.hash.saved, actual.hash.saved);
+    cmp("hash.bundle", expected.hash.bundle, actual.hash.bundle);
+  }
+  if (expected.flows !== undefined) cmp("flows", expected.flows, actual.flows);
+  if (expected.evicted !== undefined) {
+    cmp("evicted", evictionKeys(expected.evicted), evictionKeys(actual.evicted));
+  }
+  if (expected.droppedCooldowns !== undefined) {
+    cmp("droppedCooldowns", cooldownKeys(expected.droppedCooldowns), cooldownKeys(actual.droppedCooldowns));
+  }
+  if (expected.droppedSpent !== undefined) {
+    cmp("droppedSpent", [...expected.droppedSpent].sort(), [...actual.droppedSpent].sort());
+  }
+  for (const field of ["droppedProperties", "defaultedProperties", "retypedProperties"] as const) {
+    if (expected[field] !== undefined) cmp(field, propertyKeys(expected[field]), propertyKeys(actual[field]));
+  }
+};
+
 /** Execute the ops in order; every `expect` must match exactly, `expectError`
  *  ops must fail without side effects. Returns failures; empty = pass.
  *
@@ -116,6 +169,10 @@ export function runScriptedCase(c: ScriptedCase): string[] {
   const seed = c.seed ?? 0;
   let engine = new Engine(c.bundle, { seed });
   let handles = new Map<string, Flow>();
+  // Parked flow blobs, by the name they were parked under. Held OUTSIDE the
+  // engine on purpose: a park survives a content swap, which is the case that
+  // makes a resume interesting.
+  const parked = new Map<string, FlowSave>();
   // Verdicts from the deal or peek an op just ran, card id -> verdict, taken
   // from the trace because that is the only place the REASON lives: a board
   // read says a card is absent, never why, and "claimed" against
@@ -123,8 +180,17 @@ export function runScriptedCase(c: ScriptedCase): string[] {
   // fires one event per hand, so the sink accumulates across them; subscribing
   // is also what switches tracing on (with no subscribers a flow does none).
   let verdictSink = new Map<string, string>();
+  // What the ask SAID, as opposed to what it dealt. A hole filled from a
+  // property that names no tag deals a wildcard hand (4.6), which is
+  // indistinguishable on a board read from a hole that was never movable: the
+  // diagnostic is the only place the difference lives.
+  let diagnosticSink: string[] = [];
   const watch = (f: Flow): Flow => {
     f.subscribeTrace((e) => {
+      if (e.type === "diagnostic") {
+        diagnosticSink.push(e.message);
+        return;
+      }
       if (e.type !== "deal" && e.type !== "peek") return;
       for (const card of e.cards) verdictSink.set(card.id, card.verdict);
     });
@@ -140,8 +206,15 @@ export function runScriptedCase(c: ScriptedCase): string[] {
   };
   const collect = (run: () => void): Map<string, string> => {
     verdictSink = new Map();
+    diagnosticSink = [];
     run();
     return verdictSink;
+  };
+  const checkDiagnostic = (at: string, expected: string | undefined, said: string[]): void => {
+    if (expected === undefined) return;
+    if (!said.some((m) => m.includes(expected))) {
+      failures.push(`${at}: expected a diagnostic containing "${expected}", got ${said.length === 0 ? "none" : show(said)}`);
+    }
   };
   const checkVerdicts = (at: string, expected: Record<string, string> | undefined,
                          actual: Map<string, string>): void => {
@@ -221,6 +294,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         let dealt!: ReturnType<Flow["dealMany"]>;
         const verdicts = collect(() => { dealt = session.dealMany(op.hands); });
         checkVerdicts(at, op.expectVerdicts, verdicts);
+        checkDiagnostic(at, op.expectDiagnostic, diagnosticSink);
         const names = handGameIds(c.bundle);
         for (const [handId, expected] of Object.entries(op.expectBoard ?? {})) {
           const board = session.board();
@@ -333,9 +407,53 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         // case's EDITED bundle: the drifted-content contract. loadGame
         // rebuilds every flow, so the script's handles are re-taken.
         const envelope = engine.saveGame();
-        engine = new Engine(op.into === "B" ? c.bundleB! : c.bundle, { seed });
-        engine.loadGame(envelope);
+        const target = new Engine(op.into === "B" ? c.bundleB! : c.bundle, { seed });
+        if (op.previewOnly) {
+          // The purity claim, checked rather than asserted: the engine that
+          // was asked what a load would cost writes the same envelope after
+          // the question as before it. The LIVE engine is not replaced, so
+          // the ops after this one prove the load did not happen.
+          const before = show(target.saveGame());
+          const report = target.previewLoad(envelope);
+          if (show(target.saveGame()) !== before) {
+            failures.push(`${at}: previewLoad changed the engine it was asked about`);
+          }
+          checkReport(at, op.expectReport, report, failures);
+          break;
+        }
+        engine = target;
+        checkReport(at, op.expectReport, engine.loadGame(envelope), failures);
         handles = new Map(engine.flows().map((f) => [f.id, f]));
+        break;
+      }
+      case "parkFlow": {
+        // Park: take the blob, then close. Closing is what releases the shared
+        // claims, which is the whole reason a visit parks rather than idling.
+        parked.set(op.flow, engine.saveFlow(op.flow));
+        engine.closeFlow(op.flow);
+        break;
+      }
+      case "resumeFlow": {
+        const saved = parked.get(op.flow);
+        if (saved === undefined) {
+          failures.push(`${at}: nothing is parked under "${op.flow}"`);
+          break;
+        }
+        // Ask before doing, then require the two answers to agree: a preview
+        // that does not predict the restore is worse than no preview.
+        const preview = engine.previewFlowRestore(op.flow, saved);
+        let applied: LoadReport | undefined;
+        handles.set(op.flow, watch(engine.openFlow(op.flow, {
+          ...(op.seed !== undefined ? { seed: op.seed } : {}),
+          restore: saved,
+          onRestoreReport: (r) => { applied = r; },
+        })));
+        if (applied === undefined) {
+          failures.push(`${at}: the restore produced no report`);
+        } else if (!same(preview, applied)) {
+          failures.push(`${at}: previewFlowRestore said ${show(preview)}, the restore did ${show(applied)}`);
+        }
+        checkReport(at, op.expectReport, applied ?? preview, failures);
         break;
       }
       case "reset":

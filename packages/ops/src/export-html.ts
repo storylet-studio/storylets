@@ -84,7 +84,13 @@ export function playableMaps(
     space.boxes.forEach((b, i) => memberOf.set(`${b}|${space.group}`, { boxes: space.boxes, first: i === 0 }));
   }
   /** One box's placed hands as playable sites, bound against ITS OWN copy of
-   *  the group (each member box has its own group instance and ids). */
+   *  the group (each member box has its own group instance and ids).
+   *
+   *  Still derived from the sidecar, though the compiled bundle now carries the
+   *  positions too (design/engine-server.md 4.3): the page needs a LABEL and the
+   *  zone the hand binds beside each position, and the bundle's block carries
+   *  neither, so reading it here would answer a third of the question and leave
+   *  the walk in place for the rest. */
   const sitesOf = (boxGameId: string, groupGameId: string): PlayableMap["sites"] => {
     const box = source.boxes.find((b) => effectiveGameId(b.box.box) === boxGameId);
     if (!box) return [];

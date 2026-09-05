@@ -461,6 +461,129 @@ namespace StoryletStudio.StoryletEngine.TestHost
         private static string Show(IEnumerable<string> list) =>
             "[" + string.Join(",", list.Select(s => "\"" + s + "\"")) + "]";
 
+        // -- the load report (design/engine-server.md 4.9) --------------------------
+        //
+        // A report's lists are compared as SORTED lists of canonical strings, not
+        // as objects: key order in a struct is not a contract, and four runtimes
+        // have four idioms for one of these entries. An absent flow (the shared
+        // half) canonicalises to the empty string, which is why the separator is a
+        // character no id, gameId or property name can hold.
+
+        private const string FieldSep = "\u001f";
+
+        private static List<string> SortedKeys(IEnumerable<string> keys)
+        {
+            var list = new List<string>(keys);
+            list.Sort(StringComparer.Ordinal);
+            return list;
+        }
+
+        private static List<string> WantKeys(JToken array, params string[] fields)
+        {
+            var keys = new List<string>();
+            foreach (var entry in (JArray)array)
+            {
+                var parts = new List<string>();
+                foreach (var f in fields) parts.Add(entry.Value<string>(f) ?? "");
+                keys.Add(string.Join(FieldSep, parts));
+            }
+            return SortedKeys(keys);
+        }
+
+        /// <summary>The whole report as one comparable string, for "did the
+        /// preview predict the restore".</summary>
+        private static string ReportShape(LoadReport r)
+        {
+            var parts = new List<string>
+            {
+                r.Exact ? "exact" : "inexact", r.Project,
+                r.Version.Saved, r.Version.Bundle, r.Hash.Saved, r.Hash.Bundle,
+                Show(r.Flows),
+                Show(r.Evicted.Select(e => string.Join(FieldSep, e.Flow, e.Hand, e.Card, e.Reason))),
+                Show(r.DroppedCooldowns.Select(x => string.Join(FieldSep, x.Flow, x.Card))),
+                Show(r.DroppedSpent),
+                Show(r.DroppedProperties.Select(p => string.Join(FieldSep, p.Flow ?? "", p.Path))),
+                Show(r.DefaultedProperties.Select(p => string.Join(FieldSep, p.Flow ?? "", p.Path))),
+                Show(r.RetypedProperties.Select(p => string.Join(FieldSep, p.Flow ?? "", p.Path))),
+            };
+            return string.Join(" ", parts);
+        }
+
+        /// <summary>Check the fields expectReport names, and only those.</summary>
+        private static void CheckReport(string at, JToken expected, LoadReport actual, List<string> failures)
+        {
+            if (!(expected is JObject want)) return;
+            void Cmp(string field, string wantShown, string gotShown)
+            {
+                if (wantShown != gotShown) failures.Add($"{at}: report.{field} expected {wantShown}, got {gotShown}");
+            }
+            if (want["exact"] != null) Cmp("exact", want.Value<bool>("exact") ? "true" : "false", actual.Exact ? "true" : "false");
+            if (want["project"] != null) Cmp("project", want.Value<string>("project"), actual.Project);
+            if (want["version"] is JObject v)
+            {
+                Cmp("version.saved", v.Value<string>("saved"), actual.Version.Saved);
+                Cmp("version.bundle", v.Value<string>("bundle"), actual.Version.Bundle);
+            }
+            if (want["hash"] is JObject h)
+            {
+                Cmp("hash.saved", h.Value<string>("saved"), actual.Hash.Saved);
+                Cmp("hash.bundle", h.Value<string>("bundle"), actual.Hash.Bundle);
+            }
+            if (want["flows"] is JArray flows)
+            {
+                Cmp("flows", Show(flows.Select(x => x.Value<string>())), Show(actual.Flows));
+            }
+            if (want["evicted"] != null)
+            {
+                Cmp("evicted", Show(WantKeys(want["evicted"], "flow", "hand", "card", "reason")),
+                    Show(SortedKeys(actual.Evicted.Select(e => string.Join(FieldSep, e.Flow, e.Hand, e.Card, e.Reason)))));
+            }
+            if (want["droppedCooldowns"] != null)
+            {
+                Cmp("droppedCooldowns", Show(WantKeys(want["droppedCooldowns"], "flow", "card")),
+                    Show(SortedKeys(actual.DroppedCooldowns.Select(x => string.Join(FieldSep, x.Flow, x.Card)))));
+            }
+            if (want["droppedSpent"] is JArray spent)
+            {
+                Cmp("droppedSpent", Show(SortedKeys(spent.Select(x => x.Value<string>()))), Show(SortedKeys(actual.DroppedSpent)));
+            }
+            var propFields = new (string Name, List<LoadProperty> Got)[]
+            {
+                ("droppedProperties", actual.DroppedProperties),
+                ("defaultedProperties", actual.DefaultedProperties),
+                ("retypedProperties", actual.RetypedProperties),
+            };
+            foreach (var (name, got) in propFields)
+            {
+                if (want[name] == null) continue;
+                Cmp(name, Show(WantKeys(want[name], "flow", "path")),
+                    Show(SortedKeys(got.Select(p => string.Join(FieldSep, p.Flow ?? "", p.Path)))));
+            }
+        }
+
+        /// <summary>Ops that run ON a flow, and so open one lazily. The rest -
+        /// engine reads, flow management, save/load - must NOT, or a harness
+        /// quietly opens "main" where the JS reference does not and `assertFlows`
+        /// answers differently for no engine reason.</summary>
+        private static bool NeedsFlow(string kind)
+        {
+            switch (kind)
+            {
+                case "setState":
+                case "peek":
+                case "deal":
+                case "assertBoard":
+                case "play":
+                case "advanceTurns":
+                case "assertOutcomes":
+                case "assertOutcomeOrder":
+                case "assertState":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         // -- peek -------------------------------------------------------------------
 
         /// <summary>Build a session, apply setup, peek, check the ordered list -
@@ -533,7 +656,9 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     ""zones"": [{ ""tag"": ""tavern"", ""polygon"": [
                         { ""x"": 0, ""y"": 0 }, { ""x"": 4, ""y"": 0 }, { ""x"": 4, ""y"": 3 }] }],
                     ""backgrounds"": [{ ""file"": ""assets/village/plan.png"",
-                        ""x"": 1, ""y"": 2, ""width"": 8, ""height"": 6, ""opacity"": 0.6 }]
+                        ""x"": 1, ""y"": 2, ""width"": 8, ""height"": 6, ""opacity"": 0.6 }],
+                    ""sites"": [{ ""hand"": ""the-forge"", ""x"": 5, ""y"": 6 },
+                        { ""hand"": ""the-well"", ""x"": 7, ""y"": 8 }]
                 }]
             }";
             try
@@ -546,9 +671,17 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 if (map.Zones[0].Polygon[2].X != 4 || map.Zones[0].Polygon[2].Y != 3) { Fail("describe", "maps", "a point moved"); return 0; }
                 if (map.Backgrounds.Count != 1 || map.Backgrounds[0].File != "assets/village/plan.png") { Fail("describe", "maps", "the picture lost its path"); return 0; }
                 if (map.Backgrounds[0].Opacity != 0.6) { Fail("describe", "maps", "opacity lost"); return 0; }
+                // The placed hands (design/engine-server.md 4.3): a position is
+                // content in a physical experience, so it travels in the block.
+                if (map.Sites.Count != 2) { Fail("describe", "maps", "the sites did not parse"); return 0; }
+                if (map.Sites[0].Hand != "the-forge" || map.Sites[0].X != 5 || map.Sites[0].Y != 6)
+                {
+                    Fail("describe", "maps", "a site moved");
+                    return 0;
+                }
 
                 var d = BundleInspector.DescribeBundle(bundle);
-                if (d.Maps.Count != 1 || d.Maps[0].Zones != 1 || d.Maps[0].Backgrounds != 1)
+                if (d.Maps.Count != 1 || d.Maps[0].Zones != 1 || d.Maps[0].Backgrounds != 1 || d.Maps[0].Sites != 2)
                 {
                     Fail("describe", "maps", "the description does not report the map");
                     return 0;
@@ -700,20 +833,34 @@ namespace StoryletStudio.StoryletEngine.TestHost
             // it cannot make. A deal fires one event per hand, so the sink
             // accumulates across them; subscribing also switches tracing on.
             var verdicts = new Dictionary<string, string>();
+            // What the ask SAID, as opposed to what it dealt. A hole filled
+            // from a property that names no tag deals a wildcard hand (4.6),
+            // which is indistinguishable on a board read from a hole that was
+            // never movable: the diagnostic is where the difference lives.
+            var diagnostics = new List<string>();
+            // Parked flow blobs, by the name they were parked under. Held OUTSIDE
+            // the engine on purpose: a park survives a content swap, which is the
+            // case that makes a resume interesting.
+            var parked = new Dictionary<string, FlowSave>();
+            Flow Watch(Flow f)
+            {
+                f.SubscribeTrace(e =>
+                {
+                    if (e is DiagnosticEvent dg) { diagnostics.Add(dg.Message); return; }
+                    List<TraceCard> cards = null;
+                    if (e is DealEvent d) cards = d.Cards;
+                    else if (e is PeekEvent pk) cards = pk.Cards;
+                    if (cards == null) return;
+                    foreach (var card in cards) verdicts[card.Id] = Flow.VerdictWire(card.Verdict);
+                });
+                return f;
+            }
             Flow FlowOf(JObject o)
             {
                 var flowName = o.Value<string>("flow") ?? "main";
                 if (!handles.TryGetValue(flowName, out var f))
                 {
-                    f = engine.OpenFlow(flowName);
-                    f.SubscribeTrace(e =>
-                    {
-                        List<TraceCard> cards = null;
-                        if (e is DealEvent d) cards = d.Cards;
-                        else if (e is PeekEvent pk) cards = pk.Cards;
-                        if (cards == null) return;
-                        foreach (var card in cards) verdicts[card.Id] = Flow.VerdictWire(card.Verdict);
-                    });
+                    f = Watch(engine.OpenFlow(flowName));
                     handles[flowName] = f;
                 }
                 return f;
@@ -731,6 +878,15 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     }
                 }
             }
+            void CheckDiagnostic(string at, JObject o)
+            {
+                var want = o.Value<string>("expectDiagnostic");
+                if (want == null) return;
+                if (!diagnostics.Exists(m => m.Contains(want)))
+                {
+                    failures.Add($"{at}: expected a diagnostic containing \"{want}\", got {(diagnostics.Count == 0 ? "none" : Show(diagnostics))}");
+                }
+            }
             var names = HandGameIds(bundle);
 
             var script = (JArray)c["script"];
@@ -739,7 +895,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 var op = (JObject)script[index];
                 var kind = op.Value<string>("op");
                 var at = $"op {index} ({kind})";
-                var session = FlowOf(op);
+                var session = NeedsFlow(kind) ? FlowOf(op) : null;
                 switch (kind)
                 {
                     case "setState":
@@ -751,6 +907,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         List<string> ids = null;
                         string peekError = null;
                         verdicts.Clear();
+                        diagnostics.Clear();
                         try
                         {
                             var list = session.Peek(op.Value<string>("box") ?? "box",
@@ -782,8 +939,10 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     case "deal":
                     {
                         verdicts.Clear();
+                        diagnostics.Clear();
                         var dealt = session.DealMany(StringList(op["hands"]));
                         CheckVerdicts(at, op);
+                        CheckDiagnostic(at, op);
                         if (op["expectBoard"] is JObject expectBoard)
                         {
                             foreach (var pair in expectBoard)
@@ -964,10 +1123,66 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         // so the script's handles are re-taken.
                         var envelope = engine.SaveGame();
                         var into = op.Value<string>("into") == "B" ? bundleB : bundle;
-                        engine = new StoryletStudio.StoryletEngine.Engine(into, new EngineOptions { Seed = seed });
-                        engine.LoadGame(envelope);
+                        var target = new StoryletStudio.StoryletEngine.Engine(into, new EngineOptions { Seed = seed });
+                        if (op.Value<bool?>("previewOnly") == true)
+                        {
+                            // The purity claim, checked rather than asserted: the
+                            // engine that was asked what a load would cost writes
+                            // the same envelope after the question as before it.
+                            // The LIVE engine is not replaced, so the ops after
+                            // this one prove the load did not happen.
+                            var before = StoryletSave.ToJson(target.SaveGame()).ToString();
+                            var previewReport = target.PreviewLoad(envelope);
+                            if (StoryletSave.ToJson(target.SaveGame()).ToString() != before)
+                            {
+                                failures.Add($"{at}: PreviewLoad changed the engine it was asked about");
+                            }
+                            CheckReport(at, op["expectReport"], previewReport, failures);
+                            break;
+                        }
+                        engine = target;
+                        CheckReport(at, op["expectReport"], engine.LoadGame(envelope), failures);
                         handles = new Dictionary<string, Flow>();
                         foreach (var f in engine.Flows()) handles[f.Id] = f;
+                        break;
+                    }
+
+                    case "parkFlow":
+                    {
+                        // Park: take the blob, then close. Closing is what
+                        // releases the shared claims, which is the whole reason a
+                        // visit parks rather than idling.
+                        var name = op.Value<string>("flow");
+                        parked[name] = engine.SaveFlow(name);
+                        engine.CloseFlow(name);
+                        break;
+                    }
+
+                    case "resumeFlow":
+                    {
+                        var name = op.Value<string>("flow");
+                        if (!parked.TryGetValue(name, out var saved))
+                        {
+                            failures.Add($"{at}: nothing is parked under \"{name}\"");
+                            break;
+                        }
+                        // Ask before doing, then require the two answers to
+                        // agree: a preview that does not predict the restore is
+                        // worse than no preview.
+                        var preview = engine.PreviewFlowRestore(name, saved);
+                        LoadReport applied = null;
+                        var opts = new OpenFlowOptions { Restore = saved, OnRestoreReport = r => applied = r };
+                        if (op["seed"] != null) opts.Seed = op.Value<double>("seed");
+                        handles[name] = Watch(engine.OpenFlow(name, opts));
+                        if (applied == null)
+                        {
+                            failures.Add($"{at}: the restore produced no report");
+                        }
+                        else if (ReportShape(preview) != ReportShape(applied))
+                        {
+                            failures.Add($"{at}: PreviewFlowRestore said {ReportShape(preview)}, the restore did {ReportShape(applied)}");
+                        }
+                        CheckReport(at, op["expectReport"], applied ?? preview, failures);
                         break;
                     }
 

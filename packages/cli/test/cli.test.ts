@@ -521,6 +521,51 @@ describe("resolve: the --at lookup from the terminal", () => {
   });
 });
 
+// The venue's file (design/engine-server.md 4.11). Read-only: `contract show`
+// lists what a venue depends on, and the errors this material raises belong to
+// `validate`, which is why there is no verb for them.
+describe("contract show", () => {
+  const withContract = (): string => {
+    const dir = join(mkdtempSync(join(tmpdir(), "contract-")), "copy.storylets");
+    cpSync(exampleDir, dir, { recursive: true });
+    mkdirSync(join(dir, "contracts"));
+    writeFileSync(join(dir, "contracts", "the-park.storyletcontract"),
+      // Written in canonical form (schema hoisted, the rest sorted), the way
+      // the server would write it and `format` would leave it.
+      `{\n  schema: "storylets/contract@0",\n  by: "Storylet Server 0.1.0",\n`
+      + `  hands: [\n    "docks-street",\n  ],\n  installation: "the-park",\n`
+      + `  properties: [\n    "story.reputation",\n  ],\n  revision: 12,\n}\n`);
+    return dir;
+  };
+
+  it("lists what each installation depends on, one line each", async () => {
+    const r = await call("contract", "show", withContract());
+    expect(r.code).toBe(0);
+    expect(r.out[0]).toContain("the-park  (Storylet Server 0.1.0, revision 12)");
+    expect(r.out.join("\n")).toContain("hand      docks-street   a station deals this hand");
+    expect(r.out.join("\n")).toContain("property  story.reputation");
+  });
+
+  it("takes an installation name and shows only that one", async () => {
+    const dir = withContract();
+    expect((await call("contract", "show", "the-park", dir)).code).toBe(0);
+    const missing = await call("contract", "show", "the-pier", dir);
+    expect(missing.code).toBe(1);
+    expect(missing.err.join("\n")).toContain('no contract for installation "the-pier"');
+  });
+
+  it("says so and exits 1 on a project with no contract", async () => {
+    const r = await call("contract", "show", exampleDir);
+    expect(r.code).toBe(1);
+    expect(r.err.join("\n")).toContain("no installation contracts");
+  });
+
+  it("without 'show' is a usage error", async () => {
+    expect((await call("contract")).code).toBe(2);
+    expect((await call("contract", "export")).code).toBe(2);
+  });
+});
+
 describe("export-html: the playable page", () => {
   const villageDir = fileURLToPath(new URL("../../ops/test/fixtures/the-hamlet.storylets", import.meta.url));
 

@@ -26,6 +26,15 @@ class_name StoryletEngine
 extends RefCounted
 
 const CREATE_OPTION_KEYS := ["seed", "log", "world", "on_replaced_flow"]
+## open_flow's options. "restore" takes a save_flow blob and opens the flow AS
+## IT WAS (design/engine-server.md 4.1); "on_restore_report" is a
+## Callable(report: Dictionary) handed what that restore did - the same report
+## preview_flow_restore returns, and the only way out for it, since open_flow
+## returns the handle.
+const OPEN_FLOW_OPTION_KEYS := ["seed", "restore", "on_restore_report"]
+## The load report's sort-key separator: a UNIT SEPARATOR, because it cannot
+## occur in an id, a gameId or a property name.
+const REPORT_SEP := "\u001f"
 
 var _bundle: Dictionary
 var _seed: int
@@ -62,6 +71,11 @@ var _has_qualities := false
 # open_flow builds its bags from these.
 # {"story": Array, "box"/"deck"/"hand"/"value": {id: Array}}
 var _flow_decls: Dictionary = {}
+# The shared halves, the same way. Not used to build anything - the shared bags
+# are built straight from the bundle - but a load report has to say what the
+# shared side WOULD hold without building a bag, which is what makes
+# preview_load pure.
+var _shared_decls: Dictionary = {}
 # The shared stores: {"story": bag, "box"/"deck"/"hand"/"value": {id: bag}}.
 # Reassigned wholesale by load_game/reset.
 var _shared: Dictionary = {}
@@ -170,19 +184,28 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 			_hands_by_game_id[StoryletBundle.effective_game_id(hand)] = {"hand": hand, "box": box}
 	_init_ladders()
 
-	# The per-flow halves, precomputed once (a bundle never changes).
+	# Both halves, precomputed once (a bundle never changes): each open_flow
+	# builds its bags from the per-flow half, and a load report asks either half
+	# what it declares without building anything at all.
 	var fd := {"story": _half("story", _bundle["story"].get("properties", []), false),
+		"box": {}, "deck": {}, "hand": {}, "value": {}}
+	var sd := {"story": _half("story", _bundle["story"].get("properties", []), true),
 		"box": {}, "deck": {}, "hand": {}, "value": {}}
 	for box in _bundle["boxes"]:
 		fd["box"][box["id"]] = _half("box", box.get("properties", []), false)
+		sd["box"][box["id"]] = _half("box", box.get("properties", []), true)
 		for deck in box["decks"]:
 			fd["deck"][deck["id"]] = _half("deck", deck.get("properties", []), false)
+			sd["deck"][deck["id"]] = _half("deck", deck.get("properties", []), true)
 		for hand in box["hands"]:
 			fd["hand"][hand["id"]] = _half("hand", hand_decls(hand), false)
+			sd["hand"][hand["id"]] = _half("hand", hand_decls(hand), true)
 		for group in box["tagGroups"]:
 			for tag in group["tags"]:
 				fd["value"][tag["id"]] = _half("value", tag.get("properties", []), false)
+				sd["value"][tag["id"]] = _half("value", tag.get("properties", []), true)
 	_flow_decls = fd
+	_shared_decls = sd
 
 	_init_shared()
 
@@ -274,9 +297,13 @@ func world_read_only(name: String) -> bool:
 
 func open_flow(id: String, opts: Dictionary = {}) -> StoryletFlow:
 	for key in opts:
-		if key != "seed":
-			push_error('StoryletEngine.open_flow: unknown option "%s" (valid: seed)' % key)
+		if not OPEN_FLOW_OPTION_KEYS.has(key):
+			push_error('StoryletEngine.open_flow: unknown option "%s" (valid: %s)' % [key, ", ".join(OPEN_FLOW_OPTION_KEYS)])
 			return null
+	# The world's claims as they stand WITHOUT this name, taken before the
+	# replace: a resume competes with the other flows, never with the flow it is
+	# replacing (which is about to release everything it holds).
+	var other_claims = _shared_claims_except(id) if opts.has("restore") else null
 	var old = _flows.get(id)
 	if old != null:
 		# Say so BEFORE the old flow goes inert, while its board is readable.
@@ -286,6 +313,13 @@ func open_flow(id: String, opts: Dictionary = {}) -> StoryletFlow:
 		(old as StoryletFlow).mark_closed()
 	var flow := StoryletFlow.new(self, id, int(opts.get("seed", _seed)))
 	_flows[id] = flow
+	if opts.has("restore"):
+		var draft := _empty_draft()
+		var clean := _plan_flow_restore(id, opts["restore"], other_claims, draft)
+		flow.restore(clean)
+		var on_report = opts.get("on_restore_report")
+		if on_report is Callable and (on_report as Callable).is_valid():
+			(on_report as Callable).call(_finish_report(_bundle["content"], _bundle["content"], [id], draft))
 	return flow
 
 
@@ -380,6 +414,18 @@ func shared_claims() -> Dictionary:
 	for flow in _flows.values():
 		for id in (flow as StoryletFlow).held_card_ids():
 			counts[id] = counts.get(id, 0) + 1
+	return counts
+
+
+## The same ledger with one name left out: what the REST of the world holds,
+## which is the question a resume under that name has to ask.
+func _shared_claims_except(id: String) -> Dictionary:
+	var counts := {}
+	for flow_id in _flows:
+		if str(flow_id) == id:
+			continue
+		for card_id in (_flows[flow_id] as StoryletFlow).held_card_ids():
+			counts[card_id] = counts.get(card_id, 0) + 1
 	return counts
 
 
@@ -562,20 +608,59 @@ func save_game() -> Dictionary:
 	}
 
 
+## ONE flow's blob, to park a visit that is walking away: the same shape the
+## envelope carries per flow, and the same shape open_flow's "restore" option
+## takes back (design/engine-server.md 4.1). Saving the whole envelope to park
+## one of four hundred players is wrong in cost and in meaning. A name that is
+## not open is an error: returns {} with push_error, since a closed flow has
+## nothing left to save.
+func save_flow(id: String) -> Dictionary:
+	var flow = _flows.get(id)
+	if flow == null:
+		push_error('StoryletEngine.save_flow: unknown flow "%s"' % id)
+		return {}
+	return (flow as StoryletFlow).snapshot()
+
+
+## What load_game(envelope) would do that is not a plain restore, without doing
+## any of it (design/engine-server.md 4.9). Pure: nothing on this engine moves.
+## A project mismatch is refused here exactly as load_game refuses it - it is
+## the one thing neither call will tolerate - and returns {} with push_error.
+func preview_load(envelope: Dictionary) -> Dictionary:
+	var refusal := _project_mismatch(envelope)
+	if refusal != "":
+		push_error("StoryletEngine.preview_load: " + refusal)
+		return {}
+	return (_plan_load(envelope)["report"] as Dictionary)
+
+
+## What open_flow(id, {"restore": saved}) would do to a flow of that name,
+## without doing it: the same report shape, since a visit parked under one
+## build and resumed under the next raises the same questions. Pure.
+func preview_flow_restore(id: String, saved: Dictionary) -> Dictionary:
+	var draft := _empty_draft()
+	_plan_flow_restore(id, saved, _shared_claims_except(id), draft)
+	return _finish_report(_bundle["content"], _bundle["content"], [id], draft)
+
+
 ## Restore: shared state once, then every flow REBUILT from its blob.
 ## Handles held from before the load are closed and inert; take fresh ones
-## from get_flow()/flows(). Returns "" or the error message on a foreign
-## save (wrong project).
-func load_game(envelope: Dictionary) -> String:
-	var content = envelope.get("content", {})
-	if str(content.get("project")) != str(_bundle["content"]["project"]):
-		return 'save is for project "%s", bundle is "%s"' % [str(content.get("project")), str(_bundle["content"]["project"])]
-	var env: Dictionary = envelope.duplicate(true)
+## from get_flow()/flows().
+##
+## Returns the LoadReport preview_load would have given for this envelope: the
+## drift tolerance that makes a load forgiving is what hides its cost, so the
+## cost comes back with the load whether or not anybody looked first. A foreign
+## save (wrong project) is refused: {} with push_error, and nothing is touched.
+func load_game(envelope: Dictionary) -> Dictionary:
+	var refusal := _project_mismatch(envelope)
+	if refusal != "":
+		push_error("StoryletEngine.load_game: " + refusal)
+		return {}
+	var plan := _plan_load(envelope)
 	reset()
-	var shared_half: Dictionary = env.get("shared", {})
-	for id in shared_half.get("spent", []):
+	for id in (plan["spent"] as Array):
 		_spent[str(id)] = true
-	var shared_values: Dictionary = shared_half.get("props", {})
+	var shared_values: Dictionary = plan["shared"]
 	(_shared["story"] as StoryletPropertyBag).load(shared_values.get("story", {}))
 	for kind in ["box", "deck", "hand", "value"]:
 		var saved: Dictionary = shared_values.get(kind, {})
@@ -583,7 +668,250 @@ func load_game(envelope: Dictionary) -> String:
 			var bag = _shared[kind].get(id)
 			if bag != null:
 				(bag as StoryletPropertyBag).load(saved[id])
-	for id in env.get("flows", {}):
+	var flows_clean: Dictionary = plan["flows"]
+	for id in flows_clean:
 		var flow := open_flow(str(id))
-		flow.restore(env["flows"][id])
+		flow.restore(flows_clean[id])
+	return plan["report"]
+
+
+## "" when the save is for this project, else the refusal message.
+func _project_mismatch(envelope: Dictionary) -> String:
+	var content = envelope.get("content", {})
+	if str(content.get("project")) != str(_bundle["content"]["project"]):
+		return 'save is for project "%s", bundle is "%s"' % [str(content.get("project")), str(_bundle["content"]["project"])]
 	return ""
+
+
+# --- the load report (design/engine-server.md 4.9) ---------------------------------
+#
+# One walk, two entry points. preview_load runs it and returns the report;
+# load_game runs it, returns the same report and then applies the CLEANED blob
+# the walk produced. Two implementations of "what does this save cost" would
+# drift the first time one of them was fixed, so there is one, and the apply
+# half consumes its output rather than repeating its decisions.
+#
+# A reported property's "path" is the engine's property address, spelled exactly
+# as list_properties() prints it and exactly as get_property and set_property
+# accept it: "story.name" for the story scope, "scope.owner.name" for the box,
+# deck, hand and tag scopes. No "@", which belongs to the expression language and
+# not to an address. The owner segment is the engine's own id today, the same gap
+# every other address in the API has; design change 4.4 moves property addresses
+# and trace events to gameIds together, in all four runtimes.
+
+## The report under construction: unsorted, until _finish_report orders it.
+static func _empty_draft() -> Dictionary:
+	return {
+		"evicted": [], "droppedCooldowns": [], "droppedSpent": [],
+		"droppedProperties": [], "defaultedProperties": [], "retypedProperties": [],
+	}
+
+
+## Does a saved value still fit its declaration?
+##
+## The type first, then the declaration's own vocabulary: an enum value or a
+## quality stage the edit struck out is still a string of the right type and
+## still no longer a legal value. A declaration with no vocabulary constrains
+## nothing, so anything of the right type fits.
+static func _value_fits(decl: Dictionary, value) -> bool:
+	match str(decl.get("type", "")):
+		"boolean":
+			return value is bool
+		"number":
+			return (value is int or value is float) and not (value is bool)
+		"string":
+			return value is String
+		"enum":
+			return value is String and (not decl.has("values") or (decl["values"] as Array).has(value))
+		"quality":
+			return value is String and (not decl.has("stages") or (decl["stages"] as Array).has(value))
+		"flags":
+			if not (value is Array):
+				return false
+			if not decl.has("values"):
+				return true
+			for f in (value as Array):
+				if not (decl["values"] as Array).has(f):
+					return false
+			return true
+		_:
+			return true
+
+
+## Walk one bag's worth of saved values against one bag's worth of
+## declarations: report the orphans, the newcomers and the misfits, and return
+## the values that survive.
+static func _walk_scope(decls: Array, saved: Dictionary, prefix: String, flow, draft: Dictionary) -> Dictionary:
+	var by_name := {}
+	for d in decls:
+		by_name[str(d["name"])] = d
+	var clean := {}
+	for name in saved:
+		var entry := {"path": prefix + str(name)}
+		if flow != null:
+			entry["flow"] = flow
+		if not by_name.has(name):
+			(draft["droppedProperties"] as Array).append(entry)
+			continue
+		if not _value_fits(by_name[name], saved[name]):
+			(draft["retypedProperties"] as Array).append(entry)
+			continue
+		clean[name] = saved[name]
+	for d in decls:
+		var dname := str(d["name"])
+		if not saved.has(dname):
+			var missing := {"path": prefix + dname}
+			if flow != null:
+				missing["flow"] = flow
+			(draft["defaultedProperties"] as Array).append(missing)
+	return clean
+
+
+## The same walk over all five scopes of one partition. An owner the save
+## carries and the build no longer has drops whole (its bag is gone, so its
+## values have nowhere to land); an owner the build has and the save lacks
+## keeps every default.
+func _walk_partition(decls: Dictionary, values: Dictionary, flow, draft: Dictionary) -> Dictionary:
+	var out := {"story": _walk_scope(decls["story"], values.get("story", {}), "story.", flow, draft),
+		"box": {}, "deck": {}, "hand": {}, "value": {}}
+	for kind in ["box", "deck", "hand", "value"]:
+		var decl_kind: Dictionary = decls[kind]
+		var saved_kind: Dictionary = values.get(kind, {})
+		var ids := {}
+		for id in decl_kind:
+			ids[id] = true
+		for id in saved_kind:
+			ids[id] = true
+		var ordered: Array = ids.keys()
+		ordered.sort()
+		for id in ordered:
+			out[kind][id] = _walk_scope(decl_kind.get(id, []), saved_kind.get(id, {}),
+				"%s.%s." % [kind, id], flow, draft)
+	return out
+
+
+## The whole-envelope walk: the report, and the cleaned state the apply half
+## writes. Nothing here touches the engine, which is what lets preview_load and
+## load_game share it.
+func _plan_load(envelope: Dictionary) -> Dictionary:
+	var draft := _empty_draft()
+	var shared_half: Dictionary = envelope.get("shared", {})
+	var shared_clean := _walk_partition(_shared_decls, shared_half.get("props", {}), null, draft)
+	var spent: Array = []
+	for card_id in shared_half.get("spent", []):
+		if _cards_by_id.has(str(card_id)):
+			spent.append(str(card_id))
+		else:
+			(draft["droppedSpent"] as Array).append(str(card_id))
+	var flows_clean := {}
+	var ids: Array = []
+	for id in envelope.get("flows", {}):
+		ids.append(str(id))
+		flows_clean[str(id)] = _plan_flow_restore(str(id), envelope["flows"][id], null, draft)
+	return {
+		"report": _finish_report(_bundle["content"], envelope.get("content", {}), ids, draft),
+		"shared": shared_clean, "spent": spent, "flows": flows_clean,
+	}
+
+
+## One flow's walk. other_claims is the rest of the world's shared ledger and is
+## present only for a SINGLE-flow restore into a live engine: a whole-envelope
+## load rebuilds every flow from one consistent moment, so there is nobody else
+## to compete with.
+func _plan_flow_restore(id: String, saved: Dictionary, other_claims, draft: Dictionary) -> Dictionary:
+	var clean := {
+		"props": _walk_partition(_flow_decls, saved.get("props", {}), id, draft),
+		"turns": (saved.get("turns", {}) as Dictionary).duplicate(true),
+		"prng": int(saved.get("prng", 0)),
+		"cooldowns": {},
+		"board": {},
+		"playLog": (saved.get("playLog", []) as Array).duplicate(true),
+	}
+	for card_id in saved.get("cooldowns", {}):
+		if _cards_by_id.has(str(card_id)):
+			clean["cooldowns"][str(card_id)] = saved["cooldowns"][card_id]
+		else:
+			(draft["droppedCooldowns"] as Array).append({"flow": id, "card": str(card_id)})
+	var restored := {}
+	for hand_id in saved.get("board", {}):
+		var known = _hands_by_id.get(str(hand_id))
+		if known == null:
+			# A deleted entity has no gameId left, so it is named by the id the
+			# save carries; everything the build still knows keeps its gameId.
+			for card_id in saved["board"][hand_id]:
+				(draft["evicted"] as Array).append({"flow": id, "hand": str(hand_id),
+					"card": _card_report_name(str(card_id)), "reason": "hand-vanished"})
+			continue
+		var hand_name := StoryletBundle.effective_game_id(known["hand"])
+		var kept: Array = []
+		for card_id in saved["board"][hand_id]:
+			var entry = _cards_by_id.get(str(card_id))
+			if entry == null:
+				(draft["evicted"] as Array).append({"flow": id, "hand": hand_name,
+					"card": str(card_id), "reason": "vanished"})
+				continue
+			if other_claims != null and StoryletFlow._card_is_shared(entry["card"], bool(entry["deck"].get("shared", false))):
+				var elsewhere := float((other_claims as Dictionary).get(str(card_id), 0))
+				var here := float(restored.get(str(card_id), 0))
+				if elsewhere + here >= StoryletFlow._shared_cap(entry["card"]):
+					(draft["evicted"] as Array).append({"flow": id, "hand": hand_name,
+						"card": StoryletBundle.effective_game_id(entry["card"]), "reason": "claimed-elsewhere"})
+					continue
+				restored[str(card_id)] = here + 1.0
+			kept.append(str(card_id))
+		clean["board"][str(hand_id)] = kept
+	return clean
+
+
+func _card_report_name(card_id: String) -> String:
+	var entry = _cards_by_id.get(card_id)
+	return StoryletBundle.effective_game_id(entry["card"]) if entry != null else card_id
+
+
+static func _sort_by_key(list: Array, fields: Array) -> Array:
+	var keyed: Array = []
+	for entry in list:
+		var parts: Array = []
+		for f in fields:
+			parts.append(str((entry as Dictionary).get(f, "")))
+		keyed.append({"k": REPORT_SEP.join(parts), "v": entry})
+	keyed.sort_custom(func(a, b): return str(a["k"]) < str(b["k"]))
+	var out: Array = []
+	for e in keyed:
+		out.append(e["v"])
+	return out
+
+
+## Order the draft and answer the identity questions. `saved` is the content
+## block the save carries; for a single-flow restore there is none, so the
+## caller passes the bundle's own and no drift is reported.
+static func _finish_report(bundle_content: Dictionary, saved_content: Dictionary, flows_in_order: Array, draft: Dictionary) -> Dictionary:
+	var evicted := _sort_by_key(draft["evicted"], ["flow", "hand", "card", "reason"])
+	var dropped_cooldowns := _sort_by_key(draft["droppedCooldowns"], ["flow", "card"])
+	var dropped_spent: Array = (draft["droppedSpent"] as Array).duplicate()
+	dropped_spent.sort()
+	var dropped_props := _sort_by_key(draft["droppedProperties"], ["flow", "path"])
+	var defaulted_props := _sort_by_key(draft["defaultedProperties"], ["flow", "path"])
+	var retyped_props := _sort_by_key(draft["retypedProperties"], ["flow", "path"])
+	var saved_version := str(saved_content.get("version", ""))
+	var saved_hash := str(saved_content.get("hash", ""))
+	var bundle_version := str(bundle_content.get("version", ""))
+	var bundle_hash := str(bundle_content.get("hash", ""))
+	var drift := saved_version != bundle_version or saved_hash != bundle_hash
+	return {
+		# "flows" is what the load restores, not something it had to change, so
+		# it never makes a report inexact.
+		"exact": not drift and evicted.is_empty() and dropped_cooldowns.is_empty()
+			and dropped_spent.is_empty() and dropped_props.is_empty()
+			and defaulted_props.is_empty() and retyped_props.is_empty(),
+		"project": str(bundle_content.get("project", "")),
+		"version": {"saved": saved_version, "bundle": bundle_version},
+		"hash": {"saved": saved_hash, "bundle": bundle_hash},
+		"flows": flows_in_order,
+		"evicted": evicted,
+		"droppedCooldowns": dropped_cooldowns,
+		"droppedSpent": dropped_spent,
+		"droppedProperties": dropped_props,
+		"defaultedProperties": defaulted_props,
+		"retypedProperties": retyped_props,
+	}

@@ -24,7 +24,7 @@ import type {
   HandFixture, OutcomeFixture, PeekCase, ScriptedCase, TemplateFixture,
 } from "./types.js";
 
-export const CORPUS_VERSION = 2;
+export const CORPUS_VERSION = 5;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>
@@ -107,7 +107,10 @@ const scaffoldFor = (label: string, groups: TagGroup[]): Scaffold => {
     return tag.id;
   };
   /** Bindings: group gameId -> tag gameId, resolved to ids (home passes hand
-   *  ids through). */
+   *  ids through). A value beginning with "@" is a PROPERTY REFERENCE, not a
+   *  tag name (4.6, the hand that moves): it names nothing in the bundle at
+   *  build time, so it passes through exactly as authored and the runtime
+   *  resolves it at ask time. */
   const resolveBindings = (
     bindings: Record<string, string> | undefined,
   ): Record<string, string> | undefined =>
@@ -115,7 +118,7 @@ const scaffoldFor = (label: string, groups: TagGroup[]): Scaffold => {
       Object.entries(bindings).map(([group, tag]) => {
         if (group === PLACE_GROUP) return [PLACE_GROUP, tag];
         const gid = groupId(group);
-        return [gid, tagId(gid, tag)];
+        return [gid, tag.startsWith("@") ? tag : tagId(gid, tag)];
       }),
     );
   return { groups, groupId, tagId, resolveBindings };
@@ -211,6 +214,7 @@ export function expandBundle(f: BundleFixture): Bundle {
     id: "b_x",
     gameId: "box",
     ranking: f.ranking ?? { specificity: true },
+    ...(f.turn !== undefined ? { turn: f.turn } : {}),
     fields: [],
     properties: f.boxProperties ?? [],
     tagGroups: byId(allGroups),
@@ -226,6 +230,7 @@ export function expandBundle(f: BundleFixture): Bundle {
       id: OTHER_BOX_ID,
       gameId: OTHER_BOX_GAME_ID,
       ranking: o.ranking ?? { specificity: true },
+      ...(o.turn !== undefined ? { turn: o.turn } : {}),
       fields: [],
       properties: o.properties ?? [],
       tagGroups: byId(otherGroups),
@@ -236,7 +241,11 @@ export function expandBundle(f: BundleFixture): Bundle {
   }
   return {
     schema: "storylets/bundle@0",
-    content: { project: "conf", version: "0.0.0", hash: "" },
+    content: {
+      project: f.content?.project ?? "conf",
+      version: f.content?.version ?? "0.0.0",
+      hash: f.content?.hash ?? "",
+    },
     metadata: strip ? "stripped" : "full",
     settings: { playAdvancesTurns: f.settings?.playAdvancesTurns ?? 1 },
     world: { properties: f.world ?? [] },

@@ -210,16 +210,41 @@ A few notes:
 
 **File ▸ Project Settings…** (`Cmd+,`) opens a dialog with three sections:
 
-- **General**: the project's name and version, and one warning switch: **Warn about
-  unread state** also flags state an outcome writes that no condition reads. It's off by
-  default, because cards are often written ahead of the content that will read them; a
-  gate on state nothing writes always warns, whatever this says.
+- **General**: the project's name and version, the **Play** setting (below), and one
+  warning switch: **Warn about unread state** also flags state an outcome writes that no
+  condition reads. It's off by default, because cards are often written ahead of the
+  content that will read them; a gate on state nothing writes always warns, whatever
+  this says.
 - **World**: the `@world` property declarations (your game's state), and the
   [coverage drivers](/production/coverage-testing/#writing-drivers-by-hand) that stand in
   for them during a test run.
 - **Publish** (under Project, as in Patterpad): the bundle path (by default a `storylet-dist/`
   folder beside the project, never inside it), whether metadata is `full` or `stripped`, and
   how many turns a play advances.
+
+### Play: how much of the app you see
+
+Most games are one player at a time, and most of the app should say so. **Play** is one
+setting with two rungs, and the second shows everything the first shows:
+
+| Play | For | What it adds |
+|---|---|---|
+| **Solo** | one player, one playthrough | nothing extra: this is the plain editor |
+| **Shared world** | several players over one world | **Shared** on declarations and decks, the Shared choice and **In the world** on cards |
+
+Hidden means absent, not greyed out: a solo project simply has no Shared checkbox to read
+past. Nothing about the compiled bundle changes - both rungs run on the same engine - so this
+is only about what you are shown. Nothing else is governed by it: a timed box and a hole
+filled from a property are engine features, and every project has them.
+
+A project can also arrive carrying a third rung, set for it by the server it came from. The
+editor honours that rung, shows it in the field, and lets you move down from it; it isn't one
+you can pick.
+
+**Moving down is refused while the project uses what the rung would hide**, and the dialog
+says what is in the way ("3 declarations are shared"). Take those out first, or leave Play
+where it is. A shard hand-edited above its rung is a validation warning naming the rung, so
+the file and the setting can't quietly disagree.
 
 Every property list in the app is the same control, and the editor for a value follows
 its type: boolean and enum values are pickers, not free text.

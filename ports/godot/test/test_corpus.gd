@@ -15,6 +15,14 @@
 # Prints per-family counts then ALL PASS (exit 0) or N FAILED (exit 1).
 extends SceneTree
 
+## Ops that run ON a flow, and so open one lazily. Everything else must not.
+const FLOW_OPS := ["setState", "peek", "deal", "assertBoard", "play",
+	"advanceTurns", "assertOutcomes", "assertOutcomeOrder", "assertState"]
+
+## The load report's comparison separator: a UNIT SEPARATOR, because it cannot
+## occur in an id, a gameId or a property name.
+const REPORT_SEP := "\u001f"
+
 var _fails := 0
 var _dialect: Dictionary = StoryletDialect.dialect()
 
@@ -345,7 +353,10 @@ func _run_scripted_case(c: Dictionary) -> Array:
 	# handles = flow handles as the SCRIPT knows them: kept across closeFlow
 	# so a later op on a closed name exercises the inert handle, never a
 	# quiet re-open.
-	var rc := {"engine": first_engine, "handles": {}}
+	# parked = flow blobs a parkFlow op took, by the name they were parked under.
+	# Held OUTSIDE the engine on purpose: a park survives a content swap, which
+	# is the case that makes a resume interesting.
+	var rc := {"engine": first_engine, "handles": {}, "parked": {}}
 	var names := _hand_game_ids(bundle)
 
 	# Verdicts from the deal or peek an op just ran, card id -> verdict, taken
@@ -356,8 +367,16 @@ func _run_scripted_case(c: Dictionary) -> Array:
 	# is also what switches tracing on. The sink lives in rc because GDScript
 	# lambdas capture by VALUE.
 	rc["verdicts"] = {}
+	# What the ask SAID, as opposed to what it dealt. A hole filled from a
+	# property that names no tag deals a wildcard hand (4.6), which is
+	# indistinguishable on a board read from a hole that was never movable: the
+	# diagnostic is the only place the difference lives.
+	rc["diagnostics"] = []
 	var watch := func(f: StoryletFlow) -> StoryletFlow:
 		f.subscribe_trace(func(e: Dictionary) -> void:
+			if e["type"] == "diagnostic":
+				(rc["diagnostics"] as Array).append(str(e["message"]))
+				return
 			if e["type"] != "deal" and e["type"] != "peek":
 				return
 			for card in e["cards"]:
@@ -379,18 +398,34 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				out.append('%s: verdict for %s expected "%s", got %s'
 					% [at, card_id, want, ('"%s"' % str(got)) if got != null else "no verdict"])
 
+	var check_diagnostic := func(at: String, op: Dictionary, out: Array) -> void:
+		if not op.has("expectDiagnostic"):
+			return
+		var want: String = str(op["expectDiagnostic"])
+		var said: Array = rc["diagnostics"]
+		for message in said:
+			if str(message).contains(want):
+				return
+		out.append('%s: expected a diagnostic containing "%s", got %s'
+			% [at, want, "none" if said.is_empty() else str(said)])
+
 	var script: Array = c["script"]
 	for index in script.size():
 		var op: Dictionary = script[index]
 		var kind: String = op["op"]
 		var at := "op %d (%s)" % [index, kind]
-		var session: StoryletFlow = flow_of.call(op)
+		# Ops that run ON a flow open one lazily. The rest - engine reads, flow
+		# management, save/load - must NOT, or a harness quietly opens "main"
+		# where the JS reference does not and assertFlows answers differently
+		# for no engine reason.
+		var session: StoryletFlow = flow_of.call(op) if FLOW_OPS.has(kind) else null
 		match kind:
 			"setState":
 				_apply_state(session, op)
 
 			"peek":
 				rc["verdicts"] = {}
+				rc["diagnostics"] = []
 				var list := session.peek(op.get("box", "box"), op.get("criteria", {}), op.get("n"))
 				check_verdicts.call(at, op, failures)
 				var peek_error: String = list.get("error", "")
@@ -406,8 +441,10 @@ func _run_scripted_case(c: Dictionary) -> Array:
 
 			"deal":
 				rc["verdicts"] = {}
+				rc["diagnostics"] = []
 				var dealt := session.deal_many(op.get("hands"))
 				check_verdicts.call(at, op, failures)
+				check_diagnostic.call(at, op, failures)
 				for hand_id in op.get("expectBoard", {}):
 					var the_board := session.board()
 					var key: String = names.get(hand_id, hand_id)
@@ -553,14 +590,57 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				var envelope: Dictionary = (rc["engine"] as StoryletEngine).save_game()
 				var into: Dictionary = c["bundleB"] if op.get("into") == "B" else bundle
 				var next_engine := StoryletEngine.create(into, {"seed": seed})
-				var err := next_engine.load_game(envelope)
-				if err != "":
-					failures.append("%s: load refused: %s" % [at, err])
-				rc["engine"] = next_engine
-				var next_handles := {}
-				for f in next_engine.flows():
-					next_handles[(f as StoryletFlow).id] = f
-				rc["handles"] = next_handles
+				if op.get("previewOnly", false):
+					# The purity claim, checked rather than asserted: the engine
+					# that was asked what a load would cost writes the same
+					# envelope after the question as before it. The LIVE engine
+					# is not replaced, so the ops after this one prove the load
+					# did not happen.
+					var before := JSON.stringify(next_engine.save_game(), "", false, true)
+					var preview_report := next_engine.preview_load(envelope)
+					if JSON.stringify(next_engine.save_game(), "", false, true) != before:
+						failures.append("%s: preview_load changed the engine it was asked about" % at)
+					_check_report(at, op.get("expectReport"), preview_report, failures)
+				else:
+					_check_report(at, op.get("expectReport"), next_engine.load_game(envelope), failures)
+					rc["engine"] = next_engine
+					var next_handles := {}
+					for f in next_engine.flows():
+						next_handles[(f as StoryletFlow).id] = f
+					rc["handles"] = next_handles
+
+			"parkFlow":
+				# Park: take the blob, then close. Closing is what releases the
+				# shared claims, which is the whole reason a visit parks rather
+				# than idling.
+				var park_name := str(op["flow"])
+				(rc["parked"] as Dictionary)[park_name] = (rc["engine"] as StoryletEngine).save_flow(park_name)
+				(rc["engine"] as StoryletEngine).close_flow(park_name)
+
+			"resumeFlow":
+				var resume_name := str(op["flow"])
+				var parked: Dictionary = rc["parked"]
+				if not parked.has(resume_name):
+					failures.append('%s: nothing is parked under "%s"' % [at, resume_name])
+				else:
+					var saved: Dictionary = parked[resume_name]
+					var live := rc["engine"] as StoryletEngine
+					# Ask before doing, then require the two answers to agree: a
+					# preview that does not predict the restore is worse than no
+					# preview.
+					var preview := live.preview_flow_restore(resume_name, saved)
+					var applied := {}
+					var resume_opts := {"restore": saved,
+						"on_restore_report": func(r: Dictionary) -> void: applied.merge(r, true)}
+					if op.has("seed"):
+						resume_opts["seed"] = int(op["seed"])
+					(rc["handles"] as Dictionary)[resume_name] = watch.call(live.open_flow(resume_name, resume_opts))
+					if applied.is_empty():
+						failures.append("%s: the restore produced no report" % at)
+					elif _report_shape(preview) != _report_shape(applied):
+						failures.append("%s: preview_flow_restore said %s, the restore did %s"
+							% [at, _report_shape(preview), _report_shape(applied)])
+					_check_report(at, op.get("expectReport"), applied if not applied.is_empty() else preview, failures)
 
 			"reset":
 				rc["engine"] = StoryletEngine.create(bundle, {"seed": seed})
@@ -569,6 +649,84 @@ func _run_scripted_case(c: Dictionary) -> Array:
 			_:
 				failures.append("%s: unknown op" % at)
 	return failures
+
+
+# --- the load report (design/engine-server.md 4.9) -----------------------------
+#
+# A report's lists are compared as SORTED lists of canonical strings, not as
+# dictionaries: key order in a struct is not a contract, and four runtimes have
+# four idioms for one of these entries. An absent "flow" (the shared half)
+# canonicalises to the empty string, which is why the separator is a character
+# no id, gameId or property name can hold.
+
+func _report_keys(list: Array, fields: Array) -> Array:
+	var keys: Array = []
+	for entry in list:
+		var parts: Array = []
+		for f in fields:
+			parts.append(str((entry as Dictionary).get(f, "")))
+		keys.append(REPORT_SEP.join(parts))
+	keys.sort()
+	return keys
+
+
+## The whole report as one comparable string, for "did the preview predict the
+## restore".
+func _report_shape(r: Dictionary) -> String:
+	var version: Dictionary = r.get("version", {})
+	var hash_ids: Dictionary = r.get("hash", {})
+	return " ".join([
+		"exact" if r.get("exact", false) else "inexact", str(r.get("project", "")),
+		str(version.get("saved", "")), str(version.get("bundle", "")),
+		str(hash_ids.get("saved", "")), str(hash_ids.get("bundle", "")),
+		_show_list(r.get("flows", [])),
+		_show_list(_report_keys(r.get("evicted", []), ["flow", "hand", "card", "reason"])),
+		_show_list(_report_keys(r.get("droppedCooldowns", []), ["flow", "card"])),
+		_show_list(r.get("droppedSpent", [])),
+		_show_list(_report_keys(r.get("droppedProperties", []), ["flow", "path"])),
+		_show_list(_report_keys(r.get("defaultedProperties", []), ["flow", "path"])),
+		_show_list(_report_keys(r.get("retypedProperties", []), ["flow", "path"])),
+	])
+
+
+## Check the fields expectReport names, and only those.
+func _check_report(at: String, expected, actual: Dictionary, out: Array) -> void:
+	if not (expected is Dictionary):
+		return
+	var want: Dictionary = expected
+	var cmp := func(field: String, want_shown: String, got_shown: String) -> void:
+		if want_shown != got_shown:
+			out.append("%s: report.%s expected %s, got %s" % [at, field, want_shown, got_shown])
+	if want.has("exact"):
+		cmp.call("exact", str(bool(want["exact"])), str(bool(actual.get("exact", false))))
+	if want.has("project"):
+		cmp.call("project", str(want["project"]), str(actual.get("project", "")))
+	for axis in ["version", "hash"]:
+		if not want.has(axis):
+			continue
+		var want_axis: Dictionary = want[axis]
+		var got_axis: Dictionary = actual.get(axis, {})
+		cmp.call(axis + ".saved", str(want_axis.get("saved", "")), str(got_axis.get("saved", "")))
+		cmp.call(axis + ".bundle", str(want_axis.get("bundle", "")), str(got_axis.get("bundle", "")))
+	if want.has("flows"):
+		cmp.call("flows", _show_list(want["flows"]), _show_list(actual.get("flows", [])))
+	if want.has("evicted"):
+		cmp.call("evicted", _show_list(_report_keys(want["evicted"], ["flow", "hand", "card", "reason"])),
+			_show_list(_report_keys(actual.get("evicted", []), ["flow", "hand", "card", "reason"])))
+	if want.has("droppedCooldowns"):
+		cmp.call("droppedCooldowns", _show_list(_report_keys(want["droppedCooldowns"], ["flow", "card"])),
+			_show_list(_report_keys(actual.get("droppedCooldowns", []), ["flow", "card"])))
+	if want.has("droppedSpent"):
+		var want_spent: Array = (want["droppedSpent"] as Array).duplicate()
+		want_spent.sort()
+		var got_spent: Array = (actual.get("droppedSpent", []) as Array).duplicate()
+		got_spent.sort()
+		cmp.call("droppedSpent", _show_list(want_spent), _show_list(got_spent))
+	for field in ["droppedProperties", "defaultedProperties", "retypedProperties"]:
+		if not want.has(field):
+			continue
+		cmp.call(field, _show_list(_report_keys(want[field], ["flow", "path"])),
+			_show_list(_report_keys(actual.get(field, []), ["flow", "path"])))
 
 
 # Read-only @world with a HOST resolver bound (Reboot.md 10). The corpus case

@@ -19,7 +19,7 @@
     "check:unreal-plugin": "./scripts/check-unreal-plugin.sh",
     "test:watch": "vitest",
     "test:website": "npm --prefix website run build",
-    "build:libs": "npm run build -w @storylet-studio/model -w @storylet-studio/dialect -w @storylet-studio/compiler -w @storylet-studio/runtime -w @storylet-studio/play-helpers -w @storylet-studio/ops -w @storylet-studio/cli",
+    "build:libs": "npm run build -w @storylet-studio/model -w @storylet-studio/wire -w @storylet-studio/dialect -w @storylet-studio/compiler -w @storylet-studio/runtime -w @storylet-studio/play-helpers -w @storylet-studio/ops -w @storylet-studio/cli",
     "build": "npm run build:libs && npm run build -w @storylet-studio/studio && npm run build -w @storylet-studio/village-client",
     "studio": "npm run dev -w @storylet-studio/studio",
     "website": "npm --prefix website run dev",

@@ -6,12 +6,13 @@
 // ---------------------------------------------------------------------------
 
 import {
-  BOX_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, PROJECT_SCHEMA, NOTES_SCHEMA, SHARD_EXTENSIONS, TAGS_SCHEMA, VIEW_SCHEMA,
+  BOX_SCHEMA, CONTRACTS_DIR, CONTRACT_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, PROJECT_SCHEMA, NOTES_SCHEMA,
+  SHARD_EXTENSIONS, TAGS_SCHEMA, VIEW_SCHEMA,
   isCaseOnlyPropertyName,
 } from "@storylet-studio/model";
-import type { BoxShard, DeckShard, HandsShard, ProjectShard, PropertyDecl, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
+import type { BoxShard, ContractShard, DeckShard, HandsShard, ProjectShard, PropertyDecl, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
 import { parseSource } from "./serialize.js";
-import type { Issue, SourceBox, SourceFile, SourceProject } from "./project.js";
+import type { Issue, SourceBox, SourceContract, SourceFile, SourceProject } from "./project.js";
 
 interface Parsed {
   file: SourceFile;
@@ -94,11 +95,32 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
   const projectParsed = parseShard(projectFiles[0]!, PROJECT_SCHEMA, issues);
   if (!projectParsed) return { issues };
 
+  // The venue's contracts, in their own folder at the root. The directory is the
+  // registry here as it is for decks: a contract exists because its file exists,
+  // and the installation it names inside is what identifies it, not the name of
+  // the file.
+  //
+  // Recognised by EXTENSION inside that folder, not by the folder alone. A box
+  // may legitimately be called "contracts" - Port Meridian's is, and it was
+  // there first - so claiming the whole folder would break a shipped example
+  // for a name collision. A `contracts/` that holds a box shard goes on being a
+  // box folder; only the `*.storyletcontract` files in it are lifted out here.
+  const isContract = (f: SourceFile): boolean =>
+    f.path.startsWith(`${CONTRACTS_DIR}/`) && f.path.split("/").length === 2
+    && ext(f.path) === SHARD_EXTENSIONS.contract;
+  const contracts: SourceContract[] = [];
+  for (const file of files.filter(isContract).sort((a, b) => a.path.localeCompare(b.path))) {
+    const contractParsed = parseShard(file, CONTRACT_SCHEMA, issues);
+    if (!contractParsed) continue;
+    contracts.push({ path: file.path, shard: contractParsed.value as unknown as ContractShard });
+  }
+
   // Box folders: every directory holding a box shard.
   const boxFolders = new Map<string, SourceFile[]>();
   for (const file of files) {
     const parts = file.path.split("/");
     if (parts.length < 2) continue;
+    if (isContract(file)) continue;
     const folder = parts[0]!;
     boxFolders.set(folder, [...(boxFolders.get(folder) ?? []), file]);
   }
@@ -180,6 +202,7 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
     path: projectFiles[0]!.path,
     project: projectParsed.value as unknown as ProjectShard,
     boxes,
+    contracts,
   };
   foldCaseOnlyPropertyNames(project);
   return { project, issues };

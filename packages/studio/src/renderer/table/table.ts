@@ -20,10 +20,12 @@ import { confirmDialog } from "../src/confirm.js";
 import { colourIndex } from "../../shell/colour.js";
 import { Table, coerceStateInput, diffBoards, journalPlan } from "./model.js";
 import { runMarks } from "./run-marks.js";
+import { setPlayRung, shows } from "../src/play-ladder.js";
 import { createLiveRun } from "./live.js";   // Live Link: the game's run, rebuilt from its frames
 import type { LiveRun } from "./live.js";
 import type { BoardLogEntry, DealtView, LogEntry, NotDealt } from "./model.js";
 import type { SaveFile } from "@storylet-studio/model";
+import { turnSpan } from "@storylet-studio/model";
 import type { BoxMapDto, LiveLinkStatus, ProjectMapDto, StudioApi } from "../../shared/api.js";
 import type { MountedBoardMap } from "./board-map.js";
 
@@ -164,6 +166,10 @@ async function build(): Promise<void> {
   if ("error" in result) { loadError = result.error; table = undefined; render(); return; }
   loadError = "";
   name = result.name;
+  // The play ladder's rung (design/engine-server.md 4.10). It comes beside the
+  // bundle rather than in it: the bundle deliberately does not carry the
+  // setting, and this window has no other source for it.
+  setPlayRung(result.play);
   table = new Table(result.bundle, seed);
   peekBox = table.boxes()[0]?.gameId ?? "";
   for (const k of Object.keys(criteria)) delete criteria[k];
@@ -347,6 +353,42 @@ function restart(): void {
     title: "Restart the game?",
     body: "The session and its journal are discarded.",
     confirmLabel: "Restart",
+  }).then((ok) => { if (ok) void build(); });
+}
+
+/**
+ * A NEW RUN (design/engine-server.md 4.2): the world restarts overnight and the
+ * pockets come with it, which is what a designer needs in order to play a
+ * RETURNING party. The model does the work; this is the gesture.
+ *
+ * No confirmation: it keeps everything durable, and everything else it drops
+ * is the same session Restart drops without asking either. The journal starts
+ * afresh, so the run boundary is legible in the record rather than hidden in it.
+ */
+function newRun(): void {
+  if (!table) return;
+  table.newRun();
+  open = undefined; pending = undefined; snapPanel = undefined;
+  peeked = []; notDealt = []; peekStamp = undefined;
+  marks.reset();   // a new run: nowhere has been anywhere yet
+  board = table.dealAll();
+  setPulsed(new Set());
+  render();
+}
+
+/**
+ * FORGET EVERYONE (4.2): the durable half goes too, so the designer can play
+ * the first day again. That is exactly what a Restart already does - the Board
+ * builds a fresh engine - so this IS Restart, under the name that says what it
+ * costs, with a confirmation that names it. It is the one act in the system
+ * that forgets people on purpose, and it should never be a slip of the mouse.
+ */
+function forgetEveryone(): void {
+  void confirmDialog({
+    title: "Forget everyone?",
+    body: "The session and its journal are discarded, and so is everything durable: "
+      + "every pocket and the installation's own memory. The next run is the first day again.",
+    confirmLabel: "Forget everyone",
   }).then((ok) => { if (ok) void build(); });
 }
 
@@ -675,10 +717,12 @@ function playPanel(): HTMLElement | null {
 function turnDial(): HTMLElement {
   const clocks = table!.clocks();
   if (clocks.length === 1) {
+    const one = clocks[0]!;
     return el("div", { className: "dial" },
-      el("span", { className: "overline", text: "Turn" }),
-      el("span", { className: "dialnum", text: String(clocks[0]!.turn) }),
-      el("button", { className: "primary", text: "Next turn", tip: "Time passes: the clock advances, hands refresh", onClick: nextTurn }));
+      el("span", { className: "overline", text: one.seconds !== undefined ? `Turn (${turnSpan(1, one.seconds)} each)` : "Turn" }),
+      el("span", { className: "dialnum", text: String(one.turn) }),
+      el("button", { className: "primary", text: "Next turn", tip: "Time passes: the clock advances, hands refresh", onClick: nextTurn }),
+      ...timeSteps(one));
   }
   return el("div", { className: "dial clocksdial" },
     el("div", { className: "clockshead" },
@@ -688,8 +732,27 @@ function turnDial(): HTMLElement {
       ...clocks.map((c) => el("span", { className: "clockrow" },
         el("span", { className: "clockbox", text: c.box }),
         el("span", { className: "clockval", text: String(c.turn) }),
-        el("button", { className: "mini", text: "+1", tip: `Advance only ${c.box} (clocks run forward only)`,
-          onClick: () => { table!.session.advanceTurns(c.box, 1); refreshBoard(); render(); } })))));
+        c.seconds !== undefined
+          ? el("span", { className: "clockunit", text: `${turnSpan(1, c.seconds)} a turn` })
+          : el("button", { className: "mini", text: "+1", tip: `Advance only ${c.box} (clocks run forward only)`,
+              onClick: () => { table!.session.advanceTurns(c.box, 1); refreshBoard(); render(); } }),
+        ...timeSteps(c)))));
+}
+
+/** A timed box's advance buttons, scaled to its own unit (4.8): the step
+ *  nearest a minute and ten of them, so half an hour is one click and a bit
+ *  rather than thirty presses of Next turn. Each is an ordinary advanceTurns
+ *  of the right count - the Board is the host here, and a timed box has no
+ *  clock of its own. Nothing at all for an untimed box, which keeps the
+ *  surface it has always had. */
+function timeSteps(clock: { box: string; seconds?: number }): HTMLElement[] {
+  if (clock.seconds === undefined) return [];
+  const step = Math.max(1, Math.round(60 / clock.seconds));
+  return [step, step * 10].map((n) => el("button", {
+    className: "mini", text: `+${turnSpan(n, clock.seconds!)}`,
+    tip: `Advance ${clock.box} by ${n} turn${n === 1 ? "" : "s"} (clocks run forward only)`,
+    onClick: () => { table!.session.advanceTurns(clock.box, n); refreshBoard(); render(); },
+  }));
 }
 
 /** The turn dial in Live mode: read-only, from the game's `board.turns`. Every
@@ -1263,7 +1326,21 @@ function render(): void {
           el("button", { text: "Save state…", onClick: () => { snapPanel = snapPanel === "save" ? undefined : "save"; render(); } }),
           el("button", { text: "Restore…",
             onClick: () => { snapPanel = snapPanel === "restore" ? undefined : "restore"; render(); } }),
-          el("button", { text: `${icon.restart} Restart`, onClick: restart }),
+          // The run boundary (design/engine-server.md 4.2), at the venue rung
+          // only (4.10): New run keeps the pockets so a returning party can be
+          // played, Forget everyone drops them and IS the restart. Below that
+          // rung nothing is durable, so Restart is the whole story and the pair
+          // would be two names for one act.
+          ...(shows("runGestures")
+            ? [
+              el("button", { text: "New run",
+                tip: "Restart the world but keep everything durable: play a party who have been here before",
+                onClick: newRun }),
+              el("button", { text: `${icon.restart} Forget everyone`,
+                tip: "Restart, and forget the durable half too: the pockets and the installation's memory",
+                onClick: forgetEveryone }),
+            ]
+            : [el("button", { text: `${icon.restart} Restart`, onClick: restart })]),
         ),
     liveMode
       // Live mode: the game's run, always as a list (its board, its journal,

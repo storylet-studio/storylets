@@ -5,17 +5,19 @@ sidebar:
   label: The shards
 ---
 
-A project is made of six kinds of file, one extension each. Every one is JSON5 with trailing
-commas, and every expression is stored as plain source text, never as a syntax tree.
+A project is made of seven kinds of file, one extension each. Every one is JSON5 with trailing
+commas, and every expression is stored as plain source text, never as a syntax tree. Six of
+them are yours; the seventh, the installation contract, is written by a venue's server.
 
 | File | Extension | Holds |
 |---|---|---|
 | project | `<name>.storyletproj` | settings, `@world` and `@story` declarations, coverage drivers, export config |
-| box | `box.storyletbox` | the card template, `@box` properties, the ranking toggle |
+| box | `box.storyletbox` | the card template, `@box` properties, the ranking toggle, whether the box is timed |
 | tags | `tags.storylettags` | tag groups: their tags and each tag's properties |
 | hands | `hands.storylethands` | hand templates and hands |
 | deck | `<name>.storyletdeck` | the cards, and the deck's own gate and `@deck` properties |
 | view | `view.storyletview` | the arrangement layer: where things sit on a canvas or a map, and nothing about what they are |
+| contract | `contracts/<installation>.storyletcontract` | what a venue this project is installed at depends on. Not yours: the server writes it |
 
 ### How they sit on disk
 
@@ -140,6 +142,18 @@ across every flow, `false` a copy per flow. Absent means the scope default (`@st
 box, deck, hand and tag properties per-flow). `@world` takes no flag: it is the game's own
 state and always shared, and the compiler refuses the flag there.
 
+Beside it, and independent of it, **`durable`** says the value
+[outlives a run](/play/world-state/#durable-state-that-outlives-a-run): the installation's
+memory when it is also shared, one player's pocket when it is not. The engine never reads it;
+whoever runs the engine lifts and restores durable values at a run boundary. `@world` takes no
+flag here either, and for the same reason.
+
+**`settings.play`** is `"solo"`, `"shared"` or `"venue"` (absent means `"solo"`): the
+[play ladder](/storyletter/workspace/#play-how-much-of-the-app-you-see), which decides how much
+of itself Storyletter shows. It is authoring configuration and is never compiled into the
+bundle. A project that contains more than its rung shows is a validation warning naming the
+rung.
+
 **`export`** names where the compiled bundle goes and whether author metadata rides along
 (`full`) or is stripped for size (`stripped`).
 
@@ -187,6 +201,18 @@ the box.
 your game (a scene id, an animation reference, a text key). The engine never interprets them
 and expressions can't read them. `properties` is the `@box` scope. `ranking.specificity` is
 the one per-box ranking toggle.
+
+An optional `turn` makes this a **timed box**:
+
+```json5
+    turn: { seconds: 60 },   // one turn a minute of the run
+```
+
+`seconds` is a whole number of seconds, one or more. Declaring it says that a turn in this
+box is a length of time: plays in it no longer advance its clock, your game ticks it instead,
+and a card's `redraw: 30` reads as thirty minutes. See
+[Dealing](/play/dealing/#a-box-that-counts-in-time). Leave it out and a turn is a play, which
+is the ordinary box.
 
 ## The tags shard
 
@@ -289,12 +315,53 @@ The scaffolded starter hand shows the written-out form:
 }
 ```
 
+### A hole filled from a property
+
+A `chosen` value is normally a tag id. It can instead be a **property reference**, and then
+the hole moves: the engine resolves the reference each time the hand is asked and binds the
+hole to the tag the value names.
+
+```json5
+{
+  gameId: "the-elder",
+  id: "h_elder",
+  template: "t_npcs_you_can_talk_to",
+  chosen: {
+    d_zone: "@hand.zone",
+  },
+  properties: [
+    {
+      default: "village",
+      name: "zone",
+      shared: true,
+      type: "enum",
+      values: ["village", "forest", "mill"],
+    },
+  ],
+}
+```
+
+Move the Elder with `setProperty("hand.the-elder.zone", "forest")` and the next deal follows:
+forest-tagged cards become available at his hand, and village-tagged ones leave it. There is
+no other verb. A `shared: true` declaration like the one above makes the move a world fact, so
+every flow sees the Elder in the forest; leave the flag off and each flow moves its own copy,
+which is how a party gets a "what is around me" hand that follows them about.
+
+The reference may be `@hand.<name>` (a property this hand or its template declares),
+`@story.<name>` or `@world.<name>`. It has to be a string or an enum, because the value has to
+be able to name a tag. A value that names no tag in the group leaves the hole unbound, which
+is a wildcard rather than an empty hand, and the deal says so on its
+[trace](/play/dev-tools/). A standalone hand does the same thing with a `rule` binding.
+`place` is the one group this never applies to: it is the hand's own name.
+
 ## A deck shard
 
 One file per deck. It carries the deck's own identity, its optional gate condition, its
 `@deck` properties, and its cards. It may also carry **`shared`**, which makes every card in
 the pile scarce across [flows](/play/world-state/#shared-or-per-flow) unless a card says
-otherwise: one of each in the world, rather than one each per participant.
+otherwise: one of each in the world, rather than one each per participant; and **`durable`**,
+which makes every `redraw: never` card in it
+[stay played past the end of the run](/play/world-state/#durable-state-that-outlives-a-run).
 
 ```json5
 {
@@ -354,6 +421,11 @@ Reading a card top to bottom:
   for a single unique card sitting in an ordinary deck. **`sharedCopies`** is then how many
   hands may hold it anywhere, defaulting to `copies` - so `copies: 1, sharedCopies: 5` is
   five in the world, one to a customer.
+- **`durable`** says this card's `redraw: never` spend
+  [survives the run](/play/world-state/#durable-state-that-outlives-a-run) - for whoever
+  played it, or for everyone when the card is also shared. Absent, it takes its deck's flag,
+  exactly as `shared` does. On any other redraw it means nothing past the run, and the
+  compiler warns.
 - **`tags`** maps group ids to tag ids. **An absent group is a wildcard**: this card would
   match any binding of any other group the box declares. Exclusions are written as conditions
   over `@hand`, not as negative tags.
@@ -381,3 +453,53 @@ without one.
 
 Card template fields use the same shape. The difference is what they're for: a property is
 state the expressions read and write; a field is data handed to your game.
+
+## The installation contract
+
+A project running at a venue - a museum floor, a park, a show - depends on names that live
+outside it. Stations are bound to particular hands, a scheduler ticks particular timed boxes,
+a clock drives particular properties, and the crew read particular card fields. Rename one of
+those and the venue breaks, quietly, after the change has shipped.
+
+So the venue writes down what it depends on, one file per installation, in a `contracts/`
+folder beside the project shard:
+
+```json5
+// contracts/the-park.storyletcontract
+{
+  schema: "storylets/contract@0",
+  by: "Storylet Server 0.1.0",
+  boxes: {
+    street: { turn: 60 },              // the scheduler ticks these
+  },
+  fields: [
+    "prompt",                          // the crew and the bridges read these
+    "cue",
+  ],
+  hands: [
+    "the-well",                        // stations are bound to these
+    "the-forge",
+  ],
+  installation: "the-park",
+  properties: [
+    "world.time_phase",                // the clock drives these
+    "story.visits",
+  ],
+  revision: 12,
+}
+```
+
+Everything in it is by gameId, and a property is written the way `listProperties()` prints
+it, with no `@`. A property may instead be written as `{ path: "story.visits", type: "number" }`,
+and then a type change is caught as well as a rename. A project playing at two venues has two
+of these files; two files naming the same installation is an error.
+
+`storyletengine validate` treats a break as an **error**: a contracted hand that no longer
+exists, a contracted box whose turn is no longer that many seconds, a contracted property that
+has gone or changed type, a contracted field no box declares any more. Each one names the
+venue, so the message says who cares. `storyletengine contract show` lists what each
+installation depends on. The contract itself never reaches the compiled bundle: the server
+does not need its own contract back, it needs the bundle to still honour it.
+
+**The server that writes this does not exist yet.** Until it does, a project either has no
+contract at all - which is the normal state, and nothing changes - or one written by hand.

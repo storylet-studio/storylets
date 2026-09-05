@@ -5,7 +5,7 @@
 // display-ready projections of the source project.
 // ---------------------------------------------------------------------------
 
-import type { Bundle, PropertyType, SaveFile, ScalarValue } from "@storylet-studio/model";
+import type { Bundle, PlayRung, PropertyType, SaveFile, ScalarValue } from "@storylet-studio/model";
 import type { JobProgress } from "@wildwinter/app-shell/job";
 import type { BoxKit, CoverageReport, PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
 import type { IssueFix } from "@storylet-studio/compiler";
@@ -298,6 +298,9 @@ export interface CardDto {
   shared?: boolean;
   /** The world cap when shared, as typed; blank = the same as copies. */
   sharedCopies: string;
+  /** Its `never` spend outlives the run (design/engine-server.md 4.2). Absent
+   *  takes the deck's flag, exactly as `shared` does. */
+  durable?: boolean;
   fields: { name: string; value: string }[];
   outcomes: OutcomeDto[];
 }
@@ -334,6 +337,9 @@ export interface CardEdit {
   shared?: boolean | null;
   /** The world cap as typed; blank clears it back to copies. */
   sharedCopies?: string;
+  /** Its `never` spend outlives the run; null clears the override back to the
+   *  deck's flag (design/engine-server.md 4.2). */
+  durable?: boolean | null;
   fields?: { name: string; value: string }[];
   outcomes?: OutcomeEdit[];
 }
@@ -363,6 +369,9 @@ export interface DeckDto {
   /** This pile is scarce across flows (design/shared-scarcity.md): every card
    *  in it is shared unless the card says otherwise. */
   shared?: boolean;
+  /** Every `never` card in this pile is spent past the end of the run unless
+   *  the card says otherwise (design/engine-server.md 4.2). */
+  durable?: boolean;
   /** @deck state declarations. */
   properties: PropertyDeclDto[];
   cards: CardDto[];
@@ -377,6 +386,8 @@ export interface DeckEdit {
   gate?: string;
   /** Scarce across flows; false clears it (design/shared-scarcity.md). */
   shared?: boolean;
+  /** Spent past the run; false clears it (design/engine-server.md 4.2). */
+  durable?: boolean;
   properties?: PropertyDeclDto[];
 }
 
@@ -420,6 +431,15 @@ export interface PropertyDeclDto {
    *  (Reboot.md 10). The compiler keeps the promise; the switch lives on the
    *  Project Settings world list, as Patterpad's does. Absent = writable. */
   writable?: boolean;
+  /** One value across every playthrough rather than a copy each
+   *  (design/flows.md). Never valid on `@world`. Carried here so the editor
+   *  round-trips it: a declaration edited in a project that shares state used
+   *  to come back without its flag. */
+  shared?: boolean;
+  /** The value outlives the run (design/engine-server.md 4.2): the
+   *  installation's memory when it is shared, the player's pocket when it is
+   *  not. Never valid on `@world`. */
+  durable?: boolean;
   /** What this property is for: the hover tip on its pills (expr-editor's
    *  propertyTip), and a word to the next designer. */
   purpose?: string;
@@ -433,6 +453,9 @@ export interface BoxDto {
   title?: string;
   purpose?: string;
   ranking: { specificity: boolean };
+  /** Set on a TIMED box (design/engine-server.md 4.8): a turn here is that
+   *  many seconds of the run rather than a play. Absent is the ordinary box. */
+  turn?: { seconds: number };
   /** The card template - the fields a card may set. */
   fields: FieldDeclDto[];
   properties: PropertyDeclDto[];
@@ -443,6 +466,10 @@ export interface BoxDto {
    *  bindings under chosen for an instance, rule bindings for a standalone.
    *  The Where row shows a place's region from it and warns on contradictions. */
   hands: { id: string; gameId: string; title?: string; template?: string; slots?: number; tags: Record<string, string> }[];
+  /** What a VENUE depends on about this box, one line per installation
+   *  (design/engine-server.md 4.11): "Ticked at the-park every 60s". Absent on
+   *  every project that has never met a server, which is all of them so far. */
+  contract?: string[];
 }
 
 export interface ProjectDto {
@@ -455,6 +482,9 @@ export interface ProjectDto {
   name: string;
   /** How many @story properties exist: the Story nav row's count. */
   storyPropertyCount: number;
+  /** The play ladder rung (design/engine-server.md 4.10), so every surface in
+   *  the window can ask `play-ladder.ts` what it may draw. */
+  play: PlayRung;
   boxes: BoxDto[];
 }
 
@@ -501,6 +531,7 @@ export interface VcStatusDto {
  *  always present; RPG is the narrated encounters starter. Owned by ops
  *  (runNewBox), so the CLI and the editor scaffold the identical box. */
 export type { BoxKit };
+export type { PlayRung };
 
 export interface OpenResult {
   project: ProjectDto;
@@ -516,6 +547,9 @@ export interface BoxEdit {
   gameId?: string;
   purpose?: string;
   ranking?: { specificity: boolean };
+  /** The Turns section: an object makes the box timed, `null` makes it count
+   *  plays again. Absent leaves it as it was, like every other field here. */
+  turn?: { seconds: number } | null;
   fields?: FieldDeclDto[];
   properties?: PropertyDeclDto[];
 }
@@ -625,6 +659,15 @@ export interface ProjectSettingsDto {
   /** Does the bundle carry the maps (zone shapes and background pictures)? */
   exportMap: boolean;
   playAdvancesTurns: number;
+  /** The play ladder rung (design/engine-server.md 4.10): how much of itself
+   *  the editor shows this project. Never compiled. */
+  play: PlayRung;
+  /** What the project CONTAINS that a lower rung would hide, phrased the way
+   *  the refusal reads it ("3 declarations are shared"), computed by the same
+   *  compiler function the validate warning uses. Keyed by the rung being
+   *  moved TO; `venue` hides nothing, so it is not here. Read-only: the dialog
+   *  refuses the move rather than offering to strip anything. */
+  ladder: { solo: string[]; shared: string[] };
   /** Also warn when state is written but nothing reads it (off by default:
    *  cards are routinely written ahead of the content that will read them). */
   warnUnreadWrites: boolean;
@@ -939,8 +982,15 @@ export interface HandDetail {
   purpose?: string;
   /** The template this hand instances, as a gameId; absent = standalone. */
   template?: string;
-  /** One row per hole of the chosen template (value as a tag gameId). */
+  /** One row per hole of the chosen template (value as a tag gameId, or a
+   *  property reference like "@hand.zone" when the hole is filled from a
+   *  property: the hand that moves). */
   chosen: { group: string; value: string; values: string[] }[];
+  /** The property references this hand may fill a hole FROM: its own (or its
+   *  template's) string / enum declarations as `@hand.<name>`, plus the
+   *  declared `@story` / `@world` properties of those types. What the hole
+   *  picker's "from a property" list offers. */
+  movableFrom: string[];
   /** Standalone hands: the inline rule. */
   rule?: { bindings: BindingDto[]; condition?: string; slots: string };
   /** Slot override as typed; blank follows the template's / rule's slots. */
@@ -951,6 +1001,11 @@ export interface HandDetail {
   templates: { gameId: string; chooses: string[]; slots: string }[];
   /** The box's tag groups (for chosen pickers and rule bindings). */
   groups: { gameId: string; values: string[] }[];
+  /** What a VENUE depends on about this hand, one line per installation
+   *  (design/engine-server.md 4.11): "Bound at the-park: a station deals this
+   *  hand". Derived, like `movableFrom`: it exists for the editor and is stored
+   *  nowhere. */
+  contract?: string[];
 }
 
 export interface HandEdit {
@@ -1215,7 +1270,7 @@ export interface StudioApi {
    *  re-pinned; remembered bounds cleared (Patterpad's rescue). */
   resetWindows(): Promise<void>;
   /** Compile the (freshly re-read) project to a bundle for the Board. */
-  tableBundle(): Promise<{ bundle: Bundle; name: string } | { error: string }>;
+  tableBundle(): Promise<{ bundle: Bundle; name: string; play: PlayRung } | { error: string }>;
   /** The current source content hash (compare to a running bundle's
    *  content.hash to tell if the Board is out of date). Null if it won't load. */
   projectHash(): Promise<string | null>;

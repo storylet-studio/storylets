@@ -123,8 +123,44 @@ The paths, and when to write them: [Your game's state](/play/world-state/).
 
 ```js
 const envelope = engine.saveGame();   // a plain object: the whole run, every flow
-engine.loadGame(envelope);
+const report = engine.loadGame(envelope);
 const again = engine.getFlow("main"); // loadGame rebuilds every flow: re-take your handles
+```
+
+### Look before you load
+
+A load is forgiving: a card your edit deleted drops off the board, a property you added takes
+its default, and a save from an older build goes in without a word. `previewLoad` says what
+that would cost before you spend it, and changes nothing; `loadGame` returns the same report
+once it has.
+
+```js
+const report = engine.previewLoad(envelope);
+if (!report.exact) {
+  console.log(report.evicted);              // cards that will not go back, and why
+  console.log(report.defaultedProperties);  // declared here, absent from the save
+  console.log(report.version);              // { saved, bundle } - drift is reported, not refused
+}
+```
+
+A save for a different `project` is the one thing both calls refuse.
+
+### Parking one flow
+
+`saveFlow(id)` takes one flow's state - not the whole engine - and `openFlow(id, { restore })`
+puts it back. Closing the flow in between is what releases the cards it was holding, so
+another flow can be dealt them while it is away; on the way back, a shared card somebody else
+now holds is dropped and reported.
+
+```js
+const parked = engine.saveFlow("visitor-7");
+engine.closeFlow("visitor-7");            // the claims are released here
+
+const report = engine.previewFlowRestore("visitor-7", parked);   // optional; changes nothing
+const flow = engine.openFlow("visitor-7", {
+  restore: parked,
+  onRestoreReport: (r) => console.log(r.evicted),
+});
 ```
 
 `@world` is deliberately not in the envelope - it's your game's state, and your game saves

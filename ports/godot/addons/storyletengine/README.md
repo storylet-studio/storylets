@@ -83,6 +83,11 @@ diagnostic; never a silent pass, never a crash.
   `StoryletSave.serialize_state` / `deserialize_state` are the
   `.storyletsave` string boundary: a foreign, malformed or wrong-project blob
   is refused instead of corrupting a run.
+- **What a load would cost**: `load_game` returns a report of everything it
+  dropped, defaulted or reset, and `preview_load(envelope)` computes the same
+  report without applying anything. `save_flow(id)` and
+  `open_flow(id, {"restore": blob})` do it for ONE flow, so a playthrough can
+  step away (releasing its shared claims) and come back.
 - **Live state**: add a `StoryletStatePanel` (an in-game overlay; `debug_only`
   by default, inert in release exports) and register your ENGINE with
   `StoryletDebug.register(engine, "label")` to watch and edit its shared

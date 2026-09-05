@@ -28,6 +28,7 @@ static var _re_non_slug: RegEx = null
 static var _re_dash_runs: RegEx = null
 static var _re_edge_dashes: RegEx = null
 static var _re_valid_game_id: RegEx = null
+static var _re_hole_ref: RegEx = null
 
 
 static func _compile_res() -> void:
@@ -38,6 +39,7 @@ static func _compile_res() -> void:
 	_re_dash_runs = RegEx.create_from_string("-+")
 	_re_edge_dashes = RegEx.create_from_string("^-+|-+$")
 	_re_valid_game_id = RegEx.create_from_string("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+	_re_hole_ref = RegEx.create_from_string("^@(hand|world|story)\\.([a-z][a-z0-9_-]*)$")
 
 
 ## Slugify a human label into a filename- / address-safe gameId.
@@ -54,6 +56,24 @@ static func game_idify(text: String) -> String:
 static func is_valid_game_id(game_id: String) -> bool:
 	_compile_res()
 	return _re_valid_game_id.search(game_id) != null
+
+
+## Is this `chosen` / binding value MEANT as a property reference rather than a
+## tag id (design/engine-server.md 4.6)? The leading "@" alone, deliberately: a
+## value that starts with one and does not parse is a mistyped reference, not
+## an odd tag id.
+static func is_hole_ref(value: String) -> bool:
+	return value.begins_with("@")
+
+
+## Parse a hole reference into {"scope", "name"}; an EMPTY dictionary when the
+## value is not one. The on-disk form stays a plain string.
+static func parse_hole_ref(value: String) -> Dictionary:
+	_compile_res()
+	var m := _re_hole_ref.search(value)
+	if m == null:
+		return {}
+	return {"scope": m.get_string(1), "name": m.get_string(2)}
 
 
 ## The effective address: a pinned gameId, else derived from the title, else

@@ -9,8 +9,8 @@
 import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import {
-  bundleIsFresh, canonicalCollections, canonicalStringify, compileProject, loadProjectFiles,
-  parseProjectFiles, parseSource, serialiseBundle,
+  bundleIsFresh, canonicalCollections, canonicalStringify, compileMaps, compileProject, contentAboveRung,
+  loadProjectFiles, parseProjectFiles, parseSource, serialiseBundle, summariseLadder,
 } from "../src/index.js";
 import type { Issue, SourceFile, SourceProject } from "../src/index.js";
 import { Engine } from "@storylet-studio/runtime";
@@ -169,25 +169,169 @@ describe("templates of play are source-only", () => {
   });
 });
 
-describe("publish-gate validation", () => {
-  const shard = (path: string, value: unknown): SourceFile =>
-    ({ path, text: canonicalStringify(value) });
+// ---------------------------------------------------------------------------
+// Hand positions in the bundle's `maps` block (design/engine-server.md 4.3),
+// which reverses the ruling that kept sites out of it. A synthetic project
+// rather than the example's, because this is about ONE derivation - the view
+// sidecar, translated to gameIds and sorted - and the example has no sidecar.
+// ---------------------------------------------------------------------------
+describe("the maps block carries where the hands stand", () => {
+  const file = (path: string, value: unknown): SourceFile => ({ path, text: canonicalStringify(value) });
 
-  const minimal = (deckCards: unknown[], overrides: {
-    templates?: unknown[]; hands?: unknown[]; story?: unknown[]; groups?: unknown[];
-  } = {}): SourceFile[] => [
-    shard("p.storyletproj", {
+  /** A box with one drawn zone and two hands, ordered so that sorting by id and
+   *  sorting by gameId disagree: "well" is h_1 and "forge" is h_2. */
+  const drawn = (sites?: Record<string, { x: number; y: number }>): SourceProject => parseOk([
+    file("p.storyletproj", {
       schema: "storylets/project@0",
       project: { id: "p", name: "P", version: "0.0.1" },
       settings: { playAdvancesTurns: 1 },
       world: { properties: [] },
+      story: { properties: [] },
+      templates: {},
+      export: { bundle: "dist/p.storyletsc", map: true, metadata: "full" },
+    }),
+    file("b/box.storyletbox", {
+      schema: "storylets/box@0",
+      box: { fields: [], gameId: "b1", id: "b_1", properties: [], ranking: { specificity: true } },
+    }),
+    file("b/tags.storylettags", {
+      schema: "storylets/tags@0",
+      groups: [{
+        gameId: "zone", id: "g_1",
+        tags: [{ gameId: "docks", id: "v_1", templates: { spatial: { polygon: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] } } }],
+        templates: { spatial: { map: true } },
+      }],
+    }),
+    file("b/hands.storylethands", {
+      schema: "storylets/hands@0",
+      hands: [
+        { gameId: "well", id: "h_1", slots: 1 },
+        { gameId: "forge", id: "h_2", slots: 1 },
+      ],
+      templates: [],
+    }),
+    ...(sites !== undefined
+      ? [file("b/view.storyletview", { schema: "storylets/view@0", map: { sites } })]
+      : []),
+  ]);
+
+  it("names each placed hand by gameId, sorted by that gameId", () => {
+    const maps = compileMaps(drawn({ h_1: { x: 7, y: 8 }, h_2: { x: 5, y: 6 } }));
+    expect(maps).toHaveLength(1);
+    // Sorted, so the bytes do not move when somebody reorders the shard.
+    expect(maps![0]!.sites).toEqual([
+      { hand: "forge", x: 5, y: 6 },
+      { hand: "well", x: 7, y: 8 },
+    ]);
+    // No internal ids, like everything else in the block.
+    expect(JSON.stringify(maps![0]!.sites)).not.toContain("h_");
+  });
+
+  it("carries no key at all when nothing has been placed", () => {
+    expect(compileMaps(drawn())![0]!.sites).toBeUndefined();
+    // A sidecar that exists but has placed nobody is the same answer.
+    expect(compileMaps(drawn({}))![0]!.sites).toBeUndefined();
+  });
+
+  it("leaves out a hand nobody has placed", () => {
+    const maps = compileMaps(drawn({ h_2: { x: 5, y: 6 } }));
+    expect(maps![0]!.sites).toEqual([{ hand: "forge", x: 5, y: 6 }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The installation contract shard (design/engine-server.md 4.11): parsed, never
+// compiled. The venue's file, in its own folder, with the directory as the
+// registry exactly as it is for a box's decks.
+// ---------------------------------------------------------------------------
+describe("the installation contract", () => {
+  const CONTRACT = {
+    schema: "storylets/contract@0",
+    installation: "the-park",
+    by: "Storylet Server 0.1.0",
+    revision: 12,
+    hands: ["docks-street"],
+    boxes: { encounters: { turn: 60 } },
+    properties: ["story.reputation"],
+    fields: ["prompt"],
+  };
+  const withContract = (value: unknown = CONTRACT): SourceFile[] => [
+    ...files,
+    { path: "contracts/the-park.storyletcontract", text: canonicalStringify(value) },
+  ];
+
+  it("is read into the project by its extension, from contracts/", () => {
+    const source = parseOk(withContract());
+    expect(source.contracts).toHaveLength(1);
+    expect(source.contracts[0]!.path).toBe("contracts/the-park.storyletcontract");
+    expect(source.contracts[0]!.shard.installation).toBe("the-park");
+  });
+
+  it("round-trips through the canonical form like every other shard", () => {
+    const text = canonicalStringify(CONTRACT);
+    expect(canonicalStringify(parseSource(text))).toBe(text);
+  });
+
+  it("never reaches the bundle: the server needs the bundle to honour it, not to carry it", () => {
+    const { bundle, issues } = compileProject(parseOk(withContract()));
+    expect(errors(issues)).toEqual([]);
+    expect(JSON.stringify(bundle)).not.toContain("the-park");
+    expect(JSON.stringify(bundle)).not.toContain("contract");
+  });
+
+  it("a project with none has an empty list, not a missing one", () => {
+    expect(parseOk(files).contracts).toEqual([]);
+  });
+
+  it("errors on a wrong schema tag, as every shard does", () => {
+    const { issues } = parseProjectFiles(withContract({ ...CONTRACT, schema: "storylets/notes@0" }));
+    expect(errors(issues)[0]).toContain("storylets/contract@0");
+  });
+
+  // A box may legitimately be CALLED contracts (Port Meridian's is), so the
+  // folder alone cannot claim the registry: the extension does.
+  it("leaves a box folder of the same name alone", () => {
+    const boxed: SourceFile[] = [
+      ...withContract(),
+      { path: "contracts/box.storyletbox", text: canonicalStringify({
+        schema: "storylets/box@0",
+        box: { fields: [], gameId: "contracts", id: "b_c", properties: [], ranking: { specificity: true } },
+      }) },
+    ];
+    const source = parseOk(boxed);
+    expect(source.contracts).toHaveLength(1);
+    expect(source.boxes.map((b) => b.path)).toContain("contracts");
+  });
+});
+
+describe("publish-gate validation", () => {
+  const shard = (path: string, value: unknown): SourceFile =>
+    ({ path, text: canonicalStringify(value) });
+
+  // `play` defaults to "venue" here on purpose: the play ladder (4.10) warns
+  // about content above the project's rung, and nearly every case below is
+  // about something else. A venue project hides nothing and so warns about
+  // nothing; the ladder's own tests set the rung they are testing.
+  const minimal = (deckCards: unknown[], overrides: {
+    templates?: unknown[]; hands?: unknown[]; story?: unknown[]; groups?: unknown[]; world?: unknown[];
+    turn?: unknown; play?: string; deck?: Record<string, unknown>;
+  } = {}): SourceFile[] => [
+    shard("p.storyletproj", {
+      schema: "storylets/project@0",
+      project: { id: "p", name: "P", version: "0.0.1" },
+      settings: { playAdvancesTurns: 1, play: overrides.play ?? "venue" },
+      world: { properties: overrides.world ?? [] },
       story: { properties: overrides.story ?? [] },
       templates: {},
       export: { bundle: "dist/p.storyletsc", metadata: "full" },
     }),
     shard("b/box.storyletbox", {
       schema: "storylets/box@0",
-      box: { id: "b_1", gameId: "b1", ranking: { specificity: true }, fields: [], properties: [] },
+      box: {
+        id: "b_1", gameId: "b1", ranking: { specificity: true },
+        ...(overrides.turn !== undefined ? { turn: overrides.turn } : {}),
+        fields: [], properties: [],
+      },
     }),
     shard("b/tags.storylettags", {
       schema: "storylets/tags@0",
@@ -200,12 +344,182 @@ describe("publish-gate validation", () => {
     }),
     shard("b/decks/main.storyletdeck", {
       schema: "storylets/deck@0",
-      deck: { id: "k_1", gameId: "main", properties: [] },
+      deck: { id: "k_1", gameId: "main", properties: [], ...(overrides.deck ?? {}) },
       cards: deckCards,
     }),
   ];
 
   const compileFiles = (input: SourceFile[]) => compileProject(parseOk(input));
+
+  // A timed box (design/engine-server.md 4.8): a declaration, carried into the
+  // bundle unchanged, with the two things the compiler can check about it.
+  it("carries a timed box's unit into the bundle unchanged", () => {
+    const result = compileFiles(minimal(
+      [{ id: "c_1", gameId: "c1", redraw: 3, outcomes: [] }], { turn: { seconds: 60 } }));
+    expect(result.issues).toEqual([]);
+    expect(result.bundle!.boxes[0]!.turn).toEqual({ seconds: 60 });
+  });
+
+  it("an untimed box carries no turn at all", () => {
+    const result = compileFiles(minimal([{ id: "c_1", gameId: "c1", outcomes: [] }]));
+    expect(result.issues).toEqual([]);
+    expect("turn" in result.bundle!.boxes[0]!).toBe(false);
+  });
+
+  it("refuses a turn that is not a whole number of seconds", () => {
+    for (const seconds of [0, -60, 1.5]) {
+      const result = compileFiles(minimal(
+        [{ id: "c_1", gameId: "c1", redraw: 3, outcomes: [] }], { turn: { seconds } }));
+      expect(errors(result.issues).join(), String(seconds)).toContain("turn.seconds must be an integer >= 1");
+      expect(result.bundle, String(seconds)).toBeUndefined();
+    }
+  });
+
+  it("warns when a timed box holds nothing that rests", () => {
+    // Every card re-eligible the moment it is played: no cooldown ever reads
+    // the clock, so being timed buys the box nothing.
+    const result = compileFiles(minimal(
+      [{ id: "c_1", gameId: "c1", outcomes: [] }], { turn: { seconds: 60 } }));
+    expect(errors(result.issues)).toEqual([]);
+    expect(result.issues.map((i) => i.message).join()).toContain("timed, but nothing in it rests");
+    expect(result.bundle!.boxes[0]!.turn).toEqual({ seconds: 60 });   // a warning, not a refusal
+  });
+
+  it("no such warning when one card rests, or when the box is not timed", () => {
+    const resting = compileFiles(minimal([
+      { id: "c_1", gameId: "c1", outcomes: [] },
+      { id: "c_2", gameId: "c2", redraw: "never", outcomes: [] },
+    ], { turn: { seconds: 60 } }));
+    expect(resting.issues).toEqual([]);
+    expect(compileFiles(minimal([{ id: "c_1", gameId: "c1", outcomes: [] }])).issues).toEqual([]);
+  });
+
+  // --- the durability axis (design/engine-server.md 4.2) --------------------
+
+  it("carries durable through to the bundle, on a declaration, a deck and a card", () => {
+    const result = compileFiles(minimal(
+      [{ id: "c_1", gameId: "c1", redraw: "never", durable: false, outcomes: [] }],
+      {
+        story: [{ name: "visits", type: "number", default: 0, durable: true }],
+        deck: { durable: true },
+      }));
+    expect(result.issues).toEqual([]);
+    expect(result.bundle!.story.properties[0]!.durable).toBe(true);
+    expect(result.bundle!.boxes[0]!.decks[0]!.durable).toBe(true);
+    expect(result.bundle!.boxes[0]!.decks[0]!.cards[0]!.durable).toBe(false);
+  });
+
+  it("says nothing about durable when nobody declared it", () => {
+    const result = compileFiles(minimal([{ id: "c_1", gameId: "c1", outcomes: [] }]));
+    expect(result.issues).toEqual([]);
+    expect("durable" in result.bundle!.boxes[0]!.decks[0]!).toBe(false);
+    expect("durable" in result.bundle!.boxes[0]!.decks[0]!.cards[0]!).toBe(false);
+  });
+
+  it("refuses durable on a @world declaration, as it refuses shared", () => {
+    const result = compileFiles(minimal([{ id: "c_1", gameId: "c1", outcomes: [] }],
+      { world: [{ name: "weather", type: "string", default: "fair", durable: true }] }));
+    expect(errors(result.issues).join()).toContain('@world.weather declares "durable"');
+    expect(result.bundle).toBeUndefined();
+  });
+
+  it("warns about durable on a card that is not spent for good", () => {
+    for (const redraw of [3, "always"] as unknown[]) {
+      const result = compileFiles(minimal(
+        [{ id: "c_1", gameId: "c1", redraw, durable: true, outcomes: [] }]));
+      expect(errors(result.issues), String(redraw)).toEqual([]);
+      expect(result.issues.map((i) => i.message).join(), String(redraw))
+        .toContain("only \"never\" means anything past the run");
+    }
+  });
+
+  it("no such warning on a durable card whose redraw is never", () => {
+    const result = compileFiles(minimal(
+      [{ id: "c_1", gameId: "c1", redraw: "never", durable: true, outcomes: [] }]));
+    expect(result.issues).toEqual([]);
+  });
+
+  it("warns once on a durable DECK with nothing spent for good in it", () => {
+    const result = compileFiles(minimal([
+      { id: "c_1", gameId: "c1", redraw: 3, outcomes: [] },
+      { id: "c_2", gameId: "c2", outcomes: [] },
+    ], { deck: { durable: true } }));
+    const warnings = result.issues.filter((i) => i.severity === "warning");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.where).toBe("main");
+    expect(warnings[0]!.message).toContain("nothing in it is spent for good");
+  });
+
+  it("a durable deck with one resting card is fine, and says nothing per card", () => {
+    const result = compileFiles(minimal([
+      { id: "c_1", gameId: "c1", redraw: 3, outcomes: [] },
+      { id: "c_2", gameId: "c2", redraw: "never", outcomes: [] },
+    ], { deck: { durable: true } }));
+    expect(result.issues).toEqual([]);
+  });
+
+  // --- the play ladder (design/engine-server.md 4.10) -----------------------
+
+  it("never compiles the play rung into the bundle", () => {
+    for (const play of ["solo", "shared", "venue"]) {
+      const result = compileFiles(minimal([{ id: "c_1", gameId: "c1", outcomes: [] }], { play }));
+      expect(result.bundle!.settings, play).toEqual({ playAdvancesTurns: 1 });
+      expect(JSON.stringify(result.bundle), play).not.toContain('"play"');
+    }
+  });
+
+  it("warns at solo about a shared declaration, naming the rung and the way out", () => {
+    const result = compileFiles(minimal([{ id: "c_1", gameId: "c1", outcomes: [] }], {
+      play: "solo",
+      story: [{ name: "gold", type: "number", default: 0, shared: true }],
+    }));
+    expect(errors(result.issues)).toEqual([]);
+    const warning = result.issues.find((i) => i.field === "play")!;
+    expect(warning.message).toBe(
+      "this project is set to solo play; @story.gold is shared. "
+      + "Change Play in Project Settings, or remove the flag");
+  });
+
+  it("shared play allows sharing, and a durable flag is told to go rather than to move the rung", () => {
+    const result = compileFiles(minimal(
+      [{ id: "c_1", gameId: "c1", shared: true, redraw: "never", durable: true, outcomes: [] }],
+      { play: "shared", turn: { seconds: 60 } }));
+    const ladder = result.issues.filter((i) => i.field === "play").map((i) => i.message);
+    expect(ladder).toEqual([
+      'this project is set to shared play; the card "c1" is durable. Remove the flag']);
+    // Venue is the Storylet Server's to set, so no warning may point an author
+    // at Project Settings as the way out of a durable flag.
+    expect(ladder.join()).not.toContain("Project Settings");
+    expect(ladder.join()).not.toContain("venue");
+  });
+
+  it("a timed box and a hole filled from a property sit above no rung at all", () => {
+    // Ruling of 2026-09-05: both are engine features any game may want, so the
+    // plainest project may carry them without a word from the ladder.
+    const result = compileFiles(minimal(
+      [{ id: "c_1", gameId: "c1", outcomes: [] }], { play: "solo", turn: { seconds: 60 } }));
+    expect(result.issues.filter((i) => i.field === "play")).toEqual([]);
+  });
+
+  it("a venue project is never above its rung", () => {
+    const result = compileFiles(minimal(
+      [{ id: "c_1", gameId: "c1", shared: true, redraw: "never", durable: true, outcomes: [] }],
+      { play: "venue", turn: { seconds: 60 } }));
+    expect(result.issues.filter((i) => i.field === "play")).toEqual([]);
+  });
+
+  it("counts what is above a rung the way the editor's refusal reads it", () => {
+    const source = parseOk(minimal([
+      { id: "c_1", gameId: "c1", shared: true, outcomes: [] },
+      { id: "c_2", gameId: "c2", shared: true, outcomes: [] },
+    ], { play: "solo", turn: { seconds: 60 },
+      story: [{ name: "gold", type: "number", default: 0, shared: true }] }));
+    expect(summariseLadder(contentAboveRung(source, "solo")))
+      .toEqual(["1 declaration is shared", "2 cards are shared"]);
+    // The box is timed, and that is above nothing: the count says so.
+    expect(contentAboveRung(source, "shared")).toEqual([]);
+    expect(contentAboveRung(source, "venue")).toEqual([]);
+  });
 
   it("flags an undeclared property in a condition", () => {
     const result = compileFiles(minimal([
@@ -398,6 +712,98 @@ describe("publish-gate validation", () => {
     const group = result.bundle!.boxes[0]!.tagGroups.find((g) => g.gameId === "act")!;
     expect(group.boundBy).toBe("@story.act");
     expect(group.required).toBe(true);
+  });
+
+  // --- a hole filled from a property (design/engine-server.md 4.6) ----------
+  // The same net as the state-bound group above, applied per hole: a hole
+  // bound to nothing silently wildcards, so the fault has to be caught at
+  // publish or it reads as content rather than as configuration.
+
+  const movableHand = (from: string, decl: object, extra: object = {}) => minimal([], {
+    ...extra,
+    templates: [{
+      id: "t_npc", gameId: "npc", chooses: ["d_1"], slots: 1, properties: [decl],
+    }],
+    hands: [{ id: "h_1", gameId: "h1", template: "t_npc", chosen: { d_1: from } }],
+  });
+  const zoneEnum = (values: string[], def: string) =>
+    ({ name: "zone", type: "enum", default: def, values });
+
+  it("fills a hole from a hand property, and carries the reference to the bundle unchanged", () => {
+    const result = compileFiles(movableHand("@hand.zone", zoneEnum(["v1"], "v1")));
+    expect(errors(result.issues)).toEqual([]);
+    // Unchanged on purpose: the bundle keeps the string the author wrote and
+    // the runtime resolves it at ask time, so nothing here has to know what
+    // the property will hold.
+    expect(result.bundle!.boxes[0]!.hands[0]!.chosen).toEqual({ d_1: "@hand.zone" });
+  });
+
+  it("fills a hole from @story and @world too", () => {
+    const decl = [{ name: "where", type: "string", default: "v1" }];
+    const cases: [string, { story?: unknown[]; world?: unknown[] }][] = [
+      ["@story.where", { story: decl }],
+      ["@world.where", { world: decl }],
+    ];
+    for (const [from, extra] of cases) {
+      const result = compileFiles(minimal([], {
+        ...extra,
+        hands: [{ id: "h_1", gameId: "h1", rule: { bindings: { d_1: from }, slots: 1 } }],
+      }));
+      expect(errors(result.issues), from).toEqual([]);
+    }
+  });
+
+  it("flags a hole reference that does not parse", () => {
+    const result = compileFiles(movableHand("@hand", zoneEnum(["v1"], "v1")));
+    expect(errors(result.issues).join()).toContain("must be a @hand, @world or @story property reference");
+  });
+
+  it("flags a @hand reference the hand does not declare", () => {
+    const result = compileFiles(movableHand("@hand.somewhere", zoneEnum(["v1"], "v1")));
+    expect(errors(result.issues).join()).toContain("is not a property this hand declares");
+  });
+
+  it("flags a @story reference nobody declared", () => {
+    const result = compileFiles(minimal([], {
+      hands: [{ id: "h_1", gameId: "h1", rule: { bindings: { d_1: "@story.where" }, slots: 1 } }],
+    }));
+    expect(errors(result.issues).join()).toContain("is not a declared story property");
+  });
+
+  it("flags a hole reference on a property that cannot hold a tag name", () => {
+    const result = compileFiles(movableHand("@hand.zone", { name: "zone", type: "number", default: 0 }));
+    expect(errors(result.issues).join()).toContain("a hole filled from a property needs a string or enum");
+  });
+
+  it("flags an enum whose values can never name a tag of that group", () => {
+    const result = compileFiles(movableHand("@hand.zone", zoneEnum(["forest", "mill"], "forest")));
+    expect(errors(result.issues).join()).toContain("can never name a tag in that group");
+  });
+
+  it("warns about the enum values that name no tag, without failing", () => {
+    const result = compileFiles(movableHand("@hand.zone", zoneEnum(["v1", "mill"], "v1")));
+    expect(errors(result.issues)).toEqual([]);
+    expect(result.issues.map((i) => i.message).join()).toContain("mill");
+    expect(result.bundle).toBeDefined();
+  });
+
+  it("refuses to fill `place` from a property: it is the hand's own name", () => {
+    const result = compileFiles(minimal([], {
+      hands: [{
+        id: "h_1", gameId: "h1",
+        rule: { bindings: { place: "@hand.zone" }, slots: 1 },
+        properties: [zoneEnum(["v1"], "v1")],
+      }],
+    }));
+    expect(errors(result.issues).join()).toContain("it is the hand's own name");
+  });
+
+  it("refuses a property reference in a hand template's own bindings", () => {
+    const result = compileFiles(minimal([], {
+      story: [{ name: "where", type: "string", default: "v1" }],
+      templates: [{ id: "t_npc", gameId: "npc", bindings: { d_1: "@story.where" }, slots: 1, properties: [] }],
+    }));
+    expect(errors(result.issues).join()).toContain("a hole that moves belongs on the hand");
   });
 
   it("flags a tag of an unknown tag id", () => {
@@ -925,6 +1331,26 @@ describe("canonical collections (rule 5)", () => {
     const reread = parseSource(text) as { cards: Array<{ id: string; order: number }> };
     expect(reread.cards.map((c) => c.id)).toEqual(["c_a", "c_b"]);
     expect(canonicalStringify(reread)).toBe(text);
+  });
+
+  it("round-trips durable, in sorted-key position beside the flag it pairs with", () => {
+    // The serialiser sorts keys and carries whatever it is handed, so a new
+    // format field needs no code here - which is exactly why it needs a test:
+    // this is where "the flag survives a save" is actually true or not.
+    const shard = {
+      schema: "storylets/deck@0",
+      deck: { id: "k_d", durable: true, shared: true, properties: [
+        { name: "visits", type: "number", default: 0, durable: true, shared: false },
+      ] },
+      cards: [{ id: "c_a", durable: false, redraw: "never" }],
+    };
+    const text = canonicalStringify(shard);
+    expect(text).toContain("durable: true,");
+    // sorted: default, durable, name, shared, type on the declaration
+    expect(text.indexOf("default: 0")).toBeLessThan(text.indexOf("durable: true,\n        name"));
+    expect(text.indexOf('name: "visits"')).toBeLessThan(text.indexOf("shared: false"));
+    expect(parseSource(text)).toEqual(shard);
+    expect(canonicalStringify(parseSource(text))).toBe(text);
   });
 
   it("never runs over a bundle, so compiled outcomes keep DISPLAY order", () => {
