@@ -510,9 +510,12 @@ namespace StoryletStudio.StoryletEngine
             _shared = shared;
             if (_hostWorld == null)
             {
-                // Standalone: self-backed from the declared defaults. Still
-                // FOREIGN in spirit - never in SaveGame(); a host that wants
-                // @world to persist saves the container itself.
+                // Standalone: self-backed from the declared defaults,
+                // DECLARATIONS AND ALL. Still FOREIGN in spirit - never in
+                // SaveGame(); a host that wants @world to persist saves the
+                // container itself. The bag keeps Writable == false so an
+                // examiner still reads it there, and the kernel lets a host
+                // write past it, which is what the game's own surface passes.
                 _selfWorld = BagFromDecls(_bundle.World.Properties, "world.");
             }
         }
@@ -575,10 +578,17 @@ namespace StoryletStudio.StoryletEngine
 
         internal bool WorldCanSet => _hostWorld != null ? _hostWorld.CanSet : true;
 
-        internal void WorldSet(string name, StoryletValue value)
+        /// <summary>The @world WRITE seam. host: true says the caller is the GAME's
+        /// own surface - SetProperty and the tooling built on it - which the shared
+        /// kernel lets past a Writable == false (scoperegistry 0.6.0): that flag is
+        /// the story's promise, not the game's. The story's refusal is WorldReadOnly,
+        /// asked before this seam is reached. A BOUND resolver is opaque - it takes a
+        /// name and a value and keeps whatever rule the game has - so the flag only
+        /// ever reaches the self-backed bag.</summary>
+        internal void WorldSet(string name, StoryletValue value, bool host = false)
         {
             if (_hostWorld != null) _hostWorld.Set(name, value);
-            else _selfWorld.Set(name, value);
+            else _selfWorld.Set(name, value, host: host);
         }
 
         // --- flow management (Patter's surface, name for name) ------------------
@@ -785,14 +795,17 @@ namespace StoryletStudio.StoryletEngine
             if (parts.Length == 2 && parts[0] == "world")
             {
                 if (!WorldCanSet) throw new StoryletError("@world is read-only here: the host bound no write");
-                WorldSet(parts[1], value);
+                WorldSet(parts[1], value, host: true);
                 return;
             }
             // Reuse the read-side routing: a per-flow or unknown ref throws the
             // same message before anything is written.
             GetProperty(path);
             PropertyBag bag = parts.Length == 2 ? _shared.Story : KindOf(_shared, parts[0]).GetOrDefault(parts[1]);
-            bag.Set(parts[parts.Length - 1], value, silent: true, reason: "host setProperty");
+            // A HOST write, in any scope: silent under the firing rule, visible to the
+            // audit hook, and never refused by a Writable == false - that flag is the
+            // story's promise about its own outcomes, and this is the game speaking.
+            bag.Set(parts[parts.Length - 1], value, silent: true, reason: "host setProperty", host: true);
         }
 
         private static OrderedMap<string, PropertyBag> KindOf(Partition p, string kind)
@@ -825,7 +838,13 @@ namespace StoryletStudio.StoryletEngine
                     Default = d.Default,
                     Values = d.Values,
                     Stages = d.Stages,
-                    Writable = WorldCanSet,
+                    // Whether the resolver can be written at all AND what the
+                    // declaration says, which is the kernel's own rule for a foreign
+                    // scope. A row is where Writable == false is meant to SHOW: it
+                    // tells a state panel this is the game's value, not the story's.
+                    // It does not stop the panel editing it - SetProperty is a host
+                    // write and passes.
+                    Writable = WorldCanSet && !WorldReadOnly(d.Name),
                 });
             }
         }

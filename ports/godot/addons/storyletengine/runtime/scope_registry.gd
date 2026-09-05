@@ -112,19 +112,31 @@ func get_value(scope: String, name: String) -> Variant:
 ## Write a property (an ENGINE write: the bag's subscribers fire; use the bag
 ## directly for silent host writes). Returns "" or an error message (with
 ## push_error) on an unknown or read-only scope/property.
-func set_value(scope: String, name: String, value) -> String:
+##
+## `writable: false` is the STORY's promise, so a story write is refused and a
+## HOST write is not: pass {"host": true} from a host's own surface (its
+## set_property, its tooling, a coverage driver) and never from the path an
+## outcome or effect takes. A foreign scope whose resolver has no `set` is
+## refused for everyone, host included - that is not a rule to bypass, it is a
+## game that gave no way to write.
+func set_value(scope: String, name: String, value, opts: Dictionary = {}) -> String:
+	var host := bool(opts.get("host", false))
 	var e = _scopes.get(scope)
 	if e == null:
 		var msg := "unknown scope '@%s'" % scope
 		push_error("StoryletScopeRegistry: " + msg)
 		return msg
 	if e["kind"] == "owned":
-		var change: Dictionary = (e["bag"] as StoryletPropertyBag).set_value(name, value)
+		var change: Dictionary = (e["bag"] as StoryletPropertyBag).set_value(name, value, {"host": host})
 		if change.has("error"):
 			return "'@%s.%s' is read-only" % [scope, name]
 		return ""
 	var n := name.to_lower()
-	if not _foreign_writable(e, n):
+	if not (e["resolver"].get("set") is Callable):
+		var no_setter := "'@%s.%s' is read-only" % [scope, name]
+		push_error("StoryletScopeRegistry: " + no_setter)
+		return no_setter
+	if not host and not _foreign_writable(e, n):
 		var msg := "'@%s.%s' is read-only" % [scope, name]
 		push_error("StoryletScopeRegistry: " + msg)
 		return msg

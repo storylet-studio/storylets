@@ -18,6 +18,8 @@
 
 ### Changed
 
+- **Read-only `@world` properties honour the game's own writes** (2026-09-05). `writable: false` on a `@world` declaration is the STORY's promise not to write that value, so it binds an outcome and nobody else: `Engine::setProperty` and `Flow::setProperty` pass the kernel's host flag (in every scope, not just `@world`) and are never refused, while an outcome is still refused against the engine's read-only table before the write reaches a bag or a bound resolver. `ScopeRegistry::set` takes the same `host` argument, and a `world.*` examiner row reports `writable = false` whether or not the game has just written it. `UStoryletWorld`'s own split is untouched: its Set* calls were never bound by either rule. Parity with the JS runtime.
+
 - **A load now prunes what it reports**: a property the build no longer declares, a cooldown or spent entry for a deleted card, and a saved value that no longer fits its declaration (a struck-out enum value, an edited quality ladder) are dropped rather than carried, and named in the report.
 
 ## [0.4.1] - 2026-09-04

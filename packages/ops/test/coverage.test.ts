@@ -244,6 +244,23 @@ describe("coverage harness", () => {
     expect(report.unwrittenInputs).toEqual([]);
   });
 
+  it("a driver on a read-only @world property still drives it", () => {
+    // `writable: false` is the STORY's promise not to write (Reboot.md 10):
+    // the harness IS the host, so a declared driver on such a ref must land.
+    // It used to throw out of the sweep, which took the whole coverage run
+    // with it - the CLI's `coverage` on any project that drives a clock.
+    const source = project({
+      world: [{ name: "time_phase", type: "enum", default: "day", values: ["day", "night"], writable: false }],
+      coverage: { drivers: { "@world.time_phase": { kind: "recurring", cadence: "often", values: ["day", "night"] } } },
+      cards: [{ id: "c_dark", condition: '@world.time_phase == "night"' }],
+    });
+    const report = runCoverage(source, OPTS);
+    expect(report.drivers).toEqual(["@world.time_phase"]);
+    expect(cardRow(report, "c_dark").dealt).toBeGreaterThan(0);
+    expect(report.issues).toEqual([]);
+    expect(report.unwrittenInputs).toEqual([]);
+  });
+
   it("an initial driver varies the world per playthrough", () => {
     const source = project({
       world: [{ name: "class", type: "enum", default: "mage", values: ["mage", "thief"] }],

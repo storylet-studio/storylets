@@ -62,6 +62,8 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 var cname = c.Value<string>("name") ?? "";
                 if (!cname.StartsWith("an outcome may not write a read-only")) continue;
                 foreach (var f in RunReadOnlyWorldProbe((JObject)c["bundle"])) { Fail("scripted", cname, f); s = Math.Max(0, s - 1); }
+                foreach (var f in RunLoadedDeclWritable((JObject)c["bundle"])) { Fail("scripted", cname, f); s = Math.Max(0, s - 1); }
+                foreach (var f in RunSelfWorldExaminer((JObject)c["bundle"])) { Fail("scripted", cname, f); s = Math.Max(0, s - 1); }
             }
             int d = RunDescribe(peek);
             int m = RunDescribeMaps();
@@ -231,6 +233,9 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 string setName = c["set"].Value<string>("name");
                 var value = StoryletJson.ToValue(c["set"]["value"]);
                 bool expectError = c.Value<bool?>("expectError") ?? false;
+                // The case says whether the write is the HOST's: writable: false is
+                // the story's promise, and the game is never bound by it.
+                bool host = c.Value<bool?>("host") ?? false;
                 var expected = StoryletJson.ToValue(c["expected"]);
 
                 string error = null;
@@ -240,7 +245,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     if (c["scope"] is not JObject scope)
                     {
                         var bag = new PropertyBag(decls);
-                        try { bag.Set(setName, value); } catch (Exception ex) { error = ex.Message; }
+                        try { bag.Set(setName, value, host: host); } catch (Exception ex) { error = ex.Message; }
                         readBack = bag.Get(setName);
                     }
                     else
@@ -249,7 +254,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         foreach (var d in decls) store[d.Name.ToLowerInvariant()] = d.Default;
                         var registry = new ScopeRegistry().DefineForeign(
                             "s", new RecordResolver(store), decls, scope.Value<bool?>("writable") ?? true);
-                        try { registry.Set("s", setName, value); } catch (Exception ex) { error = ex.Message; }
+                        try { registry.Set("s", setName, value, host: host); } catch (Exception ex) { error = ex.Message; }
                         readBack = registry.Get("s", setName);
                     }
                 }
@@ -777,6 +782,62 @@ namespace StoryletStudio.StoryletEngine.TestHost
             if (world.Sets.Count != 0) failures.Add("bound-world probe: the host's Set was called for a read-only write: " + string.Join(",", world.Sets));
             try { flow.Play("c_cheer", "cheer", "h_q"); } catch (StoryletError ex) { failures.Add("bound-world probe: a writable property was refused: " + ex.Message); }
             if (world.Sets.Count != 1 || world.Sets[0] != "mood") failures.Add("bound-world probe: expected the host's Set once, for mood; got " + string.Join(",", world.Sets));
+            return failures;
+        }
+
+        /// <summary>The loader's OWN declarations, straight into a kernel bag: a
+        /// `writable: false` world property refuses a story write, takes a host one,
+        /// and still reports itself read-only to an examiner. Hand-built
+        /// ScopeDeclarations (the expr/registry family) never reached this, and until
+        /// 2026-09-05 PropertyDecl.Writable SHADOWED ScopeDeclaration.Writable: the
+        /// loader filled one field, the bag read the other, and Unity's bag refused
+        /// nothing at all.</summary>
+        static List<string> RunLoadedDeclWritable(JObject bundleJson)
+        {
+            var failures = new List<string>();
+            var bundle = BundleLoader.Parse(bundleJson);
+            var bag = new PropertyBag(bundle.World.Properties, n => n, "world.");
+            try
+            {
+                bag.Set("clock", StoryletValue.Num(1));
+                failures.Add("loaded-decl bag: a writable: false declaration took a plain write");
+            }
+            catch (StoryletError ex)
+            {
+                if (!ex.Message.Contains("is read-only")) failures.Add("loaded-decl bag: refused, but not as read-only: " + ex.Message);
+            }
+            if (bag.Get("clock").AsNumber != 0) failures.Add("loaded-decl bag: the refused write landed anyway");
+            try
+            {
+                bag.Set("clock", StoryletValue.Num(5), host: true);
+            }
+            catch (StoryletError ex)
+            {
+                failures.Add("loaded-decl bag: the HOST's write was refused: " + ex.Message);
+            }
+            if (bag.Get("clock").AsNumber != 5) failures.Add("loaded-decl bag: the host's write did not land");
+            var row = bag.Rows().Find(r => r.Name == "clock");
+            if (row == null) failures.Add("loaded-decl bag: no examiner row for clock");
+            else if (row.Writable) failures.Add("loaded-decl bag: the examiner row lost the declaration's writable: false");
+            return failures;
+        }
+
+        /// <summary>The SELF-BACKED @world, examined: no corpus op reads an examiner
+        /// row, so the half the Patter brief called the point of the flag - the
+        /// declaration still showing as read-only after the game has written it - is
+        /// asserted here, and in the other three runtimes' harnesses.</summary>
+        static List<string> RunSelfWorldExaminer(JObject bundleJson)
+        {
+            var failures = new List<string>();
+            var engine = new StoryletStudio.StoryletEngine.Engine(BundleLoader.Parse(bundleJson), new EngineOptions { Seed = 0 });
+            Func<string, PropertyRow> row = path => engine.ListProperties().Find(r => r.Path == path);
+            if (row("world.clock") == null) { failures.Add("self-backed examiner: no row for world.clock"); return failures; }
+            if (row("world.clock").Writable) failures.Add("self-backed examiner: world.clock did not report writable: false");
+            if (!row("world.mood").Writable) failures.Add("self-backed examiner: world.mood reported read-only");
+            try { engine.SetProperty("world.clock", StoryletValue.Num(5)); }
+            catch (StoryletError ex) { failures.Add("self-backed examiner: the game's own SetProperty was refused: " + ex.Message); }
+            if (engine.GetProperty("world.clock").AsNumber != 5) failures.Add("self-backed examiner: the host's write did not land");
+            if (row("world.clock").Writable) failures.Add("self-backed examiner: a host write made the declaration writable");
             return failures;
         }
 

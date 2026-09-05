@@ -84,6 +84,10 @@ var _shared: Dictionary = {}
 # from the declared defaults when not.
 var _world: Dictionary = {}
 var _host_world = null
+## The self-backed @world bag, when no host resolver is bound (null otherwise).
+## Held so the host's own surface can write it with {"host": true}, which the
+## shared kernel lets past a `writable: false` - see world_set.
+var _self_world: StoryletPropertyBag = null
 var _on_replaced_flow = null
 
 var _flows: Dictionary = {}             # id -> StoryletFlow, open order
@@ -227,11 +231,15 @@ func _init_shared() -> void:
 	_shared = shared
 	if _host_world != null:
 		_world = {"get": _host_world["get"], "set": _host_world.get("set")}
+		_self_world = null
 	else:
-		# Standalone: self-backed from the declared defaults. Still FOREIGN in
-		# spirit - never in save_game(); a host that wants @world to persist
-		# saves the container itself.
+		# Standalone: self-backed from the declared defaults, DECLARATIONS AND
+		# ALL. Still FOREIGN in spirit - never in save_game(); a host that wants
+		# @world to persist saves the container itself. The bag keeps
+		# `writable: false` so an examiner still reads it there, and the kernel
+		# lets a host write past it, which is what the game's own surface passes.
 		var bag := _bag_from_decls(_bundle["world"].get("properties", []), "world.")
+		_self_world = bag
 		_world = {
 			"get": func(n: String) -> Variant: return bag.get_value(n),
 			"set": func(n: String, v) -> void: bag.set_value(n, v),
@@ -279,13 +287,30 @@ func _init_ladders() -> void:
 				break
 
 
-# --- flow management (Patter's surface, name for name) --------------------------
+# --- the @world seam -----------------------------------------------------------
 
-## Open (or REPLACE) the named flow. An existing id's flow is closed first -
-## re-opening a name is a reset of that name's whole per-flow state; shared
-## state is untouched. There is no default flow: "main" is a caller
-## convention, not an engine rule. Options: {"seed": int} overrides the
-## engine's default for this flow's PRNG.
+## The @world WRITE seam. `host` says the caller is the GAME's own surface -
+## set_property and the tooling built on it - which the shared kernel lets past
+## a `writable: false` (scoperegistry 0.6.0): that flag is the story's promise,
+## not the game's. The story's refusal is world_read_only, asked before this
+## seam is reached. A BOUND resolver is opaque - it takes a name and a value and
+## keeps whatever rule the game has - so the flag only ever reaches the
+## self-backed bag. Call world_can_set() first: this writes nothing without a
+## setter.
+func world_set(name: String, value, host: bool = false) -> void:
+	if _self_world != null:
+		_self_world.set_value(name, value, {"host": host})
+		return
+	var setter = _world.get("set")
+	if setter is Callable:
+		(setter as Callable).call(name, value)
+
+
+## Whether @world can be written at all (a host may bind a resolver with no set).
+func world_can_set() -> bool:
+	return _self_world != null or _world.get("set") is Callable
+
+
 ## The story's promise about a @world value (writable: false on its declaration).
 ## Read by a flow before it writes; the host's own set_property never asks.
 func world_read_only(name: String) -> bool:
@@ -295,6 +320,13 @@ func world_read_only(name: String) -> bool:
 	return false
 
 
+# --- flow management (Patter's surface, name for name) --------------------------
+
+## Open (or REPLACE) the named flow. An existing id's flow is closed first -
+## re-opening a name is a reset of that name's whole per-flow state; shared
+## state is untouched. There is no default flow: "main" is a caller
+## convention, not an engine rule. Options: {"seed": int} overrides the
+## engine's default for this flow's PRNG.
 func open_flow(id: String, opts: Dictionary = {}) -> StoryletFlow:
 	for key in opts:
 		if not OPEN_FLOW_OPTION_KEYS.has(key):
@@ -459,14 +491,16 @@ func set_property(path: String, value) -> String:
 		push_error("StoryletEngine.set_property: " + r["error"])
 		return r["error"]
 	if r["kind"] == "world":
-		var setter = _world.get("set")
-		if setter == null:
+		if not world_can_set():
 			var msg := "@world is read-only here: the host bound no write"
 			push_error("StoryletEngine.set_property: " + msg)
 			return msg
-		(setter as Callable).call(r["name"], value)
+		world_set(r["name"], value, true)
 		return ""
-	var change: Dictionary = (r["bag"] as StoryletPropertyBag).set_value(r["name"], value, {"silent": true, "reason": "host setProperty"})
+	# A HOST write, in any scope: silent under the firing rule, visible to the
+	# audit hook, and never refused by a `writable: false` - that flag is the
+	# story's promise about its own outcomes, and this is the game speaking.
+	var change: Dictionary = (r["bag"] as StoryletPropertyBag).set_value(r["name"], value, {"silent": true, "reason": "host setProperty", "host": true})
 	if change.has("error"):
 		return change["error"]
 	return ""
@@ -506,8 +540,13 @@ func list_properties() -> Array:
 	var out: Array = []
 	for d in _bundle["world"].get("properties", []):
 		var value = (_world["get"] as Callable).call(d["name"])
+		# Whether @world can be written at all AND what the declaration says, which
+		# is the kernel's own rule for a foreign scope. A row is where
+		# `writable: false` is meant to SHOW: it says this is the game's value, not
+		# the story's. The engine's rows carried no flag at all until 2026-09-05.
 		var row := {"path": "world.%s" % d["name"], "name": d["name"], "type": d.get("type", "string"),
-			"value": value if value != null else d.get("default"), "default": d.get("default")}
+			"value": value if value != null else d.get("default"), "default": d.get("default"),
+			"writable": world_can_set() and not world_read_only(d["name"])}
 		if d.has("values"):
 			row["values"] = d["values"]
 		if d.has("stages"):

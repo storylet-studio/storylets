@@ -7638,6 +7638,29 @@
                     ]
                   },
                   {
+                    "id": "c_late",
+                    "gameId": "late",
+                    "condition": {
+                      "src": "@world.clock >= 5",
+                      "ast": [
+                        "bin",
+                        ">=",
+                        [
+                          "sv",
+                          "world",
+                          "clock"
+                        ],
+                        [
+                          "n",
+                          5
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
                     "id": "c_tick",
                     "gameId": "tick",
                     "priority": 0,
@@ -7708,6 +7731,44 @@
           "expect": {
             "world.clock": 0,
             "turn.b_x": 0
+          }
+        },
+        {
+          "op": "setState",
+          "world": {
+            "clock": 5
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "world.clock": 5
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_tick",
+              "c_cheer",
+              "c_late"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_tick",
+          "outcome": "tick",
+          "from": "h_q",
+          "expectError": true
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "world.clock": 5
           }
         },
         {

@@ -413,6 +413,16 @@ interface Internals {
   shared: Partition;
   /** @world: the host's resolver, or the self-backed bag's. */
   worldResolver: ScopeResolver;
+  /** The @world WRITE seam. `host` says the caller is the GAME's own surface -
+   *  setProperty, the coverage harness, the CLI's --set - which the shared
+   *  kernel lets past a `writable: false` (scoperegistry 0.6.0): that flag is
+   *  the story's promise, not the game's. The story's refusal is the
+   *  worldReadOnly table below, consulted before this seam is reached. A BOUND
+   *  resolver is opaque - it takes a name and a value and keeps whatever rule
+   *  the game has - so the flag only ever reaches the self-backed bag.
+   *  Undefined when @world cannot be written at all (a resolver bound with no
+   *  `set`). */
+  worldSet?: (name: string, value: ScalarValue, host?: boolean) => void;
   /** @world names declared `writable: false`: the story's promise, kept at
    *  runtime as the compiler keeps it at publish (Reboot.md 10). */
   worldReadOnly: Set<string>;
@@ -706,15 +716,24 @@ export class Engine {
     internals.worldReadOnly = new Set(internals.bundle.world.properties.filter((d) => d.writable === false).map((d) => d.name));
     if (hostWorld !== undefined) {
       internals.worldResolver = hostWorld;
+      const set = hostWorld.set;
+      internals.worldSet = set !== undefined ? (n, v): void => { set(n, v); } : undefined;
     } else {
-      // Standalone: self-backed from the declared defaults. Still FOREIGN
-      // in spirit - never in saveGame(); a host that wants @world to
-      // persist saves the container itself (play-helpers ships one).
+      // Standalone: self-backed from the declared defaults, DECLARATIONS AND
+      // ALL. Still FOREIGN in spirit - never in saveGame(); a host that wants
+      // @world to persist saves the container itself (play-helpers ships one).
+      // The bag keeps `writable: false` so an examiner still reads it there,
+      // and the kernel lets a `{ host: true }` write past it, which is what
+      // the game's own surface passes.
       const bag = bagFromDecls(internals.bundle.world.properties, "world.");
       internals.worldResolver = {
+        // The engine writes through worldSet below, not through this; the `set`
+        // is the resolver's SHAPE, so @world still reads as writable to anything
+        // inspecting the seam, and it is the story's door: no host flag on it.
         get: (n) => bag.get(n),
         set: (n, v) => { bag.set(n, v); },
       };
+      internals.worldSet = (n, v, host): void => { bag.set(n, v, host === true ? { host: true } : undefined); };
     }
   }
 
@@ -905,15 +924,17 @@ export class Engine {
   setProperty(path: string, value: ScalarValue): void {
     const found = this.resolveShared(path);
     if (found.kind === "world") {
-      if (!this.internals.worldResolver.set) {
+      if (!this.internals.worldSet) {
         throw new Error(`@world is read-only here: the host bound no write`);
       }
-      this.internals.worldResolver.set(found.name, value);
+      this.internals.worldSet(found.name, value, true);
       return;
     }
     // A host write: silent under the firing rule (no subscriber feedback
-    // loop), but visible to the bag's audit hook.
-    found.bag.set(found.name, value, { silent: true, reason: "host setProperty" });
+    // loop), but visible to the bag's audit hook - and a HOST write, so a
+    // `writable: false` does not refuse it. That flag is the story's promise
+    // about its own outcomes; this is the game speaking, in any scope.
+    found.bag.set(found.name, value, { silent: true, reason: "host setProperty", host: true });
   }
 
   private resolveShared(path: string): { kind: "world"; name: string } | { kind: "bag"; bag: StateBag; name: string } {
@@ -952,10 +973,15 @@ export class Engine {
         ...(d.values !== undefined ? { values: d.values } : {}),
         ...(d.stages !== undefined ? { stages: d.stages } : {}),
         // @world is FOREIGN - a host resolver backs it - so writability is whether that
-        // resolver can be written at all, which is the shared registry's own rule for a
-        // foreign scope. The `as PropertyView` cast this replaced was hiding the field's
-        // absence: the row type has always required it, and these rows shipped without one.
-        writable: this.internals.worldResolver.set !== undefined,
+        // resolver can be written at all AND what the declaration says, which is the
+        // shared registry's own rule for a foreign scope (its foreignWritable). The
+        // `as PropertyView` cast this replaced was hiding the field's absence: the row
+        // type has always required it, and these rows shipped without one.
+        //
+        // A row is where `writable: false` is meant to SHOW (Reboot.md 10): it tells a
+        // state panel this is the game's value, not the story's. It does not stop the
+        // panel editing it - the host's setProperty passes `{ host: true }`.
+        writable: this.internals.worldSet !== undefined && !this.internals.worldReadOnly.has(d.name),
       });
     }
     // The bag composes its rows' addresses from its own pathPrefix, so the prefix here is
@@ -2156,14 +2182,17 @@ export class Flow {
     const [, scope, name] = match as unknown as [string, string, string];
     switch (scope) {
       case "world": {
-        const resolver = this.internals.worldResolver;
-        if (!resolver.set) throw new Error(`@world.${name} cannot be written: the host bound @world read-only`);
-        // The story's own promise, kept here as the compiler keeps it at publish;
-        // the host's setProperty is its own path and never asks. Patter's runtime
-        // refuses the same write through the shared kernel, so both read one way.
+        const worldSet = this.internals.worldSet;
+        if (!worldSet) throw new Error(`@world.${name} cannot be written: the host bound @world read-only`);
+        // The story's own promise, kept HERE and only here, because here is where
+        // the story does the writing: the table is consulted before the seam, so
+        // an outcome never reaches the bag (which would let a host write past it)
+        // nor a bound resolver (which cannot tell the two apart). The host's
+        // setProperty is its own path and never asks. Patter's runtime refuses the
+        // same write through the shared kernel, so both read one way.
         if (this.internals.worldReadOnly.has(name)) throw new Error(`'@world.${name}' is read-only (writable: false)`);
-        const prev = resolver.get(name);
-        resolver.set(name, value);
+        const prev = this.internals.worldResolver.get(name);
+        worldSet(name, value);
         return { path: `world.${name}`, ...(prev !== undefined ? { prev } : {}) };
       }
       case "story": return this.landIn("story", undefined, name, value, `story.${name}`);
@@ -2235,10 +2264,15 @@ export class Flow {
         ...(d.values !== undefined ? { values: d.values } : {}),
         ...(d.stages !== undefined ? { stages: d.stages } : {}),
         // @world is FOREIGN - a host resolver backs it - so writability is whether that
-        // resolver can be written at all, which is the shared registry's own rule for a
-        // foreign scope. The `as PropertyView` cast this replaced was hiding the field's
-        // absence: the row type has always required it, and these rows shipped without one.
-        writable: this.internals.worldResolver.set !== undefined,
+        // resolver can be written at all AND what the declaration says, which is the
+        // shared registry's own rule for a foreign scope (its foreignWritable). The
+        // `as PropertyView` cast this replaced was hiding the field's absence: the row
+        // type has always required it, and these rows shipped without one.
+        //
+        // A row is where `writable: false` is meant to SHOW (Reboot.md 10): it tells a
+        // state panel this is the game's value, not the story's. It does not stop the
+        // panel editing it - the host's setProperty passes `{ host: true }`.
+        writable: this.internals.worldSet !== undefined && !this.internals.worldReadOnly.has(d.name),
       });
     }
     const add = (_prefix: string, shared: StateBag | undefined, own: StateBag | undefined): void => {
@@ -2271,8 +2305,8 @@ export class Flow {
     this.assertOpen();
     const found = this.resolvePath(path);
     if (found.kind === "world") {
-      if (!this.internals.worldResolver.set) throw new Error(`@world is read-only here: the host bound no write`);
-      this.internals.worldResolver.set(found.name, value);
+      if (!this.internals.worldSet) throw new Error(`@world is read-only here: the host bound no write`);
+      this.internals.worldSet(found.name, value, true);
       return;
     }
     const bag = found.own !== undefined && found.own.get(found.name) !== undefined ? found.own
@@ -2280,8 +2314,9 @@ export class Flow {
       : undefined;
     if (bag === undefined) throw new Error(`no property at "${path}"`);
     // A host write: silent under the firing rule (no subscriber feedback
-    // loop), but visible to the bag's audit hook.
-    bag.set(found.name, value, { silent: true, reason: "host setProperty" });
+    // loop), visible to the bag's audit hook, and flagged HOST so a
+    // `writable: false` does not refuse the game its own value.
+    bag.set(found.name, value, { silent: true, reason: "host setProperty", host: true });
   }
 
   private resolvePath(path: string): { kind: "world"; name: string } | { kind: "bag"; own?: StateBag; shared?: StateBag; name: string } {

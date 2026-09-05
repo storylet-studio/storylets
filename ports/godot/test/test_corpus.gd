@@ -331,6 +331,7 @@ func _run_scripted(cases: Array) -> int:
 		var failures := _run_scripted_case(c)
 		if str(c["name"]).begins_with("an outcome may not write a read-only"):
 			failures.append_array(_read_only_world_probe(c["bundle"]))
+			failures.append_array(_self_world_examiner(c["bundle"]))
 		if failures.is_empty():
 			pass_count += 1
 		else:
@@ -731,10 +732,11 @@ func _check_report(at: String, expected, actual: Dictionary, out: Array) -> void
 
 # Read-only @world with a HOST resolver bound (Reboot.md 10). The corpus case
 # of this name pins the self-backed path, where @world is the engine's stand-in
-# bag, the shared kernel, which keeps `writable` for every caller. A game that
-# binds its own resolver takes the engine's writes straight, and only the
-# engine's own check stands between a story and the host: this is the one
-# place that check is exercised. Same probe in the JS, C# and C++ harnesses.
+# bag: it keeps the declaration, and the host's own surface writes past it with
+# the kernel's `{"host": true}`. A game that binds its own resolver takes the
+# engine's writes straight, and only the engine's own check stands between a
+# story and the host: this is the one place that check is exercised. Same probe
+# in the JS, C# and C++ harnesses.
 func _read_only_world_probe(bundle: Dictionary) -> Array:
 	var failures: Array = []
 	var vals := {"clock": 0, "mood": 0}
@@ -761,6 +763,36 @@ func _read_only_world_probe(bundle: Dictionary) -> Array:
 	return failures
 
 
+# The SELF-BACKED @world, examined: no corpus op reads an examiner row, so the
+# half the Patter brief called the point of the flag - the declaration still
+# showing as read-only after the game has written it - is asserted here, and in
+# the other three runtimes' harnesses.
+func _self_world_examiner(bundle: Dictionary) -> Array:
+	var failures: Array = []
+	var engine := StoryletEngine.create(bundle, {"seed": 0})
+	if engine == null:
+		return ["self-backed examiner: engine would not create"]
+	var row := func(path: String) -> Dictionary:
+		for r in engine.list_properties():
+			if r["path"] == path:
+				return r
+		return {}
+	if (row.call("world.clock") as Dictionary).is_empty():
+		return ["self-backed examiner: no row for world.clock"]
+	if bool((row.call("world.clock") as Dictionary)["writable"]):
+		failures.append("self-backed examiner: world.clock did not report writable: false")
+	if not bool((row.call("world.mood") as Dictionary)["writable"]):
+		failures.append("self-backed examiner: world.mood reported read-only")
+	var err := engine.set_property("world.clock", 5)
+	if err != "":
+		failures.append("self-backed examiner: the game's own set_property was refused: " + err)
+	if engine.get_property("world.clock") != 5:
+		failures.append("self-backed examiner: the host's write did not land")
+	if bool((row.call("world.clock") as Dictionary)["writable"]):
+		failures.append("self-backed examiner: a host write made the declaration writable")
+	return failures
+
+
 # -- the expr parity corpus: registry ---------------------------------------------
 #
 # The scope kernel's `writable` rule: decl.writable ?? scope.writable ?? true. A case
@@ -781,13 +813,16 @@ func _run_expr_registry(cases: Array) -> int:
 		var set_name: String = c["set"]["name"]
 		var value = StoryletValues.to_value(c["set"]["value"])
 		var expect_error: bool = c.get("expectError", false)
+		# The case says whether the write is the HOST's: `writable: false` is the
+		# story's promise, and the game is never bound by it.
+		var host: bool = c.get("host", false)
 		var expected = StoryletValues.to_value(c["expected"])
 
 		var error := ""
 		var read_back = null
 		if not c.has("scope"):
 			var bag := StoryletPropertyBag.new(decls)
-			var change: Dictionary = bag.set_value(set_name, value)
+			var change: Dictionary = bag.set_value(set_name, value, {"host": host})
 			if change.has("error"):
 				error = str(change["error"])
 			read_back = bag.get_value(set_name)
@@ -802,7 +837,7 @@ func _run_expr_registry(cases: Array) -> int:
 			var scope: Dictionary = c["scope"]
 			var registry := StoryletScopeRegistry.new().define_foreign(
 				"s", resolver, decls, bool(scope.get("writable", true)))
-			error = registry.set_value("s", set_name, value)
+			error = registry.set_value("s", set_name, value, {"host": host})
 			read_back = registry.get_value("s", set_name)
 
 		var ok := true

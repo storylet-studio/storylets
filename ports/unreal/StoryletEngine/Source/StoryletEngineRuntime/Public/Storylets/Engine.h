@@ -654,10 +654,17 @@ namespace storylets
             return hostWorld_.has_value() ? static_cast<bool>(hostWorld_->set) : true;
         }
 
-        void worldSet(const std::string& name, const StoryletValue& value)
+        /** The @world WRITE seam. `host` says the caller is the GAME's own surface -
+         *  setProperty and the tooling built on it - which the shared kernel lets past
+         *  a `writable: false` (scoperegistry 0.6.0): that flag is the story's promise,
+         *  not the game's. The story's refusal is worldReadOnly, asked before this seam
+         *  is reached. A BOUND resolver is opaque - it takes a name and a value and
+         *  keeps whatever rule the game has - so the flag only ever reaches the
+         *  self-backed bag. */
+        void worldSet(const std::string& name, const StoryletValue& value, bool host = false)
         {
             if (hostWorld_.has_value()) hostWorld_->set(name, value);
-            else selfWorld_->set(name, value);
+            else selfWorld_->set(name, value, /*silent=*/false, "", host);
         }
 
     private:
@@ -742,9 +749,12 @@ namespace storylets
             shared_ = std::move(shared);
             if (!hostWorld_.has_value())
             {
-                // Standalone: self-backed from the declared defaults. Still
-                // FOREIGN in spirit - never in saveGame(); a host that wants
-                // @world to persist saves the container itself.
+                // Standalone: self-backed from the declared defaults,
+                // DECLARATIONS AND ALL. Still FOREIGN in spirit - never in
+                // saveGame(); a host that wants @world to persist saves the
+                // container itself. The bag keeps `writable: false` so an
+                // examiner still reads it there, and the kernel lets a host
+                // write past it, which is what the game's own surface passes.
                 selfWorld_ = bagFromDecls(bundle_->world.properties, "world.");
             }
         }
@@ -2709,7 +2719,7 @@ namespace storylets
                 {
                     throw StoryletError("@world is read-only here: the host bound no write");
                 }
-                engine_->worldSet(parts[1], value);
+                engine_->worldSet(parts[1], value, /*host=*/true);
                 return;
             }
             PropertyBag* own = nullptr;
@@ -2739,7 +2749,10 @@ namespace storylets
             if (!bag) throw StoryletError("no property at \"" + path + "\"");
             // A host write: silent under the firing rule (no subscriber
             // feedback loop), but visible to the bag's audit hook.
-            bag->set(name, value, /*silent=*/true, "host setProperty");
+            // A HOST write: silent under the firing rule, visible to the audit hook,
+            // and flagged host so a `writable: false` does not refuse the game its
+            // own value.
+            bag->set(name, value, /*silent=*/true, "host setProperty", /*host=*/true);
         }
 
         void addWorldRows(std::vector<PropertyRow>& rows) const
@@ -2756,7 +2769,10 @@ namespace storylets
                 r.values = d.values;
             r.stages = d.stages;
                 r.stages = d.stages;
-                r.writable = engine_->worldCanSet();
+                // Whether the resolver can be written at all AND what the declaration
+                // says, which is the kernel's own rule for a foreign scope: a row is
+                // where `writable: false` is meant to SHOW.
+                r.writable = engine_->worldCanSet() && !engine_->worldReadOnly(d.name);
                 rows.push_back(std::move(r));
             }
         }
@@ -3049,7 +3065,7 @@ namespace storylets
         if (parts.size() == 2 && parts[0] == "world")
         {
             if (!worldCanSet()) throw StoryletError("@world is read-only here: the host bound no write");
-            worldSet(parts[1], value);
+            worldSet(parts[1], value, /*host=*/true);
             return;
         }
         // Reuse the read-side routing: a per-flow or unknown ref throws the
@@ -3057,7 +3073,10 @@ namespace storylets
         getProperty(path);
         PropertyBag* bag = parts.size() == 2 ? shared_.story.get()
             : Flow::kindOf(shared_, parts[0]).get(parts[1])->get();
-        bag->set(parts.back(), value, /*silent=*/true, "host setProperty");
+        // A HOST write, in any scope: silent under the firing rule, visible to the
+        // audit hook, and never refused by a `writable: false` - that flag is the
+        // story's promise about its own outcomes, and this is the game speaking.
+        bag->set(parts.back(), value, /*silent=*/true, "host setProperty", /*host=*/true);
     }
 
     inline std::vector<PropertyRow> Engine::listProperties() const
@@ -3074,7 +3093,8 @@ namespace storylets
             r.defaultValue = d.defaultOrTypeDefault();
             r.values = d.values;
             r.stages = d.stages;
-            r.writable = worldCanSet();
+            // The declaration counts as well as the resolver: see the Flow's rows.
+            r.writable = worldCanSet() && !worldReadOnly(d.name);
             rows.push_back(std::move(r));
         }
         // No path prefix passed in: the bag composes the address from its own

@@ -41,10 +41,13 @@ engines sees one rule:
    is never called for a read-only property.
 3. **A resolver with no `set` makes the whole of `@world` read-only to the story**, whatever
    the declarations say. That is the game's policy rather than the story's promise; both apply.
-4. **Your game is never bound, through its own resolver.** Bind one and the game moves
-   `@world` whenever it likes, read-only or not. Bind none, and the engine's stand-in bag keeps
-   the declaration for every caller, `setProperty("world.chapter", ...)` included: a read-only
-   value then holds its default for the whole run. If the game must move it, bind a resolver.
+4. **Your game is never bound by it, resolver or none.** The promise is the story's, not the
+   game's: `setProperty("world.chapter", ...)` writes, whether you bound a resolver or let the
+   engine keep its stand-in bag, and so do the coverage driver and the CLI's `--set`, which
+   exist to move exactly these values. The examiner still shows the property as read-only,
+   because that is what the flag means: read by the story, moved by the game. (Until 2026-09-05
+   the stand-in bag refused the game as well, which locked the game's own tools out of its own
+   clock; that was a bug in the shared kernel, fixed in scoperegistry 0.6.0 and here.)
 
 There is no write-only: a declared property can always be read by the story. If the game holds
 a value the story should not see, do not declare it.
