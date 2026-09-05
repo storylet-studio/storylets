@@ -9,7 +9,7 @@
 // the pairing cross-check, so a card whose scene went missing fails here.
 
 import { describe, expect, it, beforeAll } from "vitest";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -22,12 +22,23 @@ const dist = join(pkg, "dist");
 // Through `npm run build`, never the script directly: the package's `prebuild`
 // is what makes the ops/compiler `dist/` this build reads exist, and skipping
 // it passes locally and fails on the first clean CI run.
-beforeAll(() => {
+/** Run a build without blocking this worker's event loop. A synchronous child
+ *  process here held the loop for the whole of `build:libs` on a cold CI
+ *  runner (over a minute), and vitest then timed out talking to the worker
+ *  ("Timeout calling onTaskUpdate") with every test green. Seen 2026-09-05,
+ *  twice, on this file: it is the heaviest suite in the repo. */
+function run(args: string[], cwd: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile("npm", args, { cwd }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err))) : resolve()));
+  });
+}
+
+beforeAll(async () => {
   // CI tests before it builds, and the client copies the drop-in the play-helpers
   // package builds: build the libraries first when it is missing (local runs skip this).
   const dropIn = join(pkg, "../play-helpers/dist/storyletengine.min.js");
-  if (!existsSync(dropIn)) execFileSync("npm", ["run", "build:libs"], { cwd: join(pkg, "../.."), stdio: "pipe" });
-  execFileSync("npm", ["run", "build"], { cwd: pkg, stdio: "pipe" });
+  if (!existsSync(dropIn)) await run(["run", "build:libs"], join(pkg, "../.."));
+  await run(["run", "build"], pkg);
 }, 600_000);
 
 function open(storage?: Record<string, string>): { doc: Document } {
