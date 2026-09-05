@@ -241,6 +241,14 @@ export type AttachAtLocationResponse =
       installation: InstallationId;
       visit: VisitView;
       board: BoardView;
+      /** Present when the scan MINTED the party (the walk-up: a phone that
+       *  held no credential, offered the venue's one default story), absent
+       *  when the phone already held one. Additive for the reason the walk-up
+       *  needs it to be: the bearer every later call must carry is decided
+       *  here, and a second round trip to fetch it would be a second round
+       *  trip with a visitor standing at the wall (7.1, 7.2). The phone keeps
+       *  it. */
+      token?: string;
     }
   /** No credential, and several stories are open: the phone shows the
    *  chooser, branded for nothing until the visitor picks. Only installations
@@ -270,6 +278,12 @@ export interface ChooseInstallationResponse {
   installation: InstallationId;
   visit: VisitView;
   board: BoardView;
+  /** Present when the choice MINTED the party, which is the ordinary case
+   *  here: the chooser is drawn for a phone that holds no credential, and
+   *  picking a story is what mints it. Absent when the phone already held one
+   *  and was only confirming the story it is already in (7.1, 7.2). The phone
+   *  keeps it. */
+  token?: string;
 }
 
 // --- the visit ----------------------------------------------------------------

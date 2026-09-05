@@ -14,7 +14,7 @@
 // end. Same idea, one product up.
 
 import { describe, expect, it, beforeAll } from "vitest";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -33,8 +33,14 @@ const dist = join(pkg, "dist");
  *  is what makes those two exist. It passed locally, where their `dist/` was
  *  already there from earlier work, and failed on the first clean CI run - the
  *  green-locally-proves-nothing lesson, collected again. */
-beforeAll(() => {
-  execFileSync("npm", ["run", "build"], { cwd: pkg, stdio: "pipe" });
+beforeAll(async () => {
+  // Asynchronous on purpose: a synchronous child process blocks this worker's
+  // event loop for the whole build, and on a slow runner vitest then times out
+  // talking to the worker ("Timeout calling onTaskUpdate") with every test
+  // green. Seen on CI 2026-09-05.
+  await new Promise<void>((resolve, reject) => {
+    execFile("npm", ["run", "build"], { cwd: pkg }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err))) : resolve()));
+  });
 }, 180_000);
 
 /** Open the built page with its script running.

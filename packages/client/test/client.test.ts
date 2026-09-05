@@ -205,6 +205,66 @@ describe("the party's verbs", () => {
     phone.close();
   });
 
+  it("adopts the token a walk-up scan minted, and carries it on every later call", async () => {
+    const { server, client } = bench();
+    // A phone that has never been here holds NOTHING: no stored token, no
+    // bearer, and the first request it makes is anonymous (spec 7.1).
+    const phone = client.connectParty();
+    expect(phone.token).toBeUndefined();
+    const seen: string[] = [];
+    phone.onToken((token) => seen.push(token));
+
+    const res = await phone.atLocation("this-room", "the-door");
+    expect(res.outcome).toBe("attached");
+    if (res.outcome !== "attached") throw new Error("unreachable");
+    // The server minted a transient party, and the token rode back with the
+    // attach because there is no second place to get it from.
+    expect(res.token).toBeTruthy();
+    expect(phone.token).toBe(res.token);
+    expect(seen).toEqual([res.token]);
+
+    // The scan went out anonymous; everything after it is the new party. This
+    // is the whole of the defect: a client that kept the bearer it was built
+    // with 401s on its own first deal.
+    const scan = server.requests.find((r) => r.path === "/v1/at/this-room/the-door");
+    expect(scan?.bearer).toBe("none");
+    await phone.visit?.deal();
+    const deal = server.requests.filter((r) => r.path.endsWith("/deal"));
+    expect(deal).toHaveLength(1);
+    expect(deal[0]?.bearer).toBe("party");
+    expect(phone.visit?.board["at-the-door"]).toHaveLength(2);
+    phone.close();
+  });
+
+  it("adopts the token the chooser minted, and leaves a phone that held one alone", async () => {
+    const server = createFakeServer({ twoStories: true });
+    const client = createClient({
+      base: "http://venue.local",
+      fetch: server.fetch,
+      EventSource: server.EventSource,
+      timers: manualTimers(),
+    });
+    const phone = client.connectParty();
+    const res = await phone.atLocation("this-room", "the-door");
+    expect(res.outcome).toBe("choose");
+
+    const chosen = await phone.chooseInstallation("this-room", "the-door", "after-dark");
+    expect(chosen.response.token).toBeTruthy();
+    expect(phone.token).toBe(chosen.response.token);
+    await chosen.visit.deal();
+    expect(server.requests.filter((r) => r.path.endsWith("/deal"))[0]?.bearer).toBe("party");
+    phone.close();
+
+    // A phone that already holds a credential is not re-minted, so nothing is
+    // adopted and the token it arrived with is the token it leaves with.
+    const known = server.seedParty({});
+    const returning = client.connectParty(known.token);
+    const again = await returning.chooseInstallation("this-room", "the-door", "the-caretaker");
+    expect(again.response.token).toBeUndefined();
+    expect(returning.token).toBe(known.token);
+    returning.close();
+  });
+
   it("refuses a placard this venue has never printed", async () => {
     const { server, client } = bench();
     const party = server.seedParty({});

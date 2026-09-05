@@ -16,7 +16,7 @@
 // ---------------------------------------------------------------------------
 
 import { beforeAll, describe, expect, it } from "vitest";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -36,8 +36,14 @@ const BASE = "http://venue.local";
  *
  *  Through `npm run build`, not by running the script directly: that is the
  *  Village client's lesson, collected the hard way on a clean CI runner. */
-beforeAll(() => {
-  execFileSync("npm", ["run", "build"], { cwd: pkg, stdio: "pipe" });
+beforeAll(async () => {
+  // Asynchronous on purpose: a synchronous child process blocks this worker's
+  // event loop for the whole build, and on a slow runner vitest then times out
+  // talking to the worker ("Timeout calling onTaskUpdate") with every test
+  // green. Seen on CI 2026-09-05.
+  await new Promise<void>((resolve, reject) => {
+    execFile("npm", ["run", "build"], { cwd: pkg }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err))) : resolve()));
+  });
 }, 180_000);
 
 interface Opened {
@@ -219,6 +225,26 @@ describe("the companion page", () => {
     buttons[1]!.click();
     await until(doc, ".sk-card");
     expect(doc.body.textContent).toContain("Not tonight");
+  });
+
+  it("keeps the token a walk-up scan minted, and makes the next call as that party", async () => {
+    // The phone has never been here: no stored token, one story open, and the
+    // scan is what mints the party (spec 7.1). Storing only the `/p/<token>`
+    // form loses exactly this case.
+    const server = createFakeServer({ base: BASE });
+    const { doc, dom } = open("companion", { url: `${BASE}/at/this-room/the-door`, server });
+    await until(doc, ".sk-card");
+
+    const stored = dom.window.localStorage.getItem("storylet.party.token");
+    expect(stored).toBeTruthy();
+
+    const scan = server.requests.find((r) => r.path === "/v1/at/this-room/the-door");
+    expect(scan?.bearer).toBe("none");
+    // Everything after the scan carries the minted token. Before the fix this
+    // was the phone still holding nothing, and a real server 401s.
+    const after = server.requests.slice(server.requests.indexOf(scan!) + 1);
+    expect(after.length).toBeGreaterThan(0);
+    expect(after.every((r) => r.bearer === "party")).toBe(true);
   });
 
   it("holds its token, so a reload is the same party", async () => {

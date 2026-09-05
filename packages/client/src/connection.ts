@@ -104,11 +104,27 @@ export interface StationConnection extends Connection {
 export interface PartyConnection extends Connection {
   /** The phone scanned a placard. Either it is routed into one story, or it is
    *  asked which: both are 200s, which is why the wire has no
-   *  `choose_installation` error code. */
+   *  `choose_installation` error code.
+   *
+   *  A phone that held NOTHING scans anonymously, the server mints a transient
+   *  party, and the token rides back with the attach (wire 7.1). This
+   *  connection ADOPTS it: every later call is made as that party, which is
+   *  the difference between a walk-up that works and one that 401s on its own
+   *  first deal. */
   atLocation(venue: VenueId, location: LocationId): Promise<AttachAtLocationResponse>;
   /** The visitor picked a story from the chooser. The choice mints the party
-   *  there and attaches. */
+   *  there and attaches, and the minted token is adopted as `atLocation`'s
+   *  is. */
   chooseInstallation(venue: VenueId, location: LocationId, installation: InstallationId): Promise<Attached<ChooseInstallationResponse>>;
+  /** The token this phone is holding NOW: the one it was built with, or the
+   *  one a scan minted for it. Undefined before either, which is the honest
+   *  answer for a phone that has never been here. */
+  readonly token: string | undefined;
+  /** Told whenever a scan or a choice mints a token, and NOT for the one this
+   *  connection was built with. A companion page persists it here: the token
+   *  is the only thing worth remembering, and the moment it arrives is the
+   *  only moment it is on the wire (wire 7.1). */
+  onToken(listener: (token: string) => void): () => void;
 }
 
 export interface ConnectionDeps {
@@ -126,15 +142,26 @@ export interface ConnectionDeps {
  *  front-end must never see: the bearer, the queue and the visit factory. */
 interface ConnectionInternals {
   transport: Transport;
-  bearer: Bearer;
+  /** A FUNCTION, not the value: a party connection may adopt a minted token
+   *  mid-life, and a wrapper that had destructured the string would go on
+   *  calling as whoever it used to be. */
+  bearer(): Bearer;
   queue: CommandQueue;
   key(): string;
   adopt<R>(response: R, seed: Parameters<typeof createVisit>[1]): Attached<R>;
+  /** Become this party: the bearer for every later call, a stream reopened as
+   *  the new principal, and the listeners told so a page can persist it. */
+  adoptToken(token: string): void;
+  onToken(listener: (token: string) => void): () => void;
 }
 
 /** The shared body of both connections. */
 function createConnection(deps: ConnectionDeps): { conn: Connection; raw: ConnectionInternals } {
-  const { transport, bearer } = deps;
+  const { transport } = deps;
+  // MUTABLE, and read live everywhere below: a walk-up scan mints the party
+  // this connection then IS (spec 7.1). Every call in this file closes over
+  // the variable rather than a copy, so adoption is one assignment.
+  let bearer: Bearer = deps.bearer;
   let state: ConnectionState = deps.stream === false ? "disconnected" : "connecting";
   let queueHeld = false;
   let queueReason: string | undefined;
@@ -144,6 +171,7 @@ function createConnection(deps: ConnectionDeps): { conn: Connection; raw: Connec
   const stateListeners = new Set<(s: ConnectionState, held: boolean, reason?: string) => void>();
   const eventListeners = new Set<(e: WireEvent) => void>();
   const messageListeners = new Set<(m: MessageView[]) => void>();
+  const tokenListeners = new Set<(t: string) => void>();
   let seen: MessageView[] = [];
 
   /** Held means "what is on screen is not confirmed": the stream is away, or a
@@ -184,7 +212,7 @@ function createConnection(deps: ConnectionDeps): { conn: Connection; raw: Connec
   if (deps.stream !== false) {
     stream = createStream({
       transport,
-      bearer,
+      bearer: () => bearer,
       ...(deps.EventSource !== undefined ? { EventSource: deps.EventSource } : {}),
       ...(deps.timers !== undefined ? { timers: deps.timers } : {}),
       onEvent: deliver,
@@ -204,6 +232,17 @@ function createConnection(deps: ConnectionDeps): { conn: Connection; raw: Connec
     });
     stream.start();
   }
+
+  /** The walk-up's one assignment. The stream is reopened rather than left to
+   *  its backoff, because until now it could not mint a ticket at all: an
+   *  anonymous phone has no principal, and a visitor at a wall should not wait
+   *  out a ladder that starts at a second. */
+  const adoptToken = (token: string): void => {
+    if (closed || token === "" || token === bearer) return;
+    bearer = token;
+    stream?.restart();
+    for (const l of tokenListeners) safely(() => l(token));
+  };
 
   const adopt = <R>(response: R, seed: Parameters<typeof createVisit>[1]): Attached<R> => {
     current?.close();
@@ -294,10 +333,25 @@ function createConnection(deps: ConnectionDeps): { conn: Connection; raw: Connec
       stateListeners.clear();
       eventListeners.clear();
       messageListeners.clear();
+      tokenListeners.clear();
     },
   };
 
-  return { conn, raw: { transport, bearer, queue, key: deps.key, adopt } };
+  return {
+    conn,
+    raw: {
+      transport,
+      bearer: () => bearer,
+      queue,
+      key: deps.key,
+      adopt,
+      adoptToken,
+      onToken(listener) {
+        tokenListeners.add(listener);
+        return () => { tokenListeners.delete(listener); };
+      },
+    },
+  };
 }
 
 // The two bearers, each the shared connection PLUS its own verbs.
@@ -310,9 +364,12 @@ function createConnection(deps: ConnectionDeps): { conn: Connection; raw: Connec
 export function createStationConnection(deps: ConnectionDeps): StationConnection {
   const { conn, raw } = createConnection(deps);
   const { bearer, queue, key, adopt } = raw;
+  // A station key is HARDWARE the venue owns, so nothing here adopts: a scan
+  // at a wall may mint a party and hand its token back, and that token is the
+  // PARTY's (wire 7.1). This device stays the device it was provisioned as.
   return Object.assign(Object.create(conn) as Connection, {
     async handshake(credential: HandshakeRequest): Promise<Attached<HandshakeResponse>> {
-      const res = await queue.send<HandshakeResponse>(bearer, {
+      const res = await queue.send<HandshakeResponse>(bearer(), {
         method: "POST",
         path: "/handshake",
         body: credential,
@@ -324,7 +381,7 @@ export function createStationConnection(deps: ConnectionDeps): StationConnection
       });
     },
     async attachAtLocation(venue: VenueId, location: LocationId): Promise<AttachAtLocationResponse> {
-      const res = await queue.send<AttachAtLocationResponse>(bearer, {
+      const res = await queue.send<AttachAtLocationResponse>(bearer(), {
         method: "POST",
         path: `/at/${seg(venue)}/${seg(location)}`,
         body: { venue, location },
@@ -334,7 +391,7 @@ export function createStationConnection(deps: ConnectionDeps): StationConnection
       return res;
     },
     mintParty(req: MintPartyRequest): Promise<MintPartyResponse> {
-      return queue.send<MintPartyResponse>(bearer, {
+      return queue.send<MintPartyResponse>(bearer(), {
         method: "POST",
         path: "/parties",
         body: req,
@@ -342,7 +399,7 @@ export function createStationConnection(deps: ConnectionDeps): StationConnection
       });
     },
     issueCredential(partyId: PartyId, req: Omit<IssueCredentialRequest, "partyId">): Promise<IssueCredentialResponse> {
-      return queue.send<IssueCredentialResponse>(bearer, {
+      return queue.send<IssueCredentialResponse>(bearer(), {
         method: "POST",
         path: `/parties/${seg(partyId)}/credentials`,
         body: { partyId, ...req },
@@ -350,7 +407,7 @@ export function createStationConnection(deps: ConnectionDeps): StationConnection
       });
     },
     setPresence(req: SetPresenceRequest): Promise<SetPresenceResponse> {
-      return queue.send<SetPresenceResponse>(bearer, {
+      return queue.send<SetPresenceResponse>(bearer(), {
         method: "POST",
         path: "/stations/me/presence",
         body: req,
@@ -362,16 +419,21 @@ export function createStationConnection(deps: ConnectionDeps): StationConnection
 
 export function createPartyConnection(deps: ConnectionDeps): PartyConnection {
   const { conn, raw } = createConnection(deps);
-  const { bearer, queue, key, adopt } = raw;
-  return Object.assign(Object.create(conn) as Connection, {
+  const { bearer, queue, key, adopt, adoptToken, onToken } = raw;
+  const party = Object.assign(Object.create(conn) as Connection, {
     async atLocation(venue: VenueId, location: LocationId): Promise<AttachAtLocationResponse> {
-      const res = await queue.send<AttachAtLocationResponse>(bearer, {
+      const res = await queue.send<AttachAtLocationResponse>(bearer(), {
         method: "POST",
         path: `/at/${seg(venue)}/${seg(location)}`,
         body: { venue, location },
         idempotencyKey: key(),
       });
-      if (res.outcome === "attached") adopt(res, { view: res.visit, board: res.board });
+      if (res.outcome === "attached") {
+        // BEFORE the visit is made, so the visit is born holding the bearer
+        // its own deals and plays must carry.
+        if (res.token !== undefined) adoptToken(res.token);
+        adopt(res, { view: res.visit, board: res.board });
+      }
       return res;
     },
     async chooseInstallation(
@@ -379,15 +441,22 @@ export function createPartyConnection(deps: ConnectionDeps): PartyConnection {
       location: LocationId,
       installation: InstallationId,
     ): Promise<Attached<ChooseInstallationResponse>> {
-      const res = await queue.send<ChooseInstallationResponse>(bearer, {
+      const res = await queue.send<ChooseInstallationResponse>(bearer(), {
         method: "POST",
         path: `/at/${seg(venue)}/${seg(location)}/choose`,
         body: { venue, location, installation },
         idempotencyKey: key(),
       });
+      if (res.token !== undefined) adoptToken(res.token);
       return adopt(res, { view: res.visit, board: res.board });
     },
-  }) as PartyConnection;
+    onToken,
+  });
+  // `defineProperty` rather than a field in the literal above, for the reason
+  // the prototype chain is one: a copied value would freeze a phone on the
+  // token it did not have when it was built.
+  Object.defineProperty(party, "token", { get: () => bearer(), enumerable: true });
+  return party as PartyConnection;
 }
 
 /** Thrown when a front-end asks a visit-shaped question before there is a

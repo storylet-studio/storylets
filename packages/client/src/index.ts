@@ -80,8 +80,14 @@ export interface Client {
    *  presence (spec 7.1). */
   connectStation(key: string): StationConnection;
   /** Act as a party: a phone holding its own token. It HOLDS, so it may scan a
-   *  placard, pick a story and claim its own pocket, and nothing else. */
-  connectParty(token: string): PartyConnection;
+   *  placard, pick a story and claim its own pocket, and nothing else.
+   *
+   *  The token is OPTIONAL, because the walk-up is the case this exists for: a
+   *  phone that has never been here holds nothing, scans a placard anonymously
+   *  and adopts the token that scan mints (spec 7.1). An empty string is the
+   *  same as none, so a page reading an empty `localStorage` need not think
+   *  about it. */
+  connectParty(token?: string): PartyConnection;
 }
 
 export function createClient(opts: ClientOptions): Client {
@@ -109,8 +115,11 @@ export function createClient(opts: ClientOptions): Client {
     connectStation(stationKey: string): StationConnection {
       return createStationConnection({ ...shared, bearer: stationKey });
     },
-    connectParty(token: string): PartyConnection {
-      return createPartyConnection({ ...shared, bearer: token });
+    connectParty(token?: string): PartyConnection {
+      // `""` is not a credential: sending `Authorization: Bearer ` would make
+      // an anonymous phone look like a party holding an empty token, which is
+      // a lie to the server and a lie in the frames fixture.
+      return createPartyConnection({ ...shared, bearer: token === "" ? undefined : token });
     },
   };
 }

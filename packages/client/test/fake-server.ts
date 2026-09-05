@@ -502,13 +502,18 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
       const chooseMatch = /^\/at\/([^/]+)\/([^/]+)\/choose$/.exec(path);
       if (chooseMatch && init.method === "POST") {
         const req = body as { installation: string };
-        const party = mintParty(req.installation, true);
+        // The chooser is drawn for a phone that holds nothing, so the choice
+        // MINTS, and the token comes back with the attach: the phone has no
+        // other way to learn the bearer every later call must carry (7.1).
+        const held = partyOf();
+        const party = held ?? mintParty(req.installation, true);
         const visit = openVisitFor(party);
-        dealInto(visit, [BINDINGS[req.installation]?.[decodeURIComponent(chooseMatch[2] ?? "")] ?? ""].filter(Boolean));
+        dealInto(visit, [BINDINGS[party.installation]?.[decodeURIComponent(chooseMatch[2] ?? "")] ?? ""].filter(Boolean));
         const res: ChooseInstallationResponse = {
-          installation: req.installation,
+          installation: party.installation,
           visit: viewOf(visit),
           board: visit.board,
+          ...(held === undefined ? { token: party.token } : {}),
         };
         return ok(res);
       }
@@ -535,6 +540,9 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
             installation: only.installation,
             visit: viewOf(visit),
             board: visit.board,
+            // The walk-up minted, so the answer carries the token the phone
+            // must keep, exactly as the server does (7.1, 7.2).
+            token: minted.token,
           };
           return ok(res);
         }

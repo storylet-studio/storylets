@@ -17,6 +17,15 @@
 // party. It is the only thing this page remembers, and it is the only thing
 // worth remembering: the server holds no name, no email and no photo.
 //
+// TWO WAYS A TOKEN ARRIVES, and both are stored the same way under the same
+// key. One is `/p/<token>`: a QR that IS the credential. The other is the
+// walk-up: a phone holding nothing scans a placard, the server mints a
+// transient party and hands the token back with the attach, and the client
+// adopts it (spec 7.1). Storing only the first is storing the case that was
+// already carrying its own credential, and losing the case that was not: the
+// next reload would be a stranger again, and every call after the scan would
+// be made as nobody.
+//
 // Nearly always rebuilt (spec 12): the player-facing surface is the brand.
 // This one is plain enough that nobody mistakes it for a venue's design.
 // ---------------------------------------------------------------------------
@@ -71,8 +80,11 @@ export async function startCompanion(root: HTMLElement): Promise<void> {
 
   const arrival = arrivalFrom(location.pathname);
   if (arrival.at === "party") writeToken(arrival.token);
-  const token = readToken() ?? "";
+  const token = readToken();
   const party = shell.client.connectParty(token);
+  // A walk-up mints, and this is where that token is kept. Subscribed BEFORE
+  // the scan goes out, because the scan is what mints it.
+  party.onToken(writeToken);
   showConnection(shell, party);
 
   if (arrival.at === "location") {
@@ -82,11 +94,13 @@ export async function startCompanion(root: HTMLElement): Promise<void> {
   // A token and no placard: show the party its own QR, which is both the
   // keepsake and the thing a station's camera reads (spec 7.2, both
   // directions of the handshake).
-  const hello = await party.hello().catch(() => undefined);
+  const hello = token === undefined ? undefined : await party.hello().catch(() => undefined);
   const keepsake = qrPart();
   keepsake.update({
-    text: `${shell.client.base}/p/${token}`,
-    caption: token === "" ? "Scan a code on a wall to begin." : "Show this to a kiosk, or scan a code on a wall.",
+    text: token === undefined ? shell.client.base : `${shell.client.base}/p/${token}`,
+    caption: token === undefined
+      ? "Scan a code on a wall to begin."
+      : "Show this to a kiosk, or scan a code on a wall.",
   });
   shell.main.replaceChildren(keepsake.el);
   if (hello?.visit !== undefined) {
@@ -139,8 +153,8 @@ function chooser(
       onClick: () => {
         void party.chooseInstallation(venue, at, installation.installation)
           .then(({ visit }) => {
-            // The choice minted the party, so this phone now holds one.
-            void party.hello().catch(() => {});
+            // The choice minted the party; the client adopted the token that
+            // came back with it, and `onToken` above has already stored it.
             table(shell, party, visit);
           })
           .catch((err: unknown) => {

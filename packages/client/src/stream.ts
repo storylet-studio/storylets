@@ -60,7 +60,10 @@ export type EventSourceCtor = new (url: string) => EventSourceLike;
 
 export interface StreamOptions {
   transport: Transport;
-  bearer: Bearer;
+  /** Read at every connection rather than captured once: a companion page
+   *  that scanned a placard with no credential ADOPTS the token that scan
+   *  minted, and the next ticket must be minted as the party it now is. */
+  bearer: () => Bearer;
   EventSource?: EventSourceCtor;
   timers?: Timers;
   /** Ask for monitor scope. Refused with `wrong_role` unless the principal is
@@ -80,6 +83,10 @@ export interface StreamOptions {
 export interface Stream {
   /** Open it. Safe to call twice; the second is a no-op. */
   start(): void;
+  /** Try again NOW: the bearer changed, so a ticket that could not be minted
+   *  a moment ago can be minted this moment, and waiting out a backoff that
+   *  has already been disproved is a visitor watching a blank phone. */
+  restart(): void;
   /** The last event id seen, which is what a resume sends. */
   readonly lastEventId: string | undefined;
   /** Close for good. Every later callback is a no-op. */
@@ -147,7 +154,7 @@ export function createStream(opts: StreamOptions): Stream {
     if (!everOpen) setState("connecting");
     let ticket: string;
     try {
-      const res = await opts.transport.send<CreateStreamTicketResponse>(opts.bearer, {
+      const res = await opts.transport.send<CreateStreamTicketResponse>(opts.bearer(), {
         method: "POST",
         path: "/stream-ticket",
         body: opts.monitor === true ? { monitor: true } : {},
@@ -220,6 +227,22 @@ export function createStream(opts: StreamOptions): Stream {
     start(): void {
       if (started || closed) return;
       started = true;
+      void connect();
+    },
+    restart(): void {
+      if (closed) return;
+      started = true;
+      if (timer !== null) {
+        timers.clearTimeout(timer);
+        timer = null;
+      }
+      attempt = 0;
+      try {
+        source?.close();
+      } catch {
+        /* already gone */
+      }
+      source = null;
       void connect();
     },
     close(): void {
