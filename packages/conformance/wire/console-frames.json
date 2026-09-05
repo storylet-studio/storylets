@@ -1,0 +1,199 @@
+[
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/hello",
+      "bearer": "producer",
+      "body": {}
+    }
+  },
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/stream-ticket",
+      "bearer": "producer",
+      "body": {
+        "monitor": true
+      }
+    }
+  },
+  {
+    "out": {
+      "method": "GET",
+      "path": "/v1/events?t=ticket-1",
+      "bearer": "ticket"
+    }
+  },
+  {
+    "in": {
+      "type": "visit",
+      "flow": "party-2",
+      "installation": "the-caretaker",
+      "visit": "visit-3",
+      "phase": "opened",
+      "id": "1",
+      "at": "2025-08-24T01:46:40.000Z"
+    }
+  },
+  {
+    "out": {
+      "method": "GET",
+      "path": "/v1/console/runs?installation=the-caretaker&limit=2",
+      "bearer": "producer"
+    }
+  },
+  {
+    "out": {
+      "method": "GET",
+      "path": "/v1/console/visits/visit-3/lens?log=5",
+      "bearer": "producer"
+    }
+  },
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/console/visits/visit-3/play",
+      "bearer": "producer",
+      "idempotencyKey": "key-1",
+      "body": {
+        "visit": "visit-3",
+        "card": "who-let-you-in",
+        "outcome": "say-nothing",
+        "hand": "at-the-door"
+      }
+    }
+  },
+  {
+    "in": {
+      "type": "board",
+      "flow": "party-2",
+      "installation": "the-caretaker",
+      "visit": "visit-3",
+      "board": {
+        "at-the-door": [
+          {
+            "id": "the-key-under-the-mat",
+            "title": "The key under the mat",
+            "purpose": "The scarce thing. Only the first party gets it.",
+            "fields": {
+              "prompt": "Hand over the key, once."
+            }
+          }
+        ],
+        "at-the-window": [
+          {
+            "id": "the-weather-outside",
+            "title": "The weather outside",
+            "purpose": "A beat that reads differently by phase.",
+            "fields": {
+              "prompt": "Describe the weather as it is right now."
+            }
+          }
+        ],
+        "at-the-table": [
+          {
+            "id": "what-you-brought",
+            "title": "What you brought",
+            "purpose": "Pays off whatever the door put in the pocket.",
+            "fields": {
+              "prompt": "Ask what they picked up on the way in."
+            }
+          }
+        ]
+      },
+      "turns": {
+        "room": 1
+      },
+      "at": "2025-08-24T01:46:40.000Z",
+      "id": "2"
+    }
+  },
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/console/world",
+      "bearer": "producer",
+      "idempotencyKey": "key-2",
+      "body": {
+        "installation": "the-caretaker",
+        "path": "world.time_phase",
+        "value": "evening"
+      }
+    }
+  },
+  {
+    "in": {
+      "type": "world",
+      "installation": "the-caretaker",
+      "path": "world.time_phase",
+      "value": "evening",
+      "prev": "afternoon",
+      "actor": {
+        "kind": "producer",
+        "label": "Priya (producer)"
+      },
+      "id": "3",
+      "at": "2025-08-24T01:46:40.000Z"
+    }
+  },
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/console/runs/run-1/pause",
+      "bearer": "producer",
+      "idempotencyKey": "key-3",
+      "body": {
+        "run": "run-1"
+      }
+    }
+  },
+  {
+    "in": {
+      "type": "run",
+      "phase": "paused",
+      "run": {
+        "run": "run-1",
+        "build": {
+          "project": "this-room",
+          "version": "0.1.0",
+          "hash": "0roomhash"
+        },
+        "seed": 7,
+        "startedAt": "2025-08-24T01:46:40.000Z",
+        "state": "paused"
+      },
+      "id": "4",
+      "at": "2025-08-24T01:46:40.000Z"
+    }
+  },
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/console/runs/run-1/resume",
+      "bearer": "producer",
+      "idempotencyKey": "key-4",
+      "body": {
+        "run": "run-1"
+      }
+    }
+  },
+  {
+    "in": {
+      "type": "run",
+      "phase": "resumed",
+      "run": {
+        "run": "run-1",
+        "build": {
+          "project": "this-room",
+          "version": "0.1.0",
+          "hash": "0roomhash"
+        },
+        "seed": 7,
+        "startedAt": "2025-08-24T01:46:40.000Z",
+        "state": "live"
+      },
+      "id": "5",
+      "at": "2025-08-24T01:46:40.000Z"
+    }
+  }
+]

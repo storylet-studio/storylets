@@ -1,0 +1,28 @@
+{
+  "schema": "storylets/wire-fixture@1",
+  "wire": "storyletengine/wire@1",
+  "base": "http://venue.local",
+  "producerKey": "producer-key",
+  "note": "A small console session: hello as a producer, a monitor stream, a party on the floor to look at, a page of runs, one flow's lens, a force-play on that flow, a world write, and a Hold with its Resume. The monitor stream carries what each of those pushed back, including the world and visit events. Driven through @storylet-studio/client, whose test writes console-frames.json beside this file.",
+  "steps": [
+    { "op": "hello" },
+    { "op": "monitor" },
+    { "op": "seedVisit", "installation": "the-caretaker" },
+    { "op": "runs.list", "installation": "the-caretaker", "limit": 2 },
+    { "op": "visits.lens", "log": 5 },
+    {
+      "op": "visits.forcePlay",
+      "card": "who-let-you-in",
+      "outcome": "say-nothing",
+      "hand": "at-the-door"
+    },
+    {
+      "op": "world.write",
+      "installation": "the-caretaker",
+      "path": "world.time_phase",
+      "value": "evening"
+    },
+    { "op": "runs.hold", "run": "run-1" },
+    { "op": "runs.resume", "run": "run-1" }
+  ]
+}

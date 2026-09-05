@@ -40,13 +40,18 @@ export interface FetchResponse {
 
 /** How a request is described by everything above this file. */
 export interface Call {
-  method: "GET" | "POST" | "DELETE";
-  /** Below `/v1`: `/hello`, `/visits/abc/play`. Segments must be encoded by
-   *  the caller through {@link seg}. */
+  /** `PUT` and `PATCH` are the console's (wire 6.5): a cue list and a binding
+   *  are put whole, and a pocket, a location, an installation and a
+   *  principal's label are patched. The station and party API uses neither. */
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  /** Below `/v1`: `/hello`, `/visits/abc/play`, `/console/runs`. Segments must
+   *  be encoded by the caller through {@link seg}. */
   path: string;
   /** Query parameters. `undefined` values are dropped, so a caller need not
-   *  build the object conditionally. */
-  query?: Record<string, string | number | undefined>;
+   *  build the object conditionally. A boolean rides as `true`/`false`, which
+   *  is what the console's list filters (`idle`, `claimed`, `open`,
+   *  `revoked`) are. */
+  query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
   /** A mutation's key. Present means the header is sent; the same key on a
    *  retry is the whole point of the queue. */
@@ -75,7 +80,7 @@ export interface Transport {
   send<T>(bearer: Bearer, call: Call): Promise<T>;
   /** The absolute URL for a path, which the stream needs to hand to an
    *  `EventSource` rather than to `fetch`. */
-  url(path: string, query?: Record<string, string | number | undefined>): string;
+  url(path: string, query?: Record<string, string | number | boolean | undefined>): string;
 }
 
 /** Trim one trailing slash so `https://venue/` and `https://venue` behave the
@@ -88,7 +93,7 @@ export function createTransport(opts: TransportOptions): Transport {
   const doFetch: FetchLike | undefined = opts.fetch
     ?? (globalThis as { fetch?: FetchLike }).fetch?.bind(globalThis);
 
-  const url = (path: string, query?: Record<string, string | number | undefined>): string => {
+  const url = (path: string, query?: Record<string, string | number | boolean | undefined>): string => {
     const parts: string[] = [];
     for (const [k, v] of Object.entries(query ?? {})) {
       if (v === undefined) continue;

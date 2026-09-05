@@ -3,10 +3,15 @@
 //
 // LAYER 2 of the four (design/engine-server.md section 12). The wire is the
 // types; this is the behaviour every front-end needs and none of them should
-// write twice: the transport, the two bearers, the visit as an observable
+// write twice: the transport, the three bearers, the visit as an observable
 // state machine, the event stream with replay and reconnect, degraded mode,
 // and an idempotent command queue. No DOM, no framework, no opinion about
 // pixels. Browser and Node 22.
+//
+// THREE BEARERS, three interfaces: a station VOUCHES, a party HOLDS, and a
+// producer DRIVES (6.4, 6.5). The third is the console's, and it is the one
+// that does not queue: see producer.ts for why a held command would be worse
+// on that screen than a failed one.
 //
 // The rule this exists for: **the thinner the UI we expect to survive, the
 // thicker the layer beneath it must be.** A venue's agency rebuilds a kiosk
@@ -25,6 +30,8 @@
 import type { HelloResponse } from "@storylet-studio/wire";
 import { createPartyConnection, createStationConnection } from "./connection.js";
 import type { PartyConnection, StationConnection } from "./connection.js";
+import { createProducerConnection } from "./producer.js";
+import type { ProducerConnection } from "./producer.js";
 import { defaultKeys } from "./queue.js";
 import type { Timers } from "./queue.js";
 import type { EventSourceCtor } from "./stream.js";
@@ -33,6 +40,15 @@ import type { FetchLike } from "./transport.js";
 
 export { ClientError, OFFLINE } from "./errors.js";
 export type { ClientErrorCode } from "./errors.js";
+export { MONITOR_TIMELINE_CAP } from "./monitor.js";
+export type { Monitor, TimelineEntry, WireEventOf } from "./monitor.js";
+export { walkPages } from "./paging.js";
+export { CLOCK_PREFIX, GO_CUE } from "./producer.js";
+export type {
+  BindingsDesk, BridgesDesk, BundlesDesk, CredentialsDesk, CuesDesk, DurableDesk, HouseDesk,
+  InstallationsDesk, LocationsDesk, PartiesDesk, PrincipalsDesk, ProducerConnection,
+  ProducerMessageDesk, RunsDesk, StationsDesk, VenueDesk, VisitsDesk, WorldDesk,
+} from "./producer.js";
 export { QUEUE_BACKOFF_MS, QUEUE_CAP } from "./queue.js";
 export type { CommandQueue, Timers } from "./queue.js";
 export { LAST_EVENT_ID_PARAM, STREAM_BACKOFF_MS } from "./stream.js";
@@ -88,6 +104,16 @@ export interface Client {
    *  same as none, so a page reading an empty `localStorage` need not think
    *  about it. */
   connectParty(token?: string): PartyConnection;
+  /** Act as a producer: the person running the show, holding a producer
+   *  principal's key, or an integrator or monitor key for the read-only
+   *  subset of the same surface (spec 6.5, 7.5).
+   *
+   *  It DRIVES rather than plays: other people's runs, visits, parties and
+   *  world, the venue's locations and stations, the builds, the bridges and
+   *  the messages. It has no visit of its own, and its commands are never
+   *  queued: a producer's action either happened or was refused, and the
+   *  console says which (see producer.ts). */
+  connectProducer(key: string): ProducerConnection;
 }
 
 export function createClient(opts: ClientOptions): Client {
@@ -120,6 +146,9 @@ export function createClient(opts: ClientOptions): Client {
       // an anonymous phone look like a party holding an empty token, which is
       // a lie to the server and a lie in the frames fixture.
       return createPartyConnection({ ...shared, bearer: token === "" ? undefined : token });
+    },
+    connectProducer(producerKey: string): ProducerConnection {
+      return createProducerConnection({ ...shared, bearer: producerKey });
     },
   };
 }

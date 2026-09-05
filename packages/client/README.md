@@ -30,18 +30,60 @@ queueing of a play pressed during a wifi blip. What it replaces is the pixels.
 No DOM, no framework, no dependency but `@storylet-studio/wire` (types) and
 `@storylet-studio/model` (one scalar type). Browser and Node 22.
 
-## Two bearers, two interfaces
+## Three bearers, three interfaces
 
-The wire gives a station key and a party token, and they are not the same
-thing. A **station** holds hardware the venue owns, and it VOUCHES: it may
-mint parties, resolve a call sign, bind a wristband, issue credentials and
-report presence. A **party** is a phone, and it HOLDS: it may scan a placard,
-pick a story and claim its own pocket, and nothing else.
+The wire gives a station key, a party token and a producer key, and they are
+not the same thing. A **station** holds hardware the venue owns, and it
+VOUCHES: it may mint parties, resolve a call sign, bind a wristband, issue
+credentials and report presence. A **party** is a phone, and it HOLDS: it may
+scan a placard, pick a story and claim its own pocket, and nothing else. A
+**producer** is the person running the show, and it DRIVES: other people's
+runs, visits, parties and world, the venue's locations and stations, the
+builds, the bridges and the messages.
 
 That is a type here, not a convention. `connectParty(token)` has no
-`handshake`, so a companion page cannot present a call sign it overheard, and
+`handshake`, so a companion page cannot present a call sign it overheard;
 `connectStation(key)` has no `chooseInstallation`, because a device does not
-choose a visitor's story.
+choose a visitor's story; and `connectProducer(key)` has no `visit` of its
+own, because a producer never plays.
+
+## The producer
+
+`connectProducer(key)` is the console API (spec 6.5), grouped as the wire
+groups it, and it takes an integrator or monitor key just as happily for the
+read-only subset.
+
+```ts
+const producer = client.connectProducer(key);
+
+await producer.runs.go({ installation });          // GO is a cue without a time
+const roster = await producer.visits.list({ installation });
+const lens = await producer.visits.lens(roster.items[0].visit);
+await producer.world.write({ installation, path: "world.time_phase", value: "act-two" });
+```
+
+Every list is `{ cursor, limit }` in and `{ items, next }` out, and
+`walkPages` walks one:
+
+```ts
+for await (const party of walkPages((at) => producer.parties.list({ installation, ...at }))) { ... }
+```
+
+`producer.monitor` is the stream with monitor scope: everything, flow-tagged,
+with a typed subscription per event kind (`onWorld`, `onVisit`, `onBoard`, ...)
+and a merged `timeline` a console renders as one list. It does NOT open by
+itself, unlike a station's: a producer key is as often an integrator firing one
+command from a show-control cue as it is a console with a timeline on it, so
+the console calls `monitor.start()` when it wants the scope.
+
+**A producer is never in degraded mode's held state.** A station's commands
+queue through a wifi blip on purpose, because a play must land exactly once and
+the person pressing it should never know. The console is the opposite case: it
+is the place where what happened has to be true, so a producer's command either
+happened or was refused, and the console says which. A blip rejects with
+`offline` at status 0, which is the console's cue to re-read rather than press
+again. The one thing that still holds is `monitor.connection`, and it is saying
+the TIMELINE is stale, never that a command is waiting.
 
 ## The visit is a state machine
 
@@ -118,9 +160,9 @@ fixture full of random keys is a fixture nobody can review.
 
 `test/fake-server.ts` is a fake Storylet Server built on the wire's own types:
 a consumer of the one definition, never a second one. The client's own test
-drives a scripted session through it and writes
-`packages/conformance/wire/frames.json`, which the server's suite replays.
-Regenerate with:
+drives two scripted sessions through it, a station's and a producer's, and
+writes `packages/conformance/wire/frames.json` and `console-frames.json`,
+which the server's suite replays. Regenerate both with:
 
 ```sh
 npx vitest run packages/client/test/wire-fixture.test.ts -u

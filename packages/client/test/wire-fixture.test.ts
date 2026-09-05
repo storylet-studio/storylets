@@ -1,5 +1,12 @@
 // ---------------------------------------------------------------------------
-// The shared wire fixture (packages/conformance/wire/), spec 6.1 and 13.
+// The shared wire fixtures (packages/conformance/wire/), spec 6.1 and 13.
+//
+// TWO SCRIPTS, one per bearer that has a session worth pinning: `script.json`
+// is a STATION's (6.4), and `console-script.json` is a PRODUCER's (6.5), with
+// its monitor stream. They are separate files rather than one longer one
+// because a server implementation may well have the station API working weeks
+// before the console does, and a fixture that fails as a lump tells it
+// nothing about which.
 //
 // The same idiom as `packages/conformance/live-link/`, one product up: a
 // SCRIPT of client actions, committed by hand, and the FRAMES that script
@@ -55,7 +62,35 @@ type Frame =
   | { out: { method: string; path: string; bearer: string; idempotencyKey?: string; body?: unknown } }
   | { in: WireEvent };
 
+/** The producer's session. `seedVisit` is the harness's step, as `emit` is:
+ *  the console watches a floor somebody else is standing on, so the fixture
+ *  puts a party there rather than pretending a producer minted one. The steps
+ *  that follow it act on the visit it seeded, which is why none of them names
+ *  an id: an id in a script is an id that goes stale. */
+type ConsoleStep =
+  | { op: "hello" }
+  | { op: "monitor" }
+  | { op: "seedVisit"; installation?: string }
+  | { op: "runs.list"; installation: string; limit?: number }
+  | { op: "visits.lens"; log?: number }
+  | { op: "visits.forcePlay"; card: string; outcome: string; hand: string }
+  | { op: "world.write"; installation: string; path: string; value: string }
+  | { op: "runs.hold"; run: string }
+  | { op: "runs.resume"; run: string };
+
+interface ConsoleScript {
+  schema: "storylets/wire-fixture@1";
+  wire: string;
+  base: string;
+  producerKey: string;
+  note?: string;
+  steps: ConsoleStep[];
+}
+
 const script = JSON.parse(readFileSync(new URL("script.json", FIXTURE_DIR), "utf8")) as Script;
+const consoleScript = JSON.parse(
+  readFileSync(new URL("console-script.json", FIXTURE_DIR), "utf8"),
+) as ConsoleScript;
 
 const settle = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0); });
 
@@ -160,6 +195,99 @@ async function replay(): Promise<Frame[]> {
   return frames;
 }
 
+/** Run the console script, recording every frame in the order it crossed the
+ *  wire. The same recording apparatus as above, one bearer along. */
+async function replayConsole(): Promise<Frame[]> {
+  const server = createFakeServer({ base: consoleScript.base, producerKey: consoleScript.producerKey });
+  const timers = manualTimers();
+  const frames: Frame[] = [];
+
+  const recording: FetchLike = (url, init) => {
+    const idem = init.headers["Idempotency-Key"];
+    frames.push({
+      out: {
+        method: init.method,
+        path: url.startsWith(consoleScript.base) ? url.slice(consoleScript.base.length) : url,
+        bearer: init.headers["Authorization"] === undefined ? "none" : "producer",
+        ...(idem !== undefined ? { idempotencyKey: idem } : {}),
+        ...(init.body !== undefined ? { body: JSON.parse(init.body) as unknown } : {}),
+      },
+    });
+    return server.fetch(url, init);
+  };
+
+  const Recorded: EventSourceCtor = class implements EventSourceLike {
+    private readonly inner: EventSourceLike;
+    constructor(url: string) {
+      frames.push({
+        out: {
+          method: "GET",
+          path: url.startsWith(consoleScript.base) ? url.slice(consoleScript.base.length) : url,
+          bearer: "ticket",
+        },
+      });
+      this.inner = new server.EventSource(url);
+    }
+    addEventListener(type: "open" | "error", listener: () => void): void;
+    addEventListener(type: "message", listener: (ev: { data: unknown; lastEventId?: string }) => void): void;
+    addEventListener(type: string, listener: (arg: never) => void): void {
+      (this.inner.addEventListener as (t: string, l: (arg: never) => void) => void)(type, listener);
+    }
+    close(): void { this.inner.close(); }
+  };
+
+  const client = createClient({
+    base: consoleScript.base,
+    fetch: recording,
+    EventSource: Recorded,
+    timers,
+    newIdempotencyKey: (() => { let n = 0; return () => `key-${++n}`; })(),
+  });
+  const producer = client.connectProducer(consoleScript.producerKey);
+  producer.monitor.on((event) => frames.push({ in: event }));
+
+  let visit = "";
+  for (const step of consoleScript.steps) {
+    switch (step.op) {
+      case "hello":
+        await producer.hello();
+        break;
+      case "monitor":
+        // Nothing opens by itself for a producer: an integrator key would be
+        // refused monitor scope, so the console asks for it when it wants it.
+        producer.monitor.start();
+        break;
+      case "seedVisit":
+        visit = server.seedVisit(step.installation !== undefined ? { installation: step.installation } : {});
+        break;
+      case "runs.list":
+        await producer.runs.list({
+          installation: step.installation,
+          ...(step.limit !== undefined ? { limit: step.limit } : {}),
+        });
+        break;
+      case "visits.lens":
+        await producer.visits.lens(visit, step.log);
+        break;
+      case "visits.forcePlay":
+        await producer.visits.forcePlay({ visit, card: step.card, outcome: step.outcome, hand: step.hand });
+        break;
+      case "world.write":
+        await producer.world.write({ installation: step.installation, path: step.path, value: step.value });
+        break;
+      case "runs.hold":
+        await producer.runs.hold(step.run);
+        break;
+      case "runs.resume":
+        await producer.runs.resume(step.run);
+        break;
+    }
+    await settle();
+  }
+  producer.close();
+  return frames;
+}
+
 describe("the wire fixture", () => {
   it("the script is the schema it claims, and the protocol this package speaks", () => {
     expect(script.schema).toBe("storylets/wire-fixture@1");
@@ -199,6 +327,67 @@ describe("the wire fixture", () => {
 
   it("is small enough to read, which is what makes it a contract", async () => {
     const frames = await replay();
+    expect(frames.length).toBeLessThan(40);
+  });
+});
+
+describe("the console fixture", () => {
+  it("the script is the schema it claims, and the protocol this package speaks", () => {
+    expect(consoleScript.schema).toBe("storylets/wire-fixture@1");
+    expect(consoleScript.wire).toBe("storyletengine/wire@1");
+  });
+
+  it("console-frames.json is what the client sends and consumes for console-script.json (regenerate with -u)", async () => {
+    const frames = await replayConsole();
+    await expect(JSON.stringify(frames, null, 2) + "\n")
+      .toMatchFileSnapshot(fileURLToPath(new URL("console-frames.json", FIXTURE_DIR)));
+  });
+
+  it("records the bearer by kind, so no producer key can ever reach the fixture", async () => {
+    const frames = await replayConsole();
+    const text = JSON.stringify(frames);
+    expect(text).not.toContain(consoleScript.producerKey);
+    expect(text).not.toContain("Bearer ");
+  });
+
+  it("every console mutation carries a key, and the two pure POSTs are not mutations", async () => {
+    const frames = await replayConsole();
+    const out = frames.flatMap((f) => ("out" in f ? [f.out] : []));
+    // `hello` and `stream-ticket` change nothing, and neither do the console's
+    // own two pure POSTs: the print sheet hands over addresses and the swap
+    // preview is a report against a run it does not touch.
+    const readOnlyPosts = new Set([
+      "/v1/hello",
+      "/v1/stream-ticket",
+      "/v1/console/venue/locations/print",
+    ]);
+    for (const call of out) {
+      if (call.method === "GET" || readOnlyPosts.has(call.path)) continue;
+      expect(call.idempotencyKey, call.path).toBeTruthy();
+    }
+  });
+
+  it("asks for monitor scope on the ticket, which is the whole of the scope", async () => {
+    const frames = await replayConsole();
+    const out = frames.flatMap((f) => ("out" in f ? [f.out] : []));
+    const ticket = out.find((c) => c.path === "/v1/stream-ticket");
+    expect(ticket?.body).toEqual({ monitor: true });
+    expect(out.filter((c) => c.path.startsWith("/v1/events"))).toHaveLength(1);
+  });
+
+  it("carries the world and the visit back down the stream, flow-tagged", async () => {
+    const frames = await replayConsole();
+    const events = frames.flatMap((f) => ("in" in f ? [f.in] : []));
+    const world = events.find((e) => e.type === "world");
+    expect(world).toMatchObject({ path: "world.time_phase", value: "evening" });
+    // Monitor scope sees a flow it does not hold the token for, which is the
+    // one thing a station's stream must never do.
+    expect(events.find((e) => e.type === "visit")).toMatchObject({ phase: "opened" });
+    expect(events.some((e) => e.type === "board")).toBe(true);
+  });
+
+  it("is small enough to read, which is what makes it a contract", async () => {
+    const frames = await replayConsole();
     expect(frames.length).toBeLessThan(40);
   });
 });

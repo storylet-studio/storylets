@@ -4,6 +4,13 @@ The contract for the Storylet Server's protocol (`storyletengine/wire@1`,
 design/engine-server.md sections 6.1 and 13): a scripted client session, and
 the exact frames it produces.
 
+**There are two pairs**, one per bearer with a session worth pinning:
+`script.json` / `frames.json` is a STATION's (6.4), and `console-script.json` /
+`console-frames.json` is a PRODUCER's (6.5), with its monitor stream. Two
+files rather than one longer one, because an implementation may well have the
+station API working weeks before the console does, and a fixture that fails as
+a lump says nothing about which.
+
 The same idiom as [`../live-link/`](../live-link/), one product up. The corpus
 itself stays network-free; this pair is where the network is pinned.
 
@@ -57,6 +64,42 @@ Every frame, in order, as a JSON array. Each entry is one of:
 Everything in it is deterministic: the `Idempotency-Key` minter is a counter
 (`key-1`, `key-2`, ...), the fake server's ids and tickets are counters, and
 its clock is one fixed instant.
+
+## `console-script.json` and `console-frames.json`
+
+The producer's half (6.5), in the same two shapes. `producerKey` is the key
+the console connects with, and `bearer` on a frame is `producer` or `ticket`.
+Its steps:
+
+- `hello` - as the producer, which is a bearer the venue's own console holds
+  as a session.
+- `monitor` - open the monitor stream. It does NOT open by itself: a producer
+  key is as often an integrator firing one command as it is a console with a
+  timeline on it, so the console asks for the scope when it wants it, and the
+  ticket body is `{ "monitor": true }`.
+- `seedVisit` (`installation?`) - the HARNESS's step, as `emit` is: a console
+  watches a floor somebody else is standing on, so the fixture puts a party
+  there rather than pretending a producer minted one. The steps after it act
+  on the visit it seeded, which is why none of them names an id.
+- `runs.list` (`installation`, `limit?`) - one page of runs.
+- `visits.lens` (`log?`) - that flow's board, properties and log.
+- `visits.forcePlay` (`card`, `outcome`, `hand`) - playing on a party's behalf.
+- `world.write` (`installation`, `path`, `value`) - a producer write, which is
+  allowed over `writable: false` because that flag protects a property from
+  outcomes and not from the person running the show (5.6).
+- `runs.hold` (`run`) and `runs.resume` (`run`) - the Hold and its Resume,
+  which is what the clocks are derived from (10.2).
+
+Two properties are visible in these frames and nowhere else:
+
+- **Monitor scope sees a flow the bearer holds no token for.** The `visit` and
+  `board` events in `console-frames.json` belong to a party the console never
+  authenticated as, which is exactly what a station's stream must never
+  receive.
+- **A producer's mutation is never queued.** Every `out` frame here is a
+  command that went straight out: there is no held state on this identity,
+  because a producer's action either happened or was refused and the console
+  says which.
 
 ## What a server implementation does with it
 
