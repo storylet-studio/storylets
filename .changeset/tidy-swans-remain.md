@@ -1,7 +1,5 @@
 ---
 "@storylet-studio/model": minor
-"@storylet-studio/compiler": minor
-"@storylet-studio/runtime": minor
 ---
 
 The durability axis: `durable` on a declaration, a deck and a card (design/engine-server.md 4.2).

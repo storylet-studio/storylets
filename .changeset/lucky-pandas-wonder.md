@@ -1,7 +1,5 @@
 ---
 "@storylet-studio/model": minor
-"@storylet-studio/compiler": minor
-"@storylet-studio/ops": minor
 ---
 
 The play ladder: one project setting that decides how much of the editor you see (design/engine-server.md 4.10).

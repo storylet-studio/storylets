@@ -1,7 +1,5 @@
 ---
 "@storylet-studio/model": minor
-"@storylet-studio/compiler": minor
-"@storylet-studio/ops": minor
 ---
 
 Hand positions in the bundle's `maps` block (design/engine-server.md 4.3).

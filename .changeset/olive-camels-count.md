@@ -1,8 +1,5 @@
 ---
 "@storylet-studio/model": minor
-"@storylet-studio/compiler": minor
-"@storylet-studio/runtime": minor
-"@storylet-studio/ops": minor
 ---
 
 A box that counts in time: `turn: { seconds: N }` (design/engine-server.md 4.8).

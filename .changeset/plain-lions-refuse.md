@@ -1,7 +1,5 @@
 ---
 "@storylet-studio/model": minor
-"@storylet-studio/compiler": minor
-"@storylet-studio/ops": minor
 ---
 
 The installation contract: what an author may not break (design/engine-server.md 4.11, net 1).
