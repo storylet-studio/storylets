@@ -957,11 +957,12 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
 }
 
 // Read-only @world with a HOST resolver bound (Reboot.md 10). The corpus case of
-// this name pins the self-backed path, where @world is the engine's stand-in bag,
-// the shared kernel, which keeps `writable` for every caller. A game that binds
-// its own resolver takes the engine's writes straight, and only the engine's own
-// check stands between a story and the host: this is the one place that check is
-// exercised. Same probe in the JS, C# and Godot harnesses.
+// this name pins the self-backed path, where @world is the engine's stand-in bag:
+// it keeps the declaration, and the host's own surface writes past it with the
+// kernel's host flag. A game that binds its own resolver takes the engine's writes
+// straight, and only the engine's own check stands between a story and the host:
+// this is the one place that check is exercised. Same probe in the JS, C# and
+// Godot harnesses.
 static std::vector<std::string> runReadOnlyWorldProbe(const JsonValue& c)
 {
     std::vector<std::string> failures;
@@ -985,6 +986,31 @@ static std::vector<std::string> runReadOnlyWorldProbe(const JsonValue& c)
     return failures;
 }
 
+// The SELF-BACKED @world, examined: no corpus op reads an examiner row, so the half
+// the Patter brief called the point of the flag - the declaration still showing as
+// read-only after the game has written it - is asserted here, and in the other three
+// runtimes' harnesses.
+static std::vector<std::string> runSelfWorldExaminer(const JsonValue& c)
+{
+    std::vector<std::string> failures;
+    EngineOptions opts;
+    Engine engine(ParseBundle(c.at("bundle")), opts);
+    auto rowFor = [&engine](const std::string& path) -> std::optional<PropertyRow> {
+        for (const auto& r : engine.listProperties()) if (r.path == path) return r;
+        return std::nullopt; };
+    std::optional<PropertyRow> clock = rowFor("world.clock");
+    std::optional<PropertyRow> mood = rowFor("world.mood");
+    if (!clock || !mood) { failures.push_back("self-backed examiner: no row for world.clock/world.mood"); return failures; }
+    if (clock->writable) failures.push_back("self-backed examiner: world.clock did not report writable: false");
+    if (!mood->writable) failures.push_back("self-backed examiner: world.mood reported read-only");
+    try { engine.setProperty("world.clock", StoryletValue::Num(5)); }
+    catch (const StoryletError& ex) { failures.push_back(std::string("self-backed examiner: the game's own setProperty was refused: ") + ex.what()); }
+    std::optional<PropertyRow> after = rowFor("world.clock");
+    if (!after || !after->value.valueEquals(StoryletValue::Num(5))) failures.push_back("self-backed examiner: the host's write did not land");
+    if (after && after->writable) failures.push_back("self-backed examiner: a host write made the declaration writable");
+    return failures;
+}
+
 static int runScripted(const JsonValue& cases)
 {
     int pass = 0;
@@ -998,6 +1024,8 @@ static int runScripted(const JsonValue& cases)
             {
                 std::vector<std::string> extra = runReadOnlyWorldProbe(c);
                 failures.insert(failures.end(), extra.begin(), extra.end());
+                std::vector<std::string> rows = runSelfWorldExaminer(c);
+                failures.insert(failures.end(), rows.begin(), rows.end());
             }
             if (failures.empty()) ++pass;
             else for (const auto& f : failures) fail("scripted", name, f);
@@ -1359,6 +1387,9 @@ static int runExprRegistry(const JsonValue& cases)
         const std::string setName = c.at("set").strOr("name");
         const StoryletValue value = bundleloader::ToValue(c.at("set").at("value"));
         const bool expectError = c.boolOr("expectError");
+        // The case says whether the write is the HOST's: `writable: false` is the
+        // story's promise, and the game is never bound by it.
+        const bool host = c.boolOr("host");
         const StoryletValue expected = bundleloader::ToValue(c.at("expected"));
 
         std::optional<std::string> error;
@@ -1368,7 +1399,7 @@ static int runExprRegistry(const JsonValue& cases)
             if (!jsonHas(c, "scope"))
             {
                 PropertyBag bag(&decls);
-                try { bag.set(setName, value); } catch (const std::exception& ex) { error = ex.what(); }
+                try { bag.set(setName, value, /*silent=*/false, "", host); } catch (const std::exception& ex) { error = ex.what(); }
                 readBack = bag.get(setName);
             }
             else
@@ -1379,7 +1410,7 @@ static int runExprRegistry(const JsonValue& cases)
                 bool scopeWritable = jsonHas(scope, "writable") ? scope.at("writable").b : true;
                 ScopeRegistry registry;
                 registry.defineForeign("s", std::make_shared<RecordResolver>(store), &decls, scopeWritable);
-                try { registry.set("s", setName, value); } catch (const std::exception& ex) { error = ex.what(); }
+                try { registry.set("s", setName, value, host); } catch (const std::exception& ex) { error = ex.what(); }
                 readBack = registry.get("s", setName);
             }
         }

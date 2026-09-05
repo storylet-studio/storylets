@@ -9,6 +9,7 @@ import { cpSync, mkdirSync, mkdtempSync, existsSync, readFileSync, rmSync, write
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { canonicalStringify, parseSource } from "@storylet-studio/ops";
 import { run } from "../src/main.js";
 
 const exampleDir = fileURLToPath(new URL("../../../examples/saltmarsh.storylets", import.meta.url));
@@ -288,6 +289,24 @@ describe("asks against the saltmarsh example", () => {
       "--where", "area=docks", "--set", "value.v_docks.danger=3", "--deal-all"));
     expect(r.code).toBe(0);
     expect(r.out).toEqual(['1. mysterious-stranger  "The mysterious stranger"']);
+  });
+
+  it("--set writes a read-only @world property: the promise binds the story, not the host", async () => {
+    // Reboot.md 10. The declaration says the STORY never writes @world.danger;
+    // `--set` is the host speaking, and a host tool that cannot set the value
+    // it is testing against is no use. Rewritten through the parser and the
+    // canonical formatter, never by patching the shard text.
+    const dir = join(mkdtempSync(join(tmpdir(), "storyletengine-readonly-")), "copy.storylets");
+    cpSync(exampleDir, dir, { recursive: true });
+    const projPath = join(dir, "saltmarsh.storyletproj");
+    const shard = parseSource(readFileSync(projPath, "utf8")) as
+      { world: { properties: { name: string }[] } };
+    for (const d of shard.world.properties) if (d.name === "danger") Object.assign(d, { writable: false });
+    writeFileSync(projPath, canonicalStringify(shard));
+
+    const r = (await call("deal", "docks-street", dir, "--set", "world.danger=3"));
+    expect(r.code).toBe(0);
+    expect(r.err).toEqual([]);
   });
 
   it("an unknown hand reports and exits 1", async () => {

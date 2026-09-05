@@ -22,6 +22,8 @@ the same version number always means the same runtime behaviour.
 
 ### Changed
 
+- **Read-only `@world` properties honour the game's own writes** (2026-09-05). `writable: false` on a `@world` declaration is the STORY's promise not to write that value, so it binds an outcome and nobody else: `set_property` on the engine and on a flow passes the kernel's `{"host": true}` (in every scope, not just `@world`) and is never refused, while an outcome is still refused against the engine's read-only table before the write reaches a bag or a bound resolver. `StoryletScopeRegistry.set_value` takes the same option, `StoryletEngine.world_set` / `world_can_set` are the seam the flows write through, and the engine's own `list_properties` now carries `writable` on its `world.*` rows, which only the flow's rows had. Parity with the JS runtime.
+
 - **BREAKING: `load_game` returns the load report Dictionary, not an error String.** It answers with the same report `preview_load` gives, and refuses a save for another project the way the rest of the addon refuses things: `{}` and a `push_error`. `StoryletSave.load_state` and `StoryletLiveLink.apply_live_bundle` still report a foreign project by message, asked for by name before the load.
 
 - **A load now prunes what it reports**: a property the build no longer declares, a cooldown or spent entry for a deleted card, and a saved value that no longer fits its declaration (a struck-out enum value, an edited quality ladder) are dropped rather than carried, and named in the report.

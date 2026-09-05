@@ -779,6 +779,14 @@ export const fixtures: Fixtures = {
     // be hand-built (this one is), and because Patter's runtime refuses the
     // same write through the shared kernel: an integrator running both must
     // see one behaviour. The HOST is not bound: setState still lands.
+    //
+    // Which is the half this case used to duck. The promise is the story's, so
+    // it is kept where the story writes (applyWrite) and NOWHERE else, and the
+    // host's own surface - setProperty, the coverage harness, the CLI's --set -
+    // says so to the shared kernel with `{ host: true }` (scoperegistry 0.6.0),
+    // which a `writable: false` was never a rule for. The declaration stays as
+    // declared everywhere, so an examiner still reports it read-only; no script
+    // op reads a row, so that half is asserted in each runtime's own tests.
     { name: "an outcome may not write a read-only @world property; the host still may",
       world: [
         { name: "clock", type: "number", default: 0, writable: false },
@@ -787,16 +795,21 @@ export const fixtures: Fixtures = {
       cards: [
         { id: "c_tick", outcomes: [{ id: "o_tick", changes: { "@world.clock": "@world.clock + 1" } }] },
         { id: "c_cheer", outcomes: [{ id: "o_cheer", changes: { "@world.mood": "@world.mood + 1" } }] },
+        { id: "c_late", condition: "@world.clock >= 5" },
       ],
       hands: [{ id: "h_q", rule: {} }],
       script: [
-        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_tick", "c_cheer"] } },   // authored order
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_tick", "c_cheer"] } },   // authored order; c_late is gated out
         { op: "play", card: "c_tick", outcome: "tick", from: "h_q", expectError: true },
         { op: "assertState", expect: { "world.clock": 0, "turn.b_x": 0 } },   // refused, so no side effect
-        // (No host write here: the runner binds no resolver, so @world is the
-        // engine's stand-in bag, and the shared kernel keeps a declaration's
-        // writable for EVERY caller. A game that must move a read-only value
-        // binds a resolver, which is its own state and its own rule.)
+        // The host writes the same property the outcome could not, and the
+        // next deal re-gates on the new value.
+        { op: "setState", world: { clock: 5 } },
+        { op: "assertState", expect: { "world.clock": 5 } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_tick", "c_cheer", "c_late"] } },
+        // Still the story's promise, host write or no.
+        { op: "play", card: "c_tick", outcome: "tick", from: "h_q", expectError: true },
+        { op: "assertState", expect: { "world.clock": 5 } },
         { op: "play", card: "c_cheer", outcome: "cheer", from: "h_q" },        // an absent flag is writable
         { op: "assertState", expect: { "world.mood": 1 } },
       ] },

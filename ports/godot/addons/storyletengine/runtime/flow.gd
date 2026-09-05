@@ -1259,16 +1259,18 @@ func _apply_write(target: String, value, entry: Dictionary, hand_env: Dictionary
 	var name := m.get_string(2)
 	match scope:
 		"world":
-			var setter = _engine._world.get("set")
-			if setter == null:
+			if not _engine.world_can_set():
 				return {"error": "@world.%s cannot be written: the host bound @world read-only" % name}
-			# The story's own promise (writable: false on the declaration), kept
-			# at runtime as the compiler keeps it at publish. The host is not bound:
-			# set_property is its own path. Parity with the JS runtime and Patterplay.
+			# The story's own promise (writable: false on the declaration), kept HERE
+			# and only here, because here is where the story does the writing: asked
+			# before the write seam, so an outcome never reaches the bag (which would
+			# let a host write past it) nor a bound resolver (which cannot tell the two
+			# apart). The host is not bound: set_property is its own path. Parity with
+			# the JS runtime and Patterplay.
 			if _engine.world_read_only(name):
 				return {"error": "'@world.%s' is read-only (writable: false)" % name}
 			var prev = (_engine._world["get"] as Callable).call(name)
-			(setter as Callable).call(name, value)
+			_engine.world_set(name, value)
 			var out := {"path": "world.%s" % name}
 			if prev != null:
 				out["prev"] = prev
@@ -1355,8 +1357,9 @@ func list_properties() -> Array:
 			"value": value if value != null else d.get("default"), "default": d.get("default"),
 			# The bag rows carry this from PropertyBag.rows(); the @world rows are built
 			# here by hand and were missing it, so a read-only world property looked
-			# writable to an examiner.
-			"writable": bool(d.get("writable", true))}
+			# writable to an examiner. Whether the resolver can be written at all
+			# counts too, which is the kernel's rule for a foreign scope.
+			"writable": _engine.world_can_set() and not _engine.world_read_only(d["name"])}
 		if d.has("values"):
 			row["values"] = d["values"]
 		if d.has("stages"):
@@ -1416,12 +1419,11 @@ func set_property(path: String, value) -> String:
 		return closed_msg
 	var parts := path.split(".")
 	if parts.size() == 2 and parts[0] == "world":
-		var setter = _engine._world.get("set")
-		if setter == null:
+		if not _engine.world_can_set():
 			var msg := "@world is read-only here: the host bound no write"
 			push_error("StoryletFlow.set_property: " + msg)
 			return msg
-		(setter as Callable).call(parts[1], value)
+		_engine.world_set(parts[1], value, true)
 		return ""
 	var kind := ""
 	var owner_id = null
@@ -1452,7 +1454,9 @@ func set_property(path: String, value) -> String:
 		var none := 'no property at "%s"' % path
 		push_error("StoryletFlow.set_property: " + none)
 		return none
-	var change: Dictionary = (bag as StoryletPropertyBag).set_value(name, value, {"silent": true, "reason": "host setProperty"})
+	# A HOST write: silent under the firing rule, visible to the audit hook, and
+	# flagged host so a `writable: false` does not refuse the game its own value.
+	var change: Dictionary = (bag as StoryletPropertyBag).set_value(name, value, {"silent": true, "reason": "host setProperty", "host": true})
 	if change.has("error"):
 		return change["error"]
 	return ""

@@ -22,6 +22,8 @@ section for it.
 
 ### Changed
 
+- **Read-only `@world` properties honour the game's own writes** (2026-09-05). `writable: false` on a `@world` declaration is the STORY's promise not to write that value, so it binds an outcome and nobody else: `Engine.setProperty` and `Flow.setProperty`, the coverage harness's drivers and the CLI's `deal --set` / `peek --set` now say so with the shared kernel's `{ host: true }` (`@wildwinter/scoperegistry` 0.6.0, in every scope, not just `@world`) and are never refused. An outcome still is, against the engine's own read-only table, which is asked before the write reaches a bag or a bound resolver. A coverage run whose driver moves a read-only clock finishes now instead of dying on the first sweep. The examiner keeps saying what the declaration says: a `world.*` row reports `writable: false` whether or not the game has just written it, which is what a state panel wants the flag for.
+
 - **A load now prunes what it reports.** A property the build no longer declares used to stay in the bag as a stray value and ride the next save; a cooldown or spent entry for a deleted card did the same; a saved value that no longer fits its declaration (a struck-out enum value, an edited quality ladder) used to load anyway. All three are dropped now, and named in the report.
 
 ## [0.4.1] - 2026-09-04

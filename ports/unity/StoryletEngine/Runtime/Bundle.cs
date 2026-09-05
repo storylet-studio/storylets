@@ -116,9 +116,12 @@ namespace StoryletStudio.StoryletEngine
         /// boundary through GetProperty / SetProperty. Never valid on a @world
         /// declaration (the compiler refuses it).</summary>
         public bool? Durable;
-        /// <summary>@world only: false is the story's promise not to write it
-        /// (Reboot.md 10). Absent = writable. Mirrors Patter's HostScopeDecl.Writable.</summary>
-        public bool? Writable;
+        // Writable (@world only: false is the story's promise not to write it,
+        // Reboot.md 10; absent = writable) is the KERNEL's field and is declared
+        // once, on ScopeDeclaration. Re-declaring it here HID the base one: the
+        // loader filled this copy, PropertyBag.Set read the other, and a
+        // read-only declaration refused nothing at all. The compiler said so
+        // (CS0108) for as long as the field existed. Deleted 2026-09-05.
         public string Purpose;
     }
 

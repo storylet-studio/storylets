@@ -1500,7 +1500,7 @@ namespace StoryletStudio.StoryletEngine
             if (parts.Length == 2 && parts[0] == "world")
             {
                 if (!_engine.WorldCanSet) throw new StoryletError("@world is read-only here: the host bound no write");
-                _engine.WorldSet(parts[1], value);
+                _engine.WorldSet(parts[1], value, host: true);
                 return;
             }
             PropertyBag own, shared;
@@ -1527,8 +1527,9 @@ namespace StoryletStudio.StoryletEngine
                 : null;
             if (bag == null) throw new StoryletError($"no property at \"{path}\"");
             // A host write: silent under the firing rule (no subscriber feedback
-            // loop), but visible to the bag's audit hook.
-            bag.Set(name, value, silent: true, reason: "host setProperty");
+            // loop), visible to the bag's audit hook, and flagged HOST so a
+            // Writable == false does not refuse the game its own value.
+            bag.Set(name, value, silent: true, reason: "host setProperty", host: true);
         }
 
         // --- persistence (schema 4) ----------------------------------------------------

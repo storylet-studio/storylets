@@ -230,8 +230,15 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>Write a property (an ENGINE write: the bag's subscribers fire;
         /// use the bag directly for silent host writes). Throws on an unknown or
-        /// read-only scope/property.</summary>
-        public void Set(string scope, string name, StoryletValue value)
+        /// read-only scope/property.
+        ///
+        /// Writable == false is the STORY's promise, so a story write is refused and
+        /// a HOST write is not: pass host: true from a host's own surface (its
+        /// SetProperty, its tooling, a coverage driver) and never from the path an
+        /// outcome or effect takes. A foreign scope whose resolver cannot be written
+        /// is refused for everyone, host included - that is not a rule to bypass, it
+        /// is a game that gave no way to write.</summary>
+        public void Set(string scope, string name, StoryletValue value, bool host = false)
         {
             var e = _scopes.GetOrDefault(scope);
             if (e == null) throw new StoryletError($"unknown scope '@{scope}'");
@@ -239,7 +246,7 @@ namespace StoryletStudio.StoryletEngine
             {
                 try
                 {
-                    owned.Bag.Set(name, value);
+                    owned.Bag.Set(name, value, host: host);
                 }
                 catch (Exception)
                 {
@@ -249,7 +256,8 @@ namespace StoryletStudio.StoryletEngine
             }
             var foreign = (ForeignScope)e;
             var n = name.ToLowerInvariant();
-            if (!ForeignWritable(foreign, n)) throw new StoryletError($"'@{scope}.{name}' is read-only");
+            if (!foreign.Resolver.CanSet) throw new StoryletError($"'@{scope}.{name}' is read-only");
+            if (!host && !ForeignWritable(foreign, n)) throw new StoryletError($"'@{scope}.{name}' is read-only");
             foreign.Resolver.Set(n, value);
         }
 

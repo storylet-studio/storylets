@@ -18,7 +18,13 @@
 
 ### Changed
 
+- **Read-only `@world` properties honour the game's own writes** (2026-09-05). `Writable == false` on a `@world` declaration is the STORY's promise not to write that value, so it binds an outcome and nobody else: `Engine.SetProperty` and `Flow.SetProperty` pass the kernel's host flag (in every scope, not just `@world`) and are never refused, while an outcome is still refused against the engine's read-only table before the write reaches a bag or a bound resolver. `ScopeRegistry.Set` takes the same `host` argument, and a `world.*` examiner row reports `Writable = false` whether or not the game has just written it. Parity with the JS runtime.
+
 - **A load now prunes what it reports**: a property the build no longer declares, a cooldown or spent entry for a deleted card, and a saved value that no longer fits its declaration (a struck-out enum value, an edited quality ladder) are dropped rather than carried, and named in the report.
+
+### Fixed
+
+- **A `writable: false` declaration is refused by Unity's own `PropertyBag` again** (2026-09-05). `PropertyDecl` re-declared `Writable`, HIDING `ScopeDeclaration`'s: the bundle loader filled the derived field while `PropertyBag.Set` read the base one, so a bag seeded from a bundle's declarations refused nothing at all - the C# compiler had been saying so, as CS0108, for as long as the field existed. The field is gone, so there is one `Writable`; `Engine.WorldReadOnly` reads it unchanged, and the TestHost now seeds a bag from the loader's own declarations and holds it to both halves of the rule (a plain write refused, a host write taken) before anything else runs.
 
 ## [0.4.1] - 2026-09-04
 

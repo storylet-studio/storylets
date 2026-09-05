@@ -217,8 +217,15 @@ namespace storylets
 
         /** Write a property (an ENGINE write: the bag's subscribers fire; use
          *  the bag directly for silent host writes). Throws on an unknown or
-         *  read-only scope/property. */
-        void set(const std::string& scope, const std::string& name, const StoryletValue& value)
+         *  read-only scope/property.
+         *
+         *  `writable: false` is the STORY's promise, so a story write is refused and
+         *  a HOST write is not: pass host = true from a host's own surface (its
+         *  setProperty, its tooling, a coverage driver) and never from the path an
+         *  outcome or effect takes. A foreign scope whose resolver cannot be written
+         *  is refused for everyone, host included - that is not a rule to bypass, it
+         *  is a game that gave no way to write. */
+        void set(const std::string& scope, const std::string& name, const StoryletValue& value, bool host = false)
         {
             Entry* e = scopes_.get(scope);
             if (!e) throw StoryletError("unknown scope '@" + scope + "'");
@@ -226,7 +233,7 @@ namespace storylets
             {
                 try
                 {
-                    e->bag->set(name, value);
+                    e->bag->set(name, value, /*silent=*/false, "", host);
                 }
                 catch (const std::exception&)
                 {
@@ -235,7 +242,8 @@ namespace storylets
                 return;
             }
             std::string n = LowercaseName(name);
-            if (!foreignWritable(*e, n)) throw StoryletError("'@" + scope + "." + name + "' is read-only");
+            if (!e->resolver->canSet()) throw StoryletError("'@" + scope + "." + name + "' is read-only");
+            if (!host && !foreignWritable(*e, n)) throw StoryletError("'@" + scope + "." + name + "' is read-only");
             e->resolver->set(n, value);
         }
 
