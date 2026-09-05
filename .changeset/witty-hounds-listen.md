@@ -1,7 +1,5 @@
 ---
 "@storylet-studio/model": minor
-"@storylet-studio/compiler": minor
-"@storylet-studio/runtime": minor
 ---
 
 A hole filled from a property: the hand that moves (design/engine-server.md 4.6).

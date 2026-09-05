@@ -1,6 +1,5 @@
 ---
 "@storylet-studio/model": minor
-"@storylet-studio/runtime": minor
 ---
 
 Park one flow, and price a load before you take it (design/engine-server.md 4.1 and 4.9).

@@ -13,6 +13,7 @@
     "@storylet-studio/conformance",
     "@storylet-studio/compiler",
     "@storylet-studio/ops",
-    "@storylet-studio/cli"
+    "@storylet-studio/cli",
+    "@storylet-studio/wire"
   ]
 }

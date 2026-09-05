@@ -2,7 +2,8 @@
 
 Four packages reach npm: `@storylet-studio/model`, `@storylet-studio/dialect`,
 `@storylet-studio/runtime` and `@storylet-studio/play-helpers`. Everything else in `packages/` is `private` and
-listed in `ignore` here, which is belt and braces: `ignore` keeps a package out
+listed in `ignore` here (`@storylet-studio/wire` among them until the server
+exists to speak it; it goes public with the client, on its own tag family), which is belt and braces: `ignore` keeps a package out
 of versioning, `private` keeps it out of the registry, and it takes both to be
 sure a 0.0.0 internal never ships.
 

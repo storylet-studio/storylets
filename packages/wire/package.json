@@ -1,5 +1,6 @@
 {
   "name": "@storylet-studio/wire",
+  "private": true,
   "version": "0.1.0",
   "description": "Storylet Server wire contract: types only, one definition of every request, response and SSE event that crosses the wire (storyletengine/wire@1).",
   "type": "module",
