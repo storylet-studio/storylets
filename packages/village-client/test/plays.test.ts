@@ -15,6 +15,8 @@
 
 import { describe, expect, it, beforeAll } from "vitest";
 import { execFile } from "node:child_process";
+// @ts-expect-error a plain module beside the scripts, typed by use
+import { withBuildLock } from "../../../scripts/test-build-lock.mjs";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -34,12 +36,14 @@ const dist = join(pkg, "dist");
  *  already there from earlier work, and failed on the first clean CI run - the
  *  green-locally-proves-nothing lesson, collected again. */
 beforeAll(async () => {
-  // Asynchronous on purpose: a synchronous child process blocks this worker's
-  // event loop for the whole build, and on a slow runner vitest then times out
-  // talking to the worker ("Timeout calling onTaskUpdate") with every test
-  // green. Seen on CI 2026-09-05.
-  await new Promise<void>((resolve, reject) => {
-    execFile("npm", ["run", "build"], { cwd: pkg }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err))) : resolve()));
+  await withBuildLock(async () => {
+    // Asynchronous on purpose: a synchronous child process blocks this worker's
+    // event loop for the whole build, and on a slow runner vitest then times out
+    // talking to the worker ("Timeout calling onTaskUpdate") with every test
+    // green. Seen on CI 2026-09-05.
+    await new Promise<void>((resolve, reject) => {
+      execFile("npm", ["run", "build"], { cwd: pkg }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err))) : resolve()));
+    });
   });
 }, 180_000);
 
