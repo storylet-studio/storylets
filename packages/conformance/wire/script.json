@@ -1,0 +1,46 @@
+{
+  "schema": "storylets/wire-fixture@1",
+  "wire": "storyletengine/wire@1",
+  "base": "http://venue.local",
+  "stationKey": "station-key",
+  "note": "A small station session: hello, a walk-up party, the handshake, a deal, three pushed events, a play, then a drop and a reconnect that resumes from the last event id. Driven through @storylet-studio/client, whose test writes frames.json beside this file.",
+  "steps": [
+    { "op": "hello" },
+    { "op": "mint", "installation": "the-caretaker", "callSign": true },
+    { "op": "handshake" },
+    { "op": "deal" },
+    {
+      "op": "emit",
+      "event": {
+        "type": "world",
+        "path": "world.time_phase",
+        "value": "evening",
+        "actor": { "kind": "producer", "label": "Priya (producer)" }
+      }
+    },
+    {
+      "op": "emit",
+      "event": {
+        "type": "presence",
+        "presence": { "station": "crew-2", "kind": "crew", "location": "the-window", "since": "2025-08-24T01:46:40.000Z" }
+      }
+    },
+    {
+      "op": "emit",
+      "event": {
+        "type": "message",
+        "message": {
+          "id": "msg-house-1",
+          "body": "five minutes",
+          "sender": { "kind": "producer", "label": "Priya (producer)" },
+          "priority": "note",
+          "audience": { "to": "everyone" },
+          "at": "2025-08-24T01:46:40.000Z"
+        }
+      }
+    },
+    { "op": "play", "card": "who-let-you-in", "outcome": "say-nothing", "hand": "at-the-door" },
+    { "op": "drop" },
+    { "op": "reconnect" }
+  ]
+}

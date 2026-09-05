@@ -1,0 +1,39 @@
+{
+  "name": "@storylet-studio/client",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Storylet Server headless client: the transport, the two bearers, the visit as an observable state machine, the event stream with replay and reconnect, degraded mode and an idempotent command queue. No DOM, no framework.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/storylet-studio/storylets.git",
+    "directory": "packages/client"
+  },
+  "author": "Ian Thomas",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup"
+  },
+  "dependencies": {
+    "@storylet-studio/model": ">=0.1.0 <1.0.0",
+    "@storylet-studio/wire": ">=0.1.0 <1.0.0"
+  }
+}

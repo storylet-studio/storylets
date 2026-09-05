@@ -1,0 +1,251 @@
+[
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/stream-ticket",
+      "bearer": "station",
+      "body": {}
+    }
+  },
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/hello",
+      "bearer": "station",
+      "body": {}
+    }
+  },
+  {
+    "out": {
+      "method": "GET",
+      "path": "/v1/events?t=ticket-1",
+      "bearer": "ticket"
+    }
+  },
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/parties",
+      "bearer": "station",
+      "idempotencyKey": "key-1",
+      "body": {
+        "installation": "the-caretaker",
+        "callSign": true
+      }
+    }
+  },
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/handshake",
+      "bearer": "station",
+      "idempotencyKey": "key-2",
+      "body": {
+        "credential": "token",
+        "token": "token-party-2"
+      }
+    }
+  },
+  {
+    "in": {
+      "type": "visit",
+      "flow": "party-2",
+      "installation": "the-caretaker",
+      "visit": "visit-3",
+      "phase": "opened",
+      "id": "1",
+      "at": "2025-08-24T01:46:40.000Z"
+    }
+  },
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/visits/visit-3/deal",
+      "bearer": "station",
+      "idempotencyKey": "key-3",
+      "body": {
+        "visitId": "visit-3"
+      }
+    }
+  },
+  {
+    "in": {
+      "type": "board",
+      "flow": "party-2",
+      "installation": "the-caretaker",
+      "visit": "visit-3",
+      "board": {
+        "at-the-door": [
+          {
+            "id": "who-let-you-in",
+            "title": "Who let you in?",
+            "purpose": "The opening beat: establish that somebody is expected.",
+            "fields": {
+              "prompt": "Look them up and down. Do not smile yet."
+            }
+          },
+          {
+            "id": "the-key-under-the-mat",
+            "title": "The key under the mat",
+            "purpose": "The scarce thing. Only the first party gets it.",
+            "fields": {
+              "prompt": "Hand over the key, once."
+            }
+          }
+        ],
+        "at-the-window": [
+          {
+            "id": "the-weather-outside",
+            "title": "The weather outside",
+            "purpose": "A beat that reads differently by phase.",
+            "fields": {
+              "prompt": "Describe the weather as it is right now."
+            }
+          }
+        ],
+        "at-the-table": [
+          {
+            "id": "what-you-brought",
+            "title": "What you brought",
+            "purpose": "Pays off whatever the door put in the pocket.",
+            "fields": {
+              "prompt": "Ask what they picked up on the way in."
+            }
+          }
+        ]
+      },
+      "turns": {
+        "room": 0
+      },
+      "id": "2",
+      "at": "2025-08-24T01:46:40.000Z"
+    }
+  },
+  {
+    "in": {
+      "type": "world",
+      "path": "world.time_phase",
+      "value": "evening",
+      "actor": {
+        "kind": "producer",
+        "label": "Priya (producer)"
+      },
+      "id": "3",
+      "at": "2025-08-24T01:46:40.000Z"
+    }
+  },
+  {
+    "in": {
+      "type": "presence",
+      "presence": {
+        "station": "crew-2",
+        "kind": "crew",
+        "location": "the-window",
+        "since": "2025-08-24T01:46:40.000Z"
+      },
+      "id": "4",
+      "at": "2025-08-24T01:46:40.000Z"
+    }
+  },
+  {
+    "in": {
+      "type": "message",
+      "message": {
+        "id": "msg-house-1",
+        "body": "five minutes",
+        "sender": {
+          "kind": "producer",
+          "label": "Priya (producer)"
+        },
+        "priority": "note",
+        "audience": {
+          "to": "everyone"
+        },
+        "at": "2025-08-24T01:46:40.000Z"
+      },
+      "id": "5",
+      "at": "2025-08-24T01:46:40.000Z"
+    }
+  },
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/visits/visit-3/play",
+      "bearer": "station",
+      "idempotencyKey": "key-4",
+      "body": {
+        "visitId": "visit-3",
+        "card": "who-let-you-in",
+        "outcome": "say-nothing",
+        "hand": "at-the-door"
+      }
+    }
+  },
+  {
+    "in": {
+      "type": "board",
+      "flow": "party-2",
+      "installation": "the-caretaker",
+      "visit": "visit-3",
+      "board": {
+        "at-the-door": [
+          {
+            "id": "the-key-under-the-mat",
+            "title": "The key under the mat",
+            "purpose": "The scarce thing. Only the first party gets it.",
+            "fields": {
+              "prompt": "Hand over the key, once."
+            }
+          }
+        ],
+        "at-the-window": [
+          {
+            "id": "the-weather-outside",
+            "title": "The weather outside",
+            "purpose": "A beat that reads differently by phase.",
+            "fields": {
+              "prompt": "Describe the weather as it is right now."
+            }
+          }
+        ],
+        "at-the-table": [
+          {
+            "id": "what-you-brought",
+            "title": "What you brought",
+            "purpose": "Pays off whatever the door put in the pocket.",
+            "fields": {
+              "prompt": "Ask what they picked up on the way in."
+            }
+          }
+        ]
+      },
+      "turns": {
+        "room": 1
+      },
+      "id": "6",
+      "at": "2025-08-24T01:46:40.000Z"
+    }
+  },
+  {
+    "out": {
+      "method": "POST",
+      "path": "/v1/stream-ticket",
+      "bearer": "station",
+      "body": {}
+    }
+  },
+  {
+    "out": {
+      "method": "GET",
+      "path": "/v1/events?t=ticket-4&last=6",
+      "bearer": "ticket"
+    }
+  },
+  {
+    "out": {
+      "method": "GET",
+      "path": "/v1/visits/visit-3/board",
+      "bearer": "station"
+    }
+  }
+]
