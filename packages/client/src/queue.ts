@@ -132,10 +132,16 @@ export function createQueue(opts: QueueOptions): CommandQueue {
       }
       // The server answered, so this command is decided. Refuse it and carry
       // on: one gated play must not block the queue behind it.
+      //
+      // AND THE HOLD COMES OFF. An answer is proof the network is there, so
+      // whatever is still queued is a command in flight rather than a screen
+      // being held, and the refusal's own words are not a reason to hold
+      // anything: they belong to the caller's promise, which is where the
+      // front-end is already reading them (spec 17 item 2).
       waiting.shift();
       attempt = 0;
       head.reject(error);
-      setHeld(waiting.length > 0, error.message);
+      setHeld(false);
       void pump();
     }
   };

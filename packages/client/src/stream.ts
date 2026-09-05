@@ -23,7 +23,7 @@
 
 import type { WireEvent } from "@storylet-studio/wire";
 import type { CreateStreamTicketResponse } from "@storylet-studio/wire";
-import { safely } from "./errors.js";
+import { ClientError, safely } from "./errors.js";
 import type { Bearer, Transport } from "./transport.js";
 import type { Timers } from "./queue.js";
 
@@ -78,6 +78,11 @@ export interface StreamOptions {
    *  re-read the board. Also called for `replay-lost`, which is the same
    *  instruction arriving explicitly. */
   onResync: (reason: "reconnect" | "replay-lost") => void;
+  /** The TICKET was refused: this bearer may not have a stream here, and no
+   *  amount of backing off will change that. Called with the refusal, and with
+   *  `undefined` the moment a stream opens after one, so a front-end that
+   *  drew the answer knows when it stops being the answer. */
+  onRefused?: (error: ClientError | undefined) => void;
 }
 
 export interface Stream {
@@ -113,6 +118,10 @@ export function createStream(opts: StreamOptions): Stream {
    *  later drop into a RESYNC rather than a first connection. */
   let everOpen = false;
   let state: ConnectionState = "connecting";
+  /** Set when the ticket was REFUSED. The stream is then over rather than
+   *  away, and only `restart` (which is the client becoming somebody else)
+   *  starts it again. */
+  let stopped = false;
 
   const setState = (next: ConnectionState): void => {
     if (state === next || closed) return;
@@ -130,8 +139,28 @@ export function createStream(opts: StreamOptions): Stream {
     schedule();
   };
 
+  /**
+   * The ticket was refused, which is an ANSWER and not an outage.
+   *
+   * So: no hold, because nothing here will catch up by itself, and no ladder,
+   * because a client retrying a `revoked` credential every second is arguing
+   * with a server that has decided (the command queue's own rule, one file
+   * along). The state says there is no stream; the refusal says why, and a
+   * front-end shows THAT rather than a banner about the network. This is the
+   * phone at the door on 2026-09-05, whose dead day pass was reported to its
+   * owner as "No connection" (spec 17 item 2).
+   */
+  const refused = (error: ClientError): void => {
+    if (closed) return;
+    stopped = true;
+    source?.close();
+    source = null;
+    safely(() => opts.onRefused?.(error));
+    setState("disconnected");
+  };
+
   const schedule = (): void => {
-    if (closed || timer !== null) return;
+    if (closed || stopped || timer !== null) return;
     // The CURRENT attempt decides the wait, and only then does the counter
     // move: the first retry is the short one, which is the whole point of a
     // ladder that starts at a second.
@@ -160,9 +189,13 @@ export function createStream(opts: StreamOptions): Stream {
         body: opts.monitor === true ? { monitor: true } : {},
       });
       ticket = res.ticket;
-    } catch {
-      // Cannot even mint a ticket: the server is away. Same hold, same backoff.
-      dropped();
+    } catch (err) {
+      // Two different failures wearing one shape. A REFUSAL is the server
+      // saying this bearer gets no stream; anything else (no answer at all, a
+      // 5xx, a proxy's HTML) is the server being away, which is the hold and
+      // the backoff.
+      if (err instanceof ClientError && err.refusal) refused(err);
+      else dropped();
       return;
     }
     if (closed) return;
@@ -183,6 +216,8 @@ export function createStream(opts: StreamOptions): Stream {
     es.addEventListener("open", () => {
       if (closed || source !== es) return;
       attempt = 0;
+      // Whatever was refused is no longer the answer: this bearer has a stream.
+      safely(() => opts.onRefused?.(undefined));
       const resuming = everOpen;
       everOpen = true;
       if (resuming) {
@@ -232,6 +267,9 @@ export function createStream(opts: StreamOptions): Stream {
     restart(): void {
       if (closed) return;
       started = true;
+      // A refusal was refused for the bearer this stream HAD, and a restart is
+      // the client saying it is somebody else now.
+      stopped = false;
       if (timer !== null) {
         timers.clearTimeout(timer);
         timer = null;

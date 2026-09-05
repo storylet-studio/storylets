@@ -14,8 +14,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DealtCardView, LocationView, MessageView, VenueView } from "@storylet-studio/wire";
 import {
-  connectionBannerPart, defaultTemplate, handPart, handshakePart, helpButtonPart, installKitStyles,
-  messageTrayPart, onlyFields, qrPart, showClockPart, showTime, venueMapPart, zoneStripPart,
+  connectionBannerPart, fieldRows, handPart, handshakePart, helpButtonPart, installKitStyles,
+  messageTrayPart, onlyFields, planTemplate, qrPart, showClockPart, showTime, venueMapPart,
+  zoneStripPart,
 } from "../src/index.js";
 import type { Part } from "../src/index.js";
 
@@ -36,21 +37,84 @@ const CARDS: DealtCardView[] = [
     id: "who-let-you-in",
     title: "Who let you in?",
     purpose: "Establish that somebody is expected.",
-    fields: { prompt: "Look them up and down.", cue: "house-lights-half" },
+    fields: {
+      text: "Somebody is already standing in the doorway.",
+      prompt: "Look them up and down.",
+      cue: "house-lights-half",
+    },
   },
   { id: "the-key-under-the-mat", title: "The key under the mat" },
 ];
 
 describe("the hand", () => {
-  it("draws a card per entry, with its title, purpose and fields", () => {
+  // THE RULE (spec 5.7): a card face is built by the station KIND, so the
+  // part's own default is the PARTY's face - the title and the story - and a
+  // crew face is asked for. The other way round put the author's notes on a
+  // visitor's phone, which is the failure this default exists to make
+  // impossible for a venue that never reads this file.
+  it("draws a card per entry, with its title and the story, and nothing else", () => {
     const part = keep(handPart({ onPlay: () => {} }));
     part.update({ hand: "at-the-door", cards: CARDS });
     expect(part.el.querySelectorAll(".sk-card")).toHaveLength(2);
     expect(part.el.querySelector(".sk-card-title")?.textContent).toBe("Who let you in?");
+    expect(part.el.querySelector(".sk-card-text")?.textContent).toBe("Somebody is already standing in the doorway.");
+    expect(part.el.querySelector(".sk-card-purpose")).toBeNull();
+    expect(part.el.querySelector(".sk-field-label")).toBeNull();
+    expect(part.el.textContent).not.toContain("house-lights-half");
+  });
+
+  it("wears the crew face when it is asked for: the purpose, the prompt and the cue", () => {
+    const part = keep(handPart({
+      face: {
+        purpose: true,
+        outcomePurpose: true,
+        // No body: the story is the phone's. A face says so out loud, because
+        // the unstated default is the party's and stays that way.
+        body: "",
+        show: [{ field: "prompt" }, { field: "cue", label: "Cue" }],
+      },
+      onPlay: () => {},
+    }));
+    part.update({
+      hand: "at-the-door",
+      cards: [CARDS[0]!],
+      outcomes: { "who-let-you-in": [{ id: "say-nothing", title: "Say nothing", purpose: "The quiet way in.", available: true }] },
+    });
     expect(part.el.querySelector(".sk-card-purpose")?.textContent).toContain("expected");
-    // `prompt` comes first: it is what a performer reads first (spec 5.7).
+    // `prompt` first: it is what a performer reads first (spec 5.7).
     const values = [...part.el.querySelectorAll(".sk-field-value")].map((n) => n.textContent);
     expect(values).toEqual(["Look them up and down.", "house-lights-half"]);
+    // No body: the story is the phone's, and the handset is the stage
+    // direction and the note beside the button.
+    expect(part.el.querySelector(".sk-card-text")).toBeNull();
+    expect(part.el.querySelector(".sk-outcome")?.textContent).toBe("Say nothing");
+    expect(part.el.querySelector(".sk-outcome-hint")?.textContent).toBe("The quiet way in.");
+  });
+
+  it("never puts an outcome's purpose in the button's accessible name", () => {
+    const outcomes = {
+      "who-let-you-in": [{ id: "say-nothing", title: "Say nothing", purpose: "The quiet way in.", available: true }],
+    };
+    for (const face of [{}, { purpose: true, outcomePurpose: true }]) {
+      const part = keep(handPart({ face, onPlay: () => {} }));
+      part.update({ hand: "at-the-door", cards: [CARDS[0]!], outcomes });
+      const button = part.el.querySelector<HTMLButtonElement>(".sk-outcome")!;
+      expect(button.textContent).toBe("Say nothing");
+      expect(button.getAttribute("title")).toBeNull();
+      expect(button.getAttribute("aria-label")).toBeNull();
+    }
+  });
+
+  // The heading is a STRING the app hands over, never the gameId the part
+  // happens to be holding: the wire carries no hand titles, so whoever knows
+  // what a hand is called (station.json, here) is the one who may say it.
+  it("heads the hand only when it is told what to call it", () => {
+    const named = keep(handPart({ heading: "The door", onPlay: () => {} }));
+    named.update({ hand: "at-the-door", cards: CARDS });
+    expect(named.el.querySelector(".sk-hand-title")?.textContent).toBe("The door");
+    const bare = keep(handPart({ onPlay: () => {} }));
+    bare.update({ hand: "at-the-door", cards: CARDS });
+    expect(bare.el.querySelector(".sk-hand-title")).toBeNull();
   });
 
   it("shows a gated outcome DISABLED, never hidden", () => {
@@ -115,11 +179,29 @@ describe("the field template", () => {
     expect(part.el.querySelector(".sk-field-value")?.textContent).toBe("house-lights-half");
   });
 
-  it("labels from the field name, and shows a false flag rather than hiding it", () => {
-    const rows = defaultTemplate({ id: "c", fields: { time_phase: "evening", lit: false } });
+  it("draws the plan: the body as prose, then the named fields in order", () => {
+    const rows = planTemplate({ body: "text", show: ["prompt", { field: "cue", label: "Cue" }] })({
+      id: "c",
+      fields: { cue: "storm", prompt: "Look up.", text: "The sky goes green.", note: "not asked for" },
+    });
     expect(rows).toEqual([
-      { key: "time_phase", label: "Time phase", value: "evening" },
-      { key: "lit", label: "Lit", value: "no" },
+      { key: "text", value: "The sky goes green.", prose: true },
+      { key: "prompt", value: "Look up." },
+      { key: "cue", label: "Cue", value: "storm" },
+    ]);
+  });
+
+  it("shows a false flag rather than hiding it, and skips a field the card lacks", () => {
+    const rows = planTemplate({ show: [{ field: "lit", label: "Lit" }, { field: "missing", label: "Missing" }] })({
+      id: "c",
+      fields: { lit: false },
+    });
+    expect(rows).toEqual([{ key: "lit", label: "Lit", value: "no" }]);
+  });
+
+  it("shows `text` as the story when no plan says otherwise", () => {
+    expect(fieldRows({ id: "c", fields: { text: "A door.", cue: "warm" } })).toEqual([
+      { key: "text", value: "A door.", prose: true },
     ]);
   });
 });

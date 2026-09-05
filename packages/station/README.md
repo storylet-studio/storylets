@@ -19,8 +19,8 @@ the show server between houses.
 | Folder | Kind | What it is |
 |---|---|---|
 | `kiosk/` | `fixed` | handshake, then the hand. Idle parks the visit after N minutes, so a party who walks away mid-beat does not leave their story for the next person. Offers the claim at the end of a first play. |
-| `crew/` | `crew` | a performer's phone. Recent parties, handshake by camera or call sign, the party's hand at this NPC as a prompt list (title, purpose, the project's `prompt` field), outcomes as what to record, peek, done, the zone strip that sets presence, the show clock, messages and a help call. |
-| `companion/` | `companion` | the party's own phone, opened by a QR: `/p/<token>` or `/at/<venue>/<location>`. Holds the token in `localStorage`, shows the party's own QR, attaches on a placard scan, offers the chooser when the walls carry two stories, and offers the claim. |
+| `crew/` | `crew` | a performer's phone. Recent parties, handshake by camera or call sign, the party's hand at this NPC as a prompt list (title, purpose, the project's `prompt` field and its `cue`), outcomes as what to record with each purpose as a hint beside its button, peek, done, the zone strip that sets presence, the show clock, messages and a help call. |
+| `companion/` | `companion` | the party's own phone, opened by a QR: `/p/<token>` or `/at/<venue>/<location>`. The card face is a visitor's: the title, the story, the outcome titles. Holds the token in `localStorage`, shows the party's own QR, attaches on a placard scan, offers the chooser when the walls carry two stories, and offers the claim. |
 | `sign-in/` | `sign-in` | the door. Mint, claim, issue a credential per member, show and print the QR, speak the call sign. |
 | `house/` | `house` | the venue's own flow on a wall: the plan, the clock, the house's hands, and the cues a bridge just fired, mirrored. |
 
@@ -35,7 +35,8 @@ the show server between houses.
   "stationKey": "paste-the-key-the-console-showed-you",
   "idleMinutes": 4,
   "installation": "the-caretaker",
-  "fields": [{ "field": "prompt" }, { "field": "cue", "label": "Cue" }],
+  "fields": { "body": "", "show": [{ "field": "prompt" }, { "field": "cue", "label": "Cue" }] },
+  "hands": { "at-the-door": "The door" },
   "banner": { "held": "Back in a moment." }
 }
 ```
@@ -44,6 +45,19 @@ the show server between houses.
 companion page reached by a placard QR always wants. `stationKey` is absent on
 a companion page and required everywhere else: a phone **holds** a credential
 and a station **vouches**, and the two are different powers on the wire.
+
+`fields` is the **card face**: `body` names the field holding the story, drawn
+as prose with no label (`text` by default, and `""` on a crew handset, where
+the story is the party's phone's job), and `show` lists the others, in order.
+`hands` says what a hand is called on screen; the wire carries no hand titles,
+so a hand named nowhere is headed with its gameId.
+
+What `station.json` may **not** say is whether the author's material shows. A
+card's purpose and an outcome's purpose are notes about what a beat is for,
+written for whoever performs it, so the station **kind** decides: a crew
+handset shows them and nothing else does (spec 5.7). A party's screen that
+could be talked into showing them by an edit to a config file is one typo from
+the author's notes on a visitor's phone.
 
 `kind` must match the app it sits beside. A mismatch is a provisioning mistake
 and the page says so rather than half-working.
@@ -56,7 +70,7 @@ first two, which is the test the layering has to pass.
 
 **RESTYLE.** Supply a `:root` block with the family's token names (`--bg`,
 `--surface`, `--card`, `--ink`, `--muted`, `--line`, `--accent`, `--danger`,
-`--warn`, `--ok`, `--radius-*`, `--font-*`) and a `fields` list in
+`--warn`, `--ok`, `--radius-*`, `--font-*`) and a `fields` plan in
 `station.json`. The look and the words are yours; not a line of code changes.
 
 **REARRANGE.** Copy an app from `src/`, compose the kit's parts differently,

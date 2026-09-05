@@ -102,7 +102,15 @@ const OUTCOMES: Record<string, { id: string; title: string; available: boolean }
 
 interface Party {
   id: string;
+  /** The credential this party arrived with. A walk-up's is a DAY PASS: it
+   *  expires at run end, claimed or not (7.1). */
   token: string;
+  /** Whether {@link Party.token} dies with the run. */
+  dayPass: boolean;
+  /** The permanent credential a claim minted, which is the one that comes
+   *  back (7.3). A different string from the day pass on purpose: a fake that
+   *  hands the same token back cannot show the defect that made this test. */
+  keepsake?: string;
   callSign?: string;
   claimed: boolean;
   installation: string;
@@ -160,6 +168,10 @@ export interface FakeServer {
   /** Forget the oldest events, so the next resume falls off the buffer and is
    *  answered with `replay-lost`. */
   forgetHistory(): void;
+  /** End the run: every day pass expires, and a party that never claimed is
+   *  refused from then on (7.1). The claim's keepsake survives it, which is
+   *  the property the companion page's own storage has to keep. */
+  endRun(): void;
   /** The venue's own facts, for a test that wants to assert against them. */
   readonly venue: VenueView;
   readonly locations: LocationView[];
@@ -178,6 +190,10 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
 
   const parties = new Map<string, Party>();
   const byToken = new Map<string, Party>();
+  /** Day passes the run took back, kept so the refusal can say WHICH refusal
+   *  it is: "not known here" and "that run has ended" are different answers to
+   *  a party standing at a wall. */
+  const retired = new Set<string>();
   const byCallSign = new Map<string, Party>();
   const byExternal = new Map<string, Party>();
   const visits = new Map<string, Visit>();
@@ -232,6 +248,9 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
     const party: Party = {
       id,
       token: `token-${id}`,
+      // A party nobody claimed is transient, and so is its credential: a day
+      // pass, good for this run and no other (7.1).
+      dayPass: !claimed,
       claimed,
       installation,
       ...(callSign ? { callSign: `quiet otter ${id.slice(-1)}` } : {}),
@@ -367,6 +386,18 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
       oldestHeld = eventSeq + 1;
       ring = [];
     },
+    endRun() {
+      // The run ends and every day pass goes with it (7.1). A party that
+      // claimed keeps the keepsake the claim minted, which is the difference
+      // between a story that comes back and one that does not (7.3).
+      for (const party of parties.values()) {
+        if (!party.dayPass) continue;
+        byToken.delete(party.token);
+        retired.add(party.token);
+      }
+      run.state = "ended";
+      emit({ type: "run", phase: "ended", run } as WireEvent);
+    },
     seedParty(o = {}) {
       const party = mintParty(o.installation ?? CARETAKER.installation, o.callSign !== undefined, o.claimed ?? true);
       if (o.callSign !== undefined) {
@@ -401,6 +432,16 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
 
       const partyOf = (): Party | undefined => (token === undefined ? undefined : byToken.get(token));
       const isStation = token === stationKey;
+
+      // A BEARER THIS SERVER DOES NOT KNOW IS REFUSED, on every route, which
+      // is what makes a dead day pass a refusal rather than a walk-up: the
+      // party that never claimed comes back after the run and is told so, and
+      // the stream ticket is refused with it (7.1, 7.3).
+      if (token !== undefined && !isStation && !byToken.has(token)) {
+        return retired.has(token)
+          ? fail(401, "unknown_credential", "That was a day pass for a run that has ended.")
+          : fail(401, "unknown_credential", "that credential is not known here");
+      }
       const path = pathname.replace(/^\/v1/, "");
 
       // hello --------------------------------------------------------------
@@ -443,6 +484,14 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
         if (!party) return fail(404, "unknown_party", "no party by that id");
         const req = body as ClaimPartyRequest;
         party.claimed = true;
+        if (req.kind === "token") {
+          // ISSUING A PERMANENT CREDENTIAL IS THE CLAIM (7.1), and permanent
+          // is the whole of it: the day pass this party arrived with still
+          // dies at run end, so the keepsake is a NEW token and the phone is
+          // meant to keep that one instead of the one it walked up with.
+          party.keepsake ??= `keepsake-${party.id}`;
+          byToken.set(party.keepsake, party);
+        }
         if (req.kind === "callsign" && party.callSign === undefined) {
           party.callSign = "steady heron";
           byCallSign.set(party.callSign, party);
@@ -451,7 +500,7 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
         const res: ClaimPartyResponse = {
           partyId: party.id,
           claimed: true,
-          ...(req.kind === "token" ? { qr: `${base}/p/${party.token}` } : {}),
+          ...(req.kind === "token" ? { qr: `${base}/p/${party.keepsake!}` } : {}),
           ...(req.kind === "callsign" ? { callSign: party.callSign! } : {}),
           ...(req.kind === "external" ? { externalRef: req.externalRef! } : {}),
         };

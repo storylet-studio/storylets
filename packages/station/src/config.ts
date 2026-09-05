@@ -6,21 +6,27 @@
 // server address: a stage manager with a memory stick can move a kiosk from
 // the rehearsal server to the show server between houses.
 //
-// The FIELD TEMPLATE is the interesting entry, and it is a list rather than a
+// The FIELD PLAN is the interesting entry, and it is data rather than a
 // function on purpose. JSON cannot hold a function, and the point of the first
 // customisation route (RESTYLE) is that a venue changes the look and the words
 // without touching the code. A venue that needs a real template function has
 // already reached the second route (REARRANGE), where it composes the kit
-// itself and passes `onlyFields` or its own.
+// itself and passes `planTemplate` or its own.
+//
+// What the plan may NOT say is whether the author's material shows. The card's
+// purpose and the outcomes' purposes are the station KIND's business (5.7),
+// decided in `shell.ts` and unreachable from this file: a companion that could
+// be talked into showing a purpose by an edit here is one typo away from the
+// author's notes on a visitor's phone, which is the defect this shape exists
+// to make unrepeatable.
 // ---------------------------------------------------------------------------
 
 /// <reference lib="dom" />
 
 import type { InstallationId, StationKind, VenueId } from "@storylet-studio/wire";
+import type { FieldPlan } from "@storylet-studio/station-kit";
 
-/** One field the crew view shows, and what to call it. A bare string means
- *  "show it, unlabelled", which is what a stage direction wants. */
-export type FieldSpec = string | { field: string; label?: string };
+export type { FieldPlan, FieldSpec } from "@storylet-studio/station-kit";
 
 export interface StationConfig {
   /** The server: `http://venue.local:4470`. Absent means the origin this page
@@ -41,8 +47,13 @@ export interface StationConfig {
    *  foyer wants two or three; a table in a quiet room wants ten. Zero or
    *  absent never parks, which is what a demo wants. */
   idleMinutes?: number;
-  /** The card fields this station shows, in this order. */
-  fields?: FieldSpec[];
+  /** What this station's cards show: which field is the story, and which
+   *  others to draw beside it. */
+  fields?: FieldPlan;
+  /** What to call each hand on screen, by the hand's gameId: `{ "at-the-door":
+   *  "The door" }`. The wire carries no hand titles, so this is where a venue
+   *  says one; a hand not named here is headed with its gameId. */
+  hands?: Record<string, string>;
   /** What the page calls itself: "The table", "The Elder". */
   title?: string;
   /** Words for the connection banner, when a venue's voice differs from the
@@ -50,12 +61,15 @@ export interface StationConfig {
   banner?: Record<string, string>;
 }
 
+/** The plan each kind starts with (5.7). A party's screens read the story; a
+ *  performer's reads the stage direction and the cue and not the story, which
+ *  the party is holding already; the wall reads the story and the cue. */
 const DEFAULTS: Record<string, Partial<StationConfig>> = {
-  fixed: { idleMinutes: 4, title: "Welcome" },
-  crew: { fields: [{ field: "prompt" }, { field: "cue", label: "Cue" }], title: "Crew" },
-  companion: { title: "Welcome" },
+  fixed: { idleMinutes: 4, title: "Welcome", fields: { body: "text" } },
+  crew: { fields: { body: "", show: [{ field: "prompt" }, { field: "cue", label: "Cue" }] }, title: "Crew" },
+  companion: { title: "Welcome", fields: { body: "text" } },
   "sign-in": { title: "Sign in" },
-  house: { title: "House" },
+  house: { title: "House", fields: { body: "text", show: [{ field: "cue", label: "Cue" }] } },
 };
 
 /** Read `station.json` beside the page. A device with none is not a broken

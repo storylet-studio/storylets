@@ -265,6 +265,71 @@ describe("the party's verbs", () => {
     returning.close();
   });
 
+  // THE DEFECT, from a phone at the door on 2026-09-05. A walk-up party
+  // pressed "Keep this story", the claim succeeded, the keepsake QR was on
+  // screen - and the phone went on holding the DAY PASS, which died with the
+  // run. The next scan was refused, and the party's story was gone.
+  //
+  // Issuing a permanent credential IS the claim (spec 7.1), so the credential
+  // it issues is the phone's from that moment: adopted exactly as the token a
+  // first scan mints is adopted, and announced to `onToken` so a page stores
+  // one thing in one place.
+  it("adopts the keepsake its own claim minted, and stops being the day pass", async () => {
+    const server = createFakeServer();
+    const sent: (string | undefined)[] = [];
+    const client = createClient({
+      base: "http://venue.local",
+      fetch: (url, init) => {
+        sent.push(init.headers["Authorization"]);
+        return server.fetch(url, init);
+      },
+      EventSource: server.EventSource,
+      timers: manualTimers(),
+    });
+
+    // A walk-up: the scan mints the party, and what it mints is a day pass.
+    const phone = client.connectParty();
+    const seen: string[] = [];
+    phone.onToken((token) => seen.push(token));
+    const scan = await phone.atLocation("this-room", "the-door");
+    if (scan.outcome !== "attached") throw new Error("unreachable");
+    const dayPass = phone.token!;
+    expect(dayPass).toBe(scan.token);
+
+    const claimed = await phone.claim(phone.visit!.state.party!, { kind: "token" });
+    expect(claimed.claimed).toBe(true);
+    // The keepsake is a DIFFERENT credential, and it is now this phone's.
+    expect(claimed.qr).toContain("/p/");
+    expect(phone.token).not.toBe(dayPass);
+    expect(claimed.qr).toContain(phone.token!);
+    expect(seen).toEqual([dayPass, phone.token]);
+
+    // Every later call carries it, without the page having to reconnect.
+    sent.length = 0;
+    await phone.visit!.deal();
+    expect(sent.filter((a) => a !== undefined)).not.toHaveLength(0);
+    for (const auth of sent) expect(auth).toBe(`Bearer ${phone.token!}`);
+
+    // And it outlives the run, which is the point of claiming at all (7.3).
+    server.endRun();
+    await expect(phone.hello()).resolves.toBeTruthy();
+    const stale = client.connectParty(dayPass);
+    await expect(stale.hello()).rejects.toMatchObject({ code: "unknown_credential" });
+    stale.close();
+    phone.close();
+  });
+
+  it("leaves a station's own claim alone: a key is hardware, not a keepsake", async () => {
+    // A sign-in station claims on a party's behalf all day. Adopting there
+    // would turn the venue's own device into the last party through the door.
+    const { station } = bench();
+    const minted = await station.mintParty({ installation: "the-caretaker" });
+    const claimed = await station.claim(minted.partyId, { kind: "token" });
+    expect(claimed.claimed).toBe(true);
+    expect("token" in station).toBe(false);
+    station.close();
+  });
+
   it("refuses a placard this venue has never printed", async () => {
     const { server, client } = bench();
     const party = server.seedParty({});

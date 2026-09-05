@@ -21,12 +21,16 @@ const out = join(pkg, "dist");
 
 /** The five apps. `kind` is what `station.json` must say, and the build stamps
  *  it into the example config so a copied folder starts consistent. */
+// `fields` is the card face a venue edits: `body` is the field holding the
+// story, `show` the others, in order. The author-facing switches are not here
+// and cannot be: the card's purpose and the outcomes' purposes are the KIND's,
+// and only a crew handset shows them (design/engine-server.md 5.7).
 const APPS = [
-  { dir: "kiosk", entry: "kiosk", kind: "fixed", title: "The table", extra: { idleMinutes: 4, installation: "the-caretaker" } },
-  { dir: "crew", entry: "crew", kind: "crew", title: "The Caretaker", extra: { fields: [{ field: "prompt" }, { field: "cue", label: "Cue" }] } },
-  { dir: "companion", entry: "companion", kind: "companion", title: "This Room", extra: { stationKey: undefined } },
+  { dir: "kiosk", entry: "kiosk", kind: "fixed", title: "The table", extra: { idleMinutes: 4, installation: "the-caretaker", fields: { body: "text" } } },
+  { dir: "crew", entry: "crew", kind: "crew", title: "The Caretaker", extra: { fields: { body: "", show: [{ field: "prompt" }, { field: "cue", label: "Cue" }] } } },
+  { dir: "companion", entry: "companion", kind: "companion", title: "This Room", extra: { stationKey: undefined, fields: { body: "text" } } },
   { dir: "sign-in", entry: "sign-in", kind: "sign-in", title: "Sign in", extra: { installation: "the-caretaker" } },
-  { dir: "house", entry: "house", kind: "house", title: "The house", extra: {} },
+  { dir: "house", entry: "house", kind: "house", title: "The house", extra: { fields: { body: "text", show: [{ field: "cue", label: "Cue" }] } } },
 ];
 
 const page = (title) => `<!doctype html>

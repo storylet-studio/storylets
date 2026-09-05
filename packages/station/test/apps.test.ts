@@ -17,6 +17,8 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { execFile } from "node:child_process";
+// @ts-expect-error a plain module beside the scripts, typed by use
+import { withBuildLock } from "../../../scripts/test-build-lock.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -24,7 +26,7 @@ import { JSDOM } from "jsdom";
 import { createFakeServer } from "../../client/test/fake-server.js";
 import type { FakeServer } from "../../client/test/fake-server.js";
 import { arrivalFrom } from "../src/companion.js";
-import { templateFrom } from "../src/shell.js";
+import { faceFrom } from "../src/shell.js";
 import { tokenFrom } from "../src/kiosk.js";
 
 const pkg = fileURLToPath(new URL("..", import.meta.url));
@@ -37,12 +39,14 @@ const BASE = "http://venue.local";
  *  Through `npm run build`, not by running the script directly: that is the
  *  Village client's lesson, collected the hard way on a clean CI runner. */
 beforeAll(async () => {
-  // Asynchronous on purpose: a synchronous child process blocks this worker's
-  // event loop for the whole build, and on a slow runner vitest then times out
-  // talking to the worker ("Timeout calling onTaskUpdate") with every test
-  // green. Seen on CI 2026-09-05.
-  await new Promise<void>((resolve, reject) => {
-    execFile("npm", ["run", "build"], { cwd: pkg }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err))) : resolve()));
+  await withBuildLock(async () => {
+    // Asynchronous on purpose: a synchronous child process blocks this worker's
+    // event loop for the whole build, and on a slow runner vitest then times out
+    // talking to the worker ("Timeout calling onTaskUpdate") with every test
+    // green. Seen on CI 2026-09-05.
+    await new Promise<void>((resolve, reject) => {
+      execFile("npm", ["run", "build"], { cwd: pkg }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err))) : resolve()));
+    });
   });
 }, 180_000);
 
@@ -50,6 +54,32 @@ interface Opened {
   dom: JSDOM;
   doc: Document;
   server: FakeServer;
+}
+
+/**
+ * The demo's own card, on the way past.
+ *
+ * The fake server's caretaker deck carries a `prompt` and nothing else, and it
+ * is the wire fixture's content as well as this suite's, so it is not the place
+ * to invent vocabulary. The content the stations actually meet (16.1) carries
+ * three fields with three audiences - `text` is what the phone shows, `prompt`
+ * is for the crew, `cue` is for a bridge - and outcomes written with purposes.
+ * This dresses every card and every outcome in a response with exactly that, so
+ * a face that leaks one audience's material onto another's screen fails here.
+ */
+function dress(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(dress);
+  if (value === null || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, inner] of Object.entries(value as Record<string, unknown>)) out[key] = dress(inner);
+  const id = typeof out["id"] === "string" ? out["id"] : undefined;
+  if (id !== undefined && typeof out["available"] === "boolean") {
+    out["purpose"] = `Crew note: what ${id} is for.`;
+  }
+  if (id !== undefined && typeof out["fields"] === "object" && out["fields"] !== null) {
+    out["fields"] = { text: `The story of ${id}.`, cue: "warm", ...(out["fields"] as object) };
+  }
+  return out;
 }
 
 /**
@@ -65,6 +95,9 @@ function open(kind: string, opts: {
   config?: Record<string, unknown>;
   storage?: Record<string, string>;
   server?: FakeServer;
+  /** Dress every card and outcome as the demo's content does: `text`, `cue`,
+   *  a purpose on the card and a purpose on each outcome. */
+  rich?: boolean;
 } = {}): Opened {
   const server = opts.server ?? createFakeServer({ base: BASE });
   const html = readFileSync(join(dist, kind, "index.html"), "utf8")
@@ -90,7 +123,12 @@ function open(kind: string, opts: {
         if (url.endsWith("station.json")) {
           return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(config)) });
         }
-        return server.fetch(url, init ?? { method: "GET", headers: {} });
+        const answered = server.fetch(url, init ?? { method: "GET", headers: {} });
+        if (opts.rich !== true) return answered;
+        return answered.then((res) => ({
+          ...res,
+          text: () => res.text().then((body) => JSON.stringify(dress(JSON.parse(body)))),
+        }));
       };
       for (const [k, v] of Object.entries(opts.storage ?? {})) window.localStorage.setItem(k, v);
     },
@@ -141,7 +179,7 @@ describe("the kiosk", () => {
   });
 
   it("mints a walk-up party and deals its hands", async () => {
-    const { doc, server } = open("kiosk");
+    const { doc, server } = open("kiosk", { rich: true });
     await until(doc, ".sk-handshake");
     doc.querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
       if (b.textContent === "Start without a code") b.click();
@@ -150,6 +188,12 @@ describe("the kiosk", () => {
     expect(doc.body.textContent).toContain("Who let you in?");
     expect(server.requests.some((r) => r.path === "/v1/parties")).toBe(true);
     expect(server.requests.some((r) => r.path.endsWith("/deal"))).toBe(true);
+    // A kiosk is a party's screen, so it wears the companion's face: the story
+    // and nothing written for anybody behind the scenes.
+    const page = doc.querySelector(".app-main")!.textContent ?? "";
+    expect(page).toContain("The story of who-let-you-in.");
+    expect(page).not.toContain("The opening beat");
+    expect(page).not.toContain("Look them up and down");
   });
 
   it("says so when it has not been provisioned", async () => {
@@ -185,18 +229,31 @@ describe("the crew handset", () => {
   it("shows the prompt list, with the purpose and the crew field", async () => {
     const server = createFakeServer({ base: BASE });
     const party = server.seedParty({});
-    const { doc } = open("crew", { server });
+    const { doc } = open("crew", { server, rich: true });
     await until(doc, ".sk-handshake");
     const input = doc.querySelector<HTMLInputElement>(".sk-code-entry input")!;
     input.value = party.token;
     doc.querySelector<HTMLButtonElement>(".sk-code-entry button")!.click();
-    await until(doc, ".sk-card");
-    expect(doc.body.textContent).toContain("Who let you in?");
-    expect(doc.body.textContent).toContain("establish that somebody is expected");
-    // The shipped crew template shows `prompt` and `cue`, and nothing else.
-    expect(doc.body.textContent).toContain("Look them up and down");
-    expect(doc.body.textContent).toContain("Done with this party");
-    expect(doc.body.textContent).toContain("What might come?");
+    await until(doc, ".sk-outcome");
+    const page = doc.querySelector(".app-main")!.textContent ?? "";
+    expect(page).toContain("Who let you in?");
+    expect(page).toContain("establish that somebody is expected");
+    // The shipped crew face shows `prompt` and `cue`, and nothing else.
+    expect(page).toContain("Look them up and down");
+    expect(page).toContain("warm");
+    expect(page).toContain("Done with this party");
+    expect(page).toContain("What might come?");
+    // A performer chooses BY the purpose: it is the author's note about what
+    // the beat is for, and this is the one view written for a reader of it.
+    expect(page).toContain("Crew note: what say-nothing is for.");
+    // The button still SAYS the title. The purpose is a hint beside it, not
+    // the label, so a performer reads one line and taps another.
+    const buttons = [...doc.querySelectorAll<HTMLButtonElement>("[data-card=\"who-let-you-in\"] .sk-outcome")];
+    expect(buttons.map((b) => b.textContent)).toEqual(["Say nothing", "Give a name", "Show the key"]);
+    // The party's own prose is not a stage direction, and a handset in the
+    // dark shows the performer what to DO with the beat, not what the phone
+    // in the visitor's hand already says.
+    expect(doc.querySelector(".sk-card")?.textContent).not.toContain("The story of who-let-you-in.");
   });
 });
 
@@ -213,6 +270,77 @@ describe("the companion page", () => {
     expect(doc.body.textContent).toContain("Who let you in?");
     expect(doc.body.textContent).toContain("Keep this story");
     expect(server.requests.some((r) => r.path === "/v1/at/this-room/the-door")).toBe(true);
+  });
+
+  // THE RULE (spec 5.7, 12): a card face is built by the station KIND, and a
+  // party's screen shows a party's material. The title, the story, the
+  // outcomes. Not the author's purpose, not the crew's prompt, not the
+  // bridge's cue, and never an outcome's purpose smuggled in as the button's
+  // accessible name, which a screen reader would read out loud.
+  it("shows a visitor the story and the outcome titles, and nothing written for the crew", async () => {
+    const server = createFakeServer({ base: BASE });
+    const party = server.seedParty({});
+    const { doc } = open("companion", {
+      url: `${BASE}/at/this-room/the-door`,
+      storage: { "storylet.party.token": party.token },
+      server,
+      rich: true,
+    });
+    await until(doc, ".sk-outcome");
+    const face = doc.querySelector(".sk-card")!.textContent ?? "";
+    expect(face).toContain("Who let you in?");
+    expect(face).toContain("The story of who-let-you-in.");
+    expect(face).toContain("Say nothing");
+    expect(face).toContain("Give a name");
+
+    // Author-facing, crew-facing and bridge-facing material, all off. Read
+    // off the screen rather than off `document.body`, which in jsdom holds
+    // the inlined script and would match half the app's own source.
+    const page = doc.querySelector(".app-main")!.textContent ?? "";
+    expect(page).not.toContain("The opening beat");
+    expect(page).not.toContain("Look them up and down");
+    expect(page).not.toContain("Crew note");
+    expect(page).not.toMatch(/cue/i);
+    expect(page).not.toContain("warm");
+    // The body is prose, not a labelled row: a visitor is reading, not
+    // consulting a table of the venue's vocabulary.
+    expect(doc.querySelector(".sk-field-label")).toBeNull();
+
+    // The accessible name is the title too. A `title` or `aria-label` carrying
+    // the purpose is the same leak, said out loud instead of drawn.
+    const buttons = [...doc.querySelectorAll<HTMLButtonElement>("[data-card=\"who-let-you-in\"] .sk-outcome")];
+    expect(buttons.map((b) => b.textContent)).toEqual(["Say nothing", "Give a name", "Show the key"]);
+    for (const button of doc.querySelectorAll<HTMLButtonElement>(".sk-outcome")) {
+      expect(button.getAttribute("aria-label") ?? "").not.toContain("Crew note");
+      expect(button.getAttribute("title") ?? "").not.toContain("Crew note");
+    }
+  });
+
+  it("heads a hand with what the venue calls it, and shouts at nobody", async () => {
+    const server = createFakeServer({ base: BASE });
+    const party = server.seedParty({});
+    const { doc } = open("companion", {
+      url: `${BASE}/at/this-room/the-door`,
+      storage: { "storylet.party.token": party.token },
+      server,
+      config: { hands: { "at-the-door": "The door" } },
+    });
+    await until(doc, ".sk-card");
+    expect(doc.querySelector(".sk-hand-title")?.textContent).toBe("The door");
+    // The gameId is the fallback and nothing else: a visitor never reads one.
+    expect(doc.body.textContent).not.toContain("at-the-door");
+  });
+
+  it("falls back to the gameId when the venue has named no hand", async () => {
+    const server = createFakeServer({ base: BASE });
+    const party = server.seedParty({});
+    const { doc } = open("companion", {
+      url: `${BASE}/at/this-room/the-door`,
+      storage: { "storylet.party.token": party.token },
+      server,
+    });
+    await until(doc, ".sk-card");
+    expect(doc.querySelector(".sk-hand-title")?.textContent).toBe("at-the-door");
   });
 
   it("offers the chooser when the walls carry two stories and the phone holds nothing", async () => {
@@ -245,6 +373,68 @@ describe("the companion page", () => {
     const after = server.requests.slice(server.requests.indexOf(scan!) + 1);
     expect(after.length).toBeGreaterThan(0);
     expect(after.every((r) => r.bearer === "party")).toBe(true);
+  });
+
+  // THE DEFECT, from a walk-up party on 2026-09-05. They pressed "Keep this
+  // story", the keepsake QR came up, and the phone went on holding the day
+  // pass: at the next run's first code it was a stranger again, and the pocket
+  // it had just decided to keep was on the other side of a refusal.
+  //
+  // Issuing a permanent credential IS the claim (spec 7.1). So the keepsake is
+  // what the phone holds from that moment, under the same key: one credential,
+  // one place, replacing the one that dies with the run (7.3).
+  it("keeps the keepsake the claim minted, in place of the day pass", async () => {
+    const server = createFakeServer({ base: BASE });
+    const dayPass = server.seedParty({ claimed: false });
+    const { doc, dom } = open("companion", {
+      url: `${BASE}/at/this-room/the-door`,
+      storage: { "storylet.party.token": dayPass.token },
+      server,
+    });
+    await until(doc, ".sk-card");
+
+    const keep = [...doc.querySelectorAll<HTMLButtonElement>("button")]
+      .find((b) => b.textContent === "Keep this story")!;
+    keep.click();
+    await until(doc, ".sk-qr svg");
+
+    const stored = dom.window.localStorage.getItem("storylet.party.token");
+    expect(stored).toBeTruthy();
+    expect(stored).not.toBe(dayPass.token);
+
+    // The run ends. The day pass goes with it, as a day pass does, and the
+    // phone is holding the one thing that outlives it.
+    server.endRun();
+    const as = (token: string): Promise<{ ok: boolean; status: number }> =>
+      server.fetch(`${BASE}/v1/hello`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: "{}" });
+    expect((await as(stored!)).ok).toBe(true);
+    expect((await as(dayPass.token)).status).toBe(401);
+  });
+
+  // THE SECOND DEFECT, on the same page: the refusal was drawn under a red
+  // banner reading "No connection. Come back to this spot in a moment."
+  //
+  // A 4xx is an ANSWER. The server heard the phone and said which credential
+  // it was holding; the banner is for a connection that is gone, and putting
+  // it over the answer tells a visitor to wait at a wall for something that is
+  // never coming (spec 17 item 2).
+  it("shows a refusal as the answer it is, with no banner over the top", async () => {
+    const server = createFakeServer({ base: BASE });
+    const dayPass = server.seedParty({ claimed: false });
+    server.endRun();
+    const { doc } = open("companion", {
+      url: `${BASE}/at/this-room/the-door`,
+      storage: { "storylet.party.token": dayPass.token },
+      server,
+    });
+    await until(doc, ".app-say");
+
+    expect(doc.querySelector(".app-say")?.textContent).toContain("day pass for a run that has ended");
+    const banner = doc.querySelector<HTMLElement>(".sk-banner")!;
+    expect(banner.textContent).not.toContain("No connection");
+    // The element stays in the page, as it does from the first frame; what it
+    // must not do is say anything.
+    expect(banner.hidden).toBe(true);
   });
 
   it("holds its token, so a reload is the same party", async () => {
@@ -302,12 +492,19 @@ describe("the pieces a rebuild always needs", () => {
     expect(tokenFrom("  token-9  ")).toBe("token-9");
   });
 
-  it("turns station.json's field list into a template", () => {
-    const template = templateFrom([{ field: "prompt" }, { field: "cue", label: "Cue" }])!;
-    expect(template({ id: "c", fields: { prompt: "Look up.", cue: "storm", note: "ignored" } })).toEqual([
-      { key: "prompt", value: "Look up." },
-      { key: "cue", label: "Cue", value: "storm" },
-    ]);
-    expect(templateFrom(undefined)).toBeUndefined();
+  it("builds a card face from the station KIND, and lets station.json say the rest", () => {
+    // The author-facing switches are the KIND's and not the venue's: a
+    // companion that could be talked into showing a purpose by an edit to
+    // station.json is one typo from putting the author's notes on a phone.
+    for (const kind of ["companion", "fixed", "house"] as const) {
+      const face = faceFrom(kind, { body: "text", show: [{ field: "cue", label: "Cue" }] });
+      expect(face.purpose).toBe(false);
+      expect(face.outcomePurpose).toBe(false);
+    }
+    const crew = faceFrom("crew", { show: [{ field: "prompt" }] });
+    expect(crew.purpose).toBe(true);
+    expect(crew.outcomePurpose).toBe(true);
+    expect(crew.body).toBeUndefined();
+    expect(crew.show).toEqual([{ field: "prompt" }]);
   });
 });

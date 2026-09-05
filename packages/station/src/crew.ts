@@ -217,9 +217,12 @@ export async function startCrew(root: HTMLElement): Promise<void> {
         let part = hands.get(hand);
         if (part === undefined) {
           part = handPart({
-            // The crew template is the whole point of this view: title,
-            // purpose, and the project's own crew-facing field.
-            ...(shell.template !== undefined ? { template: shell.template } : {}),
+            // The crew face is the whole point of this view: title, purpose,
+            // the project's own crew-facing field, and each outcome's purpose
+            // as a hint beside the button. The one screen written for a
+            // reader of the author's notes (5.7).
+            face: shell.face,
+            heading: shell.handName(hand),
             emptyText: "Nothing to offer here.",
             onWantOutcomes: (card, from) => {
               void visit.outcomes(card, from).then((got) => { outcomes[card] = got; render(); }).catch(() => {});
@@ -231,8 +234,7 @@ export async function startCrew(root: HTMLElement): Promise<void> {
             },
           });
           hands.set(hand, part);
-          list.append(el("section", { className: "app-section" },
-            el("p", { className: "sk-label", text: hand }), part.el));
+          list.append(el("section", { className: "app-section" }, part.el));
         }
         part.update({ hand, cards, outcomes, busy: state.held });
       }

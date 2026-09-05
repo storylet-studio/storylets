@@ -74,6 +74,27 @@ rather than each app's.
   `Idempotency-Key` it was minted with. It is sent once when the network comes
   back, and the key makes a double arrival harmless. A play the server
   REFUSED is not queued: `gated` is decided, not delayed.
+- **A refusal is an answer, not a lost connection.** Degraded mode is for a
+  transport that failed: status 0, a network error, the stream dropping. A 4xx
+  with a wire code (`unknown_credential`, `revoked`, `not_bound`,
+  `installation_closed`, `wrong_role`) never holds the screen, because holding
+  promises the screen will catch up by itself and it will not. A refused
+  command rejects with its message, for the page to show; a refused stream
+  ticket stops the stream and sets `connection.refusal`, and a front-end
+  showing that message should leave its banner alone.
+
+## The token a phone holds
+
+`connectParty(token)` is built with what the phone had, and adopts what the
+server mints for it: the token that comes back with a walk-up scan, the one
+the chooser mints, and the KEEPSAKE its own `claim({ kind: "token" })` issues.
+Each arrives through `onToken` and is readable as `party.token`, so a page
+persists one credential in one place.
+
+The claim is the one that is easy to miss. Issuing a permanent credential IS
+the claim (spec 7.1), and the day pass a walk-up was given still expires at
+run end (7.3): a phone that took the keepsake and kept the day pass is a
+stranger at the next run's first code.
 
 ## The stream
 

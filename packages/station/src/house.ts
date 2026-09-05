@@ -74,11 +74,11 @@ export async function startHouse(root: HTMLElement): Promise<void> {
       let part = hands.get(hand);
       if (part === undefined) {
         // No outcomes are passed: the house is played by the cue list and by
-        // the console, never by whoever is standing in front of the wall.
-        part = handPart({ ...(shell.template !== undefined ? { template: shell.template } : {}), onPlay: () => {} });
+        // the console, never by whoever is standing in front of the wall. The
+        // face is the party's, plus the cue: a wall is read by the room.
+        part = handPart({ face: shell.face, heading: shell.handName(hand), onPlay: () => {} });
         hands.set(hand, part);
-        board.append(el("section", { className: "app-section" },
-          el("p", { className: "sk-label", text: hand }), part.el));
+        board.append(el("section", { className: "app-section" }, part.el));
       }
       part.update({ hand, cards });
     }

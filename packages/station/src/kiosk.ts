@@ -128,15 +128,16 @@ function table(shell: Shell, station: StationConnection, visit: Visit): void {
       let part = hands.get(hand);
       if (part === undefined) {
         part = handPart({
-          ...(shell.template !== undefined ? { template: shell.template } : {}),
+          // A kiosk is a party's screen, so it wears the companion's face.
+          face: shell.face,
+          heading: shell.handName(hand),
           onWantOutcomes: wantOutcomes,
           onPlay: (card, outcome, from) => {
             void visit.play(card, outcome, from).catch(() => { /* held, or refused; the board says which */ });
           },
         });
         hands.set(hand, part);
-        board.append(el("section", { className: "app-section" },
-          el("p", { className: "sk-label", text: hand }), part.el));
+        board.append(el("section", { className: "app-section" }, part.el));
       }
       part.update({ hand, cards, outcomes, busy: state.held });
     }

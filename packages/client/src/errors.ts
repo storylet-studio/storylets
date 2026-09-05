@@ -51,6 +51,24 @@ export class ClientError extends Error {
   get offline(): boolean {
     return this.status === 0;
   }
+
+  /**
+   * True when the server HEARD the question and said no: `unknown_credential`,
+   * `revoked`, `not_bound`, `installation_closed`, `wrong_role`.
+   *
+   * A refusal is an ANSWER, and the difference matters on a screen. Degraded
+   * mode promises that what is held will catch up by itself when the signal
+   * returns (spec 17 item 2); over a refusal that promise is false, and the
+   * banner talks over the one sentence the server wrote for the person
+   * standing there. So nothing in this client enters degraded mode on one.
+   *
+   * A 5xx is deliberately NOT a refusal: a server restarting behind a proxy is
+   * a connection failing while wearing a status code, and holding through it
+   * is exactly right.
+   */
+  get refusal(): boolean {
+    return this.status >= 400 && this.status < 500;
+  }
 }
 
 /** The code used when there was no response to read a code from. */

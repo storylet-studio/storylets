@@ -102,7 +102,11 @@ export interface Visit {
 export interface VisitDeps {
   transport: Transport;
   queue: CommandQueue;
-  bearer: Bearer;
+  /** A FUNCTION, not the value, for the reason the connection's own is one: a
+   *  phone that claims its keepsake mid-visit BECOMES that credential (spec
+   *  7.1), and a visit holding the string it was born with would go on dealing
+   *  as the day pass that is about to expire. */
+  bearer(): Bearer;
   /** Mint an `Idempotency-Key`. One per command, reused on retry. */
   key(): string;
   /** The connection state, read at snapshot time so the visit's own `held`
@@ -200,7 +204,7 @@ export function createVisit(deps: VisitDeps, seed: {
   }
 
   const send = <T>(path: string, body: unknown): Promise<T> =>
-    deps.queue.send<T>(deps.bearer, { method: "POST", path, body, idempotencyKey: deps.key() });
+    deps.queue.send<T>(deps.bearer(), { method: "POST", path, body, idempotencyKey: deps.key() });
 
   const visit: Visit = {
     id,
@@ -213,7 +217,7 @@ export function createVisit(deps: VisitDeps, seed: {
     get messages() { return state.messages; },
 
     async outcomes(card, hand) {
-      const res = await deps.transport.send<GetOutcomesResponse>(deps.bearer, {
+      const res = await deps.transport.send<GetOutcomesResponse>(deps.bearer(), {
         method: "GET",
         path: `/visits/${seg(id)}/cards/${seg(card)}/outcomes`,
         query: { hand },
@@ -258,7 +262,7 @@ export function createVisit(deps: VisitDeps, seed: {
     },
 
     async park() {
-      const res = await deps.queue.send<ParkVisitResponse>(deps.bearer, {
+      const res = await deps.queue.send<ParkVisitResponse>(deps.bearer(), {
         method: "DELETE",
         path: `/visits/${seg(id)}`,
         idempotencyKey: deps.key(),
@@ -268,7 +272,7 @@ export function createVisit(deps: VisitDeps, seed: {
     },
 
     async detach() {
-      const res = await deps.queue.send<DetachStationResponse>(deps.bearer, {
+      const res = await deps.queue.send<DetachStationResponse>(deps.bearer(), {
         method: "DELETE",
         path: `/visits/${seg(id)}/stations/me`,
         idempotencyKey: deps.key(),
@@ -278,7 +282,7 @@ export function createVisit(deps: VisitDeps, seed: {
     },
 
     async refresh() {
-      const res = await deps.transport.send<GetBoardResponse>(deps.bearer, {
+      const res = await deps.transport.send<GetBoardResponse>(deps.bearer(), {
         method: "GET",
         path: `/visits/${seg(id)}/board`,
       });
@@ -290,7 +294,7 @@ export function createVisit(deps: VisitDeps, seed: {
     },
 
     async refreshProperties() {
-      const res = await deps.transport.send<GetPropertiesResponse>(deps.bearer, {
+      const res = await deps.transport.send<GetPropertiesResponse>(deps.bearer(), {
         method: "GET",
         path: `/visits/${seg(id)}/properties`,
       });

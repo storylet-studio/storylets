@@ -38,8 +38,8 @@ separation is what makes REARRANGE a day's work rather than a rewrite.
 | Part | What it draws |
 |---|---|
 | `handshakePart` | camera QR (`BarcodeDetector` where it exists), a typed-code fallback that is never optional, an optional call-sign pick list |
-| `handPart` | the hand as cards, outcomes as buttons, gated ones **disabled and never hidden** |
-| `fieldRows` / `FieldTemplate` | a card's fields, drawn by a template the venue supplies |
+| `handPart` | the hand as cards, outcomes as buttons, gated ones **disabled and never hidden**; the face is the party's unless a `CardFace` says otherwise |
+| `planTemplate` / `FieldTemplate` | a card's fields, drawn by the plan a venue supplies: a body as prose, then the named fields |
 | `zoneStripPart` | where this device is, tapped from the venue's locations |
 | `messageTrayPart` | messages, newest first, with Acknowledge on what asked for it |
 | `helpButtonPart` | a performer's help call, one thumb |
@@ -69,7 +69,16 @@ second request is a stylesheet that can be missing, and a kiosk with no styles
 reads as broken rather than plain. Call `installKitStyles()` once, or copy
 `KIT_CSS` into your own build.
 
-## Two rules the parts keep for you
+## Three rules the parts keep for you
+
+**A card face is built by the station kind.** `handPart`'s default is the
+PARTY's face: the card's title, the story (`body`, `text` unless a plan says
+otherwise), and the outcomes as buttons labelled with their titles. The card's
+purpose and the outcomes' purposes are the author's notes about what a beat is
+for, and they are drawn only for a face that asks (`purpose`,
+`outcomePurpose`), which is a crew handset and nothing else. An outcome's
+purpose is never the button's `title` or `aria-label`: a hint in the
+accessible name is the same leak, read out loud instead of drawn.
 
 **A gated outcome is disabled, never hidden.** A performer who cannot see what
 is unavailable cannot tell a locked door from a missing one, and a party

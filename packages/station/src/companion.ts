@@ -17,14 +17,22 @@
 // party. It is the only thing this page remembers, and it is the only thing
 // worth remembering: the server holds no name, no email and no photo.
 //
-// TWO WAYS A TOKEN ARRIVES, and both are stored the same way under the same
-// key. One is `/p/<token>`: a QR that IS the credential. The other is the
-// walk-up: a phone holding nothing scans a placard, the server mints a
+// THREE WAYS A TOKEN ARRIVES, and all three are stored the same way under the
+// same key. One is `/p/<token>`: a QR that IS the credential. The second is
+// the walk-up: a phone holding nothing scans a placard, the server mints a
 // transient party and hands the token back with the attach, and the client
 // adopts it (spec 7.1). Storing only the first is storing the case that was
 // already carrying its own credential, and losing the case that was not: the
 // next reload would be a stranger again, and every call after the scan would
 // be made as nobody.
+//
+// The third is the CLAIM. Issuing a permanent credential is the claim (7.1),
+// and what it issues replaces what this phone held: the day pass a walk-up was
+// given dies with the run whether or not anybody claimed (7.3), so a phone
+// that took the keepsake and kept the day pass is a stranger at the next
+// run's first code, holding a photograph of a story it can no longer reach.
+// The client adopts the keepsake as it adopts a scan's token, and it arrives
+// here through the same `onToken`.
 //
 // Nearly always rebuilt (spec 12): the player-facing surface is the brand.
 // This one is plain enough that nobody mistakes it for a venue's design.
@@ -182,6 +190,9 @@ function table(shell: Shell, party: PartyConnection, visit: Visit): void {
       const id = visit.state.party;
       if (id === undefined) return;
       void party.claim(id, { kind: "token" }).then((claimed) => {
+        // The keepsake on screen and the credential this phone holds are now
+        // the same thing: the client adopted it, and `onToken` above has
+        // already put it where a reload will look (spec 7.1).
         if (claimed.qr === undefined) return;
         keepsake.update({ text: claimed.qr, caption: "Photograph this to come back." });
         keepsakeWrap.replaceChildren(keepsake.el);
@@ -197,7 +208,10 @@ function table(shell: Shell, party: PartyConnection, visit: Visit): void {
       let part = hands.get(hand);
       if (part === undefined) {
         part = handPart({
-          ...(shell.template !== undefined ? { template: shell.template } : {}),
+          // A visitor's face: the title, the story, the outcome titles. The
+          // author's notes and the crew's prompts are not this screen's (5.7).
+          face: shell.face,
+          heading: shell.handName(hand),
           emptyText: "Nothing here yet. Try another code.",
           onWantOutcomes: (card, from) => {
             void visit.outcomes(card, from).then((got) => { outcomes[card] = got; render(); }).catch(() => {});
@@ -211,8 +225,7 @@ function table(shell: Shell, party: PartyConnection, visit: Visit): void {
           },
         });
         hands.set(hand, part);
-        board.append(el("section", { className: "app-section" },
-          el("p", { className: "sk-label", text: hand }), part.el));
+        board.append(el("section", { className: "app-section" }, part.el));
       }
       part.update({ hand, cards, outcomes, busy: state.held });
     }

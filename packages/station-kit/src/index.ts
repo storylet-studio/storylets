@@ -27,8 +27,8 @@ export { KIT_CSS } from "./style.js";
 export { handPart } from "./hand.js";
 export type { HandOptions, HandState } from "./hand.js";
 
-export { defaultTemplate, fieldRows, noFields, onlyFields, showValue } from "./fields.js";
-export type { FieldRow, FieldTemplate } from "./fields.js";
+export { BODY_FIELD, fieldRows, noFields, onlyFields, planTemplate, readingTemplate, showValue } from "./fields.js";
+export type { CardFace, FieldPlan, FieldRow, FieldSpec, FieldTemplate } from "./fields.js";
 
 export { handshakePart } from "./handshake.js";
 export type { CallSignOption, HandshakeOptions, HandshakeState } from "./handshake.js";

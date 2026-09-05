@@ -267,6 +267,102 @@ describe("a command pressed while the wifi is away", () => {
     station.close();
   });
 
+  // THE SECOND DEFECT of 2026-09-05: the refusal above was rendered under a
+  // red banner reading "No connection. Come back to this spot in a moment."
+  //
+  // A refusal is an ANSWER. The server heard the question and said no, and no
+  // amount of waiting changes it, so degraded mode - which promises the screen
+  // will catch up by itself - is a lie told over the top of the truth. Held is
+  // for a transport that failed: status 0, a network error, the stream
+  // dropping (spec 17 item 2).
+  it("does not hold the screen for a refusal: the server answered", async () => {
+    const { server, station, visit } = await room();
+    expect(station.connection).toBe("live");
+    // Every frame a front-end would draw, not just the last one: a banner that
+    // flashes the refusal's own words and then takes them back is the defect
+    // arriving and leaving too fast for a test that only looks afterwards.
+    const held: { held: boolean; reason?: string }[] = [];
+    station.subscribe((_state, isHeld, reason) => held.push({ held: isHeld, ...(reason !== undefined ? { reason } : {}) }));
+
+    // Two commands, the first refused. The second is still waiting, which is
+    // the shape that used to turn a refusal's own words into a hold.
+    const gated = visit.play("who-let-you-in", "show-the-key", "at-the-door");
+    const dealt = visit.deal();
+    await expect(gated).rejects.toMatchObject({ code: "gated", status: 409 });
+    await dealt;
+    await settle();
+
+    expect(held.filter((h) => h.held)).toEqual([]);
+
+    expect(station.connection).toBe("live");
+    expect(station.held).toBe(false);
+    expect(station.heldReason).toBeUndefined();
+    expect(visit.state.held).toBe(false);
+    expect(station.refusal).toBeUndefined();
+
+    // And a real blip still raises it, which is the half that must not be
+    // lost while fixing the other.
+    server.offline = true;
+    server.drop();
+    await settle();
+    expect(station.held).toBe(true);
+    expect(station.connection).toBe("held");
+    station.close();
+  });
+
+  it("stops rather than holds when the stream itself is refused", async () => {
+    // The phone at the door: a day pass that died with the run. The ticket is
+    // refused, so there is no stream and there will not be one until this
+    // client is somebody else - but the page has an answer to show, and the
+    // banner must not talk over it with a story about the network.
+    const server = createFakeServer();
+    const timers = manualTimers();
+    const client = createClient({
+      base: "http://venue.local",
+      fetch: server.fetch,
+      EventSource: server.EventSource,
+      timers,
+    });
+    const phone = client.connectParty("token-that-died-with-the-run");
+    await settle();
+    await settle();
+
+    expect(phone.held).toBe(false);
+    expect(phone.connection).not.toBe("held");
+    expect(phone.refusal?.code).toBe("unknown_credential");
+    // Not retried on a ladder: the server has decided, and fifty phones
+    // arguing with it is a denial of service the venue performs on itself.
+    const tickets = () => server.requests.filter((r) => r.path === "/v1/stream-ticket").length;
+    const asked = tickets();
+    expect(asked).toBe(1);
+    timers.runAll();
+    await settle();
+    expect(tickets()).toBe(asked);
+    phone.close();
+  });
+
+  it("takes the stream back up as whoever it becomes, and forgets the refusal", async () => {
+    const server = createFakeServer();
+    const client = createClient({
+      base: "http://venue.local",
+      fetch: server.fetch,
+      EventSource: server.EventSource,
+      timers: manualTimers(),
+    });
+    // A phone holding nothing: the ticket is refused, and then the scan mints
+    // the party it becomes. Adopting is what re-opens the stream.
+    const phone = client.connectParty();
+    await settle();
+    expect(phone.refusal).toBeTruthy();
+
+    await phone.atLocation("this-room", "the-door");
+    await settle();
+    await settle();
+    expect(phone.connection).toBe("live");
+    expect(phone.refusal).toBeUndefined();
+    phone.close();
+  });
+
   it("goes inert on close, refusing whatever was still held", async () => {
     const { server, station, visit } = await room();
     server.offline = true;

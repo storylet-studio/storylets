@@ -10,6 +10,8 @@
 
 import { describe, expect, it, beforeAll } from "vitest";
 import { execFile } from "node:child_process";
+// @ts-expect-error a plain module beside the scripts, typed by use
+import { withBuildLock } from "../../../scripts/test-build-lock.mjs";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -34,11 +36,13 @@ function run(args: string[], cwd: string): Promise<void> {
 }
 
 beforeAll(async () => {
-  // CI tests before it builds, and the client copies the drop-in the play-helpers
-  // package builds: build the libraries first when it is missing (local runs skip this).
-  const dropIn = join(pkg, "../play-helpers/dist/storyletengine.min.js");
-  if (!existsSync(dropIn)) await run(["run", "build:libs"], join(pkg, "../.."));
-  await run(["run", "build"], pkg);
+  await withBuildLock(async () => {
+    // CI tests before it builds, and the client copies the drop-in the play-helpers
+    // package builds: build the libraries first when it is missing (local runs skip this).
+    const dropIn = join(pkg, "../play-helpers/dist/storyletengine.min.js");
+    if (!existsSync(dropIn)) await run(["run", "build:libs"], join(pkg, "../.."));
+    await run(["run", "build"], pkg);
+  });
 }, 600_000);
 
 function open(storage?: Record<string, string>): { doc: Document } {

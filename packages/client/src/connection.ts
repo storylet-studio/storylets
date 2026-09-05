@@ -70,6 +70,14 @@ export interface Connection {
   readonly connection: ConnectionState;
   readonly held: boolean;
   readonly heldReason: string | undefined;
+  /** The server's REFUSAL of this bearer, when there is one: the stream's
+   *  ticket was answered with `unknown_credential`, `revoked`, `wrong_role`.
+   *  Set instead of degraded mode, never as well as it, because the two say
+   *  opposite things to the person holding the phone: a hold says wait, and a
+   *  refusal says this credential is not the one. A front-end showing the
+   *  refusal's own message should leave its connection banner alone (spec 17
+   *  item 2). Cleared the moment a stream opens. */
+  readonly refusal: ClientError | undefined;
   /** Told on every connection-state change, and once immediately. */
   subscribe(listener: (state: ConnectionState, held: boolean, reason?: string) => void): () => void;
   /** Every event this bearer receives, raw, for a front-end that wants more
@@ -116,9 +124,20 @@ export interface PartyConnection extends Connection {
    *  there and attaches, and the minted token is adopted as `atLocation`'s
    *  is. */
   chooseInstallation(venue: VenueId, location: LocationId, installation: InstallationId): Promise<Attached<ChooseInstallationResponse>>;
-  /** The token this phone is holding NOW: the one it was built with, or the
-   *  one a scan minted for it. Undefined before either, which is the honest
-   *  answer for a phone that has never been here. */
+  /** Take the keepsake, and BECOME it.
+   *
+   *  Issuing a permanent credential IS the claim (spec 7.1), so the credential
+   *  it issues is this phone's from that moment: adopted exactly as a first
+   *  scan's minted token is, and announced through {@link PartyConnection.onToken}
+   *  so a page keeps one credential in one place. A phone that claimed and
+   *  went on holding its day pass is refused on the next run's first scan
+   *  (7.3), with the pocket it just decided to keep on the wrong side of the
+   *  refusal. */
+  claim(partyId: PartyId, req: Omit<ClaimPartyRequest, "partyId">): Promise<ClaimPartyResponse>;
+  /** The token this phone is holding NOW: the one it was built with, the one
+   *  a scan minted for it, or the keepsake its own claim issued. Undefined
+   *  before any of them, which is the honest answer for a phone that has never
+   *  been here. */
   readonly token: string | undefined;
   /** Told whenever a scan or a choice mints a token, and NOT for the one this
    *  connection was built with. A companion page persists it here: the token
@@ -166,6 +185,7 @@ function createConnection(deps: ConnectionDeps): { conn: Connection; raw: Connec
   let queueHeld = false;
   let queueReason: string | undefined;
   let current: Visit | undefined;
+  let refusal: ClientError | undefined;
   let closed = false;
 
   const stateListeners = new Set<(s: ConnectionState, held: boolean, reason?: string) => void>();
@@ -216,6 +236,9 @@ function createConnection(deps: ConnectionDeps): { conn: Connection; raw: Connec
       ...(deps.EventSource !== undefined ? { EventSource: deps.EventSource } : {}),
       ...(deps.timers !== undefined ? { timers: deps.timers } : {}),
       onEvent: deliver,
+      // Set BEFORE the state change that follows it, so the first frame a
+      // subscriber is given already carries the reason.
+      onRefused: (error) => { refusal = error; },
       onState: (next) => {
         state = next;
         // The stream is back, so the network is back: send what was held,
@@ -240,13 +263,15 @@ function createConnection(deps: ConnectionDeps): { conn: Connection; raw: Connec
   const adoptToken = (token: string): void => {
     if (closed || token === "" || token === bearer) return;
     bearer = token;
+    // Whoever was refused, this client is not them any more.
+    refusal = undefined;
     stream?.restart();
     for (const l of tokenListeners) safely(() => l(token));
   };
 
   const adopt = <R>(response: R, seed: Parameters<typeof createVisit>[1]): Attached<R> => {
     current?.close();
-    current = createVisit({ transport, queue, bearer, key: deps.key, connection: heldNow }, seed);
+    current = createVisit({ transport, queue, bearer: () => bearer, key: deps.key, connection: heldNow }, seed);
     return { response, visit: current };
   };
 
@@ -314,6 +339,7 @@ function createConnection(deps: ConnectionDeps): { conn: Connection; raw: Connec
     get connection() { return heldNow().state; },
     get held() { return heldNow().held; },
     get heldReason() { return heldNow().reason; },
+    get refusal() { return refusal; },
     subscribe(listener) {
       stateListeners.add(listener);
       const now = heldNow();
@@ -417,10 +443,38 @@ export function createStationConnection(deps: ConnectionDeps): StationConnection
   }) as StationConnection;
 }
 
+/**
+ * The bearer inside a keepsake.
+ *
+ * The wire hands a claim's keepsake back as `qr`, the URL to print or
+ * photograph, and the spec defines that URL as `https://<server>/p/<token>`
+ * (7.1): the credential is its last segment. That is the same reading the
+ * companion page makes of its own arrival URL, so it is a format both ends
+ * already depend on rather than a guess about one. A value with no `/p/` in it
+ * is taken as the token itself, so a server that hands the bearer over plainly
+ * needs no second rule here.
+ */
+const keepsakeToken = (res: ClaimPartyResponse): string | undefined => {
+  if (typeof res.qr !== "string" || res.qr === "") return undefined;
+  const match = /\/p\/([^/?#]+)/.exec(res.qr);
+  return match?.[1] !== undefined ? decodeURIComponent(match[1]) : res.qr;
+};
+
 export function createPartyConnection(deps: ConnectionDeps): PartyConnection {
   const { conn, raw } = createConnection(deps);
   const { bearer, queue, key, adopt, adoptToken, onToken } = raw;
   const party = Object.assign(Object.create(conn) as Connection, {
+    async claim(partyId: PartyId, req: Omit<ClaimPartyRequest, "partyId">): Promise<ClaimPartyResponse> {
+      const res = await conn.claim(partyId, req);
+      // A KEEPSAKE ONLY. A call sign is said out loud and a wristband is worn;
+      // neither is a bearer this phone can hold, and the day pass stays the
+      // credential until one of the venue's own stations resolves the other.
+      if (req.kind === "token") {
+        const token = keepsakeToken(res);
+        if (token !== undefined) adoptToken(token);
+      }
+      return res;
+    },
     async atLocation(venue: VenueId, location: LocationId): Promise<AttachAtLocationResponse> {
       const res = await queue.send<AttachAtLocationResponse>(bearer(), {
         method: "POST",

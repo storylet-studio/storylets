@@ -71,6 +71,10 @@ export const KIT_CSS = `
 
 /* --- the hand -------------------------------------------------------------- */
 .sk-hand { display: flex; flex-direction: column; gap: 12px; }
+.sk-cards { display: flex; flex-direction: column; gap: 12px; }
+/* What the hand is called, in words rather than in shouted capitals: a
+   visitor reads "The door", never the gameId behind it. */
+.sk-hand-title { font: 600 1rem var(--font-read, Georgia, serif); margin: 0; }
 .sk-hand-empty { color: var(--muted, #4d5b6b); font-style: italic; padding: 12px 0; }
 .sk-card {
   background: var(--card, #fbfcfe);
@@ -80,10 +84,17 @@ export const KIT_CSS = `
 }
 .sk-card-title { font: 600 1.05rem var(--font-read, Georgia, serif); margin: 0 0 4px; }
 .sk-card-purpose { color: var(--muted, #4d5b6b); font-size: 0.85rem; line-height: 1.45; margin: 0 0 8px; }
+/* The story, as prose. No label and no colon in front of it: a visitor is
+   reading, not consulting the venue's vocabulary. */
+.sk-card-text { font: 1.05rem/1.55 var(--font-read, Georgia, serif); margin: 0 0 4px; }
 .sk-outcomes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 /* A gated outcome is DISABLED, never hidden (spec 12): a performer who cannot
    see what is unavailable cannot tell a locked door from a missing one. */
 .sk-outcome[disabled] { text-decoration: line-through; }
+/* A crew handset only: the outcome's purpose BESIDE the button, never inside
+   it, so the button's accessible name stays the title. */
+.sk-outcome-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 16rem; }
+.sk-outcome-hint { color: var(--muted, #4d5b6b); font-size: 0.8rem; line-height: 1.4; }
 
 /* --- fields ---------------------------------------------------------------- */
 .sk-fields { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
