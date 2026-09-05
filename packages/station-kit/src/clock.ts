@@ -50,10 +50,14 @@ export const showTime = (seconds: number): string => {
   return h > 0 ? `${sign}${h}:${mm}:${ss}` : `${sign}${mm}:${ss}`;
 };
 
-const wallTime = (iso: string): string => {
-  const when = new Date(iso);
-  if (Number.isNaN(when.getTime())) return "";
-  return `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
+/** `14:32` from minutes since midnight, local to the venue, which is what
+ *  `time_wall` is (10.1): the building's own clock, in the building's own
+ *  zone, so there is no instant to parse and no timezone to guess. A reading
+ *  past midnight wraps the day rather than printing `25:00`. */
+const wallTime = (minutes: number): string => {
+  if (!Number.isFinite(minutes)) return "";
+  const m = ((Math.floor(minutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 };
 
 export function showClockPart(opts: ShowClockOptions = {}): Part<ShowClockState> {

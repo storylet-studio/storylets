@@ -352,14 +352,16 @@ describe("the show clock", () => {
       setInterval: (fn) => { tick = fn; return 1; },
       clearInterval: () => {},
     }));
-    part.update({ clocks: { time_wall: "2026-09-05T14:32:00.000Z", time_show: 100, time_phase: "evening" } });
+    part.update({ clocks: { time_wall: 872, time_show: 100, time_phase: "evening" } });
     expect(part.el.querySelector(".sk-clock-show")?.textContent).toBe("01:40");
     expect(part.el.querySelector(".sk-clock-phase")?.textContent).toBe("evening");
+    // 872 minutes since midnight is 14:32 on the venue's own wall.
+    expect(part.el.querySelector(".sk-clock-wall")?.textContent).toBe("14:32");
     tick();
     tick();
     expect(part.el.querySelector(".sk-clock-show")?.textContent).toBe("01:42");
     // A Hold holds the show clock, and the local count with it (spec 10.1).
-    part.update({ clocks: { time_wall: "2026-09-05T14:32:00.000Z", time_show: 102, time_phase: "evening" }, paused: true });
+    part.update({ clocks: { time_wall: 872, time_show: 102, time_phase: "evening" }, paused: true });
     tick();
     tick();
     expect(part.el.querySelector(".sk-clock-show")?.textContent).toBe("01:42");

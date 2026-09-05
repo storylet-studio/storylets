@@ -234,6 +234,12 @@ export interface FakeServer {
 
 const now = (): string => new Date(1_756_000_000_000).toISOString();
 
+/** The wall clock this fake reads back: minutes since midnight, local to the
+ *  venue, which is what `time_wall` is (10.1). 872 is 14:32. A literal rather
+ *  than something derived from `now()`, so no frame depends on the timezone
+ *  the suite happens to run in. */
+const WALL_MINUTES = 872;
+
 export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
   const base = (opts.base ?? "http://venue.local").replace(/\/+$/, "");
   const stationKey = opts.stationKey ?? "station-key";
@@ -324,10 +330,14 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
   /** `@world`, the console's read of it: everything, including the three
    *  derived clocks (wire 10.1, 10.2). */
   const world: PropertyView[] = [
-    { path: CLOCK_WALL, value: now(), type: "string", writable: false, shared: true },
+    { path: CLOCK_WALL, value: WALL_MINUTES, type: "number", writable: false, shared: true },
     { path: CLOCK_SHOW, value: 120, type: "number", writable: false, shared: true },
     { path: CLOCK_PHASE, value: "afternoon", type: "string", writable: false, shared: true },
     { path: "world.doors_open", value: true, type: "boolean", writable: true, shared: true },
+    // An enum and a quality, declared options and all, because a console that
+    // is only told the type can offer a producer nothing but a text field.
+    { path: "world.weather", value: "fair", type: "enum", writable: true, shared: true, values: ["fair", "rain", "storm"] },
+    { path: "story.standing", value: "stranger", type: "quality", writable: true, shared: true, stages: ["stranger", "friend", "kin"] },
   ];
 
   const cues: GetCueListResponse = {
@@ -866,7 +876,7 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
           properties: [
             { path: "world.time_phase", value: "afternoon", type: "string", writable: false, shared: true },
           ],
-          clocks: { time_wall: now(), time_show: 120, time_phase: "afternoon" },
+          clocks: { time_wall: WALL_MINUTES, time_show: 120, time_phase: "afternoon" },
         };
         return ok(res);
       }
@@ -907,7 +917,7 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
           const res: GetBoardResponse = {
             board: visit.board,
             turns: visit.turns,
-            clocks: { time_wall: now(), time_show: 120, time_phase: "afternoon" },
+            clocks: { time_wall: WALL_MINUTES, time_show: 120, time_phase: "afternoon" },
           };
           return ok(res);
         }
@@ -1029,7 +1039,11 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
               if (until !== null && e.at > until) return false;
               return true;
             });
-            const res: GetJournalResponse = { ...pageOf(window), head: head() };
+            // Recent-first, as `GetJournalResponse` says and the real server
+            // does: a producer asking "what happened at 14:32" reads down from
+            // the newest, and paging from the oldest would hand them the start
+            // of the day.
+            const res: GetJournalResponse = { ...pageOf(window.reverse()), head: head() };
             return ok(res);
           }
           if (rest === "/snapshot" && init.method === "POST") {

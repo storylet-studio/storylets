@@ -582,10 +582,17 @@ export function createProducerConnection(deps: ProducerDeps): ProducerConnection
       const phase = value(CLOCK_PHASE);
       // Coerced rather than trusted: a store keeps a scalar and `Clocks` says
       // which of the three it is. A clock the project renamed is simply absent,
-      // and absent reads as the empty answer rather than as a wrong one.
+      // and absent reads as the empty answer rather than as a wrong one. Both
+      // numbers go through `Number` so a store that kept a numeric clock as a
+      // string still reads as the number it is: `time_wall` is minutes since
+      // midnight in the venue's zone, not an instant (10.1).
+      const minutes = (v: unknown): number => {
+        const n = typeof v === "number" ? v : Number(v ?? 0);
+        return Number.isFinite(n) ? n : 0;
+      };
       return {
-        time_wall: typeof wall === "string" ? wall : "",
-        time_show: typeof show === "number" ? show : Number(show ?? 0),
+        time_wall: minutes(wall),
+        time_show: minutes(show),
         time_phase: typeof phase === "string" ? phase : "",
       };
     },

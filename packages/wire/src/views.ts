@@ -116,6 +116,15 @@ export interface PropertyView {
   path: PropertyPath;
   value: ScalarValue;
   type: PropertyType;
+  /** An enum's or a flags property's declared options, in declaration order,
+   *  mirroring the model's `PropertyDecl.values`. Present so a console can
+   *  offer the choice rather than a text field a producer can misspell;
+   *  absent on every other type. */
+  values?: string[];
+  /** A quality's ordered ladder of stage names, mirroring the model's
+   *  `PropertyDecl.stages`. Order IS the meaning: position in this list is
+   *  what `>=` compares and what a stage picker steps along. */
+  stages?: string[];
   /** False for a story property the content declares read-only. It protects
    *  against OUTCOMES only; what an external writer may touch is the
    *  installation's resolver decision, per property (5.6). */
@@ -156,6 +165,14 @@ export interface VisitView {
   callSign?: string;
   /** Every station attached right now: a group can split up (5.4). */
   stations: StationId[];
+  /** Where a phone-only party stands: the location each of the visit's
+   *  credentials last scanned a placard at, journaled as `visit.stand`
+   *  (5.4, 5.7). A placard is a location and not a station, so a party
+   *  playing on its own phones attaches no station and would otherwise be
+   *  nowhere on the map. Standing is per CREDENTIAL, so a party at two walls
+   *  has two entries, and the map pins it at both, exactly as it draws a
+   *  party at two stations. Absent while no credential has scanned. */
+  standing?: { credential: CredentialId; location: LocationId }[];
   lastCommandAt: IsoTimestamp;
   /** Past `visit.idleMinutes` with no command: the next sweep parks it. */
   idle: boolean;

@@ -118,6 +118,11 @@ describe("runs", () => {
     expect(journal.items.length).toBeGreaterThan(0);
     expect(journal.items.every((e) => e.command.kind === "play" || e.command.kind === "set")).toBe(true);
     expect(journal.head).toBeGreaterThan(0);
+    // Recent-first, which is what the wire says and what the producer's
+    // question ("what just happened") asks for. The first page is the newest
+    // end of the run, so `seq` descends.
+    const seqs = journal.items.map((e) => e.seq);
+    expect(seqs).toEqual([...seqs].sort((a, b) => b - a));
     expect(last(server).path).toContain("kinds=play%2Cset");
     expect(last(server).path).toContain("flow=house");
     producer.close();
@@ -326,7 +331,9 @@ describe("the world, the house and the clocks", () => {
   it("reads the three clocks as one narrowed read, since there is no clock route", async () => {
     const { server, producer } = desk();
     const clocks = await producer.world.clocks("the-caretaker");
-    expect(typeof clocks.time_wall).toBe("string");
+    // Minutes since midnight, local to the venue, not an instant (10.1). It
+    // used to coerce the number to the empty string, which read as midnight.
+    expect(clocks.time_wall).toBe(14 * 60 + 32);
     expect(clocks.time_show).toBe(120);
     expect(clocks.time_phase).toBe("afternoon");
     expect(last(server).path).toContain(`prefix=${encodeURIComponent(CLOCK_PREFIX)}`);

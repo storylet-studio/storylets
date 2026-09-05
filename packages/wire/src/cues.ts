@@ -9,7 +9,7 @@
 // special case in content.
 // ---------------------------------------------------------------------------
 
-import type { GameId, IsoTimestamp, PropertyPath } from "./vocabulary.js";
+import type { GameId, PropertyPath } from "./vocabulary.js";
 import type { MessageAudience } from "./views.js";
 
 /** The three world clocks, by the property path each answers to. They are
@@ -30,8 +30,12 @@ export const CLOCK_PATHS = [CLOCK_WALL, CLOCK_SHOW, CLOCK_PHASE] as const;
  *  names, without the `world.` prefix, so a template that prints a clock and
  *  a condition that reads one use the same word. */
 export interface Clocks {
-  /** Wall time now, as the server sees it. */
-  time_wall: IsoTimestamp;
+  /** What the clock on the wall says: MINUTES SINCE MIDNIGHT, local to the
+   *  venue, so 14:32 is 872 and midnight is 0. A number and not an instant
+   *  because it is a physical fact about the building, answered in the
+   *  venue's own zone, and because a condition says `>= 840` rather than
+   *  parsing a date (10.1). */
+  time_wall: number;
   /** Seconds since GO. Negative before it, when the run has started but the
    *  show has not. */
   time_show: number;

@@ -88,7 +88,10 @@ const outcome: OutcomeViewWire = { id: "stand-and-fight", title: "Stand and figh
 const board: BoardView = { "the-well": [card] };
 const turns: TurnsView = { "the-village": 3 };
 const property: PropertyView = { path: "story.visits", value: 2, type: "number", writable: true, shared: false, durable: true };
-const clocks: Clocks = { time_wall: AT, time_show: 1830, time_phase: "act-2" };
+const enumProperty: PropertyView = { path: "world.weather", value: "rain", type: "enum", writable: false, values: ["fair", "rain", "storm"] };
+const qualityProperty: PropertyView = { path: "story.standing", value: "friend", type: "quality", writable: true, stages: ["stranger", "friend", "kin"] };
+// 872 is 14:32: minutes since midnight, local to the venue, not an instant.
+const clocks: Clocks = { time_wall: 872, time_show: 1830, time_phase: "act-2" };
 const build: BuildIdentity = { project: "the-park", version: "0.4.0", hash: "9f2c1a" };
 const venue: VenueView = { venue: VENUE, name: "The Park", plan: { width: 1200, height: 800, background: "/venue/plan.png" } };
 const location: LocationView = { location: LOCATION, venue: VENUE, label: "The well", x: 120, y: 400, code: "https://the-park.local:4480/at/vn_the_park/lo_the_well" };
@@ -97,6 +100,11 @@ const binding: BindingView = { installation: INSTALLATION, hand: "the-well", loc
 const actor: Actor = { kind: "producer", id: PRINCIPAL, label: "Priya" };
 const presence: PresenceView = { station: STATION, kind: "crew", location: LOCATION, zone: "forest", since: AT };
 const visit: VisitView = { visit: VISIT, party: PARTY, installation: INSTALLATION, callSign: "quiet otter", stations: [STATION], lastCommandAt: AT, idle: false };
+// A phone-only party: no station attached, and two credentials at two walls.
+const standingVisit: VisitView = {
+  visit: VISIT, party: PARTY, installation: INSTALLATION, stations: [], lastCommandAt: AT, idle: false,
+  standing: [{ credential: "cr_1", location: LOCATION }, { credential: "cr_2", location: "lo_the_forge" }],
+};
 const party: PartyView = { party: PARTY, installation: INSTALLATION, callSign: "quiet otter", claimed: true, createdAt: AT };
 const credential: CredentialView = { id: "cr_1", kind: "token", issuedAt: AT };
 const station: StationView = { station: STATION, venue: VENUE, label: "The well", kind: "fixed", location: LOCATION };
@@ -415,6 +423,7 @@ const broadcastMessageResponse: BroadcastMessageResponse = { message, delivered:
 /** Everything above, so nothing is an unused local and the compile covers it
  *  all. The runtime assertion is deliberately weak: the compile is the test. */
 const shapes: unknown[] = [
+  enumProperty, qualityProperty, standingVisit,
   helloRequest, helloResponse, mintPartyRequest, mintPartyResponse, claimPartyRequest,
   claimPartyResponse, issueCredentialRequest, issueCredentialResponse, handshakes,
   handshakeResponse, attachAtLocationRequest, attachAtLocationResponses,
@@ -489,6 +498,24 @@ describe("the wire contract", () => {
     expect(CLOCK_SHOW).toBe("world.time_show");
     expect(CLOCK_PHASE).toBe("world.time_phase");
     expect(CLOCK_PATHS).toEqual([CLOCK_WALL, CLOCK_SHOW, CLOCK_PHASE]);
+  });
+
+  it("reads the wall clock as minutes since midnight, not as an instant", () => {
+    expect(typeof clocks.time_wall).toBe("number");
+    expect(clocks.time_wall).toBe(14 * 60 + 32);
+  });
+
+  it("carries an enum's options and a quality's ladder, so a console need not offer a text field", () => {
+    expect(enumProperty.values).toEqual(["fair", "rain", "storm"]);
+    expect(qualityProperty.stages).toEqual(["stranger", "friend", "kin"]);
+    expect(property.values).toBeUndefined();
+  });
+
+  it("stands a phone-only party per credential, so a party at two walls is at both", () => {
+    expect(standingVisit.stations).toEqual([]);
+    expect(standingVisit.standing).toHaveLength(2);
+    expect(standingVisit.standing?.map((s) => s.location)).toEqual([LOCATION, "lo_the_forge"]);
+    expect(visit.standing).toBeUndefined();
   });
 
   it("constructs one literal of every shape", () => {
