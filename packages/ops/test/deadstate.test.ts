@@ -41,6 +41,7 @@ const project = (opts: {
     export: { bundle: "d.storyletsc", metadata: "full" },
     ...(opts.warnUnreadWrites ? { validation: { warnUnreadWrites: true } } : {}),
   },
+  contracts: [],
   boxes: [{
     path: "b",
     box: { schema: "storylets/box@0", box: { id: "b_1", gameId: "b1", ranking: { specificity: true }, fields: [], properties: [] } },

@@ -41,11 +41,15 @@ const SCOPE_TAG := "tag"
 ##   "identity": {"schema", "project", "version", "hash", "metadata"},
 ##   "totals": {"boxes", "decks", "cards", "hands", "templates", "tagGroups"},
 ##   "boxes": [{"gameId", "title"?, "ranking": {"specificity"},
+##              "turn"?: {"seconds"} (a TIMED box, 4.8),
+##              "durableCards"?: int (cards whose never-spend outlives a run, 4.2),
 ##              "tagGroups": [{"gameId", "tags": [gameId]}],
 ##              "counts": {"decks", "cards", "hands", "templates", "tagGroups"}}],
-##   "hands": [{"gameId", "title"?, "box", "slots" (INF = unbounded), "template"?}],
+##   "hands": [{"gameId", "title"?, "box", "slots" (INF = unbounded), "template"?,
+##              "movable"?: [{"group", "from"}]}],
 ##   "properties": [{"scope", "owner", "box"?, "group"?,
-##                   "properties": [{"name", "type", "default", "values"?, "purpose"?}]}],
+##                   "properties": [{"name", "type", "default", "values"?,
+##                                   "durable"? (true only, 4.2), "purpose"?}]}],
 ## }
 static func describe_bundle(bundle: Dictionary) -> Dictionary:
 	var content: Dictionary = bundle.get("content", {})
@@ -75,8 +79,16 @@ static func describe_bundle(bundle: Dictionary) -> Dictionary:
 		var templates: Array = box.get("handTemplates", [])
 		var groups: Array = box.get("tagGroups", [])
 		var cards := 0
+		# Durable cards (design/engine-server.md 4.2): the card's own flag, else
+		# its deck's - the same inheritance `shared` has. What a server must lift
+		# over a run boundary.
+		var durable_cards := 0
 		for deck in decks:
 			cards += (deck.get("cards", []) as Array).size()
+			for card in deck.get("cards", []):
+				var flag: Variant = card.get("durable", deck.get("durable"))
+				if flag is bool and bool(flag):
+					durable_cards += 1
 
 		var tag_groups: Array = []
 		for group in groups:
@@ -89,6 +101,15 @@ static func describe_bundle(bundle: Dictionary) -> Dictionary:
 		if box.has("title"):
 			summary["title"] = str(box["title"])
 		summary["ranking"] = {"specificity": bool(box.get("ranking", {}).get("specificity", true))}
+		# Present on a TIMED box (design/engine-server.md 4.8): how long one of
+		# its turns lasts, so an integrator knows which boxes their host must
+		# tick. Absent is the ordinary box, whose turn is a play.
+		if box.has("turn"):
+			summary["turn"] = {"seconds": float(box["turn"].get("seconds", 0.0))}
+		# Only when there are any: a box whose cards all come back with the run
+		# has nothing to lift, and the zero would be noise on every ordinary box.
+		if durable_cards > 0:
+			summary["durableCards"] = durable_cards
 		summary["tagGroups"] = tag_groups
 		summary["counts"] = {
 			"decks": decks.size(),
@@ -115,6 +136,9 @@ static func describe_bundle(bundle: Dictionary) -> Dictionary:
 			row["slots"] = _hand_slots(hand, template)
 			if template != null:
 				row["template"] = StoryletBundle.effective_game_id(template)
+			var movable := _movable_holes(hand, groups)
+			if not movable.is_empty():
+				row["movable"] = movable
 			hands.append(row)
 
 		# The property scopes, in the session's store order: box, decks, hands,
@@ -143,6 +167,8 @@ static func describe_bundle(bundle: Dictionary) -> Dictionary:
 			"group": str(map.get("group", "")),
 			"zones": (map.get("zones", []) as Array).size(),
 			"backgrounds": (map.get("backgrounds", []) as Array).size(),
+			# Placed hands: where the kiosks stand (design/engine-server.md 4.3).
+			"sites": (map.get("sites", []) as Array).size(),
 		})
 
 	return {
@@ -171,15 +197,18 @@ static func scope_label(scope: Dictionary) -> String:
 	return "%s %s%s" % [kind, str(scope.get("owner", "")), suffix]
 
 
-## "name: type = default", plus enum/flags options where declared.
+## "name: type = default", plus enum/flags options where declared, plus
+## "(durable)" where the value outlives a run (4.2). Nothing is added for the
+## ordinary run-scoped property: that is what a property is.
 static func property_label(p: Dictionary) -> String:
 	var values = p.get("values")
 	var options := ""
 	if values is Array and (values as Array).size() > 0:
 		options = " [%s]" % ", ".join((values as Array).map(func(v): return str(v)))
-	return "%s: %s = %s%s" % [
+	var durable := " (durable)" if p.get("durable") == true else ""
+	return "%s: %s = %s%s%s" % [
 		str(p.get("name", "")), str(p.get("type", "")),
-		StoryletValues.show(p.get("default")), options,
+		StoryletValues.show(p.get("default")), options, durable,
 	]
 
 
@@ -195,6 +224,10 @@ static func _summarise(decls: Variant) -> Array:
 		}
 		if decl.has("values"):
 			row["values"] = decl["values"]
+		# Declared DURABLE (4.2): the value survives a run and a server lifts
+		# and restores it. Carried only when true; absent is run-scoped.
+		if decl.get("durable") == true:
+			row["durable"] = true
 		if decl.has("purpose"):
 			row["purpose"] = str(decl["purpose"])
 		rows.append(row)
@@ -229,6 +262,30 @@ static func _hand_decls(hand: Dictionary, templates: Array) -> Variant:
 		var template = _template_of(hand, templates)
 		return template.get("properties", []) if template != null else []
 	return hand.get("properties", [])
+
+
+## The hand's movable holes, in the bundle's own key order: every `chosen` /
+## rule-binding value that is a property reference rather than a tag (4.6).
+## Absent from the row when there are none, which is the ordinary case; it is
+## the one thing about a hand its name cannot say, because writing that
+## property MOVES the hand and set_property is the whole verb.
+static func _movable_holes(hand: Dictionary, groups: Array) -> Array:
+	var filled: Dictionary = hand.get("chosen", {}) if hand.has("template") \
+		else (hand.get("rule", {}) as Dictionary).get("bindings", {})
+	var holes := []
+	for group_id in filled:
+		var value := str(filled[group_id])
+		if not StoryletBundle.is_hole_ref(value):
+			continue
+		var group = null
+		for g in groups:
+			if g.get("id") == group_id:
+				group = g
+				break
+		if group == null:
+			continue
+		holes.append({"group": StoryletBundle.effective_game_id(group), "from": value})
+	return holes
 
 
 ## The effective slot cap, resolved the way the session resolves capacity: the

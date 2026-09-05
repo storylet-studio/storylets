@@ -41,6 +41,19 @@ describe("createBundleInspector", () => {
     insp.destroy();
   });
 
+  it("says on the hand's own line when a hole moves with a property", () => {
+    const moving = expandBundle({
+      templates: [{ id: "t_npc", chooses: ["zone"],
+        properties: [{ name: "zone", type: "enum", values: ["docks", "market"], default: "docks" }] }],
+      hands: [{ id: "h_elder", template: "t_npc", chosen: { zone: "@hand.zone" } }],
+    });
+    const insp = createBundleInspector(moving);
+    expect(text(insp.el, ".sl-hands .sl-line")).toEqual([
+      "elder: box box, slots unbounded, template npc, moves zone from @hand.zone",
+    ]);
+    insp.destroy();
+  });
+
   it("renders the peek() criteria surface, grouped by box", () => {
     const insp = createBundleInspector(bundle);
     expect(text(insp.el, ".sl-tags .sl-group")).toEqual(["box"]);
@@ -66,6 +79,26 @@ describe("createBundleInspector", () => {
     expect(lines).toContain("ranking.specificity true");
     expect(insp.el.textContent).not.toContain("c_a");
     insp.destroy();
+  });
+
+  it("a timed box says its unit on its counts line; an untimed one adds nothing", () => {
+    const insp = createBundleInspector(bundle);
+    expect(text(insp.el, ".sl-counts .sl-line").join("\n")).not.toContain("turn =");
+    insp.destroy();
+    const timed = createBundleInspector(expandBundle({ turn: { seconds: 60 }, cards: [{ id: "c_a" }] }));
+    expect(text(timed.el, ".sl-counts .sl-line").join("\n")).toContain("turn = 60s");
+    timed.destroy();
+  });
+
+  it("counts a box's durable cards on its counts line, and nothing when it has none", () => {
+    const insp = createBundleInspector(bundle);
+    expect(text(insp.el, ".sl-counts .sl-line").join("\n")).not.toContain("durable cards");
+    insp.destroy();
+    const withDurable = expandBundle({ cards: [{ id: "c_a", redraw: "never" }] });
+    withDurable.boxes[0]!.decks[0]!.durable = true;
+    const durable = createBundleInspector(withDurable);
+    expect(text(durable.el, ".sl-counts .sl-line").join("\n")).toContain("durable cards 1");
+    durable.destroy();
   });
 
   it("collapsible sections, open by default and closeable", () => {
@@ -100,6 +133,7 @@ describe("a shipped map", () => {
       box: "box", group: "zone",
       zones: [{ tag: "docks", polygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }] }],
       backgrounds: [{ file: "assets/box/plan.png", x: 0, y: 0, width: 4, height: 4 }],
+      sites: [{ hand: "well", x: 1, y: 2 }, { hand: "forge", x: 3, y: 4 }],
     }],
   };
 
@@ -107,7 +141,7 @@ describe("a shipped map", () => {
     const insp = createBundleInspector(withMap);
     const lines = text(insp.el, ".sl-maps .sl-line").join("\n");
     expect(lines).toContain("The engine ignores it");
-    expect(lines).toContain("box - zone: zones 1, pictures 1");
+    expect(lines).toContain("box - zone: zones 1, pictures 1, sites 2");
     insp.destroy();
   });
 
@@ -123,6 +157,14 @@ describe("the row formatters", () => {
   it("formats a declaration as name: type = default, options listed", () => {
     expect(formatPropertySummary({ name: "mood", type: "enum", default: "calm", values: ["calm", "angry"] }))
       .toBe("mood: enum = \"calm\" [calm, angry]");
+  });
+
+  it("says durable on the declarations that outlive a run, and nothing on the rest", () => {
+    // design/engine-server.md 4.2: what a server has to lift and put back.
+    expect(formatPropertySummary({ name: "visits", type: "number", default: 0, durable: true }))
+      .toBe("visits: number = 0 (durable)");
+    expect(formatPropertySummary({ name: "gold", type: "number", default: 0 }))
+      .toBe("gold: number = 0");
   });
 
   it("labels scopes by kind, owner and (for tags) group", () => {

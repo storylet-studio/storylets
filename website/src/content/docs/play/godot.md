@@ -96,9 +96,23 @@ The paths, and when to write them: [Your game's state](/play/world-state/).
 
 ```gdscript
 var envelope := engine.save_game()
-var load_err := engine.load_game(envelope)   # rebuilds every flow...
+var report := engine.load_game(envelope)     # rebuilds every flow...
 flow = engine.get_flow("main")               # ...so re-take your handles
 ```
+
+A load is forgiving: a card your edit deleted drops off the board, a property you added takes
+its default, and a save from an older build goes in without a word. `preview_load(envelope)`
+says what that would cost before you spend it and changes nothing; `load_game` returns the
+same report Dictionary once it has, with `"exact"` true when the save goes back exactly as it
+was and `"evicted"`, `"droppedProperties"`, `"defaultedProperties"`, `"retypedProperties"` and
+the `"version"` / `"hash"` pairs naming what moved. A save for another project is refused: an
+empty Dictionary and a `push_error`.
+
+`save_flow(id)` takes ONE flow's state, for a playthrough stepping away, and
+`open_flow(id, {"restore": saved})` puts it back. Closing the flow in between is what releases
+the cards it was holding; on the way back, a shared card another flow now holds is dropped and
+reported (`preview_flow_restore(id, saved)` asks in advance, and
+`{"on_restore_report": Callable}` hands you what the restore actually did).
 
 `StoryletSave.serialize_state(engine, world_values)` and
 `StoryletSave.deserialize_state(engine, text)` (which hands back the file's `@world` values

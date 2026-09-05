@@ -483,6 +483,13 @@ namespace StoryletStudio.StoryletEngine
                 {
                     foreach (var pair in hand.Chosen)
                     {
+                        // A hole filled from a property rather than with a tag:
+                        // resolve it now, before tag composition (4.6).
+                        if (Model.IsHoleRef(pair.Value))
+                        {
+                            FillHoleFromProperty(hand, pair.Key, pair.Value, boundTags, askNames);
+                            continue;
+                        }
                         boundTags.Set(pair.Key, pair.Value);
                         var found = _engine._groupsById.GetOrDefault(pair.Key);
                         var tag = found.Group?.Tags.Find(t => t.Id == pair.Value);
@@ -500,6 +507,11 @@ namespace StoryletStudio.StoryletEngine
                 {
                     foreach (var pair in hand.Rule.Bindings)
                     {
+                        if (Model.IsHoleRef(pair.Value))
+                        {
+                            FillHoleFromProperty(hand, pair.Key, pair.Value, boundTags, askNames);
+                            continue;
+                        }
                         boundTags.Set(pair.Key, pair.Value);
                         // ...and name it, as the template branch does: a card
                         // reading @hand.<group> must not care HOW it was bound.
@@ -550,6 +562,67 @@ namespace StoryletStudio.StoryletEngine
             }
             BindStateGroups(box, boundTags, askNames);
             return new AskDescriptor { Box = box, BoundTags = boundTags, AskNames = askNames };
+        }
+
+        /// <summary>Fill one hole from the property its value names: the hand
+        /// that moves (design/engine-server.md 4.6).
+        ///
+        /// The semantics are BindStateGroups' below, word for word, applied per
+        /// HOLE instead of per group: resolved at ask time, and a value naming
+        /// no tag leaves the hole UNBOUND (a wildcard) with a diagnostic rather
+        /// than dealing a silently empty hand. What is added is the @hand
+        /// scope - the asking hand's OWN declared state, read from the flow's
+        /// merged view, so a shared declaration moves the hole for every flow
+        /// and a per-flow one moves it for this flow alone.
+        ///
+        /// Read BEFORE tag composition, which is what makes it safe: the @hand
+        /// bag a card sees is built from the bound tags, so resolving a hole
+        /// from it would be circular. A hand's own declarations are not.</summary>
+        private void FillHoleFromProperty(Hand hand, string groupId, string reference,
+            OrderedMap<string, string> boundTags, OrderedMap<string, string> askNames)
+        {
+            var found = _engine._groupsById.GetOrDefault(groupId);
+            var groupName = found.Group != null ? Model.EffectiveGameId(found.Group) : groupId;
+            var where = $"hand {Model.EffectiveGameId(hand)}, tag group {groupName}";
+            string scope, name;
+            if (!Model.TryParseHoleRef(reference, out scope, out name))
+            {
+                Emit(new DiagnosticEvent { Where = where, Message = $"\"{reference}\" is not a @hand, @world or @story property reference" });
+                return;
+            }
+            if (found.Group == null)
+            {
+                Emit(new DiagnosticEvent { Where = where, Message = $"\"{reference}\" fills a tag group that is not in this box" });
+                return;
+            }
+            StoryletValue value = null;
+            if (scope == "hand")
+            {
+                // The merged view: the flow's own bag first, the shared bag
+                // behind it. Names are disjoint, so "first" is routing.
+                var own = _stores.Hand.GetOrDefault(hand.Id);
+                var shared = _engine._shared.Hand.GetOrDefault(hand.Id);
+                value = own?.Get(name) ?? shared?.Get(name);
+            }
+            else
+            {
+                try { value = GetProperty($"{scope}.{name}"); }
+                catch (StoryletError) { value = null; }
+            }
+            if (value == null)
+            {
+                Emit(new DiagnosticEvent { Where = where, Message = $"\"{reference}\" names a property that is not declared" });
+                return;
+            }
+            var wanted = value.Kind == StoryletKind.Str ? value.AsString : value.ToString();
+            var tag = found.Group.Tags.Find(t => Model.EffectiveGameId(t) == wanted);
+            if (tag == null)
+            {
+                Emit(new DiagnosticEvent { Where = where, Message = $"{reference} is \"{wanted}\", which is not one of the tags of \"{groupName}\"" });
+                return;
+            }
+            boundTags.Set(groupId, tag.Id);
+            askNames.Set(groupName, Model.EffectiveGameId(tag));
         }
 
         /// <summary>Bind every state-bound group in the box from the property it
@@ -659,14 +732,14 @@ namespace StoryletStudio.StoryletEngine
         /// The deck says what the pile is for and the card may override it. The
         /// deck's flag hoists out of the card loop: the ask runs this per card
         /// per deal.</summary>
-        private static bool CardIsShared(Card card, bool deckShared)
+        internal static bool CardIsShared(Card card, bool deckShared)
         {
             return card.Shared ?? deckShared;
         }
 
         /// <summary>How many hands ACROSS EVERY FLOW may hold this at once;
         /// defaults to Copies.</summary>
-        private static double SharedCap(Card card)
+        internal static double SharedCap(Card card)
         {
             return card.SharedCopies ?? card.Copies ?? 1;
         }
@@ -1173,8 +1246,14 @@ namespace StoryletStudio.StoryletEngine
 
             // The played card's box's clock advances (schema 3.4); computed up
             // front so the play and its writes log as one action, one turn stamp.
-            var newTurn = _turnCounts.GetOrDefault(entry.Box.Id)
-                + (opts.AdvanceTurns ?? _engine._bundle.Settings.PlayAdvancesTurns);
+            //
+            // A TIMED box (design/engine-server.md 4.8) defaults to advancing
+            // NOTHING: its clock is time, the host ticks it, and a play is not a
+            // tick. A call that names AdvanceTurns still gets what it asked for,
+            // in either kind of box, because the call says otherwise. This is the
+            // whole of turn's effect on the engine: the seconds are never read.
+            var perPlay = entry.Box.Turn != null ? 0 : _engine._bundle.Settings.PlayAdvancesTurns;
+            var newTurn = _turnCounts.GetOrDefault(entry.Box.Id) + (opts.AdvanceTurns ?? perPlay);
 
             // Every right-hand side evaluates against PRE-play state, then all
             // writes land (schema 3.7).

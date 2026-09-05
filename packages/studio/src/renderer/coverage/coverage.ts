@@ -23,6 +23,7 @@ import { el } from "../src/dom.js";
 import { initTooltips, mountJobProgress } from "@wildwinter/app-shell";
 import type { JobProgressView } from "@wildwinter/app-shell";
 import type { CoverageReport, SearchSelection, StudioApi } from "../../shared/api.js";
+import { turnSpan } from "@storylet-studio/model";
 
 declare global { interface Window { studio: StudioApi; } }
 const studio = window.studio;
@@ -158,6 +159,11 @@ function gateRefs(refs: string[]): HTMLElement {
   return span;
 }
 
+/** " (100 min)" beside a turn count, when the project's boxes all agree on
+ *  what a turn lasts; nothing at all otherwise. */
+const asTime = (r: CoverageReport, turns: number): string =>
+  r.turnSeconds === undefined ? "" : ` (${turnSpan(turns, r.turnSeconds)})`;
+
 function results(r: CoverageReport): (HTMLElement | null)[] {
   const cardsDealt = r.cards.filter((c) => c.dealt > 0).length;
   const gaps = r.cards.filter((c) => c.dealt === 0);
@@ -184,7 +190,10 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
     // The run's own shape: how the playthroughs ended says whether the
     // numbers above are worth trusting. All "stuck" means the content jams.
     el("p", { className: "meta" },
-      `${r.turns} turns · ${r.plays} plays · max ${r.maxTurns} turns per run`,
+      // A project whose every box is timed can have its turns read as time
+      // (design/engine-server.md 4.8); a mixed project cannot, and says
+      // nothing rather than something misleading.
+      `${r.turns} turns${asTime(r, r.turns)} · ${r.plays} plays · max ${r.maxTurns} turns per run${asTime(r, r.maxTurns)}`,
       el("span", { className: "sep", text: "·" }),
       `${t.exhausted} exhausted · ${t.maxTurns} hit the cap · ${t.stuck} stuck`,
     ),

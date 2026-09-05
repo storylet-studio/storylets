@@ -12,6 +12,19 @@
 
 #define LOCTEXT_NAMESPACE "StoryletBundleDetails"
 
+namespace
+{
+	/** A timed box's unit without a trailing ".0", the way the other three
+	 *  inspectors print it (design/engine-server.md 4.8). */
+	FString SecondsLabel(double Seconds)
+	{
+		const double Rounded = FMath::RoundToDouble(Seconds);
+		return FMath::IsNearlyEqual(Seconds, Rounded)
+			? FString::Printf(TEXT("%lld"), static_cast<long long>(Rounded))
+			: FString::SanitizeFloat(Seconds);
+	}
+}
+
 TSharedRef<IDetailCustomization> FStoryletBundleDetails::MakeInstance()
 {
 	return MakeShared<FStoryletBundleDetails>();
@@ -100,6 +113,17 @@ void FStoryletBundleDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 		{
 			Line += FString::Printf(TEXT(", template %s"), *Hand.Template);
 		}
+		// A movable hole is the one thing about a hand its name cannot say:
+		// write that property and the hand moves (4.6).
+		if (Hand.Movable.Num() > 0)
+		{
+			TArray<FString> Parts;
+			for (const FStoryletMovableHole& Hole : Hand.Movable)
+			{
+				Parts.Add(FString::Printf(TEXT("%s from %s"), *Hole.Group, *Hole.From));
+			}
+			Line += FString::Printf(TEXT(", moves %s"), *FString::Join(Parts, TEXT(" and ")));
+		}
 		if (!Hand.Title.IsEmpty())
 		{
 			Line += FString::Printf(TEXT("  - %s"), *Hand.Title);
@@ -144,6 +168,25 @@ void FStoryletBundleDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 		}
 	}
 
+	// --- maps: inert payload, and therefore worth saying out loud ----------
+	//
+	// Only when there ARE some, the rule the other three inspectors follow: an
+	// empty section on every ordinary bundle would teach the reader to skip the
+	// one section that only matters when it is not empty.
+	if (D.Maps.Num() > 0)
+	{
+		IDetailCategoryBuilder& MapsCategory = DetailBuilder.EditCategory(
+			TEXT("StoryletMaps"), LOCTEXT("MapsCategory", "Maps (carried, not read)"),
+			ECategoryPriority::Important);
+		AddLine(MapsCategory, TEXT("Geometry the build was asked to carry. The engine ignores it."), true);
+		for (const FStoryletMapSummary& Map : D.Maps)
+		{
+			AddLine(MapsCategory, FString::Printf(
+				TEXT("%s - %s: zones %d, pictures %d, sites %d"),
+				*Map.Box, *Map.Group, Map.Zones, Map.Backgrounds, Map.Sites));
+		}
+	}
+
 	// --- counts: orientation, not inventory --------------------------------
 	IDetailCategoryBuilder& CountsCategory = DetailBuilder.EditCategory(
 		TEXT("StoryletCounts"), LOCTEXT("CountsCategory", "Counts"), ECategoryPriority::Important);
@@ -153,11 +196,22 @@ void FStoryletBundleDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 		D.Totals.Templates, D.Totals.TagGroups));
 	for (const FStoryletBoxSummary& Box : D.Boxes)
 	{
+		// A timed box says its unit here, because this is the line an
+		// integrator reads to find out what their host has to tick. Nothing is
+		// added for an ordinary box, whose turn is a play.
+		const FString Timed = Box.TurnSeconds > 0
+			? FString::Printf(TEXT(", turn = %ss"), *SecondsLabel(Box.TurnSeconds))
+			: FString();
+		// Durable cards (design/engine-server.md 4.2), only when there are any:
+		// what a server has to lift over a run boundary.
+		const FString Durable = Box.DurableCards > 0
+			? FString::Printf(TEXT(", durable cards %d"), Box.DurableCards)
+			: FString();
 		AddLine(CountsCategory, FString::Printf(
-			TEXT("%s: decks %d, cards %d, hands %d, templates %d, tag groups %d, ranking.specificity %s"),
+			TEXT("%s: decks %d, cards %d, hands %d, templates %d, tag groups %d, ranking.specificity %s%s%s"),
 			*Box.GameId, Box.Counts.Decks, Box.Counts.Cards, Box.Counts.Hands,
 			Box.Counts.Templates, Box.Counts.TagGroups,
-			Box.bRankingSpecificity ? TEXT("on") : TEXT("off")));
+			Box.bRankingSpecificity ? TEXT("on") : TEXT("off"), *Timed, *Durable));
 	}
 }
 

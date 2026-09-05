@@ -416,6 +416,11 @@ func _ask_for_hand(hand: Dictionary, box: Dictionary) -> Dictionary:
 			bound_tags[group_id] = template["bindings"][group_id]
 		for group_id in hand.get("chosen", {}):
 			var tag_id = hand["chosen"][group_id]
+			# A hole filled from a property rather than with a tag: resolve it
+			# now, before tag composition (design/engine-server.md 4.6).
+			if StoryletBundle.is_hole_ref(str(tag_id)):
+				_fill_hole_from_property(hand, group_id, str(tag_id), bound_tags, ask_names)
+				continue
 			bound_tags[group_id] = tag_id
 			var found = _engine._groups_by_id.get(group_id)
 			if found != null:
@@ -431,6 +436,9 @@ func _ask_for_hand(hand: Dictionary, box: Dictionary) -> Dictionary:
 		var rule: Dictionary = hand.get("rule", {})
 		for group_id in rule.get("bindings", {}):
 			var rule_tag_id = rule["bindings"][group_id]
+			if StoryletBundle.is_hole_ref(str(rule_tag_id)):
+				_fill_hole_from_property(hand, group_id, str(rule_tag_id), bound_tags, ask_names)
+				continue
 			bound_tags[group_id] = rule_tag_id
 			# ...and name it, as the template branch does: a card reading
 			# @hand.<group> must not care HOW the group got bound.
@@ -483,6 +491,59 @@ func _ask_for_peek(box: Dictionary, criteria: Dictionary) -> Dictionary:
 		ask_names[StoryletBundle.effective_game_id(found)] = StoryletBundle.effective_game_id(tag)
 	_bind_state_groups(box, bound_tags, ask_names)
 	return {"box": box, "bound_tags": bound_tags, "ask_names": ask_names}
+
+
+# Fill one hole from the property its value names: the hand that moves
+# (design/engine-server.md 4.6).
+#
+# The semantics are _bind_state_groups' below, word for word, applied per HOLE
+# instead of per group: resolved at ask time, and a value naming no tag leaves
+# the hole UNBOUND (a wildcard) with a diagnostic rather than dealing a
+# silently empty hand. What is added is the @hand scope - the asking hand's OWN
+# declared state, read from the flow's merged view, so a shared declaration
+# moves the hole for every flow and a per-flow one moves it for this flow
+# alone.
+#
+# Read BEFORE tag composition, which is what makes it safe: the @hand bag a
+# card sees is built from the bound tags, so resolving a hole from it would be
+# circular. A hand's own declarations are not.
+func _fill_hole_from_property(hand: Dictionary, group_id: String, ref: String,
+		bound_tags: Dictionary, ask_names: Dictionary) -> void:
+	var found = _engine._groups_by_id.get(group_id)
+	var group_name := StoryletBundle.effective_game_id(found["group"]) if found != null else group_id
+	var where := "hand %s, tag group %s" % [StoryletBundle.effective_game_id(hand), group_name]
+	var parsed := StoryletBundle.parse_hole_ref(ref)
+	if parsed.is_empty():
+		_emit({"type": "diagnostic", "where": where, "message": '"%s" is not a @hand, @world or @story property reference' % ref})
+		return
+	if found == null:
+		_emit({"type": "diagnostic", "where": where, "message": '"%s" fills a tag group that is not in this box' % ref})
+		return
+	var value = null
+	if parsed["scope"] == "hand":
+		# The merged view: shared under the flow's own, names disjoint.
+		value = _values_of("hand", hand["id"]).get(parsed["name"])
+	else:
+		# Resolve without get_property, which push_error()s on a missing name:
+		# an undeclared reference is a diagnostic on the trace, not engine noise.
+		var r := _resolve_path("%s.%s" % [parsed["scope"], parsed["name"]])
+		if not r.has("error"):
+			value = r["value"]
+	if value == null:
+		_emit({"type": "diagnostic", "where": where, "message": '"%s" names a property that is not declared' % ref})
+		return
+	var wanted := str(value)
+	var tag = null
+	for t in found["group"].get("tags", []):
+		if StoryletBundle.effective_game_id(t) == wanted:
+			tag = t
+			break
+	if tag == null:
+		_emit({"type": "diagnostic", "where": where,
+			"message": '%s is "%s", which is not one of the tags of "%s"' % [ref, wanted, group_name]})
+		return
+	bound_tags[group_id] = tag["id"]
+	ask_names[group_name] = StoryletBundle.effective_game_id(tag)
 
 
 # Bind every state-bound group in the box from the property it names. Runs
@@ -1107,8 +1168,16 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 
 	# The played card's box's clock advances (schema 3.4); computed up front
 	# so the play and its writes log as one action, one turn stamp.
+	#
+	# A TIMED box (design/engine-server.md 4.8) defaults to advancing NOTHING:
+	# its clock is time, the host ticks it, and a play is not a tick. A call
+	# that names advance_turns still gets what it asked for, in either kind of
+	# box, because the call says otherwise. This is the whole of turn's effect
+	# on the engine: the seconds are never read.
+	var per_play: float = 0.0 if entry["box"].has("turn") \
+		else float(_engine._bundle["settings"]["playAdvancesTurns"])
 	var new_turn: float = float(_turn_counts.get(entry["box"]["id"], 0.0)) \
-		+ float(opts.get("advance_turns", _engine._bundle["settings"]["playAdvancesTurns"]))
+		+ float(opts.get("advance_turns", per_play))
 
 	# Every right-hand side evaluates against PRE-play state, then all writes
 	# land (schema 3.7).

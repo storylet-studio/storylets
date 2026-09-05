@@ -70,6 +70,28 @@ describe("describeBundle: the deal() surface", () => {
     const open = expandBundle({ hands: [{ id: "h_open", rule: {} }] });
     expect(describeBundle(open).hands[0]!.slots).toBe("unbounded");
   });
+
+  it("reports a hole filled from a property: the hand that moves", () => {
+    // The one thing about a hand its name cannot say. An integrator reading the
+    // asset has to know that writing hand.elder.zone MOVES this hand, because
+    // setProperty is the whole verb and there is no other sign of it.
+    const moving = expandBundle({
+      story: [{ name: "where", type: "string", default: "docks" }],
+      templates: [{ id: "t_npc", chooses: ["zone"],
+        properties: [{ name: "zone", type: "enum", values: ["docks", "market"], default: "docks" }] }],
+      hands: [
+        { id: "h_elder", template: "t_npc", chosen: { zone: "@hand.zone" } },
+        { id: "h_crier", rule: { bindings: { zone: "@story.where" } } },
+        { id: "h_stall", template: "t_npc", chosen: { zone: "market" } },
+      ],
+    });
+    const { hands } = describeBundle(moving);
+    const by = Object.fromEntries(hands.map((h) => [h.gameId, h]));
+    expect(by["elder"]!.movable).toEqual([{ group: "zone", from: "@hand.zone" }]);
+    expect(by["crier"]!.movable).toEqual([{ group: "zone", from: "@story.where" }]);
+    // A hole filled literally is not movable, off the very same template.
+    expect(by["stall"]!.movable).toBeUndefined();
+  });
 });
 
 describe("describeBundle: the peek() criteria surface", () => {
@@ -82,12 +104,57 @@ describe("describeBundle: the peek() criteria surface", () => {
     expect(boxes[0]!.counts).toEqual({ decks: 1, cards: 2, hands: 2, templates: 1, tagGroups: 1 });
   });
 
+  it("reports a timed box's unit, and says nothing about an untimed one", () => {
+    // What an integrator reads to know which boxes their host must tick, and
+    // how often (design/engine-server.md 4.8).
+    expect(describeBundle(bundle).boxes[0]!.turn).toBeUndefined();
+    const timed = expandBundle({ turn: { seconds: 60 }, cards: [{ id: "c_a" }] });
+    expect(describeBundle(timed).boxes[0]!.turn).toEqual({ seconds: 60 });
+  });
+
+  it("counts a box's durable cards, taking the deck's flag where the card is silent", () => {
+    // design/engine-server.md 4.2: what a server has to lift over a run
+    // boundary. Nothing is said about a box with none, which is the ordinary one.
+    expect(describeBundle(bundle).boxes[0]!.durableCards).toBeUndefined();
+    // `durable` is inert to the runtime, so the corpus scaffold has no fixture
+    // field for it and this stamps it on the expanded bundle instead - which is
+    // all the compiler does with it too.
+    const durable = expandBundle({
+      decks: [
+        { id: "k_pocket", cards: [{ id: "c_a", redraw: "never" }, { id: "c_b", redraw: "never" }] },
+        { id: "k_plain", cards: [{ id: "c_c", redraw: "never" }] },
+      ],
+    });
+    const deck = (id: string) => durable.boxes[0]!.decks.find((d) => d.id === id)!;
+    deck("k_pocket").durable = true;                                    // the pile carries it
+    deck("k_pocket").cards.find((c) => c.id === "c_b")!.durable = false;   // one card opts out
+    deck("k_plain").cards[0]!.durable = true;                           // and one card opts in
+    expect(describeBundle(durable).boxes[0]!.durableCards).toBe(2);
+  });
+
   it("the criteria it advertises are the criteria peek accepts", () => {
     const group = describeBundle(bundle).boxes[0]!.tagGroups[0]!;
     const session = new Engine(bundle, { seed: 0 }).openFlow("main");
     for (const tag of group.tags) {
       expect(() => session.peek("box", { [group.gameId]: tag })).not.toThrow();
     }
+  });
+});
+
+describe("describeBundle: the durability axis (4.2)", () => {
+  it("marks a durable declaration and says nothing about a run-scoped one", () => {
+    const bundle = expandBundle({
+      story: [
+        { name: "gold", type: "number", default: 0 },
+        { name: "visits", type: "number", default: 0 },
+      ],
+      cards: [{ id: "c_a" }],
+    });
+    bundle.story.properties.find((p) => p.name === "visits")!.durable = true;
+    const d = describeBundle(bundle);
+    const story = d.properties.find((p) => p.scope === "story")!.properties;
+    expect(story.find((p) => p.name === "gold")!.durable).toBeUndefined();
+    expect(story.find((p) => p.name === "visits")!.durable).toBe(true);
   });
 });
 
@@ -146,10 +213,11 @@ describe("describeBundle and a shipped map", () => {
           { tag: "market", polygon: [{ x: 2, y: 2 }, { x: 3, y: 2 }, { x: 3, y: 3 }] },
         ],
         backgrounds: [{ file: "assets/box/plan.png", x: 0, y: 0, width: 4, height: 4 }],
+        sites: [{ hand: "well", x: 1, y: 2 }],
       }],
     };
     expect(describeBundle(withMap).maps).toEqual([
-      { box: "box", group: "zone", zones: 2, backgrounds: 1 },
+      { box: "box", group: "zone", zones: 2, backgrounds: 1, sites: 1 },
     ]);
   });
 
@@ -158,6 +226,6 @@ describe("describeBundle and a shipped map", () => {
       ...bundle,
       maps: [{ box: "box", group: "zone", zones: [{ tag: "docks", polygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }] }] }],
     };
-    expect(describeBundle(withMap).maps[0]).toEqual({ box: "box", group: "zone", zones: 1, backgrounds: 0 });
+    expect(describeBundle(withMap).maps[0]).toEqual({ box: "box", group: "zone", zones: 1, backgrounds: 0, sites: 0 });
   });
 });

@@ -7,6 +7,7 @@
 #include "StoryletSaveJson.h"
 
 #include "Storylets/Engine.h"
+#include "Storylets/Save.h"
 #include "UObject/Package.h" // GetTransientPackage() - not transitively available in the Game target
 
 /** The engine's Pimpl: the std engine plus the shared compiled bundle, so the
@@ -252,6 +253,71 @@ UStoryletFlow* UStoryletEngine::OpenFlow(const FString& FlowId)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: OpenFlow - %s"), UTF8_TO_TCHAR(Ex.what()));
 		return nullptr;
+	}
+}
+
+FString UStoryletEngine::SaveFlowToJson(const FString& FlowId) const
+{
+	if (!IsValidEngine())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: SaveFlowToJson on an invalid engine"));
+		return FString();
+	}
+	try
+	{
+		return FString(UTF8_TO_TCHAR(storylets::serializeFlow(Impl->Engine->saveFlow(Std(FlowId))).c_str()));
+	}
+	catch (const std::exception& Ex)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: SaveFlowToJson - %s"), UTF8_TO_TCHAR(Ex.what()));
+		return FString();
+	}
+}
+
+UStoryletFlow* UStoryletEngine::OpenFlowFromJson(const FString& FlowId, const FString& Json)
+{
+	if (!IsValidEngine())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: OpenFlowFromJson on an invalid engine"));
+		return nullptr;
+	}
+	try
+	{
+		storylets::OpenFlowOptions Options;
+		Options.restore = storylets::deserializeFlow(Std(Json));
+		// Re-opening a name REPLACES, exactly as OpenFlow does; the blob then
+		// lands in the fresh flow before the wrapper is handed back.
+		const storylets::FlowPtr Core = Impl->Engine->openFlow(Std(FlowId), Options);
+		UStoryletFlow* Wrapper = NewObject<UStoryletFlow>(GetTransientPackage());
+		Wrapper->Init(this, FlowId, Core);
+		WrappedFlows.RemoveAll([](const TWeakObjectPtr<UStoryletFlow>& W) { return !W.IsValid(); });
+		WrappedFlows.Add(Wrapper);
+		return Wrapper;
+	}
+	catch (const std::exception& Ex)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: OpenFlowFromJson - %s"), UTF8_TO_TCHAR(Ex.what()));
+		return nullptr;
+	}
+}
+
+FString UStoryletEngine::PreviewFlowRestoreJson(const FString& FlowId, const FString& Json) const
+{
+	if (!IsValidEngine())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: PreviewFlowRestoreJson on an invalid engine"));
+		return FString();
+	}
+	try
+	{
+		const storylets::FlowSave Saved = storylets::deserializeFlow(Std(Json));
+		const storylets::LoadReport Report = Impl->Engine->previewFlowRestore(Std(FlowId), Saved);
+		return FString(UTF8_TO_TCHAR(storylets::reportToJson(Report).c_str()));
+	}
+	catch (const std::exception& Ex)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: PreviewFlowRestoreJson - %s"), UTF8_TO_TCHAR(Ex.what()));
+		return FString();
 	}
 }
 

@@ -8,6 +8,22 @@ section for it.
 
 ## [Unreleased]
 
+### Added
+
+- **A box that counts in time: `turn: { seconds: N }`** (2026-09-05; design/engine-server.md 4.8). A box may declare that its turns are TIME rather than plays. One branch in `play` is the whole of it in the engine: in a timed box the default advance is 0 instead of `settings.playAdvancesTurns`, so a designer cannot declare the convention and then forget to switch play-advance off; a call that names `advanceTurns` still gets what it asked for. The host ticks the box as it always could - the runtime has no clock and gains none - and `redraw: N` on its cards reads as N x `seconds`, which is what every surface now SAYS rather than anything the engine does differently. `describeBundle` reports the unit on `BoxSummary` and the four bundle inspectors show `turn = 60s`, so an integrator reading a bundle knows which boxes their host must tick. The compiler refuses a `seconds` that is not a positive integer, and warns about a timed box whose every card says `redraw: "always"`, since nothing in it then rests. Corpus first: six cases, corpus version 5.
+
+- **A hole filled from a property: the hand that moves** (2026-09-05; design/engine-server.md 4.6). A hand's `chosen` value (or a standalone hand's rule binding) may be a property reference (`"@hand.zone"`, `"@story.where"`, `"@world.place"`) rather than a tag. The engine resolves it at ask time and binds the hole to the tag the value names, so moving the Elder to the forest is `setProperty("hand.the-elder.zone", "forest")` and the next deal follows: forest-tagged cards become available at his hand, village-tagged ones are evicted with reason `tags` by the eviction pass that already existed. No new verb, no new save shape, no new trace kind. The semantics are `boundBy`'s word for word, applied per hole: an explicit tag beats nothing (the reference IS the fill), and a value naming no tag leaves the hole UNBOUND, which is a wildcard, with a `diagnostic` rather than a silently empty hand. `@hand` is the added scope, read from the flow's merged view before tag composition, so a `shared: true` declaration moves the hole for every flow and a per-flow one moves it for that flow alone, and a movable hole can never depend on the tags it is choosing.
+
+- **`describeBundle` reports a hand's movable holes**, as `movable: [{ group, from }]` on `HandSummary`, absent when there are none. It is the one thing about a hand its name cannot say, so an integrator reading the asset alone can see which hands move and which property moves them; the four bundle inspectors show it on the hand's own line.
+
+- **`saveFlow(id)` and `openFlow(id, { restore })`: park one flow, and open it as it was** (2026-09-05; design/engine-server.md 4.1). `Flow.snapshot` / `Flow.restore` have always existed as internals; this is the public pair, and it is an option on `openFlow` rather than a `restore` verb because restoring INTO a running flow is the trap that replace semantics set. Closing a parked flow releases its shared claims, so a card it was holding can be dealt elsewhere while it is away; on the way back, a shared card the world has since given out is dropped with an `evict` of reason `claimed-elsewhere` rather than double-claimed. `onRestoreReport` hands out what the restore did.
+
+- **`previewLoad(envelope)`, `previewFlowRestore(id, save)`, and a `LoadReport` returned by `loadGame`** (2026-09-05; design/engine-server.md 4.9). A load is forgiving about content that moved underneath a save - which is what lets a save survive an edit, and also what hid the cost of one. The report itemises it: cards evicted (and why), cooldowns and spent entries for cards the build no longer has, properties dropped, defaulted or retyped, and `version` / `hash` drift, which used to load in silence. The previews are pure; a project mismatch is still the one refusal. One walk computes the report and the cleaned state the load applies, so the two can never disagree.
+
+### Changed
+
+- **A load now prunes what it reports.** A property the build no longer declares used to stay in the bag as a stray value and ride the next save; a cooldown or spent entry for a deleted card did the same; a saved value that no longer fits its declaration (a struck-out enum value, an edited quality ladder) used to load anyway. All three are dropped now, and named in the report.
+
 ## [0.4.1] - 2026-09-04
 
 ### Changed

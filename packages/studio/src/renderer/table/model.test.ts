@@ -131,6 +131,85 @@ describe("the Board model", () => {
     expect(table.log.some((e) => e.type === "turns" && e.turn === 1)).toBe(true);
   });
 
+  // A NEW RUN (design/engine-server.md 4.2): the world restarts and the durable
+  // half comes with it. Written against the model rather than the window
+  // because this is where the act lives; the Board's button only calls it.
+  const durableBundle = (): Bundle => {
+    const bundle = exampleBundle();
+    // Two pockets and one run-scoped value, all on @story so one setProperty
+    // reaches each: "reputation" is already there and is not durable.
+    bundle.story.properties.push(
+      { name: "visits", type: "number", default: 0, shared: false, durable: true },
+      { name: "trolls", type: "number", default: 0, shared: true, durable: true },
+    );
+    // Every card spent for good, and one of them durable: exactly the table in
+    // 4.2, where only a `never` spend crosses the run boundary and `durable`
+    // is what decides whether this one does.
+    for (const box of bundle.boxes) {
+      for (const deck of box.decks) {
+        for (const card of deck.cards) {
+          card.redraw = "never";
+          if (card.gameId === "rat-job") card.durable = true;
+        }
+      }
+    }
+    return bundle;
+  };
+  /** Play out the whole hand, and say which card ids went. */
+  const playOut = (table: Table, hand: string): string[] => {
+    const played: string[] = [];
+    for (;;) {
+      const card = table.dealAll().find((h) => h.hand === hand)?.cards[0];
+      if (card === undefined) break;
+      table.play(card.id, table.outcomes(card.id, hand)[0]!.gameId, hand);
+      played.push(card.id);
+    }
+    return played;
+  };
+  const idOf = (bundle: Bundle, gameId: string): string =>
+    bundle.boxes.flatMap((b) => b.decks).flatMap((d) => d.cards).find((c) => c.gameId === gameId)!.id;
+
+  it("a new run keeps the durable values and resets the rest", () => {
+    const table = new Table(durableBundle(), 0);
+    table.session.setProperty("story.reputation", 4);
+    table.session.setProperty("story.visits", 7);
+    table.session.setProperty("story.trolls", 2);
+    table.nextTurn();
+
+    table.newRun();
+
+    expect(table.session.getProperty("story.visits")).toBe(7);    // the pocket
+    expect(table.session.getProperty("story.trolls")).toBe(2);    // the installation's memory
+    expect(table.session.getProperty("story.reputation")).toBe(0);   // run-scoped: back to its default
+    expect(table.clocks().every((c) => c.turn === 0)).toBe(true);
+    expect(table.log).toEqual([]);
+  });
+
+  it("a new run carries a durable never-spend and forgets an ordinary one", () => {
+    const bundle = durableBundle();
+    const durable = idOf(bundle, "rat-job");
+    const table = new Table(bundle, 0);
+    const played = playOut(table, "docks-street");
+    expect(played).toContain(durable);
+    expect(played.length).toBeGreaterThan(1);   // or there is nothing to forget
+
+    table.newRun();
+    expect(Object.keys(table.saveFile().engine.flows["main"]!.cooldowns)).toEqual([durable]);
+
+    // And the board deals afresh from what is left: the durable card stays
+    // played, the ordinary ones come back.
+    const dealt = new Set(table.dealAll().flatMap((h) => h.cards.map((c) => c.id)));
+    expect(dealt.has(durable)).toBe(false);
+    expect([...dealt].some((id) => played.includes(id))).toBe(true);
+  });
+
+  it("@world is the host's: neither a new run nor a restart is the engine's business", () => {
+    const table = new Table(durableBundle(), 0);
+    table.session.setProperty("world.danger", 3);
+    table.newRun();
+    expect(table.session.getProperty("world.danger")).toBe(3);
+  });
+
   it("coerces poked state values", () => {
     expect(coerceStateInput("3")).toBe(3);
     expect(coerceStateInput("true")).toBe(true);

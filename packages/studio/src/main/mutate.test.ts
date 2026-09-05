@@ -4,12 +4,12 @@
 // edits, through the same validator.)
 
 import { describe, expect, it } from "vitest";
-import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openProject, projectSettings, toDto } from "./project.js";
-import { projectHash } from "@storylet-studio/compiler";
+import { canonicalStringify, projectHash } from "@storylet-studio/compiler";
 import { runValidate } from "@storylet-studio/ops";
 import {
   editBackground, restackBackground, removeBackground,
@@ -590,6 +590,28 @@ describe("project settings", () => {
   });
 });
 
+describe("the play ladder, written from the editor", () => {
+  it("round-trips the rung, and the starter project is a solo one", () => {
+    const session = scratchProject();
+    const before = projectSettings(session);
+    expect(saveProjectSettings(session, { ...before, play: "venue" })).not.toHaveProperty("error");
+    const opened = openProject(session.loaded.dir);
+    if ("error" in opened) throw new Error(opened.error);
+    expect(projectSettings(opened.session).play).toBe("venue");
+    expect(opened.session.dto.play).toBe("venue");
+  });
+
+  it("counts what is above each rung, which is what the dialog refuses with", () => {
+    const session = scratchProject();
+    renameDeck(session, docks, { shared: true });
+    const opened = openProject(session.loaded.dir);
+    if ("error" in opened) throw new Error(opened.error);
+    const settings = projectSettings(opened.session);
+    expect(settings.ladder.solo).toEqual(["1 deck is shared"]);
+    expect(settings.ladder.shared).toEqual([]);
+  });
+});
+
 describe("box mutations", () => {
   it("saves the box title and purpose and round-trips them", () => {
     const session = scratchProject();
@@ -628,6 +650,35 @@ describe("box mutations", () => {
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.loaded.source!.boxes[0]!.box.box.ranking?.specificity).toBe(false);
+  });
+
+  it("makes a box timed and round-trips the unit, to the shard and the DTO", () => {
+    const session = scratchProject();
+    saveBox(session, encBox, { turn: { seconds: 60 } });
+    const reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    expect(reopened.session.loaded.source!.boxes[0]!.box.box.turn).toEqual({ seconds: 60 });
+    expect(reopened.session.dto.boxes.find((x) => x.id === encBox)!.turn).toEqual({ seconds: 60 });
+  });
+
+  it("untiming a box deletes turn rather than storing an empty one", () => {
+    const session = scratchProject();
+    saveBox(session, encBox, { turn: { seconds: 20 } });
+    saveBox(session, encBox, { turn: null });
+    const reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    const box = reopened.session.loaded.source!.boxes[0]!.box.box;
+    expect("turn" in box).toBe(false);
+    expect(reopened.session.dto.boxes.find((x) => x.id === encBox)!.turn).toBeUndefined();
+  });
+
+  it("an edit that says nothing about turns leaves a timed box timed", () => {
+    const session = scratchProject();
+    saveBox(session, encBox, { turn: { seconds: 60 } });
+    saveBox(session, encBox, { title: "Street encounters" });
+    const reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    expect(reopened.session.loaded.source!.boxes[0]!.box.box.turn).toEqual({ seconds: 60 });
   });
 
   it("creates a blank box: empty shards, nothing scaffolded", () => {
@@ -811,6 +862,47 @@ describe("duplicate parity (surface review F5)", () => {
   });
 });
 
+// The installation contract (design/engine-server.md 4.11) as the window sees
+// it: a quiet line on the entity a venue depends on, and the same break in the
+// problems bar. Written into a scratch copy, because no shipped example is
+// installed anywhere.
+describe("a venue's claim on the project", () => {
+  /** Drop a contract into the scratch project and re-open it. */
+  const installed = (shard: Record<string, unknown>): ProjectSession => {
+    const session = scratchProject();
+    mkdirSync(join(session.loaded.dir, "contracts"), { recursive: true });
+    writeFileSync(join(session.loaded.dir, "contracts", "the-park.storyletcontract"),
+      canonicalStringify({ schema: "storylets/contract@0", installation: "the-park", ...shard }));
+    const opened = openProject(session.loaded.dir);
+    if ("error" in opened) throw new Error(opened.error);
+    return opened.session;
+  };
+
+  it("says nothing on a project no venue has ever seen", () => {
+    const session = scratchProject();
+    expect(handDetail(session, encBox, "h_docks")!.contract).toBeUndefined();
+    expect(session.dto.boxes[0]!.contract).toBeUndefined();
+  });
+
+  it("gives the bound hand one line, and leaves the others alone", () => {
+    const session = installed({ hands: ["docks-street"] });
+    expect(handDetail(session, encBox, "h_docks")!.contract)
+      .toEqual(["Bound at the-park: a station deals this hand"]);
+  });
+
+  it("gives a ticked box its line, in the venue's own unit", () => {
+    const session = installed({ boxes: { encounters: { turn: 60 } } });
+    expect(toDto(session.loaded).boxes[0]!.contract).toEqual(["Ticked at the-park every 60s"]);
+  });
+
+  it("puts a break in the problems bar as an error, naming the venue", () => {
+    const session = installed({ hands: ["the-forge"] });
+    const issues = runValidate(session.loaded, { checkBundle: false }).issues;
+    expect(issues.some((i) => i.severity === "error"
+      && i.message === 'hand "the-forge" is bound by a station at the-park; it may not be renamed or removed')).toBe(true);
+  });
+});
+
 describe("hands", () => {
   it("reads a hand's detail: its template, one chosen row per hole, and slots", () => {
     const session = scratchProject();
@@ -850,6 +942,32 @@ describe("hands", () => {
     if ("error" in reopened) throw new Error(reopened.error);
     const hand = reopened.session.loaded.source!.boxes[0]!.hands.hands.find((h) => h.id === "h_docks")!;
     expect(hand.chosen).toEqual({ d_zone: "v_market" });
+  });
+
+  it("fills a hole from a property, and stores the reference as authored", () => {
+    // The hand that moves (design/engine-server.md 4.6). The picker's second
+    // half offers the hand's own string / enum state and the declared @story /
+    // @world properties; choosing one stores the reference, which names no tag
+    // and so must survive the gameId round trip untouched.
+    const session = scratchProject();
+    saveTemplate(session, encBox, "t_street", {
+      properties: [{ name: "zone", type: "enum", default: "docks", values: ["docks", "market"] }],
+    });
+    expect(handDetail(session, encBox, "h_docks")!.movableFrom).toContain("@hand.zone");
+
+    const saved = saveHand(session, encBox, "h_docks", { chosen: [{ group: "area", value: "@hand.zone" }] });
+    expect("error" in saved).toBe(false);
+    expect(handDetail(session, encBox, "h_docks")!.chosen).toEqual([
+      { group: "area", value: "@hand.zone", values: ["docks", "market"] },
+    ]);
+    const reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    const hand = reopened.session.loaded.source!.boxes[0]!.hands.hands.find((h) => h.id === "h_docks")!;
+    expect(hand.chosen).toEqual({ d_zone: "@hand.zone" });
+
+    // And back to a literal tag: the hole stops moving.
+    saveHand(session, encBox, "h_docks", { chosen: [{ group: "area", value: "docks" }] });
+    expect(handDetail(session, encBox, "h_docks")!.chosen[0]!.value).toBe("docks");
   });
 
   it("blank slots follow the template's own slot count", () => {
@@ -1882,5 +2000,51 @@ describe("shared scarcity, written from the editor", () => {
     expect(card(session, "rat-job").sharedCopies).toBe("");
     saveCard(session, docks, ratJob.id, { sharedCopies: "nope" });
     expect(card(session, "rat-job").sharedCopies).toBe("");
+  });
+});
+
+// The durability axis (design/engine-server.md 4.2). The same three shapes the
+// sharing axis has, because it is deliberately the same shape: a flag on the
+// pile, a three-state override on the card, and a flag on a declaration.
+describe("durability, written from the editor", () => {
+  const card = (session: ReturnType<typeof scratchProject>, gameId: string) => {
+    const reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    return reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === gameId)!;
+  };
+
+  it("writes the deck's flag only when true, so an ordinary deck stays quiet", () => {
+    const session = scratchProject();
+    renameDeck(session, docks, { durable: true });
+    expect(readFileSync(dockDeckFile(session), "utf8")).toContain("durable: true");
+    renameDeck(session, docks, { durable: false });
+    expect(readFileSync(dockDeckFile(session), "utf8")).not.toContain("durable: true");
+  });
+
+  it("a card's override is three-state: inherit CLEARS it rather than writing false", () => {
+    const session = scratchProject();
+    const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
+    saveCard(session, docks, ratJob.id, { durable: true });
+    expect(card(session, "rat-job").durable).toBe(true);
+    saveCard(session, docks, ratJob.id, { durable: false });
+    expect(card(session, "rat-job").durable).toBe(false);
+    saveCard(session, docks, ratJob.id, { durable: null });
+    expect(card(session, "rat-job").durable).toBeUndefined();
+  });
+
+  it("round-trips both axes on a declaration, which the DTO used to drop", () => {
+    // The bug this is really about: `shared` was not on the declaration DTO at
+    // all, so editing any @story property in a project that shared state saved
+    // the flag away. A list saves whole; anything the DTO forgets is deleted.
+    const session = scratchProject();
+    const before = projectSettings(session);
+    const story = before.story.map((p) => (p.name === "reputation"
+      ? { ...p, shared: false, durable: true } : p));
+    expect(saveProjectSettings(session, { ...before, story })).not.toHaveProperty("error");
+    const opened = openProject(session.loaded.dir);
+    if ("error" in opened) throw new Error(opened.error);
+    const after = projectSettings(opened.session).story.find((p) => p.name === "reputation")!;
+    expect(after.shared).toBe(false);
+    expect(after.durable).toBe(true);
   });
 });

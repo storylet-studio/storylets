@@ -5,7 +5,7 @@
 // store both feed this same shape.
 // ---------------------------------------------------------------------------
 
-import type { BoxShard, DeckShard, HandsShard, ProjectShard, PropertyDecl, ScalarValue, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
+import type { BoxShard, ContractShard, DeckShard, HandsShard, ProjectShard, PropertyDecl, ScalarValue, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
 
 /** One shard as text: `path` is project-relative, posix separators. */
 export interface SourceFile {
@@ -86,9 +86,20 @@ export interface SourceBox {
   notes?: NotesShard;
 }
 
+/** One installation contract, as it sits in `contracts/`. */
+export interface SourceContract {
+  /** The shard's project-relative path ("contracts/the-park.storyletcontract"). */
+  path: string;
+  shard: ContractShard;
+}
+
 export interface SourceProject {
   /** The project shard's path (for issue anchoring). */
   path: string;
   project: ProjectShard;
   boxes: SourceBox[];
+  /** The venues this project is installed at (design/engine-server.md 4.11).
+   *  Empty on every project that has never met a server, which is all of them
+   *  until one is built. Not compiled: `validate` and the editor read it. */
+  contracts: SourceContract[];
 }

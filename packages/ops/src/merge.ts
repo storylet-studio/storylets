@@ -20,7 +20,7 @@
 import { canonicalStringify } from "@storylet-studio/compiler";
 import type { Issue } from "@storylet-studio/compiler";
 
-export type MergeFileType = "project" | "box" | "tags" | "hands" | "deck" | "view" | "notes";
+export type MergeFileType = "project" | "box" | "tags" | "hands" | "deck" | "view" | "notes" | "contract";
 
 export type ConflictKind =
   | "both-changed"      // both sides changed the same value differently
@@ -89,6 +89,7 @@ export function detectMergeType(file: { schema?: unknown }): MergeFileType {
   if (s.startsWith("storylets/deck")) return "deck";
   if (s.startsWith("storylets/view")) return "view";
   if (s.startsWith("storylets/notes")) return "notes";
+  if (s.startsWith("storylets/contract")) return "contract";
   throw new MergeInputError(`cannot detect a storylets merge type from schema '${s}'`);
 }
 
@@ -179,6 +180,13 @@ export const MERGE_SPECS: Record<MergeFileType, Strategy> = {
   notes: object({
     comments: keyed("id", object({})),
   }),
+  // The installation contract. Every key ATOMIC, which is the strategy the file's
+  // ownership asks for (design/engine-server.md 4.11): the server owns it, it
+  // rewrites it whole from provisioning, and interleaving one side's hand list
+  // with the other's would synthesise a contract no venue was ever provisioned
+  // against. A conflict here means "take the server's copy", and saying so costs
+  // nothing because nobody hand-edits this file.
+  contract: object({}),
   project: object({
     project: RECORD,
     settings: RECORD,

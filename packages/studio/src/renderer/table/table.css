@@ -176,6 +176,9 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .clockbox { font-family: var(--font-mono); color: var(--muted); min-width: 90px; }
 .clockval { font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
 .mini { font-size: 0.72rem; padding: 1px 8px; border-radius: var(--radius-pill); }
+/* A timed box's unit, said once on its row so the numbers beside it read as
+   time (design/engine-server.md 4.8). */
+.clockunit { color: var(--muted); font-size: 0.72rem; }
 .filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 
 /* --- the board: hands as places ----------------------------------------------- */

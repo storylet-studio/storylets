@@ -112,9 +112,21 @@ The paths, and when to write them: [Your game's state](/play/world-state/).
 
 ```csharp
 SaveEnvelope env = _engine.SaveGame();
-_engine.LoadGame(env);                    // rebuilds every flow...
-_flow = _engine.GetFlow("main");          // ...so re-take your handles
+LoadReport report = _engine.LoadGame(env);   // rebuilds every flow...
+_flow = _engine.GetFlow("main");             // ...so re-take your handles
 ```
+
+A load is forgiving: a card your edit deleted drops off the board, a property you added takes
+its default, and a save from an older build goes in without a word. `PreviewLoad(env)` says
+what that would cost before you spend it and changes nothing; `LoadGame` returns the same
+`LoadReport` once it has. `report.Exact` is true when the save goes back exactly as it was;
+otherwise `Evicted`, `DroppedProperties`, `DefaultedProperties`, `RetypedProperties` and the
+`Version` / `Hash` pairs say what moved.
+
+`SaveFlow(id)` takes ONE flow's state, for a playthrough stepping away, and
+`OpenFlow(id, new OpenFlowOptions { Restore = saved })` puts it back. Closing the flow in
+between is what releases the cards it was holding; on the way back, a shared card another flow
+now holds is dropped and reported (`PreviewFlowRestore(id, saved)` asks in advance).
 
 For files, `StoryletSave` is the string boundary: `SerializeState(engine, worldValues)` gives
 you the `.storyletsave` text, `LoadState(engine, text)` reads one back and hands you the

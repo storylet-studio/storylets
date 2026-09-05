@@ -146,6 +146,36 @@ fought it waits their own three turns. There is no shared clock to count anythin
 against, so a world-wide timer belongs in `@world`, where your game already keeps the time
 (`@world.now >= @world.goblin_returns_at`).
 
+**And `never` is the one that can outlive the run.** Mark a deck or a card **`durable`** and
+its `never` spend is still spent tomorrow: for whoever played it, or for everyone if the card
+is also shared. See
+[Durable state](/play/world-state/#durable-state-that-outlives-a-run). Nothing else can carry:
+a finite cooldown is a turn of a clock that resets with the run, so `durable` on one is a
+compile warning.
+
+### A box that counts in time
+
+A box can declare that its turns are time rather than plays:
+
+```json5
+// box.storyletbox
+{ gameId: "street", title: "The Street",
+  turn: { seconds: 60 },   // one turn a minute of the run
+  ... }
+```
+
+That makes it a **timed box**, and three things follow. Plays in it advance nothing: the
+project's play-advance setting does not apply, though a `play` that names `advanceTurns`
+still gets what it asks for. Your game ticks it, once every `seconds` of real time, for
+every open flow; the engine still has no clock of its own. And `redraw: N` on its cards
+reads as N minutes rather than N plays, which is the point of declaring it: `redraw: 30` in
+a sixty-second box is half an hour, and the editor, the bundle inspectors and the coverage
+report all say so out loud.
+
+Nothing else changes. The unit is a convention the tools spell out, and the time is still
+per flow, so "the goblin comes back for everyone after half an hour" is a job for `@world`
+as above.
+
 ## Hand templates
 
 A hand template is a kind of hand you define once: "NPCs you can talk to" fixes some tags,

@@ -281,6 +281,34 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	void CloseFlow(const FString& Id);
 
+	// --- parking one visit (design/engine-server.md 4.1) ------------------------
+	//
+	// The string boundary, as UStoryletSave is for the whole envelope: no
+	// FlowSave struct crosses a Blueprint pin, and a parked visit is stored and
+	// shipped as text anyway. Park with SaveFlowToJson then CloseFlow (closing
+	// is what releases the visit's shared claims); resume with
+	// OpenFlowFromJson, and ask PreviewFlowRestoreJson first if the answer
+	// matters before the act.
+
+	/** ONE flow's state as JSON, to park a visit that is walking away. Empty
+	 *  (and a log) when no flow of that name is open. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
+	FString SaveFlowToJson(const FString& Id) const;
+
+	/** Open the named flow AS IT WAS, from a SaveFlowToJson string. Replaces
+	 *  any flow already open under that name, exactly as OpenFlow does. Drift
+	 *  is tolerated as a save load tolerates it, plus one thing: a shared card
+	 *  the other open flows now hold every copy of is not put back. Null (and a
+	 *  log) on malformed JSON. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
+	UStoryletFlow* OpenFlowFromJson(const FString& Id, const FString& Json);
+
+	/** What OpenFlowFromJson would do to that name, as a LoadReport JSON
+	 *  string, without doing it (design/engine-server.md 4.9). Nothing moves.
+	 *  Empty (and a log) on malformed JSON. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
+	FString PreviewFlowRestoreJson(const FString& Id, const FString& Json) const;
+
 	/** Close every flow and reseed the shared state to its defaults. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	void Reset();

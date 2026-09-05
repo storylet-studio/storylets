@@ -60,6 +60,7 @@ const project = (b: SourceBox): SourceProject => ({
     export: { bundle: "d.storyletsc", metadata: "full" },
   },
   boxes: [b],
+  contracts: [],
 });
 
 /** The shard a planned write would land, parsed back. */

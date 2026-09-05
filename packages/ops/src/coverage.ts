@@ -147,6 +147,12 @@ export interface CoverageReport {
   seed: number;
   /** The per-run turn cap used, echoed so the report reads on its own. */
   maxTurns: number;
+  /** How long one turn lasts, when the whole project agrees on an answer:
+   *  every box is TIMED (design/engine-server.md 4.8) and every one of them
+   *  declares the same `seconds`. The sweep's turns can then be read as time
+   *  and the report says so. Absent whenever the project mixes units or has
+   *  any untimed box, because a mixed turn count is not a duration. */
+  turnSeconds?: number;
   /** The refs the run actually drove, sorted - what the honesty net was told
    *  about. Empty means every @world gate reads as "nothing drives it". */
   drivers: string[];
@@ -411,6 +417,18 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
   };
   if (!bundle) return empty;
 
+  // The sweep's turns read as time only when the whole project agrees: every
+  // box timed, on one unit (design/engine-server.md 4.8). A project that mixes
+  // a timed box with an untimed one has no single answer to "how long was that
+  // run", so the report says turns and stops there.
+  const units = new Set(bundle.boxes.map((b) => b.turn?.seconds));
+  const turnSeconds = units.size === 1 && !units.has(undefined)
+    ? [...units][0] as number : undefined;
+  // A timed box has no clock of its own: whoever runs the engine ticks it, and
+  // during a sweep that is the harness. One sweep turn is one tick, which is
+  // what makes a cooldown in a timed box expire in a run at all.
+  const timedBoxes = bundle.boxes.filter((b) => b.turn !== undefined);
+
 
   const analysis = analyse(bundle);
 
@@ -536,6 +554,11 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
       // claims cards and would read as the play having closed them.
       const before = opts.observeEdges ? eligibleNow(session) : undefined;
       session.play(choice.cardId, outcome.gameId, choice.from);
+      // The tick a timed box's plays no longer do, done by the harness, which
+      // is this sweep's host: before the "after" reading, so the clock has
+      // moved by the time eligibility is measured, exactly as it has already
+      // moved in an untimed box.
+      for (const box of timedBoxes) session.advanceTurns(box.id, 1);
       if (before) {
         for (const id of eligibleNow(session)) {
           // The played card returns to the pool as it leaves the hand: that is
@@ -630,7 +653,8 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
   return {
     // The runs actually completed, not the runs asked for: a cancelled sweep
     // must not claim a sample size it never took.
-    runs: runsDone, seed, maxTurns, drivers: drivenRefs, turns: totalTurns, plays: totalPlays, terminations,
+    runs: runsDone, seed, maxTurns, ...(turnSeconds !== undefined ? { turnSeconds } : {}),
+    drivers: drivenRefs, turns: totalTurns, plays: totalPlays, terminations,
     cards: allCards.map(({ card, deck, box }) => {
       const cardReads = [...(analysis.cardRefs.get(card.id) ?? [])];
       const refs = cardReads.filter(unwritten).sort();

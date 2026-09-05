@@ -273,6 +273,24 @@ const API = [
   { on: "Engine", member: "loadGame", js: "loadGame", unity: "LoadGame", godot: "load_game", unreal: "loadGame", bp: null,
     why: "Blueprint loads through UStoryletSave::LoadStateFromJson" },
 
+  // --- parking one visit, and pricing a load (design/engine-server.md 4.1, 4.9) ---
+  // A visit parks when the player walks away and resumes when they scan in
+  // again: one flow's state, not the engine's. saveFlow / openFlow(restore) are
+  // that pair, and previewLoad / previewFlowRestore are the question a hot swap
+  // has to ask before it acts.
+  { on: "Engine", member: "saveFlow", js: "saveFlow", unity: "SaveFlow", godot: "save_flow", unreal: "saveFlow", bp: "SaveFlowToJson",
+    why: "Blueprint parks through the string boundary (no FlowSave struct crosses a pin), as saveGame does through UStoryletSave" },
+  { on: "Engine", member: "openFlowRestoring",
+    js: { re: "restore\\?: FlowSave" }, unity: { re: "FlowSave Restore" },
+    godot: { re: '"restore"' }, unreal: { re: "std::optional<FlowSave> restore" }, bp: "OpenFlowFromJson",
+    why: "not a hole: elsewhere an option on openFlow (OpenFlowOptions.restore, with onRestoreReport beside it for the report the restore produces), so these are field probes on the options struct; a separate BP method because Blueprint has no optional struct args and takes the blob as JSON (as PlayAdvancing / DealAllHands)" },
+  { on: "Engine", member: "previewLoad", js: "previewLoad", unity: "PreviewLoad", godot: "preview_load", unreal: "previewLoad", bp: null,
+    why: "Blueprint previews through UStoryletSave::PreviewLoadFromJson, beside the LoadStateFromJson it prices: no LoadReport struct crosses a pin, so the report goes over as JSON" },
+  { on: "Engine", member: "previewFlowRestore",
+    js: "previewFlowRestore", unity: "PreviewFlowRestore", godot: "preview_flow_restore",
+    unreal: "previewFlowRestore", bp: "PreviewFlowRestoreJson",
+    why: "as previewLoad, the report crosses a BP pin as JSON; the method itself is on the engine wrapper because the flow it asks about may not be open" },
+
   // --- the retained session log + trace (schema 5) --------------------------
   { on: "Flow", member: "log", js: "log", unity: "Log", godot: "log", unreal: "log", bp: "Log" },
   { on: "Engine", member: "log",

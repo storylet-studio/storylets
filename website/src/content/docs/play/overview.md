@@ -67,10 +67,12 @@ On the **engine** (the world):
 | Call | Does |
 |---|---|
 | `new Engine(bundle, { seed, log, world })` | Build the engine; `world` binds your game's `@world` resolver |
-| `openFlow(id, { seed })` | Open (or replace) a named flow - all play happens on the flow it returns |
+| `openFlow(id, { seed, restore })` | Open (or replace) a named flow - all play happens on the flow it returns; `restore` opens it as it was |
 | `getFlow(id)` / `flows()` / `closeFlow(id)` | Find, list and close flows; a closed flow's handle refuses every call |
 | `reset()` | Close every flow and reseed shared state |
-| `saveGame()` / `loadGame(envelope)` | The whole run - shared state plus every flow - in and out |
+| `saveGame()` / `loadGame(envelope)` | The whole run - shared state plus every flow - in and out; the load returns a report |
+| `saveFlow(id)` | One flow's state on its own, to park a playthrough that is stepping away |
+| `previewLoad(envelope)` / `previewFlowRestore(id, save)` | What that load would change, without changing it |
 | `getProperty(path)` / `setProperty(path, value)` | Shared state and `@world` only; a per-flow path is refused |
 | `subscribeTrace(handler)` | Every flow's events, one stream, tagged with the flow id |
 | `log()` / `clearLog()` | The RUN's retained log, if you asked for one: every flow's entries in one order, each naming its flow |

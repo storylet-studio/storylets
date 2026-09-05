@@ -42,6 +42,7 @@ const project = (cards: CardFix[], opts: {
     templates: {},
     export: { bundle: "dist/p.storyletsc", metadata: "full" },
   },
+  contracts: [],
   boxes: [{
     path: "b",
     box: {

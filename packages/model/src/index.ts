@@ -50,6 +50,25 @@ export interface PropertyDecl {
    * the game's own state, always engine-level, never per-flow.
    */
   shared?: boolean;
+  /**
+   * The durability axis (design/engine-server.md 4.2), valid wherever `shared`
+   * is valid and orthogonal to it: `shared` says whose value this is WITHIN a
+   * run, `durable` says whether the value survives the run at all. A durable
+   * shared property is the installation's memory ("trolls defeated since we
+   * opened"); a durable per-flow one is the player's pocket (visits,
+   * allegiance, what they earned).
+   *
+   * INERT TO THE RUNTIME. The engine partitions by `shared` alone and never
+   * reads this. Durability is what the SERVER does at a run boundary: it reads
+   * the declarations, lifts the durable values out of the partitions before the
+   * world restarts, and writes them back into the fresh engine afterwards,
+   * entirely through `getProperty` / `setProperty`.
+   *
+   * On a `@world` declaration the flag is a validation error, for the reason
+   * `shared` is: @world is the game's own state, and how long the game keeps it
+   * is the game's business.
+   */
+  durable?: boolean;
   purpose?: string;
 }
 
@@ -172,6 +191,32 @@ export function freeTitle(base: string, taken: ReadonlySet<string>): string {
   return title;
 }
 
+/**
+ * A count of a TIMED box's turns, said as time (design/engine-server.md 4.8):
+ * `turnSpan(30, 60)` is "30 min", and `turnSpan(30, 60, true)` is "30 minutes".
+ *
+ * One definition, because the conversion appears wherever a designer might
+ * otherwise have to do it in their head: the card editor's Redraw field, the
+ * box page, the Board's advance buttons, and the coverage report's turn
+ * budget. Two of those want the unit spelled out and two want it short, which
+ * is the whole of `long`.
+ */
+export function turnSpan(turns: number, seconds: number, long = false): string {
+  const total = Math.max(0, Math.round(turns * seconds));
+  const say = (n: number, short: string, one: string, many: string): string =>
+    long ? `${n} ${n === 1 ? one : many}` : `${n} ${short}`;
+  if (total < 60) return long ? say(total, "s", "second", "seconds") : `${total}s`;
+  if (total < 3600) {
+    const minutes = total % 60 === 0 ? total / 60 : Math.round(total / 6) / 10;
+    return say(minutes, "min", "minute", "minutes");
+  }
+  let hours = Math.floor(total / 3600);
+  let rest = Math.round((total % 3600) / 60);
+  if (rest === 60) { hours += 1; rest = 0; }
+  const said = say(hours, "hr", "hour", "hours");
+  return rest === 0 ? said : `${said} ${say(rest, "min", "minute", "minutes")}`;
+}
+
 // --- entities (generic over expression representation E) ---------------------
 
 export interface Outcome<E> {
@@ -230,6 +275,21 @@ export interface Card<E> {
    *  common case writes one number and "five in the world, one to a customer"
    *  is `copies: 1, sharedCopies: 5`. */
   sharedCopies?: number;
+  /** Does this card's `redraw: "never"` spend survive the run
+   *  (design/engine-server.md 4.2)? Absent takes the deck's flag, set here it
+   *  overrides the deck, exactly as `shared` does. `shared` decides who a
+   *  spend counts for WITHIN a run; this decides whether it outlives one.
+   *
+   *  Only `"never"` crosses the run boundary, for the reason only `"never"`
+   *  crosses the flow boundary (shared-scarcity 9.3.2): a finite cooldown is
+   *  an absolute turn of a box clock, and the clock resets with the run. On
+   *  any other redraw the flag is a compile warning.
+   *
+   *  INERT TO THE RUNTIME, like the declaration flag: the server lifts the
+   *  durable spends at run end (per-flow ones from the flow's `never`
+   *  cooldowns, shared ones from the engine's spent set) and puts them back
+   *  through `openFlow(id, { restore })` and `markTaken`. */
+  durable?: boolean;
   /** Card-template data: field name -> value, validated at publish. */
   fields?: Record<string, ScalarValue>;
   outcomes: Outcome<E>[];
@@ -246,6 +306,11 @@ export interface Deck<E> {
    *  in it is shared unless the card says otherwise. The container is where
    *  Patter puts its own shared-memory flag, and the deck is our container. */
   shared?: boolean;
+  /** Every `redraw: "never"` card in this pile is spent for good, past the end
+   *  of the run, unless the card says otherwise (design/engine-server.md 4.2).
+   *  The container carries the flag for the reason `shared` is carried here:
+   *  a pile is what an author reaches for when a rule is true of all of it. */
+  durable?: boolean;
   properties: PropertyDecl[];
   cards: Card<E>[];
 }
@@ -345,6 +410,39 @@ export interface TagGroup {
  *  leaked into hand-edited shards and the docs. */
 export const PLACE_GROUP = "place";
 
+/** The scopes a movable hole may be filled from (design/engine-server.md 4.6):
+ *  the two `boundBy` already allows, plus `@hand` - the asking hand's OWN
+ *  declared property, resolved before tag composition so a movable hole can
+ *  never depend on the tags it is choosing. */
+export type HoleRefScope = "hand" | "story" | "world";
+
+/** A parsed hole reference: `@hand.zone` -> `{ scope: "hand", name: "zone" }`. */
+export interface HoleRef {
+  scope: HoleRefScope;
+  name: string;
+}
+
+const HOLE_REF = /^@(hand|world|story)\.([a-z][a-z0-9_-]*)$/;
+
+/**
+ * Is this `chosen` / binding value MEANT as a property reference rather than a
+ * tag id?
+ *
+ * The test is the leading `@` alone, deliberately: a value that starts with
+ * one and does not parse is a mistyped reference, which the compiler should
+ * name as such, not a tag id that happens to look odd. Tag ids never begin
+ * with `@`.
+ */
+export const isHoleRef = (value: string): boolean => value.startsWith("@");
+
+/** Parse a hole reference, or undefined when it is not one. The on-disk form
+ *  stays a plain string, so the canonical serialiser and the shard merge need
+ *  no change at all: a hole is still one group name against one value. */
+export const parseHoleRef = (value: string): HoleRef | undefined => {
+  const m = HOLE_REF.exec(value);
+  return m === null ? undefined : { scope: m[1] as HoleRefScope, name: m[2]! };
+};
+
 /** A declared kind of hand (schema 2.6): live-inherited, author-side only,
  *  never called from game code. One condition governs every instance. */
 export interface HandTemplate<E> {
@@ -357,9 +455,12 @@ export interface HandTemplate<E> {
    *  merge-clean (Reboot 7.4). */
   order?: number;
 
-  /** Fixed tag bindings: tag group id -> tag id. */
+  /** Fixed tag bindings: tag group id -> tag id. Literal tags only: what a
+   *  template FIXES is the same for every instance, and a hole that moves is
+   *  the instance's own business (`Hand.chosen`, 4.6). */
   bindings?: Record<string, string>;
-  /** The holes: tag group ids each instance fills (one tag each). */
+  /** The holes: tag group ids each instance fills (one tag each, or one
+   *  property reference: 4.6). */
   chooses?: string[];
   /** Shared availability condition, ANDed in (schema 3.1); evaluated per
    *  instance against that instance's composed @hand. */
@@ -372,6 +473,15 @@ export interface HandTemplate<E> {
 
 /** A standalone hand's inline rule (schema 2.6): owned by the hand. */
 export interface HandRule<E> {
+  /**
+   * Tag group id -> tag id, or a PROPERTY REFERENCE (`"@hand.zone"`,
+   * `"@story.where"`, `"@world.place"`) the runtime resolves at ask time
+   * (design/engine-server.md 4.6, the hand that moves). Still a plain string
+   * on disk, so the canonical serialiser and the merge are untouched; what
+   * widened is the meaning, and `parseHoleRef` is where it is read.
+   *
+   * `place` is never fillable this way: it is the hand's own name, not an axis.
+   */
   bindings?: Record<string, string>;
   condition?: E;
   slots: number | "unbounded";
@@ -389,7 +499,17 @@ export interface Hand<E> {
   purpose?: string;
   /** Hand template id (not gameId). */
   template?: string;
-  /** Template instances: tag group id -> tag id, one per `chooses` hole. */
+  /**
+   * Template instances: tag group id -> tag id, one per `chooses` hole.
+   *
+   * A value may instead be a PROPERTY REFERENCE (`"@hand.zone"`,
+   * `"@story.where"`, `"@world.place"`), which makes the hole MOVABLE: the
+   * runtime resolves the reference at ask time and binds the hole to the tag
+   * the value names, so moving the Elder to the forest is `setProperty` and
+   * nothing else (design/engine-server.md 4.6). Still a plain string on disk,
+   * so the canonical serialiser and the shard merge need no change; read it
+   * with `parseHoleRef`.
+   */
   chosen?: Record<string, string>;
   /** Standalone hands: the inline rule. */
   rule?: HandRule<E>;
@@ -413,6 +533,23 @@ export interface Box<E> {
   purpose?: string;
   /** The only per-box ranking policy (Reboot 2.2). */
   ranking: { specificity: boolean };
+  /**
+   * A TIMED box: its clock counts real time, one turn every `seconds` of the
+   * run (design/engine-server.md 4.8). Absent is the ordinary box, whose turn
+   * is a play.
+   *
+   * Two things follow, and only two. In the ENGINE, a play in this box
+   * defaults to advancing nothing: `settings.playAdvancesTurns` does not
+   * apply, so a designer cannot declare the convention and then forget to
+   * switch play-advance off. Everywhere else it is what the tools SAY: the
+   * host ticks the box (the runtime has no clock and gains none here), and a
+   * card's `redraw: N` reads as N x `seconds`, which the editors, the bundle
+   * inspectors and the coverage report spell out rather than leaving a
+   * designer to know that 30 meant minutes.
+   *
+   * The number itself is inert to the runtime, which never reads it.
+   */
+  turn?: { seconds: number };
   /** The card template: what every card in this box carries. */
   fields: FieldDecl[];
   properties: PropertyDecl[];
@@ -439,6 +576,33 @@ export interface BundleSettings {
 }
 
 /**
+ * The play ladder (design/engine-server.md 4.10): how much of itself
+ * Storyletter shows this project, in one setting with three rungs rather than
+ * a set of toggles, because the features nest.
+ *
+ *   solo   one player, one flow: no sharing, no durability, no venue features
+ *   shared several players over one world: sharing appears
+ *   venue  a production: nothing is hidden
+ *
+ * EDITOR-SIDE ONLY. It stays in the project shard beside `coverage` and
+ * `export` and is never compiled: a solo project plays on the same Engine as a
+ * venue one. Hidden is hidden rather than disabled, so going DOWN a rung is
+ * refused when the project already contains what the rung would hide, and a
+ * hand-edited shard above its rung is a compile warning.
+ */
+export type PlayRung = "solo" | "shared" | "venue";
+
+/** The default rung: a project shard that says nothing is a solo game. */
+export const DEFAULT_PLAY_RUNG: PlayRung = "solo";
+
+/** The project shard's settings block: what the bundle carries, plus the
+ *  authoring-side play rung that it does not. */
+export interface ProjectSettings extends BundleSettings {
+  /** The play ladder rung (see `PlayRung`). Absent = "solo". */
+  play?: PlayRung;
+}
+
+/**
  * A map that a bundle was asked to carry: one spatial tag group's geometry,
  * flattened for a host to draw (design/graphical-views.md 2, "The map MAY ship").
  *
@@ -452,9 +616,16 @@ export interface BundleSettings {
  * names it passes to `peek`. There is nothing here to strip either, which is why
  * `metadata: "stripped"` needs no special case: no titles, no purposes.
  *
- * Sites are deliberately NOT here. A site is where an author parked a hand while
- * working, held in the view sidecar precisely because it is not content, and a
- * host that wants to place a hand already has its zone from the compiled binding.
+ * SITES ARE HERE, which reverses a ruling. Until 2026-09-05 this comment said
+ * they were deliberately not: a site was where an author parked a hand while
+ * working, held in the view sidecar precisely because it was not content, and a
+ * host that wanted to place a hand had its zone from the compiled binding. That
+ * held for a game, where a hand's zone is its only real-world meaning. It does
+ * not hold for a physical experience (design/engine-server.md 4.3), where the
+ * position IS content: it is where the kiosk stands, and a producer's map is
+ * simply wrong without it. The alternative was a second file beside the bundle,
+ * which would cost a format the inspectors do not read and would put the view
+ * sidecar in the shipping path by the back door.
  */
 export interface BundleMap {
   /** The owning box, by gameId (tag groups are box-scoped). */
@@ -467,6 +638,12 @@ export interface BundleMap {
   /** Background pictures, back to front, as bundle-relative paths. Hidden ones
    *  do not ship: what an author put away is not something to spring on a host. */
   backgrounds?: BundleBackground[];
+  /** Where the placed hands stand on this map, by hand gameId, sorted by that
+   *  gameId so the bytes do not depend on authoring order. A hand nobody has
+   *  placed has no entry, and a map with no placed hand has no key at all. The
+   *  zone a site sits in is NOT repeated here: the hand's own binding is what
+   *  the runtime deals from, and a second copy could only go on to disagree. */
+  sites?: { hand: string; x: number; y: number }[];
 }
 
 /** One shipped picture. `locked` and `hidden` are authoring state and do not
@@ -568,6 +745,91 @@ export interface SaveEnvelope {
   flows: Record<string, FlowSave>;
 }
 
+// --- the load report (design/engine-server.md 4.9) ----------------------------
+//
+// `loadGame` is forgiving by design: a card the bundle no longer has drops off
+// the board, a property the save does not carry keeps its default, and a
+// version two builds newer loads without a word. That forgiveness is what makes
+// a save survive an edit, and it is also what hides the cost of a content
+// update from whoever is about to apply one. The report is the same walk,
+// itemised: `previewLoad` computes it and changes nothing, `loadGame` computes
+// it and applies it, and `previewFlowRestore` answers the same questions for
+// one flow (4.1's `openFlow(id, { restore })`).
+//
+// Card, hand and flow identities are GAME IDS: a report is host-facing and
+// internal ids mean nothing outside the project. The one exception is an
+// entity the edit DELETED - a vanished card, a vanished hand - which has no
+// gameId left to give, so the report carries the id the save itself carries.
+// There is nothing else to name it by.
+//
+// A property is named differently, and deliberately: by its ENGINE ADDRESS,
+// the string listProperties() prints and getProperty()/setProperty() accept.
+// A report entry is then something a host can act on rather than merely
+// print, and the runtimes have one property grammar instead of two.
+
+/** One card that a restore refused to put back on the board.
+ *
+ *  `vanished` and `hand-vanished` are the edit's doing (the card, or the hand
+ *  it sat in, is no longer in the bundle). `claimed-elsewhere` is only ever a
+ *  single-flow restore into a LIVE engine: the card is shared, and the other
+ *  open flows already hold every copy the world has. */
+export interface LoadEviction {
+  flow: string;
+  hand: string;
+  card: string;
+  reason: "vanished" | "hand-vanished" | "claimed-elsewhere";
+}
+
+/** One property the restore could not put back as it was. `flow` names the
+ *  flow whose half it belongs to; absent, it is the shared half.
+ *
+ *  `path` is the engine's property address, spelled exactly as
+ *  `Flow.listProperties()` / `Engine.listProperties()` print it and exactly as
+ *  `getProperty` and `setProperty` accept it: `story.<name>` for the story
+ *  scope, `<scope>.<owner>.<name>` for the box, deck, hand and tag scopes. No
+ *  `@`, which belongs to the expression language and not to an address.
+ *
+ *  The owner segment is the engine's own id today, not a gameId - the same gap
+ *  every other address in the API has. Design change 4.4 ("identity by
+ *  gameId") moves property addresses and trace events to gameIds together,
+ *  across all four runtimes; until it lands, a report is spelled the way the
+ *  rest of the engine is spelled, because a second grammar here would be worse
+ *  than one uniform gap. */
+export interface LoadProperty {
+  flow?: string;
+  path: string;
+}
+
+/** What a load or a flow restore would do that is not a plain restore
+ *  (design/engine-server.md 4.9). Arrays are sorted, so two runtimes given the
+ *  same save and bundle produce the same bytes; `flows` alone keeps the
+ *  envelope's own order, because a caller re-takes its handles in it. */
+export interface LoadReport {
+  /** No drift and nothing dropped, defaulted or retyped: the save goes back
+   *  exactly as it was. `flows` is not a divergence and does not count. */
+  exact: boolean;
+  project: string;
+  /** Drift when the two differ; reported, never refused. */
+  version: { saved: string; bundle: string };
+  /** Drift when the two differ; reported, never refused. */
+  hash: { saved: string; bundle: string };
+  /** The flows this restores, in the order it restores them. */
+  flows: string[];
+  evicted: LoadEviction[];
+  /** Cooldowns held for cards the bundle no longer has. */
+  droppedCooldowns: { flow: string; card: string }[];
+  /** Shared `redraw: "never"` entries for cards the bundle no longer has. */
+  droppedSpent: string[];
+  /** In the save, not declared any more. */
+  droppedProperties: LoadProperty[];
+  /** Declared, not in the save: it takes the declaration's default. */
+  defaultedProperties: LoadProperty[];
+  /** In the save, still declared, but the saved value no longer fits the
+   *  declaration (its type changed, or an enum value / quality stage was
+   *  edited away). It takes the declaration's default. */
+  retypedProperties: LoadProperty[];
+}
+
 /** The .storyletsave FILE: the HOST's file, not the engine's - the engine's
  *  envelope plus, when the host keeps one, its @world container. This is
  *  "host saves its container once, each engine saves its own envelope"
@@ -618,7 +880,19 @@ export const SHARD_EXTENSIONS = {
    *  file and were retired: `purpose` already says why a thing exists, and
    *  Patterpad's typed routing has no destination here. */
   notes: ".storyletnotes",
+  /** An installation contract: what a VENUE depends on, one file per
+   *  installation in `contracts/` at the project root
+   *  (design/engine-server.md 4.11). Its own shard, and its own folder, for the
+   *  walkthrough's reason (Reboot 7.5, S4): a different owner, a different
+   *  change rate, and a merge that must never collide with the author's edits,
+   *  since the server always wins its own file. */
+  contract: ".storyletcontract",
 } as const;
+
+/** Where the installation contracts live, relative to the project root. The
+ *  directory is the registry, as it is for a box's decks: a contract exists
+ *  because its file exists. */
+export const CONTRACTS_DIR = "contracts";
 
 export const PROJECT_SCHEMA = "storylets/project@0";
 export const BOX_SCHEMA = "storylets/box@0";
@@ -629,6 +903,69 @@ export const VIEW_SCHEMA = "storylets/view@0";
 /** The comment sidecar's schema. Still called "notes" on disk: the file already
  *  held both, and renaming it would break every project for no gain. */
 export const NOTES_SCHEMA = "storylets/notes@0";
+export const CONTRACT_SCHEMA = "storylets/contract@0";
+
+/**
+ * What one installation depends on, written by the venue's server and read by
+ * `validate` (design/engine-server.md 4.11).
+ *
+ * NOT THE AUTHOR'S FILE. A venue is provisioned against names - the hands its
+ * stations deal, the boxes its scheduler ticks, the properties its clocks drive,
+ * the fields its crew read - and the server writes them out so the tools that
+ * already gate a build can refuse a rename before it reaches the venue. A
+ * project playing at two venues has two of these. The author never edits one,
+ * and today, with no server built, a project either receives one or has none.
+ *
+ * NEVER COMPILED. It is project-side config like `coverage` and `export`: the
+ * server does not need its own contract handed back, it needs the bundle to
+ * still honour it.
+ *
+ * BY GAMEID throughout, because a gameId is the name that crosses the project's
+ * border and an internal id is authoring identity.
+ */
+export interface ContractShard {
+  schema: typeof CONTRACT_SCHEMA;
+  /** The installation this contract speaks for. One file per installation, and
+   *  two files naming the same one is an error. */
+  installation: string;
+  /** Who wrote it, for a human reading the file ("Storylet Server 0.1.0"). */
+  by?: string;
+  /** The server's revision when it wrote this. */
+  revision?: number;
+  /** Hands a station is bound to, by gameId: they may not be renamed or
+   *  removed. */
+  hands?: string[];
+  /** Timed boxes the venue's scheduler ticks, by box gameId, with the turn unit
+   *  in SECONDS it was provisioned against. A box whose unit changed means every
+   *  rest on its cards changed meaning. */
+  boxes?: Record<string, { turn: number }>;
+  /** Property paths the venue reads or drives, in the engine's own address
+   *  grammar with no `@` ("world.time_wall", "story.visits"), which is how
+   *  `listProperties()` prints them. */
+  properties?: ContractProperty[];
+  /** Card-template field names the crew and the bridges read. */
+  fields?: string[];
+}
+
+/**
+ * One contracted property.
+ *
+ * A bare path is the common form and the one the spec's example writes. The
+ * object form adds the TYPE the venue was provisioned against, which is the only
+ * way `validate` can catch the break that costs a producer most: a property that
+ * still exists under the same name and now holds something else. A server that
+ * knows the type should write the object form; a hand-written contract may say
+ * only the path and get the existence check alone.
+ */
+export type ContractProperty = string | { path: string; type?: PropertyType };
+
+/** The path a contracted property names, whichever form it was written in. */
+export const contractPropertyPath = (p: ContractProperty): string =>
+  typeof p === "string" ? p : p.path;
+
+/** The type a contracted property was provisioned against, when it says. */
+export const contractPropertyType = (p: ContractProperty): PropertyType | undefined =>
+  typeof p === "string" ? undefined : p.type;
 
 /** A point in a canvas's own coordinates. */
 export interface ViewPoint {
@@ -759,7 +1096,7 @@ export interface ProjectShard {
     name: string;
     version: string;
   };
-  settings: BundleSettings;
+  settings: ProjectSettings;
   /** Coverage drivers + argument domains (authoring/testing config; stays
    *  out of the compiled bundle). */
   coverage?: CoverageConfig;
@@ -828,6 +1165,8 @@ export interface BoxShard {
      *  into the bundle); merges as a per-field value. */
     order?: number;
     ranking: { specificity: boolean };
+    /** Declares a timed box (see `Box.turn`); compiled through unchanged. */
+    turn?: { seconds: number };
     fields: FieldDecl[];
     properties: PropertyDecl[];
   };
@@ -856,6 +1195,8 @@ export interface DeckShard {
     condition?: string;
     /** Scarce across flows: see Deck.shared. */
     shared?: boolean;
+    /** Its `redraw: "never"` cards are spent past the run: see Deck.durable. */
+    durable?: boolean;
     /** Authored display order within the box (sparse; see BoxShard). */
     order?: number;
     properties: PropertyDecl[];

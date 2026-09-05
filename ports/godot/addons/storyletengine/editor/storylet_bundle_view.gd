@@ -43,9 +43,17 @@ func _render(res: Resource) -> void:
 		var title := ""
 		if hand.has("title"):
 			title = "  [color=gray]%s[/color]" % str(hand["title"])
-		_add_row("%s: box %s, slots %s%s%s" % [
+		# A movable hole is the one thing about a hand its name cannot say:
+		# write that property and the hand moves (4.6).
+		var moves := ""
+		if hand.has("movable"):
+			var parts := []
+			for hole in hand["movable"]:
+				parts.append("%s from %s" % [str(hole["group"]), str(hole["from"])])
+			moves = ", moves %s" % " and ".join(parts)
+		_add_row("%s: box %s, slots %s%s%s%s" % [
 			str(hand["gameId"]), str(hand["box"]),
-			StoryletBundleInspector.slots_label(float(hand["slots"])), template, title,
+			StoryletBundleInspector.slots_label(float(hand["slots"])), template, moves, title,
 		])
 
 	# Tags by box: the peek() criteria surface ({group gameId: tag gameId}).
@@ -76,16 +84,37 @@ func _render(res: Resource) -> void:
 		_add_section("Maps (carried, not read)")
 		_add_row("Geometry the build was asked to carry. The engine ignores it.", true)
 		for map in d["maps"]:
-			_add_row("%s - %s: zones %d, pictures %d" % [
+			_add_row("%s - %s: zones %d, pictures %d, sites %d" % [
 				str(map["box"]), str(map["group"]), int(map["zones"]), int(map["backgrounds"]),
+				int(map["sites"]),
 			])
 
 	# Per-box counts: orientation, not inventory.
 	_add_section("Counts by box")
 	for box in d["boxes"]:
 		var counts: Dictionary = box["counts"]
-		_add_row("%s: decks %d, cards %d, hands %d, templates %d, tag groups %d, ranking.specificity %s" % [
+		# A timed box says its unit here (design/engine-server.md 4.8), because
+		# this is the line an integrator reads to find out what their host has
+		# to tick. Nothing is added for an ordinary box.
+		var timed := ""
+		if box.has("turn"):
+			timed = ", turn = %ss" % _seconds(float(box["turn"]["seconds"]))
+		# Durable cards (4.2), only when there are any: what a server lifts over
+		# a run boundary. Nothing is added for the ordinary box.
+		var durable := ""
+		if box.has("durableCards"):
+			durable = ", durable cards %d" % int(box["durableCards"])
+		_add_row("%s: decks %d, cards %d, hands %d, templates %d, tag groups %d, ranking.specificity %s%s%s" % [
 			str(box["gameId"]), int(counts["decks"]), int(counts["cards"]), int(counts["hands"]),
 			int(counts["templates"]), int(counts["tagGroups"]),
 			"on" if bool(box["ranking"]["specificity"]) else "off",
+			timed, durable,
 		])
+
+
+## Seconds without a trailing ".0": the compiler only lets a whole number
+## through, so the reader should see "60", not "60.0".
+static func _seconds(value: float) -> String:
+	if value == floor(value):
+		return str(int(value))
+	return str(value)

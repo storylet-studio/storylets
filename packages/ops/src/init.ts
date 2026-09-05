@@ -57,7 +57,13 @@ export function runInit(opts: InitOptions): InitResult {
   const project: ProjectShard = {
     schema: "storylets/project@0",
     project: { id: newId("proj"), name, version: "0.1.0" },
-    settings: { playAdvancesTurns: 1 },
+    // The play ladder's rung (design/engine-server.md 4.10). The kit sets it,
+    // and the starter kit is a single-player game, so it lands on "solo": the
+    // editor then shows nothing about sharing, durability or a venue until an
+    // author says the project is one of those. Written rather than left absent
+    // (which would mean the same) because it is a three-way choice and a shard
+    // that names its rung is one an author can read.
+    settings: { play: "solo", playAdvancesTurns: 1 },
     world: { properties: [], registry: {} },
     story: {
       properties: [{ name: "started", type: "boolean", default: false }],

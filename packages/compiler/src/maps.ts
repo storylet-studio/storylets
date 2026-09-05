@@ -85,13 +85,43 @@ export function compileMaps(source: SourceProject): BundleMap[] | undefined {
       x: b.x, y: b.y, width: b.width, height: b.height,
       ...(b.opacity !== undefined ? { opacity: b.opacity } : {}),
     }));
+    const sites = compileSites(g.box);
     return {
       box: g.boxGameId,
       group: g.groupGameId,
       zones: g.zones,
       ...(backgrounds.length > 0 ? { backgrounds } : {}),
+      ...(sites.length > 0 ? { sites } : {}),
     };
   });
 
   return maps.length > 0 ? maps : undefined;
+}
+
+/**
+ * Where a box's placed hands stand, as the bundle carries them
+ * (design/engine-server.md 4.3).
+ *
+ * Read from the VIEW SIDECAR, which is the only place a position has ever been
+ * kept, and translated to gameIds on the way out like everything else in this
+ * block. That the compiler can see the sidecar at all is not new: `SourceBox.view`
+ * has always been parsed, so nothing had to be threaded through for this.
+ *
+ * Per BOX, not per group, because that is where the positions live: a box has one
+ * set of sites and draws them on whichever of its maps is open, which is the rule
+ * the editor and the playable page already follow. A box with two spatial groups
+ * therefore ships the same sites on both, and that is the honest answer rather
+ * than an invented split.
+ *
+ * Sorted by hand gameId so the bytes do not move when somebody reorders a shard.
+ */
+function compileSites(box: SourceProject["boxes"][number]): NonNullable<BundleMap["sites"]> {
+  const placed = box.view?.map?.sites ?? {};
+  const sites: NonNullable<BundleMap["sites"]> = [];
+  for (const hand of box.hands.hands) {
+    const at = placed[hand.id];
+    if (at === undefined) continue;
+    sites.push({ hand: effectiveGameId(hand), x: at.x, y: at.y });
+  }
+  return sites.sort((a, b) => (a.hand < b.hand ? -1 : a.hand > b.hand ? 1 : 0));
 }

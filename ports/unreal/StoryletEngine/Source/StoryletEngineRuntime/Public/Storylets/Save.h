@@ -377,6 +377,105 @@ namespace storylets
             : OrderedMap<std::string, StoryletValue>{};
     }
 
+    /** ONE flow's blob as JSON, the same shape and the same bytes the envelope
+     *  carries per flow (design/engine-server.md 4.1). The string boundary for
+     *  a host that parks a visit: Blueprint has no FlowSave struct, and a
+     *  parked visit is stored and shipped as text anyway. */
+    inline std::string serializeFlow(const FlowSave& flow)
+    {
+        std::string out;
+        savedetail::WriteFlow(out, flow, 0);
+        return out;
+    }
+
+    /** The twin of serializeFlow: a parsed tree back to a blob. Tolerant in the
+     *  same way the envelope reader is - a missing key is a default, because a
+     *  blob parked under an older build is exactly the case this serves. */
+    inline FlowSave flowFromTree(const JsonValue& tree)
+    {
+        return savedetail::FlowFromTree(tree);
+    }
+
+    /** Parse + restore a serializeFlow string. Throws StoryletError on
+     *  malformed text, as deserializeState does. */
+    inline FlowSave deserializeFlow(const std::string& json)
+    {
+        try
+        {
+            return savedetail::FlowFromTree(JsonParser(json).parse());
+        }
+        catch (const StoryletError&)
+        {
+            throw;
+        }
+        catch (const std::exception&)
+        {
+            throw StoryletError("not valid JSON");
+        }
+    }
+
+    /** A LoadReport as JSON (design/engine-server.md 4.9): the string face of
+     *  the report, for a host whose boundary is text - the Unreal Blueprint
+     *  wrapper, a console, a wire. Field order is the struct's, list order is
+     *  the report's own, so two runtimes write the same bytes. */
+    inline std::string reportToJson(const LoadReport& report)
+    {
+        const auto quote = [](const std::string& text) { return StoryletValue::JsonQuote(text); };
+        const auto strings = [&quote](const std::vector<std::string>& list)
+        {
+            std::string out = "[";
+            for (size_t i = 0; i < list.size(); ++i)
+            {
+                if (i) out += ", ";
+                out += quote(list[i]);
+            }
+            return out + "]";
+        };
+        const auto properties = [&quote](const std::vector<LoadProperty>& list)
+        {
+            std::string out = "[";
+            for (size_t i = 0; i < list.size(); ++i)
+            {
+                if (i) out += ", ";
+                out += "{ ";
+                if (!list[i].flow.empty()) out += "\"flow\": " + quote(list[i].flow) + ", ";
+                out += "\"path\": " + quote(list[i].path) + " }";
+            }
+            return out + "]";
+        };
+        std::string out = "{\n";
+        out += "  \"exact\": " + std::string(report.exact ? "true" : "false") + ",\n";
+        out += "  \"project\": " + quote(report.project) + ",\n";
+        out += "  \"version\": { \"saved\": " + quote(report.version.saved)
+            + ", \"bundle\": " + quote(report.version.bundle) + " },\n";
+        out += "  \"hash\": { \"saved\": " + quote(report.hash.saved)
+            + ", \"bundle\": " + quote(report.hash.bundle) + " },\n";
+        out += "  \"flows\": " + strings(report.flows) + ",\n";
+        out += "  \"evicted\": [";
+        for (size_t i = 0; i < report.evicted.size(); ++i)
+        {
+            if (i) out += ", ";
+            const LoadEviction& e = report.evicted[i];
+            out += "{ \"flow\": " + quote(e.flow) + ", \"hand\": " + quote(e.hand)
+                + ", \"card\": " + quote(e.card) + ", \"reason\": " + quote(e.reason) + " }";
+        }
+        out += "],\n";
+        out += "  \"droppedCooldowns\": [";
+        for (size_t i = 0; i < report.droppedCooldowns.size(); ++i)
+        {
+            if (i) out += ", ";
+            out += "{ \"flow\": " + quote(report.droppedCooldowns[i].flow)
+                + ", \"card\": " + quote(report.droppedCooldowns[i].card) + " }";
+        }
+        out += "],\n";
+        out += "  \"droppedSpent\": " + strings(report.droppedSpent) + ",\n";
+        out += "  \"droppedProperties\": " + properties(report.droppedProperties) + ",\n";
+        out += "  \"defaultedProperties\": " + properties(report.defaultedProperties) + ",\n";
+        out += "  \"retypedProperties\": " + properties(report.retypedProperties) + "\n";
+        out += "}";
+        return out;
+    }
+
     /** Parse + restore .storyletsave TEXT: the text twin of loadState. Throws
      *  StoryletError on malformed text, exactly as loadState does on a
      *  malformed file. */

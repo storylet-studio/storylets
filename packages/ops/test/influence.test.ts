@@ -49,6 +49,7 @@ const project = (f: Fix): SourceProject => ({
     templates: {},
     export: { bundle: "d.storyletsc", metadata: "full" },
   },
+  contracts: [],
   boxes: [{
     path: "b",
     box: {

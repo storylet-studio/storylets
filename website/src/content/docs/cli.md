@@ -46,6 +46,7 @@ storyletengine export-xlsx [path] -o FILE
 storyletengine peek <box> [path] [--where group=tag ...] [--n N] [--set path=value ...] [--seed N] [--deal-all]
 storyletengine deal <hand> [path] [--set path=value ...] [--seed N] [--deal-all]
 storyletengine resolve <query> [path]
+storyletengine contract show [installation] [path]
 storyletengine merge BASE OURS THEIRS [-o out] [--json] [--path realfile]
 storyletengine links [path] [--deck X | --box X | --card X] [--refs] [--json]
 storyletengine coverage [path] [--runs N] [--max-turns M] [--seed S] [--json] [--fail-on-gap] [--propose]
@@ -248,6 +249,27 @@ It's the same lookup Storyletter's `--at` uses when you [open a project at a par
 item](/storyletter/overview/#opening-at-a-particular-item), so what the terminal says
 and where the editor lands can't disagree. No match prints `no match for '<query>'` and
 exits 1.
+
+## contract show
+
+What each [installation contract](/format/shards/#the-installation-contract) in the project
+depends on: the hands a venue's stations are bound to, the boxes its scheduler ticks, the
+properties its clocks drive, the fields its crew read.
+
+```
+$ storyletengine contract show the-park.storylets
+the-park  (Storylet Server 0.1.0, revision 12)  (contracts/the-park.storyletcontract)
+  hand      the-well   a station deals this hand
+  hand      the-forge   a station deals this hand
+  box       street   the scheduler ticks it every 60s
+  property  world.time_phase
+  property  story.visits
+  field     prompt   the crew and the bridges read it
+```
+
+Name an installation to show only that one. There's no verb for the breaks: `validate`
+already reports them, as errors, each one naming the venue that cares. A project with no
+contract prints nothing and exits 1.
 
 ## merge
 

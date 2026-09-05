@@ -8,7 +8,7 @@
 import { Engine } from "@storylet-studio/runtime";
 import type { Flow, LogEntry, TraceEvent, TraceVerdict } from "@storylet-studio/runtime";
 import { SAVEFILE_SCHEMA, effectiveGameId } from "@storylet-studio/model";
-import type { Bundle, PropertyBag, SaveFile, ScalarValue } from "@storylet-studio/model";
+import type { Bundle, PropertyBag, PropertyDecl, SaveFile, ScalarValue } from "@storylet-studio/model";
 
 export type { LogEntry, TraceEvent } from "@storylet-studio/runtime";
 
@@ -99,6 +99,53 @@ export interface StateRow {
   stages?: string[];
 }
 
+/**
+ * Every declared property that outlives a run, as the path `getProperty` takes
+ * (design/engine-server.md 4.2). `@world` is never here: it carries no flag,
+ * and it is the host's anyway.
+ *
+ * The path shapes are the engine's own: "story.x", "box.<id>.x",
+ * "deck.<id>.x", "hand.<id>.x", "value.<tagId>.x". Hands take their
+ * template's declarations where they have one, exactly as the engine's bags do.
+ */
+export function durablePropertyPaths(bundle: Bundle): string[] {
+  const out: string[] = [];
+  const push = (prefix: string, decls: readonly PropertyDecl[] | undefined): void => {
+    for (const d of decls ?? []) if (d.durable === true) out.push(`${prefix}${d.name}`);
+  };
+  push("story.", bundle.story.properties);
+  for (const box of bundle.boxes) {
+    push(`box.${box.id}.`, box.properties);
+    for (const deck of box.decks) push(`deck.${deck.id}.`, deck.properties);
+    for (const hand of box.hands) {
+      const decls = hand.template !== undefined
+        ? box.handTemplates.find((t) => t.id === hand.template)?.properties
+        : hand.properties;
+      push(`hand.${hand.id}.`, decls);
+    }
+    for (const group of box.tagGroups) {
+      for (const tag of group.tags) push(`value.${tag.id}.`, tag.properties);
+    }
+  }
+  return out;
+}
+
+/** Every card whose spend outlives a run, by id, with whether that spend is
+ *  one person's or the whole world's. The card's flags, else its deck's, which
+ *  is the inheritance both axes have (4.2). */
+export function durableCardIds(bundle: Bundle): Map<string, { shared: boolean }> {
+  const out = new Map<string, { shared: boolean }>();
+  for (const box of bundle.boxes) {
+    for (const deck of box.decks) {
+      for (const card of deck.cards) {
+        if ((card.durable ?? deck.durable) !== true) continue;
+        out.set(card.id, { shared: (card.shared ?? deck.shared) === true });
+      }
+    }
+  }
+  return out;
+}
+
 export class Table {
   readonly engine: Engine;
   session: Flow;
@@ -160,6 +207,60 @@ export class Table {
     for (const [name, value] of Object.entries(file.world ?? {})) {
       try { this.engine.setProperty(`world.${name}`, value); } catch { /* an orphaned key: dropped */ }
     }
+  }
+
+  /**
+   * A NEW RUN (design/engine-server.md 4.2): the world restarts, and the
+   * durable half comes with it.
+   *
+   * What a designer is testing here is a returning player, which is the
+   * ordinary daily event in a venue and not a recovery path: at run end the
+   * server lifts the durable values and spends out of the engine, and at run
+   * start it writes them back into a fresh one. This does exactly that, on the
+   * public surface and nothing else, because the RUNTIME IS INERT about
+   * durability and must stay so: saveGame to read what is there, reset,
+   * openFlow with a restore for the durable cooldowns, setProperty for the
+   * values and markTaken for the shared spends.
+   *
+   * @world is untouched. It is the host's container, not the engine's, and
+   * neither this nor Forget everyone is the game's business (4.2).
+   */
+  newRun(): void {
+    // Read everything durable BEFORE the reset, while it still exists.
+    const kept: [string, ScalarValue][] = [];
+    for (const path of durablePropertyPaths(this.bundle)) {
+      try { kept.push([path, this.session.getProperty(path)]); } catch { /* not readable: dropped */ }
+    }
+    const durableCards = durableCardIds(this.bundle);
+    const before = this.engine.saveGame();
+    const cooldowns: Record<string, number> = {};
+    for (const [cardId, until] of Object.entries(before.flows["main"]?.cooldowns ?? {})) {
+      // Only a `never` spend crosses the run boundary, and only a per-flow one
+      // is the flow's to carry: a shared spend lives in the engine's set below.
+      const card = durableCards.get(cardId);
+      if (card !== undefined && !card.shared && until === Number.MAX_SAFE_INTEGER) cooldowns[cardId] = until;
+    }
+    const spent = before.shared.spent.filter((id) => durableCards.get(id)?.shared === true);
+    const world = this.worldValues();
+
+    this.engine.reset();
+    // A fresh flow first, to take its blob: the run's seed, its zeroed clocks
+    // and its default state, which is what a new run starts from. The durable
+    // cooldowns go back on top of that, and openFlow REPLACES the name, which
+    // is the one door that restores into a flow (4.1).
+    this.engine.openFlow("main");
+    const blank = this.engine.saveFlow("main");
+    this.session = this.engine.openFlow("main", { restore: { ...blank, cooldowns } });
+    for (const id of spent) this.engine.markTaken(id);
+    // setProperty routes to whichever half the declaration put the value in,
+    // so the pocket and the installation's memory are written the same way.
+    for (const [path, value] of kept) {
+      try { this.session.setProperty(path, value); } catch { /* the declaration moved: dropped */ }
+    }
+    for (const [name, value] of Object.entries(world)) {
+      try { this.engine.setProperty(`world.${name}`, value); } catch { /* an orphaned key: dropped */ }
+    }
+    this.meddles = [];
   }
 
   /** The author's pokes (State tab), interleaved into the record. */
@@ -294,11 +395,16 @@ export class Table {
     return out;
   }
 
-  /** Every box's clock (schema 3.4), for the Board's turn drill-down. */
-  clocks(): { box: string; turn: number }[] {
+  /** Every box's clock (schema 3.4), for the Board's turn drill-down.
+   *  `seconds` comes with a TIMED box (design/engine-server.md 4.8), which is
+   *  what lets the dial say the unit and offer steps of time. */
+  clocks(): { box: string; turn: number; seconds?: number }[] {
     return this.bundle.boxes.map((box) => {
       const gameId = box.gameId ?? box.id;
-      return { box: gameId, turn: this.session.turn(gameId) };
+      return {
+        box: gameId, turn: this.session.turn(gameId),
+        ...(box.turn !== undefined ? { seconds: box.turn.seconds } : {}),
+      };
     });
   }
 

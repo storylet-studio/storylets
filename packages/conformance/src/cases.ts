@@ -406,6 +406,109 @@ export const fixtures: Fixtures = {
         { op: "assertState", expect: { "turn.b_x": 3 } },
       ] },
 
+    // --- the timed box (design/engine-server.md 4.8) ------------------------------
+    // `turn: { seconds: N }` on a box declares that its clock is TIME: the host
+    // ticks it every N seconds, and a play is not a tick. The runtime gains no
+    // clock of its own - the whole of the behaviour is which default `play`
+    // reaches for, so these cases pin that default and nothing else. `seconds`
+    // itself is inert here: the engine never reads the number, only the tools do.
+    { name: "a play in a timed box advances nothing",
+      turn: { seconds: 60 },
+      cards: [{ id: "c_greet", outcomes: [{ id: "o_hi" }] }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "assertState", expect: { "turn.b_x": 0 } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_greet"] } },
+        // settings.playAdvancesTurns is the default 1, and an untimed box would
+        // read 1 here: the declaration is what turns the advance off, so a
+        // designer cannot forget to.
+        { op: "play", card: "c_greet", outcome: "hi", from: "h_q" },
+        { op: "assertState", expect: { "turn.b_x": 0 } },
+      ] },
+
+    { name: "an explicit advanceTurns on the play still advances a timed box",
+      turn: { seconds: 60 },
+      cards: [{ id: "c_greet", outcomes: [{ id: "o_hi" }] }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_greet"] } },
+        // The declaration sets the DEFAULT; a call that says otherwise is
+        // still obeyed, exactly as it overrides playAdvancesTurns.
+        { op: "play", card: "c_greet", outcome: "hi", from: "h_q", advanceTurns: 2 },
+        { op: "assertState", expect: { "turn.b_x": 2 } },
+      ] },
+
+    { name: "the host's advanceTurns ticks a timed box as it always did",
+      turn: { seconds: 60 },
+      cards: [{ id: "c_greet", outcomes: [{ id: "o_hi" }] }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "assertState", expect: { "turn.b_x": 0 } },
+        { op: "advanceTurns", box: "b_x", n: 3 },
+        { op: "assertState", expect: { "turn.b_x": 3 } },
+      ] },
+
+    { name: "a redraw in a timed box expires on the tick, not on the play",
+      turn: { seconds: 60 },
+      // At sixty seconds a turn, "redraw: 3" is three minutes - which is the
+      // convention the tools spell out and the engine still counts as turns.
+      cards: [
+        { id: "c_patrol", priority: 1, redraw: 3, outcomes: [{ id: "o_done" }] },
+        { id: "c_filler", priority: 0, outcomes: [{ id: "o_done" }] },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_patrol", "c_filler"] } },
+        { op: "play", card: "c_patrol", outcome: "done", from: "h_q" },  // turn stays 0; eligible at 0 + 3
+        { op: "assertState", expect: { "turn.b_x": 0 } },
+        // Three more plays, which in an untimed box would be three turns and
+        // would see the cooldown out. Here they are worth nothing at all.
+        { op: "play", card: "c_filler", outcome: "done", from: "h_q" },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_filler"] },
+          expectVerdicts: { c_patrol: "cooldown" } },
+        { op: "play", card: "c_filler", outcome: "done", from: "h_q" },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_filler"] },
+          expectVerdicts: { c_patrol: "cooldown" } },
+        { op: "play", card: "c_filler", outcome: "done", from: "h_q" },
+        { op: "assertState", expect: { "turn.b_x": 0 } },
+        // Three ticks of the host's clock, which is three minutes of the run.
+        { op: "advanceTurns", box: "b_x", n: 3 },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_patrol", "c_filler"] } },
+      ] },
+
+    { name: "a timed box leaves an untimed box in the same bundle alone",
+      turn: { seconds: 60 },
+      cards: [{ id: "c_greet", outcomes: [{ id: "o_hi" }] }],
+      hands: [{ id: "h_q", rule: {} }],
+      otherBox: {
+        cards: [{ id: "c_ygreet", outcomes: [{ id: "o_hi" }] }],
+        hands: [{ id: "h_qy", rule: {} }],
+      },
+      script: [
+        { op: "deal", expectBoard: { h_q: ["c_greet"], h_qy: ["c_ygreet"] } },
+        { op: "play", card: "c_greet", outcome: "hi", from: "h_q" },
+        { op: "play", card: "c_ygreet", outcome: "hi", from: "h_qy" },
+        // Each box's clock answers to its own declaration: b_x is timed and
+        // stands still, b_y takes the project's playAdvancesTurns as before.
+        { op: "assertState", expect: { "turn.b_x": 0, "turn.b_y": 1 } },
+      ] },
+
+    { name: "a timed box's counter survives a save and load",
+      turn: { seconds: 20 },
+      cards: [{ id: "c_greet", outcomes: [{ id: "o_hi" }] }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "advanceTurns", box: "b_x", n: 7 },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_greet"] } },
+        { op: "play", card: "c_greet", outcome: "hi", from: "h_q" },
+        { op: "saveLoad" },
+        // The save carries turns per box as it always has; nothing about a
+        // timed box's counter is special, and the play added nothing to it.
+        { op: "assertState", expect: { "turn.b_x": 7 } },
+        { op: "advanceTurns", box: "b_x", n: 1 },
+        { op: "assertState", expect: { "turn.b_x": 8 } },
+      ] },
+
     { name: "a gated-shut outcome cannot be played",
       story: [{ name: "gold", type: "number", default: 5 }],
       cards: [{ id: "c_job", outcomes: [
@@ -802,6 +905,194 @@ export const fixtures: Fixtures = {
         { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_late"] } },
       ] },
 
+    // --- a hole filled from a property: the hand that moves (4.6) -------------
+    //
+    // A hand's `chosen` value (or a standalone hand's rule binding) may be a
+    // PROPERTY REFERENCE rather than a tag. The runtime resolves it at ask
+    // time and binds the hole to the tag the value names, so moving the Elder
+    // to the forest is `setProperty` and nothing else: no new verb, no new
+    // save shape, no new trace kind.
+    //
+    // The semantics are `boundBy`'s, word for word (see the state-bound cases
+    // above), plus `@hand.<name>` - the hand's OWN declared property, read
+    // before tag composition so a movable hole can never depend on the tags it
+    // is choosing.
+
+    { name: "a hole filled from a hand property moves on setProperty",
+      templates: [{ id: "t_npc", chooses: ["zone"], properties: [
+        { name: "zone", type: "enum", values: ["docks", "market"], default: "docks" },
+      ] }],
+      hands: [{ id: "h_elder", template: "t_npc", chosen: { zone: "@hand.zone" } }],
+      cards: [
+        { id: "c_dockside", priority: 3, tags: { zone: ["docks"] } },
+        { id: "c_stall", priority: 2, tags: { zone: ["market"] } },
+        { id: "c_anywhere", priority: 1 },
+      ],
+      script: [
+        // The hole is the property's value: "docks", so the Elder's hand is the
+        // docks card plus the untagged one (a card naming no tag is a wildcard).
+        { op: "assertState", expect: { "hand.h_elder.zone": "docks" } },
+        { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside", "c_anywhere"] } },
+        // Rebinding IS setProperty. The next deal follows: the eviction pass
+        // that already exists drops the docks card with verdict `tags`, the
+        // untagged one keeps its seat, and the market card is added after it.
+        { op: "setState", hand: { h_elder: { zone: "market" } } },
+        { op: "deal", hands: ["h_elder"],
+          expectBoard: { h_elder: ["c_anywhere", "c_stall"] },
+          expectVerdicts: { c_dockside: "tags" } },
+        // And @hand.zone reads back as the group's name would: a card must not
+        // care HOW the hole was filled.
+        { op: "assertState", expect: { "hand.h_elder.zone": "market" } },
+      ] },
+
+    { name: "a movable hole whose value names no tag binds nothing, and says so",
+      templates: [{ id: "t_npc", chooses: ["zone"], properties: [
+        { name: "zone", type: "string", default: "cellar" },
+      ] }],
+      hands: [{ id: "h_elder", template: "t_npc", chosen: { zone: "@hand.zone" } }],
+      cards: [
+        { id: "c_dockside", priority: 3, tags: { zone: ["docks"] } },
+        { id: "c_stall", priority: 2, tags: { zone: ["market"] } },
+        { id: "c_anywhere", priority: 1 },
+      ],
+      // "cellar" is no tag of the group, so the hole goes UNBOUND rather than
+      // matching nothing: unbound is a wildcard, so every card is eligible.
+      // Silently dealing an empty hand would read as content that does not
+      // exist, which is why the diagnostic is part of the contract.
+      script: [
+        { op: "deal", hands: ["h_elder"],
+          expectBoard: { h_elder: ["c_dockside", "c_stall", "c_anywhere"] },
+          expectDiagnostic: "which is not one of the tags of" },
+      ] },
+
+    { name: "a per-flow movable hole moves that flow only",
+      templates: [{ id: "t_npc", chooses: ["zone"], properties: [
+        { name: "zone", type: "enum", values: ["docks", "market"], default: "docks" },
+      ] }],
+      hands: [{ id: "h_elder", template: "t_npc", chosen: { zone: "@hand.zone" } }],
+      cards: [
+        { id: "c_dockside", priority: 3, tags: { zone: ["docks"] } },
+        { id: "c_stall", priority: 2, tags: { zone: ["market"] } },
+      ],
+      script: [
+        { op: "openFlow", flow: "a" },
+        { op: "openFlow", flow: "b" },
+        { op: "deal", flow: "a", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside"] } },
+        { op: "deal", flow: "b", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside"] } },
+        // A hand declaration is per-flow by default, so this is one party's
+        // own "what is around me" hand, not a world fact.
+        { op: "setState", flow: "a", hand: { h_elder: { zone: "market" } } },
+        { op: "deal", flow: "a", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall"] } },
+        { op: "deal", flow: "b", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside"] } },
+        { op: "assertState", flow: "b", expect: { "hand.h_elder.zone": "docks" } },
+      ] },
+
+    { name: "a shared movable hole moves every flow",
+      templates: [{ id: "t_npc", chooses: ["zone"], properties: [
+        { name: "zone", type: "enum", values: ["docks", "market"], default: "docks", shared: true },
+      ] }],
+      hands: [{ id: "h_elder", template: "t_npc", chosen: { zone: "@hand.zone" } }],
+      cards: [
+        { id: "c_dockside", priority: 3, tags: { zone: ["docks"] } },
+        { id: "c_stall", priority: 2, tags: { zone: ["market"] } },
+      ],
+      script: [
+        { op: "openFlow", flow: "a" },
+        { op: "openFlow", flow: "b" },
+        { op: "deal", flow: "a", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside"] } },
+        { op: "deal", flow: "b", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside"] } },
+        // `shared: true` makes the move a world fact: the performer is in one
+        // place for everybody, so every flow's next deal follows.
+        { op: "setState", flow: "a", hand: { h_elder: { zone: "market" } } },
+        { op: "assertEngineRead", path: "hand.h_elder.zone", expect: "market" },
+        { op: "deal", flow: "a", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall"] } },
+        { op: "deal", flow: "b", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall"] } },
+      ] },
+
+    { name: "a movable hole reads @story and @world too",
+      story: [{ name: "where", type: "string", default: "docks" }],
+      world: [{ name: "post", type: "string", default: "market" }],
+      hands: [
+        { id: "h_crier", rule: { bindings: { zone: "@story.where" } } },
+        { id: "h_post", rule: { bindings: { zone: "@world.post" } } },
+      ],
+      cards: [
+        { id: "c_dockside", priority: 3, tags: { zone: ["docks"] } },
+        { id: "c_stall", priority: 2, tags: { zone: ["market"] } },
+      ],
+      // The two scopes `boundBy` already allows, resolved here per hole rather
+      // than per group: one crier follows the story, one post follows the world.
+      script: [
+        { op: "deal", expectBoard: { h_crier: ["c_dockside"], h_post: ["c_stall"] } },
+        { op: "setState", story: { where: "market" } },
+        { op: "setState", world: { post: "docks" } },
+        { op: "deal", expectBoard: { h_crier: ["c_stall"], h_post: ["c_dockside"] } },
+      ] },
+
+    { name: "a movable hole survives a save round trip",
+      templates: [{ id: "t_npc", chooses: ["zone"], properties: [
+        { name: "zone", type: "enum", values: ["docks", "market"], default: "docks" },
+      ] }],
+      hands: [{ id: "h_elder", template: "t_npc", chosen: { zone: "@hand.zone" } }],
+      cards: [
+        { id: "c_dockside", priority: 3, tags: { zone: ["docks"] } },
+        { id: "c_stall", priority: 2, tags: { zone: ["market"] } },
+      ],
+      script: [
+        { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside"] } },
+        { op: "setState", hand: { h_elder: { zone: "market" } } },
+        { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall"] } },
+        // Nothing new rides the envelope: the binding IS the property, and the
+        // property was always saved. Pinned anyway, because "it falls out" is
+        // exactly the claim a corpus exists to check.
+        { op: "saveLoad" },
+        { op: "assertState", expect: { "hand.h_elder.zone": "market" } },
+        { op: "assertBoard", expect: { h_elder: ["c_stall"] } },
+        { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall"] } },
+      ] },
+
+    { name: "one template, one hole filled from a property and one filled literally",
+      templates: [{ id: "t_npc", chooses: ["zone"], properties: [
+        { name: "zone", type: "enum", values: ["docks", "market"], default: "docks" },
+      ] }],
+      hands: [
+        { id: "h_elder", template: "t_npc", chosen: { zone: "@hand.zone" } },
+        { id: "h_stallholder", template: "t_npc", chosen: { zone: "market" } },
+      ],
+      cards: [
+        { id: "c_dockside", priority: 3, tags: { zone: ["docks"] } },
+        { id: "c_stall", priority: 2, tags: { zone: ["market"] }, copies: 2 },
+      ],
+      // The choice is the INSTANCE's, so one Elder wanders and one stallholder
+      // stands still, off the same template.
+      script: [
+        { op: "deal", expectBoard: { h_elder: ["c_dockside"], h_stallholder: ["c_stall"] } },
+        { op: "setState", hand: { h_elder: { zone: "market" } } },
+        { op: "deal", expectBoard: { h_elder: ["c_stall"], h_stallholder: ["c_stall"] } },
+      ] },
+
+    { name: "peek criteria ignore a movable hole",
+      templates: [{ id: "t_npc", chooses: ["zone"], properties: [
+        { name: "zone", type: "enum", values: ["docks", "market"], default: "market" },
+      ] }],
+      hands: [{ id: "h_elder", template: "t_npc", chosen: { zone: "@hand.zone" } }],
+      cards: [
+        { id: "c_dockside", priority: 3, tags: { zone: ["docks"] } },
+        { id: "c_stall", priority: 2, tags: { zone: ["market"] } },
+      ],
+      // A peek names RAW tags and never a property (the boundary, Reboot 4):
+      // the Elder is at the market, and asking the stock about the docks still
+      // answers about the docks.
+      script: [
+        { op: "peek", criteria: { zone: "docks" }, expect: ["c_dockside"] },
+        { op: "peek", criteria: { zone: "market" }, expect: ["c_stall"] },
+        { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall"] } },
+        // The Elder now holds the market card, so a peek at the market is
+        // answered by the claim, not by the property; the docks peek is
+        // untouched, which is the half this case is pinning.
+        { op: "peek", criteria: { zone: "docks" }, expect: ["c_dockside"] },
+      ] },
+
     // --- claims and copies (schema 3.5; SandboxStories S2, S5, S8) -------------
     { name: "one copy: two hands, one seat, and peeks respect the claim",  // PRNG-computed
       cards: [{ id: "c_rare", outcomes: [{ id: "o_done" }] }],
@@ -1097,7 +1388,17 @@ export const fixtures: Fixtures = {
       script: [
         { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_gone"] } },
         { op: "play", card: "c_gone", outcome: "done", from: "h_a" },   // turn 1; cooldown at 6
-        { op: "saveLoad", into: "B" },
+        // Nothing is evicted: playing c_gone took it off the board, so the
+        // only thing the edit orphans is the cooldown it left behind. A
+        // deleted card has no gameId left, so the report names it by the id
+        // the save carries - there is nothing else to call it.
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          version: { saved: "0.0.0", bundle: "0.0.0" }, hash: { saved: "", bundle: "" },
+          evicted: [], droppedSpent: [],
+          droppedCooldowns: [{ flow: "main", card: "c_gone" }],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
         { op: "assertState", expect: { "turn.b_x": 1 } },
         { op: "peek", expect: ["c_stay"] },
       ] },
@@ -1120,7 +1421,14 @@ export const fixtures: Fixtures = {
       },
       script: [
         { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_gone"] } },
-        { op: "saveLoad", into: "B" },
+        // The hand survives, so it is named by its gameId; the card does not,
+        // so it is named by its saved id.
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          evicted: [{ flow: "main", hand: "a", card: "c_gone", reason: "vanished" }],
+          droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
         // The seat is free again, and the next deal fills it from what exists.
         { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_stay"] } },
       ] },
@@ -1598,6 +1906,301 @@ export const fixtures: Fixtures = {
         { op: "play", card: "c_b", outcome: "x", from: "h_q" },
         // Both gone, by different ledgers, indistinguishably from in here.
         { op: "deal", hands: ["h_q"], expectBoard: { h_q: [] } },
+      ] },
+
+    // --- parking one flow, and pricing a load (design/engine-server.md 4.1, 4.9) ---
+    //
+    // A visit parks when the player walks away and resumes when they scan in
+    // again: one flow's state, not the engine's. `saveFlow` takes the blob,
+    // `openFlow(id, { restore })` puts it back, and `previewFlowRestore` says
+    // in advance what putting it back would cost. The same report shape
+    // answers for the whole envelope, so `previewLoad` and `loadGame` return
+    // it too, and a caller can show it before deciding.
+    //
+    // Every expectation below is derived by hand from the fixture: what the
+    // edit deleted, what it added, and which of the two builds still has a
+    // name for the thing being reported.
+    //
+    // A property's `path` is the address the engine already prints and
+    // already accepts - `story.gold`, `box.b_x.heat`, `value.v_docks.danger`,
+    // exactly as `listProperties()` spells them and exactly what `getProperty`
+    // and `setProperty` take. So a report entry can be handed straight back to
+    // the engine, and there is one property grammar rather than two. Owner ids
+    // are the engine's own ids there, which is the same gap `assertEngineRead`
+    // above pins; design change 4.4 moves addresses and trace events to gameIds
+    // together, in all four runtimes, and these cases move with it.
+
+    { name: "a parked flow resumes on the same stream, as though it never left",  // PRNG-computed
+      seed: 1,
+      cards: [{ id: "c_alpha" }, { id: "c_beta" }, { id: "c_gamma" }],
+      script: [
+        // The seed-1 shuffle of the full tie, and the same one for both flows:
+        // a flow's PRNG starts at the engine's seed.
+        { op: "peek", flow: "alice", expect: ["c_gamma", "c_alpha", "c_beta"] },
+        { op: "peek", flow: "bob", expect: ["c_gamma", "c_alpha", "c_beta"] },
+        { op: "parkFlow", flow: "alice" },
+        // Parking is closing: alice is gone from the engine while she is away.
+        { op: "assertFlows", expect: ["bob"] },
+        { op: "resumeFlow", flow: "alice", expectReport: {
+          exact: true, project: "conf", flows: ["alice"],
+          version: { saved: "0.0.0", bundle: "0.0.0" }, hash: { saved: "", bundle: "" },
+          evicted: [], droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        { op: "assertFlows", expect: ["bob", "alice"] },
+        // The CONTINUED stream, not a reseed: alice's next list is the one bob
+        // gets without ever having parked. An engine that dropped the PRNG
+        // state on the way through would repeat the first list here.
+        { op: "peek", flow: "alice", expect: ["c_alpha", "c_gamma", "c_beta"] },
+        { op: "peek", flow: "bob", expect: ["c_alpha", "c_gamma", "c_beta"] },
+      ] },
+
+    { name: "parking keeps a flow's board, its clocks and its cooldowns",
+      cards: [
+        { id: "c_patrol", priority: 1, redraw: 4, outcomes: [{ id: "o_done" }] },
+        { id: "c_still", priority: 0 },
+      ],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      script: [
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_patrol"] } },
+        { op: "play", flow: "alice", card: "c_patrol", outcome: "done", from: "h_q" },   // turn 1; eligible at 5
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_still"] } },
+        { op: "parkFlow", flow: "alice" },
+        { op: "resumeFlow", flow: "alice", expectReport: { exact: true } },
+        { op: "assertState", flow: "alice", expect: { "turn.b_x": 1 } },
+        { op: "assertBoard", flow: "alice", expect: { h_q: ["c_still"] } },
+        { op: "advanceTurns", flow: "alice", box: "b_x", n: 4 },                         // turn 5
+        { op: "peek", flow: "alice", expect: ["c_patrol"] },   // c_still is claimed; the cooldown is spent
+      ] },
+
+    { name: "resuming a name that is in use replaces the flow that is there",
+      cards: [
+        { id: "c_one", priority: 2, outcomes: [{ id: "o_done" }] },
+        { id: "c_two", priority: 1 },
+      ],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      script: [
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_one"] } },
+        { op: "parkFlow", flow: "alice" },
+        // Somebody else scans in under the same name and plays a whole turn.
+        { op: "openFlow", flow: "alice" },
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_one"] } },
+        { op: "play", flow: "alice", card: "c_one", outcome: "done", from: "h_q" },
+        { op: "assertState", flow: "alice", expect: { "turn.b_x": 1 } },
+        // The resume REPLACES that flow, exactly as a bare openFlow does.
+        { op: "resumeFlow", flow: "alice", expectReport: { exact: true } },
+        { op: "assertBoard", flow: "alice", expect: { h_q: ["c_one"] } },
+        { op: "assertState", flow: "alice", expect: { "turn.b_x": 0 } },
+      ] },
+
+    { name: "a parked flow holds no shared claim, and may find its card gone when it comes back",
+      decks: [{ id: "k_rare", shared: true, cards: [{ id: "c_relic" }] }],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      script: [
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_relic"] } },
+        { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: [] },
+          expectVerdicts: { c_relic: "claimed-elsewhere" } },
+        { op: "parkFlow", flow: "alice" },
+        // Alice is away, so the world's only copy is free again.
+        { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: ["c_relic"] },
+          expectVerdicts: { c_relic: "dealt" } },
+        // She comes back to a world that has moved on. The restore is into a
+        // LIVE engine, so the seat cannot simply be taken back: the card is
+        // dropped and the report says which and why.
+        { op: "resumeFlow", flow: "alice", expectReport: {
+          exact: false, project: "conf", flows: ["alice"],
+          evicted: [{ flow: "alice", hand: "q", card: "relic", reason: "claimed-elsewhere" }],
+          droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        { op: "assertBoard", flow: "alice", expect: { h_q: [] } },
+        { op: "assertBoard", flow: "bob", expect: { h_q: ["c_relic"] } },
+      ] },
+
+    { name: "a flow parked under one build resumes under the next: the deleted card goes, the new property defaults",
+      cards: [
+        { id: "c_gone", priority: 2 },
+        { id: "c_stay", priority: 1 },
+      ],
+      hands: [{ id: "h_a", rule: {}, slots: 2 }],
+      // The EDITED content: the seated card is deleted and the box gains a
+      // property the parked blob has never heard of.
+      bundleB: {
+        boxProperties: [{ name: "heat", type: "number", default: 3 }],
+        cards: [{ id: "c_stay", priority: 1 }],
+        hands: [{ id: "h_a", rule: {}, slots: 2 }],
+      },
+      script: [
+        { op: "deal", flow: "alice", hands: ["h_a"], expectBoard: { h_a: ["c_gone", "c_stay"] } },
+        { op: "parkFlow", flow: "alice" },
+        // The show swaps its content while alice is away. She is parked, so
+        // she is not in the envelope this moves across.
+        { op: "saveLoad", into: "B" },
+        { op: "resumeFlow", flow: "alice", expectReport: {
+          exact: false, project: "conf", flows: ["alice"],
+          evicted: [{ flow: "alice", hand: "a", card: "c_gone", reason: "vanished" }],
+          droppedCooldowns: [], droppedSpent: [], droppedProperties: [], retypedProperties: [],
+          defaultedProperties: [{ flow: "alice", path: "box.b_x.heat" }],
+        } },
+        { op: "assertBoard", flow: "alice", expect: { h_a: ["c_stay"] } },
+        { op: "assertState", flow: "alice", expect: { "box.b_x.heat": 3 } },
+      ] },
+
+    { name: "previewLoad prices a content update and leaves the game where it stood",
+      cards: [
+        { id: "c_gone", priority: 2 },
+        { id: "c_stay", priority: 1 },
+      ],
+      hands: [{ id: "h_a", rule: {}, slots: 2 }],
+      bundleB: {
+        cards: [{ id: "c_stay", priority: 1 }],
+        hands: [{ id: "h_a", rule: {}, slots: 2 }],
+      },
+      script: [
+        { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_gone", "c_stay"] } },
+        // The preview alone: the same report the load will give, and not one
+        // byte moved. The runner also requires the previewed engine's own
+        // saveGame() to be identical either side of the call.
+        { op: "saveLoad", into: "B", previewOnly: true, expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          evicted: [{ flow: "main", hand: "a", card: "c_gone", reason: "vanished" }],
+          droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        // Still the first build, still both cards seated.
+        { op: "assertBoard", expect: { h_a: ["c_gone", "c_stay"] } },
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          evicted: [{ flow: "main", hand: "a", card: "c_gone", reason: "vanished" }],
+          droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        { op: "assertBoard", expect: { h_a: ["c_stay"] } },
+      ] },
+
+    { name: "an exact load reports nothing: same build, same bytes",
+      story: [{ name: "gold", type: "number", default: 0 }],
+      cards: [{ id: "c_take", outcomes: [{ id: "o_go", changes: { "@story.gold": "@story.gold + 1" } }] }],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_take"] } },
+        { op: "play", card: "c_take", outcome: "go", from: "h_q" },
+        { op: "saveLoad", expectReport: {
+          exact: true, project: "conf", flows: ["main"],
+          version: { saved: "0.0.0", bundle: "0.0.0" }, hash: { saved: "", bundle: "" },
+          evicted: [], droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        { op: "assertState", expect: { "story.gold": 1 } },
+      ] },
+
+    // Version and hash drift used to load in silence, which is exactly the
+    // answer a hot swap needs and could not get: same project, different
+    // build. Reported, never refused - a project mismatch stays the one
+    // refusal, and it has its own case.
+    { name: "content drift is reported, not tolerated in silence",
+      cards: [{ id: "c_any" }],
+      hands: [{ id: "h_q", rule: {} }],
+      bundleB: {
+        content: { version: "0.2.0", hash: "beef" },
+        cards: [{ id: "c_any" }],
+        hands: [{ id: "h_q", rule: {} }],
+      },
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_any"] } },
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          version: { saved: "0.0.0", bundle: "0.2.0" }, hash: { saved: "", bundle: "beef" },
+          evicted: [], droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        // Nothing else moved: the board and the cards are the same content.
+        { op: "assertBoard", expect: { h_q: ["c_any"] } },
+      ] },
+
+    { name: "a hand edited away takes the cards it was holding with it",
+      cards: [{ id: "c_seat", priority: 1 }],
+      hands: [{ id: "h_a", rule: {}, slots: 1 }],
+      // The EDITED content keeps the card and deletes the hand.
+      bundleB: { cards: [{ id: "c_seat", priority: 1 }] },
+      script: [
+        { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_seat"] } },
+        // The card still has a gameId in the new build and is named by it; the
+        // hand does not, so it is named by the id the save carries.
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          evicted: [{ flow: "main", hand: "h_a", card: "seat", reason: "hand-vanished" }],
+          droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        { op: "assertBoard", expect: {} },
+      ] },
+
+    { name: "a spent shared card the edit deleted is reported and forgotten",
+      decks: [{ id: "k_rare", shared: true, cards: [
+        { id: "c_relic", priority: 2, redraw: "never", outcomes: [{ id: "o_take" }] },
+        { id: "c_plain", priority: 1 },
+      ] }],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      bundleB: {
+        decks: [{ id: "k_rare", shared: true, cards: [{ id: "c_plain", priority: 1 }] }],
+        hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      },
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_relic"] } },
+        { op: "play", card: "c_relic", outcome: "take", from: "h_q" },   // shared one-shot: spent for everyone
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          evicted: [], droppedCooldowns: [], droppedSpent: ["c_relic"],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_plain"] } },
+      ] },
+
+    { name: "a property the edit removed drops; one the edit added defaults",
+      story: [{ name: "gold", type: "number", default: 0 }],
+      cards: [{ id: "c_any" }],
+      hands: [{ id: "h_q", rule: {} }],
+      bundleB: {
+        story: [{ name: "silver", type: "number", default: 7 }],
+        cards: [{ id: "c_any" }],
+        hands: [{ id: "h_q", rule: {} }],
+      },
+      script: [
+        { op: "setState", story: { gold: 5 } },
+        // @story is shared, so neither entry names a flow.
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          evicted: [], droppedCooldowns: [], droppedSpent: [], retypedProperties: [],
+          droppedProperties: [{ path: "story.gold" }],
+          defaultedProperties: [{ path: "story.silver" }],
+        } },
+        { op: "assertState", expect: { "story.silver": 7 } },
+      ] },
+
+    { name: "an enum value the edit struck out no longer fits: the property takes its default",
+      story: [{ name: "weather", type: "enum", default: "fair", values: ["fair", "storm", "fog"] }],
+      cards: [{ id: "c_turn", outcomes: [{ id: "o_break", changes: { "@story.weather": '"storm"' } }] }],
+      hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      // The EDITED content drops "storm" from the vocabulary. The saved value
+      // is still a string and the property is still an enum, so only the
+      // declaration's own list can tell that it no longer fits.
+      bundleB: {
+        story: [{ name: "weather", type: "enum", default: "fair", values: ["fair", "fog"] }],
+        cards: [{ id: "c_turn", outcomes: [{ id: "o_break", changes: { "@story.weather": '"fog"' } }] }],
+        hands: [{ id: "h_q", rule: {}, slots: 1 }],
+      },
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_turn"] } },
+        { op: "play", card: "c_turn", outcome: "break", from: "h_q" },
+        { op: "assertState", expect: { "story.weather": "storm" } },
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          evicted: [], droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [],
+          retypedProperties: [{ path: "story.weather" }],
+        } },
+        { op: "assertState", expect: { "story.weather": "fair" } },
       ] },
   ],
 };

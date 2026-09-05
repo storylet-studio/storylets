@@ -284,6 +284,22 @@ struct FStoryletBundleIdentity
 	FString Metadata;
 };
 
+/** One hole a hand fills from a property rather than with a tag: the hand
+ *  MOVES when that property is written (design/engine-server.md 4.6). */
+USTRUCT(BlueprintType)
+struct FStoryletMovableHole
+{
+	GENERATED_BODY()
+
+	/** The tag group's gameId. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Group;
+
+	/** The property reference, exactly as authored ("@hand.zone"). */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString From;
+};
+
 /** One hand: the Deal() surface. GameId is the name Deal() is called with. */
 USTRUCT(BlueprintType)
 struct FStoryletHandSummary
@@ -312,6 +328,12 @@ struct FStoryletHandSummary
 	/** The hand template's gameId; empty for a standalone (inline-rule) hand. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Template;
+
+	/** The holes filled from a property; EMPTY when the hand has none, which
+	 *  is the ordinary case. Writing that property moves the hand, and
+	 *  SetProperty is the whole verb (4.6). */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FStoryletMovableHole> Movable;
 };
 
 /** One tag group and its tags, by gameId: the Peek() criteria surface (a
@@ -370,6 +392,19 @@ struct FStoryletBoxSummary
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	bool bRankingSpecificity = true;
 
+	/** How long one turn of a TIMED box lasts (design/engine-server.md 4.8),
+	 *  which is what tells a host how often it must tick this box. Zero on an
+	 *  ordinary box, whose turn is a play: the compiler refuses a timed box
+	 *  under one second, so zero can only mean "not timed". */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	double TurnSeconds = 0;
+
+	/** How many cards in this box are DURABLE (design/engine-server.md 4.2):
+	 *  their `redraw: never` spend outlives the run, so a server has to lift
+	 *  and restore it. Zero on the ordinary box. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	int32 DurableCards = 0;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FStoryletTagGroupSummary> TagGroups;
 
@@ -395,6 +430,12 @@ struct FStoryletPropertySummary
 	/** Enum / flags options, where declared. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FString> Values;
+
+	/** Declared DURABLE (design/engine-server.md 4.2): the value survives a
+	 *  run, and a server lifts and restores it across one. False is the
+	 *  ordinary run-scoped property. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	bool bDurable = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Purpose;
@@ -445,6 +486,34 @@ struct FStoryletPropertyScope
 	FString Label;
 };
 
+/** One map the bundle was asked to carry. Counts rather than the geometry: an
+ *  inspector answers "what is in here", and a host that wants the polygons
+ *  reads the parsed bundle directly. */
+USTRUCT(BlueprintType)
+struct FStoryletMapSummary
+{
+	GENERATED_BODY()
+
+	/** The owning box, by gameId. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Box;
+
+	/** The tag group this is a map of, by gameId. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Group;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	int32 Zones = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	int32 Backgrounds = 0;
+
+	/** Placed hands standing on this map: where the kiosks are
+	 *  (design/engine-server.md 4.3). */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	int32 Sites = 0;
+};
+
 /** What a bundle offers a host, read from the asset alone: no session, no
  *  state, no game running (design 2, piece 6). Bundle order throughout. */
 USTRUCT(BlueprintType)
@@ -469,4 +538,9 @@ struct FStoryletBundleDescription
 	 *  Scopes that declare nothing are omitted (World and Story always show). */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FStoryletPropertyScope> Properties;
+
+	/** Maps carried as inert payload, when the build asked for them. Empty is
+	 *  the normal state. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FStoryletMapSummary> Maps;
 };

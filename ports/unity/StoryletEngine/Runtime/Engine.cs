@@ -61,6 +61,30 @@ namespace StoryletStudio.StoryletEngine
         public Box Box;
     }
 
+    /// <summary>One side's five declaration lists, keyed by owner id where the
+    /// scope has owners. The bags are built from these; so is the load report's
+    /// answer to "what does this build declare that the save does not
+    /// carry".</summary>
+    internal sealed class DeclSet
+    {
+        public List<PropertyDecl> Story = new List<PropertyDecl>();
+        public OrderedMap<string, List<PropertyDecl>> Box = new OrderedMap<string, List<PropertyDecl>>();
+        public OrderedMap<string, List<PropertyDecl>> Deck = new OrderedMap<string, List<PropertyDecl>>();
+        public OrderedMap<string, List<PropertyDecl>> Hand = new OrderedMap<string, List<PropertyDecl>>();
+        public OrderedMap<string, List<PropertyDecl>> Value = new OrderedMap<string, List<PropertyDecl>>();
+
+        public OrderedMap<string, List<PropertyDecl>> Kind(string kind)
+        {
+            switch (kind)
+            {
+                case "box": return Box;
+                case "deck": return Deck;
+                case "hand": return Hand;
+                default: return Value;
+            }
+        }
+    }
+
     // One side's five stores (shared on the engine, per-flow on each flow).
     internal sealed class Partition
     {
@@ -99,6 +123,24 @@ namespace StoryletStudio.StoryletEngine
     {
         /// <summary>Seed for this flow's PRNG (null = the engine's Seed).</summary>
         public double? Seed = null;
+        /// <summary>Open this flow AS IT WAS: a blob from SaveFlow, applied to
+        /// the freshly opened (or replaced) flow before the handle comes back
+        /// (design/engine-server.md 4.1).
+        ///
+        /// An option on OpenFlow rather than a Flow.Restore verb on purpose:
+        /// restoring INTO a running flow is the trap hosts keep falling into
+        /// (OpenFlow REPLACES), and "open this flow as it was" is one act.
+        /// Drift is tolerated exactly as LoadGame tolerates it, with one
+        /// addition, because this restore lands in a LIVE engine: a shared card
+        /// whose world copies are all held by the OTHER open flows is not put
+        /// back, and is reported as claimed-elsewhere. Ask PreviewFlowRestore
+        /// first to see that coming.</summary>
+        public FlowSave Restore = null;
+        /// <summary>Handed the Restore's LoadReport as it happens - the same
+        /// report PreviewFlowRestore returns for the same blob. Ignored without
+        /// Restore; the report has nowhere else to go, since OpenFlow returns
+        /// the handle.</summary>
+        public Action<LoadReport> OnRestoreReport = null;
     }
 
     /// <summary>A card view in a dealt hand or a peeked list. Carries NO outcome
@@ -318,11 +360,12 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>The per-flow halves of every declaration list, precomputed
         /// once: each OpenFlow builds its bags from these.</summary>
-        private List<PropertyDecl> _flowStoryDecls;
-        private readonly OrderedMap<string, List<PropertyDecl>> _flowBoxDecls = new OrderedMap<string, List<PropertyDecl>>();
-        private readonly OrderedMap<string, List<PropertyDecl>> _flowDeckDecls = new OrderedMap<string, List<PropertyDecl>>();
-        private readonly OrderedMap<string, List<PropertyDecl>> _flowHandDecls = new OrderedMap<string, List<PropertyDecl>>();
-        private readonly OrderedMap<string, List<PropertyDecl>> _flowValueDecls = new OrderedMap<string, List<PropertyDecl>>();
+        private readonly DeclSet _flowDecls = new DeclSet();
+        /// <summary>The shared halves, the same way. Not used to build anything -
+        /// the shared bags are built straight from the bundle - but a load report
+        /// has to say what the shared side WOULD hold without building a bag,
+        /// which is what makes PreviewLoad pure.</summary>
+        private readonly DeclSet _sharedDecls = new DeclSet();
 
         /// <summary>The shared stores. Reassigned wholesale by LoadGame/Reset.</summary>
         internal Partition _shared;
@@ -404,15 +447,34 @@ namespace StoryletStudio.StoryletEngine
                 }
             }
             InitLadders();
-            _flowStoryDecls = Half("story", bundle.Story.Properties, false);
+            // Both halves, precomputed once (a bundle's declarations never
+            // change): each OpenFlow builds its bags from the per-flow half, and
+            // a load report asks either half what it declares without building
+            // anything at all.
+            _flowDecls.Story = Half("story", bundle.Story.Properties, false);
+            _sharedDecls.Story = Half("story", bundle.Story.Properties, true);
             foreach (var box in bundle.Boxes)
             {
-                _flowBoxDecls.Set(box.Id, Half("box", box.Properties, false));
-                foreach (var deck in box.Decks) _flowDeckDecls.Set(deck.Id, Half("deck", deck.Properties, false));
-                foreach (var hand in box.Hands) _flowHandDecls.Set(hand.Id, Half("hand", HandDecls(hand), false));
+                _flowDecls.Box.Set(box.Id, Half("box", box.Properties, false));
+                _sharedDecls.Box.Set(box.Id, Half("box", box.Properties, true));
+                foreach (var deck in box.Decks)
+                {
+                    _flowDecls.Deck.Set(deck.Id, Half("deck", deck.Properties, false));
+                    _sharedDecls.Deck.Set(deck.Id, Half("deck", deck.Properties, true));
+                }
+                foreach (var hand in box.Hands)
+                {
+                    _flowDecls.Hand.Set(hand.Id, Half("hand", HandDecls(hand), false));
+                    _sharedDecls.Hand.Set(hand.Id, Half("hand", HandDecls(hand), true));
+                }
                 foreach (var group in box.TagGroups)
+                {
                     foreach (var tag in group.Tags)
-                        _flowValueDecls.Set(tag.Id, Half("value", tag.Properties ?? new List<PropertyDecl>(), false));
+                    {
+                        _flowDecls.Value.Set(tag.Id, Half("value", tag.Properties ?? new List<PropertyDecl>(), false));
+                        _sharedDecls.Value.Set(tag.Id, Half("value", tag.Properties ?? new List<PropertyDecl>(), true));
+                    }
+                }
             }
             InitShared();
             WorldScope = new SelfWorldScope { Owner = this };
@@ -486,11 +548,11 @@ namespace StoryletStudio.StoryletEngine
 
         internal Partition BuildFlowPartition()
         {
-            var p = new Partition { Story = BagFromDecls(_flowStoryDecls, "story.") };
-            foreach (var pair in _flowBoxDecls) p.Box.Set(pair.Key, BagFromDecls(pair.Value, $"box.{pair.Key}."));
-            foreach (var pair in _flowDeckDecls) p.Deck.Set(pair.Key, BagFromDecls(pair.Value, $"deck.{pair.Key}."));
-            foreach (var pair in _flowHandDecls) p.Hand.Set(pair.Key, BagFromDecls(pair.Value, $"hand.{pair.Key}."));
-            foreach (var pair in _flowValueDecls) p.Value.Set(pair.Key, BagFromDecls(pair.Value, $"value.{pair.Key}."));
+            var p = new Partition { Story = BagFromDecls(_flowDecls.Story, "story.") };
+            foreach (var pair in _flowDecls.Box) p.Box.Set(pair.Key, BagFromDecls(pair.Value, $"box.{pair.Key}."));
+            foreach (var pair in _flowDecls.Deck) p.Deck.Set(pair.Key, BagFromDecls(pair.Value, $"deck.{pair.Key}."));
+            foreach (var pair in _flowDecls.Hand) p.Hand.Set(pair.Key, BagFromDecls(pair.Value, $"hand.{pair.Key}."));
+            foreach (var pair in _flowDecls.Value) p.Value.Set(pair.Key, BagFromDecls(pair.Value, $"value.{pair.Key}."));
             return p;
         }
 
@@ -528,6 +590,10 @@ namespace StoryletStudio.StoryletEngine
         public Flow OpenFlow(string id, OpenFlowOptions opts = null)
         {
             opts = opts ?? new OpenFlowOptions();
+            // The world's claims as they stand WITHOUT this name, taken before
+            // the replace: a resume competes with the other flows, never with
+            // the flow it is replacing (which is about to release everything).
+            var otherClaims = opts.Restore != null ? SharedClaimsExcept(id) : null;
             var existing = _flows.GetOrDefault(id);
             if (existing != null)
             {
@@ -539,6 +605,16 @@ namespace StoryletStudio.StoryletEngine
             }
             var flow = new Flow(this, id, opts.Seed ?? _seed);
             _flows.Set(id, flow);
+            if (opts.Restore != null)
+            {
+                var draft = new ReportDraft();
+                var clean = PlanFlowRestore(id, opts.Restore, otherClaims, draft);
+                flow.Restore(clean);
+                if (opts.OnRestoreReport != null)
+                {
+                    opts.OnRestoreReport(FinishReport(_bundle.Content, _bundle.Content, new List<string> { id }, draft));
+                }
+            }
             return flow;
         }
 
@@ -637,6 +713,24 @@ namespace StoryletStudio.StoryletEngine
             return counts;
         }
 
+        /// <summary>The same ledger with one name left out: what the REST of the
+        /// world holds, which is the question a resume under that name has to
+        /// ask.</summary>
+        private Dictionary<string, int> SharedClaimsExcept(string id)
+        {
+            var counts = new Dictionary<string, int>();
+            foreach (var pair in _flows)
+            {
+                if (pair.Key == id) continue;
+                foreach (var cardId in pair.Value.HeldCardIds())
+                {
+                    counts.TryGetValue(cardId, out var n);
+                    counts[cardId] = n + 1;
+                }
+            }
+            return counts;
+        }
+
         // --- engine-level state access -------------------------------------------
 
         /// <summary>Read shared state by path: "world.x", "story.gold" (when
@@ -655,7 +749,7 @@ namespace StoryletStudio.StoryletEngine
             {
                 var sv = _shared.Story.Get(parts[1]);
                 if (sv != null) return sv;
-                foreach (var d in _flowStoryDecls)
+                foreach (var d in _flowDecls.Story)
                 {
                     if (d.Name == parts[1]) throw new StoryletError($"\"{path}\" is per-flow state - read it on a Flow, not the Engine");
                 }
@@ -714,13 +808,7 @@ namespace StoryletStudio.StoryletEngine
 
         private OrderedMap<string, List<PropertyDecl>> FlowDeclsOf(string kind)
         {
-            switch (kind)
-            {
-                case "box": return _flowBoxDecls;
-                case "deck": return _flowDeckDecls;
-                case "hand": return _flowHandDecls;
-                default: return _flowValueDecls;
-            }
+            return _flowDecls.Kind(kind);
         }
 
         internal void AddWorldRows(List<PropertyRow> rows)
@@ -832,26 +920,70 @@ namespace StoryletStudio.StoryletEngine
             return envelope;
         }
 
+        /// <summary>ONE flow's blob, to park a visit that is walking away: the
+        /// same shape the envelope carries per flow, and the same shape
+        /// OpenFlow's Restore option takes back (design/engine-server.md 4.1).
+        /// Saving the whole envelope to park one of four hundred players is
+        /// wrong in cost and in meaning. Throws for a name that is not open - a
+        /// closed flow has nothing left to save.</summary>
+        public FlowSave SaveFlow(string id)
+        {
+            var flow = _flows.GetOrDefault(id);
+            if (flow == null) throw new StoryletError($"unknown flow \"{id}\"");
+            return flow.Snapshot();
+        }
+
+        /// <summary>What LoadGame(envelope) would do that is not a plain
+        /// restore, without doing any of it (design/engine-server.md 4.9). Pure:
+        /// nothing on this engine moves. A project mismatch is refused here
+        /// exactly as LoadGame refuses it - it is the one thing neither call
+        /// will tolerate.</summary>
+        public LoadReport PreviewLoad(SaveEnvelope envelope)
+        {
+            AssertSameProject(envelope);
+            return PlanLoad(envelope).Report;
+        }
+
+        /// <summary>What OpenFlow(id, { Restore = saved }) would do to a flow of
+        /// that name, without doing it: the same report shape, since a visit
+        /// parked under one build and resumed under the next raises the same
+        /// questions. Pure.</summary>
+        public LoadReport PreviewFlowRestore(string id, FlowSave saved)
+        {
+            var draft = new ReportDraft();
+            PlanFlowRestore(id, saved, SharedClaimsExcept(id), draft);
+            return FinishReport(_bundle.Content, _bundle.Content, new List<string> { id }, draft);
+        }
+
         /// <summary>Restore: shared state once, then every flow REBUILT from
         /// its blob. Handles held from before the load are closed and inert
-        /// (Patter's rule); take fresh ones from GetFlow()/Flows().</summary>
-        public void LoadGame(SaveEnvelope envelope)
+        /// (Patter's rule); take fresh ones from GetFlow()/Flows().
+        ///
+        /// Returns the report PreviewLoad would have given for this envelope:
+        /// the drift tolerance that makes a load forgiving is what hides its
+        /// cost, so the cost comes back with the load whether or not anybody
+        /// looked first.</summary>
+        public LoadReport LoadGame(SaveEnvelope envelope)
+        {
+            AssertSameProject(envelope);
+            var plan = PlanLoad(envelope);
+            Reset();
+            _shared.Story.Load(plan.Shared.Story);
+            LoadKind(_shared.Box, plan.Shared.Box);
+            LoadKind(_shared.Deck, plan.Shared.Deck);
+            LoadKind(_shared.Hand, plan.Shared.Hand);
+            LoadKind(_shared.Value, plan.Shared.Value);
+            foreach (var id in plan.Spent) _spent.Add(id);
+            foreach (var pair in plan.Flows) OpenFlow(pair.Key).Restore(pair.Value);
+            return plan.Report;
+        }
+
+        private void AssertSameProject(SaveEnvelope envelope)
         {
             if (envelope.Content.Project != _bundle.Content.Project)
             {
                 throw new StoryletError(
                     $"save is for project \"{envelope.Content.Project}\", bundle is \"{_bundle.Content.Project}\"");
-            }
-            Reset();
-            _shared.Story.Load(envelope.Shared.Props.Story);
-            LoadKind(_shared.Box, envelope.Shared.Props.Box);
-            LoadKind(_shared.Deck, envelope.Shared.Props.Deck);
-            LoadKind(_shared.Hand, envelope.Shared.Props.Hand);
-            LoadKind(_shared.Value, envelope.Shared.Props.Value);
-            foreach (var id in envelope.Shared.Spent ?? new List<string>()) _spent.Add(id);
-            foreach (var pair in envelope.Flows)
-            {
-                OpenFlow(pair.Key).Restore(pair.Value);
             }
         }
 
@@ -863,6 +995,288 @@ namespace StoryletStudio.StoryletEngine
             {
                 stores.GetOrDefault(pair.Key)?.Load(pair.Value);
             }
+        }
+
+        // --- the load report (design/engine-server.md 4.9) ---------------------
+        //
+        // One walk, two entry points. PreviewLoad runs it and returns the
+        // report; LoadGame runs it, returns the same report and then applies the
+        // CLEANED blob the walk produced. Two implementations of "what does this
+        // save cost" would drift the first time one of them was fixed, so there
+        // is one, and the apply half consumes its output rather than repeating
+        // its decisions.
+
+        /// <summary>The report under construction: unsorted, until FinishReport
+        /// orders it.</summary>
+        private sealed class ReportDraft
+        {
+            public readonly List<LoadEviction> Evicted = new List<LoadEviction>();
+            public readonly List<LoadCooldown> DroppedCooldowns = new List<LoadCooldown>();
+            public readonly List<string> DroppedSpent = new List<string>();
+            public readonly List<LoadProperty> DroppedProperties = new List<LoadProperty>();
+            public readonly List<LoadProperty> DefaultedProperties = new List<LoadProperty>();
+            public readonly List<LoadProperty> RetypedProperties = new List<LoadProperty>();
+        }
+
+        private sealed class LoadPlan
+        {
+            public LoadReport Report;
+            public PropsPartition Shared = new PropsPartition();
+            public List<string> Spent = new List<string>();
+            public OrderedMap<string, FlowSave> Flows = new OrderedMap<string, FlowSave>();
+        }
+
+        /// <summary>The sort key separator: a UNIT SEPARATOR, because it cannot
+        /// occur in an id, a gameId or a property name.</summary>
+        private const string SortSep = "\u001f";
+
+        /// <summary>Does a saved value still fit its declaration?
+        ///
+        /// The type first, then the declaration's own vocabulary: an enum value
+        /// or a quality stage the edit struck out is still a string of the right
+        /// type and still no longer a legal value. A declaration with no
+        /// vocabulary constrains nothing, so anything of the right type
+        /// fits.</summary>
+        private static bool ValueFits(PropertyDecl decl, StoryletValue value)
+        {
+            if (value == null) return false;
+            switch (decl.Type)
+            {
+                case PropertyTypes.Boolean: return value.IsBool;
+                case PropertyTypes.Number: return value.IsNumber;
+                case PropertyTypes.String: return value.IsString;
+                case PropertyTypes.Enum:
+                    return value.IsString && (decl.Values == null || decl.Values.Contains(value.AsString));
+                case PropertyTypes.Quality:
+                    return value.IsString && (decl.Stages == null || decl.Stages.Contains(value.AsString));
+                case PropertyTypes.Flags:
+                    if (!value.IsFlags) return false;
+                    if (decl.Values == null) return true;
+                    foreach (var f in value.AsFlags) if (!decl.Values.Contains(f)) return false;
+                    return true;
+                default: return true;
+            }
+        }
+
+        /// <summary>Walk one bag's worth of saved values against one bag's worth
+        /// of declarations: report the orphans, the newcomers and the misfits,
+        /// and return the values that survive.</summary>
+        private static OrderedMap<string, StoryletValue> WalkScope(
+            List<PropertyDecl> decls,
+            OrderedMap<string, StoryletValue> saved,
+            Func<string, string> path,
+            string flow,
+            ReportDraft draft)
+        {
+            var byName = new Dictionary<string, PropertyDecl>();
+            if (decls != null) foreach (var d in decls) byName[d.Name] = d;
+            var clean = new OrderedMap<string, StoryletValue>();
+            if (saved != null)
+            {
+                foreach (var pair in saved)
+                {
+                    if (!byName.TryGetValue(pair.Key, out var decl))
+                    {
+                        draft.DroppedProperties.Add(new LoadProperty { Flow = flow, Path = path(pair.Key) });
+                        continue;
+                    }
+                    if (!ValueFits(decl, pair.Value))
+                    {
+                        draft.RetypedProperties.Add(new LoadProperty { Flow = flow, Path = path(pair.Key) });
+                        continue;
+                    }
+                    clean.Set(pair.Key, pair.Value);
+                }
+            }
+            if (decls != null)
+            {
+                foreach (var d in decls)
+                {
+                    if (saved == null || !saved.ContainsKey(d.Name))
+                    {
+                        draft.DefaultedProperties.Add(new LoadProperty { Flow = flow, Path = path(d.Name) });
+                    }
+                }
+            }
+            return clean;
+        }
+
+        /// <summary>The same walk over all five scopes of one partition. An
+        /// owner the save carries and the build no longer has drops whole (its
+        /// bag is gone, so its values have nowhere to land); an owner the build
+        /// has and the save lacks keeps every default.</summary>
+        private PropsPartition WalkPartition(DeclSet decls, PropsPartition values, string flow, ReportDraft draft)
+        {
+            var outP = new PropsPartition();
+            outP.Story = WalkScope(decls.Story, values?.Story, n => "story." + n, flow, draft);
+            foreach (var kind in new[] { "box", "deck", "hand", "value" })
+            {
+                var declKind = decls.Kind(kind);
+                var savedKind = SavedKind(values, kind);
+                var ids = new List<string>();
+                var seen = new HashSet<string>();
+                foreach (var key in declKind.Keys) if (seen.Add(key)) ids.Add(key);
+                if (savedKind != null) foreach (var key in savedKind.Keys) if (seen.Add(key)) ids.Add(key);
+                ids.Sort(StringComparer.Ordinal);
+                var target = SavedKind(outP, kind);
+                foreach (var id in ids)
+                {
+                    var prefix = kind + "." + id + ".";
+                    var savedBag = savedKind != null ? savedKind.GetOrDefault(id) : null;
+                    target.Set(id, WalkScope(declKind.GetOrDefault(id), savedBag, n => prefix + n, flow, draft));
+                }
+            }
+            return outP;
+        }
+
+        private static OrderedMap<string, OrderedMap<string, StoryletValue>> SavedKind(PropsPartition p, string kind)
+        {
+            if (p == null) return null;
+            switch (kind)
+            {
+                case "box": return p.Box;
+                case "deck": return p.Deck;
+                case "hand": return p.Hand;
+                default: return p.Value;
+            }
+        }
+
+        /// <summary>The whole-envelope walk: the report, and the cleaned state
+        /// the apply half writes. Nothing here touches the engine, which is what
+        /// lets PreviewLoad and LoadGame share it.</summary>
+        private LoadPlan PlanLoad(SaveEnvelope envelope)
+        {
+            var draft = new ReportDraft();
+            var plan = new LoadPlan();
+            plan.Shared = WalkPartition(_sharedDecls, envelope.Shared?.Props, null, draft);
+            foreach (var cardId in envelope.Shared?.Spent ?? new List<string>())
+            {
+                if (_cardsById.ContainsKey(cardId)) plan.Spent.Add(cardId);
+                else draft.DroppedSpent.Add(cardId);
+            }
+            var ids = new List<string>();
+            foreach (var pair in envelope.Flows)
+            {
+                ids.Add(pair.Key);
+                plan.Flows.Set(pair.Key, PlanFlowRestore(pair.Key, pair.Value, null, draft));
+            }
+            plan.Report = FinishReport(_bundle.Content, envelope.Content, ids, draft);
+            return plan;
+        }
+
+        /// <summary>One flow's walk. otherClaims is the rest of the world's
+        /// shared ledger and is present only for a SINGLE-flow restore into a
+        /// live engine: a whole-envelope load rebuilds every flow from one
+        /// consistent moment, so there is nobody else to compete with.</summary>
+        private FlowSave PlanFlowRestore(string id, FlowSave saved, Dictionary<string, int> otherClaims, ReportDraft draft)
+        {
+            var clean = new FlowSave { Prng = saved.Prng };
+            clean.Props = WalkPartition(_flowDecls, saved.Props, id, draft);
+            foreach (var pair in saved.Turns) clean.Turns.Set(pair.Key, pair.Value);
+            foreach (var record in saved.PlayLog)
+            {
+                clean.PlayLog.Add(new PlayRecord { Card = record.Card, Outcome = record.Outcome, Turn = record.Turn });
+            }
+            foreach (var pair in saved.Cooldowns)
+            {
+                if (_cardsById.ContainsKey(pair.Key)) clean.Cooldowns.Set(pair.Key, pair.Value);
+                else draft.DroppedCooldowns.Add(new LoadCooldown { Flow = id, Card = pair.Key });
+            }
+            // A deleted entity has no gameId left, so it is named by the id the
+            // save carries; everything the build still knows is named by its
+            // gameId.
+            Func<string, string> cardName = cardId =>
+            {
+                var known = _cardsById.GetOrDefault(cardId);
+                return known != null ? Model.EffectiveGameId(known.Card) : cardId;
+            };
+            var restored = new Dictionary<string, int>();
+            foreach (var pair in saved.Board)
+            {
+                var known = _handsById.GetOrDefault(pair.Key);
+                if (known == null)
+                {
+                    foreach (var cardId in pair.Value)
+                    {
+                        draft.Evicted.Add(new LoadEviction
+                        {
+                            Flow = id, Hand = pair.Key, Card = cardName(cardId),
+                            Reason = EvictionReasons.HandVanished,
+                        });
+                    }
+                    continue;
+                }
+                var hand = Model.EffectiveGameId(known.Hand);
+                var kept = new List<string>();
+                foreach (var cardId in pair.Value)
+                {
+                    var entry = _cardsById.GetOrDefault(cardId);
+                    if (entry == null)
+                    {
+                        draft.Evicted.Add(new LoadEviction
+                        {
+                            Flow = id, Hand = hand, Card = cardId, Reason = EvictionReasons.Vanished,
+                        });
+                        continue;
+                    }
+                    if (otherClaims != null && Flow.CardIsShared(entry.Card, entry.Deck.Shared ?? false))
+                    {
+                        otherClaims.TryGetValue(cardId, out var elsewhere);
+                        restored.TryGetValue(cardId, out var here);
+                        if (elsewhere + here >= Flow.SharedCap(entry.Card))
+                        {
+                            draft.Evicted.Add(new LoadEviction
+                            {
+                                Flow = id, Hand = hand, Card = Model.EffectiveGameId(entry.Card),
+                                Reason = EvictionReasons.ClaimedElsewhere,
+                            });
+                            continue;
+                        }
+                        restored[cardId] = here + 1;
+                    }
+                    kept.Add(cardId);
+                }
+                clean.Board.Set(pair.Key, kept);
+            }
+            return clean;
+        }
+
+        /// <summary>Order the draft and answer the identity questions. `saved` is
+        /// the content block the save carries; for a single-flow restore there is
+        /// none, so the caller passes the bundle's own and no drift is
+        /// reported.</summary>
+        private static LoadReport FinishReport(BundleContent bundle, BundleContent saved, List<string> flows, ReportDraft draft)
+        {
+            draft.Evicted.Sort((a, b) => string.CompareOrdinal(
+                string.Join(SortSep, a.Flow, a.Hand, a.Card, a.Reason),
+                string.Join(SortSep, b.Flow, b.Hand, b.Card, b.Reason)));
+            draft.DroppedCooldowns.Sort((a, b) => string.CompareOrdinal(
+                string.Join(SortSep, a.Flow, a.Card), string.Join(SortSep, b.Flow, b.Card)));
+            draft.DroppedSpent.Sort(StringComparer.Ordinal);
+            Comparison<LoadProperty> byPath = (a, b) => string.CompareOrdinal(
+                string.Join(SortSep, a.Flow ?? "", a.Path), string.Join(SortSep, b.Flow ?? "", b.Path));
+            draft.DroppedProperties.Sort(byPath);
+            draft.DefaultedProperties.Sort(byPath);
+            draft.RetypedProperties.Sort(byPath);
+            var drift = saved.Version != bundle.Version || saved.Hash != bundle.Hash;
+            return new LoadReport
+            {
+                // Flows is what the load restores, not something it had to
+                // change, so it never makes a report inexact.
+                Exact = !drift && draft.Evicted.Count == 0 && draft.DroppedCooldowns.Count == 0
+                    && draft.DroppedSpent.Count == 0 && draft.DroppedProperties.Count == 0
+                    && draft.DefaultedProperties.Count == 0 && draft.RetypedProperties.Count == 0,
+                Project = bundle.Project,
+                Version = new LoadIdentity { Saved = saved.Version, Bundle = bundle.Version },
+                Hash = new LoadIdentity { Saved = saved.Hash, Bundle = bundle.Hash },
+                Flows = flows,
+                Evicted = draft.Evicted,
+                DroppedCooldowns = draft.DroppedCooldowns,
+                DroppedSpent = draft.DroppedSpent,
+                DroppedProperties = draft.DroppedProperties,
+                DefaultedProperties = draft.DefaultedProperties,
+                RetypedProperties = draft.RetypedProperties,
+            };
         }
     }
 }

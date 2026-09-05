@@ -135,6 +135,18 @@ foreign or malformed blob returns false and leaves the engine untouched. Flow ob
 game is already holding survive the load: they re-bind by name, so a Blueprint variable
 pointing at a flow keeps working.
 
+A load is forgiving: a card your edit deleted drops off the board, a property you added takes
+its default, and a save from an older build goes in without a word.
+`UStoryletSave::PreviewLoadFromJson(Engine, Json)` says what that would cost before you spend
+it, and changes nothing. It hands back a report as a JSON string - `exact`, `evicted`,
+`droppedProperties`, `defaultedProperties`, `retypedProperties` and the `version` / `hash`
+pairs - because no report struct crosses a Blueprint pin.
+
+To park ONE playthrough rather than the whole run, `SaveFlowToJson(Id)` on the engine takes
+that flow's state and `OpenFlowFromJson(Id, Json)` puts it back; `CloseFlow` in between is
+what releases the cards it was holding, and `PreviewFlowRestoreJson(Id, Json)` says what
+coming back would cost.
+
 ## The Runtime State panel
 
 **Window ▸ Storylet Engine Runtime State** opens the examiner. Register an engine with

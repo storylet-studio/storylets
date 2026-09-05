@@ -25,6 +25,7 @@ import {
   BOX_KITS,                        // the one kit list; --kit validates from it
 } from "@storylet-studio/ops";
 import type { BoxKit, Issue, PlannedWrite } from "@storylet-studio/ops";
+import { contractPropertyPath, contractPropertyType, turnSpan } from "@storylet-studio/model";
 import pkg from "../package.json" with { type: "json" };
 
 export const USAGE = `storyletengine - Storylet Engine CLI
@@ -76,6 +77,11 @@ Usage:
   storyletengine links [path]         Which cards can turn which others on and
                  [--deck X | --box X | --card X]   off, from conditions and
                  [--refs] [--json]                 outcomes alone (no playthrough)
+  storyletengine contract show        What each installation contract this project
+                 [installation]       carries depends on: the hands, boxes,
+                 [path]               properties and fields a venue was
+                                      provisioned against. \`validate\` refuses a
+                                      build that breaks one
   storyletengine coverage [path]      Seeded random playthroughs: what can each
                  [--runs N] [--max-turns M] [--seed S]   hand deal, what never
                  [--json] [--fail-on-gap]                gets dealt or played?
@@ -113,6 +119,7 @@ const FLAGS: Record<string, { boolean: string[]; valued: string[]; repeated: str
   merge: { boolean: ["json"], valued: ["o", "path"], repeated: [] },
   links: { boolean: ["json", "refs"], valued: ["deck", "box", "card"], repeated: [] },
   coverage: { boolean: ["json", "fail-on-gap", "propose"], valued: ["runs", "max-turns", "seed"], repeated: [] },
+  contract: { boolean: [], valued: [], repeated: [] },
 };
 
 export interface ParsedArgs {
@@ -390,6 +397,49 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
       });
       return 0;
     }
+    // What a VENUE depends on (design/engine-server.md 4.11). Read-only, and one
+    // line per dependency in the same shape `resolve` prints: nothing here is a
+    // build step, and the errors this material raises need no verb of their own
+    // because `validate` already raises them.
+    case "contract": {
+      if (positionals[0] !== "show") {
+        io.error("usage: storyletengine contract show [installation] [path]");
+        return 2;
+      }
+      // `contract show <path>` with no installation has to be told apart from
+      // `contract show <installation>`: a path is a thing on disk, a name is not.
+      const asked = positionals[1];
+      const looksLikePath = asked !== undefined && existsSync(asked);
+      const installation = looksLikePath ? undefined : asked;
+      const where = looksLikePath ? asked : positionals[2];
+      const loaded = loadProject(where ?? ".");
+      printIssues(loaded.issues, io);
+      if (!loaded.source) return 1;
+      const contracts = loaded.source.contracts
+        .filter((c) => installation === undefined || c.shard.installation === installation);
+      if (contracts.length === 0) {
+        io.error(installation === undefined
+          ? `no installation contracts in ${loaded.dir}`
+          : `no contract for installation "${installation}" in ${loaded.dir}`);
+        return 1;
+      }
+      for (const contract of contracts) {
+        const shard = contract.shard;
+        const by = [shard.by, shard.revision !== undefined ? `revision ${shard.revision}` : undefined]
+          .filter((x) => x !== undefined).join(", ");
+        io.log(`${shard.installation}${by !== "" ? `  (${by})` : ""}  (${contract.path})`);
+        for (const hand of shard.hands ?? []) io.log(`  hand      ${hand}   a station deals this hand`);
+        for (const [box, want] of Object.entries(shard.boxes ?? {})) {
+          io.log(`  box       ${box}   the scheduler ticks it every ${want.turn}s`);
+        }
+        for (const entry of shard.properties ?? []) {
+          const type = contractPropertyType(entry);
+          io.log(`  property  ${contractPropertyPath(entry)}${type !== undefined ? `   ${type}` : ""}`);
+        }
+        for (const field of shard.fields ?? []) io.log(`  field     ${field}   the crew and the bridges read it`);
+      }
+      return 0;
+    }
     case "resolve": {
       const query = positionals[0];
       if (query === undefined) {
@@ -645,7 +695,12 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
         // (the news/codex pattern), so the played count answers over the
         // cards that COULD be.
         const playable = new Set(report.outcomes.map((o) => o.card)).size;
-        io.log(`coverage: ${report.runs} run(s), seed ${report.seed}, max ${report.maxTurns} turns/run, ${report.turns} turns, ${report.plays} plays`);
+        // A project whose every box is timed can have its turns read as time
+        // (design/engine-server.md 4.8); a mixed project cannot, and says
+        // nothing rather than something misleading.
+        const asTime = (turns: number): string => report.turnSeconds === undefined
+          ? "" : ` (${turnSpan(turns, report.turnSeconds)})`;
+        io.log(`coverage: ${report.runs} run(s), seed ${report.seed}, max ${report.maxTurns} turns/run${asTime(report.maxTurns)}, ${report.turns} turns${asTime(report.turns)}, ${report.plays} plays`);
         io.log(report.drivers.length > 0
           ? `inputs driven: ${report.drivers.join(", ")}`
           : "no input drivers: content gated on @world reads as never dealt");

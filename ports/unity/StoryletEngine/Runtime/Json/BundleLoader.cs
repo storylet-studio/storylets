@@ -189,6 +189,18 @@ namespace StoryletStudio.StoryletEngine
                     });
                 }
             }
+            if (o["sites"] is JArray sites)
+            {
+                foreach (JObject s in sites)
+                {
+                    map.Sites.Add(new MapSite
+                    {
+                        Hand = s.Value<string>("hand"),
+                        X = s.Value<double>("x"),
+                        Y = s.Value<double>("y"),
+                    });
+                }
+            }
             return map;
         }
 
@@ -203,6 +215,8 @@ namespace StoryletStudio.StoryletEngine
             };
             var ranking = o["ranking"] as JObject;
             if (ranking != null) box.Ranking.Specificity = ranking.Value<bool>("specificity");
+            var turn = o["turn"] as JObject;
+            if (turn != null) box.Turn = new TurnUnit { Seconds = turn.Value<double>("seconds") };
             if (o["fields"] is JArray fields)
             {
                 foreach (var f in fields) box.Fields.Add(ParseFieldDecl((JObject)f));
@@ -263,6 +277,7 @@ namespace StoryletStudio.StoryletEngine
                 Purpose = o.Value<string>("purpose"),
                 Condition = o["condition"] != null ? StoryletJson.ToExpression(o["condition"]) : null,
                 Shared = o["shared"] != null ? o.Value<bool>("shared") : (bool?)null,
+                Durable = o["durable"] != null ? o.Value<bool>("durable") : (bool?)null,
             };
             if (o["properties"] is JArray props) deck.Properties = ParsePropertyDecls(props);
             if (o["cards"] is JArray cards)
@@ -312,6 +327,7 @@ namespace StoryletStudio.StoryletEngine
             if (o["copies"] != null) card.Copies = o.Value<double>("copies");
             if (o["shared"] != null) card.Shared = o.Value<bool>("shared");
             if (o["sharedCopies"] != null) card.SharedCopies = o.Value<double>("sharedCopies");
+            if (o["durable"] != null) card.Durable = o.Value<bool>("durable");
             if (o["fields"] is JObject cardFields)
             {
                 card.Fields = new OrderedMap<string, StoryletValue>();
@@ -409,6 +425,7 @@ namespace StoryletStudio.StoryletEngine
                     Values = ParseStringList(o["values"]),
                     Stages = ParseStringList(o["stages"]),
                     Shared = o["shared"] != null ? (bool?)o["shared"].Value<bool>() : null,
+                    Durable = o["durable"] != null ? (bool?)o["durable"].Value<bool>() : null,
                     Writable = o["writable"] != null ? (bool?)o["writable"].Value<bool>() : null,
                     Purpose = o.Value<string>("purpose"),
                 });

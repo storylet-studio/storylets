@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Hand positions carried in a bundle's `maps` block** (2026-09-05). `BundleMap::sites` is a list of `MapSite` (a hand gameId and a point), parsed and handed over like the zones and the pictures beside it, and reported as `MapSummary::sites` (design/engine-server.md 4.3). Still INERT PAYLOAD: nothing in the engine reads any of it. The asset Inspector gains the **Maps (carried, not read)** section the other three inspectors already had, counting zones, pictures and sites, and `FStoryletBundleDescription` gains `Maps` so Blueprint can read the same. No corpus change: a position is not a behaviour.
+
+- **`durable` carried on declarations, decks and cards** (2026-09-05). The durability axis (design/engine-server.md 4.2): `durable` says whether a value, or a `redraw: "never"` spend, survives the end of a RUN, where `shared` says whose it is within one. INERT in the engine, which partitions by `shared` alone and never reads the flag; a server lifts and restores durable values across a run boundary through `GetProperty` / `SetProperty`, and durable spends through `OpenFlow(Id, Restore)` and `MarkTaken`. The bundle parser carries it, `DescribeBundle` marks a durable declaration on `FStoryletPropertySummary::bDurable` and counts a box's durable cards on `FStoryletBoxSummary::DurableCards`, and the asset Details panel shows "(durable)" on the property row and "durable cards N" on the box's counts line. No corpus change: nothing about play is different.
+
+- **A box that counts in time: `turn: { seconds: N }`** (2026-09-05). A box may declare that its turns are TIME rather than plays, and `Box::turnSeconds` carries the unit. In such a box `play` advances the clock by 0 by default instead of `settings.playAdvancesTurns`; a call that sets `PlayOptions::advanceTurns` still gets what it asked for, and `advanceTurns` is unchanged, because the host is what ticks a timed box. `redraw: N` on its cards then reads as N x `seconds`, which the tools say and the engine does not act on. `DescribeBundle` reports it as `BoxSummary::turnSeconds`, Blueprint reads it as `FStoryletBoxSummary::TurnSeconds` (0 on an untimed box), and the bundle's Details view shows `turn = 60s` on the box's counts line. Parity with the JS runtime, corpus-pinned (corpus version 5).
+
+- **A hole filled from a property: the hand that moves** (2026-09-05). A hand's `chosen` value (or a standalone hand's rule binding) may be a property reference (`"@hand.zone"`, `"@story.where"`, `"@world.place"`) rather than a tag id; the engine resolves it at ask time and binds the hole to the tag it names, so moving a hand is `SetProperty` and the next deal follows. Parity with the JS runtime, corpus-pinned. A value naming no tag leaves the hole unbound (a wildcard) with a diagnostic, never a silently empty hand. `describeBundle` reports the holes as `HandSummary::movable`, surfaced to Blueprint as `FStoryletHandSummary::Movable` and shown on the hand's own line in the bundle details panel. No new verb, so no new Blueprint node.
+
+- **`saveFlow(id)` and `openFlow(id, { .restore })` on the C++ core, `SaveFlowToJson` / `OpenFlowFromJson` / `PreviewFlowRestoreJson` on `UStoryletEngine`** (2026-09-05): park one flow and open it as it was. Parity with the JS runtime's `saveFlow` / `openFlow(restore)`, corpus-pinned. Closing a parked flow releases its shared claims; on the way back, a shared card the world has since given out is dropped as `claimed-elsewhere` rather than double-claimed. Blueprint takes the blob as JSON, as `UStoryletSave` does the envelope: no `FlowSave` struct crosses a pin.
+
+- **`previewLoad(envelope)` and a `LoadReport` returned by `loadGame` on the core; `UStoryletSave::PreviewLoadFromJson` for Blueprint.** What a save load would drop, default or reset, and whether its build is this one - answered before the load as well as by it. The report crosses a pin as JSON (`storylets::reportToJson`, in the pure core, so the clang TestHost exercises it).
+
+### Changed
+
+- **A load now prunes what it reports**: a property the build no longer declares, a cooldown or spent entry for a deleted card, and a saved value that no longer fits its declaration (a struck-out enum value, an edited quality ladder) are dropped rather than carried, and named in the report.
+
 ## [0.4.1] - 2026-09-04
 
 ### Changed

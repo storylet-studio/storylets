@@ -38,10 +38,14 @@ export interface BundleInspector {
 const showVal = (v: ScalarValue | undefined): string =>
   v === undefined ? "<unset>" : JSON.stringify(v);
 
-/** "name: type = default", plus enum/flags options where declared. */
+/** "name: type = default", plus enum/flags options where declared, plus
+ *  "(durable)" where the declaration says the value outlives a run
+ *  (design/engine-server.md 4.2). Nothing is added for the ordinary
+ *  run-scoped property: that is what a property is. */
 export function formatPropertySummary(p: PropertySummary): string {
   const options = p.values !== undefined && p.values.length > 0 ? ` [${p.values.join(", ")}]` : "";
-  return `${p.name}: ${p.type} = ${showVal(p.default)}${options}`;
+  const durable = p.durable === true ? " (durable)" : "";
+  return `${p.name}: ${p.type} = ${showVal(p.default)}${options}${durable}`;
 }
 
 /** The scope label a declaration block files under ("world", "box box",
@@ -112,7 +116,11 @@ export function createBundleInspector(
   }
   for (const hand of description.hands) {
     const template = hand.template !== undefined ? `, template ${hand.template}` : "";
-    line(handsBody, `${hand.gameId}: box ${hand.box}, slots ${hand.slots}${template}`
+    // A movable hole is the one thing about a hand its name cannot say: write
+    // that property and the hand moves (4.6).
+    const moves = hand.movable === undefined ? ""
+      : `, moves ${hand.movable.map((m) => `${m.group} from ${m.from}`).join(" and ")}`;
+    line(handsBody, `${hand.gameId}: box ${hand.box}, slots ${hand.slots}${template}${moves}`
       + (hand.title !== undefined ? ` - ${hand.title}` : ""));
   }
 
@@ -152,7 +160,7 @@ export function createBundleInspector(
     mapsBody.className = "sl-maps";
     line(mapsBody, "Geometry the build was asked to carry. The engine ignores it.", "sl-line sl-note");
     for (const map of description.maps) {
-      line(mapsBody, `${map.box} - ${map.group}: zones ${map.zones}, pictures ${map.backgrounds}`);
+      line(mapsBody, `${map.box} - ${map.group}: zones ${map.zones}, pictures ${map.backgrounds}, sites ${map.sites}`);
     }
   }
 
@@ -162,9 +170,17 @@ export function createBundleInspector(
   line(countsBody, `boxes ${totals.boxes} - decks ${totals.decks} - cards ${totals.cards}`);
   line(countsBody, `hands ${totals.hands} - templates ${totals.templates} - tag groups ${totals.tagGroups}`);
   for (const box of description.boxes) {
+    // A timed box says its unit here (design/engine-server.md 4.8), because
+    // this is the line an integrator reads to find out what their host has to
+    // tick. Nothing is added for an ordinary box: the answer "a turn is a
+    // play" belongs in the docs, not on every line of every bundle.
     line(countsBody, `${box.gameId}: decks ${box.counts.decks}, cards ${box.counts.cards}, `
       + `hands ${box.counts.hands}, templates ${box.counts.templates}, `
-      + `tag groups ${box.counts.tagGroups}, ranking.specificity ${box.ranking.specificity}`);
+      + `tag groups ${box.counts.tagGroups}, ranking.specificity ${box.ranking.specificity}`
+      + (box.turn !== undefined ? `, turn = ${box.turn.seconds}s` : "")
+      // Only when there are any: a box whose cards all come back with the run
+      // has nothing for a server to lift, and the zero would be noise.
+      + (box.durableCards !== undefined ? `, durable cards ${box.durableCards}` : ""));
   }
 
   (opts.container ?? document.body).append(el);

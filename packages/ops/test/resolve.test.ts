@@ -69,6 +69,7 @@ const source: SourceProject = {
     export: { bundle: "d.storyletsc", metadata: "full" },
   },
   boxes: [box],
+  contracts: [],
 };
 
 const loaded: LoadedProject = { dir: "/p", files: [], source, issues: [], sidecars: [] };

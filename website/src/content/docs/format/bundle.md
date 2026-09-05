@@ -80,12 +80,21 @@ maps: [{
   backgrounds: [
     { file: "assets/village/plan.png", x: 0, y: 0, width: 800, height: 600, opacity: 0.6 },
   ],
+  sites: [                     // where the placed hands stand
+    { hand: "the-forge", x: 210, y: 340 },
+    { hand: "the-well", x: 120, y: 80 },
+  ],
 }]
 ```
 
 Everything is named by gameId, the same names `peek` takes, so a host can match a shape to
 the tag it draws. Background pictures are written as files next to the bundle at the path
 each entry names, ready for an engine to import.
+
+`sites` is where each placed hand stands on the map, sorted by hand gameId so the bytes
+don't move when a shard is reordered. A hand nobody has placed has no entry, and a map with
+no placed hand has no `sites` key at all. Which zone a hand belongs to isn't repeated here:
+the hand's own binding is what the engine deals from.
 
 **The engine never reads any of it.** It's there for a host that wants to draw an in-game
 map without building its own export. `describeBundle` reports whether a bundle carries maps,

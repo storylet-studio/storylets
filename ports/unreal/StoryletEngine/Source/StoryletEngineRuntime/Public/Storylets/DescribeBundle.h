@@ -47,6 +47,15 @@ namespace storylets
     };
 
     /** One hand: the deal() surface. gameId is the name deal() is called with. */
+    /** One hole this hand fills from a property rather than with a tag: the
+     *  hand MOVES when that property is written (design/engine-server.md 4.6).
+     *  `group` is the tag group's gameId, `from` the reference as authored. */
+    struct MovableHole
+    {
+        std::string group;
+        std::string from;
+    };
+
     struct HandSummary
     {
         std::string gameId;
@@ -59,6 +68,11 @@ namespace storylets
         double slots = std::numeric_limits<double>::infinity();
         /** The hand template's gameId; empty for a standalone (inline-rule) hand. */
         std::string templateGameId;
+        /** The holes filled from a property, in bundle order; EMPTY when the
+         *  hand has none, which is the ordinary case. It is the one thing about
+         *  a hand its name cannot say: writing that property moves the hand,
+         *  and setProperty is the whole verb (4.6). */
+        std::vector<MovableHole> movable;
     };
 
     /** One tag group and its tags, by gameId: the peek() criteria surface (a
@@ -87,6 +101,14 @@ namespace storylets
         std::string title;
         /** The only per-box ranking policy (Reboot 2.2). */
         bool rankingSpecificity = true;
+        /** Set on a TIMED box (design/engine-server.md 4.8): how long one of its
+         *  turns lasts. An integrator reading a bundle needs it to know which
+         *  boxes their host must tick, and how often. Empty is the ordinary box. */
+        std::optional<double> turnSeconds;
+        /** How many cards in this box are DURABLE (design/engine-server.md
+         *  4.2): their `redraw: never` spend outlives the run, so a server has
+         *  to lift and restore it. Zero on the ordinary box. */
+        int durableCards = 0;
         std::vector<TagGroupSummary> tagGroups;
         BoxCounts counts;
     };
@@ -100,6 +122,10 @@ namespace storylets
         StoryletValue defaultValue;
         /** Enum / flags options, where declared. */
         std::vector<std::string> values;
+        /** Declared DURABLE (design/engine-server.md 4.2): the value survives a
+         *  run, and a server lifts and restores it across one. False is the
+         *  ordinary run-scoped property. */
+        bool durable = false;
         std::string purpose;
     };
 
@@ -149,6 +175,9 @@ namespace storylets
         std::string group;                      // the tag group, by gameId
         int zones = 0;
         int backgrounds = 0;
+        /** Placed hands standing on this map: where the kiosks are
+         *  (design/engine-server.md 4.3). */
+        int sites = 0;
     };
 
     struct BundleDescription
@@ -183,7 +212,9 @@ namespace storylets
         return scope.scope + " " + scope.owner + suffix;
     }
 
-    /** "name: type = default", plus enum/flags options where declared. */
+    /** "name: type = default", plus enum/flags options where declared, plus
+     *  "(durable)" where the value outlives a run (4.2). Nothing is added for
+     *  the ordinary run-scoped property. */
     inline std::string PropertyLabel(const PropertySummary& p)
     {
         std::string options;
@@ -197,7 +228,8 @@ namespace storylets
             }
             options += "]";
         }
-        return p.name + ": " + p.type + " = " + p.defaultValue.toJsonString() + options;
+        const std::string durable = p.durable ? std::string(" (durable)") : std::string();
+        return p.name + ": " + p.type + " = " + p.defaultValue.toJsonString() + options + durable;
     }
 
     namespace describedetail
@@ -212,6 +244,7 @@ namespace storylets
                 row.type = decl.type;
                 if (decl.defaultValue.has_value()) row.defaultValue = *decl.defaultValue;
                 if (decl.values.has_value()) row.values = *decl.values;
+                row.durable = decl.durable.value_or(false);
                 row.purpose = decl.purpose;
                 rows.push_back(std::move(row));
             }
@@ -240,6 +273,31 @@ namespace storylets
                 return t ? t->properties : none;
             }
             return hand.properties;
+        }
+
+        /** The hand's movable holes, in the bundle's own key order: every
+         *  `chosen` / rule-binding value that is a property reference rather
+         *  than a tag (4.6). A group id the bundle does not carry is skipped:
+         *  the description speaks gameIds throughout. */
+        inline std::vector<MovableHole> MovableHoles(const Hand& hand, const Box& box)
+        {
+            std::vector<MovableHole> holes;
+            const OrderedMap<std::string, std::string>* filled = nullptr;
+            if (!hand.templateId.empty()) filled = &hand.chosen;
+            else if (hand.rule) filled = &hand.rule->bindings;
+            if (!filled) return holes;
+            for (const auto& pair : *filled)
+            {
+                if (!IsHoleRef(pair.second)) continue;
+                const TagGroup* group = nullptr;
+                for (const TagGroup& g : box.tagGroups) { if (g.id == pair.first) { group = &g; break; } }
+                if (!group) continue;
+                MovableHole hole;
+                hole.group = EffectiveGameId(*group);
+                hole.from = pair.second;
+                holes.push_back(std::move(hole));
+            }
+            return holes;
         }
 
         /** The effective slot cap, resolved the way the session resolves
@@ -304,6 +362,7 @@ namespace storylets
             summary.group = map.group;
             summary.zones = static_cast<int>(map.zones.size());
             summary.backgrounds = static_cast<int>(map.backgrounds.size());
+            summary.sites = static_cast<int>(map.sites.size());
             d.maps.push_back(std::move(summary));
         }
 
@@ -311,12 +370,24 @@ namespace storylets
         {
             const std::string boxGameId = EffectiveGameId(box);
             int cards = 0;
-            for (const Deck& deck : box.decks) cards += static_cast<int>(deck.cards.size());
+            // Durable cards (4.2): the card's own flag, else its deck's - the
+            // same inheritance `shared` has.
+            int durableCards = 0;
+            for (const Deck& deck : box.decks)
+            {
+                cards += static_cast<int>(deck.cards.size());
+                for (const Card& card : deck.cards)
+                {
+                    if (card.durable.value_or(deck.durable.value_or(false))) durableCards += 1;
+                }
+            }
 
             BoxSummary summary;
             summary.gameId = boxGameId;
             summary.title = box.title;
             summary.rankingSpecificity = box.ranking.specificity;
+            summary.turnSeconds = box.turnSeconds;
+            summary.durableCards = durableCards;
             for (const TagGroup& group : box.tagGroups)
             {
                 TagGroupSummary g;
@@ -347,6 +418,7 @@ namespace storylets
                 h.box = boxGameId;
                 h.slots = describedetail::HandSlots(hand, templatePtr);
                 if (templatePtr) h.templateGameId = EffectiveGameId(*templatePtr);
+                h.movable = describedetail::MovableHoles(hand, box);
                 d.hands.push_back(std::move(h));
             }
 

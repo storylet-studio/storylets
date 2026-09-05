@@ -53,6 +53,7 @@ import {
 import type { Detail, Inspected, InspectorHost } from "./inspector.js";
 import { createProjectSettings } from "./project-settings.js";
 import { mountPropertyList } from "./prop-list.js";
+import { setPlayRung } from "./play-ladder.js";
 import { setPropertyNavigator } from "./expr-panels.js";
 import { createNavHistory, historyNav, toast } from "@wildwinter/app-shell";
 import type { MountedNodeView } from "./node-view.js";
@@ -1197,6 +1198,11 @@ const AUTOSAVE_MS = 700;
  */
 function applyResult(result: OpenResult): void {
   project = result.project;
+  // Every surface asks play-ladder.ts what it may draw, and this is the one
+  // place the answer arrives (design/engine-server.md 4.10). Seeded on every
+  // result, not only on open: changing Play in Project Settings comes back
+  // through here.
+  setPlayRung(result.project.play);
   problems = result.problems;
   // Stay on the same problem where that still makes sense; a shorter list
   // clamps rather than jumping to the start.
@@ -1774,7 +1780,7 @@ function renderStoryCentre(host: HTMLElement): void {
     // the property itself: a quiet uses chip per row, opening Find's property
     // mode. Counts fill in asynchronously (one usage scan per declaration).
     const useBtns = new Map<string, HTMLButtonElement>();
-    mountPropertyList(list, dto.story, { onChange: save, rowExtras: (decl) => {
+    mountPropertyList(list, dto.story, { onChange: save, sharedByDefault: true, rowExtras: (decl) => {
       const b = el("button", { className: "set-uses", text: "uses",
         tip: `Find every read and write of @story.${decl.name}`,
         onClick: () => void studio.openSearch({ mode: "property", query: `@story.${decl.name}` }) });
@@ -2326,6 +2332,7 @@ async function adopt(pending: Promise<OpenResult | { error: string } | null>): P
   // A different project is a different sitting: tab choices do not carry over.
   if (project !== undefined && project.dir !== result.project.dir) resetDocTabMemory();
   project = result.project;
+  setPlayRung(result.project.play);
   problems = result.problems;
   problemAt = 0;
   liveLinkChip?.setVisible(true);   // Live Link: the control is available once a project is open

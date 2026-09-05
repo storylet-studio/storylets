@@ -629,6 +629,7 @@ export function renderBoxCentre(
       { label: "Duplicate box", onClick: () => actions.duplicateBox(box.id) },
       { label: "Delete box", danger: true, onClick: () => actions.deleteBox(box.id) },
     ],
+    ...(box.contract !== undefined ? { contract: box.contract } : {}),
   });
   // The MAP is offered by a box that has one, which means a tag group marked
   // spatial. A tab rather than a setting of a view switch, because a box page is

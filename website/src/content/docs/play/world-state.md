@@ -127,6 +127,31 @@ shared state: there's no message-passing between them, and no flow can read anot
 themselves scarce across flows rather than the state they read: one goblin in the whole world,
 to whoever finds it first. That's [How a deal is decided](/play/dealing/#copies-and-claims).
 
+## Durable: state that outlives a run
+
+Sharing says *whose* a value is. **`durable`** says how long it lasts. It sits beside `shared`
+on the same declarations, and the two are independent:
+
+| | run-scoped (the default) | `durable: true` |
+|---|---|---|
+| **shared** | world truth for this run: the act, the well opened | the installation's memory: trolls defeated since it opened |
+| **per flow** | this visit: my danger in the docks | the player's pocket: visits, allegiance, what they earned |
+
+The engine never reads the flag. It partitions by `shared` alone, and durability is what
+whoever runs the engine does at a run boundary: read the declarations, lift the durable values
+out with `getProperty` before the world restarts, and write them back with `setProperty` into
+the fresh one. Everything that needs is already public.
+
+`durable` is a compile error on `@world`, for the reason `shared` is: `@world` is the game's
+own state, and how long the game keeps it is the game's business.
+
+**A card can be durable too**, on the deck or on the card, and it means one thing: its
+`redraw: never` spend survives the run. Only `never` can - a finite cooldown is an absolute
+turn of a box's clock, and the clock resets with the run - so `durable` on any other redraw is
+a compile warning. A durable per-flow spend rides in that flow's cooldowns; a durable shared
+one rides the engine's spent set, and both go back with `openFlow(id, { restore })` and
+`markTaken`.
+
 ## Saving it
 
 `saveGame()` returns the whole run: the shared state once (with anything a shared one-shot has
@@ -134,6 +159,13 @@ taken out of the world), then every flow's own state, turn counters, cooldowns, 
 and random stream position. `loadGame(envelope)` restores it, rebuilding every flow, so
 re-take your handles with `getFlow`, never `openFlow`, which would replace the restored flow
 and its dealt hand (see [JavaScript, Save and load](/play/javascript/#save-and-load)).
+
+A load is deliberately forgiving about content that has moved underneath a save, which is what
+lets a save survive an edit - and is also what hides the cost of one. So it says: `loadGame`
+returns a report of everything it dropped, defaulted or reset, and `previewLoad(envelope)`
+computes the same report without applying anything. `saveFlow(id)` and
+`openFlow(id, { restore })` do the same for ONE flow, for a playthrough that steps away and
+comes back.
 
 **`@world` is deliberately not in the envelope.** It's your game's state - the engine only
 borrows it - so your game saves it, next to the envelope. That's also what makes a game that

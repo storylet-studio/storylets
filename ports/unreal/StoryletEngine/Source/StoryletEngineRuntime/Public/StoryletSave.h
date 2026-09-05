@@ -32,4 +32,14 @@ public:
 	 *  holds re-bind by name. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
 	static bool LoadStateFromJson(UStoryletEngine* Engine, const FString& Json);
+
+	/** What LoadStateFromJson would change, as a LoadReport JSON string,
+	 *  without changing any of it (design/engine-server.md 4.9): the cards a
+	 *  content update would knock off the board, the properties it would drop,
+	 *  default or reset, and whether the save's build is this one. Empty (and a
+	 *  log) when the blob is refused, which is the same refusal the load gives.
+	 *  Here rather than on UStoryletEngine because the report belongs with the
+	 *  string boundary it prices, as SaveStateToJson does. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
+	static FString PreviewLoadFromJson(UStoryletEngine* Engine, const FString& Json);
 };

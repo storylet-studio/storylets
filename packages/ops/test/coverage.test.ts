@@ -23,6 +23,8 @@ interface Fix {
   hands?: Hand<string>[];
   /** A gate on the one deck, when the test needs one. */
   deckCondition?: string;
+  /** Makes the one box TIMED (design/engine-server.md 4.8). */
+  turn?: { seconds: number };
   cards: Partial<Card<string>>[];
 }
 
@@ -31,18 +33,25 @@ const project = (f: Fix): SourceProject => ({
   project: {
     schema: "storylets/project@0",
     project: { id: "p", name: "P", version: "0.0.1" },
-    settings: { playAdvancesTurns: 1 },
+    // A venue project: the play ladder (4.10) hides nothing there, so a timed
+    // box in the fixture is not also a warning about the project's rung.
+    settings: { playAdvancesTurns: 1, play: "venue" },
     ...(f.coverage !== undefined ? { coverage: f.coverage } : {}),
     world: { properties: f.world ?? [] },
     story: { properties: f.story ?? [] },
     templates: {},
     export: { bundle: "dist/p.storyletsc", metadata: "full" },
   },
+  contracts: [],
   boxes: [{
     path: "b",
     box: {
       schema: "storylets/box@0",
-      box: { id: "b_1", gameId: "b1", ranking: { specificity: true }, fields: [], properties: [] },
+      box: {
+        id: "b_1", gameId: "b1", ranking: { specificity: true },
+        ...(f.turn !== undefined ? { turn: f.turn } : {}),
+        fields: [], properties: [],
+      },
     },
     tags: { schema: "storylets/tags@0", groups: f.tagGroups ?? [] },
     hands: {
@@ -84,6 +93,24 @@ describe("coverage harness", () => {
     expect(JSON.stringify(two)).toBe(JSON.stringify(one));
     expect(one.issues).toEqual([]);
     expect(one.plays).toBeGreaterThan(0);
+  });
+
+  it("a timed box: the report carries the unit, and the sweep still ticks it", () => {
+    // The harness is the host here, so it ticks a timed box itself: without
+    // that a cooldown in one could never expire inside a run, and the report
+    // would call a perfectly reachable card never dealt.
+    const source = project({
+      turn: { seconds: 60 },
+      cards: [{ id: "c_a", redraw: 3 }, { id: "c_b" }],
+    });
+    const report = runCoverage(source, OPTS);
+    expect(report.turnSeconds).toBe(60);
+    expect(cardRow(report, "c_a").played).toBeGreaterThan(1);   // it comes back
+    expect(report.issues).toEqual([]);
+  });
+
+  it("no unit on the report when the project has an untimed box", () => {
+    expect(runCoverage(project({ cards: [{ id: "c_a" }] }), OPTS).turnSeconds).toBeUndefined();
   });
 
   it("story-owned state is covered by play, no driver needed", () => {

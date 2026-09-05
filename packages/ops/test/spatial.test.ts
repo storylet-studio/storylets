@@ -42,6 +42,7 @@ const project = (groups: TagGroup[]): SourceProject => ({
     export: { bundle: "d.storyletsc", metadata: "full" },
   },
   boxes: [box(groups)],
+  contracts: [],
 });
 
 /** Validate a project made of these tag groups, with the bundle gate off (there
