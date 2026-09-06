@@ -341,11 +341,30 @@ function mergeKeyed(spec: Extract<Strategy, { kind: "keyed" }>, B: unknown[], O:
   return [...out.keys()].sort().map((k) => out.get(k));
 }
 
+/**
+ * An ABSENT ancestor, as distinct from one that disagrees. `{}` is how a caller
+ * says "this shard did not exist at the base", which is the ordinary case when
+ * both sides ADDED the same file after the base was taken: every field of
+ * theirs then reads as an add, and the merge is a two-sided one.
+ *
+ * Emptiness, not a missing `schema` key: a base with content but no schema is a
+ * malformed shard, and still skew.
+ */
+const isAbsentBase = (base: Obj): boolean => Object.keys(base).length === 0;
+
 /** 3-way merge BASE / OURS / THEIRS (parsed shard models). All three must be
- *  the same shard type and schema version; skew is a MergeInputError. */
+ *  the same shard type and schema version; skew is a MergeInputError. An
+ *  ABSENT base (`{}`) is exempt, because an absence has no version to
+ *  disagree with - see `isAbsentBase`. */
 export function runMerge(base: Obj, ours: Obj, theirs: Obj, opts?: { type?: MergeFileType }): MergeResult {
   const type = opts?.type ?? detectMergeType(ours);
   for (const [label, side] of [["BASE", base], ["THEIRS", theirs]] as const) {
+    // The skew check exists to stop a v0 shard's fields being merged into a v1
+    // one by pretending the two shapes match. An empty base makes no such
+    // claim, and refusing it took a whole return leg down over a single file
+    // that two people had happened to create independently (2026-09-06).
+    // THEIRS is never exempt: that side is a real document either way.
+    if (label === "BASE" && isAbsentBase(base)) continue;
     if (!eq(side.schema, ours.schema)) {
       throw new MergeInputError(`schema version skew: ${label} is ${JSON.stringify(side.schema)}, OURS is ${JSON.stringify(ours.schema)}`);
     }

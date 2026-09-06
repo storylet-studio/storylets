@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
 import { PACK_MANIFEST, readPackManifest, runPack } from "../src/pack.js";
 import { UnsafeEntryError, isUnsafeEntry, runUnpack, runUnpackMerge } from "../src/unpack.js";
-import { MergeInputError } from "../src/merge.js";
+import { CONFLICT_SIDECAR_EXTENSION, MergeInputError } from "../src/merge.js";
 import { loadProject } from "../src/load.js";
 import { runExport } from "../src/export.js";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
@@ -449,6 +449,60 @@ describe("unpack --merge: the return leg", () => {
     const before = readFileSync(join(ours, deckPath), "utf8");
     await runUnpackMerge(returned, sent, ours);
     expect(readFileSync(join(ours, deckPath), "utf8")).toBe(before);
+  });
+
+  // --- added on both sides: the shard with no ancestor at all ----------------
+  //
+  // Present in the working copy AND in the returned pack, absent from the pack
+  // that was SENT: two authors created the same file after the base went out.
+  // There is no ancestor to lean on, so every field of theirs reads as an add,
+  // and the base the merge sees is empty. This threw until 2026-09-06 and took
+  // the whole return leg down over one file.
+
+  const rumoursPath = join("encounters", "decks", "rumours.storyletdeck");
+  const card = (id: string, title: string): Record<string, unknown> =>
+    ({ gameId: id.replace("c_", ""), id, title });
+  /** A deck shard neither side had at the base. */
+  const rumours = (cards: Record<string, unknown>[]): string => canonicalStringify({
+    schema: "storylets/deck@0",
+    deck: { gameId: "rumours", id: "k_rumours", properties: [] },
+    cards,
+  });
+
+  it("merges a shard added on BOTH sides, with no ancestor to lean on", async () => {
+    const { ours, sent, returned } = await roundTrip((dir) => {
+      writeFileSync(join(dir, rumoursPath), rumours([card("c_r1", "A rumour"), card("c_r2", "Theirs alone")]));
+    });
+    writeFileSync(join(ours, rumoursPath), rumours([card("c_r1", "A rumour"), card("c_r3", "Ours alone")]));
+
+    const result = await runUnpackMerge(returned, sent, ours);
+    // We have the file, so it MERGED rather than being taken whole.
+    expect(result.shards.find((s) => s.path.endsWith("rumours.storyletdeck"))!.added).toBe(false);
+    const write = result.writes.find((w) => w.path.endsWith("rumours.storyletdeck"))!;
+    expect(write.content).toContain("Theirs alone");
+    expect(write.content).toContain("Ours alone");
+    expect(write.content).toContain("A rumour");   // agreed on both sides, so clean
+    expect(result.conflicts).toBe(0);
+    // And the rest of the leg still ran: one shard must not take down the pack.
+    expect(result.writes.some((w) => w.path.endsWith("docks.storyletdeck"))).toBe(true);
+  });
+
+  it("conflicts, with a sidecar, when the two sides added the same card differently", async () => {
+    const { ours, sent, returned } = await roundTrip((dir) => {
+      writeFileSync(join(dir, rumoursPath), rumours([card("c_r1", "Their rumour")]));
+    });
+    writeFileSync(join(ours, rumoursPath), rumours([card("c_r1", "Our rumour")]));
+
+    const result = await runUnpackMerge(returned, sent, ours);
+    expect(result.conflicts).toBe(1);
+    const sidecar = result.sidecars.find((s) => s.path.endsWith(`rumours.storyletdeck${CONFLICT_SIDECAR_EXTENSION}`));
+    expect(sidecar).toBeDefined();
+    const [conflict] = JSON.parse(sidecar!.content).conflicts as { kind: string; base: unknown }[];
+    expect(conflict!.kind).toBe("added-both");    // no base: an add, not a both-changed
+    expect(conflict!.base).toBeUndefined();
+    // Provisional OURS stands in the file, as it does for any other conflict.
+    expect(result.writes.find((w) => w.path.endsWith("rumours.storyletdeck"))!.content)
+      .toContain("Our rumour");
   });
 
   // --- the cheap provenance check (pack-merge-back section 7, cheap variant) --

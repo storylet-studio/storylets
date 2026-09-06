@@ -438,11 +438,11 @@ export async function planPull(
     const ours = read(readFileSync(path, "utf8"), "local");
     const baseText = ancestor?.get(name);
     // NO BASE ENTRY means the shard did not exist at the revision we pulled, so
-    // there is no ancestor and every field of theirs reads as an add. The empty
-    // base still has to carry the schema: `runMerge` refuses skew between the
-    // three sides, and a literal `{}` is skew.
+    // there is no ancestor and every field of theirs reads as an add. `{}` is
+    // how `runMerge` is told that, and it is exempt from the schema-skew check
+    // for exactly this reason: an absence has no version to disagree with.
     const result = runMerge(
-      baseText !== undefined ? read(baseText, "base") : { schema: ours["schema"] },
+      baseText !== undefined ? read(baseText, "base") : {},
       ours,
       read(theirText, "pulled"),
     );

@@ -19,6 +19,17 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Fixed
+
+- **`unpack --merge` no longer refuses the whole return leg over a file both authors created.**
+  A shard present in the working copy and in the returned pack, but absent from the pack that
+  was sent, has no common ancestor, so the merge sees an empty base. The three-way merge read
+  that empty base as version skew and threw, which failed every other shard in the pack along
+  with it. An absent ancestor is now what it says it is: the shard merges as "added on both
+  sides", agreeing content merging cleanly and a real disagreement landing in a
+  `.storyletconflict` sidecar like any other. A base that genuinely names a different schema
+  version is still refused, and so is a base with content but no schema at all.
+
 ## [0.5.0] - 2026-09-06
 
 ### Added

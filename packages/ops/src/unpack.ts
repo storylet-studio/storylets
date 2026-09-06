@@ -301,6 +301,9 @@ export async function runUnpackMerge(
     const theirsObj = read(theirText, "returned");
     // No base entry means the shard did not exist when we sent the pack, so
     // there is no ancestor: an empty base makes every field of theirs an add.
+    // `runMerge` exempts an empty base from its schema-skew check for exactly
+    // this case - until 2026-09-06 it did not, and a file two people had each
+    // created independently took the whole return leg down with it.
     const baseObj = baseText !== undefined ? read(baseText, "sent") : {};
 
     const result = runMerge(baseObj, ours, theirsObj);

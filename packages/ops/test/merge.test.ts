@@ -470,6 +470,28 @@ describe("merge input errors", () => {
   it("an unknown schema is refused", () => {
     expect(() => runMerge({ schema: "nope" }, { schema: "nope" }, { schema: "nope" })).toThrow(MergeInputError);
   });
+
+  it("an ABSENT base is not skew: `{}` means the shard had no ancestor", () => {
+    // Both sides created the same file after the base was taken. There is no
+    // version to disagree with, and refusing it took a whole return leg down
+    // over one file (2026-09-06). The two adds merge as adds.
+    const result = runMerge({}, deck([card("c_1")]), deck([card("c_2")]));
+    eq(result.merged, deck([card("c_1"), card("c_2")]));
+    expect(result.conflicts).toEqual([]);
+  });
+
+  it("...and the same id, added differently on both sides, is added-both", () => {
+    const result = runMerge(
+      {}, deck([card("c_1", { title: "Ours" })]), deck([card("c_1", { title: "Theirs" })]));
+    expect(result.conflicts.map((c) => c.kind)).toEqual(["added-both"]);
+    expect(result.conflicts[0]!.base).toBeUndefined();
+  });
+
+  it("a base that is merely SCHEMALESS is still skew, not an absence", () => {
+    // The exemption is emptiness, not a missing key: a base with content and no
+    // schema is a malformed shard, and merging it would be a guess.
+    expect(() => runMerge({ cards: [] }, deck([]), deck([]))).toThrow(MergeInputError);
+  });
 });
 
 // ---------------------------------------------------------------------------
