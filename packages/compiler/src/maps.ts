@@ -20,6 +20,7 @@ import {
   backgroundsOf, bundleAssetPath, effectiveGameId, isSpatial, polygonOf,
 } from "@storylet-studio/model";
 import type { BundleBackground, BundleMap } from "@storylet-studio/model";
+import { boxMapOf } from "./project.js";
 import type { SourceProject } from "./project.js";
 
 /** One spatial group with something drawn on it: the walk both map builders
@@ -102,10 +103,9 @@ export function compileMaps(source: SourceProject): BundleMap[] | undefined {
  * Where a box's placed hands stand, as the bundle carries them
  * (design/engine-server.md 4.3).
  *
- * Read from the VIEW SIDECAR, which is the only place a position has ever been
- * kept, and translated to gameIds on the way out like everything else in this
- * block. That the compiler can see the sidecar at all is not new: `SourceBox.view`
- * has always been parsed, so nothing had to be threaded through for this.
+ * Read from the box's MAP SHARD (and, for one release, from the view shard that
+ * used to hold it: `boxMapOf` is the single reader that knows both addresses),
+ * and translated to gameIds on the way out like everything else in this block.
  *
  * Per BOX, not per group, because that is where the positions live: a box has one
  * set of sites and draws them on whichever of its maps is open, which is the rule
@@ -116,7 +116,7 @@ export function compileMaps(source: SourceProject): BundleMap[] | undefined {
  * Sorted by hand gameId so the bytes do not move when somebody reorders a shard.
  */
 function compileSites(box: SourceProject["boxes"][number]): NonNullable<BundleMap["sites"]> {
-  const placed = box.view?.map?.sites ?? {};
+  const placed = boxMapOf(box)?.sites ?? {};
   const sites: NonNullable<BundleMap["sites"]> = [];
   for (const hand of box.hands.hands) {
     const at = placed[hand.id];

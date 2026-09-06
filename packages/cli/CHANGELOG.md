@@ -19,6 +19,22 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Changed
+
+- **The box map moved into a shard of its own, `map.storyletmap`.** Where a box's hands stand
+  used to sit inside `view.storyletview` beside the deck canvases. It does not any more: a
+  hand's position ships in the bundle's `maps` block and is where a screen or a kiosk stands,
+  which makes it the designer's shape, while a deck's canvas is the author's working drawing.
+  One file could not be both. The compiled bundle is unchanged, byte for byte, so nothing a
+  game loads moved.
+
+  `storyletengine format` **is the migration**: it moves a map it finds in a view shard into
+  the box's map shard, and deletes a view shard that held nothing else. The compiler reads the
+  old address for one release and warns, naming that command; after the next release a map
+  left in a view shard is ignored. `pack`, `unpack --merge` and the merge driver all carry the
+  new extension, and `init` registers it in `.gitattributes`, `.editorconfig` and the VS Code
+  file associations it writes.
+
 ### Fixed
 
 - **`unpack --merge` no longer refuses the whole return leg over a file both authors created.**

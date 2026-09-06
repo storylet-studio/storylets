@@ -45,8 +45,9 @@ links to wrap into rows below it. Cards that enable each other in a loop share a
 and the strip says so.
 
 Positions live in `view.storyletview`, the
-[arrangement shard](/format/shards/#the-arrangement-layer), which holds positions and
-never content: delete it and you lose a layout, never a card.
+[arrangement shard](/format/shards/#the-two-arrangement-shards), which holds card
+positions and never content: delete it and you lose a layout, never a card. The map's
+sites are not in there; they have [their own shard](/storyletter/maps/#where-the-map-is-stored).
 
 Where you were looking is remembered per deck and restored when you come back.
 

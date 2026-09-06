@@ -104,7 +104,16 @@ If you want containment to mean something, use two tag groups, say a `region` gr
 
 ## Where the map is stored
 
-Positions live in `view.storyletview`, the arrangement shard, and nothing else does. Which
+Positions live in `map.storyletmap`, the box's map shard, and nothing else does. Which
 zone a site is in is *not* recorded there: that's the hand's binding, in
 `hands.storylethands`. So two people rearranging one map produce a position conflict, not
-a content one. See [The shards](/format/shards/#the-arrangement-layer).
+a content one. See [The shards](/format/shards/#the-two-arrangement-shards).
+
+A site is the one bit of arrangement that leaves the project: it ships in the bundle's
+`maps` block when you export with the map, because where a hand stands is where a screen
+or a kiosk stands. That's why the map has a file of its own rather than sharing one with
+the node canvas.
+
+Projects made before this split kept the map inside `view.storyletview`. Storyletter reads
+it there and moves it the first time you touch the map; `storyletengine format` moves the
+whole project at once.

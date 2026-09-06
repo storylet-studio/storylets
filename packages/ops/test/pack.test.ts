@@ -242,8 +242,20 @@ describe("pack", () => {
     // put a second, staler answer in the envelope.
     expect(names.some((n) => n.endsWith(".storyletsc"))).toBe(false);
     for (const n of names.filter((x) => x !== PACK_MANIFEST)) {
-      expect(n).toMatch(/\.storylet(proj|box|tags|hands|deck)$/);
+      expect(n).toMatch(/\.storylet(proj|box|tags|hands|deck|view|map|notes)$/);
     }
+  });
+
+  it("carries a box's map shard, which is a shard like any other", async () => {
+    // The extension list is `Object.values(SHARD_EXTENSIONS)`, so a new shard
+    // travels for free - and a delivery that quietly left the map behind would
+    // hand somebody a project whose kiosks stand nowhere.
+    const dir = scratch();
+    writeFileSync(join(dir, "encounters", "map.storyletmap"), canonicalStringify({
+      schema: "storylets/map@0", map: { sites: { h_1: { x: 5, y: 6 } } },
+    }));
+    const zip = await JSZip.loadAsync(await runPack(dir));
+    expect(Object.keys(zip.files)).toContain("encounters/map.storyletmap");
   });
 
   it("names the project in its manifest, with the file list sorted", async () => {

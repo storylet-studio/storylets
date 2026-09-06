@@ -5,7 +5,7 @@
 // store both feed this same shape.
 // ---------------------------------------------------------------------------
 
-import type { BoxShard, ContractShard, DeckShard, HandsShard, ProjectShard, PropertyDecl, ScalarValue, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
+import type { BoxMap, BoxShard, ContractShard, DeckShard, HandsShard, MapShard, ProjectShard, PropertyDecl, ScalarValue, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
 
 /** One shard as text: `path` is project-relative, posix separators. */
 export interface SourceFile {
@@ -80,11 +80,31 @@ export interface SourceBox {
    *  that honestly also means nothing which ignores arrangement (the compiler, the
    *  runtime, coverage, influence, every hand-built fixture) has to mention it. */
   view?: ViewShard;
+  /** The designer's map, when the box has one. Optional for the same reason the
+   *  view shard is, and read from the same box folder: a box that nobody has put
+   *  a hand on the map of has no file here. */
+  map?: MapShard;
   /** Documentation notes, when the box has any. Optional for the same reason the
    *  view sidecar is: most boxes have none, and nothing which ignores notes (the
    *  compiler, the runtime, every fixture) should have to mention them. */
   notes?: NotesShard;
 }
+
+/**
+ * The box's map, wherever it is written.
+ *
+ * ONE reader for the compatibility window (design/engine-server.md 9.1 point 5).
+ * The map shard is the address; `ViewShard.map` is where every project written
+ * before 2026-09-06 keeps it, and is read here until the next release and never
+ * written. The map shard wins when a box somehow has both, which is what
+ * `parseProjectFiles` warns about.
+ *
+ * Exported because three layers ask the same question - the compiler for the
+ * bundle's `maps` block, ops for the editor's writes, and the formatter for the
+ * migration - and a second copy of this expression is how the two locations
+ * start disagreeing.
+ */
+export const boxMapOf = (box: SourceBox): BoxMap | undefined => box.map?.map ?? box.view?.map;
 
 /** One installation contract, as it sits in `contracts/`. */
 export interface SourceContract {

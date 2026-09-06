@@ -26,7 +26,7 @@ import {
   declareProperty, deleteCommentMessage, repointTag,
 } from "./mutate.js";
 import { parseSource } from "@storylet-studio/compiler";
-import type { ViewShard } from "@storylet-studio/model";
+import type { MapShard, ViewShard } from "@storylet-studio/model";
 import { isSpatial, polygonOf, backgroundsOf, PLACE_GROUP } from "@storylet-studio/model";
 import { commentsOf, markOf } from "@storylet-studio/model";
 import type { Comment, TagGroup } from "@storylet-studio/model";
@@ -1109,7 +1109,7 @@ describe("hand template mutations", () => {
 
 describe("the map (spatial tag groups)", () => {
   // #55 slice 1 and 2. What matters here is which FILE moves and what survives:
-  // geometry lives in the tags shard, sites in the arrangement sidecar, and an
+  // geometry lives in the tags shard, sites in the box's map shard, and an
   // ordinary edit by an editor that has never heard of geometry must not erase it.
   const zoneShape = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }];
   const groupIn = (session: ProjectSession): TagGroup =>
@@ -1138,9 +1138,10 @@ describe("the map (spatial tag groups)", () => {
     setZonePolygon(session, encBox, "d_zone", "v_docks", zoneShape);
     const tags = readFileSync(join(session.loaded.dir, "encounters", "tags.storylettags"), "utf8");
     expect(tags).toContain("polygon");
-    // A zone is not content: no deck, and no arrangement sidecar either.
+    // A zone is not content: no deck, and neither arrangement shard either.
     expect(readFileSync(dockDeckFile(session), "utf8")).toBe(before);
     expect(existsSync(join(session.loaded.dir, "encounters", "view.storyletview"))).toBe(false);
+    expect(existsSync(join(session.loaded.dir, "encounters", "map.storyletmap"))).toBe(false);
   });
 
   it("keeps a zone's outline through an ordinary tag-group edit", () => {
@@ -1162,9 +1163,11 @@ describe("the map (spatial tag groups)", () => {
     expect(polygonOf(group.tags[0]!)).toEqual(zoneShape);
   });
 
-  /** The sidecar, read back with the project's own parser (the shards are JSON5). */
-  const sidecarOf = (session: ProjectSession): { map?: { sites?: Record<string, unknown> } } =>
-    parseSource(readFileSync(join(session.loaded.dir, "encounters", "view.storyletview"), "utf8")) as
+  /** The MAP shard, read back with the project's own parser (the shards are
+   *  JSON5). Its own file since 2026-09-06: a site is the designer's shape, and
+   *  the canvases next door are the author's (design/engine-server.md 9.1). */
+  const mapShardOf = (session: ProjectSession): { map?: { sites?: Record<string, unknown> } } =>
+    parseSource(readFileSync(join(session.loaded.dir, "encounters", "map.storyletmap"), "utf8")) as
       { map?: { sites?: Record<string, unknown> } };
   const handsOf = (session: ProjectSession) =>
     session.loaded.source!.boxes.find((b) => b.box.box.id === encBox)!.hands.hands;
@@ -1179,14 +1182,16 @@ describe("the map (spatial tag groups)", () => {
       [{ x: 220, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 200 }, { x: 220, y: 200 }]);
   };
 
-  it("writes a site to the sidecar as a POSITION, and nothing else", () => {
+  it("writes a site to the map shard as a POSITION, and nothing else", () => {
     // Which zone it is in lives on the hand. A copy here could only go on to
     // disagree with it.
     const session = scratchProject();
     const hand = handsOf(session)[0]!.id;
     const result = moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 40, y: 60 }]);
     expect("error" in result).toBe(false);
-    expect(sidecarOf(session).map?.sites?.[hand]).toEqual({ x: 40, y: 60 });
+    expect(mapShardOf(session).map?.sites?.[hand]).toEqual({ x: 40, y: 60 });
+    // And never in the view shard, which is where it used to land.
+    expect(existsSync(join(session.loaded.dir, "encounters", "view.storyletview"))).toBe(false);
   });
 
   it("REBINDS the hand when its site is dropped in another zone", () => {
@@ -1465,9 +1470,9 @@ describe("the map (spatial tag groups)", () => {
     const undone = undo(session);
     expect(undone).not.toBeNull();
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
-    // The sidecar did not exist before the drag, so undoing takes the whole file
-    // back out rather than leaving an empty husk of a map behind.
-    expect(existsSync(join(session.loaded.dir, "encounters", "view.storyletview"))).toBe(false);
+    // The map shard did not exist before the drag, so undoing takes the whole
+    // file back out rather than leaving an empty husk of a map behind.
+    expect(existsSync(join(session.loaded.dir, "encounters", "map.storyletmap"))).toBe(false);
   });
 
   it("will not move one hand off a binding its TEMPLATE owns", () => {
@@ -1484,7 +1489,7 @@ describe("the map (spatial tag groups)", () => {
     const moved = moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 250, y: 50 }]);
     expect(moved).toMatchObject({ rebound: [] });
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });   // untouched
-    expect(sidecarOf(session).map?.sites?.[hand]).toEqual({ x: 250, y: 50 });
+    expect(mapShardOf(session).map?.sites?.[hand]).toEqual({ x: 250, y: 50 });
   });
 
   it("is one undo step per shape", () => {
@@ -1545,12 +1550,17 @@ describe("tag group mutations", () => {
 });
 
 describe("canvas furniture", () => {
-  // #56. The interesting part is not the drawing (ops/view.test.ts sites the
-  // format); it is that furniture is ARRANGEMENT: it touches the sidecar and
-  // nothing else, and its undo steps follow the gesture rather than the entity.
+  // #56. The interesting part is not the drawing (ops/view.test.ts and
+  // ops/map.test.ts pin the format); it is that furniture is ARRANGEMENT: it
+  // touches an arrangement shard and nothing else, and its undo steps follow the
+  // gesture rather than the entity. WHICH arrangement shard depends on the
+  // canvas: a deck's frames are the author's and land in the view shard, the
+  // map's are the designer's and land in the map shard (9.1 point 5).
   const frame = { id: "r_1", x: 0, y: 0, w: 120, h: 60, title: "Act one" };
   const sidecar = (session: ProjectSession): string =>
     join(session.loaded.dir, "encounters", "view.storyletview");
+  const mapShard = (session: ProjectSession): string =>
+    join(session.loaded.dir, "encounters", "map.storyletmap");
 
   it("writes the sidecar and no content shard", () => {
     const session = scratchProject();
@@ -1569,9 +1579,11 @@ describe("canvas furniture", () => {
       { frames: [frame] }, "Draw a frame");
     setCanvasFurniture(session, encBox, { kind: "map" },
       { frames: [onMap] }, "Draw a frame");
-    const shard = parseSource(readFileSync(sidecar(session), "utf8")) as ViewShard;
-    expect(shard.canvases![docks]!.frames).toEqual([frame]);
-    expect(shard.map!.frames).toEqual([onMap]);
+    const view = parseSource(readFileSync(sidecar(session), "utf8")) as ViewShard;
+    expect(view.canvases![docks]!.frames).toEqual([frame]);
+    expect(view.map).toBeUndefined();
+    const map = parseSource(readFileSync(mapShard(session), "utf8")) as MapShard;
+    expect(map.map.frames).toEqual([onMap]);
   });
 
   it("a drag is one undo step however many frames it took; a command is its own", () => {
@@ -1582,17 +1594,17 @@ describe("canvas furniture", () => {
       setCanvasFurniture(session, encBox, { kind: "map" },
         { frames: [{ ...frame, x }] }, "Move", "furniture:move");
     }
-    const moved = () => (parseSource(readFileSync(sidecar(session), "utf8")) as ViewShard).map!.frames![0]!;
+    const moved = () => (parseSource(readFileSync(mapShard(session), "utf8")) as MapShard).map.frames![0]!;
     expect(moved().x).toBe(30);
     // One undo takes the whole drag back to where it started, not to frame two.
     undo(session);
     expect(moved().x).toBe(0);
     // And a second undo takes the frame away entirely: drawing it was its own
-    // step. The box had no sidecar before it, so undoing back past the first
+    // step. The box had no map shard before it, so undoing back past the first
     // piece of furniture leaves NO FILE rather than an empty one - the same
     // "leave no husk" rule the writer follows going forwards.
     undo(session);
-    expect(existsSync(sidecar(session))).toBe(false);
+    expect(existsSync(mapShard(session))).toBe(false);
   });
 
   it("says so rather than throwing when the box has gone", () => {
@@ -1604,9 +1616,44 @@ describe("canvas furniture", () => {
   it("writes nothing when the furniture has not changed", () => {
     const session = scratchProject();
     setCanvasFurniture(session, encBox, { kind: "map" }, { frames: [frame] }, "Draw a frame");
-    const before = readFileSync(sidecar(session), "utf8");
+    const before = readFileSync(mapShard(session), "utf8");
     setCanvasFurniture(session, encBox, { kind: "map" }, { frames: [frame] }, "Draw a frame");
-    expect(readFileSync(sidecar(session), "utf8")).toBe(before);
+    expect(readFileSync(mapShard(session), "utf8")).toBe(before);
+  });
+
+  // --- the migration, from the app's side ------------------------------------
+  //
+  // A project written before the split keeps its map under `map` in the view
+  // shard. Storyletter never writes it back there: the first map edit of a box
+  // moves the block, in the same commit and therefore the same undo step.
+  it("moves a map out of an old view shard on the first map edit", () => {
+    const session = scratchProject();
+    const hands = session.loaded.source!.boxes.find((b) => b.box.box.id === encBox)!.hands.hands;
+    const hand = hands[0]!.id;
+    writeFileSync(sidecar(session), canonicalStringify({
+      schema: "storylets/view@0",
+      canvases: { [docks]: { cards: { c_1: { x: 1, y: 2 } } } },
+      map: { sites: { [hand]: { x: 5, y: 6 } } },
+    }));
+    const reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    const live = reopened.session;
+
+    setCanvasFurniture(live, encBox, { kind: "map" }, { frames: [frame] }, "Draw a frame");
+
+    const map = parseSource(readFileSync(mapShard(live), "utf8")) as MapShard;
+    expect(map.map.sites).toEqual({ [hand]: { x: 5, y: 6 } });
+    expect(map.map.frames).toEqual([frame]);
+    const view = parseSource(readFileSync(sidecar(live), "utf8")) as ViewShard;
+    expect(view.map).toBeUndefined();
+    // The author's canvas is left exactly where it was.
+    expect(view.canvases![docks]!.cards).toEqual({ c_1: { x: 1, y: 2 } });
+
+    // One gesture, one undo: the move rides the edit that triggered it.
+    undo(live);
+    const back = parseSource(readFileSync(sidecar(live), "utf8")) as ViewShard;
+    expect(back.map!.sites).toEqual({ [hand]: { x: 5, y: 6 } });
+    expect(existsSync(mapShard(live))).toBe(false);
   });
 });
 

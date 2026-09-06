@@ -1,5 +1,5 @@
 {
-  schema: "storylets/view@0",
+  schema: "storylets/map@0",
   map: {
     sites: {
       h_back_room: {

@@ -1,13 +1,13 @@
 ---
 title: The shards
-description: What each file in a .storylets project holds - the project shard, the box shard, tags, hands, decks and the view - with real examples.
+description: What each file in a .storylets project holds - the project shard, the box shard, tags, hands, decks, the view and the map - with real examples.
 sidebar:
   label: The shards
 ---
 
-A project is made of seven kinds of file, one extension each. Every one is JSON5 with trailing
-commas, and every expression is stored as plain source text, never as a syntax tree. Six of
-them are yours; the seventh, the installation contract, is written by a venue's server.
+A project is made of eight kinds of file, one extension each. Every one is JSON5 with trailing
+commas, and every expression is stored as plain source text, never as a syntax tree. Seven of
+them are yours; the eighth, the installation contract, is written by a venue's server.
 
 | File | Extension | Holds |
 |---|---|---|
@@ -16,13 +16,14 @@ them are yours; the seventh, the installation contract, is written by a venue's 
 | tags | `tags.storylettags` | tag groups: their tags and each tag's properties |
 | hands | `hands.storylethands` | hand templates and hands |
 | deck | `<name>.storyletdeck` | the cards, and the deck's own gate and `@deck` properties |
-| view | `view.storyletview` | the arrangement layer: where things sit on a canvas or a map, and nothing about what they are |
+| view | `view.storyletview` | the canvases: where cards sit on a deck's node canvas, and nothing about what they are |
+| map | `map.storyletmap` | the box's map: where its hands stand in space |
 | contract | `contracts/<installation>.storyletcontract` | what a venue this project is installed at depends on. Not yours: the server writes it |
 
 ### How they sit on disk
 
-<svg viewBox="0 0 620 268" role="img" aria-labelledby="sy-tree-title" style="width:100%;height:auto;font-family:var(--sl-font-mono,monospace)">
-  <title id="sy-tree-title">A project folder: the .storyletproj file at the root, then one folder per box containing box.storyletbox, tags.storylettags, hands.storylethands, an optional view.storyletview, and a decks folder holding one .storyletdeck file per deck. A dist folder holds the compiled .storyletsc bundle.</title>
+<svg viewBox="0 0 620 290" role="img" aria-labelledby="sy-tree-title" style="width:100%;height:auto;font-family:var(--sl-font-mono,monospace)">
+  <title id="sy-tree-title">A project folder: the .storyletproj file at the root, then one folder per box containing box.storyletbox, tags.storylettags, hands.storylethands, an optional view.storyletview and map.storyletmap, and a decks folder holding one .storyletdeck file per deck. A dist folder holds the compiled .storyletsc bundle.</title>
   <g font-size="12.5" fill="var(--sl-color-white)">
     <rect x="8" y="10" width="252" height="26" rx="6" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 14%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
     <text x="20" y="28">the-hamlet.storylets/</text>
@@ -39,17 +40,19 @@ them are yours; the seventh, the installation contract, is written by a venue's 
     <text x="62" y="162">hands.storylethands</text>
     <text x="290" y="162" fill="var(--sl-color-gray-3)" font-size="11.5">hand templates and hands</text>
     <text x="62" y="184">view.storyletview</text>
-    <text x="290" y="184" fill="var(--sl-color-gray-3)" font-size="11.5">positions only, and safe to lose</text>
-    <text x="62" y="206">decks/</text>
-    <text x="84" y="228">arrival.storyletdeck</text>
-    <text x="290" y="228" fill="var(--sl-color-gray-3)" font-size="11.5">one file per deck: the cards live inside</text>
-    <text x="40" y="256" fill="var(--sl-color-gray-2)">dist/the-hamlet.storyletsc</text>
-    <text x="290" y="256" fill="var(--sl-color-gray-3)" font-size="11.5">the compiled bundle your game loads</text>
+    <text x="290" y="184" fill="var(--sl-color-gray-3)" font-size="11.5">card positions, and safe to lose</text>
+    <text x="62" y="206">map.storyletmap</text>
+    <text x="290" y="206" fill="var(--sl-color-gray-3)" font-size="11.5">where the hands stand on the map</text>
+    <text x="62" y="228">decks/</text>
+    <text x="84" y="250">arrival.storyletdeck</text>
+    <text x="290" y="250" fill="var(--sl-color-gray-3)" font-size="11.5">one file per deck: the cards live inside</text>
+    <text x="40" y="278" fill="var(--sl-color-gray-2)">dist/the-hamlet.storyletsc</text>
+    <text x="290" y="278" fill="var(--sl-color-gray-3)" font-size="11.5">the compiled bundle your game loads</text>
   </g>
   <g stroke="var(--sl-color-gray-4)" fill="none">
-    <path d="M22 42 V 252 M22 54 H 36 M22 84 H 26 M22 250 H 36"/>
-    <path d="M44 102 V 222 M44 114 H 58 M44 136 H 58 M44 158 H 58 M44 180 H 58 M44 202 H 58"/>
-    <path d="M66 212 V 224 H 80"/>
+    <path d="M22 42 V 274 M22 54 H 36 M22 84 H 26 M22 272 H 36"/>
+    <path d="M44 102 V 244 M44 114 H 58 M44 136 H 58 M44 158 H 58 M44 180 H 58 M44 202 H 58 M44 224 H 58"/>
+    <path d="M66 234 V 246 H 80"/>
   </g>
 </svg>
 
@@ -57,15 +60,26 @@ A deck is one file and a box is one folder, so two people adding decks to the sa
 different files and never meet. That's most of why everyday edits merge on their own; see
 [Version control](/setup/version-control/) for the rest.
 
-### The arrangement layer
+### The two arrangement shards
 
-`view.storyletview` is the one shard you can ignore. It holds positions (where a card sits
-on a deck's canvas, where a hand's site sits on a map) and nothing else. Which zone a site
-belongs to isn't recorded here: that's the hand's own tag binding, in `hands.storylethands`.
-Delete the file and you lose a layout, never content.
+Positions live apart from content, in two shards of their own, and neither holds anything
+about what a thing *is*.
+
+`view.storyletview` is the one shard you can ignore: it holds where a card sits on a deck's
+node canvas, and the frames drawn round them. Delete the file and you lose a layout, never
+content.
+
+`map.storyletmap` holds where a box's hands stand on its map. That one is not safe to lose,
+because a site leaves the project: it ships in the bundle's `maps` block when you export
+with the map, and it's where a screen or a kiosk stands. Which zone a site belongs to isn't
+recorded here either: that's the hand's own tag binding, in `hands.storylethands`.
 
 Because of that split, two people arranging the same canvas can only produce a position
 conflict, never a content conflict.
+
+The map lived inside `view.storyletview` until September 2026. It is still read from there,
+for one release: Storyletter moves it the first time you touch the map, and
+`storyletengine format` moves a whole project at once.
 
 The fixed basenames (`box`, `tags`, `hands`) are kept even though the extension already
 carries the type, so a box folder reads the same in a file browser and a diff.

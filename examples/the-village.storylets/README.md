@@ -21,7 +21,7 @@ storyletengine coverage the-village.storylets --runs 40 --seed 1
 - **A map with five regions**, each carrying its real outline from the original,
   each with its background picture from the original demo game behind it
   (`village/assets/`), and all thirteen sites standing where they stood in the
-  original (`view.storyletview`), so the map reads as the world rather than as
+  original (`village/map.storyletmap`), so the map reads as the world rather than as
   five empty rectangles.
 - **Acts as deck gates.** Every deck is single-act, so the old model's `actId`
   needs no concept of its own here: 13 deck conditions replace what would have

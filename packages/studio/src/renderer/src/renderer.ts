@@ -45,7 +45,7 @@ import {
 } from "./views.js";
 import { cardHasContent, crumbTrail, navId, setCameFrom, vcKeys } from "./views.js";
 import type { Focus, ViewActions } from "./views.js";
-import { arrangingLocked, canvasLocked, foldVc, lockControls, lockNotice, paintVcBadges, shapeNotice } from "./vc-view.js";
+import { foldVc, lockControls, lockNotice, paintVcBadges, shapeNotice } from "./vc-view.js";
 import {
   renderCardWorkspace, renderTemplateWorkspace, renderHandWorkspace, renderTagGroupWorkspace,
   renderBoxTabBody, renderDeckTabBody, docTabFor, expandOutcome, setDocTab, resetDocTabMemory,
@@ -644,10 +644,10 @@ const actions: ViewActions = {
             void refreshMarkers(canvasId({ kind: "deck", deck: deck.id }));
           })();
         },
-      // Where the cards SIT is the shape, so an author's key arranges nothing
-      // here. The notice above the canvas says so, and this is what makes the
-      // gestures agree with it.
-      }, { readOnly: arrangingLocked(remote?.role) });
+      // Arranging a deck's canvas is the AUTHOR's, and has been since the map
+      // moved to a shard of its own (design/engine-server.md 9.1 point 5). The
+      // option stays because the canvas may yet be somebody else's to hold.
+      });
       // The canvas hands back its own marker repaint, so a refresh does not have
       // to know which canvas is mounted.
       repaintMarkers = () => nodeView?.repaintMarkers();
@@ -1454,9 +1454,6 @@ function applyDocVc(): void {
   // The role's rule rides the same mechanism as a held shard, because it is
   // the same thing to the author: this page does not type, and here is why.
   const shape = shapeReadOnly();
-  // The canvas is greyed rather than the document around it: the deck IS the
-  // author's, and only where its cards sit is the designer's (see vc-view).
-  const canvas = canvasLocked(host, remote?.role);
   lockControls(host, holders.size > 0 || shape);
   // A frame of the page that writes a DIFFERENT shard (the box page's Hand
   // templates and Tags tabs) takes its state from that shard instead.
@@ -1469,7 +1466,7 @@ function applyDocVc(): void {
   docLocked = docHolders.length > 0;
   host.querySelector(":scope > .vc-lock")?.remove();
   if (docLocked) host.prepend(lockNotice(docHolders));
-  else if (shape || canvas) host.prepend(shapeNotice());
+  else if (shape) host.prepend(shapeNotice());
 }
 
 /** The topbar chip: the open page's state, in the same words as the badge and

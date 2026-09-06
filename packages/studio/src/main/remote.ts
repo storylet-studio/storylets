@@ -120,10 +120,20 @@ export function clearEdits(dir: string, revision: number): void {
 
 // --- which shards a role may change ------------------------------------------------
 
-/** The shard extensions an author's key may change: the writer's cards and the
- *  comment sidecar. Everything else - the project file, a box, its tags, its
- *  hands, its templates and the arrangement sidecar - is the shape. */
-const AUTHOR_SHARDS: readonly string[] = [SHARD_EXTENSIONS.deck, SHARD_EXTENSIONS.notes];
+/** The shard extensions an author's key may change: the writer's cards, the
+ *  comment sidecar, and the canvases they arrange them on. Everything else - the
+ *  project file, a box, its tags, its hands, its templates and the MAP - is the
+ *  shape.
+ *
+ *  The view shard joined this list on 2026-09-06, when the map moved out of it
+ *  (design/engine-server.md 9.1 point 5). Until then one file held both a
+ *  working drawing and the positions a venue provisions its kiosks against, and
+ *  the stricter reading was the only safe one; now that the map has a file of
+ *  its own, refusing an author their own canvas would be refusing them nothing
+ *  the designer cares about. */
+const AUTHOR_SHARDS: readonly string[] = [
+  SHARD_EXTENSIONS.deck, SHARD_EXTENSIONS.notes, SHARD_EXTENSIONS.view,
+];
 
 const SHARD_EXTS: readonly string[] = Object.values(SHARD_EXTENSIONS);
 

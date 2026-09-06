@@ -59,7 +59,8 @@ A project is a **folder**, not a file, so that a team can merge it.
 | `.storylettags` | Tag groups, their tags and each tag's properties, and map outlines | yes |
 | `.storylethands` | Hand templates and hands | yes |
 | `.storyletdeck` | One deck: its cards, its gate and its `@deck` properties | yes |
-| `.storyletview` | The arrangement layer: where things sit on a canvas or a map, and nothing about what they are | yes, and safe to lose |
+| `.storyletview` | The author's canvases: where cards sit on a deck's node canvas, and nothing about what they are | yes, and safe to lose |
+| `.storyletmap` | The designer's map: where a box's hands stand in space | yes |
 | `.storyletnotes` | Documentation notes and review comments | yes |
 | `.storyletsc` | The compiled bundle your game loads (`export` output) | generated |
 | `.storyletpack` | A packed portable project (`pack` output, a zip) | generated |

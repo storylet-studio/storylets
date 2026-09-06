@@ -10,3 +10,4 @@ export type { LadderItem, LadderItemKind } from "./play-ladder.js";
 export type { SpatialGroup } from "./maps.js";
 export { loadProjectFiles, walkProjectFiles } from "./load.js";
 export type { Issue, IssueFix, SourceFile, SourceProject, SourceBox, SourceContract, SourceDeck } from "./project.js";
+export { boxMapOf } from "./project.js";

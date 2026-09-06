@@ -6,11 +6,11 @@
 // ---------------------------------------------------------------------------
 
 import {
-  BOX_SCHEMA, CONTRACTS_DIR, CONTRACT_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, PROJECT_SCHEMA, NOTES_SCHEMA,
+  BOX_SCHEMA, CONTRACTS_DIR, CONTRACT_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, MAP_SCHEMA, PROJECT_SCHEMA, NOTES_SCHEMA,
   SHARD_EXTENSIONS, TAGS_SCHEMA, VIEW_SCHEMA,
   isCaseOnlyPropertyName,
 } from "@storylet-studio/model";
-import type { BoxShard, ContractShard, DeckShard, HandsShard, ProjectShard, PropertyDecl, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
+import type { BoxShard, ContractShard, DeckShard, HandsShard, MapShard, ProjectShard, PropertyDecl, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
 import { parseSource } from "./serialize.js";
 import type { Issue, SourceBox, SourceContract, SourceFile, SourceProject } from "./project.js";
 
@@ -150,13 +150,30 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
     // merge tooling see it as an ordinary shard.
     const viewFile = find(`view${SHARD_EXTENSIONS.view}`);
     const viewParsed = viewFile ? parseShard(viewFile, VIEW_SCHEMA, issues) : undefined;
+    // The designer's map. Optional in the same way, and split out of the view
+    // shard on 2026-09-06 (design/engine-server.md 9.1 point 5).
+    const mapFile = find(`map${SHARD_EXTENSIONS.map}`);
+    const mapParsed = mapFile ? parseShard(mapFile, MAP_SCHEMA, issues) : undefined;
     // The comment sidecar: optional in the same way, and read here for the same
     // reason - so the editor and the merge tooling treat it as an ordinary shard
     // rather than as a file only one feature knows about.
     const notesFile = find(`notes${SHARD_EXTENSIONS.notes}`);
     const notesParsed = notesFile ? parseShard(notesFile, NOTES_SCHEMA, issues) : undefined;
     if ((tagsFile && !tagsParsed) || (handsFile && !handsParsed) || (viewFile && !viewParsed)
-      || (notesFile && !notesParsed)) continue;
+      || (mapFile && !mapParsed) || (notesFile && !notesParsed)) continue;
+
+    // The map's old address, read for one release. Warned about rather than
+    // repaired here, because a reader may not write: `storyletengine format` and
+    // Storyletter's own map writes are what actually move it.
+    const staleViewMap = (viewParsed?.value as { map?: unknown } | undefined)?.map !== undefined;
+    if (staleViewMap && viewFile) {
+      issues.push({
+        severity: "warning", path: viewFile.path, field: "map",
+        message: mapParsed
+          ? `the map lives in map${SHARD_EXTENSIONS.map} now, and the view shard still carries a copy; the map shard is used and this copy is ignored; run \`storyletengine format\` to remove it`
+          : "this project's map lives in the view shard; open it in Storyletter or run `storyletengine format` to move it; the view shard's map is ignored after the next release",
+      });
+    }
 
     const decks = [];
     let decksOk = true;
@@ -180,6 +197,7 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
         || file.path === tagsFile?.path
         || file.path === handsFile?.path
         || file.path === viewFile?.path
+        || file.path === mapFile?.path
         || file.path === notesFile?.path
         || file.path.startsWith(`${folder}/decks/`);
       if (!known) {
@@ -193,6 +211,7 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
       tags: (tagsParsed?.value as unknown as TagsShard) ?? { schema: TAGS_SCHEMA, groups: [] },
       hands: (handsParsed?.value as unknown as HandsShard) ?? { schema: HANDS_SCHEMA, templates: [], hands: [] },
       ...(viewParsed ? { view: viewParsed.value as unknown as ViewShard } : {}),
+      ...(mapParsed ? { map: mapParsed.value as unknown as MapShard } : {}),
       ...(notesParsed ? { notes: notesParsed.value as unknown as NotesShard } : {}),
       decks,
     });

@@ -5,8 +5,9 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  arrangingLocked, canvasLocked, foldVc, lockControls, lockNotice, paintVcBadges, shapeNotice, vcBadgeFor,
+  foldVc, lockControls, lockNotice, paintVcBadges, shapeNotice, vcBadgeFor,
 } from "./vc-view.js";
+import * as vcView from "./vc-view.js";
 import type { ShardVcDto } from "../../shared/api.js";
 
 const snapshot = (...shards: ShardVcDto[]): Map<string, ShardVcDto> =>
@@ -164,22 +165,18 @@ describe("the shape, under the key it was pulled with", () => {
     expect(shapeNotice().textContent).toContain("pull as designer to change the shape");
   });
 
-  it("locks the arranging for an author's key and nobody else's", () => {
-    expect(arrangingLocked("author")).toBe(true);
-    expect(arrangingLocked("designer")).toBe(false);
-    // A project that never came from a server has no role and no rule.
-    expect(arrangingLocked(undefined)).toBe(false);
-  });
-
-  it("wears the notice only where a canvas of that kind is actually open", () => {
-    const centre = document.createElement("div");
-    // A card, a hand, a list: an author edits all of these, canvas or no canvas.
-    expect(canvasLocked(centre, "author")).toBe(false);
-    const canvas = document.createElement("div");
-    canvas.className = "nodeview";
-    centre.append(canvas);
-    expect(canvasLocked(centre, "author")).toBe(true);
-    expect(canvasLocked(centre, "designer")).toBe(false);
-    expect(canvasLocked(centre, undefined)).toBe(false);
+  it("no longer holds a rule of its own about a canvas", () => {
+    // `arrangingLocked` and `canvasLocked` greyed a deck's node canvas under an
+    // author's key, because where a card sat lived in the same shard as where a
+    // hand stood. The map has its own shard now (design/engine-server.md 9.1
+    // point 5), so the canvas is the author's and this module says nothing about
+    // it; the map is on the box page, which `docIsShape` already reads as the
+    // designer's, and `refuseWrite` refuses with the same sentence.
+    //
+    // Pinned as an ABSENCE rather than deleted, because the two names coming
+    // back would mean the split had been quietly undone.
+    const surface = vcView as Record<string, unknown>;
+    expect(surface["arrangingLocked"]).toBeUndefined();
+    expect(surface["canvasLocked"]).toBeUndefined();
   });
 });

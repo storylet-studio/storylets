@@ -1,0 +1,19 @@
+{
+  schema: "storylets/map@0",
+  map: {
+    sites: {
+      h_forge: {
+        x: 233,
+        y: 142,
+      },
+      h_inn: {
+        x: 232,
+        y: 179,
+      },
+      h_tree: {
+        x: 547,
+        y: 226,
+      },
+    },
+  },
+}

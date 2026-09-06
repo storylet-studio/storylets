@@ -14,7 +14,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import {
-  SHARD_EXTENSIONS, PROJECT_SCHEMA, BOX_SCHEMA, TAGS_SCHEMA, HANDS_SCHEMA,
+  SHARD_EXTENSIONS, PROJECT_SCHEMA, BOX_SCHEMA, MAP_SCHEMA, TAGS_SCHEMA, HANDS_SCHEMA,
   DECK_SCHEMA, VIEW_SCHEMA, NOTES_SCHEMA, CONTRACT_SCHEMA,
 } from "@storylet-studio/model";
 import type { ConflictKind } from "../src/merge.js";
@@ -519,8 +519,8 @@ describe("the merge specs cannot drift from the model", () => {
     // return leg down - not just its own file.
     const schemas: Record<keyof typeof SHARD_EXTENSIONS, string> = {
       project: PROJECT_SCHEMA, box: BOX_SCHEMA, tags: TAGS_SCHEMA,
-      hands: HANDS_SCHEMA, deck: DECK_SCHEMA, view: VIEW_SCHEMA, notes: NOTES_SCHEMA,
-      contract: CONTRACT_SCHEMA,
+      hands: HANDS_SCHEMA, deck: DECK_SCHEMA, view: VIEW_SCHEMA, map: MAP_SCHEMA,
+      notes: NOTES_SCHEMA, contract: CONTRACT_SCHEMA,
     };
     // Every extension is named here, so a NEW one fails this line first.
     expect(Object.keys(schemas).sort()).toEqual(Object.keys(SHARD_EXTENSIONS).sort());

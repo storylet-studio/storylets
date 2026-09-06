@@ -10,11 +10,17 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **The map is its own shard now, and the node canvas is the author's.** Where a box's hands stand has moved out of `view.storyletview` into `map.storyletmap` beside it (design/engine-server.md 9.1 point 5): a site ships in the bundle and is where a screen or a kiosk stands, so it is the shape, while a deck's canvas never leaves the project folder. Opening a project written before the split changes nothing on screen; the map moves itself the first time you touch it, in the same undo step as the edit that moved it, and never goes back. `storyletengine format` moves a whole project at once. The compiled bundle is unchanged.
+
+  Under an author's key that settles which canvas is read-only: **the node canvas is yours to arrange**, and the map is the designer's, refused with the same sentence as the rest of the shape.
+
 ### Added
 
 - **File ▸ Connect to a server…**, which asks for an address and a code. With both, the project is fetched and opened, and a **Server** menu appears for that project with Pull, Push… and a line saying where it stands. Pull takes the latest into the project by id, leaving `.storyletconflict` sidecars where the two disagree; Push sends it back and shows what came of it. Edits the far end has not seen are counted in that line and in the window title, and the app asks before quitting or closing over them. A project that did not come from a server has none of this.
 
-- **Push asks first**: a note for the revision list, and, when the far end refuses because the change breaks something it depends on, one tick per refusal in its own words before it will send again. Under a key that may not change the shape, the node canvas and Project Settings open read-only with the reason on them, instead of letting an edit start and refusing it on save. A `.storyletpack` opened from the desktop makes the same offer File ▸ Open Storyletpack makes.
+- **Push asks first**: a note for the revision list, and, when the far end refuses because the change breaks something it depends on, one tick per refusal in its own words before it will send again. Under a key that may not change the shape, the shape pages open read-only with the reason on them, instead of letting an edit start and refusing it on save. A `.storyletpack` opened from the desktop makes the same offer File ▸ Open Storyletpack makes.
 
 ## [0.6.0] - 2026-09-06
 

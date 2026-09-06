@@ -42,18 +42,17 @@ export const shapeNotice = (): HTMLElement => el("div", { className: "vc-lock" }
   el("span", { className: "vc-lock-glyph", text: icon.readOnly }),
   el("span", { text: "Read-only: pull as designer to change the shape." }));
 
-/**
- * May this role arrange a canvas?
- *
- * WHERE THINGS SIT IS THE SHAPE. A card's place on the node canvas lands in the
- * box's `.storyletview` shard, which an author's key may not change, while the
- * cards on that same canvas are the author's to write all day. So this greys
- * the arranging and nothing else: no drag, no frame, no arrange.
- */
-export const arrangingLocked = (role: string | undefined): boolean => role === "author";
-
-/** ...and is a canvas of that kind on screen right now? What decides whether
- *  the document wears the notice, since the canvas sits inside a document that
- *  is otherwise perfectly writable. */
-export const canvasLocked = (centre: ParentNode, role: string | undefined): boolean =>
-  arrangingLocked(role) && centre.querySelector(".nodeview") !== null;
+// THE ARRANGING RULE MOVED, and left nothing behind here (2026-09-06,
+// design/engine-server.md 9.1 point 5).
+//
+// `arrangingLocked` and `canvasLocked` used to grey a deck's node canvas under an
+// author's key, because where a card sat landed in the same shard as where a
+// hand stood, and a hand's position is the shape: it ships in the bundle and is
+// where a venue's kiosk stands. One file, so the stricter reading governed both.
+//
+// The map now has a shard of its own. What is left of the view shard is the
+// author's working drawing, and greying it would refuse them something no
+// designer cares about; the map, meanwhile, is only ever on the BOX page, which
+// `docIsShape` in renderer.ts already reads as the designer's, and whose writes
+// `refuseWrite` in main/remote.ts refuses with the same sentence. So both halves
+// of the old rule are still enforced, by the two rules that were already there.

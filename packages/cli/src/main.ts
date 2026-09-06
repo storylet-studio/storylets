@@ -13,7 +13,7 @@
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { writeBinaryFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
+import { deleteFile, writeBinaryFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
 import {
   canonicalStringify, conflictSidecar, loadProject, parseFlagValue, parseSource,
   proposeCoverage, runAsk, runCoverage, runExport, runFormat, runInit, runMerge,
@@ -38,7 +38,8 @@ Usage:
                                       narrated starters, each teaching a chapter)
   storyletengine validate [path]      Validate a project: the publish gate, bundle
                                       staleness, canonical form
-  storyletengine format [path]        Rewrite shards to canonical form (alias: fmt)
+  storyletengine format [path]        Rewrite shards to canonical form, and move a
+                                     box map out of an old view shard (alias: fmt)
                  [--check]            Report what would change; write nothing (for CI)
   storyletengine export [path]        Compile to the .storyletsc bundle (the project's
                  [-o file]            declared path, or -o; -o - for stdout)
@@ -292,16 +293,21 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
       const result = runFormat(loaded);
       printIssues(result.issues, io);
       if (result.issues.some((i) => i.severity === "error")) return 1;
-      if (result.changed.length === 0) {
+      if (result.changed.length === 0 && result.removed.length === 0) {
         io.log("all shards canonical");
         return 0;
       }
       if (flags["check"] === true) {
         for (const w of result.changed) io.error(`not canonical: ${w.path}`);
+        for (const stale of result.removed) io.error(`not canonical: ${stale} (its map belongs in a map shard)`);
         return 1;
       }
       if (!commitWrites(result.changed, io)) return 1;
-      io.log(`formatted ${result.changed.length} shard(s)`);
+      // A view shard the migration emptied. Deleted through the VC layer, like
+      // every other write, so a checked-in read-only file is checked out first.
+      for (const path of result.removed) deleteFile(path);
+      const touched = result.changed.length + result.removed.length;
+      io.log(`formatted ${touched} shard(s)`);
       return 0;
     }
     case "export": {

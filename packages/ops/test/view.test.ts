@@ -1,5 +1,8 @@
 // ---------------------------------------------------------------------------
-// The arrangement layer. Expectations hand-written from what
+// The AUTHOR's arrangement layer: the deck canvases. Where a box's hands stand
+// went to its own shard on 2026-09-06 and is pinned in map.test.ts.
+//
+// Expectations hand-written from what
 // design/graphical-views.md section 1.2 PROMISES an author and a merge, not read
 // off the implementation:
 //
@@ -21,7 +24,7 @@ import type { Comment, NotesShard, ViewPoint, ViewShard } from "@storylet-studio
 import { parseSource } from "@storylet-studio/compiler";
 import { planComments } from "../src/comments.js";
 import type { PlannedWrite } from "../src/write.js";
-import { canvasFurniture, cardPositions, mapSites, planCanvasFurniture, planCardPositions, planForgetCanvas, planForgetSites, planMapSites, viewPath } from "../src/view.js";
+import { canvasFurniture, cardPositions, planCanvasFurniture, planCardPositions, planForgetCanvas, viewPath } from "../src/view.js";
 
 const box = (view?: ViewShard): SourceBox => ({
   path: "village",
@@ -153,82 +156,6 @@ describe("recording a move", () => {
   });
 });
 
-describe("placing a hand on the map", () => {
-  it("reads nothing for a box whose hands have never been placed", () => {
-    expect(mapSites(box())).toEqual({});
-  });
-
-  it("records a site as a POSITION and nothing else", () => {
-    // Which zone it is in is the hand's own business (its `chosen`), not a second
-    // opinion kept here that could go on to disagree with it.
-    const shard = written(planMapSites("/p", box(), [{ id: "h_all", x: 40, y: 60 }]));
-    expect(shard.map?.sites).toEqual({ h_all: { x: 40, y: 60 } });
-  });
-
-  it("keeps a deck's canvas when the map changes", () => {
-    // One sidecar, several concerns: arranging cards and moving sites must not
-    // overwrite each other.
-    const view: ViewShard = { schema: VIEW_SCHEMA, canvases: { k_arrival: { cards: { c_gate: { x: 1, y: 2 } } } } };
-    const shard = written(planMapSites("/p", box(view), [{ id: "h_all", x: 3, y: 4 }]));
-    expect(shard.canvases).toEqual({ k_arrival: { cards: { c_gate: { x: 1, y: 2 } } } });
-    expect(shard.map?.sites?.["h_all"]).toEqual({ x: 3, y: 4 });
-  });
-
-  // NOT legacy handling, which was removed with the heal: this is the narrowing
-  // read doing its job. Whatever else a sidecar carries beside x and y - an older
-  // shape's `zone`, or a key a NEWER version of the app writes - is not this
-  // function's business, and it projects the two it knows.
-  it("reads a site as a position and ignores anything else beside it", () => {
-    const view: ViewShard = {
-      schema: VIEW_SCHEMA,
-      map: { sites: { h_all: { x: 0, y: 0, zone: "v_docks" } as ViewPoint } },
-    };
-    expect(mapSites(box(view))).toEqual({ h_all: { x: 0, y: 0 } });
-  });
-
-  it("plans no write when a site lands back where it was", () => {
-    const view: ViewShard = { schema: VIEW_SCHEMA, map: { sites: { h_all: { x: 8, y: 9 } } } };
-    expect(planMapSites("/p", box(view), [{ id: "h_all", x: 8, y: 9 }])).toBeUndefined();
-  });
-
-  it("rounds to whole numbers", () => {
-    const shard = written(planMapSites("/p", box(), [{ id: "h_all", x: 19.6, y: 40.2 }]));
-    expect(shard.map?.sites?.["h_all"]).toEqual({ x: 20, y: 40 });
-  });
-});
-
-describe("taking a hand off the map", () => {
-  it("removes the site rather than emptying it", () => {
-    const view: ViewShard = {
-      schema: VIEW_SCHEMA,
-      map: { sites: { h_all: { x: 1, y: 2 }, h_other: { x: 3, y: 4 } } },
-    };
-    const shard = written(planForgetSites("/p", box(view), ["h_all"]));
-    expect(shard.map?.sites).toEqual({ h_other: { x: 3, y: 4 } });
-  });
-
-  it("drops the map block entirely when that was the last site", () => {
-    // No husks: "no entry" already means "not placed" everywhere in this sidecar.
-    const view: ViewShard = { schema: VIEW_SCHEMA, map: { sites: { h_all: { x: 1, y: 2 } } } };
-    expect(written(planForgetSites("/p", box(view), ["h_all"]))).toEqual({ schema: VIEW_SCHEMA });
-  });
-
-  it("keeps the deck canvases beside it", () => {
-    const view: ViewShard = {
-      schema: VIEW_SCHEMA,
-      canvases: { k_arrival: { cards: { c_gate: { x: 1, y: 2 } } } },
-      map: { sites: { h_all: { x: 1, y: 2 } } },
-    };
-    const shard = written(planForgetSites("/p", box(view), ["h_all"]));
-    expect(shard.canvases).toEqual({ k_arrival: { cards: { c_gate: { x: 1, y: 2 } } } });
-  });
-
-  it("plans no write for a hand that was never sitened", () => {
-    const view: ViewShard = { schema: VIEW_SCHEMA, map: { sites: { h_all: { x: 1, y: 2 } } } };
-    expect(planForgetSites("/p", box(view), ["h_nobody"])).toBeUndefined();
-  });
-});
-
 describe("forgetting an arrangement", () => {
   it("removes the deck's canvas rather than emptying it", () => {
     const view: ViewShard = {
@@ -267,7 +194,7 @@ describe("the sidecar never reaches the bundle", () => {
 
 // --- canvas furniture ------------------------------------------------------------
 //
-// What the design promises here is different from the rest of this sidecar, and
+// What the design promises here is different from the rest of this shard, and
 // the difference is the thing worth pinning: card positions are a sparse record
 // keyed by content that moves underneath, while furniture is a short list of
 // things somebody DREW. So it is written whole, and an empty canvas leaves no
@@ -277,75 +204,49 @@ const REGION = { id: "r_1", x: 10, y: 20, w: 100, h: 80, title: "Act two" };
 
 describe("canvas furniture", () => {
   it("reads back what was written, on a deck canvas", () => {
-    const write = planCanvasFurniture("/p", box(), { kind: "deck", deck: "k_arrival" },
-      { frames: [REGION] })!;
-    const shard = parseSource(write.content) as ViewShard;
+    const writes = planCanvasFurniture("/p", box(), { kind: "deck", deck: "k_arrival" },
+      { frames: [REGION] });
+    expect(writes).toHaveLength(1);
+    const shard = written(writes[0]);
     expect(shard.canvases!["k_arrival"]!.frames).toEqual([REGION]);
     expect(canvasFurniture(box(shard), { kind: "deck", deck: "k_arrival" })).toEqual({
       frames: [REGION],
     });
   });
 
-  it("reads back what was written, on the map", () => {
-    const write = planCanvasFurniture("/p", box(), { kind: "map" }, { frames: [REGION] })!;
-    const shard = parseSource(write.content) as ViewShard;
-    expect(shard.map!.frames).toEqual([REGION]);
-  });
-
-  it("leaves the other canvas, the sites and the cards alone", () => {
-    const before: ViewShard = {
-      schema: VIEW_SCHEMA,
-      canvases: { k_arrival: { cards: { c_gate: { x: 1, y: 2 } } } },
-      map: { sites: { h_all: { x: 3, y: 4 } } },
-    };
-    const write = planCanvasFurniture("/p", box(before), { kind: "map" }, { frames: [REGION] })!;
-    const shard = parseSource(write.content) as ViewShard;
-    expect(shard.canvases!["k_arrival"]!.cards).toEqual({ c_gate: { x: 1, y: 2 } });
-    expect(shard.map!.sites).toEqual({ h_all: { x: 3, y: 4 } });
-    expect(shard.map!.frames).toEqual([REGION]);
-  });
-
   it("writes nothing when nothing changed", () => {
-    const drawn = parseSource(
-      planCanvasFurniture("/p", box(), { kind: "map" }, { frames: [REGION] })!.content,
-    ) as ViewShard;
-    expect(planCanvasFurniture("/p", box(drawn), { kind: "map" },
-      { frames: [REGION] })).toBeUndefined();
-  });
-
-  it("clearing a canvas leaves no husk", () => {
-    const drawn = parseSource(
-      planCanvasFurniture("/p", box(), { kind: "map" }, { frames: [REGION] })!.content,
-    ) as ViewShard;
-    const cleared = parseSource(
-      planCanvasFurniture("/p", box(drawn), { kind: "map" }, { frames: [] })!.content,
-    ) as ViewShard;
-    expect(cleared.map).toBeUndefined();
+    const drawn = written(planCanvasFurniture("/p", box(), { kind: "deck", deck: "k_arrival" },
+      { frames: [REGION] })[0]);
+    expect(planCanvasFurniture("/p", box(drawn), { kind: "deck", deck: "k_arrival" },
+      { frames: [REGION] })).toEqual([]);
   });
 
   it("rounds coordinates and keeps a title exactly as typed", () => {
-    const write = planCanvasFurniture("/p", box(), { kind: "map" }, {
+    const shard = written(planCanvasFurniture("/p", box(), { kind: "deck", deck: "k_arrival" }, {
       frames: [{ ...REGION, x: 10.4, y: 19.6, w: 99.5, h: 80.2, title: "  Act two  " }],
-    })!;
-    const shard = parseSource(write.content) as ViewShard;
-    expect(shard.map!.frames![0]).toMatchObject({ x: 10, y: 20, w: 100, h: 80 });
-    expect(shard.map!.frames![0]!.title).toBe("  Act two  ");
+    })[0]);
+    expect(shard.canvases!["k_arrival"]!.frames![0]).toMatchObject({ x: 10, y: 20, w: 100, h: 80 });
+    expect(shard.canvases!["k_arrival"]!.frames![0]!.title).toBe("  Act two  ");
   });
 
   it("drops a malformed entry rather than throwing inside a canvas", () => {
     const wonky = {
       schema: VIEW_SCHEMA,
-      map: { frames: [REGION, { id: "r_bad" }, { id: "r_flat", x: 0, y: 0, w: 0, h: 10 }, "nonsense"] },
+      canvases: {
+        k_arrival: { frames: [REGION, { id: "r_bad" }, { id: "r_flat", x: 0, y: 0, w: 0, h: 10 }, "nonsense"] },
+      },
     } as unknown as ViewShard;
-    expect(canvasFurniture(box(wonky), { kind: "map" }).frames).toEqual([REGION]);
+    expect(canvasFurniture(box(wonky), { kind: "deck", deck: "k_arrival" }).frames).toEqual([REGION]);
   });
 
   it("draws back to front, and a restacked entry keeps its place", () => {
     const wonky: ViewShard = {
       schema: VIEW_SCHEMA,
-      map: { frames: [{ ...REGION, id: "r_front", z: 5 }, { ...REGION, id: "r_back", z: -1 }] },
+      canvases: {
+        k_arrival: { frames: [{ ...REGION, id: "r_front", z: 5 }, { ...REGION, id: "r_back", z: -1 }] },
+      },
     };
-    expect(canvasFurniture(box(wonky), { kind: "map" }).frames!.map((r) => r.id))
+    expect(canvasFurniture(box(wonky), { kind: "deck", deck: "k_arrival" }).frames!.map((r) => r.id))
       .toEqual(["r_back", "r_front"]);
   });
 });

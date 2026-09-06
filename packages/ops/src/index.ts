@@ -43,12 +43,14 @@ export {
 } from "./assets.js";
 export { contractIssues, contractNotes } from "./contract.js";
 export type { ContractNote } from "./contract.js";
-export { canvasFurniture, cardPositions, deckCanvas, mapSites, planCanvasFurniture, planCardPositions, planForgetCanvas, planForgetSites, planMapSites, viewPath } from "./view.js";
+export { canvasFurniture, cardPositions, deckCanvas, planCanvasFurniture, planCardPositions, planForgetCanvas, viewPath } from "./view.js";
 export type { CanvasRef } from "./view.js";
+export { boxMap, mapPath, mapSites, planForgetSites, planMapFurniture, planMapMigration, planMapSites } from "./map.js";
 export { notesPath, planComments } from "./comments.js";
 export { layoutByDependency } from "./layout.js";
 export type { LayoutEdge, LayoutOptions, LayoutResult } from "./layout.js";
-export type { CardPlacement, SitePlacement } from "./view.js";
+export type { CardPlacement } from "./view.js";
+export type { SitePlacement } from "./map.js";
 export type {
   InfluenceGraph, InfluenceEdge, InfluenceNode, InfluenceScope, InfluenceOptions,
   InfluenceScopeName, EdgeClass, EdgeContribution, AnalysisWarning, AnalysisWarningKind, Neighbourhood,

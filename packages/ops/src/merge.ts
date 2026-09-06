@@ -20,7 +20,7 @@
 import { canonicalStringify } from "@storylet-studio/compiler";
 import type { Issue } from "@storylet-studio/compiler";
 
-export type MergeFileType = "project" | "box" | "tags" | "hands" | "deck" | "view" | "notes" | "contract";
+export type MergeFileType = "project" | "box" | "tags" | "hands" | "deck" | "view" | "map" | "notes" | "contract";
 
 export type ConflictKind =
   | "both-changed"      // both sides changed the same value differently
@@ -88,6 +88,7 @@ export function detectMergeType(file: { schema?: unknown }): MergeFileType {
   if (s.startsWith("storylets/hands")) return "hands";
   if (s.startsWith("storylets/deck")) return "deck";
   if (s.startsWith("storylets/view")) return "view";
+  if (s.startsWith("storylets/map")) return "map";
   if (s.startsWith("storylets/notes")) return "notes";
   if (s.startsWith("storylets/contract")) return "contract";
   throw new MergeInputError(`cannot detect a storylets merge type from schema '${s}'`);
@@ -164,6 +165,15 @@ export const MERGE_SPECS: Record<MergeFileType, Strategy> = {
         frames: keyed("id", object({})),
       }),
     },
+    // The map's OLD address, kept for the compatibility window so a pre-split
+    // project still merges where its map actually is. It goes when the field does.
+    map: object({ sites: RECORD, frames: keyed("id", object({})) }),
+  }),
+  // The map shard: the same strategy the view's map half had, word for word,
+  // which is the whole benefit of moving the block rather than reshaping it. A
+  // SITE is atomic per hand for the reason a card's point is: half of one
+  // designer's position and half of another's is a place neither chose.
+  map: object({
     map: object({ sites: RECORD, frames: keyed("id", object({})) }),
   }),
   // The comment sidecar. Threads are keyed by id, so two reviewers annotating

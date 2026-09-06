@@ -509,7 +509,11 @@ describe("the role, in the editor", () => {
     expect(isShapeShard("a.storylettags")).toBe(true);
     expect(isShapeShard("a.storylethands")).toBe(true);
     expect(isShapeShard("a.storyletproj")).toBe(true);
-    expect(isShapeShard("a.storyletview")).toBe(true);
+    // The view shard joined the AUTHOR's list on 2026-09-06, when the map moved
+    // out of it into a shard of its own (design/engine-server.md 9.1 point 5):
+    // the canvases are the author's working drawing, the map is the shape.
+    expect(isShapeShard("a.storyletview")).toBe(false);
+    expect(isShapeShard("a.storyletmap")).toBe(true);
     expect(isShapeShard("a.storyletdeck")).toBe(false);
     expect(isShapeShard("a.storyletnotes")).toBe(false);
     expect(isShapeShard("README.md")).toBe(false);
@@ -520,6 +524,15 @@ describe("the role, in the editor", () => {
     expect(refuseWrite("author", ["/p/a.storyletdeck"])).toBeUndefined();
     expect(refuseWrite("designer", ["/p/a.storyletbox"])).toBeUndefined();
     expect(refuseWrite(undefined, ["/p/a.storyletbox"])).toBeUndefined();
+  });
+
+  it("lets an author arrange a canvas and refuses them the map", () => {
+    // The two halves of the shard that split (9.1 point 5), each on the side the
+    // ruling put it: a deck's canvas is the author's to push, a hand's position
+    // ships in the bundle and stays the designer's.
+    expect(refuseWrite("author", ["/p/village/view.storyletview"])).toBeUndefined();
+    expect(refuseWrite("author", ["/p/village/map.storyletmap"])).toBe(PULL_AS_DESIGNER);
+    expect(refuseWrite("designer", ["/p/village/map.storyletmap"])).toBeUndefined();
   });
 
   it("stops the write itself, not only the controls", () => {

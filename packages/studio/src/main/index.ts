@@ -1493,6 +1493,7 @@ function wireIpc(): void {
   });
 
   // Arranging: writes the box's `.storyletview` sidecar, never a content shard.
+  // (The map's own arranging writes `.storyletmap` next door; see mutate.ts.)
   ipcMain.handle("view:moveCards", (_event, deckId: string, placements: { id: string; x: number; y: number }[]): OpenResult | { error: string } => {
     if (!session) return { error: "no project open" };
     return moveCardsOnCanvas(session, deckId, placements);
@@ -1500,7 +1501,7 @@ function wireIpc(): void {
 
   // --- the map (#55, the spatial template of play) -----------------------------
   // The map is the tag data seen from above: zones ARE the tags of a spatial group,
-  // sites come from the arrangement sidecar. Nothing here is computed, so the view
+  // sites come from the box's map shard. Nothing here is computed, so the view
   // draws and does not reason.
   ipcMain.handle("map:box", (_event, boxId: string, groupId?: string): BoxMapDto => {
     const base: BoxMapDto = {
@@ -1548,7 +1549,7 @@ function wireIpc(): void {
 
     // A pin's ZONE comes from the hand, never from the ground under the pin: the
     // hand's own binding is what the runtime deals from, so it is what the map
-    // must draw, and a second copy in the sidecar could only go on to disagree.
+    // must draw, and a second copy in the map shard could only go on to disagree.
     const placed = mapSites(box);
     const sites: MapSiteDto[] = [];
     const unplaced: { id: string; gameId: string }[] = [];

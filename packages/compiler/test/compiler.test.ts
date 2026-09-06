@@ -9,8 +9,8 @@
 import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import {
-  bundleIsFresh, canonicalCollections, canonicalStringify, compileMaps, compileProject, contentAboveRung,
-  loadProjectFiles, parseProjectFiles, parseSource, serialiseBundle, summariseLadder,
+  boxMapOf, bundleIsFresh, canonicalCollections, canonicalStringify, compileMaps, compileProject,
+  contentAboveRung, loadProjectFiles, parseProjectFiles, parseSource, serialiseBundle, summariseLadder,
 } from "../src/index.js";
 import type { Issue, SourceFile, SourceProject } from "../src/index.js";
 import { Engine } from "@storylet-studio/runtime";
@@ -27,6 +27,17 @@ const parseOk = (input: SourceFile[]): SourceProject => {
 
 const errors = (issues: Issue[]): string[] =>
   issues.filter((i) => i.severity === "error").map((i) => i.message);
+
+const warnings = (issues: Issue[]): string[] =>
+  issues.filter((i) => i.severity === "warning").map((i) => i.message);
+
+/** Parse with no ERRORS, tolerating warnings: for the shards a reader accepts
+ *  and complains about, which today is a map still in its view shard. */
+const parseNoErrors = (input: SourceFile[]): SourceProject => {
+  const { project, issues } = parseProjectFiles(input);
+  expect(errors(issues)).toEqual([]);
+  return project!;
+};
 
 describe("example project", () => {
   const source = parseOk(files);
@@ -179,8 +190,15 @@ describe("the maps block carries where the hands stand", () => {
   const file = (path: string, value: unknown): SourceFile => ({ path, text: canonicalStringify(value) });
 
   /** A box with one drawn zone and two hands, ordered so that sorting by id and
-   *  sorting by gameId disagree: "well" is h_1 and "forge" is h_2. */
-  const drawn = (sites?: Record<string, { x: number; y: number }>): SourceProject => parseOk([
+   *  sorting by gameId disagree: "well" is h_1 and "forge" is h_2.
+   *
+   *  `where` is the compatibility window (design/engine-server.md 9.1 point 5):
+   *  "map" is the shard the positions live in now, "view" the one every project
+   *  written before 2026-09-06 keeps them in, and the block compiles the same
+   *  from either. */
+  const drawn = (
+    sites?: Record<string, { x: number; y: number }>, where: "map" | "view" = "map",
+  ): SourceProject => parseNoErrors([
     file("p.storyletproj", {
       schema: "storylets/project@0",
       project: { id: "p", name: "P", version: "0.0.1" },
@@ -210,9 +228,10 @@ describe("the maps block carries where the hands stand", () => {
       ],
       templates: [],
     }),
-    ...(sites !== undefined
-      ? [file("b/view.storyletview", { schema: "storylets/view@0", map: { sites } })]
-      : []),
+    ...(sites === undefined ? []
+      : where === "map"
+        ? [file("b/map.storyletmap", { schema: "storylets/map@0", map: { sites } })]
+        : [file("b/view.storyletview", { schema: "storylets/view@0", map: { sites } })]),
   ]);
 
   it("names each placed hand by gameId, sorted by that gameId", () => {
@@ -229,13 +248,83 @@ describe("the maps block carries where the hands stand", () => {
 
   it("carries no key at all when nothing has been placed", () => {
     expect(compileMaps(drawn())![0]!.sites).toBeUndefined();
-    // A sidecar that exists but has placed nobody is the same answer.
+    // A map shard that exists but has placed nobody is the same answer.
     expect(compileMaps(drawn({}))![0]!.sites).toBeUndefined();
+  });
+
+  it("compiles the same block from a map still living in the view shard", () => {
+    // The whole point of the split (design/engine-server.md 9.1 point 5): the
+    // bundle did not change, so no port moved and no corpus case did either.
+    const placed = { h_1: { x: 7, y: 8 }, h_2: { x: 5, y: 6 } };
+    expect(JSON.stringify(compileMaps(drawn(placed, "view"))))
+      .toBe(JSON.stringify(compileMaps(drawn(placed, "map"))));
   });
 
   it("leaves out a hand nobody has placed", () => {
     const maps = compileMaps(drawn({ h_2: { x: 5, y: 6 } }));
     expect(maps![0]!.sites).toEqual([{ hand: "forge", x: 5, y: 6 }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The map's old address, read for one release (design/engine-server.md 9.1
+// point 5). A reader may not repair a project, so it says where the map is and
+// what will move it, once per box, and gets on with compiling.
+// ---------------------------------------------------------------------------
+describe("a map still living in the view shard", () => {
+  const file = (path: string, value: unknown): SourceFile => ({ path, text: canonicalStringify(value) });
+  const boxFiles = (extra: SourceFile[]): SourceFile[] => [
+    file("p.storyletproj", {
+      schema: "storylets/project@0",
+      project: { id: "p", name: "P", version: "0.0.1" },
+      settings: { playAdvancesTurns: 1 },
+      world: { properties: [] },
+      story: { properties: [] },
+      templates: {},
+      export: { bundle: "dist/p.storyletsc", metadata: "full" },
+    }),
+    file("b/box.storyletbox", {
+      schema: "storylets/box@0",
+      box: { fields: [], gameId: "b1", id: "b_1", properties: [], ranking: { specificity: true } },
+    }),
+    ...extra,
+  ];
+  const view = file("b/view.storyletview", {
+    schema: "storylets/view@0", map: { sites: { h_1: { x: 1, y: 2 } } },
+  });
+  const map = file("b/map.storyletmap", {
+    schema: "storylets/map@0", map: { sites: { h_1: { x: 3, y: 4 } } },
+  });
+
+  it("warns, naming the command that moves it, and keeps reading it", () => {
+    const { project, issues } = parseProjectFiles(boxFiles([view]));
+    expect(errors(issues)).toEqual([]);
+    expect(warnings(issues)).toEqual([
+      "this project's map lives in the view shard; open it in Storyletter or run `storyletengine format` to move it; the view shard's map is ignored after the next release",
+    ]);
+    expect(issues[0]!.path).toBe("b/view.storyletview");
+    expect(project!.boxes[0]!.view!.map!.sites).toEqual({ h_1: { x: 1, y: 2 } });
+  });
+
+  it("says the copy is IGNORED when the box has both, and the map shard wins", () => {
+    const { project, issues } = parseProjectFiles(boxFiles([view, map]));
+    expect(errors(issues)).toEqual([]);
+    expect(warnings(issues)).toEqual([
+      "the map lives in map.storyletmap now, and the view shard still carries a copy; the map shard is used and this copy is ignored; run `storyletengine format` to remove it",
+    ]);
+    expect(boxMapOf(project!.boxes[0]!)!.sites).toEqual({ h_1: { x: 3, y: 4 } });
+  });
+
+  it("says nothing about a project that has already moved", () => {
+    const { issues } = parseProjectFiles(boxFiles([map]));
+    expect(issues).toEqual([]);
+  });
+
+  it("does not call a map shard an unrecognised file in a box folder", () => {
+    // The stray-file warning is how a typo is caught, so a shard it has never
+    // heard of has to be added to what it knows, not just to the parser.
+    const { issues } = parseProjectFiles(boxFiles([map]));
+    expect(issues.map((i) => i.message)).not.toContain("unrecognised file in a box folder; ignored");
   });
 });
 

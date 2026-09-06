@@ -960,11 +960,22 @@ export const SHARD_EXTENSIONS = {
   tags: ".storylettags",
   hands: ".storylethands",
   deck: ".storyletdeck",
-  /** The arrangement layer: where things SIT, never what they are. Its own shard
-   *  because positions churn (an afternoon of tidying a canvas touches every
-   *  card) and content does not, so a designer arranging and a writer editing
-   *  never collide on one file (design/graphical-views.md section 1.2). */
+  /** The AUTHOR's arrangement layer: the canvases, where cards sit on a deck's
+   *  node canvas and the furniture drawn round them. Its own shard because
+   *  positions churn (an afternoon of tidying a canvas touches every card) and
+   *  content does not, so a designer arranging and a writer editing never
+   *  collide on one file (design/graphical-views.md section 1.2). */
   view: ".storyletview",
+  /** The DESIGNER's map: where a box's hands stand in space, and the furniture
+   *  round them. One per box, beside the view shard.
+   *
+   *  Split out of the view shard on 2026-09-06 (design/engine-server.md 9.1
+   *  point 5) because the two halves stopped having one owner. A hand's
+   *  position ships in the bundle's `maps` block (4.3) and is where a venue's
+   *  kiosk stands, so it is SHAPE, which a server's author key may not change;
+   *  the canvases are the author's own working drawing and never leave the
+   *  project folder. One file could not be both. */
+  map: ".storyletmap",
   /** Threaded comments: content-ADJACENT, so neither in a content shard (a
    *  writer's deck edit must not conflict with a reviewer's comment) nor in the
    *  arrangement sidecar (this is not where anything sits). One per box,
@@ -992,6 +1003,7 @@ export const TAGS_SCHEMA = "storylets/tags@0";
 export const HANDS_SCHEMA = "storylets/hands@0";
 export const DECK_SCHEMA = "storylets/deck@0";
 export const VIEW_SCHEMA = "storylets/view@0";
+export const MAP_SCHEMA = "storylets/map@0";
 /** The comment sidecar's schema. Still called "notes" on disk: the file already
  *  held both, and renaming it would break every project for no gain. */
 export const NOTES_SCHEMA = "storylets/notes@0";
@@ -1126,7 +1138,9 @@ export interface DeckCanvas extends CanvasFurniture {
   cards?: Record<string, ViewPoint>;
 }
 
-/** The box's map: where its hands sit in space, and the furniture around them. */
+/** The box's map: where its hands sit in space, and the furniture around them.
+ *  Carried by the MAP shard since 2026-09-06; `ViewShard.map` is the old
+ *  address, read for one release and never written. */
 export interface BoxMap extends CanvasFurniture {
   /** Keyed by HAND id. WHERE a site is, and nothing else.
    *
@@ -1143,7 +1157,8 @@ export interface BoxMap extends CanvasFurniture {
   sites?: Record<string, ViewPoint>;
 }
 
-/** The arrangement layer for one box: where things SIT, never what they are.
+/** The AUTHOR's arrangement layer for one box: where cards sit on their decks'
+ *  canvases, and the furniture drawn round them.
  *
  *  Its own shard on purpose (design/graphical-views.md section 1.2). Positions
  *  churn, content does not: an afternoon of tidying a canvas touches every card,
@@ -1158,7 +1173,33 @@ export interface ViewShard {
   schema: typeof VIEW_SCHEMA;
   /** Keyed by DECK id: one node canvas each. */
   canvases?: Record<string, DeckCanvas>;
+  /** @deprecated The box map's old address, kept for one release and READ ONLY.
+   *  A reader that meets it uses it when the box has no `MapShard`, and the
+   *  formatter moves it; nothing writes it any more. Removed after the next
+   *  release, at which point a map left here is simply lost. */
   map?: BoxMap;
+}
+
+/** The DESIGNER's map for one box: where its hands stand in space.
+ *
+ *  Split out of the view shard on 2026-09-06 (design/engine-server.md 9.1 point
+ *  5). The two halves had stopped sharing an owner: a hand's position ships in
+ *  the bundle's `maps` block (4.3), which makes it the thing a venue provisions
+ *  its kiosks against, while a deck's canvas is a working drawing that never
+ *  leaves the folder. A server's author key may change the canvases and not
+ *  this.
+ *
+ *  The map is NESTED under `map` rather than flattened to the top level, and
+ *  deliberately: the block's bytes are then exactly what the view shard held, so
+ *  the migration is a move of a value rather than a reshaping of it, the merge
+ *  strategy carries over word for word, and a reader that has to look in both
+ *  places is one expression (`box.map?.map ?? box.view?.map`).
+ *
+ *  Source-only in the sense the view shard is not: `compileMaps` reads the
+ *  positions for the bundle's `maps` block, under `export.map`. */
+export interface MapShard {
+  schema: typeof MAP_SCHEMA;
+  map: BoxMap;
 }
 
 /** A coverage input driver: during a coverage run the harness feeds a

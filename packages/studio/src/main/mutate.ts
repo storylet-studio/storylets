@@ -405,7 +405,7 @@ function midpointOrder(items: { id: string; order?: number }[], movedId: string,
 /**
  * Record where cards now sit on a deck's node canvas.
  *
- * The arrangement layer, so it touches the box's `.storyletview` sidecar and no
+ * The author's arrangement layer, so it touches the box's `.storyletview` sidecar and no
  * content shard at all: nothing a writer reviewing card text will ever see.
  *
  * Undoable, one step per drop. The key is unique rather than shared, because
@@ -1668,9 +1668,10 @@ export function removeSitesFromMap(
 ): OpenResult | { error: string } {
   const box = locateBox(session, boxId);
   if (!box) return { error: `unknown box (id ${boxId})` };
-  const write = planForgetSites(session.loaded.dir, box, handIds);
-  if (!write) return reload(session);
-  return commit(session, "Remove from the map", `map:${structCounter++}`, [{ path: write.path, content: write.content }]);
+  const writes = planForgetSites(session.loaded.dir, box, handIds);
+  if (writes.length === 0) return reload(session);
+  return commit(session, "Remove from the map", `map:${structCounter++}`,
+    writes.map((w) => ({ path: w.path, content: w.content })));
 }
 
 /**
@@ -1702,12 +1703,15 @@ export function moveSitesOnMap(
   for (const p of placements) moved[p.id] = { x: Math.round(p.x), y: Math.round(p.y) };
   const rebound = bindSitesToZones(box, groupId, moved);
 
-  const write = planMapSites(session.loaded.dir, box, placements);
+  // One or two files: the map shard, and - for a project whose map still lives in
+  // its view shard - the view shard without it. The move out rides the same
+  // commit as the drag that triggered it, so it undoes as one step too.
+  const planned = planMapSites(session.loaded.dir, box, placements);
   // Nothing to write: the sites landed where they already were and nobody moved
   // zone. Still a fresh read, so the caller's DTOs and problems are current.
-  if (!write && rebound.length === 0) return { result: reload(session), rebound };
+  if (planned.length === 0 && rebound.length === 0) return { result: reload(session), rebound };
   const writes = [
-    ...(write ? [{ path: write.path, content: write.content }] : []),
+    ...planned.map((w) => ({ path: w.path, content: w.content })),
     ...(rebound.length > 0 ? [{ path: handsFile(session, box), content: canonicalStringify(box.hands) }] : []),
   ];
   // Named for what the author did, since it is what an undo will offer back. One
@@ -1756,10 +1760,10 @@ export function setCanvasFurniture(
 ): OpenResult | { error: string } {
   const box = locateBox(session, boxId);
   if (!box) return { error: `unknown box (id ${boxId})` };
-  const write = planCanvasFurniture(session.loaded.dir, box, ref, furniture);
-  if (!write) return reload(session);   // nothing moved: no file touched, no undo step
+  const writes = planCanvasFurniture(session.loaded.dir, box, ref, furniture);
+  if (writes.length === 0) return reload(session);   // nothing moved: no file touched, no undo step
   return commit(session, label, coalesce ?? `struct:${structCounter++}`,
-    [{ path: write.path, content: write.content }]);
+    writes.map((w) => ({ path: w.path, content: w.content })));
 }
 
 // --- threaded comments ---------------------------------------------------------

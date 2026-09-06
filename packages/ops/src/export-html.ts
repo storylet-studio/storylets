@@ -19,7 +19,7 @@ import { effectiveGameId, handBinding, labelPoint } from "@storylet-studio/model
 import { assetPath } from "./assets.js";
 import type { LoadedProject } from "./load.js";
 import { sharedSpaces } from "./spaces.js";
-import { mapSites } from "./view.js";
+import { mapSites } from "./map.js";
 import { PLAYABLE_PLAYER_JS } from "./playable-player.js";
 
 export interface ExportHtmlResult {
