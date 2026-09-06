@@ -1,5 +1,5 @@
 // One build at a time across the test suites that build a real app in their
-// setup (the Village client, the Hamlet client, the station apps). Each writes
+// setup (the Village client and the Hamlet client). Each writes
 // its own dist, but the Hamlet suite also rebuilds the libraries when their
 // dist is missing, which on a cold runner is while the other two read them:
 // a full run then fails one file with its tests skipped, and passes on the
