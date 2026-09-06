@@ -19,6 +19,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-06
+
 ### Added
 
 - **`contract show`**: what each installation contract in `contracts/` depends on, entity by entity (design/engine-server.md 4.11). A venue's server writes the contract; `validate` refuses a build that breaks one, and every message names the venue that cares.

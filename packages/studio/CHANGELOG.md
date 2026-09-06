@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-06
+
 ### Added
 
 - **A venue's claim on an entity, said once and quietly** (design/engine-server.md 4.11). When a project carries an installation contract - the file a Storylet Server writes to record what a venue depends on - the hand or box it names says so in its page header: "Bound at the-park: a station deals this hand", "Ticked at the-park every 60s", one line per installation. The game id field beside it is marked and carries the same sentence as its hint; it is not refused, because the refusal is the server's on push, and a rename field that simply would not type would leave a designer with no way to see why. A project with no contract - which is every project, until a server exists to write one - shows nothing at all. Breaking a contract is an ERROR in the problems bar like any other, naming the venue.
