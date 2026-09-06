@@ -33,7 +33,7 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@storylet-studio/model": ">=0.1.0 <1.0.0",
+    "@storylet-studio/model": ">=0.3.0",
     "@storylet-studio/wire": ">=0.1.0 <1.0.0"
   }
 }

@@ -34,7 +34,7 @@
   },
   "dependencies": {
     "@storylet-studio/client": ">=0.1.0 <1.0.0",
-    "@storylet-studio/model": ">=0.1.0 <1.0.0",
+    "@storylet-studio/model": ">=0.3.0",
     "@storylet-studio/wire": ">=0.1.0 <1.0.0",
     "qrcode": "^1.5.4"
   },
