@@ -32,6 +32,16 @@ import type { Bearer, Transport } from "./transport.js";
 import { createVisit } from "./visit.js";
 import type { Visit, VisitInternals } from "./visit.js";
 
+/** Everything from both, once each, oldest first. The stream and the catch-up
+ *  overlap by design (a reconnect replays the ring buffer AND asks what it
+ *  missed), so the id decides, and the later copy wins because it is the one
+ *  that may carry acks. */
+const mergeMessages = (held: MessageView[], arrived: MessageView[]): MessageView[] => {
+  const by = new Map<MessageId, MessageView>();
+  for (const message of [...held, ...arrived]) by.set(message.id, message);
+  return [...by.values()].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+};
+
 /** What a handshake, an attach or an open hands back: the wire's own response,
  *  and the visit state machine already seeded from it. */
 export interface Attached<R> {
@@ -45,6 +55,19 @@ export interface Attached<R> {
 export interface MessageDesk {
   /** Everything seen this session, oldest first. */
   readonly all: MessageView[];
+  /**
+   * The catch-up read. `since` MERGES what comes back into what this
+   * connection has already seen; without it the answer replaces the lot.
+   *
+   * The two are different questions and a handset asks both. `list()` is
+   * "what is there", which a device asks once on waking. `list(since)` is
+   * "what did I miss", which a device asks after a blip, and answering it by
+   * replacing would empty the tray of everything older than the outage: a
+   * performer who reconnected would watch the control room's last half hour
+   * disappear, which is the opposite of what degraded mode promises (spec 17
+   * item 2). Merged by id, oldest first, so a message delivered twice - once
+   * on the stream, once in the catch-up - appears once.
+   */
   list(since?: string): Promise<MessageView[]>;
   ack(id: MessageId): Promise<AckMessageResponse>;
   send(req: SendMessageRequest): Promise<SendMessageResponse>;
@@ -221,8 +244,12 @@ function createConnection(deps: ConnectionDeps): { conn: Connection; raw: Connec
 
   const deliver = (event: WireEvent): void => {
     if (event.type === "message") {
-      seen = [...seen, event.message];
-      for (const l of messageListeners) safely(() => l(seen));
+      // A replayed ring buffer can hand the same message over twice; the tray
+      // should not show it twice.
+      if (!seen.some((m) => m.id === event.message.id)) {
+        seen = [...seen, event.message];
+        for (const l of messageListeners) safely(() => l(seen));
+      }
     }
     (current as (Visit & VisitInternals) | undefined)?.__apply(event);
     for (const l of eventListeners) safely(() => l(event));
@@ -283,7 +310,7 @@ function createConnection(deps: ConnectionDeps): { conn: Connection; raw: Connec
         path: "/messages",
         query: { since },
       });
-      seen = res.messages;
+      seen = since === undefined ? res.messages : mergeMessages(seen, res.messages);
       for (const l of messageListeners) safely(() => l(seen));
       return seen;
     },

@@ -285,6 +285,26 @@ describe("the zone strip", () => {
     buttons[2]!.click();
     expect(picks).toEqual(["the-window", undefined]);
   });
+
+  it("shows the zone the server derived, and nothing when it derived none", () => {
+    // The strip sends a LOCATION and the server answers with the zone its
+    // installation's map derives from it. A performer needs to read that word
+    // back, because it is the one a producer addresses (6.7).
+    const part = keep(zoneStripPart({ onPick: () => {} }));
+    part.update({ locations, here: "the-window", zone: "the-parlour" });
+    expect(part.el.querySelector(".sk-zone-derived")?.textContent).toBe("the-parlour");
+    part.update({ locations, here: "the-window" });
+    expect(part.el.querySelector(".sk-zone-derived")).toBeNull();
+  });
+
+  it("takes a wall the venue only gave a name to, with no position and no printed code", () => {
+    // A crew handset's list comes from `station.json`, not from the wire: a
+    // station key may not read the venue's locations, and a stage manager
+    // should not have to type coordinates to give a performer a button.
+    const part = keep(zoneStripPart({ onPick: () => {} }));
+    part.update({ locations: [{ location: "the-forge", label: "The forge" }] });
+    expect(part.el.querySelector<HTMLButtonElement>("button")?.textContent).toBe("The forge");
+  });
 });
 
 describe("the message tray and the help button", () => {

@@ -13,8 +13,8 @@
 
 import type { ScalarValue } from "@storylet-studio/model";
 import type {
-  Actor, BuildIdentity, FlowRef, GameId, InstallationId, IsoTimestamp, PropertyPath, StationId,
-  VisitId,
+  Actor, BuildIdentity, CredentialId, FlowRef, GameId, InstallationId, IsoTimestamp, LocationId,
+  PropertyPath, StationId, VisitId,
 } from "./vocabulary.js";
 import type {
   BoardView, InstallationView, MessageView, PresenceView, RunView, StationView, TurnsView, VenueView,
@@ -129,7 +129,8 @@ export type WireEvent =
   /** A `@world` change, with the actor that made it: a producer, a bridge's
    *  trigger in, a crew station's presence mirror (5.6, 5.7). */
   | (WireEventBase & { type: "world"; installation?: InstallationId; path: PropertyPath; value: ScalarValue; prev?: ScalarValue; actor: Actor })
-  /** A visit's life: opened, a station attached or detached, parked, closed. */
+  /** A visit's life: opened, a station attached or detached, a phone stood
+   *  somewhere, parked, closed. */
   | (WireEventBase & {
       type: "visit";
       flow: FlowRef;
@@ -137,9 +138,18 @@ export type WireEvent =
        *  console watching every story reads the roster from these (4a). */
       installation: InstallationId;
       visit: VisitId;
-      phase: "opened" | "attached" | "detached" | "parked" | "closed";
+      /** `stood` is a phone-only party moving: it scanned a placard, which
+       *  attaches no station and so is none of the other five (5.4, 5.7). It
+       *  carries `standing`, since a map that learned a party had moved and
+       *  not where to would have to re-read the visit to draw it. */
+      phase: "opened" | "attached" | "detached" | "stood" | "parked" | "closed";
       /** Which station attached or detached. */
       station?: StationId;
+      /** On `stood`: where the visit's credentials are standing NOW, whole
+       *  rather than as a delta, exactly as {@link VisitView.standing} reads
+       *  it. A party at two walls has two entries, because standing is per
+       *  credential and the map pins it at both. */
+      standing?: { credential: CredentialId; location: LocationId }[];
     })
   /** The run's life. `build-changed` is a hot swap or a go-live: a client
    *  should re-read, because what it holds may name cards that are gone. */

@@ -14,15 +14,28 @@
 
 /// <reference lib="dom" />
 
-import type { LocationId, LocationView } from "@storylet-studio/wire";
+import type { LocationId, LocationView, ZoneId } from "@storylet-studio/wire";
 import { cls, el } from "./part.js";
 import type { Part } from "./part.js";
 
+/** What the strip needs of a location: the id it sends and the word a
+ *  performer reads. Narrower than {@link LocationView} on purpose, so a venue
+ *  that names its walls in `station.json` need not invent a position and a
+ *  printed code for each; a full `LocationView` is accepted unchanged. */
+export type ZoneStripLocation = Pick<LocationView, "location" | "label">;
+
 export interface ZoneStripState {
-  locations: LocationView[];
+  locations: ZoneStripLocation[];
   /** Where the device says it is now. Absent is "nowhere in particular", which
    *  is a real answer and has its own button. */
   here?: LocationId;
+  /** The zone the SERVER derived from that location, when it derived one
+   *  (4a). Shown rather than the location's own label because it is the word
+   *  a producer addresses: "everyone in the parlour" reaches this handset
+   *  because of this line, and a performer who cannot see it cannot tell
+   *  whether it will. Absent when this story's map covers nowhere near here,
+   *  which is a real state and reads as one. */
+  zone?: ZoneId;
   busy?: boolean;
 }
 
@@ -55,6 +68,13 @@ export function zoneStripPart(opts: ZoneStripOptions): Part<ZoneStripState> {
         }) as HTMLButtonElement;
         button.disabled = state.busy === true;
         root.append(button);
+      }
+      if (state.zone !== undefined) {
+        root.append(el("span", {
+          className: cls("zone-derived"),
+          text: state.zone,
+          attrs: { "data-zone": state.zone },
+        }));
       }
       if (opts.clearText !== undefined) {
         const clear = el("button", {

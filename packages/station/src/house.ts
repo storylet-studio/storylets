@@ -18,7 +18,8 @@
 
 /// <reference lib="dom" />
 
-import type { GameId, LocationId, LocationView } from "@storylet-studio/wire";
+import { CLOCK_PHASE } from "@storylet-studio/wire";
+import type { Clocks, GameId, LocationId, LocationView } from "@storylet-studio/wire";
 import type { StationConnection } from "@storylet-studio/client";
 import { el, handPart, showClockPart, venueMapPart } from "@storylet-studio/station-kit";
 import { mountShell, showConnection } from "./shell.js";
@@ -34,9 +35,24 @@ export async function startHouse(root: HTMLElement): Promise<void> {
   const station = shell.client.connectStation(key);
   showConnection(shell, station);
 
+  // The clock and the PHASE, which on a wall is the more useful of the two: a
+  // room reads "act two" at a glance and the seconds at leisure. Both are
+  // derived rather than ticked (10.2), so they arrive as a reading here and as
+  // `world` events after.
   const clock = showClockPart();
-  clock.update({});
+  let clocks: Clocks | undefined;
+  let paused = false;
+  const drawClock = (): void => {
+    clock.update({ ...(clocks !== undefined ? { clocks } : {}), paused });
+  };
+  drawClock();
   shell.head.append(clock.el);
+
+  const readClocks = (): void => {
+    void station.world().then((got) => { clocks = got.clocks; drawClock(); }).catch(() => {
+      /* away: the part counts on from the last reading rather than freezing */
+    });
+  };
 
   const cues = el("div", { className: "app-section" });
   const board = el("div", { className: "app-section" });
@@ -51,7 +67,8 @@ export async function startHouse(root: HTMLElement): Promise<void> {
     const map = venueMapPart({ venue: hello.venue, locations });
     map.update({});
     mapWrap.replaceChildren(map.el);
-    if (hello.run !== undefined) clock.update({});
+    paused = hello.run?.state === "paused";
+    readClocks();
     const counts: Record<LocationId, number> = {};
     const stations: Record<LocationId, number> = {};
     station.on((event) => {
@@ -85,6 +102,15 @@ export async function startHouse(root: HTMLElement): Promise<void> {
   };
   station.on((event) => {
     if (event.type === "board") drawBoard();
+    if (event.type === "world" && event.path === CLOCK_PHASE && clocks !== undefined) {
+      clocks = { ...clocks, time_phase: String(event.value) };
+      drawClock();
+    }
+    if (event.type === "run") {
+      if (event.phase === "paused") paused = true;
+      if (event.phase === "resumed" || event.phase === "started") paused = false;
+      drawClock();
+    }
     if (event.type !== "cue") return;
     // What a bridge just sent, echoed. Newest at the top, three deep: a wall
     // is read at a glance or not at all.

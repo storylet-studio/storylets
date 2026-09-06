@@ -49,7 +49,7 @@ import type {
   IssueCredentialResponse, JournalEntry, ListBindingsResponse, ListBridgesResponse,
   ListBundlesResponse, ListInstallationsResponse, ListLocationsResponse, ListMessagesResponse,
   ListPartiesResponse, ListPresenceResponse, ListPrincipalsResponse, ListRunsResponse,
-  ListVisitsResponse, LocationView, MessageView, MintPartyRequest, MintPartyResponse,
+  ListVisitsResponse, LocationView, MessageAudience, MessageView, MintPartyRequest, MintPartyResponse,
   MoveCredentialRequest, MoveCredentialResponse, OpenInstallationResponse, OpenVisitRequest,
   OpenVisitResponse, Page, PairPrincipalRequest, PairPrincipalResponse, ParkVisitConsoleResponse,
   ParkVisitResponse, PartyView, PauseRunResponse, PeekRequest, PeekResponse, PlayHouseRequest,
@@ -105,6 +105,19 @@ const AFTER_DARK: InstallationView = {
 const BINDINGS: Record<string, Record<string, string>> = {
   "the-caretaker": { "the-door": "at-the-door", "the-window": "at-the-window", "the-table": "at-the-table" },
   "after-dark": { "the-door": "the-locked-door" },
+};
+
+/** The zone each of the venue's locations falls in, per installation (4a).
+ *
+ *  A ZONE IS A STORY'S WORD for a part of its map, and the server derives one
+ *  from the location a device reported: the device knows only where it is. Two
+ *  locations share `the-parlour` on purpose, because that is the whole point
+ *  of a zone-addressed message - "everyone inside" reaches a performer at the
+ *  window and a performer at the table with one send (6.7).
+ */
+const ZONES: Record<string, Record<string, string>> = {
+  "the-caretaker": { "the-door": "the-threshold", "the-window": "the-parlour", "the-table": "the-parlour" },
+  "after-dark": { "the-door": "the-threshold" },
 };
 
 /** The deck each hand deals from, in order. */
@@ -228,11 +241,42 @@ export interface FakeServer {
   /** Mint a party, open its visit and deal its hands, for a console that needs
    *  somebody on the floor to look at. Returns the visit's id. */
   seedVisit(opts?: { installation?: string }): string;
+  /** Log a message from the control room and deliver it, exactly as the
+   *  console's broadcast route does (6.7). For a test about the RECEIVING
+   *  end, which is most of them: a crew handset's tray is fed by producers
+   *  this fake has no second connection for. */
+  seedMessage(opts: {
+    body: string;
+    audience: MessageAudience;
+    priority?: MessageView["priority"];
+    ackRequired?: boolean;
+  }): MessageView;
+  /** Where the fake's one station says it is, and the zone its installation
+   *  derives from that. A test that broadcasts to a zone needs to know
+   *  which. */
+  readonly presence: PresenceView;
   /** How many streams are open right now. */
   readonly streams: number;
 }
 
 const now = (): string => new Date(1_756_000_000_000).toISOString();
+
+/**
+ * The instant a MESSAGE is logged at, one second on from the last.
+ *
+ * Everything else in this fake reads one frozen instant, so no frame depends
+ * on a clock. Messages cannot: `GET /v1/messages?since=` is answered by
+ * comparing instants, and a tray whose every message shared one would make the
+ * catch-up either everything or nothing, whatever the cursor said. Still
+ * deterministic, and still not the wall clock: a counter from the same epoch.
+ *
+ * PER SERVER, like the bindings and for the same reason: a counter at module
+ * level is one test's state leaking into the next one's.
+ */
+const messageClock = (): (() => string) => {
+  let ticks = 0;
+  return () => new Date(1_756_000_000_000 + ++ticks * 1000).toISOString();
+};
 
 /** The wall clock this fake reads back: minutes since midnight, local to the
  *  venue, which is what `time_wall` is (10.1). 872 is 14:32. A literal rather
@@ -257,6 +301,7 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
   const visits = new Map<string, Visit>();
   const tickets = new Map<string, "station" | "party" | "producer" | "monitor">();
   const messages: MessageView[] = [];
+  const messageNow = messageClock();
   const requests: RecordedRequest[] = [];
 
   let ids = 0;
@@ -287,7 +332,13 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
     location: "the-table",
     paired: true,
   };
-  let presence: PresenceView = { station: station.station, kind: station.kind, location: "the-table", since: now() };
+  // The zone is spelt out rather than derived, because `zoneAt` below is
+  // declared after this and a device standing somewhere is the state this
+  // server starts in. `ZONES` is the one place the pairing is decided; this
+  // literal must agree with it.
+  let presence: PresenceView = {
+    station: station.station, kind: station.kind, location: "the-table", zone: "the-parlour", since: now(),
+  };
 
   // --- what the console may change, and therefore what is per-server --------
 
@@ -390,6 +441,66 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
     }
     for (const es of open) es.push(event);
     return event;
+  };
+
+  // --- zones, and who a message reaches --------------------------------------
+
+  /** The zone this installation's map derives from a location, if any (4a).
+   *  Derived here and never sent by a device: a device knows only where it is.
+   *  Which installation's map is asked is the one the handset is signed in to,
+   *  falling back to the venue's default, which is what a fixed station in a
+   *  one-story venue is serving anyway. */
+  const zoneAt = (location?: string, installation?: string): string | undefined => {
+    if (location === undefined) return undefined;
+    const story = installation ?? station.installation
+      ?? installations().find((i) => i.default === true)?.installation
+      ?? installations()[0]?.installation;
+    return story === undefined ? undefined : ZONES[story]?.[location];
+  };
+
+  const presenceNow = (location?: string): PresenceView => {
+    const zone = zoneAt(location);
+    return {
+      station: station.station,
+      kind: station.kind,
+      ...(location !== undefined ? { location } : {}),
+      ...(zone !== undefined ? { zone } : {}),
+      since: now(),
+    };
+  };
+
+  /**
+   * Whether a message reaches a stream of this scope (6.7).
+   *
+   * The half of the fan-out rule that is about messages rather than flows, and
+   * the one a client cannot check for itself: a station receives what is
+   * addressed to it, to its kind, to where it stands, to the zone its
+   * installation derives from that, or to everyone. A PARTY receives none of
+   * it. There is no party audience on the wire, and there should not be: what
+   * the control room says to the floor is said to the venue's own devices, and
+   * a visitor's phone is not one. It reaches a party only as whatever a
+   * performer standing in front of them says out loud.
+   */
+  /** A station's own copy of a message carries no acks: the tally is what a
+   *  producer watches fill in, and it is nobody else's business (6.7). */
+  const withoutAcks = (message: MessageView): MessageView => {
+    const copy: MessageView = { ...message };
+    delete copy.acks;
+    return copy;
+  };
+
+  const reaches = (message: MessageView, scope: "station" | "party" | "producer" | "monitor"): boolean => {
+    if (scope === "producer" || scope === "monitor") return true;
+    if (scope === "party") return false;
+    const to = message.audience;
+    switch (to.to) {
+      case "everyone": return true;
+      case "kind": return to.kind === station.kind;
+      case "location": return to.location === presence.location;
+      case "zone": return to.zone === presence.zone;
+      case "station": return to.station === station.station;
+      case "producers": return false;
+    }
   };
 
   // --- helpers ---------------------------------------------------------------
@@ -503,6 +614,10 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
   class FakeEventSource implements EventSourceLike {
     private readonly listeners = new Map<string, (arg: never) => void>();
     private shut = false;
+    /** What this stream is entitled to see. The flow-tagged events are already
+     *  narrow enough for this fake's one party; what this decides is messages,
+     *  which are addressed by audience and not by flow (6.7). */
+    private scope: "station" | "party" | "producer" | "monitor" = "party";
 
     constructor(url: string) {
       const query = new URLSearchParams(url.split("?")[1] ?? "");
@@ -512,6 +627,7 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
         queueMicrotask(() => this.fail());
         return;
       }
+      this.scope = tickets.get(ticket)!;
       open.add(this);
       queueMicrotask(() => {
         if (this.shut) return;
@@ -528,6 +644,9 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
 
     push(event: WireEvent): void {
       if (this.shut) return;
+      // The message half of the fan-out rule, applied on the way out so a
+      // replay from the ring buffer obeys it as a live push does.
+      if (event.type === "message" && !reaches(event.message, this.scope)) return;
       const listener = this.listeners.get("message") as ((ev: { data: unknown; lastEventId?: string }) => void) | undefined;
       listener?.({ data: JSON.stringify(event), ...(event.id !== undefined ? { lastEventId: event.id } : {}) });
     }
@@ -595,6 +714,21 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
       dealInto(visit);
       return visit.id;
     },
+    seedMessage(o) {
+      const message: MessageView = {
+        id: nextConsoleId("msg-"),
+        body: o.body,
+        sender: PRODUCER,
+        priority: o.priority ?? "note",
+        audience: o.audience,
+        at: messageNow(),
+        ...(o.ackRequired === true ? { ackRequired: true, acks: [] } : {}),
+      };
+      messages.push(message);
+      emit({ type: "message", message } as WireEvent);
+      return message;
+    },
+    get presence() { return presence; },
 
     EventSource: FakeEventSource as unknown as EventSourceCtor,
 
@@ -645,7 +779,12 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
           installations: installations(),
           run,
           build: run.build,
-          ...(isStation ? { station } : {}),
+          // With its PRESENCE: where the device says it is, and the zone
+          // this venue's story derives from that (4a). A handset waking up
+          // reads its own sign-in from here rather than asking again, and
+          // without it a crew screen would show a zone only after the next
+          // tap.
+          ...(isStation ? { station: { ...station, presence } } : {}),
           ...(visit !== undefined ? { visit: viewOf(visit) } : {}),
         };
         return ok(res);
@@ -812,12 +951,7 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
       if (path === "/stations/me/presence" && init.method === "POST") {
         if (!isStation) return fail(401, "needs_station_key", "presence is a station's fact");
         const req = body as SetPresenceRequest;
-        presence = {
-          station: station.station,
-          kind: station.kind,
-          ...(req.location !== undefined ? { location: req.location } : {}),
-          since: now(),
-        };
+        presence = presenceNow(req.location);
         emit({ type: "presence", presence } as WireEvent);
         const res: SetPresenceResponse = { presence, mirrored: [] };
         return ok(res);
@@ -826,8 +960,18 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
       // messages -------------------------------------------------------------
       if (path === "/messages" && init.method === "GET") {
         const since = query.get("since");
+        // Addressed to THIS bearer, under the same rule the stream applies:
+        // the catch-up and the delivery must agree, or a device that
+        // reconnected would learn something it was never sent (6.7).
+        const scope = isProducer ? "producer" : isStation ? "station" : "party";
         const res: ListMessagesResponse = {
-          messages: since === null ? messages : messages.filter((m) => m.at > since),
+          messages: messages
+            .filter((m) => reaches(m, scope))
+            // A cursor is EXCLUSIVE: the client sends back the instant of the
+            // last message it holds, and asking for that one again would put a
+            // duplicate in the tray.
+            .filter((m) => since === null || m.at > since)
+            .map(withoutAcks),
         };
         return ok(res);
       }
@@ -839,8 +983,8 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
           sender: { kind: "crew", id: station.station, label: station.label },
           priority: req.priority,
           audience: req.audience,
-          at: now(),
-          ...(req.ackRequired === true ? { ackRequired: true } : {}),
+          at: messageNow(),
+          ...(req.ackRequired === true ? { ackRequired: true, acks: [] } : {}),
         };
         messages.push(message);
         emit({ type: "message", message } as WireEvent);
@@ -849,7 +993,22 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
       }
       const ackMatch = /^\/messages\/([^/]+)\/ack$/.exec(path);
       if (ackMatch && init.method === "POST") {
-        const res: AckMessageResponse = { id: decodeURIComponent(ackMatch[1] ?? ""), acked: 1, of: 1 };
+        const id = decodeURIComponent(ackMatch[1] ?? "");
+        const message = messages.find((m) => m.id === id);
+        if (!message) return fail(404, "bad_request", "no message by that id in this run");
+        // The count a producer watches fill in: "4 of 5 in the forest have
+        // seen it". Acked ONCE per station, however many times a thumb lands
+        // on it, which is what makes a second ack from the same handset
+        // harmless rather than a second body in the tally.
+        message.acks ??= [];
+        if (!message.acks.some((a) => a.station === station.station)) {
+          message.acks.push({ station: station.station, at: now() });
+        }
+        const res: AckMessageResponse = {
+          id,
+          acked: message.acks.length,
+          of: reaches(message, "station") ? 1 : 0,
+        };
         return ok(res);
       }
 
@@ -1428,11 +1587,7 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
           const req = body as BindStationToLocationRequest;
           if (req.location === undefined) delete station.location;
           else station.location = req.location;
-          presence = {
-            station: station.station, kind: station.kind,
-            ...(station.location !== undefined ? { location: station.location } : {}),
-            since: now(),
-          };
+          presence = presenceNow(station.location);
           station.presence = presence;
           emit({ type: "presence", presence } as WireEvent);
           const res: BindStationToLocationResponse = { station };
@@ -1689,7 +1844,7 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
             sender: PRODUCER,
             priority: req.priority,
             audience: req.audience,
-            at: now(),
+            at: messageNow(),
             ...(req.ackRequired === true ? { ackRequired: true, acks: [] } : {}),
           };
           messages.push(message);

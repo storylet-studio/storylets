@@ -27,7 +27,11 @@ const out = join(pkg, "dist");
 // and only a crew handset shows them (design/engine-server.md 5.7).
 const APPS = [
   { dir: "kiosk", entry: "kiosk", kind: "fixed", title: "The table", extra: { idleMinutes: 4, installation: "the-caretaker", fields: { body: "text" } } },
-  { dir: "crew", entry: "crew", kind: "crew", title: "The Caretaker", extra: { fields: { body: "", show: [{ field: "prompt" }, { field: "cue", label: "Cue" }] } } },
+  // `locations` is the crew handset's own line of provisioning: the walls a
+  // performer may sign in to. It is here rather than off the wire because
+  // listing the venue's locations is a console route and a station key is not
+  // a producer (6.5). These three are This Room's (12.2).
+  { dir: "crew", entry: "crew", kind: "crew", title: "The Caretaker", extra: { fields: { body: "", show: [{ field: "prompt" }, { field: "cue", label: "Cue" }] }, locations: [{ location: "the-door", label: "The door" }, { location: "the-window", label: "The window" }, { location: "the-table", label: "The table" }] } },
   { dir: "companion", entry: "companion", kind: "companion", title: "This Room", extra: { stationKey: undefined, fields: { body: "text" } } },
   { dir: "sign-in", entry: "sign-in", kind: "sign-in", title: "Sign in", extra: { installation: "the-caretaker" } },
   { dir: "house", entry: "house", kind: "house", title: "The house", extra: { fields: { body: "text", show: [{ field: "cue", label: "Cue" }] } } },

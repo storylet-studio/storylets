@@ -34,7 +34,7 @@ export { handshakePart } from "./handshake.js";
 export type { CallSignOption, HandshakeOptions, HandshakeState } from "./handshake.js";
 
 export { zoneStripPart } from "./zones.js";
-export type { ZoneStripOptions, ZoneStripState } from "./zones.js";
+export type { ZoneStripLocation, ZoneStripOptions, ZoneStripState } from "./zones.js";
 
 export { helpButtonPart, messageTrayPart } from "./messages.js";
 export type {

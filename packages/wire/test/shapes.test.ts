@@ -226,6 +226,7 @@ const events: WireEvent[] = [
   { type: "trace", at: AT, flow: PARTY, installation: INSTALLATION, event: traceEvents[0]!, seq: 12, turn: 4 },
   { type: "world", at: AT, installation: INSTALLATION, path: "world.time_phase", value: "act-2", prev: "act-1", actor },
   { type: "visit", at: AT, flow: PARTY, installation: INSTALLATION, visit: VISIT, phase: "attached", station: STATION },
+  { type: "visit", at: AT, flow: PARTY, installation: INSTALLATION, visit: VISIT, phase: "stood", standing: [{ credential: "cr_1", location: LOCATION }] },
   { type: "run", at: AT, installation: INSTALLATION, phase: "started", run },
   { type: "cue", at: AT, flow: HOUSE_FLOW, installation: INSTALLATION, bridge: "br_osc", verb: "deal", hand: "the-wall", card: "dusk", fields: { music: "tense" } },
   { type: "message", at: AT, message },
@@ -518,9 +519,19 @@ describe("the wire contract", () => {
     expect(visit.standing).toBeUndefined();
   });
 
+  it("announces a stand as its own visit phase, carrying where the party is now", () => {
+    const stood = events.find((e) => e.type === "visit" && e.phase === "stood");
+    expect(stood).toBeDefined();
+    expect(stood?.type === "visit" ? stood.standing?.[0]?.location : undefined).toBe(LOCATION);
+    // The other phases carry no standing: a station attaching says nothing
+    // about where a phone is.
+    const attached = events.find((e) => e.type === "visit" && e.phase === "attached");
+    expect(attached?.type === "visit" ? attached.standing : "not a visit").toBeUndefined();
+  });
+
   it("constructs one literal of every shape", () => {
     expect(shapes.every((s) => s !== undefined)).toBe(true);
-    expect(events).toHaveLength(11);
+    expect(events).toHaveLength(12);
     expect(traceEvents).toHaveLength(7);
     expect(commands).toHaveLength(14);
   });

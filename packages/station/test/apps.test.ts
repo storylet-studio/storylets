@@ -226,6 +226,162 @@ describe("the crew handset", () => {
     expect(doc.querySelector(".sk-callsign-block")?.hasAttribute("hidden")).toBe(false);
   });
 
+  it("signs in to a wall and shows the zone the server derived from it", async () => {
+    const { doc, server } = open("crew");
+    await until(doc, "[data-location=\"the-door\"]");
+    // The walls are the handset's own provisioning: a station key may not read
+    // the venue's locations, so `station.json` names them (6.5).
+    const walls = [...doc.querySelectorAll<HTMLButtonElement>(".sk-zone[data-location]")]
+      .map((b) => b.textContent)
+      // The last button is "Nowhere in particular", which is a real answer and
+      // not a wall.
+      .slice(0, -1);
+    expect(walls).toEqual(["The door", "The window", "The table"]);
+
+    doc.querySelector<HTMLButtonElement>("[data-location=\"the-door\"]")!.click();
+    await until(doc, "[data-zone=\"the-threshold\"]");
+    // A LOCATION went out; a ZONE came back. The device knows where it is and
+    // the story's map is what names it (4a, 5.7).
+    const sent = server.requests.find((r) => r.path === "/v1/stations/me/presence");
+    expect(sent?.method).toBe("POST");
+    expect(sent?.body).toEqual({ location: "the-door" });
+    expect(doc.querySelector(".sk-zone-derived")?.textContent).toBe("the-threshold");
+  });
+
+  it("shows a broadcast addressed to the zone it is standing in", async () => {
+    const server = createFakeServer({ base: BASE });
+    const { doc } = open("crew", { server });
+    await until(doc, ".sk-tray");
+    expect(doc.querySelector(".sk-tray")?.textContent).toContain("Nothing from the control room");
+
+    // Where this handset stands, and what the caretaker's map calls it.
+    expect(server.presence.zone).toBe("the-parlour");
+    server.seedMessage({ body: "Everyone inside, please", audience: { to: "zone", zone: "the-parlour" }, priority: "cue" });
+    server.seedMessage({ body: "Not for this zone", audience: { to: "zone", zone: "the-threshold" } });
+
+    await until(doc, ".sk-message-cue");
+    const tray = doc.querySelector(".sk-tray")!.textContent ?? "";
+    expect(tray).toContain("Everyone inside, please");
+    expect(tray).not.toContain("Not for this zone");
+  });
+
+  it("acks once, however many times a thumb lands on it", async () => {
+    const server = createFakeServer({ base: BASE });
+    const { doc } = open("crew", { server });
+    await until(doc, ".sk-tray");
+    const message = server.seedMessage({ body: "Places", audience: { to: "everyone" }, ackRequired: true, priority: "urgent" });
+
+    const seen = await until(doc, ".sk-message-urgent button") as HTMLButtonElement;
+    seen.click();
+    seen.click();
+    seen.click();
+    await until(doc, ".sk-tray");
+    // The button goes the moment a thumb lands, so a second thumb has nothing
+    // to press and a second ack is never sent.
+    for (let i = 0; i < 10 && doc.querySelector(".sk-message-urgent button") !== null; i++) {
+      await new Promise((resolve) => { setTimeout(resolve, 10); });
+    }
+    expect(doc.querySelector(".sk-message-urgent button")).toBeNull();
+    const acks = server.requests.filter((r) => r.path === `/v1/messages/${message.id}/ack`);
+    expect(acks).toHaveLength(1);
+  });
+
+  it("calls for help with where it is and who it is standing with", async () => {
+    const server = createFakeServer({ base: BASE });
+    const party = server.seedParty({ callSign: "quiet otter 9" });
+    const { doc } = open("crew", { server });
+    await until(doc, ".sk-handshake");
+    const input = doc.querySelector<HTMLInputElement>(".sk-code-entry input")!;
+    input.value = party.token;
+    doc.querySelector<HTMLButtonElement>(".sk-code-entry button")!.click();
+    await until(doc, ".sk-card");
+
+    doc.querySelector<HTMLButtonElement>(".sk-help-button")!.click();
+    await until(doc, ".sk-help-button[disabled]");
+    const posted = (): typeof server.requests[number] | undefined =>
+      server.requests.find((r) => r.path === "/v1/messages" && r.method === "POST");
+    for (let i = 0; i < 40 && posted() === undefined; i++) {
+      await new Promise((resolve) => { setTimeout(resolve, 10); });
+    }
+    const call = posted()!;
+    const body = call.body as { body: string; priority: string; audience: { to: string }; ackRequired?: boolean };
+    expect(body.priority).toBe("urgent");
+    expect(body.audience).toEqual({ to: "producers" });
+    expect(body.ackRequired).toBe(true);
+    expect(body.body).toContain("Help");
+    // Presence, and the party. There is no second field on the wire to put
+    // them in, and a producer deciding who to send needs both (6.7).
+    expect(body.body).toContain("The table");
+    expect(body.body).toContain("the-parlour");
+    expect(body.body).toContain("quiet otter 9");
+
+    // The confirmation is the button itself, which is the one thumb-sized
+    // thing on the screen: it says so rather than inviting a fourth press.
+    const button = doc.querySelector<HTMLButtonElement>(".sk-help-button")!;
+    for (let i = 0; i < 40 && button.textContent !== "Help is called"; i++) {
+      await new Promise((resolve) => { setTimeout(resolve, 10); });
+    }
+    expect(button.textContent).toBe("Help is called");
+    expect(button.disabled).toBe(true);
+    // A help call goes TO the control room, so it does not land in this
+    // handset's own tray.
+    expect(doc.querySelector(".sk-tray")?.textContent).toContain("Nothing from the control room");
+  });
+
+  // DEGRADED MODE (spec 17 item 2): a crew handset keeps its prompt list, and
+  // its tray with it. The catch-up asks what it MISSED, from the cursor it
+  // kept, and merges: a performer who reconnected must not watch the control
+  // room's last half hour disappear.
+  it("keeps the tray across a drop, and catches up from the cursor it kept", async () => {
+    const server = createFakeServer({ base: BASE });
+    const { doc, dom } = open("crew", { server });
+    await until(doc, ".sk-tray");
+
+    const first = server.seedMessage({ body: "Houses open", audience: { to: "everyone" } });
+    await until(doc, "[data-message]");
+    expect(dom.window.localStorage.getItem("storylet.crew.since")).toBe(first.at);
+
+    // The blip, and a message sent while nobody was listening.
+    server.drop();
+    server.seedMessage({ body: "Act two", audience: { to: "everyone" } });
+    expect(doc.querySelector(".sk-tray")?.textContent).toContain("Houses open");
+
+    for (let i = 0; i < 200 && !(doc.querySelector(".sk-tray")?.textContent ?? "").includes("Act two"); i++) {
+      await new Promise((resolve) => { setTimeout(resolve, 10); });
+    }
+    const tray = doc.querySelector(".sk-tray")?.textContent ?? "";
+    expect(tray).toContain("Act two");
+    // Both, once each: the old one was never thrown away, and the new one
+    // arrived exactly once.
+    expect(tray).toContain("Houses open");
+    expect(doc.querySelectorAll("[data-message]")).toHaveLength(2);
+    // The catch-up asked from the cursor rather than for the whole run.
+    expect(server.requests.some((r) => r.path === `/v1/messages?since=${encodeURIComponent(first.at)}`)).toBe(true);
+  });
+
+  it("shows the show clock and the phase, and follows the phase when it moves", async () => {
+    const server = createFakeServer({ base: BASE });
+    const { doc } = open("crew", { server });
+    await until(doc, ".sk-clock-phase");
+    for (let i = 0; i < 60 && doc.querySelector(".sk-clock-wall")?.textContent === ""; i++) {
+      await new Promise((resolve) => { setTimeout(resolve, 10); });
+    }
+    // Minutes for the wall, as `time_wall` is: 872 is 14:32 (10.1).
+    expect(doc.querySelector(".sk-clock-wall")?.textContent).toBe("14:32");
+    expect(doc.querySelector(".sk-clock-phase")?.textContent).toBe("afternoon");
+
+    server.emit({
+      type: "world",
+      path: "world.time_phase",
+      value: "act-two",
+      actor: { kind: "producer", label: "Priya (producer)" },
+    } as never);
+    for (let i = 0; i < 60 && doc.querySelector(".sk-clock-phase")?.textContent !== "act-two"; i++) {
+      await new Promise((resolve) => { setTimeout(resolve, 10); });
+    }
+    expect(doc.querySelector(".sk-clock-phase")?.textContent).toBe("act-two");
+  });
+
   it("shows the prompt list, with the purpose and the crew field", async () => {
     const server = createFakeServer({ base: BASE });
     const party = server.seedParty({});
@@ -476,6 +632,71 @@ describe("the house display", () => {
     } as never);
     await until(doc, ".sk-quiet");
     expect(doc.body.textContent).toContain("cue: storm");
+  });
+
+  it("keeps three cues, newest first, and the phase in the corner", async () => {
+    const { doc, server } = open("house");
+    await until(doc, ".sk-map");
+    // The phase is what a room reads at a glance, and it arrives as a `world`
+    // event like any other `@world` write (10.1).
+    for (let i = 0; i < 60 && doc.querySelector(".sk-clock-phase")?.textContent !== "afternoon"; i++) {
+      await new Promise((resolve) => { setTimeout(resolve, 10); });
+    }
+    expect(doc.querySelector(".sk-clock-phase")?.textContent).toBe("afternoon");
+    expect(doc.querySelector(".sk-clock-wall")?.textContent).toBe("14:32");
+
+    server.emit({
+      type: "world",
+      path: "world.time_phase",
+      value: "act-two",
+      actor: { kind: "producer", label: "Priya (producer)" },
+    } as never);
+    for (let i = 0; i < 60 && doc.querySelector(".sk-clock-phase")?.textContent !== "act-two"; i++) {
+      await new Promise((resolve) => { setTimeout(resolve, 10); });
+    }
+    expect(doc.querySelector(".sk-clock-phase")?.textContent).toBe("act-two");
+
+    for (const cue of ["one", "two", "three", "four"]) {
+      server.emit({ type: "cue", flow: "house", bridge: "desk-lamp", verb: "deal", card: cue } as never);
+    }
+    await until(doc, ".sk-quiet");
+    for (let i = 0; i < 60 && !(doc.body.textContent ?? "").includes("four"); i++) {
+      await new Promise((resolve) => { setTimeout(resolve, 10); });
+    }
+    // A wall is read at a glance or not at all: three deep, newest at the top.
+    const lines = [...doc.querySelectorAll(".sk-quiet")].map((p) => p.textContent);
+    expect(lines).toEqual(["deal four", "deal three", "deal two"]);
+  });
+});
+
+// The companion is a PARTY, and there is no party audience on the wire (6.7).
+// What the control room says to the floor is said to the venue's own devices;
+// a visitor's phone is not one, and a party audience reaches it only through
+// the stations standing with it. So: nothing in a message ever reaches this
+// page, whoever it was addressed to.
+describe("the companion and the control room", () => {
+  it("ignores every message, however it is addressed", async () => {
+    const server = createFakeServer({ base: BASE });
+    const party = server.seedParty({});
+    const { doc } = open("companion", {
+      url: `${BASE}/at/this-room/the-door`,
+      storage: { "storylet.party.token": party.token },
+      server,
+    });
+    await until(doc, ".sk-card");
+
+    server.seedMessage({ body: "Places, everyone", audience: { to: "everyone" }, priority: "urgent" });
+    server.seedMessage({ body: "Crew only", audience: { to: "kind", kind: "crew" } });
+    server.seedMessage({ body: "The parlour", audience: { to: "zone", zone: "the-parlour" } });
+    server.seedMessage({ body: "Control room only", audience: { to: "producers" } });
+    for (let i = 0; i < 20; i++) await new Promise((resolve) => { setTimeout(resolve, 10); });
+
+    const page = doc.querySelector(".app-main")!.textContent ?? "";
+    for (const said of ["Places, everyone", "Crew only", "The parlour", "Control room only"]) {
+      expect(page).not.toContain(said);
+    }
+    // And it never asked, either: a companion has no tray to fill.
+    expect(server.requests.some((r) => r.path.startsWith("/v1/messages"))).toBe(false);
   });
 });
 

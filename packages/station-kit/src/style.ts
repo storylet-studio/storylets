@@ -110,6 +110,7 @@ export const KIT_CSS = `
 /* --- the zone strip -------------------------------------------------------- */
 .sk-zones { display: flex; flex-wrap: wrap; gap: 8px; }
 .sk-zone[aria-pressed="true"] { background: var(--accent, #2d5c86); color: var(--surface, #f4f6f9); }
+.sk-zone-derived { align-self: center; color: var(--muted, #4d5b6b); font-size: 0.85rem; font-style: italic; }
 
 /* --- messages -------------------------------------------------------------- */
 .sk-tray { display: flex; flex-direction: column; gap: 8px; }

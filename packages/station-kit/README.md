@@ -40,7 +40,7 @@ separation is what makes REARRANGE a day's work rather than a rewrite.
 | `handshakePart` | camera QR (`BarcodeDetector` where it exists), a typed-code fallback that is never optional, an optional call-sign pick list |
 | `handPart` | the hand as cards, outcomes as buttons, gated ones **disabled and never hidden**; the face is the party's unless a `CardFace` says otherwise |
 | `planTemplate` / `FieldTemplate` | a card's fields, drawn by the plan a venue supplies: a body as prose, then the named fields |
-| `zoneStripPart` | where this device is, tapped from the venue's locations |
+| `zoneStripPart` | where this device is, tapped from the walls it was given; a LOCATION goes out and the ZONE the server derived from it is shown back |
 | `messageTrayPart` | messages, newest first, with Acknowledge on what asked for it |
 | `helpButtonPart` | a performer's help call, one thumb |
 | `showClockPart` | the three clocks, counting on between readings, held on a Hold |

@@ -19,10 +19,10 @@ the show server between houses.
 | Folder | Kind | What it is |
 |---|---|---|
 | `kiosk/` | `fixed` | handshake, then the hand. Idle parks the visit after N minutes, so a party who walks away mid-beat does not leave their story for the next person. Offers the claim at the end of a first play. |
-| `crew/` | `crew` | a performer's phone. Recent parties, handshake by camera or call sign, the party's hand at this NPC as a prompt list (title, purpose, the project's `prompt` field and its `cue`), outcomes as what to record with each purpose as a hint beside its button, peek, done, the zone strip that sets presence, the show clock, messages and a help call. |
+| `crew/` | `crew` | a performer's phone. Recent parties, handshake by camera or call sign, the party's hand at this NPC as a prompt list (title, purpose, the project's `prompt` field and its `cue`), outcomes as what to record with each purpose as a hint beside its button, peek, done, the zone strip that signs in to a wall and reads back the zone the server derived, the show clock and the phase, the tray of what the control room has said (with an ack where one is asked for, and a `since` cursor kept so a handset that came back does not re-read the run), and a one-tap help call carrying where it is and who it is with. |
 | `companion/` | `companion` | the party's own phone, opened by a QR: `/p/<token>` or `/at/<venue>/<location>`. The card face is a visitor's: the title, the story, the outcome titles. Holds the token in `localStorage`, shows the party's own QR, attaches on a placard scan, offers the chooser when the walls carry two stories, and offers the claim. |
 | `sign-in/` | `sign-in` | the door. Mint, claim, issue a credential per member, show and print the QR, speak the call sign. |
-| `house/` | `house` | the venue's own flow on a wall: the plan, the clock, the house's hands, and the cues a bridge just fired, mirrored. |
+| `house/` | `house` | the venue's own flow on a wall: the plan, the clock and the phase, the house's hands, and the cues a bridge just fired, mirrored three deep under them. |
 
 ## `station.json`
 
@@ -37,6 +37,7 @@ the show server between houses.
   "installation": "the-caretaker",
   "fields": { "body": "", "show": [{ "field": "prompt" }, { "field": "cue", "label": "Cue" }] },
   "hands": { "at-the-door": "The door" },
+  "locations": [{ "location": "the-door", "label": "The door" }],
   "banner": { "held": "Back in a moment." }
 }
 ```
@@ -51,6 +52,17 @@ as prose with no label (`text` by default, and `""` on a crew handset, where
 the story is the party's phone's job), and `show` lists the others, in order.
 `hands` says what a hand is called on screen; the wire carries no hand titles,
 so a hand named nowhere is headed with its gameId.
+
+`locations` is the **crew handset's zone strip**: the walls a performer may
+sign in to, in the order they should read. It lives here rather than coming off
+the wire because the wire does not offer it, listing the venue's locations
+being a console route and a station key not being a producer. The id goes to
+`POST /v1/stations/me/presence`; the label is what a thumb finds in the dark.
+What comes back is the **zone** the story's map derives from that location, and
+the strip shows it, because that is the word a producer addresses a broadcast
+to. A handset told no locations shows an empty strip, and the performer signs
+in by scanning the placard on the wall instead, which is the same fact by the
+other route.
 
 What `station.json` may **not** say is whether the author's material shows. A
 card's purpose and an outcome's purpose are notes about what a beat is for,

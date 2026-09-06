@@ -346,6 +346,9 @@ describe("messages", () => {
     const { server, station } = bench();
     await settle();
 
+    // A help call goes TO the control room, so it does not come back: the
+    // audience is `producers`, and this handset is not one. The sender has the
+    // message it sent; the tray is for what arrives (6.7).
     const sent = await station.messages.send({
       body: "help at the door",
       priority: "urgent",
@@ -354,14 +357,75 @@ describe("messages", () => {
     });
     expect(sent.message.priority).toBe("urgent");
     await settle();
-    // Delivery rides the stream, so the desk already has it without a list.
-    expect(station.messages.all.map((m) => m.body)).toEqual(["help at the door"]);
+    expect(station.messages.all).toEqual([]);
 
-    const acked = await station.messages.ack(sent.message.id);
-    expect(acked).toEqual({ id: sent.message.id, acked: 1, of: 1 });
+    const broadcast = server.seedMessage({ body: "five minutes", audience: { to: "everyone" }, ackRequired: true });
+    await settle();
+    // Delivery rides the stream, so the desk has it without a list.
+    expect(station.messages.all.map((m) => m.body)).toEqual(["five minutes"]);
 
+    const acked = await station.messages.ack(broadcast.id);
+    expect(acked).toEqual({ id: broadcast.id, acked: 1, of: 1 });
+    // Once per station, however many times a thumb lands on it.
+    expect(await station.messages.ack(broadcast.id)).toEqual({ id: broadcast.id, acked: 1, of: 1 });
+
+    // The list is addressed the same way the stream is: the help call this
+    // station sent is not in its own catch-up either.
     const listed = await station.messages.list();
-    expect(listed).toHaveLength(1);
+    expect(listed.map((m) => m.body)).toEqual(["five minutes"]);
+    // A station's own copy carries no tally: that is the producer's.
+    expect(listed[0]?.acks).toBeUndefined();
+    station.close();
+  });
+
+  it("addresses a zone, a kind and a station, and a party gets none of it", async () => {
+    const { server, station, client } = bench();
+    const phone = server.seedParty({});
+    const companion = client.connectParty(phone.token);
+    await settle();
+
+    const at = server.presence;
+    expect(at.location).toBe("the-table");
+    expect(at.zone).toBe("the-parlour");
+
+    server.seedMessage({ body: "everyone inside", audience: { to: "zone", zone: at.zone! } });
+    server.seedMessage({ body: "not this zone", audience: { to: "zone", zone: "the-threshold" } });
+    server.seedMessage({ body: "all kiosks", audience: { to: "kind", kind: "fixed" } });
+    server.seedMessage({ body: "all crew", audience: { to: "kind", kind: "crew" } });
+    server.seedMessage({ body: "this one", audience: { to: "station", station: at.station } });
+    await settle();
+
+    expect(station.messages.all.map((m) => m.body)).toEqual(["everyone inside", "all kiosks", "this one"]);
+    // THE COMPANION'S RULE: there is no party audience on the wire, so a
+    // phone receives nothing the control room says to the floor. What reaches
+    // a visitor is whatever a performer standing in front of them says out
+    // loud (6.7).
+    expect(companion.messages.all).toEqual([]);
+    expect(await companion.messages.list()).toEqual([]);
+
+    companion.close();
+    station.close();
+  });
+
+  it("catches up with `since` by MERGING, so a reconnect does not empty the tray", async () => {
+    const { server, station } = bench();
+    await settle();
+
+    const first = server.seedMessage({ body: "houses open", audience: { to: "everyone" } });
+    await settle();
+    expect(station.messages.all.map((m) => m.body)).toEqual(["houses open"]);
+
+    // The blip. The handset misses what came while it was away, and asks for
+    // it back with the instant of the last message it holds.
+    server.drop();
+    const missed = server.seedMessage({ body: "act two", audience: { to: "everyone" } });
+    expect(missed.at > first.at).toBe(true);
+
+    const caught = await station.messages.list(first.at);
+    expect(caught.map((m) => m.body)).toEqual(["houses open", "act two"]);
+    // Without a cursor it is a full read, which REPLACES: two different
+    // questions, two different answers.
+    expect((await station.messages.list()).map((m) => m.body)).toEqual(["houses open", "act two"]);
     station.close();
   });
 });

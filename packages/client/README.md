@@ -85,6 +85,20 @@ happened or was refused, and the console says which. A blip rejects with
 again. The one thing that still holds is `monitor.connection`, and it is saying
 the TIMELINE is stale, never that a command is waiting.
 
+## Messages, and the two questions a tray asks
+
+Delivery rides the stream, so `connection.messages.subscribe` is fed without
+asking. `list()` and `list(since)` are the two catch-up reads, and they are not
+the same question. `list()` is "what is there", and it REPLACES. `list(since)`
+is "what did I miss", and it MERGES, by id, into what this connection already
+holds: answering it by replacing would empty a tray of everything older than
+the outage, which is the opposite of what degraded mode promises. A device that
+reconnects sends the instant of the newest message it holds and gets the rest.
+
+There is no party audience on the wire, so a `PartyConnection` receives no
+messages at all. What the control room says to the floor is said to the venue's
+own devices, and a visitor's phone is not one of them.
+
 ## The visit is a state machine
 
 `visit.state` is a frozen snapshot: `board`, `turns`, `clocks`, `properties`,

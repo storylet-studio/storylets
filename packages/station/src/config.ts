@@ -24,7 +24,7 @@
 /// <reference lib="dom" />
 
 import type { InstallationId, StationKind, VenueId } from "@storylet-studio/wire";
-import type { FieldPlan } from "@storylet-studio/station-kit";
+import type { FieldPlan, ZoneStripLocation } from "@storylet-studio/station-kit";
 
 export type { FieldPlan, FieldSpec } from "@storylet-studio/station-kit";
 
@@ -54,6 +54,17 @@ export interface StationConfig {
    *  "The door" }`. The wire carries no hand titles, so this is where a venue
    *  says one; a hand not named here is headed with its gameId. */
   hands?: Record<string, string>;
+  /** For a crew handset: the walls a performer may sign in to, in the order
+   *  they should read on the strip.
+   *
+   *  It lives here rather than coming off the wire because the wire does not
+   *  offer it: listing the venue's locations is a console route, and a station
+   *  key is not a producer (6.5). The alternative to this field is a strip
+   *  with nothing on it and a performer who can only sign in by finding a
+   *  placard, which is a worse answer than one line of provisioning. The id is
+   *  what goes to `POST /v1/stations/me/presence`; the label is what a thumb
+   *  finds in the dark. */
+  locations?: ZoneStripLocation[];
   /** What the page calls itself: "The table", "The Elder". */
   title?: string;
   /** Words for the connection banner, when a venue's voice differs from the
