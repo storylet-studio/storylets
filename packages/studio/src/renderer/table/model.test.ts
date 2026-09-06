@@ -91,6 +91,36 @@ describe("the Board model", () => {
     expect(rows.find((r) => r.path === "value.docks.danger")).toBeDefined();
   });
 
+  // A tag's gameId is unique only within its group, and a group's only within
+  // its box, so two boxes may each name a tag "docks" and the short address
+  // names two stores. The strip then shows the box-qualified address the
+  // engine takes (4.4), in the label as well as the path: two rows called
+  // "docks.danger" would leave a designer poking one and watching the other.
+  it("qualifies a tag two boxes name the same, in the path and on the label", () => {
+    const bundle = exampleBundle();
+    const first = bundle.boxes[0]!;
+    const second = {
+      ...first, id: "b_cellar", gameId: "cellar", title: "The cellar",
+      properties: [], decks: [], handTemplates: [], hands: [],
+      tagGroups: first.tagGroups.map((g) => ({
+        ...g, id: `${g.id}_cellar`,
+        tags: g.tags.map((t) => ({ ...t, id: `${t.id}_cellar` })),
+      })),
+    };
+    const table = new Table({ ...bundle, boxes: [...bundle.boxes, second] }, 0);
+    const rows = table.stateRows();
+    expect(rows.find((r) => r.path === "value.docks.danger")).toBeUndefined();
+    expect(rows.find((r) => r.path === "value.encounters/docks.danger"))
+      .toMatchObject({ label: "encounters/docks.danger" });
+    expect(rows.find((r) => r.path === "value.cellar/docks.danger"))
+      .toMatchObject({ label: "cellar/docks.danger" });
+    // And the address the strip shows is one the engine takes: the two rows
+    // are two stores, which is the whole reason they are told apart.
+    table.session.setProperty("value.cellar/docks.danger", 7);
+    expect(table.session.getProperty("value.encounters/docks.danger")).toBe(0);
+    expect(table.session.getProperty("value.cellar/docks.danger")).toBe(7);
+  });
+
   // The raw-state fold shows a quality as its LADDER with the current rung
   // marked (design/quality.md section 4), so the row has to carry the stages.
   // Deck qualities join the strip: a spine is exactly the state a tester

@@ -117,7 +117,11 @@ static std::string show(const std::vector<std::string>& list)
 /** Direct store writes for setup and setState: story/world are single bags;
  *  box/deck/hand/value are keyed by the owner's GAMEID (design change 4.4).
  *  The immutable id is still accepted on input for this release and raises a
- *  `diagnostic`; it is refused after the next lockstep release. */
+ *  `diagnostic`; it is refused after the next lockstep release, in every scope
+ *  including "value". A "value" key is the tag's gameId where one tag in the
+ *  bundle carries it and the box-qualified "<boxGameId>/<tagGameId>"
+ *  otherwise: two boxes may each name a tag "docks", so the short form is
+ *  refused there and the qualified one is accepted always. */
 static void applyState(Flow& session, const JsonValue& selector)
 {
     for (const char* scope : {"story", "world"})
@@ -526,6 +530,11 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
                 traces.push_back("play " + e.card + " " + e.outcome);
                 return;
             }
+            if (e.kind == TraceEvent::Kind::Write)
+            {
+                traces.push_back("write " + e.target + " " + e.path);
+                return;
+            }
             if (e.kind != TraceEvent::Kind::Deal && e.kind != TraceEvent::Kind::Peek) return;
             for (const auto& card : e.cards) verdicts[card.id] = VerdictWire(card.verdict);
         });
@@ -583,6 +592,32 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
         failures.push_back(at + ": expected a diagnostic containing \"" + want
             + "\", got " + (got.empty() ? "none" : got));
     };
+    // A write the corpus expects to be REFUSED, through the channel an unknown
+    // owner segment already uses: every string listed must appear in what the
+    // refusal said. An ambiguous short-form value address is the case that
+    // needs it - two boxes naming one tag - and what is listed is the qualified
+    // addresses it offers instead.
+    auto checkRefused = [&](const std::string& at, const JsonValue& op,
+        const std::optional<std::string>& error)
+    {
+        const JsonValue* expected = op.find("expectRefused");
+        if (!expected || !expected->isArray())
+        {
+            if (error) failures.push_back(at + ": unexpected error: " + *error);
+            return;
+        }
+        if (!error)
+        {
+            failures.push_back(at + ": expected the write to be refused, it was accepted");
+            return;
+        }
+        for (const std::string& want : stringList(*expected))
+        {
+            if (error->find(want) != std::string::npos) continue;
+            failures.push_back(at + ": expected the refusal to name \"" + want
+                + "\", got \"" + *error + "\"");
+        }
+    };
     std::unordered_map<std::string, std::string> names = handGameIds(*bundle);
 
     const JsonValue& script = c.at("script");
@@ -597,8 +632,17 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             verdicts.clear();
             diagnostics.clear();
             traces.clear();
-            applyState(*session, op);
+            std::optional<std::string> writeError;
+            try
+            {
+                applyState(*session, op);
+            }
+            catch (const std::exception& ex)
+            {
+                writeError = std::string(ex.what());
+            }
             checkDiagnostic(at, op);
+            checkRefused(at, op, writeError);
         }
         else if (kind == "peek")
         {

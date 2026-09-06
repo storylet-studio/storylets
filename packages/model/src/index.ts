@@ -138,6 +138,92 @@ export function effectiveGameId(entity: { gameId?: string; title?: string; id: s
   return fromTitle || entity.id;
 }
 
+// --- the value scope's owner segment (design/engine-server.md 4.4) -----------
+//
+// Every other owned scope names its owner with a gameId that is unique across
+// the bundle: box, deck, hand and card. A TAG's gameId is unique only within
+// its group, and a group's only within its box, so two boxes may each name a
+// tag "docks" - as ordinary as two boxes each having a "zone" group - and
+// `value.docks.danger` then names two stores.
+//
+// So the value scope's owner segment is box-qualified where it has to be:
+// `value.<boxGameId>/<tagGameId>.<name>`. The slash sits INSIDE the owner
+// segment, so the address still splits into three on the dot and no parser
+// changes shape. The qualified form is always accepted; the short form is
+// accepted while exactly one tag in the bundle carries that gameId, and
+// refused when more do, naming the qualified candidates. What a runtime
+// PRINTS - `listProperties`, a write on the trace, a load report, an
+// examiner - is the short form except where the gameId repeats.
+//
+// One definition, because the Board draws these addresses from the bundle
+// while the engine builds them from its own index, and an address the editor
+// shows that the engine will not take is the fault 4.4 was fixing.
+
+/** The three answers a value address needs, all derived from the bundle. */
+export interface ValueAddresses {
+  /** Tag internal id -> the owner segment an address PRINTS for it. */
+  print: Map<string, string>;
+  /** Every owner segment a value address ACCEPTS -> the tag's internal id.
+   *  Holds the qualified form for every tag and the short form only for a
+   *  gameId no other tag shares. */
+  accept: Map<string, string>;
+  /** A tag gameId more than one box uses -> its qualified forms, in bundle
+   *  order. Empty for the overwhelming majority of projects, and what a
+   *  refusal lists. */
+  repeated: Map<string, string[]>;
+}
+
+/** The owner segment of every tag in the bundle, both ways round. */
+export function valueAddresses(bundle: {
+  boxes: readonly { id: string; gameId?: string; title?: string; tagGroups: readonly TagGroup[] }[];
+}): ValueAddresses {
+  const tags: { id: string; gameId: string; qualified: string }[] = [];
+  for (const box of bundle.boxes) {
+    const boxGameId = effectiveGameId(box);
+    for (const group of box.tagGroups) {
+      for (const tag of group.tags) {
+        const gameId = effectiveGameId(tag);
+        tags.push({ id: tag.id, gameId, qualified: `${boxGameId}/${gameId}` });
+      }
+    }
+  }
+  // Distinct qualified forms per gameId. Distinct rather than a count: two
+  // groups in ONE box may also name a tag the same way, and a refusal that
+  // offered the same address twice would be no help at all. Those two share
+  // the qualified segment, and the first in bundle order answers to it, which
+  // is what the short form did for everything before this rule.
+  const forms = new Map<string, string[]>();
+  for (const tag of tags) {
+    const list = forms.get(tag.gameId) ?? [];
+    if (!list.includes(tag.qualified)) list.push(tag.qualified);
+    forms.set(tag.gameId, list);
+  }
+  const print = new Map<string, string>();
+  const accept = new Map<string, string>();
+  const repeated = new Map<string, string[]>();
+  for (const tag of tags) {
+    const candidates = forms.get(tag.gameId) ?? [tag.qualified];
+    const ambiguous = candidates.length > 1;
+    print.set(tag.id, ambiguous ? tag.qualified : tag.gameId);
+    if (!accept.has(tag.qualified)) accept.set(tag.qualified, tag.id);
+    if (!ambiguous && !accept.has(tag.gameId)) accept.set(tag.gameId, tag.id);
+    if (ambiguous) repeated.set(tag.gameId, candidates);
+  }
+  return { print, accept, repeated };
+}
+
+/** What an ambiguous short-form value address is told: the candidates, in
+ *  full, because "that names two tags" without them leaves a host reading a
+ *  bundle it did not write to find out which boxes. */
+export function ambiguousValueAddressMessage(
+  segment: string, name: string, candidates: readonly string[],
+): string {
+  const forms = candidates.map((q) => `"value.${q}.${name}"`);
+  const list = forms.length <= 1 ? (forms[0] ?? "")
+    : `${forms.slice(0, -1).join(", ")} or ${forms[forms.length - 1]}`;
+  return `"value.${segment}.${name}" names a tag in ${candidates.length} boxes; write ${list}`;
+}
+
 /**
  * The first free gameId of the form `base`, `base-2`, `base-3`, ... not already
  * in `taken`.

@@ -24,7 +24,7 @@ import type {
   HandFixture, OutcomeFixture, PeekCase, ScriptedCase, TemplateFixture,
 } from "./types.js";
 
-export const CORPUS_VERSION = 6;
+export const CORPUS_VERSION = 7;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>

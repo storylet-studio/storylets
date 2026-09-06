@@ -368,8 +368,13 @@ namespace storylets
          */
         struct OwnerIndex
         {
-            OrderedMap<std::string, std::string> gameId;   // internal id -> gameId
-            OrderedMap<std::string, std::string> id;       // gameId -> internal id (first in bundle order wins)
+            OrderedMap<std::string, std::string> gameId;   // internal id -> the owner segment printed
+            OrderedMap<std::string, std::string> id;       // owner segment -> internal id (first in bundle order wins)
+            /** A short form more than one owner answers to -> the qualified
+             *  candidates, in bundle order. Only the value scope can have one
+             *  (a tag's gameId is unique within its group alone), and it is
+             *  REFUSED rather than resolved to the first. */
+            OrderedMap<std::string, std::vector<std::string>> repeated;
         };
 
         /** One index per owned scope, reached by the scope word the address
@@ -400,14 +405,74 @@ namespace storylets
 
         /** Index one owner both ways. OrderedMap::set is LAST-write-wins, so
          *  the gameId -> id direction is guarded rather than set: first in
-         *  bundle order wins, which is what makes a repeated tag gameId name
-         *  the first of the two and leave the second addressable by id. */
+         *  bundle order wins. Box, deck, hand and card gameIds are unique
+         *  bundle-wide, so for those three scopes the guard never fires. */
         template <typename T>
         void IndexOwner(OwnerIndex& index, const T& entity)
         {
             const std::string gameId = EffectiveGameId(entity);
             index.gameId.set(entity.id, gameId);
             if (!index.id.contains(gameId)) index.id.set(gameId, entity.id);
+        }
+
+        /**
+         * The value scope's index, whole: the segment each tag PRINTS, every
+         * segment an address ACCEPTS, and the gameIds that need qualifying.
+         *
+         * A TAG's gameId is unique only within its group, and a group's only
+         * within its box, so two boxes may each name a tag "docks" - as
+         * ordinary as two boxes each having a "zone" group - and
+         * "value.docks.danger" then names two stores. The address is
+         * "value.<boxGameId>/<tagGameId>.<name>" wherever that happens, with
+         * the slash INSIDE the owner segment so the address still splits into
+         * three on the dot. The qualified form is always accepted; the short
+         * form is accepted while one tag carries the gameId and refused when
+         * more do (design/engine-server.md 4.4). Built from the whole bundle
+         * rather than tag by tag, because whether a tag's own gameId is enough
+         * is a question about the OTHER boxes.
+         */
+        template <typename BundleT>
+        void IndexValueOwners(OwnerIndex& index, const BundleT& bundle)
+        {
+            std::vector<std::string> ids;
+            std::vector<std::string> gameIds;
+            std::vector<std::string> qualified;
+            for (const auto& box : bundle.boxes)
+            {
+                const std::string boxGameId = EffectiveGameId(box);
+                for (const auto& group : box.tagGroups)
+                {
+                    for (const auto& tag : group.tags)
+                    {
+                        const std::string gameId = EffectiveGameId(tag);
+                        ids.push_back(tag.id);
+                        gameIds.push_back(gameId);
+                        qualified.push_back(boxGameId + "/" + gameId);
+                    }
+                }
+            }
+            // Distinct qualified forms per gameId. Distinct rather than a
+            // count: two groups in ONE box may also name a tag the same way,
+            // and a refusal that offered the same address twice would be no
+            // help at all.
+            OrderedMap<std::string, std::vector<std::string>> forms;
+            for (size_t i = 0; i < ids.size(); ++i)
+            {
+                if (!forms.contains(gameIds[i])) forms.set(gameIds[i], std::vector<std::string>());
+                std::vector<std::string>& list = *forms.get(gameIds[i]);
+                bool seen = false;
+                for (const auto& q : list) if (q == qualified[i]) { seen = true; break; }
+                if (!seen) list.push_back(qualified[i]);
+            }
+            for (size_t i = 0; i < ids.size(); ++i)
+            {
+                const std::vector<std::string>& candidates = *forms.get(gameIds[i]);
+                const bool ambiguous = candidates.size() > 1;
+                index.gameId.set(ids[i], ambiguous ? qualified[i] : gameIds[i]);
+                if (!index.id.contains(qualified[i])) index.id.set(qualified[i], ids[i]);
+                if (!ambiguous && !index.id.contains(gameIds[i])) index.id.set(gameIds[i], ids[i]);
+                if (ambiguous) index.repeated.set(gameIds[i], candidates);
+            }
         }
 
         // --- the load report (design/engine-server.md 4.9) --------------------
@@ -830,8 +895,10 @@ namespace storylets
          * stores are keyed by. `outLegacy` says the caller used the pre-4.4
          * form - an internal id where a gameId belongs - which resolves for
          * THIS release and earns a diagnostic; the next lockstep release
-         * refuses it. False when the segment names no owner at all, which is
-         * the caller's "no <kind> store" error.
+         * refuses it, in every scope including "value". False when the segment
+         * names no owner at all, which is the caller's "no <kind> store"
+         * error, and false too for an ambiguous short form, which is
+         * deliberately not in the id map: see ownerOrThrow.
          */
         bool resolveOwner(const std::string& kind, const std::string& segment,
             std::string& outId, bool& outLegacy) const
@@ -853,6 +920,38 @@ namespace storylets
                 return true;
             }
             return false;
+        }
+
+        /** What an ambiguous short-form value address is told: the candidates,
+         *  in full, because "that names two tags" without them leaves a host
+         *  reading a bundle it did not write to find out which boxes. */
+        std::string ambiguousAddressMessage(const std::string& segment, const std::string& name,
+            const std::vector<std::string>& candidates) const
+        {
+            std::string list;
+            for (size_t i = 0; i < candidates.size(); ++i)
+            {
+                if (i > 0) list += (i + 1 == candidates.size() ? " or " : ", ");
+                list += "\"value." + candidates[i] + "." + name + "\"";
+            }
+            return "\"value." + segment + "." + name + "\" names a tag in "
+                + std::to_string(candidates.size()) + " boxes; write " + list;
+        }
+
+        /** Resolve or refuse: the two refusals every property address shares,
+         *  in one place, so the engine's own surface and a flow's answer with
+         *  the same words. */
+        std::string ownerOrThrow(const std::string& kind, const std::string& segment,
+            const std::string& name, bool& outLegacy) const
+        {
+            const std::vector<std::string>* candidates = owners_.of(kind).repeated.get(segment);
+            if (candidates) throw StoryletError(ambiguousAddressMessage(segment, name, *candidates));
+            std::string id;
+            if (!resolveOwner(kind, segment, id, outLegacy))
+            {
+                throw StoryletError("no " + kind + " store \"" + segment + "\"");
+            }
+            return id;
         }
 
         /** What a legacy address is told. It NAMES the address to move to,
@@ -897,17 +996,15 @@ namespace storylets
 
         /** Resolve an owned-scope path ("box.village.heat") for both property
          *  verbs, diagnostic and all. Throws for an owner segment that names
-         *  nothing at all. */
+         *  nothing at all, and for a short-form value segment that names a tag
+         *  in more than one box. */
         OwnedAddress resolveOwned(const std::vector<std::string>& parts) const
         {
             OwnedAddress owned;
             owned.kind = parts[0];
             owned.segment = parts[1];
             owned.name = parts[2];
-            if (!resolveOwner(owned.kind, owned.segment, owned.id, owned.legacy))
-            {
-                throw StoryletError("no " + owned.kind + " store \"" + owned.segment + "\"");
-            }
+            owned.id = ownerOrThrow(owned.kind, owned.segment, owned.name, owned.legacy);
             if (owned.legacy) diagnose(legacyAddressMessage(owned.kind, owned.segment, owned.name));
             return owned;
         }
@@ -2653,16 +2750,13 @@ namespace storylets
 
         /** The internal id an owned-scope address names, diagnosing the pre-4.4
          *  internal-id form on the way past (4.4). Throws for an owner segment
-         *  that names nothing at all. */
+         *  that names nothing at all, and for a short-form value segment that
+         *  names a tag in more than one box. */
         std::string ownerId(const std::string& kind, const std::string& segment,
             const std::string& name) const
         {
-            std::string id;
             bool legacy = false;
-            if (!engine_->resolveOwner(kind, segment, id, legacy))
-            {
-                throw StoryletError("no " + kind + " store \"" + segment + "\"");
-            }
+            const std::string id = engine_->ownerOrThrow(kind, segment, name, legacy);
             if (legacy) diagnose("property address", engine_->legacyAddressMessage(kind, segment, name));
             return id;
         }
@@ -3084,6 +3178,10 @@ namespace storylets
     {
         if (opts.log) logCap_ = opts.logCap;
         if (opts.world.has_value()) hostWorld_ = opts.world;
+        // The value scope's segments come off the whole bundle at once (a tag
+        // gameId is only unique within its group), so they are built before the
+        // walk rather than tag by tag inside it.
+        detail::IndexValueOwners(owners_.value, *bundle_);
         for (const auto& box : bundle_->boxes)
         {
             boxesById_.set(box.id, &box);
@@ -3093,7 +3191,6 @@ namespace storylets
             {
                 groupsById_.set(group.id, detail::GroupInBox{&group, &box});
                 if (group.required) requiredGroups_.insert(group.id);
-                for (const auto& tag : group.tags) detail::IndexOwner(owners_.value, tag);
             }
             for (const auto& deck : box.decks)
             {

@@ -7,7 +7,7 @@
 
 import { Engine } from "@storylet-studio/runtime";
 import type { Flow, LogEntry, TraceEvent, TraceVerdict } from "@storylet-studio/runtime";
-import { SAVEFILE_SCHEMA, effectiveGameId } from "@storylet-studio/model";
+import { SAVEFILE_SCHEMA, effectiveGameId, valueAddresses } from "@storylet-studio/model";
 import type { Bundle, PropertyBag, PropertyDecl, SaveFile, ScalarValue } from "@storylet-studio/model";
 
 export type { LogEntry, TraceEvent } from "@storylet-studio/runtime";
@@ -106,8 +106,12 @@ export interface StateRow {
  *
  * The path shapes are the engine's own: "story.x", "box.<gameId>.x",
  * "deck.<gameId>.x", "hand.<gameId>.x", "value.<tagGameId>.x" - the owner
- * segment is a gameId (design/engine-server.md 4.4). Hands take their
- * template's declarations where they have one, exactly as the engine's bags do.
+ * segment is a gameId (design/engine-server.md 4.4), box-qualified for a tag
+ * gameId two boxes share ("value.harbour/docks.x"), which is the one owner a
+ * gameId does not name uniquely. `valueAddresses` is that rule, shared with the
+ * engine so the address this shows is one the engine will take. Hands take
+ * their template's declarations where they have one, exactly as the engine's
+ * bags do.
  */
 export function durablePropertyPaths(bundle: Bundle): string[] {
   const out: string[] = [];
@@ -115,6 +119,7 @@ export function durablePropertyPaths(bundle: Bundle): string[] {
     for (const d of decls ?? []) if (d.durable === true) out.push(`${prefix}${d.name}`);
   };
   push("story.", bundle.story.properties);
+  const values = valueAddresses(bundle);
   for (const box of bundle.boxes) {
     push(`box.${effectiveGameId(box)}.`, box.properties);
     for (const deck of box.decks) push(`deck.${effectiveGameId(deck)}.`, deck.properties);
@@ -125,7 +130,9 @@ export function durablePropertyPaths(bundle: Bundle): string[] {
       push(`hand.${effectiveGameId(hand)}.`, decls);
     }
     for (const group of box.tagGroups) {
-      for (const tag of group.tags) push(`value.${effectiveGameId(tag)}.`, tag.properties);
+      for (const tag of group.tags) {
+        push(`value.${values.print.get(tag.id) ?? effectiveGameId(tag)}.`, tag.properties);
+      }
     }
   }
   return out;
@@ -536,11 +543,19 @@ export class Table {
     };
     for (const decl of this.bundle.world.properties) push(`world.${decl.name}`, decl.name, "world", decl);
     for (const decl of this.bundle.story.properties) push(`story.${decl.name}`, decl.name, "story", decl);
+    // The tag rows' owner segment, from the shared rule (4.4): the tag's
+    // gameId, or "<boxGameId>/<tagGameId>" where two boxes name a tag the same
+    // way. The LABEL carries whichever the path does, so a designer looking at
+    // two "docks.danger" rows can see which box each belongs to - and so that
+    // what the strip shows is an address the engine would accept, which is the
+    // whole point of one grammar.
+    const values = valueAddresses(this.bundle);
     for (const box of this.bundle.boxes) {
       for (const group of box.tagGroups) {
         for (const tag of group.tags) {
+          const owner = values.print.get(tag.id) ?? effectiveGameId(tag);
           for (const decl of tag.properties ?? []) {
-            push(`value.${effectiveGameId(tag)}.${decl.name}`, `${tag.gameId}.${decl.name}`, group.gameId ?? group.id, decl);
+            push(`value.${owner}.${decl.name}`, `${owner}.${decl.name}`, group.gameId ?? group.id, decl);
           }
         }
       }

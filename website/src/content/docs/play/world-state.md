@@ -84,11 +84,19 @@ expression language a designer writes in; the API takes a plain path. The paths 
 | `box.<box>.<name>` | a box's properties |
 | `deck.<deck>.<name>` | a deck's properties |
 | `hand.<hand>.<name>` | a hand's properties |
-| `value.<tag>.<name>` | a tag's own properties |
+| `value.<tag>.<name>` | a tag's own properties (see below when two boxes share a tag name) |
 
 The owner is named by the name you gave it: a box, deck, hand or tag is addressed by the same
 gameId you write in a shard and read on a card. So the Elder's zone is
 `hand.the-elder.zone`, and the docks' danger is `value.docks.danger`.
+
+**Two boxes may name a tag the same way.** Box, deck and hand names are unique across a
+project, but a tag's name only has to be unique within its group, and a group's within its
+box, so a harbour box and a cellar box can each have a `docks`. Where that happens, say which
+box: `value.harbour/docks.danger`. The slash sits inside the owner segment, so the address
+still has its three parts. You can always write the long form, whether or not you need it; the
+short one is refused where it would name two tags at once, and the refusal tells you both
+addresses to choose from. A project whose tag names happen to be unique sees none of this.
 
 `getProperty` reads the same paths, and `listProperties()` returns every declared property
 with its path, type, current value and default. That list is what the in-engine

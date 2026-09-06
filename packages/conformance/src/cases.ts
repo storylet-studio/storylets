@@ -330,15 +330,14 @@ export const fixtures: Fixtures = {
       // Only b_y's `v_docks_y` carries danger 3; b_x's `v_docks` keeps its
       // default 0. Asking b_x must compose b_x's tag properties.
       //
-      // Addressed by INTERNAL ID on purpose, and it is the one selector in the
-      // corpus that is: both tags carry the gameId "docks" (tag gameIds are
-      // unique within a group, and groups within a box), so `value.docks`
-      // names the first of the two in bundle order - b_x's - and b_y's is
-      // reachable only by id. The legacy form is accepted for this release
-      // (4.4), which is what makes this case pass unchanged; the collision
-      // itself is why the value scope cannot lose the id form on the same
-      // timetable as the other three.
-      setup: { value: { v_docks_y: { danger: 3 } } },
+      // Addressed by the BOX-QUALIFIED form, which is what a tag gameId two
+      // boxes share is addressed by (4.4's follow-up): both tags carry the
+      // gameId "docks" (tag gameIds are unique within a group, and groups
+      // within a box), so the bare `value.docks` is refused here and
+      // `value.other/docks` names b_y's. The first cut of this case wrote the
+      // INTERNAL id, the one selector in the corpus that did, because there
+      // was then no other way to reach the second tag.
+      setup: { value: { "other/docks": { danger: 3 } } },
       cards: [
         { id: "c_xcalm", priority: 1, condition: "@hand.danger == 0" },
         { id: "c_xwild", priority: 2, condition: "@hand.danger == 3" },
@@ -2333,6 +2332,106 @@ export const fixtures: Fixtures = {
           exact: false, project: "conf", flows: ["main"],
           droppedProperties: [{ flow: "main", path: "hand.elder.uses" }],
         } },
+      ] },
+
+    // --- the value scope's owner is box-qualified where it must be -----------
+    //
+    // The one hole 4.4 left, and the reason the internal-id form could not be
+    // retired for `value` with the rest. Box, deck, hand and card gameIds are
+    // unique bundle-wide, so their owner segment names one thing. A TAG's is
+    // unique only within its group, and a group's only within its box, so two
+    // boxes may each name a tag "docks" - ordinary authoring, the same way two
+    // boxes may each have a "zone" group - and `value.docks.danger` then names
+    // two stores.
+    //
+    // The address is `value.<boxGameId>/<tagGameId>.<name>`: the slash lives
+    // INSIDE the owner segment, so the address keeps its three dots and every
+    // parser keeps the shape it already has. It is accepted always. The short
+    // form resolves while exactly one tag in the bundle carries that gameId
+    // and is refused when more do - refused, not resolved to the first in
+    // bundle order, which is the bug this removes: a hand-authored address
+    // silently naming a store in a box the author was not thinking about is
+    // not a thing a runtime should do quietly.
+
+    { name: "a tag gameId in two boxes is reached by its box-qualified address",
+      // `otherBox` gives the bundle b_y, whose own "zone" group carries its
+      // own "docks" tag with its own `danger` - so "docks" names two stores.
+      cards: [{ id: "c_riot", tags: { zone: ["docks"] }, outcomes: [
+        { id: "o_escalate", changes: { "@hand.danger": "@hand.danger + 1" } },
+      ] }],
+      hands: [{ id: "h_docks", rule: { bindings: { zone: "docks" } } }],
+      otherBox: { cards: [{ id: "c_yplain" }] },
+      script: [
+        // Two addresses, two stores. Written in one op, so a runtime that
+        // resolved both to the first tag would show up as the second write
+        // overwriting the first.
+        { op: "setState", value: { "box/docks": { danger: 1 }, "other/docks": { danger: 5 } } },
+        { op: "assertState", expect: {
+          "value.box/docks.danger": 1, "value.other/docks.danger": 5 } },
+        // And what the engine PRINTS is the qualified form, for a repeated
+        // gameId only: the write event's path is the address `getProperty`
+        // takes, so a run log, a load report and a host call are one string.
+        { op: "deal", hands: ["h_docks"], expectBoard: { h_docks: ["c_riot"] } },
+        { op: "play", card: "c_riot", outcome: "escalate", from: "h_docks",
+          expectTrace: ["write @hand.danger value.box/docks.danger"] },
+        // The played hand is b_x's, so b_x's tag moved and b_y's did not.
+        { op: "assertState", expect: {
+          "value.box/docks.danger": 2, "value.other/docks.danger": 5 } },
+      ] },
+
+    { name: "the short form is refused where two boxes name the tag, and says what to write",
+      cards: [{ id: "c_any" }],
+      otherBox: { cards: [{ id: "c_yplain" }] },
+      script: [
+        // Refused through the channel an unknown owner segment already uses,
+        // and the refusal NAMES both candidates: a host holding an address
+        // that no longer resolves cannot otherwise tell which box the tag it
+        // meant is in, and there are only ever a handful.
+        { op: "setState", value: { docks: { danger: 9 } },
+          expectRefused: ["value.docks.danger", "value.box/docks.danger", "value.other/docks.danger"] },
+        // Nothing landed. A refusal that half-wrote would be worse than a
+        // guess, because it would be a guess with a hole in it.
+        { op: "assertState", expect: {
+          "value.box/docks.danger": 0, "value.other/docks.danger": 0 } },
+      ] },
+
+    { name: "one box naming the tag keeps the short form, and takes the qualified one too",
+      // The same fixture WITHOUT the second box: nothing about a project whose
+      // tag names happen to be unique may change, which is most projects.
+      cards: [{ id: "c_riot", tags: { zone: ["docks"] }, outcomes: [
+        { id: "o_escalate", changes: { "@hand.danger": "@hand.danger + 1" } },
+      ] }],
+      hands: [{ id: "h_docks", rule: { bindings: { zone: "docks" } } }],
+      script: [
+        { op: "setState", value: { docks: { danger: 2 } } },
+        // The qualified form is accepted whether or not it is needed, so a
+        // tool that always writes it (a contract, a venue's provisioning) is
+        // not made wrong by an author deleting the second box.
+        { op: "assertState", expect: {
+          "value.docks.danger": 2, "value.box/docks.danger": 2 } },
+        { op: "setState", value: { "box/docks": { danger: 4 } } },
+        { op: "assertState", expect: { "value.docks.danger": 4 } },
+        // And the engine still PRINTS the short form here: an unambiguous
+        // project sees no change at all.
+        { op: "deal", hands: ["h_docks"], expectBoard: { h_docks: ["c_riot"] } },
+        { op: "play", card: "c_riot", outcome: "escalate", from: "h_docks",
+          expectTrace: ["write @hand.danger value.docks.danger"] },
+        { op: "assertState", expect: { "value.docks.danger": 5 } },
+      ] },
+
+    { name: "a tag's internal-id address still resolves, and names the qualified form",
+      cards: [{ id: "c_any" }],
+      otherBox: { cards: [{ id: "c_yplain" }] },
+      script: [
+        // The value scope was 4.4's one exception, kept because a repeated tag
+        // gameId had no other address. It has one now, so the id form is on the
+        // same timetable as the other three scopes: accepted for this release
+        // with a diagnostic, refused after the next. What the diagnostic names
+        // is the address that WORKS - the qualified one, since the short one
+        // would be refused.
+        { op: "setState", value: { v_docks_y: { danger: 6 } },
+          expectDiagnostic: "value.other/docks.danger" },
+        { op: "assertState", expect: { "value.other/docks.danger": 6 } },
       ] },
   ],
 };

@@ -25,10 +25,16 @@ export type ScopeBag = Record<string, ScalarValue>;
  *  bags; box/deck/hand/value are keyed by the owner's GAMEID
  *  (design/engine-server.md 4.4). The immutable id is still accepted on input
  *  for this release and raises a `diagnostic`; it is refused after the next
- *  lockstep release. One case leans on that deliberately: two boxes may each
- *  name a tag "docks", and a tag gameId is only unique within its group, so
- *  `value.docks` names the FIRST such tag in bundle order and the second stays
- *  addressable by id. */
+ *  lockstep release, in every scope including `value`.
+ *
+ *  A `value` key is a tag's gameId where that gameId belongs to exactly one
+ *  tag in the bundle, and the BOX-QUALIFIED form `"<boxGameId>/<tagGameId>"`
+ *  otherwise: a tag's gameId is unique only within its group, and a group's
+ *  only within its box, so two boxes may each name a tag "docks". The
+ *  qualified form is accepted whether or not the short one is ambiguous; the
+ *  short one is REFUSED when it is, naming both ways out (see
+ *  `expectRefused`). The slash sits inside the owner segment, so an address
+ *  keeps its three dots and every parser keeps its shape. */
 export interface StateSelector {
   story?: ScopeBag;
   world?: ScopeBag;
@@ -110,20 +116,39 @@ export type TraceVerdictKind =
  *
  *     evict <hand> <card> <reason>
  *     play <card> <outcome>
+ *     write <target> <path>
  *
- * Deliberately only those two kinds, and deliberately a flat string rather
+ * Deliberately only those three kinds, and deliberately a flat string rather
  * than a struct: `expectVerdicts` already pins `cards[].id` on a deal or a
- * peek, and these are the two events nothing else could reach. What they pin
+ * peek, and these are the events nothing else could reach. What they pin
  * is IDENTITY - `evict.hand`, `evict.card` and `play.card` are gameIds now,
  * where three of them were internal ids until 4.4 - so the cheapest assertion
  * that can tell one form from the other is the whole requirement. A runtime
  * implements it as one formatter and one containment check.
+ *
+ * `write` carries the authored `target` ("@hand.danger") and the `path` the
+ * write actually LANDED at, which is where a routed @hand write shows its
+ * tag (schema 3.6). It is the one place a case can read what the engine
+ * PRINTS an address as, so it is what pins the box-qualified value form: a
+ * repeated tag gameId prints qualified, a unique one prints short. The value
+ * itself is deliberately not in the string - four languages spell a number
+ * four ways, and `assertState` already pins what landed.
  */
 export type ScriptOp =
   /** `expectDiagnostic` is the deal op's field, on a write: an address whose
    *  owner segment is an internal id resolves for this release and SAYS SO,
-   *  naming the gameId form, so a host can find its old addresses (4.4). */
-  | ({ op: "setState"; flow?: string; expectDiagnostic?: string } & StateSelector)
+   *  naming the gameId form, so a host can find its old addresses (4.4).
+   *
+   *  `expectRefused` is its opposite: the write must be REFUSED, through the
+   *  same channel an unknown owner segment already is (the error
+   *  `setProperty` throws), and every string listed must appear in what the
+   *  refusal says. An ambiguous short-form value address is the case that
+   *  needs it - two boxes naming one tag - and the strings to list are the
+   *  qualified addresses the refusal offers instead, because a refusal that
+   *  does not name the way out leaves a host guessing at a bundle it did not
+   *  write. No part of the selector may land: a refused write changes
+   *  nothing. */
+  | ({ op: "setState"; flow?: string; expectDiagnostic?: string; expectRefused?: string[] } & StateSelector)
   /** `expectError` pins the asks that must be REFUSED - notably a tag group
    *  gameId that belongs to another box (group gameIds are box-scoped, so
    *  box-scoping must be a real scope, never a bundle-wide fallback), and
@@ -163,8 +188,9 @@ export type ScriptOp =
   | { op: "assertOutcomeOrder"; flow?: string; card: string; from: string; expect: string[] }
   /** Paths: "turn.b_x", "story.gold", "value.docks.danger", "box.x.heat",
    *  "world.x", ... - read on the op's flow (the merged view). The owner
-   *  segment is a gameId (4.4); `turn.` takes either, as `advanceTurns` and
-   *  `turn()` always have. */
+   *  segment is a gameId (4.4), box-qualified for a tag gameId two boxes
+   *  share ("value.other/docks.danger"); `turn.` takes either, as
+   *  `advanceTurns` and `turn()` always have. */
   | { op: "assertState"; flow?: string; expect: Record<string, ScalarValue> }
   /** Open (or REPLACE - re-opening an existing name resets its per-flow
    *  state, shared state untouched) a named flow. `seed` overrides the

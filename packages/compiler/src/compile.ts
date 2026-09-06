@@ -140,7 +140,7 @@ export function compileProject(source: SourceProject): CompileResult {
    * build a path from one of these: reporting alone would leave the write
    * unguarded (design/storyletter.md section 4, "addresses").
    */
-  const checkGameId = (kind: string, entity: { gameId?: string; id: string }, path: string): void => {
+  const checkGameId = (kind: string, entity: { gameId?: string; title?: string; id: string }, path: string): void => {
     // The PINNED value only. The other two ways an address is arrived at are
     // safe by construction and must not be checked against this regex: a derived
     // one comes from `gameIdify`, whose output is always legal, and the last
@@ -148,11 +148,29 @@ export function compileProject(source: SourceProject): CompileResult {
     // ("c_arrive") and would fail. Checking the effective address flagged every
     // untitled entity in the corpus, which is how this was caught.
     const pinned = entity.gameId?.trim();
-    if (pinned === undefined || pinned === "" || isValidGameId(pinned)) return;
+    if (pinned !== undefined && pinned !== "" && !isValidGameId(pinned)) {
+      report({
+        severity: "error", path, where: pinned,
+        message: `${kind} gameId "${pinned}" is not a legal address`
+          + " (lower case letters, digits and hyphens; must start and end with a letter or digit)",
+      });
+      return;
+    }
+    // The slash, on the EFFECTIVE address rather than the pinned one, and so
+    // separately from the grammar above. It is the one character that MEANS
+    // something in an address rather than merely being illegal in a name: a
+    // tag two boxes share is addressed "value.<boxGameId>/<tagGameId>.<name>"
+    // (design/engine-server.md 4.4), so a slash anywhere inside an address
+    // would split one owner segment into two. The pinned check refuses it and
+    // `gameIdify` cannot produce it, which leaves the last resort - a
+    // hand-written shard's own id, which nothing shape-checks - as the only
+    // route into a bundle.
+    const effective = effectiveGameId(entity);
+    if (!effective.includes("/")) return;
     report({
-      severity: "error", path, where: pinned,
-      message: `${kind} gameId "${pinned}" is not a legal address`
-        + " (lower case letters, digits and hyphens; must start and end with a letter or digit)",
+      severity: "error", path, where: effective,
+      message: `${kind} address "${effective}" cannot contain "/"`
+        + ' (the slash separates a box from a tag in a property address, as in "value.harbour/docks.danger")',
     });
   };
   /**

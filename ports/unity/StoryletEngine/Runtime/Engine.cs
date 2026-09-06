@@ -99,10 +99,15 @@ namespace StoryletStudio.StoryletEngine
     /// cannot be retired on the same timetable as the rest.</summary>
     internal sealed class OwnerIndex
     {
-        /// <summary>Internal id -> gameId.</summary>
+        /// <summary>Internal id -> the owner segment an address prints.</summary>
         public readonly Dictionary<string, string> GameId = new Dictionary<string, string>();
-        /// <summary>GameId -> internal id; first in bundle order wins.</summary>
+        /// <summary>Owner segment -> internal id; first in bundle order wins.</summary>
         public readonly Dictionary<string, string> Id = new Dictionary<string, string>();
+        /// <summary>A short form more than one owner answers to -> the
+        /// qualified candidates, in bundle order. Only the value scope can
+        /// have one (a tag's gameId is unique within its group alone), and it
+        /// is REFUSED rather than resolved to the first.</summary>
+        public readonly Dictionary<string, List<string>> Repeated = new Dictionary<string, List<string>>();
 
         public void Add(string id, string gameId)
         {
@@ -430,8 +435,10 @@ namespace StoryletStudio.StoryletEngine
         /// id the stores are keyed by. `legacy` says the caller used the pre-4.4
         /// form - an internal id where a gameId belongs - which resolves for
         /// THIS release and earns a diagnostic; the next lockstep release
-        /// refuses it. False when the segment names no owner at all, which is
-        /// the caller's "no &lt;kind&gt; store" error.</summary>
+        /// refuses it, in every scope including "value". False when the segment
+        /// names no owner at all, which is the caller's "no &lt;kind&gt; store"
+        /// error, and false too for an ambiguous short form, which is
+        /// deliberately not in the Id map: see OwnerOrThrow.</summary>
         internal bool TryResolveOwner(string kind, string segment, out string id, out bool legacy)
         {
             var owners = Owners(kind);
@@ -442,6 +449,99 @@ namespace StoryletStudio.StoryletEngine
             id = null;
             legacy = false;
             return false;
+        }
+
+        /// <summary>Resolve or refuse: the two refusals every property address
+        /// shares, in one place, so the engine's own surface and a flow's
+        /// answer with the same words.</summary>
+        internal string OwnerOrThrow(string kind, string segment, string name, out bool legacy)
+        {
+            List<string> candidates;
+            if (Owners(kind).Repeated.TryGetValue(segment, out candidates))
+            {
+                throw new StoryletError(AmbiguousAddressMessage(segment, name, candidates));
+            }
+            string id;
+            if (!TryResolveOwner(kind, segment, out id, out legacy))
+            {
+                throw new StoryletError($"no {kind} store \"{segment}\"");
+            }
+            return id;
+        }
+
+        /// <summary>What an ambiguous short-form value address is told: the
+        /// candidates, in full, because "that names two tags" without them
+        /// leaves a host reading a bundle it did not write to find out which
+        /// boxes.</summary>
+        internal string AmbiguousAddressMessage(string segment, string name, List<string> candidates)
+        {
+            var forms = new List<string>();
+            foreach (var q in candidates) forms.Add($"\"value.{q}.{name}\"");
+            var list = forms.Count <= 1
+                ? (forms.Count == 1 ? forms[0] : "")
+                : string.Join(", ", forms.GetRange(0, forms.Count - 1).ToArray()) + " or " + forms[forms.Count - 1];
+            return $"\"value.{segment}.{name}\" names a tag in {candidates.Count} boxes; write {list}";
+        }
+
+        /// <summary>The value scope's index, whole: the segment each tag
+        /// PRINTS, every segment an address ACCEPTS, and the gameIds that need
+        /// qualifying.
+        ///
+        /// Every other owned scope names its owner with a gameId that is unique
+        /// across the bundle. A TAG's is unique only within its group, and a
+        /// group's only within its box, so two boxes may each name a tag
+        /// "docks" - as ordinary as two boxes each having a "zone" group - and
+        /// "value.docks.danger" then names two stores. The address is
+        /// "value.&lt;boxGameId&gt;/&lt;tagGameId&gt;.&lt;name&gt;" wherever that
+        /// happens, with the slash INSIDE the owner segment so the address
+        /// still splits into three on the dot. The qualified form is always
+        /// accepted; the short form is accepted while one tag carries the
+        /// gameId and refused when more do. Built from the whole bundle rather
+        /// than tag by tag, because whether a tag's own gameId is enough is a
+        /// question about the OTHER boxes.</summary>
+        private void IndexValueOwners(Bundle bundle)
+        {
+            var ids = new List<string>();
+            var gameIds = new List<string>();
+            var qualified = new List<string>();
+            foreach (var box in bundle.Boxes)
+            {
+                var boxGameId = Model.EffectiveGameId(box);
+                foreach (var group in box.TagGroups)
+                {
+                    foreach (var tag in group.Tags)
+                    {
+                        var gameId = Model.EffectiveGameId(tag);
+                        ids.Add(tag.Id);
+                        gameIds.Add(gameId);
+                        qualified.Add(boxGameId + "/" + gameId);
+                    }
+                }
+            }
+            // Distinct qualified forms per gameId. Distinct rather than a
+            // count: two groups in ONE box may also name a tag the same way,
+            // and a refusal that offered the same address twice would be no
+            // help at all.
+            var forms = new Dictionary<string, List<string>>();
+            for (var i = 0; i < ids.Count; i++)
+            {
+                List<string> list;
+                if (!forms.TryGetValue(gameIds[i], out list))
+                {
+                    list = new List<string>();
+                    forms[gameIds[i]] = list;
+                }
+                if (!list.Contains(qualified[i])) list.Add(qualified[i]);
+            }
+            for (var i = 0; i < ids.Count; i++)
+            {
+                var candidates = forms[gameIds[i]];
+                var ambiguous = candidates.Count > 1;
+                _valueOwners.GameId[ids[i]] = ambiguous ? qualified[i] : gameIds[i];
+                if (!_valueOwners.Id.ContainsKey(qualified[i])) _valueOwners.Id[qualified[i]] = ids[i];
+                if (!ambiguous && !_valueOwners.Id.ContainsKey(gameIds[i])) _valueOwners.Id[gameIds[i]] = ids[i];
+                if (ambiguous) _valueOwners.Repeated[gameIds[i]] = candidates;
+            }
         }
 
         /// <summary>What a legacy address is told. It NAMES the address to move
@@ -523,6 +623,10 @@ namespace StoryletStudio.StoryletEngine
             _onReplacedFlow = opts.OnReplacedFlow;
             if (opts.Log) _logCap = opts.LogCap;
             _hostWorld = opts.World;
+            // The value scope's segments come off the whole bundle at once (a
+            // tag gameId is only unique within its group), so they are built
+            // before the walk rather than tag by tag inside it.
+            IndexValueOwners(bundle);
             foreach (var box in bundle.Boxes)
             {
                 _boxesById.Set(box.Id, box);
@@ -532,7 +636,6 @@ namespace StoryletStudio.StoryletEngine
                 {
                     _groupsById.Set(group.Id, (group, box));
                     if (group.Required) requiredGroups.Add(group.Id);
-                    foreach (var tag in group.Tags) _valueOwners.Add(tag.Id, Model.EffectiveGameId(tag));
                 }
                 foreach (var deck in box.Decks)
                 {
@@ -882,10 +985,7 @@ namespace StoryletStudio.StoryletEngine
                 var kind = parts[0];
                 var segment = parts[1];
                 var name = parts[2];
-                if (!TryResolveOwner(kind, segment, out var id, out var legacy))
-                {
-                    throw new StoryletError($"no {kind} store \"{segment}\"");
-                }
+                var id = OwnerOrThrow(kind, segment, name, out var legacy);
                 if (legacy) Diagnose(LegacyAddressMessage(kind, segment, name));
                 var sharedKind = KindOf(_shared, kind);
                 var flowDecls = FlowDeclsOf(kind);

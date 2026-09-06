@@ -21,7 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import {
-  contractPropertyPath, contractPropertyType, effectiveGameId,
+  contractPropertyPath, contractPropertyType, effectiveGameId, valueAddresses,
 } from "@storylet-studio/model";
 import type { ContractShard, PropertyDecl, PropertyType } from "@storylet-studio/model";
 import type { Issue, SourceBox, SourceProject } from "@storylet-studio/compiler";
@@ -47,6 +47,12 @@ function handDecls(box: SourceBox, hand: SourceBox["hands"]["hands"][number]): P
  * internal-id form still resolving so a venue provisioned before the change
  * does not go dark on the night. Both stay accepted here for as long as they
  * are accepted there.
+ *
+ * A TAG is the exception, because its gameId is unique only within its group:
+ * where two boxes name a tag the same way the engine refuses the short form and
+ * takes "value.<boxGameId>/<tagGameId>.<name>", so that is what a contract must
+ * carry too, and offering the short form here would pass a provisioning the
+ * venue's own engine will not accept.
  */
 function declarations(source: SourceProject): Map<string, { decl: PropertyDecl; path: string; where: string }> {
   const out = new Map<string, { decl: PropertyDecl; path: string; where: string }>();
@@ -62,6 +68,18 @@ function declarations(source: SourceProject): Map<string, { decl: PropertyDecl; 
     const gameId = effectiveGameId(entity);
     return gameId === entity.id ? [gameId] : [gameId, entity.id];
   };
+  // The value scope's segments, from the same helper the engine and the Board
+  // build theirs with: the qualified form for every tag, the short one only
+  // where no other box uses that gameId.
+  const values = valueAddresses({
+    boxes: source.boxes.map((box) => ({ ...box.box.box, tagGroups: box.tags.groups })),
+  });
+  const valueOwners = (tag: { id: string }): string[] => {
+    const out: string[] = [];
+    for (const [segment, id] of values.accept) if (id === tag.id) out.push(segment);
+    if (!out.includes(tag.id)) out.push(tag.id);
+    return out;
+  };
 
   add("world", [""], source.project.world?.properties, source.path, "world");
   add("story", [""], source.project.story?.properties, source.path, "story");
@@ -76,10 +94,10 @@ function declarations(source: SourceProject): Map<string, { decl: PropertyDecl; 
     for (const group of box.tags.groups) {
       for (const tag of group.tags) {
         const where = `${effectiveGameId(group)}.${effectiveGameId(tag)}`;
-        add("value", both(tag), tag.properties, `${box.path}/tags`, where);
+        add("value", valueOwners(tag), tag.properties, `${box.path}/tags`, where);
         // A group declares what every one of its tags has; the compiler
         // flattens those onto each tag, so they are addressable here too.
-        add("value", both(tag), group.properties, `${box.path}/tags`, where);
+        add("value", valueOwners(tag), group.properties, `${box.path}/tags`, where);
       }
     }
   }

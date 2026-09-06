@@ -13,7 +13,9 @@
 // adapter over the same core now.
 //
 // Flattened path scheme:
-//   world.x / story.x / box.<id>.x / deck.<id>.x / hand.<id>.x / value.<id>.x
+//   world.x / story.x / box.<gameId>.x / deck.<gameId>.x / hand.<gameId>.x /
+//   value.<tagGameId>.x, and value.<boxGameId>/<tagGameId>.x for a tag gameId
+//   two boxes share (4.4)
 //   turn:<boxId>      per-box clocks
 //   cooldown:<cardId> next-eligible turns
 //   board:<handId>    hand contents (card ids, dealt order)

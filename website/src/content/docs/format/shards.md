@@ -491,7 +491,10 @@ folder beside the project shard:
 
 Everything in it is by gameId, and a property is written the way `listProperties()` prints
 it, with no `@`. A property may instead be written as `{ path: "story.visits", type: "number" }`,
-and then a type change is caught as well as a rename. A project playing at two venues has two
+and then a type change is caught as well as a rename. A tag property whose tag name two boxes
+share carries the box too (`value.harbour/docks.danger`), which is the address the engine
+takes for it; the short form there would provision the venue against a name its own engine
+refuses. A project playing at two venues has two
 of these files; two files naming the same installation is an error.
 
 `storyletengine validate` treats a break as an **error**: a contracted hand that no longer

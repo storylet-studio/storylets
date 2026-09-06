@@ -1332,13 +1332,12 @@ namespace StoryletStudio.StoryletEngine
         /// pre-4.4 internal-id form: it resolves for THIS release and earns a
         /// diagnostic naming the address to move to, and the next lockstep
         /// release refuses it. Throws the caller's "no &lt;kind&gt; store" error
-        /// when the segment names no owner at all.</summary>
+        /// when the segment names no owner at all, and the ambiguous-address
+        /// refusal when a short-form value segment names a tag in more than
+        /// one box.</summary>
         private string ResolveOwner(string kind, string segment, string name)
         {
-            if (!_engine.TryResolveOwner(kind, segment, out var id, out var legacy))
-            {
-                throw new StoryletError($"no {kind} store \"{segment}\"");
-            }
+            var id = _engine.OwnerOrThrow(kind, segment, name, out var legacy);
             if (legacy && Tracing)
             {
                 Emit(new DiagnosticEvent

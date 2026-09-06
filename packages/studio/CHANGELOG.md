@@ -44,6 +44,8 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
+- **The state strip names the box when two boxes name a tag the same way** (design/engine-server.md 4.4). A tag's name only has to be unique within its group, and a group's within its box, so a harbour box and a cellar box may each have a `docks`. The engine addresses such a tag by box - `value.harbour/docks.danger` - and refuses the short form, so the strip shows and pokes that address, and the row's label carries it too: two rows both reading "docks.danger" would leave a designer changing one and watching the other. A project whose tag names happen to be unique is untouched. The label is now the tag's effective name rather than its pinned one, so a tag named only by its title no longer reads "undefined.danger".
+
 - **Project Settings: Export is now Publish, under Project**, where Patterpad has it (Project Settings > Project > Publish), so the two apps read the same. The project file's `export` block is unchanged.
 - **The toast is the shell's** (`@wildwinter/app-shell` 0.37.0): one drawing for Patterpad and Storyletter, bottom-right, with an `ok` kind; `flash` and `flashError` are unchanged for callers.
 

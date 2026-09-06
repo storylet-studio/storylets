@@ -1428,6 +1428,9 @@ func get_property(path: String) -> Variant:
 		value = _read_story(parts[1])
 	elif parts.size() == 3 and ["box", "deck", "hand", "value"].has(parts[0]):
 		var owner := _resolve_owner(parts[0], parts[1], parts[2])
+		if owner.has("error"):
+			push_error("StoryletFlow.get_property: " + str(owner["error"]))
+			return null
 		if owner.is_empty():
 			push_error('StoryletFlow.get_property: no %s store "%s"' % [parts[0], parts[1]])
 			return null
@@ -1470,6 +1473,10 @@ func set_property(path: String, value) -> String:
 		kind = parts[0]
 		name = parts[2]
 		var owner := _resolve_owner(kind, parts[1], name)
+		if owner.has("error"):
+			var refused := str(owner["error"])
+			push_error("StoryletFlow.set_property: " + refused)
+			return refused
 		if owner.is_empty():
 			var unknown := 'no %s store "%s"' % [kind, parts[1]]
 			push_error("StoryletFlow.set_property: " + unknown)
@@ -1503,12 +1510,16 @@ func set_property(path: String, value) -> String:
 
 
 # A property address's owner segment, resolved to the internal id the stores are
-# keyed by: {"id", "legacy"}, or {} when it names no owner (the caller's "no
-# <kind> store" refusal). The pre-4.4 form - an internal id where a gameId
+# keyed by: {"id", "legacy"}, {} when it names no owner (the caller's "no <kind>
+# store" refusal), or {"error": message} for a short-form value segment that
+# names a tag in more than one box, which is refused with the qualified
+# addresses to write instead. The pre-4.4 form - an internal id where a gameId
 # belongs - resolves for this release and SAYS SO on the trace, so a host can
 # find its old addresses before the next lockstep release refuses them.
 func _resolve_owner(kind: String, segment: String, name: String) -> Dictionary:
 	var owner := _engine.resolve_owner(kind, segment)
+	if owner.has("ambiguous"):
+		return {"error": _engine.ambiguous_address_message(segment, name, owner["ambiguous"])}
 	if owner.is_empty():
 		return owner
 	if owner["legacy"] and _tracing():

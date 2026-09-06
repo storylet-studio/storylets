@@ -1371,3 +1371,42 @@ describe("canonical collections (rule 5)", () => {
       .toEqual(["o_leave", "o_pay", "o_stand"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// A slash in an address (design/engine-server.md 4.4).
+//
+// Not merely another illegal character: the slash is the SEPARATOR in the
+// value scope's owner segment, "value.<boxGameId>/<tagGameId>.<name>", which
+// is how a tag two boxes both name is addressed. One inside an address would
+// split that segment in two. The pinned check has always refused it and
+// `gameIdify` cannot produce it, so the route in is the last resort - an
+// entity with no gameId and no title takes its own id, and an id is not
+// shape-checked anywhere.
+// ---------------------------------------------------------------------------
+
+describe("a slash in an effective address", () => {
+  /** Add a tag to the saltmarsh's first group, the way a hand-edited shard
+   *  would: the app cannot type one of these. */
+  const withTag = (tag: Record<string, unknown>): SourceFile[] =>
+    files.map((f) => {
+      if (!f.path.endsWith(".storylettags")) return f;
+      const shard = parseSource(f.text) as { groups?: Array<{ tags?: Record<string, unknown>[] }> };
+      shard.groups?.[0]?.tags?.push(tag);
+      return { ...f, text: canonicalStringify(shard) };
+    });
+
+  it("is refused where the address falls back to a hand-written id", () => {
+    const errs = errors(compileProject(parseOk(withTag({ id: "harbour/docks" }))).issues);
+    expect(errs.some((m) => m.includes('tag address "harbour/docks" cannot contain "/"'))).toBe(true);
+  });
+
+  it("is refused ONCE on a pinned gameId, by the grammar it also breaks", () => {
+    const errs = errors(compileProject(parseOk(withTag({ id: "t_slashed", gameId: "harbour/docks" }))).issues);
+    expect(errs.filter((m) => m.includes("harbour/docks"))).toHaveLength(1);
+    expect(errs.some((m) => m.includes("is not a legal address"))).toBe(true);
+  });
+
+  it("leaves the ordinary ids alone, underscores and all", () => {
+    expect(errors(compileProject(parseOk(files)).issues)).toEqual([]);
+  });
+});

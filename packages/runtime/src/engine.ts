@@ -75,7 +75,9 @@ import { storyletsDialect, NEVER_PLAYED } from "@storylet-studio/dialect";
 const tagKey = (groupId: string, tagId: string): string => `${groupId}\u001f${tagId}`;
 
 import type { StoryletsHost } from "@storylet-studio/dialect";
-import { PLACE_GROUP, effectiveGameId, isHoleRef, parseHoleRef } from "@storylet-studio/model";
+import {
+  PLACE_GROUP, ambiguousValueAddressMessage, effectiveGameId, isHoleRef, parseHoleRef, valueAddresses,
+} from "@storylet-studio/model";
 import type {
   Box, Bundle, BundleContent, Card, Deck, Expression, FlowSave, Hand, HandTemplate,
   LoadEviction, LoadProperty, LoadReport, PlayRecord, PropertyBag, PropertyDecl, PropsPartition,
@@ -378,34 +380,52 @@ const OWNED_SCOPES = ["box", "deck", "hand", "value"] as const;
 /** The owner segment of a property address, both ways round
  *  (design/engine-server.md 4.4).
  *
- * `gameId` is the id the ADDRESS uses; `id` is the internal id everything
+ * `gameId` is the segment the ADDRESS uses; `id` is the internal id everything
  * inside the engine is keyed by - the bags, the save envelope, the ladders.
  * Both maps are built in bundle order and a repeated gameId does NOT
- * overwrite the first: box, hand and card gameIds are unique bundle-wide, but
- * a TAG's is unique only within its group, and a group's only within its box,
- * so two boxes may each name a tag "docks". `value.docks` names the first of
- * the two, and the second stays reachable by its internal id - which is the
- * one part of the internal-id form that cannot be retired on the same
- * timetable as the rest.
+ * overwrite the first.
+ *
+ * Box, deck, hand and card gameIds are unique bundle-wide, so for three of the
+ * four scopes the segment is simply the gameId. A TAG's is unique only within
+ * its group, and a group's only within its box, so two boxes may each name a
+ * tag "docks": the value scope's segment is box-qualified,
+ * `value.<boxGameId>/<tagGameId>.<name>`, wherever a gameId repeats, and the
+ * short form is REFUSED there rather than resolved to the first in bundle
+ * order. `valueAddresses` in the model is the one definition of that rule -
+ * the Board draws these addresses from the bundle while the engine builds them
+ * from this index, and the two have to agree - and `repeated` is what it
+ * found, so a refusal can name the candidates.
  */
 interface OwnerIndex {
-  gameId: Map<string, string>;   // internal id -> gameId
-  id: Map<string, string>;       // gameId -> internal id (first in bundle order wins)
+  gameId: Map<string, string>;   // internal id -> owner segment
+  id: Map<string, string>;       // owner segment -> internal id (first in bundle order wins)
+  repeated: Map<string, string[]>;  // an ambiguous short form -> the qualified candidates
 }
 
 type OwnerIndexes = Record<OwnedScope, OwnerIndex>;
 
 const emptyOwnerIndexes = (): OwnerIndexes => ({
-  box: { gameId: new Map(), id: new Map() },
-  deck: { gameId: new Map(), id: new Map() },
-  hand: { gameId: new Map(), id: new Map() },
-  value: { gameId: new Map(), id: new Map() },
+  box: { gameId: new Map(), id: new Map(), repeated: new Map() },
+  deck: { gameId: new Map(), id: new Map(), repeated: new Map() },
+  hand: { gameId: new Map(), id: new Map(), repeated: new Map() },
+  value: { gameId: new Map(), id: new Map(), repeated: new Map() },
 });
 
 const indexOwner = (index: OwnerIndex, entity: { id: string; gameId?: string; title?: string }): void => {
   const gameId = effectiveGameId(entity);
   index.gameId.set(entity.id, gameId);
   if (!index.id.has(gameId)) index.id.set(gameId, entity.id);
+};
+
+/** The value scope's index, whole: the segments to print, the segments to
+ *  accept, and the gameIds that need qualifying. Built from the bundle rather
+ *  than tag by tag, because whether a tag's own gameId is enough is a question
+ *  about the OTHER boxes. */
+const indexValueOwners = (index: OwnerIndex, bundle: Bundle): void => {
+  const addresses = valueAddresses(bundle);
+  for (const [id, segment] of addresses.print) index.gameId.set(id, segment);
+  for (const [segment, id] of addresses.accept) index.id.set(segment, id);
+  for (const [gameId, candidates] of addresses.repeated) index.repeated.set(gameId, candidates);
 };
 
 /** One side's five stores (shared on the engine, per-flow on each flow). */
@@ -513,16 +533,35 @@ const addressOf = (internals: Internals, kind: OwnedScope, id: string): string =
  * Resolve a property address's owner segment to the internal id the stores are
  * keyed by. `legacy` says the caller used the pre-4.4 form - an internal id
  * where a gameId belongs - which resolves for THIS release and earns a
- * diagnostic; the next lockstep release refuses it. Undefined when the segment
- * names no owner at all, which is the caller's "no <kind> store" error.
+ * diagnostic; the next lockstep release refuses it, in every scope including
+ * `value`, which had the one reprieve until it gained an address of its own.
+ * `ambiguous` is a short-form value address two boxes answer to: the caller
+ * REFUSES it, listing those candidates. Undefined when the segment names no
+ * owner at all, which is the caller's "no <kind> store" error.
  */
-const resolveOwner = (internals: Internals, kind: OwnedScope, segment: string): { id: string; legacy: boolean } | undefined => {
+type OwnerLookup = { id: string; legacy: boolean } | { ambiguous: string[] };
+
+const resolveOwner = (internals: Internals, kind: OwnedScope, segment: string): OwnerLookup | undefined => {
+  // Checked before the lookup, because the short form is deliberately NOT in
+  // the accept map when it is ambiguous: silently picking the first tag in
+  // bundle order is the bug this removes.
+  const candidates = internals.owners[kind].repeated.get(segment);
+  if (candidates !== undefined) return { ambiguous: candidates };
   const byGameId = internals.owners[kind].id.get(segment);
   if (byGameId !== undefined) return { id: byGameId, legacy: false };
   // A gameId that equals its id took the branch above, so anything reaching
   // here and known as an id is genuinely the old spelling.
   if (internals.owners[kind].gameId.has(segment)) return { id: segment, legacy: true };
   return undefined;
+};
+
+/** Resolve or throw: the two refusals every property address shares, in one
+ *  place, so the engine's surface and a flow's answer alike. */
+const ownerOrThrow = (internals: Internals, kind: OwnedScope, segment: string, name: string): { id: string; legacy: boolean } => {
+  const owner = resolveOwner(internals, kind, segment);
+  if (owner === undefined) throw new Error(`no ${kind} store "${segment}"`);
+  if ("ambiguous" in owner) throw new Error(ambiguousValueAddressMessage(segment, name, owner.ambiguous));
+  return owner;
 };
 
 /** What a legacy address is told. It NAMES the address to move to, because
@@ -759,6 +798,11 @@ export class Engine {
     };
     this.internals = internals;
 
+    // The value scope's segments come off the whole bundle at once (a tag
+    // gameId is only unique within its group), so they are built before the
+    // walk rather than tag by tag inside it.
+    indexValueOwners(internals.owners.value, bundle);
+
     for (const box of bundle.boxes) {
       internals.boxesById.set(box.id, box);
       internals.boxesByGameId.set(effectiveGameId(box), box);
@@ -766,7 +810,6 @@ export class Engine {
       for (const group of box.tagGroups) {
         internals.groupsById.set(group.id, { group, box });
         if (group.required === true) internals.requiredGroups.add(group.id);
-        for (const tag of group.tags) indexOwner(internals.owners.value, tag);
       }
       for (const deck of box.decks) {
         indexOwner(internals.owners.deck, deck);
@@ -1053,8 +1096,7 @@ export class Engine {
     if (parts.length === 3 && (parts[0] === "box" || parts[0] === "deck" || parts[0] === "hand" || parts[0] === "value")) {
       const kind = parts[0] as OwnedScope;
       const [, segment, name] = parts as unknown as [string, string, string];
-      const owner = resolveOwner(this.internals, kind, segment);
-      if (owner === undefined) throw new Error(`no ${kind} store "${segment}"`);
+      const owner = ownerOrThrow(this.internals, kind, segment, name);
       if (owner.legacy) this.diagnose(legacyAddressMessage(this.internals, kind, segment, name));
       const id = owner.id;
       const bag = this.internals.shared[kind].get(id);
@@ -2463,8 +2505,7 @@ export class Flow {
     if (parts.length === 3 && (parts[0] === "box" || parts[0] === "deck" || parts[0] === "hand" || parts[0] === "value")) {
       const kind = parts[0] as OwnedScope;
       const [, segment, name] = parts as unknown as [string, string, string];
-      const owner = resolveOwner(this.internals, kind, segment);
-      if (owner === undefined) throw new Error(`no ${kind} store "${segment}"`);
+      const owner = ownerOrThrow(this.internals, kind, segment, name);
       if (owner.legacy && this.tracing) {
         this.emit({ type: "diagnostic", where: "property address", message: legacyAddressMessage(this.internals, kind, segment, name) });
       }

@@ -136,18 +136,26 @@ static func _show_list(list: Array) -> String:
 # box/deck/hand/value are keyed by the owner's GAMEID (design change 4.4;
 # runner.ts applyState). The internal id is still accepted on input for this
 # release and raises a `diagnostic`; it is refused after the next lockstep
-# release. One case leans on that deliberately: two boxes may each name a tag
-# "docks", and a tag gameId is only unique within its group, so "value.docks"
-# names the FIRST such tag in bundle order and the second stays addressable by
-# id.
-static func _apply_state(session: StoryletFlow, selector: Dictionary) -> void:
+# release, in every scope including "value". A "value" key is the tag's gameId
+# where one tag in the bundle carries it and the box-qualified
+# "<boxGameId>/<tagGameId>" otherwise: two boxes may each name a tag "docks", so
+# the short form is refused there and the qualified one is accepted always.
+#
+# Returns the first refusal, so a setState the corpus expects to be REFUSED can
+# be held to what it said; "" is the ordinary accepted write.
+static func _apply_state(session: StoryletFlow, selector: Dictionary) -> String:
 	for scope in ["story", "world"]:
 		for prop_name in selector.get(scope, {}):
-			session.set_property("%s.%s" % [scope, prop_name], StoryletValues.to_value(selector[scope][prop_name]))
+			var refused := session.set_property("%s.%s" % [scope, prop_name], StoryletValues.to_value(selector[scope][prop_name]))
+			if refused != "":
+				return refused
 	for kind in ["box", "deck", "hand", "value"]:
 		for id in selector.get(kind, {}):
 			for prop_name in selector[kind][id]:
-				session.set_property("%s.%s.%s" % [kind, id, prop_name], StoryletValues.to_value(selector[kind][id][prop_name]))
+				var refused := session.set_property("%s.%s.%s" % [kind, id, prop_name], StoryletValues.to_value(selector[kind][id][prop_name]))
+				if refused != "":
+					return refused
+	return ""
 
 
 # "turn.<boxId>" reads that box's clock (schema 3.4); everything else is a
@@ -394,6 +402,9 @@ func _run_scripted_case(c: Dictionary) -> Array:
 			if e["type"] == "play":
 				(rc["traces"] as Array).append("play %s %s" % [e["card"], e["outcome"]])
 				return
+			if e["type"] == "write":
+				(rc["traces"] as Array).append("write %s %s" % [e["target"], e["path"]])
+				return
 			if e["type"] != "deal" and e["type"] != "peek":
 				return
 			for card in e["cards"]:
@@ -433,6 +444,23 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				out.append('%s: expected the trace to carry "%s", got %s'
 					% [at, str(want), "no deal-time events" if said.is_empty() else _show_list(said)])
 
+	# A write the corpus expects to be REFUSED, through the channel an unknown
+	# owner segment already uses: every string listed must appear in what the
+	# refusal said. An ambiguous short-form value address is the case that needs
+	# it - two boxes naming one tag - and what is listed is the qualified
+	# addresses it offers instead.
+	var check_refused := func(at: String, op: Dictionary, refused: String, out: Array) -> void:
+		if not op.has("expectRefused"):
+			if refused != "":
+				out.append("%s: unexpected error: %s" % [at, refused])
+			return
+		if refused == "":
+			out.append("%s: expected the write to be refused, it was accepted" % at)
+			return
+		for want in op["expectRefused"]:
+			if not refused.contains(str(want)):
+				out.append('%s: expected the refusal to name "%s", got "%s"' % [at, str(want), refused])
+
 	var script: Array = c["script"]
 	for index in script.size():
 		var op: Dictionary = script[index]
@@ -447,8 +475,9 @@ func _run_scripted_case(c: Dictionary) -> Array:
 			"setState":
 				rc["diagnostics"] = []
 				rc["traces"] = []
-				_apply_state(session, op)
+				var write_refused := _apply_state(session, op)
 				check_diagnostic.call(at, op, failures)
+				check_refused.call(at, op, write_refused, failures)
 
 			"peek":
 				rc["verdicts"] = {}

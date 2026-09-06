@@ -59,7 +59,8 @@ Usage:
                  (--deal-all deals every hand first, so claims are visible)
                  (--set takes the address listProperties prints: story.gold,
                   world.time, box.street.mood, deck.wares.n, hand.the-elder.zone,
-                  value.docks.danger - the owner named as you name it)
+                  value.docks.danger - the owner named as you name it; where two
+                  boxes name a tag the same, say which: value.harbour/docks.danger)
   storyletengine resolve <query> [path]  Find an item by gameId, id or title: which
                                       box, deck and shard it lives in (the same
                                       lookup as Storyletter's --at)

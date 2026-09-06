@@ -218,7 +218,9 @@ right now, in ranking order, without dealing anything.
 | `--deal-all` | both | Deal every hand first, so cards other hands have claimed are already gone. |
 
 `--set` takes the same paths the runtime does, the owner named as you name it in a shard:
-`story.started`, `world.market_day`, `value.docks.danger`, `box.street.heat`.
+`story.started`, `world.market_day`, `value.docks.danger`, `box.street.heat`. Where two boxes
+name a tag the same way, say which box the tag is in:
+`--set value.harbour/docks.danger=3`.
 
 `--deal-all` is how you see exclusivity from the command line: with every other hand dealt
 first, the cards they hold don't come up in yours.

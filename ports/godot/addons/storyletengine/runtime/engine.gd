@@ -60,16 +60,21 @@ var _required_groups: Dictionary = {}   # id -> true
 
 # The owner segment of a property address, both ways round (design change 4.4).
 #
-# The first map answers "what is this store called?" (internal id -> gameId) and
-# the second "which store is that?" (gameId -> internal id). Both are built in
-# bundle order and a repeated gameId does NOT overwrite the first: box, hand and
-# card gameIds are unique bundle-wide, but a TAG's is unique only within its
-# group, and a group's only within its box, so two boxes may each name a tag
-# "docks". "value.docks" names the first of the two, and the second stays
-# reachable by its internal id - which is the one part of the internal-id form
-# that cannot be retired on the same timetable as the rest.
+# The first map answers "what is this store called?" (internal id -> the segment
+# an address prints) and the second "which store is that?" (owner segment ->
+# internal id). Both are built in bundle order and a repeated key does NOT
+# overwrite the first.
+#
+# Box, deck, hand and card gameIds are unique bundle-wide, so for three of the
+# four scopes the segment is simply the gameId. A TAG's is unique only within
+# its group, and a group's only within its box, so two boxes may each name a tag
+# "docks": the value scope's segment is box-qualified,
+# "value.<boxGameId>/<tagGameId>.<name>", wherever a gameId repeats, and the
+# short form is REFUSED there rather than resolved to the first in bundle order.
+# The third map is what such a refusal names.
 var _owner_game_ids: Dictionary = {"box": {}, "deck": {}, "hand": {}, "value": {}}
 var _owner_ids: Dictionary = {"box": {}, "deck": {}, "hand": {}, "value": {}}
+var _owner_repeated: Dictionary = {"box": {}, "deck": {}, "hand": {}, "value": {}}
 
 # Quality ladders (quality.md), declaration-level so partition-blind.
 var _world_ladders: Dictionary = {}
@@ -145,6 +150,49 @@ func _index_owner(kind: String, entity: Dictionary) -> void:
 		by_game_id[game_id] = id
 
 
+## @internal - the value scope's index, whole: the segment each tag PRINTS,
+## every segment an address ACCEPTS, and the gameIds that need qualifying.
+##
+## Built from the whole bundle rather than tag by tag, because whether a tag's
+## own gameId is enough is a question about the OTHER boxes. The qualified form
+## is always accepted; the short form is accepted while one tag in the bundle
+## carries the gameId and refused when more do.
+func _index_value_owners(bundle: Dictionary) -> void:
+	var ids: Array[String] = []
+	var game_ids: Array[String] = []
+	var qualified: Array[String] = []
+	for box in bundle["boxes"]:
+		var box_game_id := StoryletBundle.effective_game_id(box)
+		for group in box["tagGroups"]:
+			for tag in group["tags"]:
+				var game_id := StoryletBundle.effective_game_id(tag)
+				ids.append(str(tag["id"]))
+				game_ids.append(game_id)
+				qualified.append("%s/%s" % [box_game_id, game_id])
+	# Distinct qualified forms per gameId. Distinct rather than a count: two
+	# groups in ONE box may also name a tag the same way, and a refusal that
+	# offered the same address twice would be no help at all.
+	var forms: Dictionary = {}
+	for i in ids.size():
+		var list: Array = forms.get(game_ids[i], [])
+		if not list.has(qualified[i]):
+			list.append(qualified[i])
+		forms[game_ids[i]] = list
+	var by_id: Dictionary = _owner_game_ids["value"]
+	var by_segment: Dictionary = _owner_ids["value"]
+	var repeated: Dictionary = _owner_repeated["value"]
+	for i in ids.size():
+		var candidates: Array = forms[game_ids[i]]
+		var ambiguous := candidates.size() > 1
+		by_id[ids[i]] = qualified[i] if ambiguous else game_ids[i]
+		if not by_segment.has(qualified[i]):
+			by_segment[qualified[i]] = ids[i]
+		if not ambiguous and not by_segment.has(game_ids[i]):
+			by_segment[game_ids[i]] = ids[i]
+		if ambiguous:
+			repeated[game_ids[i]] = candidates
+
+
 ## @internal - one owned property owner's ADDRESS, segment and all:
 ## "box.village" for the box whose internal id is "b_village".
 ##
@@ -161,11 +209,19 @@ func address_of(kind: String, id: String) -> String:
 
 ## @internal - the same address's owner segment resolved back to the internal id
 ## the stores are keyed by: {"id", "legacy"}, or {} when the segment names no
-## owner at all (which is the caller's "no <kind> store" refusal). "legacy" says
-## the caller used the pre-4.4 form - an internal id where a gameId belongs -
-## which resolves for THIS release and earns a diagnostic; the next lockstep
-## release refuses it.
+## owner at all (which is the caller's "no <kind> store" refusal), or
+## {"ambiguous": [candidates]} for a short-form value segment more than one box
+## answers to (which the caller REFUSES, naming them). "legacy" says the caller
+## used the pre-4.4 form - an internal id where a gameId belongs - which
+## resolves for THIS release and earns a diagnostic; the next lockstep release
+## refuses it, in every scope including "value".
 func resolve_owner(kind: String, segment: String) -> Dictionary:
+	# Checked before the lookup, because the short form is deliberately NOT in
+	# the segment map when it is ambiguous: silently picking the first tag in
+	# bundle order is the bug this removes.
+	var candidates = (_owner_repeated[kind] as Dictionary).get(segment)
+	if candidates != null:
+		return {"ambiguous": candidates}
 	var by_game_id = (_owner_ids[kind] as Dictionary).get(segment)
 	if by_game_id != null:
 		return {"id": str(by_game_id), "legacy": false}
@@ -174,6 +230,21 @@ func resolve_owner(kind: String, segment: String) -> Dictionary:
 	if (_owner_game_ids[kind] as Dictionary).has(segment):
 		return {"id": segment, "legacy": true}
 	return {}
+
+
+## @internal - what an ambiguous short-form value address is told: the
+## candidates, in full, because "that names two tags" without them leaves a host
+## reading a bundle it did not write to find out which boxes.
+func ambiguous_address_message(segment: String, name: String, candidates: Array) -> String:
+	var forms: Array[String] = []
+	for q in candidates:
+		forms.append('"value.%s.%s"' % [str(q), name])
+	var list := ""
+	if forms.size() == 1:
+		list = forms[0]
+	elif forms.size() > 1:
+		list = ", ".join(forms.slice(0, forms.size() - 1)) + " or " + forms[forms.size() - 1]
+	return '"value.%s.%s" names a tag in %d boxes; write %s' % [segment, name, candidates.size(), list]
 
 
 ## @internal - what a legacy address is told. It NAMES the address to move to,
@@ -230,6 +301,11 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 	# Parity with the JS runtime's onReplacedFlow. Zero cost when unset.
 	_on_replaced_flow = opts.get("on_replaced_flow")
 
+	# The value scope's segments come off the whole bundle at once (a tag gameId
+	# is only unique within its group), so they are built before the walk rather
+	# than tag by tag inside it.
+	_index_value_owners(_bundle)
+
 	for box in _bundle["boxes"]:
 		_boxes_by_id[box["id"]] = box
 		_boxes_by_game_id[StoryletBundle.effective_game_id(box)] = box
@@ -238,8 +314,6 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 			_groups_by_id[group["id"]] = {"group": group, "box": box}
 			if group.get("required", false):
 				_required_groups[group["id"]] = true
-			for tag in group["tags"]:
-				_index_owner("value", tag)
 		for deck in box["decks"]:
 			_index_owner("deck", deck)
 			if deck.get("shared", false) == true:
@@ -598,6 +672,8 @@ func _resolve_shared(path: String) -> Dictionary:
 		var segment := parts[1]
 		var name := parts[2]
 		var owner := resolve_owner(kind, segment)
+		if owner.has("ambiguous"):
+			return {"error": ambiguous_address_message(segment, name, owner["ambiguous"])}
 		if owner.is_empty():
 			return {"error": 'no %s store "%s"' % [kind, segment]}
 		if owner["legacy"]:

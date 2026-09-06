@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -3716,7 +3716,7 @@
       },
       "setup": {
         "value": {
-          "v_docks_y": {
+          "other/docks": {
             "danger": 3
           }
         }
@@ -20933,6 +20933,711 @@
                 "path": "hand.elder.uses"
               }
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a tag gameId in two boxes is reached by its box-qualified address",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_riot",
+                    "gameId": "riot",
+                    "priority": 0,
+                    "redraw": "always",
+                    "tags": {
+                      "d_zone": [
+                        "v_docks"
+                      ]
+                    },
+                    "outcomes": [
+                      {
+                        "id": "o_escalate",
+                        "gameId": "escalate",
+                        "changes": {
+                          "@hand.danger": {
+                            "src": "@hand.danger + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "hand",
+                                "danger"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_docks",
+                "gameId": "docks",
+                "rule": {
+                  "bindings": {
+                    "d_zone": "v_docks"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_yplain",
+                    "gameId": "yplain",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "setState",
+          "value": {
+            "box/docks": {
+              "danger": 1
+            },
+            "other/docks": {
+              "danger": 5
+            }
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.box/docks.danger": 1,
+            "value.other/docks.danger": 5
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_docks"
+          ],
+          "expectBoard": {
+            "h_docks": [
+              "c_riot"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_riot",
+          "outcome": "escalate",
+          "from": "h_docks",
+          "expectTrace": [
+            "write @hand.danger value.box/docks.danger"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.box/docks.danger": 2,
+            "value.other/docks.danger": 5
+          }
+        }
+      ]
+    },
+    {
+      "name": "the short form is refused where two boxes name the tag, and says what to write",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_any",
+                    "gameId": "any",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_yplain",
+                    "gameId": "yplain",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "setState",
+          "value": {
+            "docks": {
+              "danger": 9
+            }
+          },
+          "expectRefused": [
+            "value.docks.danger",
+            "value.box/docks.danger",
+            "value.other/docks.danger"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.box/docks.danger": 0,
+            "value.other/docks.danger": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "one box naming the tag keeps the short form, and takes the qualified one too",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_riot",
+                    "gameId": "riot",
+                    "priority": 0,
+                    "redraw": "always",
+                    "tags": {
+                      "d_zone": [
+                        "v_docks"
+                      ]
+                    },
+                    "outcomes": [
+                      {
+                        "id": "o_escalate",
+                        "gameId": "escalate",
+                        "changes": {
+                          "@hand.danger": {
+                            "src": "@hand.danger + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "hand",
+                                "danger"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_docks",
+                "gameId": "docks",
+                "rule": {
+                  "bindings": {
+                    "d_zone": "v_docks"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "setState",
+          "value": {
+            "docks": {
+              "danger": 2
+            }
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.docks.danger": 2,
+            "value.box/docks.danger": 2
+          }
+        },
+        {
+          "op": "setState",
+          "value": {
+            "box/docks": {
+              "danger": 4
+            }
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.docks.danger": 4
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_docks"
+          ],
+          "expectBoard": {
+            "h_docks": [
+              "c_riot"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_riot",
+          "outcome": "escalate",
+          "from": "h_docks",
+          "expectTrace": [
+            "write @hand.danger value.docks.danger"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.docks.danger": 5
+          }
+        }
+      ]
+    },
+    {
+      "name": "a tag's internal-id address still resolves, and names the qualified form",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_any",
+                    "gameId": "any",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_yplain",
+                    "gameId": "yplain",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "setState",
+          "value": {
+            "v_docks_y": {
+              "danger": 6
+            }
+          },
+          "expectDiagnostic": "value.other/docks.danger"
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.other/docks.danger": 6
           }
         }
       ]

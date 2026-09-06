@@ -203,6 +203,10 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         traceSink.push(`play ${e.card} ${e.outcome}`);
         return;
       }
+      if (e.type === "write") {
+        traceSink.push(`write ${e.target} ${e.path}`);
+        return;
+      }
       if (e.type !== "deal" && e.type !== "peek") return;
       for (const card of e.cards) verdictSink.set(card.id, card.verdict);
     });
@@ -251,9 +255,27 @@ export function runScriptedCase(c: ScriptedCase): string[] {
     const at = `op ${index} (${op.op})`;
     switch (op.op) {
       case "setState": {
-        const { op: _ignored, flow: _flow, expectDiagnostic: _diag, ...selector } = op;
-        collect(() => { applyState(flowOf(op.flow), selector); });
+        const { op: _ignored, flow: _flow, expectDiagnostic: _diag, expectRefused: _refused, ...selector } = op;
+        let error: string | undefined;
+        collect(() => {
+          try {
+            applyState(flowOf(op.flow), selector);
+          } catch (e) {
+            error = String(e);
+          }
+        });
         checkDiagnostic(at, op.expectDiagnostic, diagnosticSink);
+        if (op.expectRefused === undefined) {
+          if (error !== undefined) failures.push(`${at}: unexpected error: ${error}`);
+        } else if (error === undefined) {
+          failures.push(`${at}: expected the write to be refused, it was accepted`);
+        } else {
+          for (const want of op.expectRefused) {
+            if (!error.includes(want)) {
+              failures.push(`${at}: expected the refusal to name "${want}", got ${show(error)}`);
+            }
+          }
+        }
         break;
       }
       case "openFlow":

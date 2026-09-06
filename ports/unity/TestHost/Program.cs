@@ -421,10 +421,11 @@ namespace StoryletStudio.StoryletEngine.TestHost
         /// single bags; box/deck/hand/value are keyed by the owner's GAMEID
         /// (design/engine-server.md 4.4). The internal id is still accepted on
         /// input for this release and raises a diagnostic; it is refused after
-        /// the next lockstep release. One case leans on that deliberately: two
-        /// boxes may each name a tag "docks", and a tag gameId is only unique
-        /// within its group, so "value.docks" names the FIRST such tag in bundle
-        /// order and the second stays addressable by id.</summary>
+        /// the next lockstep release, in every scope including "value". A
+        /// "value" key is the tag's gameId where one tag in the bundle carries
+        /// it, and the box-qualified "&lt;boxGameId&gt;/&lt;tagGameId&gt;"
+        /// otherwise: two boxes may each name a tag "docks", so the short form
+        /// is refused there and the qualified one is accepted always.</summary>
         private static void ApplyState(Flow session, JObject selector)
         {
             foreach (var scope in new[] { "story", "world" })
@@ -920,6 +921,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     if (e is DiagnosticEvent dg) { diagnostics.Add(dg.Message); return; }
                     if (e is EvictEvent ev) { traces.Add($"evict {ev.Hand} {ev.Card} {ev.Reason}"); return; }
                     if (e is PlayEvent pl) { traces.Add($"play {pl.Card} {pl.Outcome}"); return; }
+                    if (e is WriteEvent wr) { traces.Add($"write {wr.Target} {wr.Path}"); return; }
                     List<TraceCard> cards = null;
                     if (e is DealEvent d) cards = d.Cards;
                     else if (e is PeekEvent pk) cards = pk.Cards;
@@ -975,6 +977,31 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     }
                 }
             }
+            // A write the corpus expects to be REFUSED, through the channel an
+            // unknown owner segment already uses: every string listed must
+            // appear in what the refusal said. An ambiguous short-form value
+            // address is the case that needs it - two boxes naming one tag -
+            // and what is listed is the qualified addresses it offers instead.
+            void CheckRefused(string at, JObject o, string error)
+            {
+                if (!(o["expectRefused"] is JArray expected))
+                {
+                    if (error != null) failures.Add($"{at}: unexpected error: {error}");
+                    return;
+                }
+                if (error == null)
+                {
+                    failures.Add($"{at}: expected the write to be refused, it was accepted");
+                    return;
+                }
+                foreach (var want in expected.Select(t => t.Value<string>()))
+                {
+                    if (!error.Contains(want))
+                    {
+                        failures.Add($"{at}: expected the refusal to name \"{want}\", got \"{error}\"");
+                    }
+                }
+            }
             // The reference runner's `collect`: every sink an op's assertions
             // read is emptied before the op runs, so nothing an earlier op said
             // can satisfy this one's expectation.
@@ -996,10 +1023,21 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 switch (kind)
                 {
                     case "setState":
+                    {
                         Collect();
-                        ApplyState(session, op);
+                        string writeError = null;
+                        try
+                        {
+                            ApplyState(session, op);
+                        }
+                        catch (Exception ex)
+                        {
+                            writeError = ex.Message;
+                        }
                         CheckDiagnostic(at, op);
+                        CheckRefused(at, op, writeError);
                         break;
+                    }
 
                     case "peek":
                     {
