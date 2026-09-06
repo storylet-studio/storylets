@@ -42,14 +42,16 @@ import type {
   DealtCardView, DetachStationResponse, DetachVisitStationResponse, EditPocketRequest,
   EditPocketResponse, EndRunResponse, EvictCardRequest, EvictCardResponse,
   ForceDealRequest, ForceDealResponse, ForcePlayRequest, ForcePlayResponse,
-  ForgetPartyResponse, GetBoardResponse, GetCueListResponse, GetJournalResponse, GetOutcomesResponse,
+  ForgetPartyResponse, GetBoardResponse, GetCueListResponse, GetHouseResponse, GetJournalResponse,
+  GetOutcomesResponse,
   GetPartyResponse, GetPropertiesResponse, GetVenueResponse, GetVisitLensResponse, GetWorldResponse,
   GoLiveRequest, GoLiveResponse, HandshakeRequest, HandshakeResponse, HelloResponse,
   HotSwapRequest, HotSwapResponse, InstallationView, IssueCredentialRequest,
   IssueCredentialResponse, JournalEntry, ListBindingsResponse, ListBridgesResponse,
   ListBundlesResponse, ListInstallationsResponse, ListLocationsResponse, ListMessagesResponse,
   ListPartiesResponse, ListPresenceResponse, ListPrincipalsResponse, ListRunsResponse,
-  ListVisitsResponse, LocationView, MessageAudience, MessageView, MintPartyRequest, MintPartyResponse,
+  ListSentMessagesResponse, ListVisitsResponse, LocationView, MessageAudience, MessageView,
+  MintPartyRequest, MintPartyResponse,
   MoveCredentialRequest, MoveCredentialResponse, OpenInstallationResponse, OpenVisitRequest,
   OpenVisitResponse, Page, PairPrincipalRequest, PairPrincipalResponse, ParkVisitConsoleResponse,
   ParkVisitResponse, PartyView, PauseRunResponse, PeekRequest, PeekResponse, PlayHouseRequest,
@@ -481,11 +483,15 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
    * a visitor's phone is not one. It reaches a party only as whatever a
    * performer standing in front of them says out loud.
    */
-  /** A station's own copy of a message carries no acks: the tally is what a
-   *  producer watches fill in, and it is nobody else's business (6.7). */
+  /** A station's own copy of a message carries no acks and neither of the two
+   *  counts: the tally is what a producer watches fill in, and it is nobody
+   *  else's business (6.7). A handset that could see the denominator could see
+   *  how many colleagues have not looked up yet. */
   const withoutAcks = (message: MessageView): MessageView => {
     const copy: MessageView = { ...message };
     delete copy.acks;
+    delete copy.delivered;
+    delete copy.acknowledged;
     return copy;
   };
 
@@ -1004,6 +1010,9 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
         if (!message.acks.some((a) => a.station === station.station)) {
           message.acks.push({ station: station.station, at: now() });
         }
+        // The console's log reads the count and not the list, so the two must
+        // not be able to disagree: the count is the list's length here.
+        message.acknowledged = message.acks.length;
         const res: AckMessageResponse = {
           id,
           acked: message.acks.length,
@@ -1191,9 +1200,23 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
             const flow = query.get("flow");
             const since = query.get("since");
             const until = query.get("until");
+            const atStation = query.get("station");
+            const onHand = query.get("hand");
+            /** The hands a command NAMES: what it asked to deal, what it was
+             *  played on, what it was evicted from. */
+            const handsOf = (command: JournalEntry["command"]): string[] => {
+              if (command.kind === "deal") return command.hands ?? [];
+              if (command.kind === "play" || command.kind === "evict") return [command.hand];
+              return [];
+            };
             const window = journal.filter((e) => {
               if (kinds.length > 0 && !kinds.includes(e.command.kind)) return false;
               if (flow !== null && (e.command as { flow?: string }).flow !== flow) return false;
+              // A station is NAMED by an attach or a detach and by nothing
+              // else: presence is never journaled, so "commands from a device
+              // standing there" is not a question the journal can answer.
+              if (atStation !== null && (e.command as { station?: string }).station !== atStation) return false;
+              if (onHand !== null && !handsOf(e.command).includes(onHand)) return false;
               if (since !== null && e.at < since) return false;
               if (until !== null && e.at > until) return false;
               return true;
@@ -1337,6 +1360,10 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
           if (rest === "/evict" && init.method === "POST") {
             const req = body as EvictCardRequest;
             visit.board[req.hand] = (visit.board[req.hand] ?? []).filter((card) => card.id !== req.card);
+            // A card taken off a board is a MUTATION, so it is journaled like
+            // one: the wire names the kind now, and a producer's stuck-beat
+            // fix that left no line would be a replay that never made it.
+            journalled(PRODUCER, { kind: "evict", flow: visit.party, hand: req.hand, card: req.card });
             emit(board());
             const res: EvictCardResponse = { board: visit.board };
             return ok(res);
@@ -1364,6 +1391,9 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
           if (detachMatch && init.method === "DELETE") {
             const which = decodeURIComponent(detachMatch[1] ?? "");
             visit.stations = visit.stations.filter((s) => s !== which);
+            // The one command that NAMES a station, which is what the
+            // journal's station filter can answer from (5.4).
+            journalled(PRODUCER, { kind: "visit.detach", flow: visit.party, station: which });
             emit({
               type: "visit", flow: visit.party, installation: visit.installation, visit: visit.id,
               phase: "detached", station: which,
@@ -1484,6 +1514,12 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
             actor: PRODUCER,
           } as WireEvent);
           const res: WriteWorldResponse = { property: row };
+          return ok(res);
+        }
+        // The house's table, READ rather than dealt: a read that had to deal
+        // to answer would be a read that changed the show (5.5).
+        if (c === "/house" && init.method === "GET") {
+          const res: GetHouseResponse = { board: houseBoard, turns: houseTurns };
           return ok(res);
         }
         if (c === "/house/deal" && init.method === "POST") {
@@ -1624,6 +1660,11 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
             const req = body as UpdateInstallationRequest;
             if (req.name !== undefined) story.name = req.name;
             if (req.walkUp !== undefined) story.walkUp = req.walkUp;
+            // THE WHOLE LIST, not a delta: an allow list edited by patch is
+            // one two consoles can grow between them (5.6). An empty array
+            // clears it; absent leaves it alone, so renaming a story does not
+            // silently disarm the rig.
+            if (req.externalWritable !== undefined) story.externalWritable = [...req.externalWritable];
             if (req.default === true) {
               // Exactly one installation holds it, so setting it here clears
               // it on whichever had it.
@@ -1845,12 +1886,29 @@ export function createFakeServer(opts: FakeServerOptions = {}): FakeServer {
             priority: req.priority,
             audience: req.audience,
             at: messageNow(),
+            // The denominator of "4 of 5 in the forest have seen it", resolved
+            // at SEND time by presence and KEPT: the log carries the number it
+            // went out with rather than counting the forest again later.
+            delivered: 1,
+            acknowledged: 0,
             ...(req.ackRequired === true ? { ackRequired: true, acks: [] } : {}),
           };
           messages.push(message);
           emit({ type: "message", message } as WireEvent);
-          // The denominator of "4 of 5 in the forest have seen it".
-          const res: BroadcastMessageResponse = { message, delivered: 1 };
+          const res: BroadcastMessageResponse = { message, delivered: message.delivered ?? 0 };
+          return ok(res);
+        }
+        // The whole SENT log with its counts, which is the producer's own
+        // record and so is NOT filtered by audience the way the station route
+        // is (6.7).
+        if (c === "/messages" && init.method === "GET") {
+          const since = query.get("since");
+          const limit = Number(query.get("limit") ?? 50);
+          const log = messages
+            .filter((m) => since === null || m.at >= since)
+            .slice(-limit)
+            .reverse();
+          const res: ListSentMessagesResponse = { messages: log };
           return ok(res);
         }
 

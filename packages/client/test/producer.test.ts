@@ -128,6 +128,35 @@ describe("runs", () => {
     producer.close();
   });
 
+  it("windows the journal by hand, which is spec 11's fourth filter", async () => {
+    const { server, producer } = desk();
+    const onTheHand = await producer.runs.journal({ run: "run-1", hand: "the-house-hand" });
+    expect(onTheHand.items.length).toBeGreaterThan(0);
+    // Only the commands that NAME the hand: a deal that asked for it, a play
+    // on it, an eviction from it.
+    expect(onTheHand.items.every((e) => e.command.kind === "play")).toBe(true);
+    expect(last(server).path).toContain("hand=the-house-hand");
+
+    const nowhere = await producer.runs.journal({ run: "run-1", hand: "a-hand-nobody-declared" });
+    expect(nowhere.items).toEqual([]);
+    producer.close();
+  });
+
+  it("windows the journal by station, and a detach is what names one", async () => {
+    const { server, producer } = desk();
+    const seeded = server.seedVisit({});
+    // Nothing names a station until something does: presence is never
+    // journaled, so a station filter can only ever find an attach or a detach.
+    const before = await producer.runs.journal({ run: "run-1", station: "kiosk-1" });
+    expect(before.items).toEqual([]);
+
+    await producer.visits.detach({ visit: seeded, station: "kiosk-1" });
+    const after = await producer.runs.journal({ run: "run-1", station: "kiosk-1" });
+    expect(after.items.map((e) => e.command.kind)).toEqual(["visit.detach"]);
+    expect(last(server).path).toContain("station=kiosk-1");
+    producer.close();
+  });
+
   it("snapshots and restores from the journal", async () => {
     const { server, producer } = desk();
     const shot = await producer.runs.snapshot("run-1");
@@ -344,6 +373,21 @@ describe("the world, the house and the clocks", () => {
     for (const path of CLOCK_PATHS) expect(path.startsWith(CLOCK_PREFIX)).toBe(true);
   });
 
+  it("reads the house's table without dealing it, which is what a map draws from", async () => {
+    const { server, producer } = desk();
+    const empty = await producer.house.list({ installation: "the-caretaker" });
+    expect(empty.board).toEqual({});
+    expect(last(server)).toMatchObject({ method: "GET", path: `${WIRE_CONSOLE_PATH}/house?installation=the-caretaker` });
+    // A read that had to deal to answer would be a read that changed the show,
+    // so this one carries no key and leaves the table as it found it.
+    expect(last(server).idempotencyKey).toBeUndefined();
+
+    await producer.house.deal({ installation: "the-caretaker" });
+    const dealt = await producer.house.list({ installation: "the-caretaker" });
+    expect(Object.keys(dealt.board)).toContain("the-house-hand");
+    producer.close();
+  });
+
   it("deals, plays and advances the house", async () => {
     const { server, producer } = desk();
     const dealt = await producer.house.deal({ installation: "the-caretaker" });
@@ -421,6 +465,32 @@ describe("installations and their bindings", () => {
     const updated = await producer.installations.update({ installation: "after-dark", default: true });
     expect(updated.installation.default).toBe(true);
     expect(last(server).method).toBe("PATCH");
+    producer.close();
+  });
+
+  it("edits the trigger-in allow list on the patch, whole rather than by delta", async () => {
+    const { server, producer } = desk();
+    const before = await producer.installations.list();
+    // Never set means no external write is allowed, which is the safe default
+    // for a rig nobody has decided about yet (5.6).
+    expect(before.items[0]?.externalWritable).toBeUndefined();
+
+    const armed = await producer.installations.update({
+      installation: "the-caretaker",
+      externalWritable: ["world.doors_open", "world.weather"],
+    });
+    expect(armed.installation.externalWritable).toEqual(["world.doors_open", "world.weather"]);
+    expect(last(server)).toMatchObject({ method: "PATCH" });
+    expect(last(server).body).toMatchObject({ externalWritable: ["world.doors_open", "world.weather"] });
+
+    // A patch that says nothing about the list leaves it alone: renaming a
+    // story must not silently disarm the building.
+    const renamed = await producer.installations.update({ installation: "the-caretaker", name: "The Caretaker by day" });
+    expect(renamed.installation.externalWritable).toEqual(["world.doors_open", "world.weather"]);
+
+    // An empty array is the list cleared, said out loud.
+    const cleared = await producer.installations.update({ installation: "the-caretaker", externalWritable: [] });
+    expect(cleared.installation.externalWritable).toEqual([]);
     producer.close();
   });
 
@@ -553,6 +623,34 @@ describe("messages", () => {
 
     const acked = await producer.messages.ack(sent.message.id);
     expect(acked.acked).toBe(1);
+    producer.close();
+  });
+
+  it("reads the whole sent log with its counts, which the inbox is not", async () => {
+    const { server, producer } = desk();
+    const sent = await producer.messages.broadcast({
+      installation: "the-caretaker",
+      body: "places",
+      priority: "cue",
+      audience: { to: "kind", kind: "crew" },
+      ackRequired: true,
+    });
+    await producer.messages.ack(sent.message.id);
+
+    const log = await producer.messages.log({ installation: "the-caretaker" });
+    expect(last(server)).toMatchObject({ method: "GET" });
+    expect(last(server).path).toContain(`${WIRE_CONSOLE_PATH}/messages?`);
+    const line = log.messages.find((m) => m.id === sent.message.id);
+    // "4 of 5 in the forest have seen it": the denominator is what the message
+    // went out to, kept from send time, and the numerator is who has answered.
+    expect(line?.delivered).toBe(sent.delivered);
+    expect(line?.acknowledged).toBe(1);
+
+    // The INBOX is a different question and a different route, and a station's
+    // own copy of a message carries neither count.
+    const inbox = await producer.messages.list();
+    expect(last(server).path).toBe("/v1/messages");
+    expect(inbox.messages.find((m) => m.id === sent.message.id)?.delivered).toBeUndefined();
     producer.close();
   });
 });

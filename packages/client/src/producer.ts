@@ -46,14 +46,16 @@ import type {
   DetachVisitStationRequest, DetachVisitStationResponse, EditPocketRequest, EditPocketResponse,
   EndRunResponse, EvictCardRequest, EvictCardResponse, FireCueRequest, FireCueResponse,
   ForceDealRequest, ForceDealResponse, ForcePlayRequest, ForcePlayResponse, ForgetPartyResponse,
-  GetCueListRequest, GetCueListResponse, GetJournalRequest, GetJournalResponse, GetPartyResponse,
+  GetCueListRequest, GetCueListResponse, GetHouseRequest, GetHouseResponse, GetJournalRequest,
+  GetJournalResponse, GetPartyResponse,
   GetVenueResponse, GetVisitLensResponse, GoLiveRequest, GoLiveResponse, HelloResponse,
   HotSwapRequest, HotSwapResponse, InstallationId, IssueCredentialRequest, IssueCredentialResponse,
   ListBindingsResponse, ListBridgesResponse, ListBundlesRequest, ListBundlesResponse,
   ListInstallationsRequest, ListInstallationsResponse, ListLocationsRequest, ListLocationsResponse,
   ListMessagesResponse, ListPartiesRequest, ListPartiesResponse, ListPresenceRequest,
   ListPresenceResponse, ListPrincipalsRequest, ListPrincipalsResponse, ListRunsRequest,
-  ListRunsResponse, ListVisitsRequest, ListVisitsResponse, MessageId, MoveCredentialRequest,
+  ListRunsResponse, ListSentMessagesRequest, ListSentMessagesResponse,
+  ListVisitsRequest, ListVisitsResponse, MessageId, MoveCredentialRequest,
   MoveCredentialResponse, OpenInstallationResponse, PairPrincipalRequest, PairPrincipalResponse,
   ParkVisitConsoleResponse, PartyId, PauseRunResponse, PlayHouseRequest, PlayHouseResponse,
   PreviewSwapResponse, PrincipalId, PrintLocationSheetRequest, PrintLocationSheetResponse,
@@ -118,9 +120,10 @@ export interface RunsDesk {
   /** Every open visit CLOSED, not parked, and each pocket lifted (5.4). */
   end(run: RunId): Promise<EndRunResponse>;
   list(req: ListRunsRequest): Promise<ListRunsResponse>;
-  /** Windowed and recent-first, with the wire's four filters: `since`,
-   *  `until`, `kinds` and `flow`. A day's run is a long list and the
-   *  producer's question is usually "what happened at 14:32". */
+  /** Windowed and recent-first, with the wire's six filters: `since`,
+   *  `until`, `kinds`, `flow`, `station` and `hand`. A day's run is a long
+   *  list and the producer's question is usually "what happened at 14:32", or
+   *  else "what has the well been doing" (spec 11's Journal surface). */
   journal(req: GetJournalRequest): Promise<GetJournalResponse>;
   snapshot(run: RunId): Promise<SnapshotRunResponse>;
   /** Snapshot plus replay: the recovery path, used deliberately (5.2). */
@@ -221,6 +224,10 @@ export interface WorldDesk {
 
 /** The house flow: the venue's own, never a player's (5.5). */
 export interface HouseDesk {
+  /** The house's hands as they stand, READ rather than dealt: what the map
+   *  draws beside everybody else's table, and what a cue editor offers as the
+   *  target of `deal-house`. Pure, so it carries no key. */
+  list(req: GetHouseRequest): Promise<GetHouseResponse>;
   deal(req: DealHouseRequest): Promise<DealHouseResponse>;
   play(req: PlayHouseRequest): Promise<PlayHouseResponse>;
   /** A house box without `turn` advances per play as authored, and a cue (or
@@ -342,9 +349,20 @@ export interface BridgesDesk {
 export interface ProducerMessageDesk {
   /** A producer to everyone, a kind, a location, a zone or one station. */
   broadcast(req: BroadcastMessageRequest): Promise<BroadcastMessageResponse>;
-  /** The producer's own inbox: crew replies and help calls. On the station
-   *  route, which is where the wire declares `GET /v1/messages`. */
+  /** The producer's own INBOX: crew replies and help calls, filtered to what
+   *  is addressed to this bearer. On the station route, which is where the
+   *  wire declares `GET /v1/messages`. */
   list(since?: string): Promise<ListMessagesResponse>;
+  /**
+   * The whole SENT log with its ack counts, on the console's own route.
+   *
+   * `log` rather than a second `list`, because the two answer different
+   * questions and a desk with two verbs that read alike is a desk a console
+   * calls the wrong half of: `list` is what was said TO the producer, this is
+   * what the producer said to everybody, and only this one carries "4 of 5 in
+   * the forest have seen it".
+   */
+  log(req?: ListSentMessagesRequest): Promise<ListSentMessagesResponse>;
   ack(id: MessageId): Promise<AckMessageResponse>;
 }
 
@@ -454,6 +472,8 @@ export function createProducerConnection(deps: ProducerDeps): ProducerConnection
         // `Record<string, string>` query can carry without inventing one.
         kinds: req.kinds !== undefined ? req.kinds.join(",") : undefined,
         flow: req.flow,
+        station: req.station,
+        hand: req.hand,
         ...at(req),
       });
     },
@@ -599,6 +619,9 @@ export function createProducerConnection(deps: ProducerDeps): ProducerConnection
   };
 
   const house: HouseDesk = {
+    list(req) {
+      return read<GetHouseResponse>(`${CONSOLE}/house`, { installation: req.installation });
+    },
     deal(req) {
       return write<DealHouseResponse>("POST", `${CONSOLE}/house/deal`, req);
     },
@@ -779,6 +802,13 @@ export function createProducerConnection(deps: ProducerDeps): ProducerConnection
     },
     list(since) {
       return read<ListMessagesResponse>("/messages", { since });
+    },
+    log(req = {}) {
+      return read<ListSentMessagesResponse>(`${CONSOLE}/messages`, {
+        installation: req.installation,
+        since: req.since,
+        limit: req.limit,
+      });
     },
     ack(id) {
       return write<AckMessageResponse>("POST", `/messages/${seg(id)}/ack`, { id });

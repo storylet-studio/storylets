@@ -34,7 +34,8 @@ import type {
   EditPocketResponse, EndRunRequest, EndRunResponse, EvictCardRequest, EvictCardResponse,
   FireCueRequest, FireCueResponse, ForceDealRequest, ForceDealResponse, ForcePlayRequest,
   ForcePlayResponse, ForgetPartyRequest, ForgetPartyResponse, GetBoardRequest, GetBoardResponse,
-  GetContractRequest, GetContractResponse, GetCueListRequest, GetCueListResponse, GetJournalRequest,
+  GetContractRequest, GetContractResponse, GetCueListRequest, GetCueListResponse, GetHouseRequest,
+  GetHouseResponse, GetJournalRequest,
   GetJournalResponse, GetOutcomesRequest, GetOutcomesResponse, GetPartyRequest, GetPartyResponse,
   GetPropertiesRequest, GetPropertiesResponse, GetVenueRequest, GetVenueResponse,
   GetVisitLensRequest, GetVisitLensResponse,
@@ -46,7 +47,8 @@ import type {
   ListInstallationsResponse, ListLocationsRequest, ListLocationsResponse, ListMessagesRequest,
   ListMessagesResponse, ListPartiesRequest, ListPartiesResponse, ListPresenceRequest,
   ListPresenceResponse, ListPrincipalsRequest, ListPrincipalsResponse, ListRevisionsRequest,
-  ListRevisionsResponse, ListRunsRequest, ListRunsResponse, ListVisitsRequest, ListVisitsResponse,
+  ListRevisionsResponse, ListRunsRequest, ListRunsResponse, ListSentMessagesRequest,
+  ListSentMessagesResponse, ListVisitsRequest, ListVisitsResponse,
   LocationView, MessageAudience, MessageView, MintPartyRequest, MintPartyResponse,
   MoveCredentialRequest, MoveCredentialResponse, NewFromSeedRequest, NewFromSeedResponse,
   OpenInstallationRequest, OpenInstallationResponse,
@@ -96,6 +98,9 @@ const build: BuildIdentity = { project: "the-park", version: "0.4.0", hash: "9f2
 const venue: VenueView = { venue: VENUE, name: "The Park", plan: { width: 1200, height: 800, background: "/venue/plan.png" } };
 const location: LocationView = { location: LOCATION, venue: VENUE, label: "The well", x: 120, y: 400, code: "https://the-park.local:4480/at/vn_the_park/lo_the_well" };
 const installation: InstallationView = { installation: INSTALLATION, name: "The Park", open: true, walkUp: true, default: true };
+// The trigger-in allow list (5.6): what a bridge may write, which is the
+// installation's decision and not the content's.
+const gatedInstallation: InstallationView = { ...installation, externalWritable: ["world.doors_open", "world.weather"] };
 const binding: BindingView = { installation: INSTALLATION, hand: "the-well", location: LOCATION };
 const actor: Actor = { kind: "producer", id: PRINCIPAL, label: "Priya" };
 const presence: PresenceView = { station: STATION, kind: "crew", location: LOCATION, zone: "forest", since: AT };
@@ -111,6 +116,9 @@ const station: StationView = { station: STATION, venue: VENUE, label: "The well"
 const run: RunView = { run: RUN, build, seed: 1234, startedAt: AT, state: "live" };
 const principal: PrincipalView = { principal: PRINCIPAL, label: "Sam", role: "designer", issuedAt: AT };
 const message: MessageView = { id: "ms_1", body: "hold at the gate", sender: actor, priority: "cue", audience: { to: "zone", zone: "forest" }, at: AT };
+// The same message in the producer's own log: "4 of 5 in the forest have seen
+// it", with the denominator resolved at SEND time and kept, never re-counted.
+const loggedMessage: MessageView = { ...message, ackRequired: true, delivered: 5, acknowledged: 4 };
 const revision: RevisionView = { revision: "12", at: AT, by: actor, role: "designer" };
 const bundle: BundleView = { build, id: "bd_7", uploadedAt: AT, state: "live" };
 const bridge: BridgeView = { id: "br_osc", kind: "osc", enabled: true };
@@ -226,6 +234,9 @@ const events: WireEvent[] = [
   { type: "trace", at: AT, flow: PARTY, installation: INSTALLATION, event: traceEvents[0]!, seq: 12, turn: 4 },
   { type: "world", at: AT, installation: INSTALLATION, path: "world.time_phase", value: "act-2", prev: "act-1", actor },
   { type: "visit", at: AT, flow: PARTY, installation: INSTALLATION, visit: VISIT, phase: "attached", station: STATION },
+  // A detach names the station too: the console's roster has to take the right
+  // one off a party that is at two walls.
+  { type: "visit", at: AT, flow: PARTY, installation: INSTALLATION, visit: VISIT, phase: "detached", station: STATION },
   { type: "visit", at: AT, flow: PARTY, installation: INSTALLATION, visit: VISIT, phase: "stood", standing: [{ credential: "cr_1", location: LOCATION }] },
   { type: "run", at: AT, installation: INSTALLATION, phase: "started", run },
   { type: "cue", at: AT, flow: HOUSE_FLOW, installation: INSTALLATION, bridge: "br_osc", verb: "deal", hand: "the-wall", card: "dusk", fields: { music: "tense" } },
@@ -260,6 +271,13 @@ const commands: WireCommand[] = [
   { kind: "deal", flow: PARTY, hands: ["the-well"] },
   { kind: "play", flow: PARTY, card: "ambush-at-the-ford", outcome: "stand-and-fight", hand: "the-well" },
   { kind: "advance", flow: HOUSE_FLOW, box: "the-village", turns: 1 },
+  // A peek is a COMMAND and not a read: it moves the flow's random generator,
+  // so a replay that skipped it would diverge in card order (5.2).
+  { kind: "peek", flow: PARTY, box: "the-village", criteria: { mood: "tense" }, n: 3 },
+  { kind: "evict", flow: PARTY, hand: "the-well", card: "the-goblin" },
+  { kind: "visit.attach", flow: PARTY, station: STATION },
+  { kind: "visit.detach", flow: PARTY, station: STATION },
+  { kind: "visit.stand", flow: PARTY, credential: "cr_1", location: LOCATION },
   { kind: "set", path: "world.time_phase", value: "act-2" },
   { kind: "close", flow: PARTY, reason: "idle" },
   { kind: "install", build },
@@ -267,8 +285,13 @@ const commands: WireCommand[] = [
   { kind: "run.end", run: RUN },
   { kind: "run.hold", run: RUN },
   { kind: "run.resume", run: RUN },
-  { kind: "tick", cue: "c3", action: cueActions[3]! },
+  { kind: "run.cue", entry: "c1", action: cueActions[0]!, late: false },
+  // A late `every` cue fires ONCE with the count of the periods it covered,
+  // deliberately unlike a timed box's catch-up (10.3).
+  { kind: "run.cue", entry: "c3", action: cueActions[3]!, times: 4, late: true },
+  { kind: "tick", box: "the-village", turns: 2 },
   { kind: "hot-swap", build },
+  { kind: "run.restore", run: RUN, toSeq: 400 },
   { kind: "durable.reset", scope: "all" },
 ];
 
@@ -286,7 +309,7 @@ const resumeRunRequest: ResumeRunRequest = { run: RUN };
 const resumeRunResponse: ResumeRunResponse = { run };
 const listRunsRequest: ListRunsRequest = { installation: INSTALLATION, cursor: "c", limit: 25 };
 const listRunsResponse: ListRunsResponse = { items: [run], next: "c2" };
-const getJournalRequest: GetJournalRequest = { run: RUN, since: AT, until: AT, kinds: ["play"], flow: PARTY, limit: 50 };
+const getJournalRequest: GetJournalRequest = { run: RUN, since: AT, until: AT, kinds: ["play"], flow: PARTY, station: STATION, hand: "the-well", limit: 50 };
 const getJournalResponse: GetJournalResponse = { items: [journalEntry], next: "c2", head: 412 };
 const snapshotRunRequest: SnapshotRunRequest = { run: RUN };
 const snapshotRunResponse: SnapshotRunResponse = { run: RUN, snapshot: "sn_3", seq: 412, at: AT };
@@ -335,6 +358,8 @@ const putCueListRequest: PutCueListRequest = { installation: INSTALLATION, run: 
 const putCueListResponse: PutCueListResponse = { cues };
 const fireCueRequest: FireCueRequest = { installation: INSTALLATION, cue: "c4" };
 const fireCueResponse: FireCueResponse = { cue: "c4", seq: 413 };
+const getHouseRequest: GetHouseRequest = { installation: INSTALLATION };
+const getHouseResponse: GetHouseResponse = { board, turns };
 const dealHouseRequest: DealHouseRequest = { installation: INSTALLATION, hands: ["the-wall"] };
 const dealHouseResponse: DealHouseResponse = { board, turns };
 const playHouseRequest: PlayHouseRequest = { installation: INSTALLATION, card: "dusk", outcome: "lights-down", hand: "the-wall" };
@@ -366,7 +391,7 @@ const openInstallationRequest: OpenInstallationRequest = { installation: INSTALL
 const openInstallationResponse: OpenInstallationResponse = { installation };
 const closeInstallationRequest: CloseInstallationRequest = { installation: INSTALLATION };
 const closeInstallationResponse: CloseInstallationResponse = { installation };
-const updateInstallationRequest: UpdateInstallationRequest = { installation: INSTALLATION, name: "The Park by day", default: true, walkUp: false };
+const updateInstallationRequest: UpdateInstallationRequest = { installation: INSTALLATION, name: "The Park by day", default: true, walkUp: false, externalWritable: ["world.doors_open"] };
 const updateInstallationResponse: UpdateInstallationResponse = { installation };
 const listBindingsRequest: ListBindingsRequest = { installation: INSTALLATION };
 const listBindingsResponse: ListBindingsResponse = { bindings: [binding] };
@@ -420,11 +445,14 @@ const testFireBridgeRequest: TestFireBridgeRequest = { bridge: "br_osc", payload
 const testFireBridgeResponse: TestFireBridgeResponse = { bridge: "br_osc", ok: false, detail: "no route to host" };
 const broadcastMessageRequest: BroadcastMessageRequest = { installation: INSTALLATION, body: "places", priority: "cue", audience: audiences[0]!, ackRequired: true };
 const broadcastMessageResponse: BroadcastMessageResponse = { message, delivered: 5 };
+const listSentMessagesRequest: ListSentMessagesRequest = { installation: INSTALLATION, since: AT, limit: 50 };
+const listSentMessagesResponse: ListSentMessagesResponse = { messages: [loggedMessage] };
 
 /** Everything above, so nothing is an unused local and the compile covers it
  *  all. The runtime assertion is deliberately weak: the compile is the test. */
 const shapes: unknown[] = [
-  enumProperty, qualityProperty, standingVisit,
+  enumProperty, qualityProperty, standingVisit, gatedInstallation, loggedMessage,
+  getHouseRequest, getHouseResponse, listSentMessagesRequest, listSentMessagesResponse,
   helloRequest, helloResponse, mintPartyRequest, mintPartyResponse, claimPartyRequest,
   claimPartyResponse, issueCredentialRequest, issueCredentialResponse, handshakes,
   handshakeResponse, attachAtLocationRequest, attachAtLocationResponses,
@@ -529,10 +557,64 @@ describe("the wire contract", () => {
     expect(attached?.type === "visit" ? attached.standing : "not a visit").toBeUndefined();
   });
 
+  it("names the station on an attach and on a detach, so a roster takes the right one off", () => {
+    const phases = events.flatMap((e) => (e.type === "visit" ? [e] : []));
+    expect(phases.map((e) => e.phase)).toEqual(["attached", "detached", "stood"]);
+    expect(phases.find((e) => e.phase === "attached")?.station).toBe(STATION);
+    expect(phases.find((e) => e.phase === "detached")?.station).toBe(STATION);
+    // A stand attaches nothing: it is a placard, and a placard is a location.
+    expect(phases.find((e) => e.phase === "stood")?.station).toBeUndefined();
+  });
+
+  it("journals a peek, because ranking shuffles its ties with the flow's generator", () => {
+    expect(commands.some((c) => c.kind === "peek")).toBe(true);
+  });
+
+  it("fires a late `every` cue once, with the count of the periods it covered", () => {
+    const fires = commands.flatMap((c) => (c.kind === "run.cue" ? [c] : []));
+    expect(fires).toHaveLength(2);
+    const late = fires.find((c) => c.late);
+    expect(late?.times).toBe(4);
+    // An on-time fire says so rather than leaving it to be inferred, and it
+    // covers one period, so it carries no count.
+    expect(fires.find((c) => !c.late)?.times).toBeUndefined();
+  });
+
+  it("keeps `tick` for the timed box, which names the box it moved", () => {
+    const tick = commands.find((c) => c.kind === "tick");
+    expect(tick?.kind === "tick" ? tick.box : undefined).toBe("the-village");
+  });
+
+  it("holds the trigger-in allow list on the installation, and lets a patch send the whole list", () => {
+    // On a property, `writable` is about OUTCOMES; what an external writer may
+    // touch is the installation's decision, per property (5.6).
+    expect(gatedInstallation.externalWritable).toEqual(["world.doors_open", "world.weather"]);
+    expect(installation.externalWritable).toBeUndefined();
+    expect(updateInstallationRequest.externalWritable).toEqual(["world.doors_open"]);
+  });
+
+  it("counts a sent message's audience and its acks, without re-deriving either", () => {
+    expect(loggedMessage.delivered).toBe(5);
+    expect(loggedMessage.acknowledged).toBe(4);
+    // A station's own copy carries neither, and the log is the producer's.
+    expect(message.delivered).toBeUndefined();
+    expect(listSentMessagesResponse.messages[0]?.acknowledged).toBe(4);
+  });
+
+  it("reads the house's table without dealing it, in the shape a deal answers with", () => {
+    expect(getHouseResponse.board).toEqual(dealHouseResponse.board);
+    expect(getHouseResponse.turns).toEqual(dealHouseResponse.turns);
+  });
+
+  it("filters the journal by station and by hand as well as by party and kind", () => {
+    expect(getJournalRequest.station).toBe(STATION);
+    expect(getJournalRequest.hand).toBe("the-well");
+  });
+
   it("constructs one literal of every shape", () => {
     expect(shapes.every((s) => s !== undefined)).toBe(true);
-    expect(events).toHaveLength(12);
+    expect(events).toHaveLength(13);
     expect(traceEvents).toHaveLength(7);
-    expect(commands).toHaveLength(14);
+    expect(commands).toHaveLength(22);
   });
 });

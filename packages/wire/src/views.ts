@@ -305,6 +305,17 @@ export interface InstallationView {
    *  the only one offered when just one is open. Exactly one installation
    *  holds it. */
   default?: boolean;
+  /** The TRIGGER-IN ALLOW LIST: the `@world` paths a bridge's trigger may
+   *  write, actor `external` (5.6).
+   *
+   *  It is here rather than on a property, because `writable: false` on a
+   *  declaration protects a property from OUTCOMES and says nothing about the
+   *  building: what the light desk may set is the installation's decision and
+   *  changes with the rig, not with the content. Absent means the list has
+   *  never been set and no external write is allowed; an empty array means the
+   *  same thing said out loud, which is what a console shows after a producer
+   *  has cleared it. */
+  externalWritable?: PropertyPath[];
 }
 
 /** Who a message is for (6.7). A location or zone audience is what makes
@@ -334,6 +345,21 @@ export interface MessageView {
   ackRequired?: boolean;
   /** Stations that have acked, and when. Absent on a station's own copy. */
   acks?: { station: StationId; at: IsoTimestamp }[];
+  /** How many stations it went to: the denominator of "4 of 5 in the forest
+   *  have seen it".
+   *
+   *  RESOLVED AT SEND TIME AND KEPT, never re-derived from presence. An
+   *  audience is a set of devices at one instant, and the forest has a
+   *  different five in it an hour later; a log that recounted would move the
+   *  denominator under a producer reading it. The broadcast response's
+   *  `delivered` is this number at the moment of sending, and this is the same
+   *  number afterwards. */
+  delivered?: number;
+  /** How many of them have acked. It is `acks.length` where the acks are
+   *  carried, and the count on its own where they are not, so a log with a
+   *  thousand messages in it need not carry a thousand ack lists to say
+   *  "4 of 5". */
+  acknowledged?: number;
 }
 
 /** One revision of the project's source, as pull and push count them (9.1). */

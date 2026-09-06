@@ -42,37 +42,126 @@ import type {
  * Trace events are NOT here: they are derived from applying commands and are
  * re-emitted on replay (5.2). Presence and messages are not here either:
  * they change no story, so they are logged and not journaled.
+ *
+ * EVERY ARM SAYS WHEN IT IS JOURNALED, because the list is also the list of
+ * things a replay reproduces, and an arm nobody can place is an arm a server
+ * will journal at the wrong moment. A receiver IGNORES a kind it does not
+ * recognise (6.2), so this union grows and never breaks.
  */
 export type WireCommand =
   /** A visit opened, with the seed derived from the run seed and the party
-   *  id, so replay is exact (5.4.1). */
+   *  id, so replay is exact (5.4.1). Journaled at the first handshake of the
+   *  run for that party, and again on a resume that restored a parked save. */
   | { kind: "open"; flow: FlowRef; seed?: number; restored?: boolean }
-  /** Hands dealt. Absent `hands` means every hand the actor may deal. */
+  /** Hands dealt. Absent `hands` means every hand the actor may deal.
+   *  Journaled on every deal, a station's and a producer's alike. */
   | { kind: "deal"; flow: FlowRef; hands?: GameId[] }
+  /** A card played. Journaled before the outcome is applied. */
   | { kind: "play"; flow: FlowRef; card: GameId; outcome: GameId; hand: GameId }
-  /** `advanceTurns` on a box: a cue's nudge, or a timed box's own tick. */
+  /** `advanceTurns` on a box: a cue's nudge, or a producer's by hand. A timed
+   *  box's own tick is `tick`. */
   | { kind: "advance"; flow: FlowRef; box: GameId; turns: number }
+  /**
+   * A box was peeked: the top of the stock, looked at and put back.
+   *
+   * **A PEEK IS A COMMAND, NOT A READ** (5.2). Ranking shuffles its ties with
+   * the flow's random generator, so a peek moves the one thing replay rests
+   * on, and a replay that skipped it would diverge in card order with nothing
+   * to show for it. `board`, `outcomes` and `properties` are true reads and are
+   * not here; this one is journaled every time it is asked for.
+   */
+  | { kind: "peek"; flow: FlowRef; box: GameId; criteria?: Record<GameId, GameId>; n?: number }
+  /** A card taken off a board without being played: the producer's stuck-beat
+   *  fix (6.5). Journaled when the console evicts, and not when the engine
+   *  drops a card on a deal, which is a trace verdict and not a command. */
+  | { kind: "evict"; flow: FlowRef; hand: GameId; card: GameId }
+  /** A station attached to a visit. Journaled at the handshake that attached
+   *  it, which for a party of four with four wristbands happens four times on
+   *  one flow (5.4). */
+  | { kind: "visit.attach"; flow: FlowRef; station: StationId }
+  /** A station detached. Journaled by the idle sweep, by a producer taking the
+   *  tablet off a bench, and by a handshake under `party.stations: one` (5.4). */
+  | { kind: "visit.detach"; flow: FlowRef; station: StationId }
+  /**
+   * A phone-only party scanned a placard and now stands there (5.4, 5.7).
+   *
+   * Journaled per CREDENTIAL rather than per party, because a party at two
+   * walls is at both, and because standing is what narrows every later deal to
+   * the hands bound at that location: a stand that were not journaled would
+   * make a replay deal a phone the whole room.
+   */
+  | { kind: "visit.stand"; flow: FlowRef; credential: CredentialId; location: LocationId }
   /** A property write. `flow` absent means a shared or `@world` write; a
-   *  trigger in from a bridge is one of these with actor `external` (5.6). */
+   *  trigger in from a bridge is one of these with actor `external` (5.6).
+   *  Journaled on a producer's write, a bridge's trigger in and a crew
+   *  station's presence mirror alike: every write has an actor. */
   | { kind: "set"; path: PropertyPath; value: ScalarValue; flow?: FlowRef }
-  /** A visit closed: idle, or the run ending (5.4). */
+  /** A visit closed: idle, or the run ending (5.4). Journaled by the idle
+   *  sweep, at `run.end`, by a producer parking, and by a forget. */
   | { kind: "close"; flow: FlowRef; reason?: "idle" | "run-end" | "producer" | "forget" }
-  /** A bundle installed (section 9). */
+  /** A bundle installed (section 9). Journaled before any run pins it. */
   | { kind: "install"; build: BuildIdentity }
-  /** A fresh world with a fresh seed (5.4.1). */
+  /** A fresh world with a fresh seed (5.4.1). The first command of a run. */
   | { kind: "run.start"; run: RunId; seed: number; build: BuildIdentity }
-  /** The cue list disarmed, the house closed, every pocket lifted (5.4.1). */
+  /** The cue list disarmed, the house closed, every pocket lifted (5.4.1).
+   *  The last command of a run. */
   | { kind: "run.end"; run: RunId }
-  /** A Hold and its Resume: the clocks are derived from these (10.2). */
+  /** A Hold and its Resume: the clocks are derived from these (10.2), so both
+   *  are journaled at the instant the producer pressed them. */
   | { kind: "run.hold"; run: RunId }
   | { kind: "run.resume"; run: RunId }
-  /** A scheduler tick: the cue list firing, journaled so replay reproduces
-   *  what fired and when. */
-  | { kind: "tick"; cue?: string; action?: CueEntry["action"] }
+  /**
+   * A cue on the run's list fired (10.3).
+   *
+   * Journaled with actor `scheduler` when the clock reached it and with the
+   * producer's when it was fired by hand, and journaled BEFORE the action is
+   * applied, so a replay reproduces what fired and when. The two side effects
+   * that change no story (`message` and `bridge-fire`) ride out of the apply's
+   * result rather than out of the replay, which is why a recovery does not
+   * shout at an empty building or fire the pyrotechnics twice.
+   */
+  | {
+      kind: "run.cue";
+      /** The entry's id on the cue list, stable across edits so a button keeps
+       *  its identity. */
+      entry: string;
+      /** What it did, copied into the journal rather than looked up, because
+       *  the list is a document a producer edits and the journal must say what
+       *  fired and not what is armed now. */
+      action?: CueEntry["action"];
+      /** How many periods of an `every` entry this one fire covers. A
+       *  scheduler called late issues the backlog ONCE with a count, unlike a
+       *  timed box's catch-up, because five blackouts in one second is a venue
+       *  in trouble (10.3). Absent means one. */
+      times?: number;
+      /** The entry's own moment had already gone: a wall cue whose time passed
+       *  while the show was held. */
+      late: boolean;
+    }
+  /**
+   * A timed box's own tick: `advanceTurns` driven by the box's
+   * `turn: { seconds: N }` declaration rather than by a play (4.8, 10.4).
+   *
+   * Journaled off SHOW time, so a Hold stops it and a scheduler called late
+   * issues the backlog in one command; a parked flow catches up from its two
+   * journaled instants on resume. A cue's fire is `run.cue`; `cue` and
+   * `action` are that older home here and stay for the servers that send them.
+   */
+  | { kind: "tick"; cue?: string; action?: CueEntry["action"]; box?: GameId; turns?: number }
   /** A new build carried into the live run, with the 4.9 report attached, so
    *  the swap is reversible like any other command (section 9). */
   | { kind: "hot-swap"; build: BuildIdentity }
-  /** Every pocket and the installation memory cleared (6.5). */
+  /**
+   * The run rebuilt from its own journal, up to a sequence number (5.2, 6.5).
+   *
+   * Journaled AFTER the rebuild, recording that a producer went back rather
+   * than erasing what they went past: the journal is the audit log as well as
+   * the timeline, and a restore that quietly truncated it would be the one
+   * command that could hide the others.
+   */
+  | { kind: "run.restore"; run: RunId; toSeq: number }
+  /** Every pocket and the installation memory cleared (6.5). Journaled with
+   *  the producer who typed the confirmation. */
   | { kind: "durable.reset"; scope: "pockets" | "installation" | "all" };
 
 /** One line of the journal. */
@@ -174,6 +263,15 @@ export interface GetJournalRequest extends PageRequest {
   kinds?: WireCommand["kind"][];
   /** Only this flow's commands. */
   flow?: FlowRef;
+  /** Only commands that NAME this station: an attach or a detach (5.4). Not
+   *  "commands from a device standing there": presence is ephemeral and is
+   *  never journaled, so a filter that meant that could not be answered from
+   *  the journal at all. */
+  station?: StationId;
+  /** Only commands that name this hand: a deal that asked for it, a play on
+   *  it, an eviction from it. The producer's "what has the well been doing",
+   *  which is spec 11's fourth Journal filter beside party, station and kind. */
+  hand?: GameId;
 }
 
 /** A page of the journal, recent first. */
@@ -542,6 +640,27 @@ export interface FireCueResponse {
   seq: number;
 }
 
+/** `GET /v1/console/house`. The house's table as it stands, READ rather than
+ *  dealt (5.5).
+ *
+ *  The house had three verbs and no read, and a read that had to deal to
+ *  answer would be a read that changed the show: the console's map draws the
+ *  venue's own hands beside everybody else's, and its cue editor offers them
+ *  as the targets of `deal-house` and `play-house`. Pure, so it takes no key
+ *  and is journaled as nothing. */
+export interface GetHouseRequest {
+  /** Whose house: each story has its own house flow (5.5). */
+  installation: InstallationId;
+}
+
+/** The house's board and its box clocks, field for field what
+ *  {@link DealHouseResponse} carries, since it is the same flow read instead
+ *  of dealt. */
+export interface GetHouseResponse {
+  board: BoardView;
+  turns?: TurnsView;
+}
+
 /** `POST /v1/console/house/deal`. The venue's own flow, dealt by hand (5.5).
  *  Takes `Idempotency-Key`. */
 export interface DealHouseRequest {
@@ -768,6 +887,16 @@ export interface UpdateInstallationRequest {
   /** Mint parties at a walk-up here (7.2). False keeps this story to the
    *  door, and off every chooser. */
   walkUp?: boolean;
+  /** The trigger-in allow list: the `@world` paths a bridge may write, actor
+   *  `external` (5.6, {@link InstallationView.externalWritable}).
+   *
+   *  THE WHOLE LIST, not a delta, for the reason {@link PutCueListRequest}
+   *  states about an ordered list: an allow list edited by patch is an allow
+   *  list two consoles can grow between them without either meaning to. A
+   *  console reads the current list off the installation, ticks a box and
+   *  sends what it now shows; an empty array clears it. Absent leaves it
+   *  alone, so a producer renaming a story does not silently disarm the rig. */
+  externalWritable?: PropertyPath[];
 }
 
 /** The installation after the change. */
@@ -1214,6 +1343,31 @@ export interface BroadcastMessageRequest {
 export interface BroadcastMessageResponse {
   message: MessageView;
   /** How many stations it went to, which is the denominator of "4 of 5 in
-   *  the forest have seen it". */
+   *  the forest have seen it". The same number the log keeps afterwards on
+   *  {@link MessageView.delivered}. */
   delivered: number;
+}
+
+/** `GET /v1/console/messages`. The whole SENT log with its ack counts, recent
+ *  first (6.7).
+ *
+ *  Not the same route as a station's `GET /v1/messages`, and deliberately not
+ *  the same answer: that one is an inbox, filtered to what is addressed to the
+ *  bearer, and a producer reading it sees the crew's replies and help calls.
+ *  This is the producer's own record of what was sent to everybody, which is
+ *  why it is not filtered by audience. */
+export interface ListSentMessagesRequest {
+  /** One story's crew only. Absent is the whole building's log, which is what
+   *  a venue-wide instruction belongs to (4a). */
+  installation?: InstallationId;
+  /** Only messages at or after this instant. */
+  since?: IsoTimestamp;
+  /** How many, most recent first. */
+  limit?: number;
+}
+
+/** The log, recent first, each message carrying the `delivered` it was sent to
+ *  and the `acknowledged` that have answered. */
+export interface ListSentMessagesResponse {
+  messages: MessageView[];
 }
