@@ -644,6 +644,41 @@ describe("export-xlsx: the readable workbook", () => {
   });
 });
 
+// --- box-unique tag gameIds -------------------------------------------------
+// The compile-time check landed for question 16 (design/engine-server.md 4.4,
+// ruled 2026-09-06). It is a WARNING for this release and an error for the
+// next, so what matters here is that validate SAYS it and still exits 0: an
+// author meets this check through the CLI or through Storyletter's problems
+// bar and nowhere else.
+
+describe("a tag gameId used by two groups in one box", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "storyletengine-tagids-"));
+  const dir = join(tmp, "demo.storylets");
+
+  it("validate reports it as a warning, and the project still builds", async () => {
+    expect((await call("init", join(tmp, "demo"), "--name", "Demo")).code).toBe(0);
+    // Through the parser and the canonical formatter, never by hand: a shard is
+    // bytes with a contract on them.
+    const tagsPath = join(dir, "main", "tags.storylettags");
+    const tags = parseSource(readFileSync(tagsPath, "utf8")) as {
+      groups: { id: string; gameId: string; tags: { id: string; gameId: string }[] }[];
+    };
+    tags.groups.push(
+      { id: "d_berths", gameId: "berths", tags: [{ id: "v_docks", gameId: "docks" }] },
+      { id: "d_quays", gameId: "quays", tags: [{ id: "v_docks_2", gameId: "docks" }] },
+    );
+    writeFileSync(tagsPath, canonicalStringify(tags));
+    // Export first, so the staleness gate is not what is being read below.
+    expect((await call("export", dir)).code).toBe(0);
+    const r = await call("validate", dir);
+    expect(r.code).toBe(0);                       // a warning, not a refusal
+    const said = r.err.join("\n");
+    expect(said).toContain("warning: main/tags [docks]:");
+    expect(said).toContain('tag gameId "docks" is used by group "berths" and by group "quays" in box "main"');
+    expect(said).toContain("A warning in this release, and an error in the next.");
+  });
+});
+
 describe("every loading command reports the project's issues", () => {
   // The convention, made a test 2026-08-29. Most commands printed
   // `loaded.issues` unconditionally and four did not: `new box` only inside

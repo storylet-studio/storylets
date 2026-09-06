@@ -19,6 +19,27 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Added
+
+- **`contract show`**: what each installation contract in `contracts/` depends on, entity by entity (design/engine-server.md 4.11). A venue's server writes the contract; `validate` refuses a build that breaks one, and every message names the venue that cares.
+
+- **`validate` warns about content above the project's play rung** (design/engine-server.md 4.10): a shared declaration or deck in a solo project, durable content below venue, each warning naming a way out the editor can actually take.
+
+- **`coverage` reads a timed box's budget as time** when every box in the project agrees on a unit, and the sweep ticks a timed box itself, since the harness is the host (design/engine-server.md 4.8).
+
+### Changed
+
+- **`--set` takes the address `listProperties()` prints, by gameId** (design/engine-server.md 4.4): `box.village.mood`, `hand.the-elder.zone`. The internal-id form still works this release and prints a diagnostic naming the address to move to; it is refused after the next runtime release. A tag two boxes both name is addressed by its box, `value.harbour/docks.danger`, and the ambiguous short form is refused with both candidates named.
+
+- **`--set` can write a read-only `@world` value.** `writable: false` is the story's promise not to write a value, never the host's, and the CLI is a host.
+
+- **A tag's `gameId` is now unique within its box**, across all of that box's tag groups, and
+  `validate` says so. A tag's properties are addressed as `value.<box>/<tag>.<name>`, which
+  qualifies by box and no further, so two groups in one box that both name a tag `docks` share
+  one address: the first answers to it and the second cannot be addressed at all. This release
+  warns, naming the box, both groups and the shared name; the next refuses it. The fix is to
+  rename one of the two tags, or to pin a distinct `gameId` on one of them.
+
 ## [0.4.0] - 2026-09-04
 
 ### Changed

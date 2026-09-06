@@ -858,6 +858,96 @@ describe("publish-gate validation", () => {
     expect(result.bundle!.boxes.map((b) => b.tagGroups.map((g) => g.gameId))).toEqual([["d1"], ["d1"]]);
   });
 
+  // A TAG's gameId is unique within its box as well, across all of that box's
+  // groups (design/engine-server.md 4.4, question 16 ruled 2026-09-06): the
+  // value address qualifies by box and stops there, so two groups naming a tag
+  // the same way leave the second one with no address. A warning for this
+  // release and an error for the next, because the fix is a rename.
+  it("warns where two groups in ONE box name a tag the same way", () => {
+    const result = compileFiles(minimal([]).map((f) => (f.path === "b/tags.storylettags"
+      ? shard("b/tags.storylettags", {
+        schema: "storylets/tags@0",
+        groups: [
+          { id: "d_1", gameId: "berths", tags: [{ id: "v_1", gameId: "docks" }] },
+          { id: "d_2", gameId: "quays", tags: [{ id: "v_2", gameId: "docks" }] },
+        ],
+      })
+      : f)));
+    expect(errors(result.issues)).toEqual([]);
+    const warnings = result.issues.filter((i) => i.severity === "warning");
+    expect(warnings).toHaveLength(1);
+    // Anchored on the SECOND in bundle order: the one that cannot be addressed.
+    expect(warnings[0]!.where).toBe("docks");
+    expect(warnings[0]!.path).toBe("b/tags");
+    expect(warnings[0]!.message).toBe(
+      'tag gameId "docks" is used by group "berths" and by group "quays" in box "b1",'
+      + ' so the address "value.b1/docks.<property>" reaches only the tag in "berths"'
+      + " and this one's properties cannot be addressed at all; rename one of the two tags,"
+      + " or pin a distinct gameId on one of them. A warning in this release, and an error in the next.");
+  });
+
+  // The pinned spelling and the derived one are the same address, so they
+  // collide the same way. A tag has no title, so its non-pinned gameId is the
+  // last resort, its own id - which is exactly what a hand-written shard using
+  // readable ids produces.
+  it("warns where a pinned tag gameId collides with a derived one", () => {
+    const result = compileFiles(minimal([]).map((f) => (f.path === "b/tags.storylettags"
+      ? shard("b/tags.storylettags", {
+        schema: "storylets/tags@0",
+        groups: [
+          { id: "d_1", gameId: "berths", tags: [{ id: "docks" }] },
+          { id: "d_2", gameId: "quays", tags: [{ id: "v_2", gameId: "docks" }] },
+        ],
+      })
+      : f)));
+    const warnings = result.issues.filter((i) => i.severity === "warning");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.message).toContain('tag gameId "docks" is used by group "berths"');
+    expect(warnings[0]!.message).toContain('and by group "quays" in box "b1"');
+  });
+
+  it("says nothing where a box's tag gameIds are all distinct", () => {
+    const result = compileFiles(minimal([]).map((f) => (f.path === "b/tags.storylettags"
+      ? shard("b/tags.storylettags", {
+        schema: "storylets/tags@0",
+        groups: [
+          { id: "d_1", gameId: "berths", tags: [{ id: "v_1", gameId: "docks" }] },
+          { id: "d_2", gameId: "quays", tags: [{ id: "v_2", gameId: "moorings" }] },
+        ],
+      })
+      : f)));
+    expect(result.issues).toEqual([]);
+  });
+
+  // Two BOXES sharing a tag gameId is the case the qualified address exists
+  // for, so it is silent here: `value.b1/docks` and `value.b2/docks` are both
+  // reachable and it is the SHORT form that the runtime refuses.
+  it("says nothing where two boxes name a tag the same way", () => {
+    const result = compileFiles([
+      ...minimal([]).map((f) => (f.path === "b/tags.storylettags"
+        ? shard("b/tags.storylettags", {
+          schema: "storylets/tags@0",
+          groups: [{ id: "d_1", gameId: "berths", tags: [{ id: "v_1", gameId: "docks" }] }],
+        })
+        : f)),
+      shard("c/box.storyletbox", {
+        schema: "storylets/box@0",
+        box: { id: "b_2", gameId: "b2", ranking: { specificity: true }, fields: [], properties: [] },
+      }),
+      shard("c/tags.storylettags", {
+        schema: "storylets/tags@0",
+        groups: [{ id: "d_2", gameId: "quays", tags: [{ id: "v_2", gameId: "docks" }] }],
+      }),
+      shard("c/hands.storylethands", { schema: "storylets/hands@0", templates: [], hands: [] }),
+      shard("c/decks/main.storyletdeck", {
+        schema: "storylets/deck@0",
+        deck: { id: "k_2", gameId: "main", properties: [] },
+        cards: [],
+      }),
+    ]);
+    expect(result.issues).toEqual([]);
+  });
+
   it("flags a duplicate id across shards", () => {
     const result = compileFiles(minimal([
       { id: "c_1", gameId: "c1", outcomes: [] },

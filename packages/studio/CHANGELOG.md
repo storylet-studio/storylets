@@ -26,9 +26,21 @@ here is part of shipping, not a courtesy.
 
 - **The Board's New run and Forget everyone**, replacing Restart on a project a Storylet Server set to venue. **New run** is the next day: everything run-scoped resets - state, boards, cooldowns, clocks and the journal - and everything durable stays, so a designer can play a party who have been here before. **Forget everyone** is the restart, under the name that says what it costs, and asks first. Neither touches `@world`, which is the game's.
 
+- **A hand's hole filled from a property** (design/engine-server.md 4.6). On a hand's Bindings, beside a tag and "the instance chooses", a hole may be filled **from a property**: a picker of the string and enum declarations this hand or its template carries, and the `@story` and `@world` ones. The engine resolves it at ask time, so moving the Elder to the forest is one `setProperty("hand.the-elder.zone", "forest")` from a host or the Board and the next deal follows. The compiler checks the reference the way it checks `boundBy`, and a value naming no tag leaves the hole unbound with a diagnostic rather than an empty hand.
+
+- **A box that counts in time** (design/engine-server.md 4.8). The box page's Turns section chooses between "a play" and "every N seconds of play". In a timed box the card editor labels `redraw` in the box's unit and converts as you type ("30 turns, half an hour"), and the Board shows the unit beside the counter with its advance buttons scaled to it. A play in a timed box advances nothing unless the call says otherwise; the host ticks the clock.
+
+### Changed
+
+- **The Board's state strip addresses every value by gameId** (design/engine-server.md 4.4), the way `listProperties()` prints it, and where a tag's name repeats across boxes the row carries the box: `harbour/docks.danger` beside `cellar/docks.danger`, so two rows reading "docks.danger" cannot be confused. A tag named only by its title no longer reads "undefined" in the strip.
+
 ### Fixed
 
 - **A declaration edited in the app no longer loses its `shared` flag.** The flag was not on the editor's declaration DTO at all, and a property list saves whole, so opening any list that held a shared declaration and saving it deleted the flag from the shard.
+
+- **The card editor's live time conversion was never visible.** It was drawn at opacity 0 and revealed by a section the card panel is not inside, so nobody saw "30 turns, half an hour" until a launch pass looked for it.
+
+- **The box page's consequence sentence overlapped its panel** by four pixels.
 
 ## [0.5.0] - 2026-09-04
 

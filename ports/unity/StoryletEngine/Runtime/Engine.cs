@@ -521,7 +521,11 @@ namespace StoryletStudio.StoryletEngine
             // Distinct qualified forms per gameId. Distinct rather than a
             // count: two groups in ONE box may also name a tag the same way,
             // and a refusal that offered the same address twice would be no
-            // help at all.
+            // help at all. That last case is closing at the source rather than
+            // here (question 16, ruled 2026-09-06): the compiler warns that a
+            // tag gameId must be unique within its box, across all of that
+            // box's groups, and refuses it from the next release. Until then
+            // the first in bundle order answers, as it always did.
             var forms = new Dictionary<string, List<string>>();
             for (var i = 0; i < ids.Count; i++)
             {

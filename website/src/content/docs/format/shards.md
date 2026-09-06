@@ -250,7 +250,11 @@ card that never deals. A tag may carry properties of its own.
 ```
 
 A group's name is unique **within its box**, not project-wide, so two boxes can each declare
-a `zone` group. Tag names are unique within their group. Ids are unique across the whole
+a `zone` group. Tag names are unique within their group, and unique **within their box** as
+well: a tag's properties are addressed as `value.<box>/<tag>.<name>`, which qualifies by box
+and no further, so two groups in one box that both name a tag `docks` leave the second one
+with no address of its own. Rename one of them, or pin a distinct `gameId` on one. Validation
+warns about it in this release and refuses it in the next. Ids are unique across the whole
 project.
 
 ## The hands shard

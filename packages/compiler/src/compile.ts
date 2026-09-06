@@ -415,6 +415,10 @@ export function compileProject(source: SourceProject): CompileResult {
     const tagGroups: TagGroup[] = [];
     const groupsById = new Map<string, TagGroup>();
     const groupGameIds = new Map<string, string>();
+    /** Tag gameId -> the gameId of the first GROUP in this box to use it.
+     *  A tag's own uniqueness is per group, one map down; this one is the
+     *  box-wide rule the value address needs (see the check itself). */
+    const tagGameIdsInBox = new Map<string, string>();
     for (const group of sourceBox.tags.groups) {
       const path = `${sourceBox.path}/tags`;
       claimId(group.id, path, effectiveGameId(group));
@@ -428,6 +432,34 @@ export function compileProject(source: SourceProject): CompileResult {
         claimId(tag.id, path, effectiveGameId(tag));
         checkGameId("tag", tag, path);
         uniqueGameIds(`tag (group "${effectiveGameId(group)}")`, tagGameIds, effectiveGameId(tag), path);
+        // ...and a tag gameId is unique within its BOX as well, across all of
+        // that box's groups (design/engine-server.md 4.4, question 16 ruled
+        // 2026-09-06). The value scope's address qualifies by box and stops
+        // there: `value.<boxGameId>/<tagGameId>.<name>`. Two groups in ONE box
+        // that both name a tag "docks" therefore share one address, the first
+        // in bundle order answers to it, and the second has no address at all,
+        // which is why the SECOND is where this is anchored.
+        //
+        // A warning for this release and an error for the next, because the
+        // only fix is a rename and a rename is content: a project that already
+        // does this needs a release in which the compiler tells it so while
+        // still building. Both spellings are covered, since `effectiveGameId`
+        // is what an address is actually made of: a pinned gameId collides with
+        // a derived one just as readily as two derived ones collide.
+        const priorGroup = tagGameIdsInBox.get(effectiveGameId(tag));
+        if (priorGroup === undefined) {
+          tagGameIdsInBox.set(effectiveGameId(tag), effectiveGameId(group));
+        } else if (priorGroup !== effectiveGameId(group)) {
+          report({
+            severity: "warning", path, where: effectiveGameId(tag),
+            message: `tag gameId "${effectiveGameId(tag)}" is used by group "${priorGroup}"`
+              + ` and by group "${effectiveGameId(group)}" in box "${effectiveGameId(boxDecl)}",`
+              + ` so the address "value.${effectiveGameId(boxDecl)}/${effectiveGameId(tag)}.<property>"`
+              + ` reaches only the tag in "${priorGroup}" and this one's properties cannot be addressed`
+              + " at all; rename one of the two tags, or pin a distinct gameId on one of them."
+              + " A warning in this release, and an error in the next.",
+          });
+        }
         // A tag's own properties feed the composed @hand, so they fold too.
         legalPropertyName("hand", tag.properties, path);
       }

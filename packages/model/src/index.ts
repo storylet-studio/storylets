@@ -192,6 +192,12 @@ export function valueAddresses(bundle: {
   // offered the same address twice would be no help at all. Those two share
   // the qualified segment, and the first in bundle order answers to it, which
   // is what the short form did for everything before this rule.
+  //
+  // That last case is closing at the source rather than here (question 16,
+  // ruled 2026-09-06): the compiler WARNS that a tag gameId must be unique
+  // within its box, across all of that box's groups, and refuses it from the
+  // next release. So this stays as the reading rule for a bundle built before
+  // that, and a bundle built after it has no repeated qualified form to read.
   const forms = new Map<string, string[]>();
   for (const tag of tags) {
     const list = forms.get(tag.gameId) ?? [];

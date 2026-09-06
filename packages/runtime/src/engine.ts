@@ -395,6 +395,12 @@ const OWNED_SCOPES = ["box", "deck", "hand", "value"] as const;
  * the Board draws these addresses from the bundle while the engine builds them
  * from this index, and the two have to agree - and `repeated` is what it
  * found, so a refusal can name the candidates.
+ *
+ * Two GROUPS in one box naming the same tag is the case the box qualifier
+ * cannot separate, and it is closing at the source rather than here (question
+ * 16, ruled 2026-09-06): the compiler warns that a tag gameId must be unique
+ * within its box, and refuses it from the next release. Until then the first
+ * in bundle order answers, as it always did.
  */
 interface OwnerIndex {
   gameId: Map<string, string>;   // internal id -> owner segment
