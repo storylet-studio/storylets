@@ -19,7 +19,7 @@ import type {
   BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectSettingsDto,
   PropertyDeclDto, RemoteDto, ShardVcDto, VcStatusDto,
 } from "../shared/api.js";
-import { addressOf, readRemote } from "./remote.js";
+import { addressOf, readRemote, statusLine } from "./remote.js";
 import { History } from "./history.js";
 import { resetShardStatus, shardStatus } from "./vc.js";
 import type { ShardRef } from "./vc.js";
@@ -338,6 +338,10 @@ export function remoteDto(dir: string): RemoteDto | undefined {
     revision: remote.revision,
     role: remote.role,
     edits: remote.edits ?? 0,
+    // The menu's own line, said once and read by both. The far end's head is
+    // not asked for here: learning it costs a call, so the menu carries it and
+    // this says what the project on disk knows.
+    status: statusLine({ revision: remote.revision, edits: remote.edits ?? 0 }),
   };
 }
 

@@ -36,9 +36,10 @@ import { loadProject, runPack } from "@storylet-studio/ops";
 import { openProject } from "./project.js";
 import { commit, forgetLastCounted, saveBox, saveCard } from "./mutate.js";
 import {
-  PULL_AS_DESIGNER, REMOTE_FILE, addressOf, clearEdits, countEdit, failed, isShapeShard,
-  menuState, normaliseAddress, openPackBytes, pair, packProject, planPull, pullPack, pushPack,
-  readRemote, refuseWrite, remoteInPack, resolveLeave, statusLine, writeRemote,
+  PULL_AS_DESIGNER, REMOTE_FILE, addressOf, clearEdits, contractBreaks, countEdit, failed,
+  isShapeShard, menuState, normaliseAddress, openPackBytes, pair, packAddress, packProject,
+  planPull, pullPack, pushPack, readRemote, refuseWrite, remoteInPack, resolveLeave, statusLine,
+  writeRemote,
 } from "./remote.js";
 import type { RemoteRecord } from "./remote.js";
 
@@ -75,6 +76,8 @@ interface PushRecord {
   base?: number;
   pack: Buffer;
   role: string;
+  note?: string;
+  acknowledge?: string[];
 }
 
 /** The fake. One installation, one version, a list of revisions. */
@@ -83,6 +86,10 @@ class FakeServer {
   readonly pushes: PushRecord[] = [];
   /** Set to refuse the next push with this, whatever it carries. */
   refuseNext?: { status: number; code: string; message: string; details?: unknown };
+  /** Things a push breaks at this end, refused until every one is acknowledged.
+   *  The real server matches an acknowledgement against a break's `where` and
+   *  then its `path`, and so does this. */
+  breaks?: { severity: string; path?: string; where?: string; message: string }[];
   /** Seal the packs it sends with the record a real one carries. */
   sealed = false;
   private server?: Server;
@@ -160,12 +167,25 @@ class FakeServer {
 
     if (url.pathname === "/v1/console/project/push" && req.method === "POST") {
       const pack = Buffer.from(String(body["pack"] ?? ""), "base64");
+      const acknowledge = body["acknowledge"] as string[] | undefined;
       this.pushes.push({
         installation: body["installation"] as string | undefined,
         version: body["version"] as string | undefined,
         base: body["base"] as number | undefined,
         pack, role,
+        note: body["note"] as string | undefined,
+        acknowledge,
       });
+      const said = acknowledge ?? [];
+      const outstanding = (this.breaks ?? []).filter(
+        (b) => !said.includes(b.where ?? "") && !said.includes(b.path ?? ""),
+      );
+      if (outstanding.length > 0) {
+        refuse(409, "contract_break",
+          `That push breaks ${outstanding.length} thing${outstanding.length === 1 ? "" : "s"} `
+          + "this end depends on. Nothing was recorded.", outstanding);
+        return;
+      }
       if (this.refuseNext !== undefined) {
         const { status, code, message, details } = this.refuseNext;
         this.refuseNext = undefined;
@@ -406,6 +426,80 @@ describe("pushing", () => {
     if (!failed(pushed)) return;
     expect(pushed.code).toBe("conflict");
     expect(Array.isArray(pushed.details)).toBe(true);
+  });
+});
+
+describe("the note and the breaks a push carries", () => {
+  it("sends the note up with the pack", async () => {
+    const mine = copyExample("push-note");
+    const pushed = await pushPack(server.origin, designerKey, {
+      pack: await packProject(mine), installation: "the-park", version: "seed", base: 1,
+      note: "the second act, roughed in",
+    });
+    expect(failed(pushed)).toBe(false);
+    expect(server.pushes.at(-1)!.note).toBe("the second act, roughed in");
+  });
+
+  it("refuses over what it says the push breaks, then takes it once each is acknowledged", async () => {
+    const mine = copyExample("push-breaks");
+    server.breaks = [
+      { severity: "error", where: "hand:h_inn", message: "A station deals this hand." },
+      { severity: "error", path: "village/village.storyletbox", message: "This box is ticked every 60s." },
+    ];
+    const body = {
+      pack: await packProject(mine), installation: "the-park", version: "seed", base: 1,
+    };
+    const refused = await pushPack(server.origin, designerKey, body);
+    expect(failed(refused)).toBe(true);
+    if (!failed(refused)) return;
+    expect(refused.code).toBe("contract_break");
+
+    // The dialog's list: the far end's own sentences, and the word IT knows
+    // each one by, which is what goes back.
+    const listed = contractBreaks(refused.details);
+    expect(listed.map((b) => b.message)).toEqual([
+      "A station deals this hand.", "This box is ticked every 60s.",
+    ]);
+    expect(listed.map((b) => b.key)).toEqual(["hand:h_inn", "village/village.storyletbox"]);
+
+    // One tick is not enough: the far end still names the other.
+    const half = await pushPack(server.origin, designerKey, { ...body, acknowledge: [listed[0]!.key] });
+    expect(failed(half)).toBe(true);
+    if (!failed(half)) return;
+    expect(contractBreaks(half.details)).toHaveLength(1);
+
+    const landed = await pushPack(server.origin, designerKey, {
+      ...body, acknowledge: listed.map((b) => b.key),
+    });
+    server.breaks = undefined;
+    expect(failed(landed)).toBe(false);
+    expect(server.pushes.at(-1)!.acknowledge).toEqual(["hand:h_inn", "village/village.storyletbox"]);
+  });
+
+  it("reads a refusal that named nothing tickable as no breaks at all", () => {
+    expect(contractBreaks(undefined)).toEqual([]);
+    expect(contractBreaks("that is not a list")).toEqual([]);
+    // A row with nothing to say is a row with nothing to tick.
+    expect(contractBreaks([{ severity: "error", path: "a.storyletbox" }])).toEqual([]);
+    // No `where` and no `path`: the far end matches an empty acknowledgement,
+    // so an empty key is what it will recognise.
+    expect(contractBreaks([{ message: "Something gives." }])).toEqual([{ key: "", message: "Something gives." }]);
+  });
+});
+
+describe("a pack that names where it came from", () => {
+  it("answers with the address, whether it was picked or handed to us", async () => {
+    server.sealed = true;
+    const pulled = await pullPack(server.origin, designerKey);
+    server.sealed = false;
+    expect(failed(pulled)).toBe(false);
+    if (failed(pulled)) return;
+    expect(await packAddress(pulled.bytes, seedDir)).toBe(server.origin);
+  });
+
+  it("answers with nothing for an ordinary pack, and for bytes that are not one", async () => {
+    expect(await packAddress(server.revisions[0]!, seedDir)).toBeUndefined();
+    expect(await packAddress(Buffer.from("not a zip"), seedDir)).toBeUndefined();
   });
 });
 

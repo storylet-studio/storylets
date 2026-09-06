@@ -45,7 +45,7 @@ import {
 } from "./views.js";
 import { cardHasContent, crumbTrail, navId, setCameFrom, vcKeys } from "./views.js";
 import type { Focus, ViewActions } from "./views.js";
-import { foldVc, lockControls, lockNotice, paintVcBadges } from "./vc-view.js";
+import { arrangingLocked, canvasLocked, foldVc, lockControls, lockNotice, paintVcBadges, shapeNotice } from "./vc-view.js";
 import {
   renderCardWorkspace, renderTemplateWorkspace, renderHandWorkspace, renderTagGroupWorkspace,
   renderBoxTabBody, renderDeckTabBody, docTabFor, expandOutcome, setDocTab, resetDocTabMemory,
@@ -65,9 +65,10 @@ import { mountLiveLinkChip } from "./live-link.js";   // Live Link: the bottom-r
 import type { LiveLinkChip } from "./live-link.js";
 import { canvasId, MAP_CANVAS } from "../../shared/api.js";
 import { showUpdaterDialog, feedUpdaterDownloadProgress } from "./updater-dialog.js";
-import { askServer } from "./server-dialog.js";
+import { askPush, askServer } from "./server-dialog.js";
+import type { PushOptions } from "./server-dialog.js";
 import type {
-  BoxEdit, BoxKit, CardDto, CardEdit, ConditionProperty, TagGroupEdit, MenuCommand, OpenResult, Problem, ProjectDto,
+  BoxEdit, BoxKit, CardDto, CardEdit, ConditionProperty, ContractBreakDto, TagGroupEdit, MenuCommand, OpenResult, PackOffer, Problem, ProjectDto,
   RemoteDto, ShardVcDto, TemplateEdit, StudioApi, StudioState, ThemeChoice,
   BoxDto, CommentDto, CommentMarkerDto, CoverageOverlayDto, ReviewAt, ReviewItemDto } from "../../shared/api.js";
 
@@ -643,7 +644,10 @@ const actions: ViewActions = {
             void refreshMarkers(canvasId({ kind: "deck", deck: deck.id }));
           })();
         },
-      });
+      // Where the cards SIT is the shape, so an author's key arranges nothing
+      // here. The notice above the canvas says so, and this is what makes the
+      // gestures agree with it.
+      }, { readOnly: arrangingLocked(remote?.role) });
       // The canvas hands back its own marker repaint, so a refresh does not have
       // to know which canvas is mounted.
       repaintMarkers = () => nodeView?.repaintMarkers();
@@ -1442,13 +1446,6 @@ function docIsShape(): boolean {
  *  never for a project that did not come from a server. */
 const shapeReadOnly = (): boolean => remote?.role === "author" && docIsShape();
 
-/** The line a read-only shape document opens with: the far end's own sentence,
- *  which is what a push would be refused with, said before the edit instead of
- *  after it. */
-const shapeNotice = (): HTMLElement => el("div", { className: "vc-lock" },
-  el("span", { className: "vc-lock-glyph", text: icon.readOnly }),
-  el("span", { text: "Read-only: pull as designer to change the shape." }));
-
 /** Apply the open document's version-control state: read-only + a notice
  *  naming the holder when somebody else has it. */
 function applyDocVc(): void {
@@ -1457,6 +1454,9 @@ function applyDocVc(): void {
   // The role's rule rides the same mechanism as a held shard, because it is
   // the same thing to the author: this page does not type, and here is why.
   const shape = shapeReadOnly();
+  // The canvas is greyed rather than the document around it: the deck IS the
+  // author's, and only where its cards sit is the designer's (see vc-view).
+  const canvas = canvasLocked(host, remote?.role);
   lockControls(host, holders.size > 0 || shape);
   // A frame of the page that writes a DIFFERENT shard (the box page's Hand
   // templates and Tags tabs) takes its state from that shard instead.
@@ -1469,7 +1469,7 @@ function applyDocVc(): void {
   docLocked = docHolders.length > 0;
   host.querySelector(":scope > .vc-lock")?.remove();
   if (docLocked) host.prepend(lockNotice(docHolders));
-  else if (shape) host.prepend(shapeNotice());
+  else if (shape || canvas) host.prepend(shapeNotice());
 }
 
 /** The topbar chip: the open page's state, in the same words as the badge and
@@ -2143,6 +2143,9 @@ const projectSettingsPanel = createProjectSettings(
   studio,
   (result) => { applyResult(result); catalogueDeck = undefined; renderWorkspace(); },
   flashError,
+  // The project file is the shape: under an author's key this dialog is to be
+  // read, not typed into (design/engine-server.md 9.1).
+  () => remote?.role === "author",
 );
 
 // Right-click on a property pill: Go to definition / Find usages (the ruling
@@ -2468,11 +2471,28 @@ async function openPack(): Promise<void> {
   await flushSaves();
   const picked = await studio.choosePack();
   if (picked === null) return;
+  await offerPack(picked);
+}
+
+/**
+ * A pack, and the one question it can have in it.
+ *
+ * Shared by the picker and by a pack the OS handed us, because they are the
+ * same pack and deserve the same offer: a double-clicked one used to unpack
+ * flat with its address quietly thrown away.
+ */
+async function offerPack(picked: { path: string; address?: string }): Promise<void> {
   if (picked.address !== undefined) {
     const answered = await connect({ address: picked.address, offerForget: true });
     if (answered === "connected" || answered === "busy") return;
   }
   await adopt(studio.openPackAt(picked.path));
+}
+
+/** What the OS handed us, whichever of the three it is. */
+async function arrive(result: OpenResult | { error: string } | PackOffer): Promise<void> {
+  if ("pack" in result) { await offerPack(result.pack); return; }
+  await adopt(Promise.resolve(result));
 }
 
 /**
@@ -2515,18 +2535,44 @@ async function serverPull(): Promise<void> {
   }
 }
 
-/** Send the open project up, and say what came back. */
-async function serverPush(): Promise<void> {
+/**
+ * Send the open project up, and say what came back.
+ *
+ * The dialog first: a note for whoever reads the revision list later, and the
+ * line saying where the project stands. THEN the one refusal with a way through
+ * it - the far end naming things this change breaks - brings the dialog back
+ * with a tick per break, and the second attempt names the ticked ones. Every
+ * other refusal is the far end saying no, shown as it stands in the problems
+ * bar: it is the one thing here nobody should paraphrase.
+ *
+ * `breaks` is main asking for that second dialog directly, after a push it made
+ * on its own on the way out of a project.
+ */
+async function serverPush(breaks: ContractBreakDto[] = []): Promise<void> {
   await flushSaves();
-  const done = await studio.serverPush();
-  if (done === null) return;
-  if ("error" in done) { flashError(done.error); return; }
-  applyResult(done.result);
-  renderWorkspace();
-  // A refusal is the far end's own sentence, shown as it stands: it is the one
-  // thing here nobody should paraphrase.
-  if ("refusal" in done) { flashError(done.refusal); return; }
-  flash(`Pushed as revision ${done.revision} (${done.changed} shard${done.changed === 1 ? "" : "s"})`, "ok");
+  let asking: PushOptions = {
+    status: remote?.status ?? "",
+    ...(breaks.length > 0 ? { breaks } : {}),
+  };
+  for (;;) {
+    const answer = await askPush(asking);
+    if (answer === null) return;
+    const done = await studio.serverPush(answer.note, answer.acknowledge);
+    if (done === null) return;
+    if ("error" in done) { flashError(done.error); return; }
+    applyResult(done.result);
+    renderWorkspace();
+    if ("refusal" in done) {
+      if (done.breaks === undefined || done.breaks.length === 0) { flashError(done.refusal); return; }
+      asking = {
+        status: remote?.status ?? "",
+        note: answer.note, refusal: done.refusal, breaks: done.breaks,
+      };
+      continue;
+    }
+    flash(`Pushed as revision ${done.revision} (${done.changed} shard${done.changed === 1 ? "" : "s"})`, "ok");
+    return;
+  }
 }
 
 /**
@@ -2650,7 +2696,7 @@ function onMenu(command: MenuCommand): void {
     // there otherwise.
     case "connect-server": void connect({ ...(remote !== undefined ? { address: remote.address, offerForget: true } : {}) }); break;
     case "server-pull": if (project) void serverPull(); break;
-    case "server-push": if (project) void serverPush(); break;
+    case "server-push": if (project) void serverPush(command.breaks); break;
     case "merge-pack": if (project) void mergePack(); break;
     case "project-settings": if (project) projectSettingsPanel.open(command.section); break;
     case "identity": void saveIdentity(); break;
@@ -2757,7 +2803,7 @@ async function boot(): Promise<void> {
     flash(`Replaced ${count} across the project`, "ok");
   })());
   // The OS asked the running app to open something else.
-  studio.onProjectOpened((result) => void adopt(Promise.resolve(result)));
+  studio.onProjectOpened((result) => void arrive(result));
   window.addEventListener("keydown", (event) => {
     const mod = event.metaKey || event.ctrlKey;
     // Cmd+1 (pane toggle) is a native menu accelerator now (View menu).
@@ -2866,7 +2912,7 @@ async function boot(): Promise<void> {
   // A double-clicked project or pack wins over the last project: the author
   // just said which one they want.
   const launched = await studio.launchTarget();
-  if (launched !== null) { await adopt(Promise.resolve(launched)); if (project) return; }
+  if (launched !== null) { await arrive(launched); if (project) return; }
   if (state.lastProject) { await adopt(studio.openProjectPath(state.lastProject)); if (project) return; }
   renderWelcome();
 }

@@ -10,7 +10,8 @@
 import { el } from "./dom.js";
 import { mountPropertyList } from "./prop-list.js";
 import { mountDriverList } from "./driver-list.js";
-import { mountSettingsDialog, labelled } from "@wildwinter/app-shell";
+import { mountSettingsDialog, labelled, lockControls } from "@wildwinter/app-shell";
+import { shapeNotice } from "./vc-view.js";
 import type { SettingsDialog, SettingsSectionHandle } from "@wildwinter/app-shell";
 import type { OpenResult, PlayRung, ProjectSettingsDto, PropertyDeclDto, StudioApi } from "../../shared/api.js";
 import { PLAY_RUNGS, RUNG_BLURB, RUNG_LABEL } from "./play-ladder.js";
@@ -79,10 +80,25 @@ function playField(d: ProjectSettingsDto): HTMLElement[] {
   return [labelled("Play", sel), note, refusal];
 }
 
-/** Build the dialog once; each open re-reads the settings and re-mounts. */
-export function createProjectSettings(studio: StudioApi, onSaved: (result: OpenResult) => void, onError: (msg: string) => void): { open(section?: string): void } {
+/**
+ * Build the dialog once; each open re-reads the settings and re-mounts.
+ *
+ * `readOnly` is the role's rule (design/engine-server.md 9.1): the project file
+ * is the shape, so under an author's key this dialog opens to be READ. Greyed
+ * first rather than refused on Save, which is what it used to do, with the far
+ * end's own sentence arriving as a toast after the typing was done.
+ */
+export function createProjectSettings(
+  studio: StudioApi, onSaved: (result: OpenResult) => void, onError: (msg: string) => void,
+  readOnly: () => boolean = () => false,
+): { open(section?: string): void } {
   let data: ProjectSettingsDto | undefined;
   let dialog: SettingsDialog | undefined;
+  /** The shell hands back open/destroy and keeps its modal to itself, so the
+   *  frame is the node it just appended: what the read-only pass greys, and
+   *  where the notice and the missing Save live. */
+  let frame: HTMLDialogElement | undefined;
+  let notice: HTMLElement | undefined;
 
   function build(): SettingsDialog {
     return mountSettingsDialog({
@@ -154,6 +170,28 @@ export function createProjectSettings(studio: StudioApi, onSaved: (result: OpenR
     });
   }
 
+  /**
+   * Grey what was just mounted, or hand it back.
+   *
+   * After `open`, never before: the shell re-mounts every section on each open,
+   * so a control disabled last time is a brand new control this time.
+   * The PANELS only - the tab rail stays live, because reading the other tabs
+   * is the whole of what a read-only settings dialog is for.
+   */
+  function applyReadOnly(): void {
+    if (!frame) return;
+    const off = readOnly();
+    const panels = frame.querySelector<HTMLElement>(".settings-panels");
+    if (panels) lockControls(panels, off, "");
+    const save = frame.querySelector<HTMLButtonElement>(".settings-save");
+    if (save) save.hidden = off;
+    if (off && notice === undefined) {
+      notice = shapeNotice();
+      frame.querySelector(".settings-body")?.before(notice);
+    }
+    if (notice) notice.hidden = !off;
+  }
+
   return {
     // `section` lets another surface land the author where the setting is:
     // the Coverage window's "Coverage drivers..." opens straight at World.
@@ -162,8 +200,12 @@ export function createProjectSettings(studio: StudioApi, onSaved: (result: OpenR
         const s = await studio.projectSettings();
         if (!s) return;
         data = s;
-        if (!dialog) dialog = build();
+        if (!dialog) {
+          dialog = build();
+          frame = document.body.lastElementChild as HTMLDialogElement;
+        }
         dialog.open(section);
+        applyReadOnly();
       })();
     },
   };

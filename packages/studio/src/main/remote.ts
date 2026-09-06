@@ -305,6 +305,36 @@ export async function pullPack(
   };
 }
 
+/**
+ * One thing a push would break at the far end, as it named it.
+ *
+ * A refusal of this kind is the only one with a way through it: the far end is
+ * saying "this changes something depended on", not "this is wrong", and a
+ * designer who meant it says so break by break. `key` is what goes back in
+ * `acknowledge`, and it is the far end's own word for the thing rather than
+ * anything of ours: it matches a break by `where` first and by `path` second,
+ * so the first of those it gave us is the one it will recognise.
+ */
+export interface ContractBreak {
+  key: string;
+  /** The far end's own sentence, shown as it stands. */
+  message: string;
+}
+
+/** The breaks in a refusal's details, or nothing when it carried none. A row
+ *  with no message is a row there is nothing to show or tick, so it is left
+ *  out rather than listed blank. */
+export function contractBreaks(details: unknown): ContractBreak[] {
+  if (!Array.isArray(details)) return [];
+  return (details as { message?: unknown; where?: unknown; path?: unknown }[])
+    .filter((row) => typeof row.message === "string" && row.message !== "")
+    .map((row) => ({
+      key: typeof row.where === "string" ? row.where
+        : typeof row.path === "string" ? row.path : "",
+      message: row.message as string,
+    }));
+}
+
 /** What a push did. */
 export interface PushedRevision {
   revision: number;
@@ -323,7 +353,7 @@ export interface PushedRevision {
 export async function pushPack(
   address: string, key: string, body: {
     pack: Buffer; installation: string; version: string; base: number;
-    note?: string; identity?: { name: string; email?: string };
+    note?: string; acknowledge?: string[]; identity?: { name: string; email?: string };
   },
 ): Promise<PushedRevision | CallFailure> {
   const answer = await call<{ revision?: { revision?: number }; changed?: string[]; issues?: PushedRevision["issues"] }>(
@@ -337,6 +367,7 @@ export async function pushPack(
         version: body.version,
         base: body.base,
         ...(body.note !== undefined ? { note: body.note } : {}),
+        ...(body.acknowledge !== undefined ? { acknowledge: body.acknowledge } : {}),
         ...(body.identity !== undefined ? { identity: body.identity } : {}),
       }),
     },
@@ -391,6 +422,25 @@ export async function openPackBytes(bytes: Buffer | Uint8Array, dir: string): Pr
  *  before it offers to connect. */
 export async function remoteInPack(bytes: Buffer | Uint8Array, dir: string): Promise<RemoteRecord | undefined> {
   return (await openPackBytes(bytes, dir)).remote;
+}
+
+/**
+ * The address a pack names, or nothing.
+ *
+ * The one question asked of every pack that arrives, however it arrives: picked
+ * in Open Storyletpack, double-clicked in the file manager, or named on the
+ * command line. A pack that names one has a question in it and the answer is
+ * the author's; a pack that names none is opened as packs have always been.
+ * A pack we cannot read at all answers "none" rather than throwing, because the
+ * unpack that follows is where an unreadable pack is properly reported.
+ */
+export async function packAddress(bytes: Buffer | Uint8Array, dir: string): Promise<string | undefined> {
+  try {
+    const carried = await remoteInPack(bytes, dir);
+    return carried === undefined ? undefined : addressOf(carried);
+  } catch {
+    return undefined;
+  }
 }
 
 export interface PullPlan {

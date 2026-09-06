@@ -990,3 +990,15 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
   color: var(--muted);
   font-variant-numeric: tabular-nums;   /* the percentage must not jitter as it counts */
 }
+
+/* --- The push dialog's breaks ---------------------------------------------- */
+/* The dialog is the shell's `confirm-dialog`, like the connect one, so the frame,
+   the type and the buttons are already right. Only the list of things the far
+   end refused over is ours: one tick per break, in its own words, and the line
+   saying where the project stands. */
+.push-refusal { margin: 0.7rem 0 0.2rem; color: var(--danger); }
+.push-breaks { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.4rem 0; max-height: 40vh; overflow-y: auto; }
+.push-break { display: flex; align-items: flex-start; gap: 0.45rem; line-height: 1.35; }
+.push-tick { margin-top: 0.15rem; flex: none; }
+.push-hint,
+.push-status { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted); }

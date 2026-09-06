@@ -7,7 +7,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { JOB_PROGRESS_CHANNEL, PROJECT_CHANGED } from "../shared/api.js";
 import type { JobProgress } from "../shared/api.js";
 import type {
-  BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, LiveLinkFrame, LiveLinkStatus, MenuCommand, OpenResult, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
+  BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, LiveLinkFrame, LiveLinkStatus, MenuCommand, OpenResult, PackOffer, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
   UpdaterPromptOptions,
   UpdaterDownloadProgress,
 } from "../shared/api.js";
@@ -198,13 +198,14 @@ const api: StudioApi = {
   connectServer: (address: string, code: string) => ipcRenderer.invoke("server:connect", address, code),
   forgetServer: (address: string) => ipcRenderer.invoke("server:forget", address),
   serverPull: () => ipcRenderer.invoke("server:pull"),
-  serverPush: () => ipcRenderer.invoke("server:push"),
+  serverPush: (note?: string, acknowledge?: string[]) =>
+    ipcRenderer.invoke("server:push", note, acknowledge),
   mergePackPlan: () => ipcRenderer.invoke("pack:mergePlan"),
   mergePackCommit: () => ipcRenderer.invoke("pack:mergeCommit"),
   mergePackDrop: () => ipcRenderer.invoke("pack:mergeDrop"),
   launchTarget: () => ipcRenderer.invoke("project:launchTarget"),
-  onProjectOpened: (handler: (result: OpenResult | { error: string }) => void) => {
-    ipcRenderer.on("project:opened", (_event, result: OpenResult | { error: string }) => handler(result));
+  onProjectOpened: (handler: (result: OpenResult | { error: string } | PackOffer) => void) => {
+    ipcRenderer.on("project:opened", (_event, result: OpenResult | { error: string } | PackOffer) => handler(result));
   },
   // Live Link (design/live-link.md)
   liveLinkStart: () => ipcRenderer.invoke("liveLink:start"),

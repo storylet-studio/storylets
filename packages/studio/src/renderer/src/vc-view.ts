@@ -8,7 +8,7 @@
 // that reads in OUR markup, which is why they did not travel.
 // ---------------------------------------------------------------------------
 
-import { lockControls as shellLockControls } from "@wildwinter/app-shell";
+import { el, icon, lockControls as shellLockControls } from "@wildwinter/app-shell";
 
 export { foldVc, vcBadgeFor, paintVcBadges, lockNotice } from "@wildwinter/app-shell";
 export type { VcMap } from "@wildwinter/app-shell";
@@ -30,3 +30,30 @@ export const VC_STAYS_LIVE = [
 export function lockControls(host: HTMLElement, off: boolean): void {
   shellLockControls(host, off, VC_STAYS_LIVE);
 }
+
+// --- the role's own read-only, which is not version control at all ------------
+// The same mechanism and the same look, for a different reason: under an
+// author's key the shape shards are the designer's, so the editor says so
+// BEFORE the edit rather than refusing it after (design/engine-server.md 9.1).
+
+/** The line a document opens with when the shape is not this key's to change:
+ *  the far end's own sentence, said before the edit instead of after it. */
+export const shapeNotice = (): HTMLElement => el("div", { className: "vc-lock" },
+  el("span", { className: "vc-lock-glyph", text: icon.readOnly }),
+  el("span", { text: "Read-only: pull as designer to change the shape." }));
+
+/**
+ * May this role arrange a canvas?
+ *
+ * WHERE THINGS SIT IS THE SHAPE. A card's place on the node canvas lands in the
+ * box's `.storyletview` shard, which an author's key may not change, while the
+ * cards on that same canvas are the author's to write all day. So this greys
+ * the arranging and nothing else: no drag, no frame, no arrange.
+ */
+export const arrangingLocked = (role: string | undefined): boolean => role === "author";
+
+/** ...and is a canvas of that kind on screen right now? What decides whether
+ *  the document wears the notice, since the canvas sits inside a document that
+ *  is otherwise perfectly writable. */
+export const canvasLocked = (centre: ParentNode, role: string | undefined): boolean =>
+  arrangingLocked(role) && centre.querySelector(".nodeview") !== null;

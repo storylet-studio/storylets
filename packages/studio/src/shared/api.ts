@@ -552,6 +552,22 @@ export interface RemoteDto {
   role: "author" | "designer";
   /** Shard writes since the last push or pull. */
   edits: number;
+  /** The Server menu's line, in the same words, for a surface that has no menu
+   *  to read: "In sync", "3 edits unpushed". Where the far end has GOT to is
+   *  the menu's own knowledge (it costs a call), so this says what the project
+   *  itself knows. */
+  status: string;
+}
+
+/**
+ * One thing a push would break at the far end, in its own words.
+ *
+ * The push dialog lists these with a tick each, and the second attempt names
+ * the ticked ones back: `key` is the far end's word for the thing, never ours.
+ */
+export interface ContractBreakDto {
+  key: string;
+  message: string;
 }
 
 /** What a Pull did. The project payload rides along so the editor refreshes
@@ -565,9 +581,24 @@ export type ServerPullResult =
  *  far end saying no, in its own words, and it is shown verbatim. */
 export type ServerPushResult =
   | { result: OpenResult; revision: number; changed: number }
-  | { result: OpenResult; refusal: string }
+  /** `breaks` is present only for the refusal with a way through it: things the
+   *  far end depends on, which a designer may push anyway by acknowledging each
+   *  one. Every other refusal has none, and is shown and left. */
+  | { result: OpenResult; refusal: string; breaks?: ContractBreakDto[] }
   | { error: string }
   | null;
+
+/**
+ * A pack that names an address, offered rather than opened.
+ *
+ * The one question a pack can have in it: connect to the address it came from,
+ * or open it flat with no record of where it came from. It reaches the renderer
+ * from the launch path the same way the picker's answer does, because it is the
+ * same question and gets the same dialog.
+ */
+export interface PackOffer {
+  pack: { path: string; address: string };
+}
 
 export interface OpenResult {
   project: ProjectDto;
@@ -1156,7 +1187,10 @@ export type MenuCommand =
   // appears once a project has come from one).
   | { cmd: "connect-server" }
   | { cmd: "server-pull" }
-  | { cmd: "server-push" }
+  /** `breaks` reopens the push dialog on a refusal main met on its own: the way
+   *  out of a project pushes without a dialog in front of it, and a refusal
+   *  that can be acknowledged is one the author is owed the ticks for. */
+  | { cmd: "server-push"; breaks?: ContractBreakDto[] }
   | { cmd: "live-link" }   // Play > Live Link: toggle the server (the bottom-right chip mirrors it)
   | { cmd: "theme"; theme: ThemeChoice }
   | { cmd: "nav-back" }
@@ -1573,14 +1607,16 @@ export interface StudioApi {
   forgetServer(address: string): Promise<void>;
   /** Take the server's latest revision into the open project. */
   serverPull(): Promise<ServerPullResult>;
-  /** Send the open project up. */
-  serverPush(): Promise<ServerPushResult>;
+  /** Send the open project up. `note` rides on the revision; `acknowledge`
+   *  carries the breaks the author ticked after a refusal that named them. */
+  serverPush(note?: string, acknowledge?: string[]): Promise<ServerPushResult>;
   /** Whatever the OS handed the app at launch: a double-clicked project, or a
-   *  double-clicked pack (which unpacks first). Null = nothing was passed, so
-   *  boot falls back to the last project. Consumed once. */
-  launchTarget(): Promise<OpenResult | { error: string } | null>;
+   *  double-clicked pack (which unpacks first, or is offered when it names an
+   *  address). Null = nothing was passed, so boot falls back to the last
+   *  project. Consumed once. */
+  launchTarget(): Promise<OpenResult | { error: string } | PackOffer | null>;
   /** The OS asked the RUNNING app to open something (a second double-click). */
-  onProjectOpened(handler: (result: OpenResult | { error: string }) => void): void;
+  onProjectOpened(handler: (result: OpenResult | { error: string } | PackOffer) => void): void;
 
   // --- Live Link (design/live-link.md) ---------------------------------------
   /** Start / stop the loopback server (the chip and Play > Live Link); each

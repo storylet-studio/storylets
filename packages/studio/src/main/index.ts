@@ -19,8 +19,9 @@ import { refreshMenu } from "./menu.js";
 // The pack exchange (design/engine-server.md 9.1): three calls over plain HTTP
 // for a project that came from a server, and nothing at all for one that did not.
 import {
-  addressOf, failed, normaliseAddress, openPackBytes, packProject, pair, planPull, pullPack, pushPack,
-  menuState, reachable, readRemote, remoteInPack, resolveLeave, statusLine, writeRemote, REMOTE_FILE,
+  addressOf, contractBreaks, failed, normaliseAddress, openPackBytes, packAddress, packProject, pair,
+  planPull, pullPack, pushPack, menuState, reachable, readRemote, resolveLeave, statusLine,
+  writeRemote, REMOTE_FILE,
 } from "./remote.js";
 import type { LeaveChoice, PullPlan, RemoteRecord } from "./remote.js";
 import { compileBundle, compileForLivePush, createProject, currentProjectHash, exportBundle, openProject, openResult, projectSettings, validate, vcStatus } from "./project.js";
@@ -56,7 +57,7 @@ import type { Bundle, Comment, Frame, PropertyDecl, SaveFile, ScalarValue, Stack
 import type { BackgroundEdit } from "./mutate.js";
 import { ASSET_SCHEME, assetUrl } from "../shared/api.js";
 import type {
-  BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOverlayDto, CoverageReport, DeckGraph, GraphEdge, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
+  BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOverlayDto, CoverageReport, DeckGraph, GraphEdge, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, PackOffer, ContractBreakDto, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
 } from "../shared/api.js";
 import { JOB_PROGRESS_CHANNEL, MAP_CANVAS, PROJECT_CHANGED } from "../shared/api.js";
 import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
@@ -400,13 +401,32 @@ async function unpackToChosenDir(packPath: string): Promise<OpenResult | { error
   }
 }
 
-/** Open whatever the OS passed us. A `.storyletpack` is a DELIVERY, never a
- *  project that can be opened in place, so it unpacks (with a destination
- *  prompt) rather than being loaded; anything else is treated as a project
- *  folder. */
-async function resolveLaunchPath(path: string): Promise<OpenResult | { error: string } | null> {
-  if (path.toLowerCase().endsWith(PACK_EXTENSION)) return unpackToChosenDir(path);
-  return openAt(path);
+/**
+ * Open whatever the OS passed us.
+ *
+ * A `.storyletpack` is a DELIVERY, never a project that can be opened in place,
+ * so it unpacks (with a destination prompt) rather than being loaded; anything
+ * else is treated as a project folder.
+ *
+ * A pack that NAMES AN ADDRESS is not opened here at all: it is handed back as
+ * an offer, and the renderer asks the same question File ▸ Open Storyletpack
+ * asks. A double-clicked pack and a picked one are the same pack, and until now
+ * one of them quietly threw the address away.
+ */
+async function resolveLaunchPath(path: string): Promise<OpenResult | { error: string } | PackOffer | null> {
+  if (!path.toLowerCase().endsWith(PACK_EXTENSION)) return openAt(path);
+  const address = await readPackAddress(path);
+  return address === undefined ? unpackToChosenDir(path) : { pack: { path, address } };
+}
+
+/** The address a pack on disk names, or nothing. A file we cannot even read is
+ *  a pack with no address: the unpack that follows reports it properly. */
+async function readPackAddress(packPath: string): Promise<string | undefined> {
+  try {
+    return await packAddress(readFileSync(packPath), dirname(packPath));
+  } catch {
+    return undefined;
+  }
 }
 
 /** Bring the editor window to the front (a launch while we are running). */
@@ -421,9 +441,11 @@ function surfaceWindow(): void {
  *  matching is said on the terminal and the open goes ahead as it would have,
  *  so a stale id in a bug report cannot keep anyone out. */
 function withLaunchLocation(
-  result: OpenResult | { error: string } | null, query: string | undefined,
-): OpenResult | { error: string } | null {
-  if (query === undefined || result === null || "error" in result || !session) return result;
+  result: OpenResult | { error: string } | PackOffer | null, query: string | undefined,
+): OpenResult | { error: string } | PackOffer | null {
+  // An offer has not opened anything yet, so there is nowhere to land: the `--at`
+  // is dropped with the same silence a stale id gets.
+  if (query === undefined || result === null || "error" in result || "pack" in result || !session) return result;
   const at = launchLocation(session.loaded, query);
   if (!at) { console.error(`--at: nothing in this project matches '${query}'`); return result; }
   return { ...result, at };
@@ -753,9 +775,19 @@ async function serverPull(): Promise<ServerPullResult> {
   }
 }
 
-/** Send the open project up. A refusal is not a fault in the plumbing: it is
- *  the far end saying no, in its own words, and it is shown as it stands. */
-async function serverPush(): Promise<ServerPushResult> {
+/**
+ * Send the open project up. A refusal is not a fault in the plumbing: it is the
+ * far end saying no, in its own words, and it is shown as it stands.
+ *
+ * `note` and `acknowledge` come from the push dialog: the note rides on the
+ * revision for whoever reads the list later, and the acknowledgements are the
+ * breaks the author ticked after a refusal that named them. Both are absent on
+ * the way out of a project, where the push happens with no dialog in front of
+ * it, and a refusal that names breaks then opens one.
+ */
+async function serverPush(
+  opts: { note?: string; acknowledge?: string[] } = {},
+): Promise<ServerPushResult> {
   const ctx = serverContext();
   if (ctx === undefined || session === undefined) return null;
   await flushEditor();   // a pack is a snapshot of the FILES
@@ -771,12 +803,23 @@ async function serverPush(): Promise<ServerPushResult> {
     installation: ctx.remote.installation,
     version: ctx.remote.version,
     base: ctx.remote.revision,
+    // An empty note is no note: the field is optional, and a blank one should
+    // not land on the revision as if somebody had typed a space.
+    ...(opts.note !== undefined && opts.note.trim() !== "" ? { note: opts.note.trim() } : {}),
+    ...(opts.acknowledge !== undefined && opts.acknowledge.length > 0 ? { acknowledge: opts.acknowledge } : {}),
     ...(identity !== undefined ? { identity } : {}),
   });
   if (failed(pushed)) {
     if (pushed.code === "conflict") writeRefusedSidecars(ctx.dir, pushed.details);
     const problems = [...validate(session), ...serverProblems(ctx.dir, pushed.error, pushed.details)];
-    return { result: openResult(session, problems), refusal: pushed.error };
+    // The one refusal with a way through it: the far end named things this
+    // change breaks, and a designer who meant it says so break by break.
+    const breaks = pushed.code === "contract_break" ? contractBreaks(pushed.details) : [];
+    return {
+      result: openResult(session, problems),
+      refusal: pushed.error,
+      ...(breaks.length > 0 ? { breaks } : {}),
+    };
   }
   serverHeads.set(ctx.dir, pushed.revision);
   writeRemote(ctx.dir, { ...ctx.remote, revision: pushed.revision, edits: 0 });
@@ -816,11 +859,15 @@ async function mayLeaveProject(act: "quit" | "close"): Promise<boolean> {
   const choice: LeaveChoice = online
     ? (["push", "leave", "cancel"] as const)[answer.response] ?? "cancel"
     : (["leave", "cancel"] as const)[answer.response] ?? "cancel";
+  // The push at this moment carries no note and no acknowledgements: there is no
+  // dialog in front of it. A refusal that NAMES BREAKS is the one that then
+  // needs one, so the breaks travel back for it.
+  let breaks: ContractBreakDto[] | undefined;
   const outcome = await resolveLeave(choice, async () => {
     const pushed = await serverPush();
     if (pushed === null) return { error: "there is nothing to push to." };
     if ("error" in pushed) return { error: pushed.error };
-    if ("refusal" in pushed) return { error: pushed.refusal };
+    if ("refusal" in pushed) { breaks = pushed.breaks; return { error: pushed.refusal }; }
     return { revision: pushed.revision };
   });
   if (outcome.refusal !== undefined && window && !window.isDestroyed()) {
@@ -829,6 +876,11 @@ async function mayLeaveProject(act: "quit" | "close"): Promise<boolean> {
     window.webContents.send("project:opened", openResult(session!, [
       ...validate(session!), ...serverProblems(ctx.dir, outcome.refusal, undefined),
     ]));
+    // ...and, when there is something to tick, the push dialog opens on it,
+    // down the same channel every other menu-driven dialog opens on.
+    if (breaks !== undefined && breaks.length > 0) {
+      window.webContents.send("menu", { cmd: "server-push", breaks });
+    }
   }
   return outcome.go;
 }
@@ -1841,15 +1893,8 @@ function wireIpc(): void {
     });
     const packPath = packPick.filePaths[0];
     if (packPick.canceled || packPath === undefined) return null;
-    try {
-      const carried = await remoteInPack(readFileSync(packPath), dirname(packPath));
-      return carried === undefined
-        ? { path: packPath }
-        : { path: packPath, address: addressOf(carried) };
-    } catch {
-      // A pack we cannot read here is a pack the unpack will report on properly.
-      return { path: packPath };
-    }
+    const address = await readPackAddress(packPath);
+    return address === undefined ? { path: packPath } : { path: packPath, address };
   });
 
   /** Open a chosen pack flat: the project only, with no record of where it came
@@ -1916,12 +1961,17 @@ function wireIpc(): void {
   });
 
   ipcMain.handle("server:pull", (): Promise<ServerPullResult> => serverPull());
-  ipcMain.handle("server:push", (): Promise<ServerPushResult> => serverPush());
+  ipcMain.handle("server:push", (
+    _event, note?: string, acknowledge?: string[],
+  ): Promise<ServerPushResult> => serverPush({
+    ...(note !== undefined ? { note } : {}),
+    ...(acknowledge !== undefined ? { acknowledge } : {}),
+  }));
 
   // Whatever the OS handed us at launch (a double-clicked project or pack), if
   // anything. The renderer asks first and falls back to the last project, so
   // boot order stays the renderer's decision.
-  ipcMain.handle("project:launchTarget", async (): Promise<OpenResult | { error: string } | null> => {
+  ipcMain.handle("project:launchTarget", async (): Promise<OpenResult | { error: string } | PackOffer | null> => {
     const path = pendingLaunchPath;
     const at = pendingLaunchAt;
     pendingLaunchPath = undefined;

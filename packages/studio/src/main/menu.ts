@@ -271,7 +271,9 @@ export function refreshMenu(
       label: "Server",
       submenu: [
         { label: "Pull", click: send({ cmd: "server-pull" }) },
-        { label: "Push", click: send({ cmd: "server-push" }) },
+        // The ellipsis is the promise it makes: a note, and the ticks a refusal
+        // that can be acknowledged comes back with, before anything is sent.
+        { label: "Push…", click: send({ cmd: "server-push" }) },
         { type: "separator" as const },
         { label: server.status, enabled: false },
       ],

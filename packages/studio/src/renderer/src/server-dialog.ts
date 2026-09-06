@@ -1,11 +1,16 @@
 // ---------------------------------------------------------------------------
-// Connect to a server: one modal, two fields, and no explanation.
+// The two dialogs of the pack exchange: connecting, and pushing.
 //
-// It is for somebody who was given an address and a code and knows what they
-// mean. There is nothing here about what is at the other end, nowhere to go and
-// read about it, and nothing to sign up to: an address, a code, Connect.
+// Connect to a server is one modal, two fields, and no explanation. It is for
+// somebody who was given an address and a code and knows what they mean. There
+// is nothing here about what is at the other end, nowhere to go and read about
+// it, and nothing to sign up to: an address, a code, Connect.
 //
-// The shell's `confirm-*` classes, like the updater's prompt, so it wears the
+// Push is a note and a look at where the project stands, and, when the far end
+// has refused with things this change breaks, one tick per break in the far
+// end's own words. Nothing here paraphrases a refusal.
+//
+// The shell's `confirm-*` classes, like the updater's prompt, so both wear the
 // app's own typography rather than a second look invented for one dialog.
 // ---------------------------------------------------------------------------
 
@@ -79,5 +84,104 @@ export function askServer(opts: ConnectOptions = {}): Promise<ConnectAnswer | { 
     // The code is what an author has in their hand; the address is usually
     // already right when it is there at all.
     queueMicrotask(() => (opts.address ? code : address).focus());
+  });
+}
+
+// --- Push ---------------------------------------------------------------------
+
+/** One thing the far end says this push would break, and the word it knows it
+ *  by. Shown as it stands; ticked, it goes back as an acknowledgement. */
+export interface PushBreak {
+  key: string;
+  message: string;
+}
+
+export interface PushOptions {
+  /** Where the project stands, in the Server menu's own words. */
+  status: string;
+  /** The note already typed, so a refusal does not cost the author their note. */
+  note?: string;
+  /** The far end's refusal, shown above the breaks it named. */
+  refusal?: string;
+  /** What it named. With any of these, Push is offered only once every one is
+   *  ticked: acknowledging is per break, and there is no "all of them" button
+   *  because there is no reading them in one. */
+  breaks?: readonly PushBreak[];
+}
+
+export interface PushAnswer {
+  note: string;
+  /** The breaks ticked, by the far end's own key. Empty on a first attempt. */
+  acknowledge: string[];
+}
+
+/** Show the push dialog. Resolves to what to send, or to null when the author
+ *  backed out. */
+export function askPush(opts: PushOptions): Promise<PushAnswer | null> {
+  return new Promise((resolve) => {
+    const dlg = el("dialog", "confirm-dialog server-dialog push-dialog");
+    dlg.append(el("div", "confirm-title", "Push"));
+
+    const note = el("input", "insp-input");
+    note.type = "text";
+    note.value = opts.note ?? "";
+
+    const body = el("div", "confirm-body", labelled("Note", note));
+    const breaks = opts.breaks ?? [];
+    const ticks: HTMLInputElement[] = [];
+    if (breaks.length > 0) {
+      // The refusal first, verbatim, then the things it named: the author reads
+      // why before they read what.
+      if (opts.refusal !== undefined && opts.refusal !== "") {
+        body.append(el("p", "push-refusal", opts.refusal));
+      }
+      const list = el("div", "push-breaks");
+      for (const each of breaks) {
+        const tick = el("input", "push-tick");
+        tick.type = "checkbox";
+        ticks.push(tick);
+        const row = el("label", "push-break", tick, el("span", { text: each.message }));
+        list.append(row);
+      }
+      body.append(list, el("p", "push-hint", "Tick each one to push it anyway."));
+    }
+    // The status is a fact about the project, not a field: it sits under what
+    // is being asked, in the same words the Server menu uses.
+    body.append(el("p", "push-status", opts.status));
+    dlg.append(body);
+
+    const actions = el("div", "confirm-actions");
+    let done = false;
+    const finish = (answer: PushAnswer | null): void => {
+      if (done) return;
+      done = true;
+      dlg.close();
+      dlg.remove();
+      resolve(answer);
+    };
+
+    const cancel = el("button", "confirm-btn cancel", "Cancel");
+    cancel.addEventListener("click", () => finish(null));
+    const push = el("button", "confirm-btn", "Push");
+    const acknowledged = (): boolean => ticks.every((t) => t.checked);
+    const reflect = (): void => { push.disabled = !acknowledged(); };
+    for (const tick of ticks) tick.addEventListener("change", reflect);
+    reflect();
+    const submit = (): void => {
+      if (!acknowledged()) return;
+      finish({
+        note: note.value.trim(),
+        acknowledge: breaks.filter((_, i) => ticks[i]!.checked).map((b) => b.key),
+      });
+    };
+    push.addEventListener("click", submit);
+    note.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+    actions.append(cancel, push);
+    dlg.append(actions);
+
+    dlg.addEventListener("cancel", (e) => { e.preventDefault(); finish(null); });
+    document.body.append(dlg);
+    dlg.showModal();
+    queueMicrotask(() => (breaks.length > 0 ? ticks[0]! : note).focus());
   });
 }

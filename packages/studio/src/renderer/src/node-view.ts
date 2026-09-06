@@ -98,11 +98,19 @@ export interface MountedNodeView {
 // that is the user's state rather than the project's sidecar.
 
 /** Mount the canvas into `host`. The caller owns the fetch, so this stays
- *  synchronous and testable in shape: hand it the deck and its graph. */
+ *  synchronous and testable in shape: hand it the deck and its graph.
+ *
+ *  `readOnly` is the ARRANGEMENT's, not the deck's: where a card sits lands in
+ *  the box's view shard, which an author's key may not change, so the canvas
+ *  takes no drag and offers no frame and no arranging, while the cards on it
+ *  stay every bit as openable, addable and deletable as they are anywhere else
+ *  (design/engine-server.md 9.1). */
 export function mountNodeView(
   host: HTMLElement, deck: DeckDto, graph: DeckGraph,
   selected: readonly string[], actions: NodeViewActions,
+  opts: { readOnly?: boolean } = {},
 ): MountedNodeView {
+  const readOnly = opts.readOnly === true;
   const stage = el("div", { className: "nodestage" });
   const strip = el("div", { className: "nodestrip" });
   host.replaceChildren(stage, strip);
@@ -163,6 +171,9 @@ export function mountNodeView(
     tip: "Arrange by what links the cards (L)",
     onClick: () => layOut(),
   });
+  // Greyed, never removed: a control that vanishes leaves an author wondering
+  // what they did, and the notice above the canvas already says why.
+  tidy.disabled = readOnly;
   /** What the last layout had to say, if anything. Cleared by the next one. */
   let layoutNote: string | undefined;
 
@@ -242,12 +253,16 @@ export function mountNodeView(
     // group is things you ADD to the canvas, and rearranging what is already on
     // it is a different kind of act. The map has no equivalent, which is why it
     // ends at its status.
+    // A frame is furniture on the canvas, so it is arranging; a comment lands in
+    // the notes shard, which is the author's, so it is not.
+    const frame = el("button", {
+      className: "stripbtn", text: "Frame", tip: "Draw a titled frame behind a group of cards",
+      onClick: () => furniture?.drawFrame(),
+    });
+    frame.disabled = readOnly;
     strip.replaceChildren(
       el("div", { className: "striptools" },
-        el("button", {
-          className: "stripbtn", text: "Frame", tip: "Draw a titled frame behind a group of cards",
-          onClick: () => furniture?.drawFrame(),
-        }),
+        frame,
         el("button", {
           className: "stripbtn", text: "Comment", tip: "Drop a comment on the canvas or on a card",
           onClick: () => armComment(),
@@ -264,6 +279,7 @@ export function mountNodeView(
     host: stage,
     tokens,
     grid: 20,
+    readOnly,
     draw: (item, ctx) => {
       if (isCard(item)) return drawCardNode(item, ctx);
       return drawFrame(item, ctx);
@@ -276,7 +292,7 @@ export function mountNodeView(
     // No grace period here: a chip left beside a card that has moved away reads
     // as a bug, and nobody needs an Open button while they are dragging.
     onDragStart: () => chip.hide(),
-    onKey: (key) => { if (key === "l") layOut(); },
+    onKey: (key) => { if (key === "l" && !readOnly) layOut(); },
     // Below the title floor a card face is a blank rectangle with a deck stripe,
     // which is right at that size and leaves a board of anonymous cards. The tip
     // is the name back, at a size the zoom cannot touch.
@@ -312,6 +328,10 @@ export function mountNodeView(
     // have that a canvas was missing: a way to add a card.
     onContext: (id, world, e) => {
       if (id !== undefined && furniture?.menu(id, e) === true) return;
+      // Empty canvas offers three things, and all three place something: they go
+      // together when the arrangement is not this key's to write. The CARD menu
+      // stays whole, because every verb on it is the deck's.
+      if (id === undefined && readOnly) return;
       openContextMenu(e.clientX, e.clientY, id === undefined
         ? [
             { label: "New card here", onClick: () => actions.addAt(world, cardsNow()) },

@@ -96,6 +96,15 @@ export interface CanvasSurfaceOptions<T extends CanvasItem> {
   draw: (item: T, ctx: DrawContext) => Konva.Group;
   /** Snap step in world units. 0 disables the grid and snapping. */
   grid?: number;
+  /**
+   * Nothing on this canvas may be MOVED.
+   *
+   * Selecting, opening, marqueeing, panning and zooming all stay: reading a
+   * canvas you may not rearrange has to remain fully possible, exactly as
+   * reading a shard somebody else holds does. Only the drag goes, so there is
+   * no drop to record and no half-gesture to undo.
+   */
+  readOnly?: boolean;
   /** World-space room a caller's BACKDROP needs around the items when framing: a
    *  caption band, a legend, a title. A fit measures items, because items are all
    *  the surface knows about, so anything drawn outside them would otherwise be
@@ -424,7 +433,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
         // reaches whatever the author actually meant.
         group.listening(false);
       } else {
-        group.draggable(true);
+        group.draggable(opts.readOnly !== true);
         wireItem(group, item);
       }
       contentGroup.add(group);

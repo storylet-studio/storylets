@@ -4,7 +4,9 @@
 // guard that stops a locked document being typed into.
 
 import { describe, expect, it } from "vitest";
-import { foldVc, lockControls, lockNotice, paintVcBadges, vcBadgeFor } from "./vc-view.js";
+import {
+  arrangingLocked, canvasLocked, foldVc, lockControls, lockNotice, paintVcBadges, shapeNotice, vcBadgeFor,
+} from "./vc-view.js";
 import type { ShardVcDto } from "../../shared/api.js";
 
 const snapshot = (...shards: ShardVcDto[]): Map<string, ShardVcDto> =>
@@ -152,5 +154,32 @@ describe("the read-only guard on a locked document", () => {
   it("names the holders in the notice", () => {
     expect(lockNotice(["bo@bo-ws", "ada@ada-ws"]).textContent)
       .toContain("Locked by bo@bo-ws, ada@ada-ws");
+  });
+});
+
+// --- the role's own read-only (design/engine-server.md 9.1) -------------------
+
+describe("the shape, under the key it was pulled with", () => {
+  it("says the far end's own sentence, so the editor and the refusal agree", () => {
+    expect(shapeNotice().textContent).toContain("pull as designer to change the shape");
+  });
+
+  it("locks the arranging for an author's key and nobody else's", () => {
+    expect(arrangingLocked("author")).toBe(true);
+    expect(arrangingLocked("designer")).toBe(false);
+    // A project that never came from a server has no role and no rule.
+    expect(arrangingLocked(undefined)).toBe(false);
+  });
+
+  it("wears the notice only where a canvas of that kind is actually open", () => {
+    const centre = document.createElement("div");
+    // A card, a hand, a list: an author edits all of these, canvas or no canvas.
+    expect(canvasLocked(centre, "author")).toBe(false);
+    const canvas = document.createElement("div");
+    canvas.className = "nodeview";
+    centre.append(canvas);
+    expect(canvasLocked(centre, "author")).toBe(true);
+    expect(canvasLocked(centre, "designer")).toBe(false);
+    expect(canvasLocked(centre, undefined)).toBe(false);
   });
 });
