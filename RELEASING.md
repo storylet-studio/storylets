@@ -12,8 +12,8 @@ whoever is shipping.
 |---|---|---|---|
 | `vX.Y.Z` | Storyletter, the desktop editor | `storyletter.yml` | built |
 | `cli-vX.Y.Z` | the standalone `storyletengine` binaries | `cli.yml` | built |
-| `play-<engine>-vX.Y.Z` | one of the four Storylet Engine runtimes | not written yet | see below |
-| `village-vX.Y.Z` | the Village browser client | not written yet | see below |
+| `play-<engine>-vX.Y.Z` | one of the four Storylet Engine runtimes | `play-<engine>.yml` | built |
+| `village-vX.Y.Z` | the Village browser client | `village.yml` | built |
 
 **The seven `@storylet-studio/*` npm packages are deliberately not in that table.** They are
 the one deliverable not driven by a tag: Changesets publishes them when it notices a change.
@@ -58,6 +58,27 @@ The pipeline runs three jobs:
 
 The draft is a staging area, so a half-built release is never visible. If one OS fails, fix it
 and re-run: the draft is still there and electron-builder reuses a draft whose tag matches.
+
+## The four runtimes: `play-<engine>-vX.Y.Z`
+
+```sh
+npm run bump:play -- X.Y.Z      # every manifest, every changelog dated, one commit
+git tag play-js-vX.Y.Z && git push origin play-js-vX.Y.Z
+git tag play-unity-vX.Y.Z && git push origin play-unity-vX.Y.Z
+git tag play-unreal-vX.Y.Z && git push origin play-unreal-vX.Y.Z
+git tag play-godot-vX.Y.Z && git push origin play-godot-vX.Y.Z
+```
+
+**Push the tags one at a time, exactly as printed.** GitHub raises no push event for a push
+that carries more than three tags, so `git push origin t1 t2 t3 t4` creates all four tags on
+the remote and starts nothing (2026-09-06, 0.5.0: the fix was to delete the remote tags and push
+them singly). Each workflow refuses a tag whose version disagrees with its manifest or whose
+changelog has no dated section, which is why `bump:play` is the one route.
+
+The JS runtime and the play helpers also reach npm, but not from these tags: `changeset publish`
+ships any public package whose version is ahead of the registry, so they go out with the next
+Version Packages merge after the bump. Merge that PR after `bump:play`, so the model bump that
+the runtime needs and the runtime itself publish in one run.
 
 ## The CLI: `cli-vX.Y.Z`
 
@@ -170,12 +191,8 @@ what claims `@storylet-studio` on the registry.
 
 These are written down so nobody has to rediscover them.
 
-- **The four runtime workflows (`play-<engine>-v*`).** `ports.yml` today is a CI gate only:
-  it runs the corpus against Godot, the Unity C# runtime and the Unreal C++ core on every push,
-  and releases nothing. The release half lands with the public repo. Until a family has tagged
-  once, its card on the Downloads page reads "coming soon", which is why the page can ship
-  before the workflows do.
-- **The Village client (`village-v*`).** Built, tested and gated, waiting on the same thing.
+- Nothing at present: the runtime workflows and the Village client's have both shipped.
+  `ports.yml` stays the CI gate on every push; the `play-<engine>.yml` four do the releases.
 
 ## Checking a release afterwards
 
