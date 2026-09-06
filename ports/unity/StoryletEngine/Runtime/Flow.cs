@@ -811,9 +811,12 @@ namespace StoryletStudio.StoryletEngine
         {
             var box = ask.Box;
             var handEnv = BuildHandEnv(ask);
-            void Verdict(string id, TraceVerdict v)
+            // Identity on the trace is by gameId (4.4), so the helper takes the
+            // CARD rather than an id: every call site had one in hand, and
+            // taking the id was the whole of how the two vocabularies got mixed.
+            void Verdict(Card card, TraceVerdict v)
             {
-                trace?.Add(new TraceCard { Id = id, Verdict = v });
+                trace?.Add(new TraceCard { Id = Model.EffectiveGameId(card), Verdict = v });
             }
 
             // The hand's condition: ask-constant, evaluated once (schema 3.1 step 4).
@@ -847,7 +850,7 @@ namespace StoryletStudio.StoryletEngine
                     var shared = CardIsShared(card, deckShared);
                     if (!gateOk[deck.Id])
                     {
-                        Verdict(card.Id, TraceVerdict.DeckGate);
+                        Verdict(card, TraceVerdict.DeckGate);
                         continue;
                     }
                     // Taken out of the world by somebody's shared one-shot.
@@ -856,17 +859,17 @@ namespace StoryletStudio.StoryletEngine
                     // to do with it.
                     if (shared && _engine.IsTaken(card.Id))
                     {
-                        Verdict(card.Id, TraceVerdict.Taken);
+                        Verdict(card, TraceVerdict.Taken);
                         continue;
                     }
                     if (_cooldowns.GetOrDefault(card.Id) > turn)
                     {
-                        Verdict(card.Id, TraceVerdict.Cooldown);
+                        Verdict(card, TraceVerdict.Cooldown);
                         continue;
                     }
                     if (!TagsMatch(card, handEnv.BoundTags))
                     {
-                        Verdict(card.Id, TraceVerdict.Tags);
+                        Verdict(card, TraceVerdict.Tags);
                         continue;
                     }
                     var ctx = deckCtx;
@@ -876,13 +879,13 @@ namespace StoryletStudio.StoryletEngine
                     if (card.Condition != null && !Passes(card.Condition, ctx,
                         Tracing ? $"card {card.GameId} condition" : null))
                     {
-                        Verdict(card.Id, TraceVerdict.Condition);
+                        Verdict(card, TraceVerdict.Condition);
                         continue;
                     }
                     var refused = claimed(card, shared);    // claims, last (schema 3.1 step 6)
                     if (refused.HasValue)
                     {
-                        Verdict(card.Id, refused.Value);
+                        Verdict(card, refused.Value);
                         continue;
                     }
 
@@ -898,7 +901,7 @@ namespace StoryletStudio.StoryletEngine
                             var v = Eval(card.PriorityExpr, ctx);
                             if (!v.IsNumber)
                             {
-                                Verdict(card.Id, TraceVerdict.Priority);
+                                Verdict(card, TraceVerdict.Priority);
                                 continue;
                             }
                             priority = v.AsNumber;
@@ -909,7 +912,7 @@ namespace StoryletStudio.StoryletEngine
                             {
                                 Emit(new DiagnosticEvent { Where = $"card {card.GameId} priority", Message = e.Message });
                             }
-                            Verdict(card.Id, TraceVerdict.Priority);
+                            Verdict(card, TraceVerdict.Priority);
                             continue;
                         }
                     }
@@ -955,13 +958,15 @@ namespace StoryletStudio.StoryletEngine
             {
                 foreach (var s in scored)
                 {
-                    trace.Add(new TraceCard { Id = s.Entry.Card.Id, Verdict = TraceVerdict.Dealt, Priority = s.Priority, Specificity = s.Spec });
+                    trace.Add(new TraceCard { Id = Model.EffectiveGameId(s.Entry.Card), Verdict = TraceVerdict.Dealt, Priority = s.Priority, Specificity = s.Spec });
                 }
             }
             return (scored.Select(s => s.Entry).ToList(), handEnv);
         }
 
-        /// <summary>Flip eligible-but-not-taken trace entries to "capped".</summary>
+        /// <summary>Flip eligible-but-not-taken trace entries to "capped".
+        /// `taken` is keyed by GAMEID, as the trace rows are (4.4): the two must
+        /// move together or every dealt card silently reads as capped.</summary>
         private static void CapTrace(List<TraceCard> trace, HashSet<string> taken)
         {
             foreach (var entry in trace)
@@ -1023,7 +1028,7 @@ namespace StoryletStudio.StoryletEngine
             var listed = n == null ? ordered : ordered.GetRange(0, Math.Min(Math.Max(n.Value, 0), ordered.Count));
             if (trace != null)
             {
-                CapTrace(trace, new HashSet<string>(listed.Select(e => e.Card.Id)));
+                CapTrace(trace, new HashSet<string>(listed.Select(e => Model.EffectiveGameId(e.Card))));
                 Emit(new PeekEvent { Box = Model.EffectiveGameId(box), Criteria = criteria, Cards = trace }, _turnCounts.GetOrDefault(box.Id));
             }
             return new RankedList { Box = Model.EffectiveGameId(box), Cards = listed.Select(View).ToList() };
@@ -1077,9 +1082,22 @@ namespace StoryletStudio.StoryletEngine
                 // handler reading the board sees the eviction), so they are
                 // collected here and emitted once the survivors are set.
                 var evicted = new List<EvictEvent>();
+                // The card is named by gameId (4.4). A card the build no longer
+                // has - the "vanished" branch below - has no gameId left, so it
+                // is named by the id the board carries, which is the rule a load
+                // report has always used for the same reason.
                 bool Evict(string cardId, string reason)
                 {
-                    if (Tracing) evicted.Add(new EvictEvent { Hand = hand.Id, Card = cardId, Reason = reason });
+                    if (Tracing)
+                    {
+                        var known = _engine._cardsById.GetOrDefault(cardId);
+                        evicted.Add(new EvictEvent
+                        {
+                            Hand = Model.EffectiveGameId(hand),
+                            Card = known != null ? Model.EffectiveGameId(known.Card) : cardId,
+                            Reason = reason,
+                        });
+                    }
                     return false;
                 }
                 var contents = _boardContents.GetOrDefault(hand.Id) ?? new List<string>();
@@ -1129,7 +1147,8 @@ namespace StoryletStudio.StoryletEngine
                         ? TraceVerdict.Claimed
                         : ClaimVerdict(card, shared, claimCounts, worldClaims), trace);
                 var take = double.IsPositiveInfinity(free) ? ordered.Count : Math.Min((int)free, ordered.Count);
-                var added = ordered.GetRange(0, take).Select(e => e.Card.Id).ToList();
+                var taking = ordered.GetRange(0, take);
+                var added = taking.Select(e => e.Card.Id).ToList();
                 var next = new List<string>(contents);
                 next.AddRange(added);
                 _boardContents.Set(hand.Id, next);
@@ -1143,7 +1162,7 @@ namespace StoryletStudio.StoryletEngine
                 // Emitted after the hand is set: a handler reading Board() sees the deal.
                 if (trace != null)
                 {
-                    CapTrace(trace, new HashSet<string>(added));
+                    CapTrace(trace, new HashSet<string>(taking.Select(e => Model.EffectiveGameId(e.Card))));
                     Emit(new DealEvent { Hand = Model.EffectiveGameId(hand), Cards = trace }, _turnCounts.GetOrDefault(box.Id));
                 }
             }
@@ -1297,8 +1316,38 @@ namespace StoryletStudio.StoryletEngine
             // Emitted last: a handler reading the board and the clock sees the play.
             if (Tracing)
             {
-                Emit(new PlayEvent { Card = entry.Card.Id, Outcome = Model.EffectiveGameId(outcome), Turn = newTurn }, newTurn);
+                Emit(new PlayEvent { Card = Model.EffectiveGameId(entry.Card), Outcome = Model.EffectiveGameId(outcome), Turn = newTurn }, newTurn);
             }
+        }
+
+        /// <summary>One owned property owner's address, owner segment and all
+        /// (4.4).</summary>
+        private string Address(string kind, string id)
+        {
+            return _engine.AddressOf(kind, id);
+        }
+
+        /// <summary>Resolve a property address's owner segment to the internal
+        /// id the stores are keyed by, saying so when the caller used the
+        /// pre-4.4 internal-id form: it resolves for THIS release and earns a
+        /// diagnostic naming the address to move to, and the next lockstep
+        /// release refuses it. Throws the caller's "no &lt;kind&gt; store" error
+        /// when the segment names no owner at all.</summary>
+        private string ResolveOwner(string kind, string segment, string name)
+        {
+            if (!_engine.TryResolveOwner(kind, segment, out var id, out var legacy))
+            {
+                throw new StoryletError($"no {kind} store \"{segment}\"");
+            }
+            if (legacy && Tracing)
+            {
+                Emit(new DiagnosticEvent
+                {
+                    Where = "property address",
+                    Message = _engine.LegacyAddressMessage(kind, segment, name),
+                });
+            }
+            return id;
         }
 
         /// <summary>Land one change in whichever partition declares the name:
@@ -1347,8 +1396,8 @@ namespace StoryletStudio.StoryletEngine
                     return new WriteResult { Path = $"world.{name}", Prev = prev };
                 }
                 case "story": return LandIn("story", null, name, value, $"story.{name}");
-                case "box": return LandIn("box", entry.Box.Id, name, value, $"box.{entry.Box.Id}.{name}");
-                case "deck": return LandIn("deck", entry.Deck.Id, name, value, $"deck.{entry.Deck.Id}.{name}");
+                case "box": return LandIn("box", entry.Box.Id, name, value, $"{Address("box", entry.Box.Id)}.{name}");
+                case "deck": return LandIn("deck", entry.Deck.Id, name, value, $"{Address("deck", entry.Deck.Id)}.{name}");
                 case "hand":
                 {
                     // Write-back routing (schema 3.6): the composed name remembers
@@ -1361,7 +1410,7 @@ namespace StoryletStudio.StoryletEngine
                     {
                         throw new StoryletError($"@hand.{name} is a chosen tag / criteria name and cannot be written");
                     }
-                    return LandIn(source.Kind, source.Id, name, value, $"{source.Kind}.{source.Id}.{name}");
+                    return LandIn(source.Kind, source.Id, name, value, $"{Address(source.Kind, source.Id)}.{name}");
                 }
                 default: throw new StoryletError($"bad change target scope \"@{scope}\"");
             }
@@ -1409,10 +1458,13 @@ namespace StoryletStudio.StoryletEngine
         {
             AssertOpen();
             var mounts = new List<BagMount> { new BagMount { Prefix = "story", Bag = _stores.Story } };
-            foreach (var pair in _stores.Box) mounts.Add(new BagMount { Prefix = $"box.{pair.Key}", Bag = pair.Value });
-            foreach (var pair in _stores.Deck) mounts.Add(new BagMount { Prefix = $"deck.{pair.Key}", Bag = pair.Value });
-            foreach (var pair in _stores.Hand) mounts.Add(new BagMount { Prefix = $"hand.{pair.Key}", Bag = pair.Value });
-            foreach (var pair in _stores.Value) mounts.Add(new BagMount { Prefix = $"value.{pair.Key}", Bag = pair.Value });
+            foreach (var kind in Engine.OwnedScopes)
+            {
+                foreach (var pair in KindOf(_stores, kind))
+                {
+                    mounts.Add(new BagMount { Prefix = Address(kind, pair.Key), Bag = pair.Value });
+                }
+            }
             return mounts;
         }
 
@@ -1451,8 +1503,12 @@ namespace StoryletStudio.StoryletEngine
                 foreach (var id in own.Keys) if (!ids.Contains(id)) ids.Add(id);
                 foreach (var id in ids)
                 {
-                    Add($"{kind}.{id}", shared.GetOrDefault(id));
-                    Add($"{kind}.{id}", own.GetOrDefault(id));
+                    // Composed here rather than taken from the bag's own
+                    // PathPrefix because one address covers the two bags a
+                    // merged read unions; the owner segment is its gameId (4.4).
+                    var address = Address(kind, id);
+                    Add(address, shared.GetOrDefault(id));
+                    Add(address, own.GetOrDefault(id));
                 }
             }
             AddKind("box", _engine._shared.Box, _stores.Box);
@@ -1463,8 +1519,14 @@ namespace StoryletStudio.StoryletEngine
         }
 
         /// <summary>Read by path: "world.x", "story.gold",
-        /// "value.v_docks.danger", "box.b_x.heat" - the flow's merged view,
-        /// routed by the declaration's sharing.</summary>
+        /// "value.docks.danger", "box.village.heat", "deck.wares.n",
+        /// "hand.the-elder.zone" - the flow's merged view, routed by the
+        /// declaration's sharing.
+        ///
+        /// The owner segment is the entity's GAMEID, the name it is called by
+        /// everywhere else (4.4). Its internal id is accepted for this release
+        /// and earns a DiagnosticEvent naming the address to move to; the next
+        /// lockstep release refuses it.</summary>
         public StoryletValue GetProperty(string path)
         {
             AssertOpen();
@@ -1480,8 +1542,9 @@ namespace StoryletStudio.StoryletEngine
             }
             else if (parts.Length == 3 && (parts[0] == "box" || parts[0] == "deck" || parts[0] == "hand" || parts[0] == "value"))
             {
-                var own = KindOf(_stores, parts[0]).GetOrDefault(parts[1]);
-                var shared = KindOf(_engine._shared, parts[0]).GetOrDefault(parts[1]);
+                var id = ResolveOwner(parts[0], parts[1], parts[2]);
+                var own = KindOf(_stores, parts[0]).GetOrDefault(id);
+                var shared = KindOf(_engine._shared, parts[0]).GetOrDefault(id);
                 if (own == null && shared == null) throw new StoryletError($"no {parts[0]} store \"{parts[1]}\"");
                 value = own?.Get(parts[2]) ?? shared?.Get(parts[2]);
             }
@@ -1513,8 +1576,9 @@ namespace StoryletStudio.StoryletEngine
             }
             else if (parts.Length == 3 && (parts[0] == "box" || parts[0] == "deck" || parts[0] == "hand" || parts[0] == "value"))
             {
-                own = KindOf(_stores, parts[0]).GetOrDefault(parts[1]);
-                shared = KindOf(_engine._shared, parts[0]).GetOrDefault(parts[1]);
+                var id = ResolveOwner(parts[0], parts[1], parts[2]);
+                own = KindOf(_stores, parts[0]).GetOrDefault(id);
+                shared = KindOf(_engine._shared, parts[0]).GetOrDefault(id);
                 if (own == null && shared == null) throw new StoryletError($"no {parts[0]} store \"{parts[1]}\"");
                 name = parts[2];
             }

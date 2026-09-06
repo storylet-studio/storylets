@@ -266,7 +266,7 @@ describe("merge: the git-driver flow", () => {
 describe("asks against the saltmarsh example", () => {
   it("peeks the docks stock, ranked", async () => {
     const r = (await call("peek", "encounters", exampleDir,
-      "--where", "area=docks", "--set", "value.v_docks.danger=3"));
+      "--where", "area=docks", "--set", "value.docks.danger=3"));
     expect(r.code).toBe(0);
     expect(r.out).toEqual([
       '1. ambush-at-the-ford  "Ambush at the ford"',
@@ -276,7 +276,7 @@ describe("asks against the saltmarsh example", () => {
   });
 
   it("deal refreshes the hand; --deal-all makes claims visible to a peek", async () => {
-    const dealt = (await call("deal", "docks-street", exampleDir, "--set", "value.v_docks.danger=3"));
+    const dealt = (await call("deal", "docks-street", exampleDir, "--set", "value.docks.danger=3"));
     expect(dealt.code).toBe(0);
     // Two slots, by priority: the ambush (p2) and the rat job (p1).
     expect(dealt.out).toEqual([
@@ -286,7 +286,7 @@ describe("asks against the saltmarsh example", () => {
     // --set applies before --deal-all, so the hand seats the same two; the
     // peek respects the claims and only the stranger is left.
     const r = (await call("peek", "encounters", exampleDir,
-      "--where", "area=docks", "--set", "value.v_docks.danger=3", "--deal-all"));
+      "--where", "area=docks", "--set", "value.docks.danger=3", "--deal-all"));
     expect(r.code).toBe(0);
     expect(r.out).toEqual(['1. mysterious-stranger  "The mysterious stranger"']);
   });

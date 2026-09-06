@@ -133,7 +133,13 @@ static func _show_list(list: Array) -> String:
 
 
 # Direct store writes for setup and setState: story/world are single bags;
-# box/deck/hand/value are keyed by immutable id (runner.ts applyState).
+# box/deck/hand/value are keyed by the owner's GAMEID (design change 4.4;
+# runner.ts applyState). The internal id is still accepted on input for this
+# release and raises a `diagnostic`; it is refused after the next lockstep
+# release. One case leans on that deliberately: two boxes may each name a tag
+# "docks", and a tag gameId is only unique within its group, so "value.docks"
+# names the FIRST such tag in bundle order and the second stays addressable by
+# id.
 static func _apply_state(session: StoryletFlow, selector: Dictionary) -> void:
 	for scope in ["story", "world"]:
 		for prop_name in selector.get(scope, {}):
@@ -373,10 +379,20 @@ func _run_scripted_case(c: Dictionary) -> Array:
 	# indistinguishable on a board read from a hole that was never movable: the
 	# diagnostic is the only place the difference lives.
 	rc["diagnostics"] = []
+	# The two events nothing else can reach, rendered by the shared rule
+	# (runner.ts, ScriptOp's expectTrace): "evict.hand", "evict.card" and
+	# "play.card" are gameIds from 4.4 on, and this is what says so.
+	rc["traces"] = []
 	var watch := func(f: StoryletFlow) -> StoryletFlow:
 		f.subscribe_trace(func(e: Dictionary) -> void:
 			if e["type"] == "diagnostic":
 				(rc["diagnostics"] as Array).append(str(e["message"]))
+				return
+			if e["type"] == "evict":
+				(rc["traces"] as Array).append("evict %s %s %s" % [e["hand"], e["card"], e["reason"]])
+				return
+			if e["type"] == "play":
+				(rc["traces"] as Array).append("play %s %s" % [e["card"], e["outcome"]])
 				return
 			if e["type"] != "deal" and e["type"] != "peek":
 				return
@@ -410,6 +426,13 @@ func _run_scripted_case(c: Dictionary) -> Array:
 		out.append('%s: expected a diagnostic containing "%s", got %s'
 			% [at, want, "none" if said.is_empty() else str(said)])
 
+	var check_trace := func(at: String, op: Dictionary, out: Array) -> void:
+		var said: Array = rc["traces"]
+		for want in op.get("expectTrace", []):
+			if not said.has(str(want)):
+				out.append('%s: expected the trace to carry "%s", got %s'
+					% [at, str(want), "no deal-time events" if said.is_empty() else _show_list(said)])
+
 	var script: Array = c["script"]
 	for index in script.size():
 		var op: Dictionary = script[index]
@@ -422,11 +445,15 @@ func _run_scripted_case(c: Dictionary) -> Array:
 		var session: StoryletFlow = flow_of.call(op) if FLOW_OPS.has(kind) else null
 		match kind:
 			"setState":
+				rc["diagnostics"] = []
+				rc["traces"] = []
 				_apply_state(session, op)
+				check_diagnostic.call(at, op, failures)
 
 			"peek":
 				rc["verdicts"] = {}
 				rc["diagnostics"] = []
+				rc["traces"] = []
 				var list := session.peek(op.get("box", "box"), op.get("criteria", {}), op.get("n"))
 				check_verdicts.call(at, op, failures)
 				var peek_error: String = list.get("error", "")
@@ -443,9 +470,11 @@ func _run_scripted_case(c: Dictionary) -> Array:
 			"deal":
 				rc["verdicts"] = {}
 				rc["diagnostics"] = []
+				rc["traces"] = []
 				var dealt := session.deal_many(op.get("hands"))
 				check_verdicts.call(at, op, failures)
 				check_diagnostic.call(at, op, failures)
+				check_trace.call(at, op, failures)
 				for hand_id in op.get("expectBoard", {}):
 					var the_board := session.board()
 					var key: String = names.get(hand_id, hand_id)
@@ -506,7 +535,9 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				var opts := {}
 				if op.has("advanceTurns"):
 					opts["advance_turns"] = float(op["advanceTurns"])
+				rc["traces"] = []
 				var error := session.play(op["card"], op["outcome"], op["from"], opts)
+				check_trace.call(at, op, failures)
 				var expect_error: bool = op.get("expectError", false)
 				if expect_error and error == "":
 					failures.append("%s: expected an error, play succeeded" % at)

@@ -88,7 +88,7 @@ describe("the Board model", () => {
     const rows = table.stateRows();
     expect(rows.find((r) => r.path === "story.reputation")).toMatchObject({ scope: "story", value: 0, editable: true });
     expect(rows.find((r) => r.path === "world.danger")).toBeDefined();
-    expect(rows.find((r) => r.path === "value.v_docks.danger")).toBeDefined();
+    expect(rows.find((r) => r.path === "value.docks.danger")).toBeDefined();
   });
 
   // The raw-state fold shows a quality as its LADDER with the current rung
@@ -108,10 +108,10 @@ describe("the Board model", () => {
     const table = new Table(bundle, 0);
     const rows = table.stateRows();
     expect(rows.find((r) => r.path === "story.mood")).toMatchObject({ stages: ["low", "high"], value: "low", editable: true });
-    expect(rows.find((r) => r.path === `deck.${deck.id}.arc`))
+    expect(rows.find((r) => r.path === `deck.${deck.gameId}.arc`))
       .toMatchObject({ label: `${deck.gameId}.arc`, stages: ["opening", "closing"], value: "opening" });
     // ...but a deck's ordinary latches stay out of the strip.
-    expect(rows.find((r) => r.path === `deck.${deck.id}.seen`)).toBeUndefined();
+    expect(rows.find((r) => r.path === `deck.${deck.gameId}.seen`)).toBeUndefined();
     // a non-quality row has no stages field at all
     expect(rows.find((r) => r.path === "story.reputation")?.stages).toBeUndefined();
   });

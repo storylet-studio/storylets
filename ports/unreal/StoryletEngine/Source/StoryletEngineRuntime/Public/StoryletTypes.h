@@ -214,7 +214,9 @@ struct FStoryletPropertyView
 {
 	GENERATED_BODY()
 
-	/** "story.gold", "world.x", "box.b_x.heat", "value.v_docks.danger", ... */
+	/** "story.gold", "world.x", "box.village.heat", "value.docks.danger", ...
+	 *  The owner segment is the owner's gameId (design change 4.4); its
+	 *  internal id is accepted for this release and raises a diagnostic. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Path;
 

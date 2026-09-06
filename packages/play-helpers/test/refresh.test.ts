@@ -75,7 +75,7 @@ describe("applyLiveBundle", () => {
     flow.subscribeTrace((e) => log.push(e));
     flow.dealMany();
     expect(flow.board()["the-mystic-tree"]).toEqual([]); // evicted: needs night now
-    expect(log).toContainEqual({ type: "evict", hand: "h_tree", card: "c_amb_forest", reason: "condition" });
+    expect(log).toContainEqual({ type: "evict", hand: "the-mystic-tree", card: "wind-in-the-leaves", reason: "condition" });
     expect(Object.values(flow.board()).flat().map((c) => c.gameId)).not.toContain("arrive-at-the-gate");
   });
 

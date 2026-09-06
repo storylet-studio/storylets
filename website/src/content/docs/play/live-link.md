@@ -266,9 +266,9 @@ Editor to game:
 | bundle | `{ "t":"bundle", "v":1, "build":"<new content.hash>", "data":"<the full .storyletsc JSON as a string>" }` | after a save, when the connected client's build differs from the editor's current compiled hash |
 
 Identity in frames is by **gameId** (hands, boxes, cards), never by opaque id, because that is
-what the game's own code already speaks and what the bundle inspector lists. The trace event
-inside `trace` is the runtime's own object and keeps whatever ids the runtime uses; the Board
-already renders from those.
+what the game's own code already speaks and what the bundle inspector lists. That now holds
+for the trace event inside `trace` as well: it is the runtime's own object, and every hand,
+box and card in it is a gameId.
 
 A trace event fires after the state it reports has landed, so the board snapshot that follows
 it shows the deal, play, eviction or turn it describes. The server binds to `127.0.0.1` only,

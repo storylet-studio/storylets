@@ -198,6 +198,10 @@ Events are `deal`, `peek`, `evict`, `play`, `write`, `turns` and `diagnostic`. A
 `claimed-elsewhere`, `taken`). A `write`
 carries the path and the previous value, so a log line reads "0 -> 1".
 
+Everything an event names, it names by **gameId**: the hand, the box, the played card, the
+evicted card and every card in an ask's verdicts. So a trace reads back against the shards you
+wrote, and a tool over it needs no translation table of its own.
+
 If you created the engine with `log: true`, `flow.log()` gives you the same events, each
 stamped with a sequence number and the turn of the box it happened in. The log lives for the
 flow and never rides a save; the durable play history is in the save's `playLog`.

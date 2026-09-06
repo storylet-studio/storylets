@@ -22,7 +22,13 @@ import type { Bundle, LoadReport, PropertyDecl, RedrawPolicy } from "@storylet-s
 export type ScopeBag = Record<string, ScalarValue>;
 
 /** Direct store writes/reads for setup and setState: story/world are single
- *  bags; box/deck/hand/value are keyed by immutable id. */
+ *  bags; box/deck/hand/value are keyed by the owner's GAMEID
+ *  (design/engine-server.md 4.4). The immutable id is still accepted on input
+ *  for this release and raises a `diagnostic`; it is refused after the next
+ *  lockstep release. One case leans on that deliberately: two boxes may each
+ *  name a tag "docks", and a tag gameId is only unique within its group, so
+ *  `value.docks` names the FIRST such tag in bundle order and the second stays
+ *  addressable by id. */
 export interface StateSelector {
   story?: ScopeBag;
   world?: ScopeBag;
@@ -97,15 +103,35 @@ export type TraceVerdictKind =
  *  "main", which the runner opens lazily on first use - so a single-flow
  *  script reads exactly as it always did, and a case that never says "flow"
  *  pins single-flow behaviour unchanged. */
+/**
+ * A trace assertion on `deal` and `play`: every string listed must appear
+ * among the events the op emitted, rendered by one rule the four runtimes
+ * share (design/engine-server.md 4.4).
+ *
+ *     evict <hand> <card> <reason>
+ *     play <card> <outcome>
+ *
+ * Deliberately only those two kinds, and deliberately a flat string rather
+ * than a struct: `expectVerdicts` already pins `cards[].id` on a deal or a
+ * peek, and these are the two events nothing else could reach. What they pin
+ * is IDENTITY - `evict.hand`, `evict.card` and `play.card` are gameIds now,
+ * where three of them were internal ids until 4.4 - so the cheapest assertion
+ * that can tell one form from the other is the whole requirement. A runtime
+ * implements it as one formatter and one containment check.
+ */
 export type ScriptOp =
-  | ({ op: "setState"; flow?: string } & StateSelector)
+  /** `expectDiagnostic` is the deal op's field, on a write: an address whose
+   *  owner segment is an internal id resolves for this release and SAYS SO,
+   *  naming the gameId form, so a host can find its old addresses (4.4). */
+  | ({ op: "setState"; flow?: string; expectDiagnostic?: string } & StateSelector)
   /** `expectError` pins the asks that must be REFUSED - notably a tag group
    *  gameId that belongs to another box (group gameIds are box-scoped, so
    *  box-scoping must be a real scope, never a bundle-wide fallback), and
    *  every verb on a CLOSED flow (the inert-handle rule). */
   | { op: "peek"; flow?: string; box?: string; criteria?: Record<string, string>; n?: number; expect?: string[]; expectError?: true; expectVerdicts?: Record<string, TraceVerdictKind> }
-  /** `expectVerdicts` pins WHY a card was refused, keyed by card id, against
-   *  the deal's own trace. The reason matters as much as the outcome once
+  /** `expectVerdicts` pins WHY a card was refused, keyed by card GAMEID,
+   *  against the deal's own trace (identity in a trace event is by gameId,
+   *  design/engine-server.md 4.4). The reason matters as much as the outcome once
    *  flows share cards: "claimed" and "claimed-elsewhere" look identical on a
    *  board read and mean quite different things to whoever is debugging.
    *
@@ -119,7 +145,7 @@ export type ScriptOp =
    *  substring rather than the whole message because the message is prose an
    *  author reads, not a contract - what is pinned is that the runtime spoke
    *  up rather than filling a hole silently (4.6). */
-  | { op: "deal"; flow?: string; hands?: string[]; expectBoard?: Record<string, string[]>; expectDealt?: Record<string, string[]>; expectVerdicts?: Record<string, TraceVerdictKind>; expectDiagnostic?: string }
+  | { op: "deal"; flow?: string; hands?: string[]; expectBoard?: Record<string, string[]>; expectDealt?: Record<string, string[]>; expectVerdicts?: Record<string, TraceVerdictKind>; expectDiagnostic?: string; expectTrace?: string[] }
   /** Read the board and check it WHOLE: `expect` is keyed by hand ID and its
    *  key set must MATCH, not merely be included - that is what pins the
    *  filter. `box` (a box gameId or id) narrows the read to one box's hands;
@@ -128,15 +154,17 @@ export type ScriptOp =
   | { op: "assertBoard"; flow?: string; box?: string; expect?: Record<string, string[]>; expectError?: true }
   /** `from` is the hand the card sits in: you never play a card from inside
    *  the deck (schema 3.1). */
-  | { op: "play"; flow?: string; card: string; outcome: string; from: string; advanceTurns?: number; expectError?: true }
+  | { op: "play"; flow?: string; card: string; outcome: string; from: string; advanceTurns?: number; expectError?: true; expectTrace?: string[] }
   /** Each box has its own clock (schema 3.4), PER FLOW; `box` is the box id. */
   | { op: "advanceTurns"; flow?: string; box: string; n: number }
   | { op: "assertOutcomes"; flow?: string; card: string; from: string; expect: Record<string, boolean> }
   /** The ORDER `outcomes()` hands them back in, exactly. Separate from
    *  `assertOutcomes`, which is a map and so says nothing about sequence. */
   | { op: "assertOutcomeOrder"; flow?: string; card: string; from: string; expect: string[] }
-  /** Paths: "turn.b_x", "story.gold", "value.v_docks.danger", "box.b_x.heat",
-   *  "world.x", ... - read on the op's flow (the merged view). */
+  /** Paths: "turn.b_x", "story.gold", "value.docks.danger", "box.x.heat",
+   *  "world.x", ... - read on the op's flow (the merged view). The owner
+   *  segment is a gameId (4.4); `turn.` takes either, as `advanceTurns` and
+   *  `turn()` always have. */
   | { op: "assertState"; flow?: string; expect: Record<string, ScalarValue> }
   /** Open (or REPLACE - re-opening an existing name resets its per-flow
    *  state, shared state untouched) a named flow. `seed` overrides the

@@ -178,6 +178,7 @@ namespace storylets
 
     struct TraceCard
     {
+        /** The card's GAMEID (design/engine-server.md 4.4). */
         std::string id;
         TraceVerdict verdict = TraceVerdict::Dealt;
         std::optional<double> priority;
@@ -187,24 +188,34 @@ namespace storylets
     /** One event on the deal/play log, as a single tagged struct (the C++
      *  shape of the reference's event-type union; the kind is the verb, so a
      *  peek is distinguishable from a deal when reading a run back). Only
-     *  the fields the kind names are meaningful. */
+     *  the fields the kind names are meaningful.
+     *
+     *  IDENTITY IS BY GAMEID throughout (design/engine-server.md 4.4). It was
+     *  mixed until then: Deal's hand and Peek's box were gameIds while Evict's
+     *  hand, Evict's and Play's card and every TraceCard::id were internal ids,
+     *  so every consumer outside the engine - the Board, the four examiners,
+     *  the Live Link, a wire a kiosk reads - mapped one to the other itself. */
     struct TraceEvent
     {
         enum class Kind { Deal, Peek, Evict, Play, Write, Turns, Diagnostic };
 
         Kind kind = Kind::Deal;
-        /** Deal: hand gameId. Evict: hand id. */
+        /** Deal / Evict: hand gameId. */
         std::string hand;
         /** Peek / Turns: box gameId. */
         std::string box;
-        /** Evict / Play: card id. */
+        /** Evict / Play: card gameId. A card the build no longer has (Evict's
+         *  "vanished") has no gameId left, so it is named by the id the board
+         *  carried - the rule a load report has always used. */
         std::string card;
         /** Play: outcome gameId. */
         std::string outcome;
         /** Evict: a verdict wire name, or "hand-condition" / "vanished". */
         std::string reason;
-        /** Write: the authored target and the resolved store location (a
-         *  routed @hand write shows where it actually went, schema 3.6). */
+        /** Write: the authored target and the resolved store location, in the
+         *  address grammar getProperty takes - the owner segment is its gameId
+         *  (4.4). A routed @hand write shows where it actually went (schema
+         *  3.6). */
         std::string target;
         std::string path;
         /** Write: the landed value and the value it replaced ("0 -> 1"). */
@@ -251,8 +262,9 @@ namespace storylets
     // ScopePropertyRow next to it, PropertyRow in the kernel. listProperties() returns
     // PropertyRow, in this runtime and in Patterplay's.
 
-    /** One kernel bag with its store path prefix (world / story / box.<id> /
-     *  deck.<id> / hand.<id> / value.<id>): the state logger's mount surface
+    /** One kernel bag with its store path prefix (world / story /
+     *  box.<gameId> / deck.<gameId> / hand.<gameId> / value.<gameId>, the
+     *  owner named as an address names it - 4.4): the state logger's mount surface
      *  (design/engine-runtimes.md 3.4 - the logger builds on the PropertyBag
      *  audit hook, so it needs the bags themselves, not just their rows).
      *  load() replaces the flow's bags, so re-enumerate after a load. */
@@ -331,6 +343,72 @@ namespace storylets
             OrderedMap<std::string, std::vector<PropertyDecl>> hand;
             OrderedMap<std::string, std::vector<PropertyDecl>> value;
         };
+
+        /** The four owned property scopes: the ones whose address carries an
+         *  owner segment. @story has no owner and @world is the host's. */
+        inline bool IsOwnedScope(const std::string& scope)
+        {
+            return scope == "box" || scope == "deck" || scope == "hand" || scope == "value";
+        }
+
+        /**
+         * The owner segment of a property address, both ways round
+         * (design/engine-server.md 4.4).
+         *
+         * `gameId` maps the internal id everything INSIDE the engine is keyed
+         * by - the bags, the save envelope, the ladders - to the id an ADDRESS
+         * uses; `id` maps back. Both are built in bundle order and a repeated
+         * gameId does NOT overwrite the first: box, hand and card gameIds are
+         * unique bundle-wide, but a TAG's is unique only within its group, and a
+         * group's only within its box, so two boxes may each name a tag
+         * "docks". "value.docks" names the first of the two, and the second
+         * stays reachable by its internal id - which is the one part of the
+         * internal-id form that cannot be retired on the same timetable as the
+         * rest.
+         */
+        struct OwnerIndex
+        {
+            OrderedMap<std::string, std::string> gameId;   // internal id -> gameId
+            OrderedMap<std::string, std::string> id;       // gameId -> internal id (first in bundle order wins)
+        };
+
+        /** One index per owned scope, reached by the scope word the address
+         *  carries. */
+        struct OwnerIndexes
+        {
+            OwnerIndex box;
+            OwnerIndex deck;
+            OwnerIndex hand;
+            OwnerIndex value;
+
+            OwnerIndex& of(const std::string& kind)
+            {
+                if (kind == "box") return box;
+                if (kind == "deck") return deck;
+                if (kind == "hand") return hand;
+                return value;
+            }
+
+            const OwnerIndex& of(const std::string& kind) const
+            {
+                if (kind == "box") return box;
+                if (kind == "deck") return deck;
+                if (kind == "hand") return hand;
+                return value;
+            }
+        };
+
+        /** Index one owner both ways. OrderedMap::set is LAST-write-wins, so
+         *  the gameId -> id direction is guarded rather than set: first in
+         *  bundle order wins, which is what makes a repeated tag gameId name
+         *  the first of the two and leave the second addressable by id. */
+        template <typename T>
+        void IndexOwner(OwnerIndex& index, const T& entity)
+        {
+            const std::string gameId = EffectiveGameId(entity);
+            index.gameId.set(entity.id, gameId);
+            if (!index.id.contains(gameId)) index.id.set(gameId, entity.id);
+        }
 
         // --- the load report (design/engine-server.md 4.9) --------------------
         //
@@ -559,8 +637,11 @@ namespace storylets
         void clearLog() { engineLog_.clear(); }
 
         /** Read shared state by path: "world.x", "story.gold" (when shared),
-         *  "box.b_x.heat" (when shared). A ref that resolves PER-FLOW throws,
-         *  naming the fix (Patter's teaching rule). */
+         *  "box.village.heat" (when shared) - the owner segment is its GAMEID
+         *  (design/engine-server.md 4.4), and its internal id is accepted for
+         *  this release with a diagnostic naming the address to move to. A ref
+         *  that resolves PER-FLOW throws, naming the fix (Patter's teaching
+         *  rule). */
         StoryletValue getProperty(const std::string& path) const;
 
         void setProperty(const std::string& path, const StoryletValue& value);
@@ -575,10 +656,10 @@ namespace storylets
         {
             std::vector<BagMount> mounts;
             mounts.push_back({"story", shared_.story});
-            for (const auto& pair : shared_.box) mounts.push_back({"box." + pair.first, pair.second});
-            for (const auto& pair : shared_.deck) mounts.push_back({"deck." + pair.first, pair.second});
-            for (const auto& pair : shared_.hand) mounts.push_back({"hand." + pair.first, pair.second});
-            for (const auto& pair : shared_.value) mounts.push_back({"value." + pair.first, pair.second});
+            for (const auto& pair : shared_.box) mounts.push_back({addressOf("box", pair.first), pair.second});
+            for (const auto& pair : shared_.deck) mounts.push_back({addressOf("deck", pair.first), pair.second});
+            for (const auto& pair : shared_.hand) mounts.push_back({addressOf("hand", pair.first), pair.second});
+            for (const auto& pair : shared_.value) mounts.push_back({addressOf("value", pair.first), pair.second});
             return mounts;
         }
 
@@ -695,6 +776,8 @@ namespace storylets
         // storylets property names are case-significant as authored.
         // pathPrefix carries its own separator, so a bag composes its rows' addresses
         // itself ("story.gold", "deck.tavern.drawn") instead of each caller pasting one on.
+        // The owner segment of that prefix is the owner's GAMEID (4.4); the map it is
+        // keyed under is still the internal id, because a save must survive a rename.
         static std::shared_ptr<PropertyBag> bagFromDecls(const std::vector<PropertyDecl>& decls,
                                                          const std::string& pathPrefix)
         {
@@ -722,6 +805,118 @@ namespace storylets
             return hand.properties;
         }
 
+        /**
+         * One owned property's ADDRESS, owner segment and all: "box.village"
+         * (design/engine-server.md 4.4). The name is pasted on by the caller,
+         * because a bag's path prefix wants the separator and a trace path does
+         * not.
+         *
+         * The stores, the save envelope and the ladders stay keyed by internal
+         * id - a save must survive a rename, which is the whole reason ids
+         * exist - so this is the one place the two vocabularies meet, and it is
+         * a formatter, never a lookup key. An owner the build no longer has (a
+         * save that outlived an edit) keeps the id it arrived with: there is no
+         * gameId left to give it, which is the rule a load report's evictions
+         * have always used.
+         */
+        std::string addressOf(const std::string& kind, const std::string& id) const
+        {
+            const std::string* gameId = owners_.of(kind).gameId.get(id);
+            return kind + "." + (gameId ? *gameId : id);
+        }
+
+        /**
+         * Resolve a property address's owner segment to the internal id the
+         * stores are keyed by. `outLegacy` says the caller used the pre-4.4
+         * form - an internal id where a gameId belongs - which resolves for
+         * THIS release and earns a diagnostic; the next lockstep release
+         * refuses it. False when the segment names no owner at all, which is
+         * the caller's "no <kind> store" error.
+         */
+        bool resolveOwner(const std::string& kind, const std::string& segment,
+            std::string& outId, bool& outLegacy) const
+        {
+            const detail::OwnerIndex& index = owners_.of(kind);
+            const std::string* byGameId = index.id.get(segment);
+            if (byGameId)
+            {
+                outId = *byGameId;
+                outLegacy = false;
+                return true;
+            }
+            // A gameId that equals its id took the branch above, so anything
+            // reaching here and known as an id is genuinely the old spelling.
+            if (index.gameId.contains(segment))
+            {
+                outId = segment;
+                outLegacy = true;
+                return true;
+            }
+            return false;
+        }
+
+        /** What a legacy address is told. It NAMES the address to move to,
+         *  because "that form is deprecated" without the replacement leaves a
+         *  host grepping a bundle for ids it never chose. */
+        std::string legacyAddressMessage(const std::string& kind, const std::string& segment,
+            const std::string& name) const
+        {
+            return "\"" + kind + "." + segment + "." + name + "\" names the " + kind
+                + " by its internal id; write \"" + addressOf(kind, segment) + "." + name + "\". "
+                + "The internal-id form is refused after the next release.";
+        }
+
+        /** The engine's own surface has no flow, so an engine-level diagnostic
+         *  carries the EMPTY flow id - the same way a LoadReport's shared half
+         *  carries no flow. It reaches the run log and the engine tap; there is
+         *  nowhere else for it to go, and it fires only on a legacy address.
+         *  const because getProperty is, with Flow::diagnose's own const_cast
+         *  and for the same reason. */
+        void diagnose(const std::string& message) const
+        {
+            TraceEvent evt;
+            evt.kind = TraceEvent::Kind::Diagnostic;
+            evt.where = "property address";
+            evt.message = message;
+            const_cast<Engine*>(this)->emitEngine("", evt, std::nullopt);
+        }
+
+        /** One owned-scope address, resolved: the store's internal id, and
+         *  whether the caller spelled the owner the pre-4.4 way. Resolved ONCE
+         *  per call and handed to whichever half needs it, so the read that
+         *  refuses a write and the write itself can never disagree about which
+         *  store an address names. */
+        struct OwnedAddress
+        {
+            std::string kind;
+            std::string segment;
+            std::string id;
+            std::string name;
+            bool legacy = false;
+        };
+
+        /** Resolve an owned-scope path ("box.village.heat") for both property
+         *  verbs, diagnostic and all. Throws for an owner segment that names
+         *  nothing at all. */
+        OwnedAddress resolveOwned(const std::vector<std::string>& parts) const
+        {
+            OwnedAddress owned;
+            owned.kind = parts[0];
+            owned.segment = parts[1];
+            owned.name = parts[2];
+            if (!resolveOwner(owned.kind, owned.segment, owned.id, owned.legacy))
+            {
+                throw StoryletError("no " + owned.kind + " store \"" + owned.segment + "\"");
+            }
+            if (owned.legacy) diagnose(legacyAddressMessage(owned.kind, owned.segment, owned.name));
+            return owned;
+        }
+
+        /** The read half of getProperty, over an owner segment already
+         *  resolved. setProperty routes its refusals through this same call. */
+        StoryletValue readShared(const std::string& path, const std::vector<std::string>& parts,
+            const std::optional<OwnedAddress>& owned) const;
+
         /** Build the shared stores and the @world seam. */
         void initShared()
         {
@@ -729,20 +924,20 @@ namespace storylets
             shared.story = bagFromDecls(half("story", bundle_->story.properties, true), "story.");
             for (const auto& box : bundle_->boxes)
             {
-                shared.box.set(box.id, bagFromDecls(half("box", box.properties, true), "box." + box.id + "."));
+                shared.box.set(box.id, bagFromDecls(half("box", box.properties, true), addressOf("box", box.id) + "."));
                 for (const auto& deck : box.decks)
                 {
-                    shared.deck.set(deck.id, bagFromDecls(half("deck", deck.properties, true), "deck." + deck.id + "."));
+                    shared.deck.set(deck.id, bagFromDecls(half("deck", deck.properties, true), addressOf("deck", deck.id) + "."));
                 }
                 for (const auto& hand : box.hands)
                 {
-                    shared.hand.set(hand.id, bagFromDecls(half("hand", handDecls(hand), true), "hand." + hand.id + "."));
+                    shared.hand.set(hand.id, bagFromDecls(half("hand", handDecls(hand), true), addressOf("hand", hand.id) + "."));
                 }
                 for (const auto& group : box.tagGroups)
                 {
                     for (const auto& tag : group.tags)
                     {
-                        shared.value.set(tag.id, bagFromDecls(half("value", tag.properties, true), "value." + tag.id + "."));
+                        shared.value.set(tag.id, bagFromDecls(half("value", tag.properties, true), addressOf("value", tag.id) + "."));
                     }
                 }
             }
@@ -852,6 +1047,8 @@ namespace storylets
         OrderedMap<std::string, const Box*> boxesById_;
         OrderedMap<std::string, detail::HandInBox> handsById_;
         OrderedMap<std::string, detail::HandInBox> handsByGameId_;
+        /** The owner segment of a property address, both ways round (4.4). */
+        detail::OwnerIndexes owners_;
         OrderedMap<std::string, const HandTemplate*> templatesById_;
         OrderedMap<std::string, detail::GroupInBox> groupsById_;
         std::unordered_set<std::string> requiredGroups_;
@@ -884,10 +1081,10 @@ namespace storylets
         {
             const detail::FlowDecls& fd = engine_->flowDecls_;
             stores_.story = Engine::bagFromDecls(fd.story, "story.");
-            for (const auto& pair : fd.box) stores_.box.set(pair.first, Engine::bagFromDecls(pair.second, "box." + pair.first + "."));
-            for (const auto& pair : fd.deck) stores_.deck.set(pair.first, Engine::bagFromDecls(pair.second, "deck." + pair.first + "."));
-            for (const auto& pair : fd.hand) stores_.hand.set(pair.first, Engine::bagFromDecls(pair.second, "hand." + pair.first + "."));
-            for (const auto& pair : fd.value) stores_.value.set(pair.first, Engine::bagFromDecls(pair.second, "value." + pair.first + "."));
+            for (const auto& pair : fd.box) stores_.box.set(pair.first, Engine::bagFromDecls(pair.second, engine_->addressOf("box", pair.first) + "."));
+            for (const auto& pair : fd.deck) stores_.deck.set(pair.first, Engine::bagFromDecls(pair.second, engine_->addressOf("deck", pair.first) + "."));
+            for (const auto& pair : fd.hand) stores_.hand.set(pair.first, Engine::bagFromDecls(pair.second, engine_->addressOf("hand", pair.first) + "."));
+            for (const auto& pair : fd.value) stores_.value.set(pair.first, Engine::bagFromDecls(pair.second, engine_->addressOf("value", pair.first) + "."));
             for (const auto& box : engine_->bundle_->boxes)
             {
                 turnCounts_.set(box.id, 0);
@@ -989,8 +1186,9 @@ namespace storylets
             }
             if (trace)
             {
+                // Keyed by GAMEID, as the trace rows are (4.4).
                 std::unordered_set<std::string> taken;
-                for (const auto& e : listed) taken.insert(e.card->id);
+                for (const auto& e : listed) taken.insert(EffectiveGameId(*e.card));
                 capTrace(*trace, taken);
                 TraceEvent evt;
                 evt.kind = TraceEvent::Kind::Peek;
@@ -1060,10 +1258,15 @@ namespace storylets
                 // Trace events fire after the state they report has landed (a
                 // handler reading the board sees the eviction), so they are
                 // collected here and emitted once the survivors are set.
+                // The card is named by gameId (4.4). A card the build no longer
+                // has - the "vanished" branch below - has no gameId left, so it
+                // is named by the id the board carries, which is the rule a load
+                // report has always used for the same reason.
                 std::vector<std::pair<std::string, std::string>> evicted;
                 auto evict = [&](const std::string& cardId, const std::string& reason)
                 {
-                    evicted.emplace_back(cardId, reason);
+                    const CardEntry* known = engine_->cardsById_.get(cardId);
+                    evicted.emplace_back(known ? EffectiveGameId(*known->card) : cardId, reason);
                     return false;
                 };
                 const std::vector<std::string>* contents = boardContents_.get(hand.id);
@@ -1097,7 +1300,7 @@ namespace storylets
                     {
                         TraceEvent evt;
                         evt.kind = TraceEvent::Kind::Evict;
-                        evt.hand = hand.id;
+                        evt.hand = EffectiveGameId(hand);
                         evt.card = e.first;
                         evt.reason = e.second;
                         emit(std::move(evt), boxTurn);
@@ -1134,8 +1337,16 @@ namespace storylets
                 size_t take = std::isinf(free)
                     ? run.ordered.size()
                     : std::min(static_cast<size_t>(free), run.ordered.size());
+                // `added` is what the BOARD holds (internal ids); `taking` is
+                // the same cards as the trace names them (gameIds). The two must
+                // move together or every dealt card silently reads as capped.
                 std::vector<std::string> added;
-                for (size_t i = 0; i < take; ++i) added.push_back(run.ordered[i].card->id);
+                std::unordered_set<std::string> taking;
+                for (size_t i = 0; i < take; ++i)
+                {
+                    added.push_back(run.ordered[i].card->id);
+                    taking.insert(EffectiveGameId(*run.ordered[i].card));
+                }
                 std::vector<std::string> next = contents;
                 next.insert(next.end(), added.begin(), added.end());
                 boardContents_.set(hand.id, std::move(next));
@@ -1143,8 +1354,7 @@ namespace storylets
                 // Emitted after the hand is set: a handler reading board() sees the deal.
                 if (trace)
                 {
-                    std::unordered_set<std::string> taken(added.begin(), added.end());
-                    capTrace(*trace, taken);
+                    capTrace(*trace, taking);
                     TraceEvent evt;
                     evt.kind = TraceEvent::Kind::Deal;
                     evt.hand = EffectiveGameId(hand);
@@ -1338,7 +1548,7 @@ namespace storylets
             {
                 TraceEvent evt;
                 evt.kind = TraceEvent::Kind::Play;
-                evt.card = entry.card->id;
+                evt.card = EffectiveGameId(*entry.card);
                 evt.outcome = EffectiveGameId(*outcome);
                 evt.turn = newTurn;
                 emit(std::move(evt), newTurn);
@@ -2184,12 +2394,15 @@ namespace storylets
             RunAskResult result;
             result.handEnv = buildHandEnv(ask);
             const HandEnv& handEnv = result.handEnv;
-            auto verdict = [trace](const std::string& id, TraceVerdict v)
+            // Identity on the trace is by gameId (4.4), so the helper takes the
+            // CARD rather than an id: every call site had one in hand, and
+            // taking the id was the whole of how the two vocabularies got mixed.
+            auto verdict = [trace](const Card& card, TraceVerdict v)
             {
                 if (trace)
                 {
                     TraceCard tc;
-                    tc.id = id;
+                    tc.id = EffectiveGameId(card);
                     tc.verdict = v;
                     trace->push_back(std::move(tc));
                 }
@@ -2228,7 +2441,7 @@ namespace storylets
                     const bool shared = cardIsShared(card, deckShared);
                     if (!gateOk[deck.id])
                     {
-                        verdict(card.id, TraceVerdict::DeckGate);
+                        verdict(card, TraceVerdict::DeckGate);
                         continue;
                     }
                     // Taken out of the world by somebody's shared one-shot.
@@ -2237,17 +2450,17 @@ namespace storylets
                     // to do with it.
                     if (shared && engine_->isTaken(card.id))
                     {
-                        verdict(card.id, TraceVerdict::Taken);
+                        verdict(card, TraceVerdict::Taken);
                         continue;
                     }
                     if (cooldowns_.getOr(card.id, 0) > boxTurn)
                     {
-                        verdict(card.id, TraceVerdict::Cooldown);
+                        verdict(card, TraceVerdict::Cooldown);
                         continue;
                     }
                     if (!tagsMatch(card, handEnv.boundTags))
                     {
-                        verdict(card.id, TraceVerdict::Tags);
+                        verdict(card, TraceVerdict::Tags);
                         continue;
                     }
                     EvalContext& ctx = deckCtx;
@@ -2257,13 +2470,13 @@ namespace storylets
                     if (card.condition && !passes(card.condition, ctx,
                         tracing() ? "card " + card.gameId + " condition" : std::string()))
                     {
-                        verdict(card.id, TraceVerdict::Condition);
+                        verdict(card, TraceVerdict::Condition);
                         continue;
                     }
                     std::optional<TraceVerdict> refused = claimed(card, shared);   // claims, last (3.1 step 6)
                     if (refused.has_value())
                     {
-                        verdict(card.id, *refused);
+                        verdict(card, *refused);
                         continue;
                     }
 
@@ -2279,7 +2492,7 @@ namespace storylets
                             StoryletValue v = eval(card.priorityExpr, ctx);
                             if (!v.isNumber())
                             {
-                                verdict(card.id, TraceVerdict::Priority);
+                                verdict(card, TraceVerdict::Priority);
                                 continue;
                             }
                             priority = v.asNumber();
@@ -2294,7 +2507,7 @@ namespace storylets
                                 evt.message = e.what();
                                 emit(std::move(evt));
                             }
-                            verdict(card.id, TraceVerdict::Priority);
+                            verdict(card, TraceVerdict::Priority);
                             continue;
                         }
                     }
@@ -2350,7 +2563,7 @@ namespace storylets
                 for (const auto& s : scored)
                 {
                     TraceCard tc;
-                    tc.id = s.entry.card->id;
+                    tc.id = EffectiveGameId(*s.entry.card);
                     tc.verdict = TraceVerdict::Dealt;
                     tc.priority = s.priority;
                     tc.specificity = s.spec;
@@ -2361,7 +2574,9 @@ namespace storylets
             return result;
         }
 
-        /** Flip eligible-but-not-taken trace entries to "capped". */
+        /** Flip eligible-but-not-taken trace entries to "capped". `taken` is
+         *  keyed by GAMEID, as the trace rows are (4.4): the two must move
+         *  together or every dealt card silently reads as capped. */
         static void capTrace(std::vector<TraceCard>& trace, const std::unordered_set<std::string>& taken)
         {
             for (auto& entry : trace)
@@ -2430,6 +2645,28 @@ namespace storylets
             return resolved;
         }
 
+        /** One owned property's address, owner segment and all (4.4). */
+        std::string address(const std::string& kind, const std::string& id) const
+        {
+            return engine_->addressOf(kind, id);
+        }
+
+        /** The internal id an owned-scope address names, diagnosing the pre-4.4
+         *  internal-id form on the way past (4.4). Throws for an owner segment
+         *  that names nothing at all. */
+        std::string ownerId(const std::string& kind, const std::string& segment,
+            const std::string& name) const
+        {
+            std::string id;
+            bool legacy = false;
+            if (!engine_->resolveOwner(kind, segment, id, legacy))
+            {
+                throw StoryletError("no " + kind + " store \"" + segment + "\"");
+            }
+            if (legacy) diagnose("property address", engine_->legacyAddressMessage(kind, segment, name));
+            return id;
+        }
+
         /** Land one change in whichever partition declares the name: the
          *  flow's bag when the property is per-flow, the shared bag when it
          *  is shared. Returns the resolved store path (for the trace) and
@@ -2481,8 +2718,8 @@ namespace storylets
                 return result;
             }
             if (scope == "story") return landIn("story", std::string(), name, value, "story." + name);
-            if (scope == "box") return landIn("box", entry.box->id, name, value, "box." + entry.box->id + "." + name);
-            if (scope == "deck") return landIn("deck", entry.deck->id, name, value, "deck." + entry.deck->id + "." + name);
+            if (scope == "box") return landIn("box", entry.box->id, name, value, address("box", entry.box->id) + "." + name);
+            if (scope == "deck") return landIn("deck", entry.deck->id, name, value, address("deck", entry.deck->id) + "." + name);
             if (scope == "hand")
             {
                 // Write-back routing (schema 3.6): the composed name remembers
@@ -2498,7 +2735,7 @@ namespace storylets
                 }
                 const char* kindName = source->second.kind == HandSource::Kind::Value ? "value" : "hand";
                 return landIn(kindName, source->second.id, name, value,
-                    std::string(kindName) + "." + source->second.id + "." + name);
+                    address(kindName, source->second.id) + "." + name);
             }
             throw StoryletError("bad change target scope \"@" + scope + "\"");
         }
@@ -2627,10 +2864,10 @@ namespace storylets
             assertOpen();
             std::vector<BagMount> mounts;
             mounts.push_back({"story", stores_.story});
-            for (const auto& pair : stores_.box) mounts.push_back({"box." + pair.first, pair.second});
-            for (const auto& pair : stores_.deck) mounts.push_back({"deck." + pair.first, pair.second});
-            for (const auto& pair : stores_.hand) mounts.push_back({"hand." + pair.first, pair.second});
-            for (const auto& pair : stores_.value) mounts.push_back({"value." + pair.first, pair.second});
+            for (const auto& pair : stores_.box) mounts.push_back({address("box", pair.first), pair.second});
+            for (const auto& pair : stores_.deck) mounts.push_back({address("deck", pair.first), pair.second});
+            for (const auto& pair : stores_.hand) mounts.push_back({address("hand", pair.first), pair.second});
+            for (const auto& pair : stores_.value) mounts.push_back({address("value", pair.first), pair.second});
             return mounts;
         }
 
@@ -2675,9 +2912,14 @@ namespace storylets
             return rows;
         }
 
-        /** Read by path: "world.x", "story.gold", "value.v_docks.danger",
-         *  "box.b_x.heat" - the flow's merged view, routed by the
-         *  declaration's sharing. */
+        /** Read by path: "world.x", "story.gold", "value.docks.danger",
+         *  "box.village.heat", "deck.wares.n", "hand.the-elder.zone" - the
+         *  flow's merged view, routed by the declaration's sharing.
+         *
+         *  The owner segment is the entity's GAMEID, the name it is called by
+         *  everywhere else (4.4). Its internal id is accepted for this release
+         *  and earns a diagnostic naming the address to move to; the next
+         *  lockstep release refuses it. */
         StoryletValue getProperty(const std::string& path) const
         {
             assertOpen();
@@ -2692,11 +2934,11 @@ namespace storylets
                 value = stores_.story->get(parts[1]);
                 if (!value.has_value()) value = engine_->shared_.story->get(parts[1]);
             }
-            else if (parts.size() == 3
-                && (parts[0] == "box" || parts[0] == "deck" || parts[0] == "hand" || parts[0] == "value"))
+            else if (parts.size() == 3 && detail::IsOwnedScope(parts[0]))
             {
-                const PropertyBag* own = bagOf(kindOf(stores_, parts[0]), parts[1]);
-                const PropertyBag* shared = bagOf(kindOf(engine_->shared_, parts[0]), parts[1]);
+                const std::string id = ownerId(parts[0], parts[1], parts[2]);
+                const PropertyBag* own = bagOf(kindOf(stores_, parts[0]), id);
+                const PropertyBag* shared = bagOf(kindOf(engine_->shared_, parts[0]), id);
                 if (!own && !shared) throw StoryletError("no " + parts[0] + " store \"" + parts[1] + "\"");
                 if (own) value = own->get(parts[2]);
                 if (!value.has_value() && shared) value = shared->get(parts[2]);
@@ -2731,11 +2973,11 @@ namespace storylets
                 shared = engine_->shared_.story.get();
                 name = parts[1];
             }
-            else if (parts.size() == 3
-                && (parts[0] == "box" || parts[0] == "deck" || parts[0] == "hand" || parts[0] == "value"))
+            else if (parts.size() == 3 && detail::IsOwnedScope(parts[0]))
             {
-                own = const_cast<PropertyBag*>(bagOf(kindOf(stores_, parts[0]), parts[1]));
-                shared = const_cast<PropertyBag*>(bagOf(kindOf(engine_->shared_, parts[0]), parts[1]));
+                const std::string id = ownerId(parts[0], parts[1], parts[2]);
+                own = const_cast<PropertyBag*>(bagOf(kindOf(stores_, parts[0]), id));
+                shared = const_cast<PropertyBag*>(bagOf(kindOf(engine_->shared_, parts[0]), id));
                 if (!own && !shared) throw StoryletError("no " + parts[0] + " store \"" + parts[1] + "\"");
                 name = parts[2];
             }
@@ -2846,13 +3088,16 @@ namespace storylets
         {
             boxesById_.set(box.id, &box);
             boxesByGameId_.set(EffectiveGameId(box), &box);
+            detail::IndexOwner(owners_.box, box);
             for (const auto& group : box.tagGroups)
             {
                 groupsById_.set(group.id, detail::GroupInBox{&group, &box});
                 if (group.required) requiredGroups_.insert(group.id);
+                for (const auto& tag : group.tags) detail::IndexOwner(owners_.value, tag);
             }
             for (const auto& deck : box.decks)
             {
+                detail::IndexOwner(owners_.deck, deck);
                 if (deck.shared) hasShared_ = true;
                 for (const auto& card : deck.cards)
                 {
@@ -2871,6 +3116,7 @@ namespace storylets
                 detail::HandInBox entry{&hand, &box};
                 handsById_.set(hand.id, entry);
                 handsByGameId_.set(EffectiveGameId(hand), entry);
+                detail::IndexOwner(owners_.hand, hand);
             }
         }
         initLadders();
@@ -3007,7 +3253,19 @@ namespace storylets
 
     inline StoryletValue Engine::getProperty(const std::string& path) const
     {
-        std::vector<std::string> parts = Flow::splitPath(path);
+        const std::vector<std::string> parts = Flow::splitPath(path);
+        // The owner segment is resolved ONCE, here, and handed on: setProperty
+        // reads through the same call with the same answer, so the read that
+        // refuses a write and the write itself can never disagree about which
+        // store an address names (4.4).
+        std::optional<OwnedAddress> owned;
+        if (parts.size() == 3 && detail::IsOwnedScope(parts[0])) owned = resolveOwned(parts);
+        return readShared(path, parts, owned);
+    }
+
+    inline StoryletValue Engine::readShared(const std::string& path, const std::vector<std::string>& parts,
+        const std::optional<OwnedAddress>& owned) const
+    {
         if (parts.size() == 2 && parts[0] == "world")
         {
             std::optional<StoryletValue> wv = worldGet(parts[1]);
@@ -3027,33 +3285,35 @@ namespace storylets
             }
             throw StoryletError("no property at \"" + path + "\"");
         }
-        if (parts.size() == 3
-            && (parts[0] == "box" || parts[0] == "deck" || parts[0] == "hand" || parts[0] == "value"))
+        if (owned.has_value())
         {
-            const OrderedMap<std::string, std::shared_ptr<PropertyBag>>& sharedKind = Flow::kindOf(shared_, parts[0]);
+            const std::string& kind = owned->kind;
+            const OrderedMap<std::string, std::shared_ptr<PropertyBag>>& sharedKind = Flow::kindOf(shared_, kind);
             const OrderedMap<std::string, std::vector<PropertyDecl>>& flowKind =
-                parts[0] == "box" ? flowDecls_.box
-                : parts[0] == "deck" ? flowDecls_.deck
-                : parts[0] == "hand" ? flowDecls_.hand
+                kind == "box" ? flowDecls_.box
+                : kind == "deck" ? flowDecls_.deck
+                : kind == "hand" ? flowDecls_.hand
                 : flowDecls_.value;
-            const std::shared_ptr<PropertyBag>* bag = sharedKind.get(parts[1]);
+            const std::shared_ptr<PropertyBag>* bag = sharedKind.get(owned->id);
             if (bag)
             {
-                std::optional<StoryletValue> v = (*bag)->get(parts[2]);
+                std::optional<StoryletValue> v = (*bag)->get(owned->name);
                 if (v.has_value()) return *v;
             }
-            const std::vector<PropertyDecl>* decls = flowKind.get(parts[1]);
+            const std::vector<PropertyDecl>* decls = flowKind.get(owned->id);
             if (decls)
             {
                 for (const auto& d : *decls)
                 {
-                    if (d.name == parts[2])
+                    if (d.name == owned->name)
                     {
                         throw StoryletError("\"" + path + "\" is per-flow state - read it on a Flow, not the Engine");
                     }
                 }
             }
-            if (!bag && !decls) throw StoryletError("no " + parts[0] + " store \"" + parts[1] + "\"");
+            // The error names the segment the CALLER wrote, never the id it
+            // resolved to: an address the reader did not type teaches nothing.
+            if (!bag && !decls) throw StoryletError("no " + kind + " store \"" + owned->segment + "\"");
             throw StoryletError("no property at \"" + path + "\"");
         }
         throw StoryletError("bad property path \"" + path + "\"");
@@ -3061,18 +3321,28 @@ namespace storylets
 
     inline void Engine::setProperty(const std::string& path, const StoryletValue& value)
     {
-        std::vector<std::string> parts = Flow::splitPath(path);
+        const std::vector<std::string> parts = Flow::splitPath(path);
         if (parts.size() == 2 && parts[0] == "world")
         {
             if (!worldCanSet()) throw StoryletError("@world is read-only here: the host bound no write");
             worldSet(parts[1], value, /*host=*/true);
             return;
         }
+        // Resolved once, then reused for both halves (4.4). The write used to
+        // re-split the path and dereference whatever kindOf found for it, which
+        // survived only because the read below had thrown first.
+        std::optional<OwnedAddress> owned;
+        if (parts.size() == 3 && detail::IsOwnedScope(parts[0])) owned = resolveOwned(parts);
         // Reuse the read-side routing: a per-flow or unknown ref throws the
         // same message before anything is written.
-        getProperty(path);
-        PropertyBag* bag = parts.size() == 2 ? shared_.story.get()
-            : Flow::kindOf(shared_, parts[0]).get(parts[1])->get();
+        readShared(path, parts, owned);
+        PropertyBag* bag = shared_.story.get();
+        if (owned.has_value())
+        {
+            const std::shared_ptr<PropertyBag>* found = Flow::kindOf(shared_, owned->kind).get(owned->id);
+            if (!found) throw StoryletError("no " + owned->kind + " store \"" + owned->segment + "\"");
+            bag = found->get();
+        }
         // A HOST write, in any scope: silent under the firing rule, visible to the
         // audit hook, and never refused by a `writable: false` - that flag is the
         // story's promise about its own outcomes, and this is the game speaking.
@@ -3208,7 +3478,11 @@ namespace storylets
             std::sort(ids.begin(), ids.end());
             for (const auto& id : ids)
             {
-                const std::string prefix = std::string(kind.name) + "." + id + ".";
+                // The report's `path` is exactly what listProperties() prints
+                // and what setProperty takes: one grammar, so an operator
+                // reading a hot-swap report can paste the address straight back
+                // in (4.4). An owner the build no longer has keeps its id.
+                const std::string prefix = addressOf(kind.name, id) + ".";
                 kind.out->set(id, detail::WalkScope(kind.decls->get(id),
                     kind.saved ? kind.saved->get(id) : nullptr, prefix, flow, draft));
             }

@@ -5,10 +5,13 @@
 // non-property state (turns / cooldowns / board) as flattened paths.
 //
 // Flattened path scheme (the JS play-helpers logger's, verbatim):
-//   world.x / story.x / box.<id>.x / deck.<id>.x / hand.<id>.x / value.<id>.x
+//   world.x / story.x / box.<gameId>.x / deck.<gameId>.x / hand.<gameId>.x /
+//   value.<gameId>.x  the property half, addressed as getProperty addresses it (4.4)
 //   turn:<boxId>      per-box clocks
 //   cooldown:<cardId> next-eligible turns
 //   board:<handId>    hand contents (card ids, dealt order)
+// The three colon keys stay on INTERNAL ids: they are the save envelope's own
+// keys, and a save is keyed by id so it survives a rename.
 // Line format: `${label}${path}: ${from} -> ${to}`, `<unset>` for nullopt.
 
 #pragma once
@@ -43,36 +46,32 @@ namespace storylets
     }
 
     /** The full flattened snapshot of ONE FLOW's view - the shared
-     *  partitions plus that flow's own - straight off the save envelope, so
-     *  "what the snapshot sees" is by construction "what a save persists".
-     *  @world is not here for the same reason it is not in the envelope:
-     *  the host owns that container and mounts/saves it itself. */
+     *  partitions plus that flow's own - plus its turns / cooldowns / board.
+     *  @world is not here for the same reason it is not in a save envelope:
+     *  the host owns that container and mounts/saves it itself.
+     *
+     *  Taken off the BAGS, which is what a save envelope is made of, rather
+     *  than off the envelope itself. The two used to be interchangeable; from
+     *  4.4 they are not, because a property ADDRESS names its owner by gameId
+     *  while the envelope stays keyed by internal id (a save has to survive a
+     *  rename). The bags carry the address, so reading them is what keeps this
+     *  snapshot and the live logger's lines in ONE path space. */
     inline StateSnapshot snapshotState(const Engine& engine, const Flow& flow)
     {
-        SaveEnvelope env = engine.saveGame();
-        const FlowSave* flowSave = env.flows.get(flow.id());
         StateSnapshot snapshot;
-        auto bag = [&snapshot](const std::string& prefix, const OrderedMap<std::string, StoryletValue>& values)
-        {
-            for (const auto& pair : values) snapshot.set(prefix + "." + pair.first, pair.second);
-        };
         // Shared under the flow's own: names are disjoint (shared XOR
         // per-flow by declaration), so one path space holds both.
-        bag("story", env.shared.props.story);
-        if (flowSave) bag("story", flowSave->props.story);
-        auto kind = [&bag](const char* k,
-            const OrderedMap<std::string, OrderedMap<std::string, StoryletValue>>& shared,
-            const OrderedMap<std::string, OrderedMap<std::string, StoryletValue>>* own)
+        std::vector<BagMount> mounts = engine.listBags();
+        const std::vector<BagMount> own = flow.listBags();
+        mounts.insert(mounts.end(), own.begin(), own.end());
+        for (const BagMount& mount : mounts)
         {
-            for (const auto& pair : shared) bag(std::string(k) + "." + pair.first, pair.second);
-            if (!own) return;
-            for (const auto& pair : *own) bag(std::string(k) + "." + pair.first, pair.second);
-        };
-        kind("box", env.shared.props.box, flowSave ? &flowSave->props.box : nullptr);
-        kind("deck", env.shared.props.deck, flowSave ? &flowSave->props.deck : nullptr);
-        kind("hand", env.shared.props.hand, flowSave ? &flowSave->props.hand : nullptr);
-        kind("value", env.shared.props.value, flowSave ? &flowSave->props.value : nullptr);
-        StateSnapshot extra = extraState(flowSave);
+            // The bag composes each row's address from its own pathPrefix, so
+            // no prefix is pasted on here: same strings, one owner.
+            for (const PropertyRow& row : mount.bag->rows()) snapshot.set(row.path, row.value);
+        }
+        const SaveEnvelope env = engine.saveGame();
+        StateSnapshot extra = extraState(env.flows.get(flow.id()));
         for (const auto& pair : extra) snapshot.set(pair.first, pair.second);
         return snapshot;
     }

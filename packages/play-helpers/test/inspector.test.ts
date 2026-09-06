@@ -157,7 +157,8 @@ describe("createPropertyInspector", () => {
     inspector.refresh();
     expect(logText()).toContain("deal seat:");
     expect(logText()).toContain("write story.gold: 10 -> 3");
-    expect(logText()).toContain("play c_a -> go");
+    // The log line names the card by gameId, as the trace now does (4.4).
+    expect(logText()).toContain("play a -> go");
 
     // Untick the Write kind: write lines disappear, deal lines stay.
     const writeToggle = [...inspector.el.querySelectorAll(".sl-logkind")]

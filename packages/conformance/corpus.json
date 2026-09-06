@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -2103,7 +2103,7 @@
       },
       "setup": {
         "value": {
-          "v_docks": {
+          "docks": {
             "danger": 3
           }
         }
@@ -2491,7 +2491,7 @@
       },
       "setup": {
         "value": {
-          "v_docks": {
+          "docks": {
             "danger": 2
           }
         }
@@ -4908,7 +4908,7 @@
             ]
           },
           "expectVerdicts": {
-            "c_patrol": "cooldown"
+            "patrol": "cooldown"
           }
         },
         {
@@ -4928,7 +4928,7 @@
             ]
           },
           "expectVerdicts": {
-            "c_patrol": "cooldown"
+            "patrol": "cooldown"
           }
         },
         {
@@ -6561,8 +6561,8 @@
         {
           "op": "assertState",
           "expect": {
-            "value.v_wood.peril": "tense",
-            "value.v_moor.peril": "calm"
+            "value.wood.peril": "tense",
+            "value.moor.peril": "calm"
           }
         },
         {
@@ -6580,7 +6580,7 @@
         {
           "op": "assertState",
           "expect": {
-            "value.v_wood.peril": "deadly"
+            "value.wood.peril": "deadly"
           }
         },
         {
@@ -6598,7 +6598,7 @@
         {
           "op": "assertState",
           "expect": {
-            "value.v_wood.peril": "deadly"
+            "value.wood.peril": "deadly"
           }
         }
       ]
@@ -8761,7 +8761,7 @@
         {
           "op": "assertState",
           "expect": {
-            "hand.h_elder.zone": "docks"
+            "hand.elder.zone": "docks"
           }
         },
         {
@@ -8779,7 +8779,7 @@
         {
           "op": "setState",
           "hand": {
-            "h_elder": {
+            "elder": {
               "zone": "market"
             }
           }
@@ -8796,13 +8796,13 @@
             ]
           },
           "expectVerdicts": {
-            "c_dockside": "tags"
+            "dockside": "tags"
           }
         },
         {
           "op": "assertState",
           "expect": {
-            "hand.h_elder.zone": "market"
+            "hand.elder.zone": "market"
           }
         }
       ]
@@ -9100,7 +9100,7 @@
           "op": "setState",
           "flow": "a",
           "hand": {
-            "h_elder": {
+            "elder": {
               "zone": "market"
             }
           }
@@ -9133,7 +9133,7 @@
           "op": "assertState",
           "flow": "b",
           "expect": {
-            "hand.h_elder.zone": "docks"
+            "hand.elder.zone": "docks"
           }
         }
       ]
@@ -9294,14 +9294,14 @@
           "op": "setState",
           "flow": "a",
           "hand": {
-            "h_elder": {
+            "elder": {
               "zone": "market"
             }
           }
         },
         {
           "op": "assertEngineRead",
-          "path": "hand.h_elder.zone",
+          "path": "hand.elder.zone",
           "expect": "market"
         },
         {
@@ -9622,7 +9622,7 @@
         {
           "op": "setState",
           "hand": {
-            "h_elder": {
+            "elder": {
               "zone": "market"
             }
           }
@@ -9644,7 +9644,7 @@
         {
           "op": "assertState",
           "expect": {
-            "hand.h_elder.zone": "market"
+            "hand.elder.zone": "market"
           }
         },
         {
@@ -9810,7 +9810,7 @@
         {
           "op": "setState",
           "hand": {
-            "h_elder": {
+            "elder": {
               "zone": "market"
             }
           }
@@ -11639,7 +11639,7 @@
         {
           "op": "assertState",
           "expect": {
-            "value.v_docks.danger": 1
+            "value.docks.danger": 1
           }
         },
         {
@@ -11662,7 +11662,7 @@
         {
           "op": "assertState",
           "expect": {
-            "value.v_docks.danger": 2
+            "value.docks.danger": 2
           }
         }
       ]
@@ -12317,8 +12317,8 @@
         {
           "op": "assertState",
           "expect": {
-            "box.b_x.heat": 1,
-            "deck.k_main.visits": 1
+            "box.box.heat": 1,
+            "deck.main.visits": 1
           }
         }
       ]
@@ -12476,7 +12476,7 @@
         {
           "op": "assertState",
           "expect": {
-            "hand.h_elder.uses": 1
+            "hand.elder.uses": 1
           }
         }
       ]
@@ -14997,7 +14997,7 @@
           "op": "setState",
           "flow": "alice",
           "value": {
-            "v_docks": {
+            "docks": {
               "danger": 3
             }
           }
@@ -15006,26 +15006,26 @@
           "op": "assertState",
           "flow": "alice",
           "expect": {
-            "value.v_docks.danger": 3
+            "value.docks.danger": 3
           }
         },
         {
           "op": "assertState",
           "flow": "bob",
           "expect": {
-            "value.v_docks.danger": 0
+            "value.docks.danger": 0
           }
         },
         {
           "op": "assertEngineRead",
-          "path": "value.v_docks.danger",
+          "path": "value.docks.danger",
           "expectError": true
         },
         {
           "op": "setState",
           "flow": "alice",
           "box": {
-            "b_x": {
+            "box": {
               "heat": 2
             }
           }
@@ -15034,12 +15034,12 @@
           "op": "assertState",
           "flow": "bob",
           "expect": {
-            "box.b_x.heat": 2
+            "box.box.heat": 2
           }
         },
         {
           "op": "assertEngineRead",
-          "path": "box.b_x.heat",
+          "path": "box.box.heat",
           "expect": 2
         }
       ]
@@ -15539,7 +15539,7 @@
           "op": "setState",
           "flow": "alice",
           "box": {
-            "b_x": {
+            "box": {
               "heat": 1
             }
           }
@@ -15560,7 +15560,7 @@
           "op": "setState",
           "flow": "bob",
           "value": {
-            "v_docks": {
+            "docks": {
               "danger": 5
             }
           }
@@ -16144,7 +16144,7 @@
             "h_q": []
           },
           "expectVerdicts": {
-            "c_goblin": "claimed-elsewhere"
+            "goblin": "claimed-elsewhere"
           }
         },
         {
@@ -16152,7 +16152,7 @@
           "flow": "bob",
           "expect": [],
           "expectVerdicts": {
-            "c_goblin": "claimed-elsewhere"
+            "goblin": "claimed-elsewhere"
           }
         }
       ]
@@ -16411,7 +16411,7 @@
           "op": "setState",
           "flow": "alice",
           "box": {
-            "b_x": {
+            "box": {
               "open": false
             }
           }
@@ -16553,7 +16553,7 @@
             "h_q2": []
           },
           "expectVerdicts": {
-            "c_ticket": "claimed"
+            "ticket": "claimed"
           }
         },
         {
@@ -16578,7 +16578,7 @@
             "h_q1": []
           },
           "expectVerdicts": {
-            "c_ticket": "claimed-elsewhere"
+            "ticket": "claimed-elsewhere"
           }
         }
       ]
@@ -16812,7 +16812,7 @@
             ]
           },
           "expectVerdicts": {
-            "c_unique": "claimed-elsewhere"
+            "unique": "claimed-elsewhere"
           }
         }
       ]
@@ -16934,7 +16934,7 @@
             "h_q": []
           },
           "expectVerdicts": {
-            "c_pixie": "taken"
+            "pixie": "taken"
           }
         },
         {
@@ -16947,7 +16947,7 @@
             "h_q": []
           },
           "expectVerdicts": {
-            "c_pixie": "taken"
+            "pixie": "taken"
           }
         }
       ]
@@ -17072,7 +17072,7 @@
             "h_q": []
           },
           "expectVerdicts": {
-            "c_pixie": "taken"
+            "pixie": "taken"
           }
         }
       ]
@@ -17206,7 +17206,7 @@
             "h_q": []
           },
           "expectVerdicts": {
-            "c_goblin": "cooldown"
+            "goblin": "cooldown"
           }
         }
       ]
@@ -18455,7 +18455,7 @@
             "h_q": []
           },
           "expectVerdicts": {
-            "c_relic": "claimed-elsewhere"
+            "relic": "claimed-elsewhere"
           }
         },
         {
@@ -18474,7 +18474,7 @@
             ]
           },
           "expectVerdicts": {
-            "c_relic": "dealt"
+            "relic": "dealt"
           }
         },
         {
@@ -18738,7 +18738,7 @@
             "defaultedProperties": [
               {
                 "flow": "alice",
-                "path": "box.b_x.heat"
+                "path": "box.box.heat"
               }
             ]
           }
@@ -18756,7 +18756,7 @@
           "op": "assertState",
           "flow": "alice",
           "expect": {
-            "box.b_x.heat": 3
+            "box.box.heat": 3
           }
         }
       ]
@@ -20260,6 +20260,679 @@
           "op": "assertState",
           "expect": {
             "story.weather": "fair"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a property address names its owner by gameId, in every owned scope",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [
+              {
+                "name": "heat",
+                "type": "number",
+                "default": 0
+              }
+            ],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [
+                  {
+                    "name": "visits",
+                    "type": "number",
+                    "default": 0
+                  }
+                ],
+                "cards": [
+                  {
+                    "id": "c_anywhere",
+                    "gameId": "anywhere",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_dockside",
+                    "gameId": "dockside",
+                    "priority": 3,
+                    "redraw": "always",
+                    "tags": {
+                      "d_zone": [
+                        "v_docks"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_stall",
+                    "gameId": "stall",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_zone": [
+                        "v_market"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [
+              {
+                "id": "t_npc",
+                "gameId": "npc",
+                "chooses": [
+                  "d_zone"
+                ],
+                "slots": "unbounded",
+                "properties": [
+                  {
+                    "name": "zone",
+                    "type": "enum",
+                    "values": [
+                      "docks",
+                      "market"
+                    ],
+                    "default": "docks"
+                  }
+                ]
+              }
+            ],
+            "hands": [
+              {
+                "id": "h_elder",
+                "gameId": "elder",
+                "template": "t_npc",
+                "chosen": {
+                  "d_zone": "@hand.zone"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "setState",
+          "box": {
+            "box": {
+              "heat": 4
+            }
+          },
+          "deck": {
+            "main": {
+              "visits": 2
+            }
+          },
+          "hand": {
+            "elder": {
+              "zone": "market"
+            }
+          },
+          "value": {
+            "docks": {
+              "danger": 3
+            }
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "box.box.heat": 4,
+            "deck.main.visits": 2,
+            "hand.elder.zone": "market",
+            "value.docks.danger": 3
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_elder"
+          ],
+          "expectBoard": {
+            "h_elder": [
+              "c_stall",
+              "c_anywhere"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "the old internal-id address still resolves, and says which form to use",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_any",
+                    "gameId": "any",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [
+              {
+                "id": "t_npc",
+                "gameId": "npc",
+                "slots": "unbounded",
+                "properties": [
+                  {
+                    "name": "uses",
+                    "type": "number",
+                    "default": 0
+                  }
+                ]
+              }
+            ],
+            "hands": [
+              {
+                "id": "h_elder",
+                "gameId": "elder",
+                "template": "t_npc"
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "setState",
+          "hand": {
+            "h_elder": {
+              "uses": 2
+            }
+          },
+          "expectDiagnostic": "hand.elder.uses"
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "hand.elder.uses": 2
+          }
+        },
+        {
+          "op": "setState",
+          "hand": {
+            "elder": {
+              "uses": 3
+            }
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "hand.elder.uses": 3
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_elder"
+          ],
+          "expectBoard": {
+            "h_elder": [
+              "c_any"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "evict and play name gameIds on the trace",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [
+              {
+                "name": "open",
+                "type": "boolean",
+                "default": true
+              }
+            ],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_ambush",
+                    "gameId": "ambush",
+                    "condition": {
+                      "src": "@box.open",
+                      "ast": [
+                        "sv",
+                        "box",
+                        "open"
+                      ]
+                    },
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_calm",
+                    "gameId": "calm",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_done",
+                        "gameId": "done",
+                        "changes": {}
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_watch",
+                "gameId": "watch",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_watch"
+          ],
+          "expectBoard": {
+            "h_watch": [
+              "c_ambush",
+              "c_calm"
+            ]
+          }
+        },
+        {
+          "op": "setState",
+          "box": {
+            "box": {
+              "open": false
+            }
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_watch"
+          ],
+          "expectBoard": {
+            "h_watch": [
+              "c_calm"
+            ]
+          },
+          "expectTrace": [
+            "evict watch ambush condition"
+          ]
+        },
+        {
+          "op": "play",
+          "card": "c_calm",
+          "outcome": "done",
+          "from": "h_watch",
+          "expectTrace": [
+            "play calm done"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a load report addresses an owned property by gameId",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_any",
+                    "gameId": "any",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [
+              {
+                "id": "t_npc",
+                "gameId": "npc",
+                "slots": "unbounded",
+                "properties": [
+                  {
+                    "name": "uses",
+                    "type": "number",
+                    "default": 0
+                  }
+                ]
+              }
+            ],
+            "hands": [
+              {
+                "id": "h_elder",
+                "gameId": "elder",
+                "template": "t_npc"
+              }
+            ]
+          }
+        ]
+      },
+      "bundleB": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_any",
+                    "gameId": "any",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [
+              {
+                "id": "t_npc",
+                "gameId": "npc",
+                "slots": "unbounded",
+                "properties": []
+              }
+            ],
+            "hands": [
+              {
+                "id": "h_elder",
+                "gameId": "elder",
+                "template": "t_npc"
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "setState",
+          "hand": {
+            "elder": {
+              "uses": 2
+            }
+          }
+        },
+        {
+          "op": "saveLoad",
+          "into": "B",
+          "expectReport": {
+            "exact": false,
+            "project": "conf",
+            "flows": [
+              "main"
+            ],
+            "droppedProperties": [
+              {
+                "flow": "main",
+                "path": "hand.elder.uses"
+              }
+            ]
           }
         }
       ]

@@ -217,7 +217,7 @@ export const fixtures: Fixtures = {
       expect: ["c_any"] },
 
     { name: "tag properties compose into @hand",
-      setup: { value: { v_docks: { danger: 3 } } },
+      setup: { value: { docks: { danger: 3 } } },
       cards: [{ id: "c_risky", condition: "@hand.danger >= 2" }],
       criteria: { zone: "docks" },
       expect: ["c_risky"] },
@@ -244,7 +244,7 @@ export const fixtures: Fixtures = {
       expect: ["c_both"] },
 
     { name: "a deck gate may read @hand (open)",
-      setup: { value: { v_docks: { danger: 2 } } },
+      setup: { value: { docks: { danger: 2 } } },
       decks: [{ id: "k_hot", condition: "@hand.danger >= 1", cards: [{ id: "c_g" }] }],
       criteria: { zone: "docks" },
       expect: ["c_g"] },
@@ -329,6 +329,15 @@ export const fixtures: Fixtures = {
     { name: "a tag bound by name binds the asked box's tag, not the other box's",
       // Only b_y's `v_docks_y` carries danger 3; b_x's `v_docks` keeps its
       // default 0. Asking b_x must compose b_x's tag properties.
+      //
+      // Addressed by INTERNAL ID on purpose, and it is the one selector in the
+      // corpus that is: both tags carry the gameId "docks" (tag gameIds are
+      // unique within a group, and groups within a box), so `value.docks`
+      // names the first of the two in bundle order - b_x's - and b_y's is
+      // reachable only by id. The legacy form is accepted for this release
+      // (4.4), which is what makes this case pass unchanged; the collision
+      // itself is why the value scope cannot lose the id form on the same
+      // timetable as the other three.
       setup: { value: { v_docks_y: { danger: 3 } } },
       cards: [
         { id: "c_xcalm", priority: 1, condition: "@hand.danger == 0" },
@@ -465,10 +474,10 @@ export const fixtures: Fixtures = {
         // would see the cooldown out. Here they are worth nothing at all.
         { op: "play", card: "c_filler", outcome: "done", from: "h_q" },
         { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_filler"] },
-          expectVerdicts: { c_patrol: "cooldown" } },
+          expectVerdicts: { patrol: "cooldown" } },
         { op: "play", card: "c_filler", outcome: "done", from: "h_q" },
         { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_filler"] },
-          expectVerdicts: { c_patrol: "cooldown" } },
+          expectVerdicts: { patrol: "cooldown" } },
         { op: "play", card: "c_filler", outcome: "done", from: "h_q" },
         { op: "assertState", expect: { "turn.b_x": 0 } },
         // Three ticks of the host's clock, which is three minutes of the run.
@@ -666,14 +675,14 @@ export const fixtures: Fixtures = {
         { op: "play", card: "c_stir", outcome: "up", from: "h_wood" },
         // the write routes to the tag the hand was bound to, and the other
         // tag's copy of the same name is untouched
-        { op: "assertState", expect: { "value.v_wood.peril": "tense", "value.v_moor.peril": "calm" } },
+        { op: "assertState", expect: { "value.wood.peril": "tense", "value.moor.peril": "calm" } },
         { op: "deal", hands: ["h_wood"] },
         { op: "play", card: "c_stir", outcome: "up", from: "h_wood" },
-        { op: "assertState", expect: { "value.v_wood.peril": "deadly" } },
+        { op: "assertState", expect: { "value.wood.peril": "deadly" } },
         { op: "deal", hands: ["h_wood"] },
         { op: "play", card: "c_stir", outcome: "up", from: "h_wood" },
         // saturates on the tag exactly as it does in any other scope
-        { op: "assertState", expect: { "value.v_wood.peril": "deadly" } },
+        { op: "assertState", expect: { "value.wood.peril": "deadly" } },
       ] },
 
     { name: "advance steps the ladder and saturates at the last stage",
@@ -944,18 +953,18 @@ export const fixtures: Fixtures = {
       script: [
         // The hole is the property's value: "docks", so the Elder's hand is the
         // docks card plus the untagged one (a card naming no tag is a wildcard).
-        { op: "assertState", expect: { "hand.h_elder.zone": "docks" } },
+        { op: "assertState", expect: { "hand.elder.zone": "docks" } },
         { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside", "c_anywhere"] } },
         // Rebinding IS setProperty. The next deal follows: the eviction pass
         // that already exists drops the docks card with verdict `tags`, the
         // untagged one keeps its seat, and the market card is added after it.
-        { op: "setState", hand: { h_elder: { zone: "market" } } },
+        { op: "setState", hand: { elder: { zone: "market" } } },
         { op: "deal", hands: ["h_elder"],
           expectBoard: { h_elder: ["c_anywhere", "c_stall"] },
-          expectVerdicts: { c_dockside: "tags" } },
+          expectVerdicts: { dockside: "tags" } },
         // And @hand.zone reads back as the group's name would: a card must not
         // care HOW the hole was filled.
-        { op: "assertState", expect: { "hand.h_elder.zone": "market" } },
+        { op: "assertState", expect: { "hand.elder.zone": "market" } },
       ] },
 
     { name: "a movable hole whose value names no tag binds nothing, and says so",
@@ -994,10 +1003,10 @@ export const fixtures: Fixtures = {
         { op: "deal", flow: "b", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside"] } },
         // A hand declaration is per-flow by default, so this is one party's
         // own "what is around me" hand, not a world fact.
-        { op: "setState", flow: "a", hand: { h_elder: { zone: "market" } } },
+        { op: "setState", flow: "a", hand: { elder: { zone: "market" } } },
         { op: "deal", flow: "a", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall"] } },
         { op: "deal", flow: "b", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside"] } },
-        { op: "assertState", flow: "b", expect: { "hand.h_elder.zone": "docks" } },
+        { op: "assertState", flow: "b", expect: { "hand.elder.zone": "docks" } },
       ] },
 
     { name: "a shared movable hole moves every flow",
@@ -1016,8 +1025,8 @@ export const fixtures: Fixtures = {
         { op: "deal", flow: "b", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside"] } },
         // `shared: true` makes the move a world fact: the performer is in one
         // place for everybody, so every flow's next deal follows.
-        { op: "setState", flow: "a", hand: { h_elder: { zone: "market" } } },
-        { op: "assertEngineRead", path: "hand.h_elder.zone", expect: "market" },
+        { op: "setState", flow: "a", hand: { elder: { zone: "market" } } },
+        { op: "assertEngineRead", path: "hand.elder.zone", expect: "market" },
         { op: "deal", flow: "a", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall"] } },
         { op: "deal", flow: "b", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall"] } },
       ] },
@@ -1053,13 +1062,13 @@ export const fixtures: Fixtures = {
       ],
       script: [
         { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside"] } },
-        { op: "setState", hand: { h_elder: { zone: "market" } } },
+        { op: "setState", hand: { elder: { zone: "market" } } },
         { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall"] } },
         // Nothing new rides the envelope: the binding IS the property, and the
         // property was always saved. Pinned anyway, because "it falls out" is
         // exactly the claim a corpus exists to check.
         { op: "saveLoad" },
-        { op: "assertState", expect: { "hand.h_elder.zone": "market" } },
+        { op: "assertState", expect: { "hand.elder.zone": "market" } },
         { op: "assertBoard", expect: { h_elder: ["c_stall"] } },
         { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall"] } },
       ] },
@@ -1080,7 +1089,7 @@ export const fixtures: Fixtures = {
       // stands still, off the same template.
       script: [
         { op: "deal", expectBoard: { h_elder: ["c_dockside"], h_stallholder: ["c_stall"] } },
-        { op: "setState", hand: { h_elder: { zone: "market" } } },
+        { op: "setState", hand: { elder: { zone: "market" } } },
         { op: "deal", expectBoard: { h_elder: ["c_stall"], h_stallholder: ["c_stall"] } },
       ] },
 
@@ -1275,10 +1284,10 @@ export const fixtures: Fixtures = {
       script: [
         { op: "deal", hands: ["h_docks"], expectBoard: { h_docks: ["c_riot"] } },
         { op: "play", card: "c_riot", outcome: "escalate", from: "h_docks" },
-        { op: "assertState", expect: { "value.v_docks.danger": 1 } },
+        { op: "assertState", expect: { "value.docks.danger": 1 } },
         { op: "deal", hands: ["h_docks"], expectBoard: { h_docks: ["c_riot"] } },
         { op: "play", card: "c_riot", outcome: "escalate", from: "h_docks" },
-        { op: "assertState", expect: { "value.v_docks.danger": 2 } },
+        { op: "assertState", expect: { "value.docks.danger": 2 } },
       ] },
 
     { name: "count_played feeds a condition from the play log",
@@ -1344,7 +1353,7 @@ export const fixtures: Fixtures = {
       script: [
         { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_a"] } },
         { op: "play", card: "c_a", outcome: "tag", from: "h_q" },
-        { op: "assertState", expect: { "box.b_x.heat": 1, "deck.k_main.visits": 1 } },
+        { op: "assertState", expect: { "box.box.heat": 1, "deck.main.visits": 1 } },
       ] },
 
     { name: "hand properties compose into @hand and write back",
@@ -1358,7 +1367,7 @@ export const fixtures: Fixtures = {
       script: [
         { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_topic"] } },
         { op: "play", card: "c_topic", outcome: "chat", from: "h_elder" },
-        { op: "assertState", expect: { "hand.h_elder.uses": 1 } },
+        { op: "assertState", expect: { "hand.elder.uses": 1 } },
       ] },
 
     { name: "count_played_in counts plays of a tag's cards",
@@ -1620,14 +1629,14 @@ export const fixtures: Fixtures = {
       hands: [{ id: "h_q", rule: {} }],
       script: [
         // The scaffold's v_docks danger (a tag property): per-flow by default.
-        { op: "setState", flow: "alice", value: { v_docks: { danger: 3 } } },
-        { op: "assertState", flow: "alice", expect: { "value.v_docks.danger": 3 } },
-        { op: "assertState", flow: "bob", expect: { "value.v_docks.danger": 0 } },
-        { op: "assertEngineRead", path: "value.v_docks.danger", expectError: true },
+        { op: "setState", flow: "alice", value: { docks: { danger: 3 } } },
+        { op: "assertState", flow: "alice", expect: { "value.docks.danger": 3 } },
+        { op: "assertState", flow: "bob", expect: { "value.docks.danger": 0 } },
+        { op: "assertEngineRead", path: "value.docks.danger", expectError: true },
         // The flagged box property: written through one flow, seen by the other.
-        { op: "setState", flow: "alice", box: { b_x: { heat: 2 } } },
-        { op: "assertState", flow: "bob", expect: { "box.b_x.heat": 2 } },
-        { op: "assertEngineRead", path: "box.b_x.heat", expect: 2 },
+        { op: "setState", flow: "alice", box: { box: { heat: 2 } } },
+        { op: "assertState", flow: "bob", expect: { "box.box.heat": 2 } },
+        { op: "assertEngineRead", path: "box.box.heat", expect: 2 },
       ] },
 
     { name: "each flow has its own clocks: there is deliberately no global turn",
@@ -1667,9 +1676,9 @@ export const fixtures: Fixtures = {
       hands: [{ id: "h_dock", rule: { bindings: { zone: "docks" } } }],
       script: [
         { op: "deal", flow: "bob", hands: ["h_dock"], expectBoard: { h_dock: [] } },   // heat 0 everywhere
-        { op: "setState", flow: "alice", box: { b_x: { heat: 1 } } },                  // shared: bob sees it
+        { op: "setState", flow: "alice", box: { box: { heat: 1 } } },                    // shared: bob sees it
         { op: "deal", flow: "bob", hands: ["h_dock"], expectBoard: { h_dock: ["c_hot"] } },
-        { op: "setState", flow: "bob", value: { v_docks: { danger: 5 } } },            // bob's own docks
+        { op: "setState", flow: "bob", value: { docks: { danger: 5 } } },              // bob's own docks
         { op: "deal", flow: "bob", hands: ["h_dock"], expectBoard: { h_dock: [] } },
         { op: "deal", flow: "alice", hands: ["h_dock"], expectBoard: { h_dock: ["c_hot"] } },   // alice's danger is still 0
       ] },
@@ -1741,9 +1750,9 @@ export const fixtures: Fixtures = {
         // Bob is refused, and told it is somebody else holding it - not his own
         // hand, which is what "claimed" would have said.
         { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: [] },
-          expectVerdicts: { c_goblin: "claimed-elsewhere" } },
+          expectVerdicts: { goblin: "claimed-elsewhere" } },
         // A peek respects the foreign claim too, and reports it the same way.
-        { op: "peek", flow: "bob", expect: [], expectVerdicts: { c_goblin: "claimed-elsewhere" } },
+        { op: "peek", flow: "bob", expect: [], expectVerdicts: { goblin: "claimed-elsewhere" } },
       ] },
 
     { name: "a shared claim is released by a play, and the card goes to whoever is next",
@@ -1767,7 +1776,7 @@ export const fixtures: Fixtures = {
         { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: [] } },
         // alice's own copy of the gate shuts, so her next deal evicts it; the
         // claim goes with it and bob can be dealt it.
-        { op: "setState", flow: "alice", box: { b_x: { open: false } } },
+        { op: "setState", flow: "alice", box: { box: { open: false } } },
         { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: [] } },
         { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: ["c_goblin"] } },
       ] },
@@ -1781,12 +1790,12 @@ export const fixtures: Fixtures = {
         // cap, which is the ordinary claim and says so.
         { op: "deal", flow: "alice", hands: ["h_q1"], expectBoard: { h_q1: ["c_ticket"] } },
         { op: "deal", flow: "alice", hands: ["h_q2"], expectBoard: { h_q2: [] },
-          expectVerdicts: { c_ticket: "claimed" } },
+          expectVerdicts: { ticket: "claimed" } },
         // Two in the world, so bob gets the second...
         { op: "deal", flow: "bob", hands: ["h_q1"], expectBoard: { h_q1: ["c_ticket"] } },
         // ...and the third participant gets nothing.
         { op: "deal", flow: "carol", hands: ["h_q1"], expectBoard: { h_q1: [] },
-          expectVerdicts: { c_ticket: "claimed-elsewhere" } },
+          expectVerdicts: { ticket: "claimed-elsewhere" } },
       ] },
 
     { name: "sharedCopies defaults to copies, so a shared card with no cap is one in the world",
@@ -1808,7 +1817,7 @@ export const fixtures: Fixtures = {
         // c_unique is shared despite its plain deck, so bob cannot have it;
         // c_common is not, despite its shared deck, so he can.
         { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: ["c_common"] },
-          expectVerdicts: { c_unique: "claimed-elsewhere" } },
+          expectVerdicts: { unique: "claimed-elsewhere" } },
       ] },
 
     { name: "shared redraw never is SPENT for everyone: the first to play it takes it out of the world",
@@ -1820,10 +1829,10 @@ export const fixtures: Fixtures = {
         { op: "play", flow: "alice", card: "c_pixie", outcome: "take", from: "h_q" },
         // Not "cooldown": bob never played it, and his own clock says nothing.
         { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: [] },
-          expectVerdicts: { c_pixie: "taken" } },
+          expectVerdicts: { pixie: "taken" } },
         // Alice is refused too, by the same shared ledger.
         { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: [] },
-          expectVerdicts: { c_pixie: "taken" } },
+          expectVerdicts: { pixie: "taken" } },
       ] },
 
     { name: "the spent set rides the save: a shared one-shot stays spent across a round trip",
@@ -1835,7 +1844,7 @@ export const fixtures: Fixtures = {
         { op: "play", flow: "alice", card: "c_pixie", outcome: "take", from: "h_q" },
         { op: "saveLoad" },
         { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: [] },
-          expectVerdicts: { c_pixie: "taken" } },
+          expectVerdicts: { pixie: "taken" } },
       ] },
 
     { name: "a finite redraw in a shared deck stays personal: back in the pool, but not for you yet",
@@ -1850,7 +1859,7 @@ export const fixtures: Fixtures = {
         // ...but alice, who just fought it, waits three of HER OWN turns. The
         // verdict is the ordinary one: this cooldown really is hers.
         { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: [] },
-          expectVerdicts: { c_goblin: "cooldown" } },
+          expectVerdicts: { goblin: "cooldown" } },
       ] },
 
     { name: "closing a flow releases its shared claims: a participant who leaves does not lock the world",
@@ -2012,11 +2021,11 @@ export const fixtures: Fixtures = {
       script: [
         { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_relic"] } },
         { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: [] },
-          expectVerdicts: { c_relic: "claimed-elsewhere" } },
+          expectVerdicts: { relic: "claimed-elsewhere" } },
         { op: "parkFlow", flow: "alice" },
         // Alice is away, so the world's only copy is free again.
         { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: ["c_relic"] },
-          expectVerdicts: { c_relic: "dealt" } },
+          expectVerdicts: { relic: "dealt" } },
         // She comes back to a world that has moved on. The restore is into a
         // LIVE engine, so the seat cannot simply be taken back: the card is
         // dropped and the report says which and why.
@@ -2053,10 +2062,10 @@ export const fixtures: Fixtures = {
           exact: false, project: "conf", flows: ["alice"],
           evicted: [{ flow: "alice", hand: "a", card: "c_gone", reason: "vanished" }],
           droppedCooldowns: [], droppedSpent: [], droppedProperties: [], retypedProperties: [],
-          defaultedProperties: [{ flow: "alice", path: "box.b_x.heat" }],
+          defaultedProperties: [{ flow: "alice", path: "box.box.heat" }],
         } },
         { op: "assertBoard", flow: "alice", expect: { h_a: ["c_stay"] } },
-        { op: "assertState", flow: "alice", expect: { "box.b_x.heat": 3 } },
+        { op: "assertState", flow: "alice", expect: { "box.box.heat": 3 } },
       ] },
 
     { name: "previewLoad prices a content update and leaves the game where it stood",
@@ -2214,6 +2223,116 @@ export const fixtures: Fixtures = {
           retypedProperties: [{ path: "story.weather" }],
         } },
         { op: "assertState", expect: { "story.weather": "fair" } },
+      ] },
+
+    // --- identity by gameId: trace events and property addresses (4.4) --------
+    //
+    // One grammar, one vocabulary. A trace event names entities by gameId -
+    // `deal.hand` and `peek.box` always did, and `evict.hand`, `play.card` and
+    // every `cards[].id` join them here - and a property ADDRESS names its
+    // owner the same way, so what `listProperties()` prints, what a load report
+    // says it dropped and what `setProperty` takes are one string. Until 4.4
+    // they were three: the docs' `setProperty("hand.the-elder.zone", ...)`
+    // answered `no hand store "the-elder"`, and two authors hit it in a day.
+    //
+    // The internal-id form is accepted on input for THIS release, with a
+    // diagnostic naming the address to move to, and refused after the next.
+
+    { name: "a property address names its owner by gameId, in every owned scope",
+      boxProperties: [{ name: "heat", type: "number", default: 0 }],
+      decks: [{
+        id: "k_main",
+        properties: [{ name: "visits", type: "number", default: 0 }],
+        cards: [
+          { id: "c_dockside", priority: 3, tags: { zone: ["docks"] } },
+          { id: "c_stall", priority: 2, tags: { zone: ["market"] } },
+          { id: "c_anywhere", priority: 1 },
+        ],
+      }],
+      templates: [{ id: "t_npc", chooses: ["zone"], properties: [
+        { name: "zone", type: "enum", values: ["docks", "market"], default: "docks" },
+      ] }],
+      hands: [{ id: "h_elder", template: "t_npc", chosen: { zone: "@hand.zone" } }],
+      script: [
+        // The scaffold's gameIds: b_x is "box", k_main is "main", h_elder is
+        // "elder", v_docks is "docks". None of them is the id.
+        { op: "setState",
+          box: { box: { heat: 4 } },
+          deck: { main: { visits: 2 } },
+          hand: { elder: { zone: "market" } },
+          value: { docks: { danger: 3 } } },
+        { op: "assertState", expect: {
+          "box.box.heat": 4, "deck.main.visits": 2,
+          "hand.elder.zone": "market", "value.docks.danger": 3 } },
+        // The write that moved the Elder is the one an author was told to make
+        // and could not: a movable hole (4.6) reads the hand's own property, so
+        // the address has to be the one a hand is called by out loud.
+        { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_stall", "c_anywhere"] } },
+      ] },
+
+    { name: "the old internal-id address still resolves, and says which form to use",
+      templates: [{ id: "t_npc", properties: [
+        { name: "uses", type: "number", default: 0 },
+      ] }],
+      hands: [{ id: "h_elder", template: "t_npc" }],
+      cards: [{ id: "c_any" }],
+      script: [
+        // Accepted for this release, so a host built against the old grammar
+        // keeps working - and TOLD, in the one place a runtime can speak, what
+        // to write instead. The message is prose; what is pinned is that the
+        // new address is in it, which is what makes it actionable.
+        { op: "setState", hand: { h_elder: { uses: 2 } },
+          expectDiagnostic: "hand.elder.uses" },
+        { op: "assertState", expect: { "hand.elder.uses": 2 } },
+        // And the new form says nothing: a diagnostic on every ordinary write
+        // would be noise, and a host could not tell the two apart.
+        { op: "setState", hand: { elder: { uses: 3 } } },
+        { op: "assertState", expect: { "hand.elder.uses": 3 } },
+        { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_any"] } },
+      ] },
+
+    { name: "evict and play name gameIds on the trace",
+      boxProperties: [{ name: "open", type: "boolean", default: true }],
+      cards: [
+        { id: "c_ambush", priority: 2, condition: "@box.open" },
+        { id: "c_calm", priority: 1, outcomes: [{ id: "o_done" }] },
+      ],
+      hands: [{ id: "h_watch", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_watch"], expectBoard: { h_watch: ["c_ambush", "c_calm"] } },
+        // Shutting the gate evicts the ambush. Both halves of that event were
+        // internal ids until 4.4, while the deal event beside it already said
+        // "watch": one refresh, two vocabularies.
+        { op: "setState", box: { box: { open: false } } },
+        { op: "deal", hands: ["h_watch"], expectBoard: { h_watch: ["c_calm"] },
+          expectTrace: ["evict watch ambush condition"] },
+        // A play names its card the way it has always named its outcome.
+        { op: "play", card: "c_calm", outcome: "done", from: "h_watch",
+          expectTrace: ["play calm done"] },
+      ] },
+
+    { name: "a load report addresses an owned property by gameId",
+      templates: [{ id: "t_npc", properties: [
+        { name: "uses", type: "number", default: 0 },
+      ] }],
+      hands: [{ id: "h_elder", template: "t_npc" }],
+      cards: [{ id: "c_any" }],
+      // The edit takes the declaration away, so the saved value has nowhere to
+      // land and the report has to name it.
+      bundleB: {
+        templates: [{ id: "t_npc", properties: [] }],
+        hands: [{ id: "h_elder", template: "t_npc" }],
+        cards: [{ id: "c_any" }],
+      },
+      script: [
+        { op: "setState", hand: { elder: { uses: 2 } } },
+        // `path` is exactly what `listProperties()` prints and what
+        // `setProperty` takes, which is the whole point of one grammar: an
+        // operator reading a hot-swap report can paste the address back in.
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          droppedProperties: [{ flow: "main", path: "hand.elder.uses" }],
+        } },
       ] },
   ],
 };

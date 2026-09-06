@@ -16,7 +16,9 @@ One widget per engine: the **Runtime State** window in Unity, the **Runtime Stat
 Unreal, the in-game `StoryletStatePanel` in Godot, and `createPropertyInspector` in
 JavaScript. All four show the same thing:
 
-- one row per declared property from `listProperties()`, path-addressed;
+- one row per declared property from `listProperties()`, path-addressed - the owner named as
+  you name it, so a row reads `hand.the-elder.zone` and the address it shows is the one
+  `setProperty` takes;
 - **type-aware editors**: boolean toggle, number field, string field, enum picker, flags,
   quality stage picker;
 - per-row **reset to default**, disabled while the value is already at its default;
@@ -84,6 +86,11 @@ all of them. The logger turns them into something you read.
 Every write arrives as it happens, whether the engine or your own code made it, carrying the
 previous value and a reason, alongside the events that aren't property writes: deals, peeks,
 plays, turns, cooldowns and the board.
+
+Everything a trace event names, it names by gameId: the hand a deal filled, the box a peek
+read, the card a play spent, the card an eviction dropped and every card in an ask's verdicts.
+So a log line reads back against the shards you wrote, and a tool over the trace needs no
+translation table of its own.
 
 Every engine's examiner renders the retained log with per-kind filters, Autoscroll, Copy and
 Clear. Peek entries file under the Deal filter.

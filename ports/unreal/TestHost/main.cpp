@@ -115,7 +115,9 @@ static std::string show(const std::vector<std::string>& list)
 }
 
 /** Direct store writes for setup and setState: story/world are single bags;
- *  box/deck/hand/value are keyed by immutable id. */
+ *  box/deck/hand/value are keyed by the owner's GAMEID (design change 4.4).
+ *  The immutable id is still accepted on input for this release and raises a
+ *  `diagnostic`; it is refused after the next lockstep release. */
 static void applyState(Flow& session, const JsonValue& selector)
 {
     for (const char* scope : {"story", "world"})
@@ -501,15 +503,29 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
     // indistinguishable on a board read from a hole that was never movable:
     // the diagnostic is the only place the difference lives.
     std::vector<std::string> diagnostics;
+    // The two events nothing else can reach, rendered by the shared rule
+    // (the corpus's ScriptOp, expectTrace): an evict's hand and card and a
+    // play's card are gameIds from 4.4 on, and this is what says so.
+    std::vector<std::string> traces;
     // Parked flow blobs, by the name they were parked under. Held OUTSIDE the
     // engine on purpose: a park survives a content swap, which is the case that
     // makes a resume interesting.
     std::unordered_map<std::string, FlowSave> parked;
-    auto watch = [&verdicts, &diagnostics](const FlowPtr& f) -> FlowPtr
+    auto watch = [&verdicts, &diagnostics, &traces](const FlowPtr& f) -> FlowPtr
     {
-        f->subscribeTrace([&verdicts, &diagnostics](const TraceEvent& e)
+        f->subscribeTrace([&verdicts, &diagnostics, &traces](const TraceEvent& e)
         {
             if (e.kind == TraceEvent::Kind::Diagnostic) { diagnostics.push_back(e.message); return; }
+            if (e.kind == TraceEvent::Kind::Evict)
+            {
+                traces.push_back("evict " + e.hand + " " + e.card + " " + e.reason);
+                return;
+            }
+            if (e.kind == TraceEvent::Kind::Play)
+            {
+                traces.push_back("play " + e.card + " " + e.outcome);
+                return;
+            }
             if (e.kind != TraceEvent::Kind::Deal && e.kind != TraceEvent::Kind::Peek) return;
             for (const auto& card : e.cards) verdicts[card.id] = VerdictWire(card.verdict);
         });
@@ -542,6 +558,17 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             }
         }
     };
+    auto checkTrace = [&](const std::string& at, const JsonValue& op)
+    {
+        const JsonValue* expected = op.find("expectTrace");
+        if (!expected || !expected->isArray()) return;
+        for (const std::string& want : stringList(*expected))
+        {
+            if (std::find(traces.begin(), traces.end(), want) != traces.end()) continue;
+            failures.push_back(at + ": expected the trace to carry \"" + want
+                + "\", got " + (traces.empty() ? "no deal-time events" : show(traces)));
+        }
+    };
     auto checkDiagnostic = [&](const std::string& at, const JsonValue& op)
     {
         const JsonValue* expected = op.find("expectDiagnostic");
@@ -567,7 +594,11 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
         Flow* session = needsFlow(kind) ? &flowOf(op) : nullptr;
         if (kind == "setState")
         {
+            verdicts.clear();
+            diagnostics.clear();
+            traces.clear();
             applyState(*session, op);
+            checkDiagnostic(at, op);
         }
         else if (kind == "peek")
         {
@@ -575,6 +606,7 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             std::optional<std::string> peekError;
             verdicts.clear();
             diagnostics.clear();
+            traces.clear();
             try
             {
                 RankedList list = session->peek(op.strOr("box", "box"), criteriaOf(op), peekCap(op));
@@ -611,9 +643,11 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             if (hands && hands->isArray()) handRefs = stringList(*hands);
             verdicts.clear();
             diagnostics.clear();
+            traces.clear();
             OrderedMap<std::string, std::vector<DealtCard>> dealt = session->dealMany(handRefs);
             checkVerdicts(at, op);
             checkDiagnostic(at, op);
+            checkTrace(at, op);
             const JsonValue* expectBoard = op.find("expectBoard");
             if (expectBoard && expectBoard->isObject())
             {
@@ -712,6 +746,9 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
         {
             bool expectError = op.boolOr("expectError");
             std::optional<std::string> error;
+            verdicts.clear();
+            diagnostics.clear();
+            traces.clear();
             try
             {
                 PlayOptions playOpts;
@@ -723,6 +760,7 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             {
                 error = ex.what();
             }
+            checkTrace(at, op);
             if (expectError && !error.has_value())
             {
                 failures.push_back(at + ": expected an error, play succeeded");

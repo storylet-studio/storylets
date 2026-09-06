@@ -57,6 +57,9 @@ Usage:
   storyletengine deal <hand> [path]   Refresh a hand through the reference runtime
                  [--set path=value ...] [--seed N] [--deal-all]
                  (--deal-all deals every hand first, so claims are visible)
+                 (--set takes the address listProperties prints: story.gold,
+                  world.time, box.street.mood, deck.wares.n, hand.the-elder.zone,
+                  value.docks.danger - the owner named as you name it)
   storyletengine resolve <query> [path]  Find an item by gameId, id or title: which
                                       box, deck and shard it lives in (the same
                                       lookup as Storyletter's --at)

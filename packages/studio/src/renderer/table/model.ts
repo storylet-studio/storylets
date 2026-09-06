@@ -104,8 +104,9 @@ export interface StateRow {
  * (design/engine-server.md 4.2). `@world` is never here: it carries no flag,
  * and it is the host's anyway.
  *
- * The path shapes are the engine's own: "story.x", "box.<id>.x",
- * "deck.<id>.x", "hand.<id>.x", "value.<tagId>.x". Hands take their
+ * The path shapes are the engine's own: "story.x", "box.<gameId>.x",
+ * "deck.<gameId>.x", "hand.<gameId>.x", "value.<tagGameId>.x" - the owner
+ * segment is a gameId (design/engine-server.md 4.4). Hands take their
  * template's declarations where they have one, exactly as the engine's bags do.
  */
 export function durablePropertyPaths(bundle: Bundle): string[] {
@@ -115,16 +116,16 @@ export function durablePropertyPaths(bundle: Bundle): string[] {
   };
   push("story.", bundle.story.properties);
   for (const box of bundle.boxes) {
-    push(`box.${box.id}.`, box.properties);
-    for (const deck of box.decks) push(`deck.${deck.id}.`, deck.properties);
+    push(`box.${effectiveGameId(box)}.`, box.properties);
+    for (const deck of box.decks) push(`deck.${effectiveGameId(deck)}.`, deck.properties);
     for (const hand of box.hands) {
       const decls = hand.template !== undefined
         ? box.handTemplates.find((t) => t.id === hand.template)?.properties
         : hand.properties;
-      push(`hand.${hand.id}.`, decls);
+      push(`hand.${effectiveGameId(hand)}.`, decls);
     }
     for (const group of box.tagGroups) {
-      for (const tag of group.tags) push(`value.${tag.id}.`, tag.properties);
+      for (const tag of group.tags) push(`value.${effectiveGameId(tag)}.`, tag.properties);
     }
   }
   return out;
@@ -151,6 +152,11 @@ export class Table {
   session: Flow;
   /** Card id -> display label, for naming non-dealt cards from their trace id. */
   private readonly cardLabels = new Map<string, { gameId: string; title?: string }>();
+  /** Card gameId -> its internal id. A trace event names cards, hands and
+   *  boxes by gameId (design/engine-server.md 4.4) while the three maps below
+   *  are keyed by the id the editor addresses; this is the one hop between
+   *  them, and every reader goes through `cardKey`. */
+  private readonly cardIdsByGameId = new Map<string, string>();
   /** Where each card lives, for a surface that wants to open it in the editor.
    *  Bundle ids ARE source ids (the compiler carries them through), so these
    *  address the editor's own entities. */
@@ -171,6 +177,7 @@ export class Table {
           this.cardLabels.set(card.id, { gameId: card.gameId ?? card.id, ...(card.title !== undefined ? { title: card.title } : {}) });
           this.cardHomes.set(card.id, { box: box.id, deck: deck.id, card: card.id });
           this.cardBoxes.set(card.id, box.gameId ?? box.id);
+          this.cardIdsByGameId.set(card.gameId ?? card.id, card.id);
         }
       }
     }
@@ -329,14 +336,16 @@ export class Table {
     for (const e of this.session.log()) {
       if (e.seq > beforeLast && e.type === "diagnostic") this.peekDiagSeqs.add(e.seq);
     }
+    // The trace keys by gameId; the peek's own list carries both, so the
+    // ranking keys are joined on the gameId the event speaks.
     const keys = new Map(peekEvent?.cards.map((c) => [c.id, c]));
     const dealt = list.cards.map((card) => ({
       id: card.id,
       gameId: card.gameId,
       ...(card.title !== undefined ? { title: card.title } : {}),
       ...(card.purpose !== undefined ? { purpose: card.purpose } : {}),
-      ...(keys.get(card.id)?.priority !== undefined ? { priority: keys.get(card.id)!.priority } : {}),
-      ...(keys.get(card.id)?.specificity !== undefined ? { specificity: keys.get(card.id)!.specificity } : {}),
+      ...(keys.get(card.gameId)?.priority !== undefined ? { priority: keys.get(card.gameId)!.priority } : {}),
+      ...(keys.get(card.gameId)?.specificity !== undefined ? { specificity: keys.get(card.gameId)!.specificity } : {}),
     }));
     // A condition that faulted on a composed @hand name is not "condition not
     // met" and not an authoring error: this peek simply asked without a hand.
@@ -348,7 +357,9 @@ export class Table {
     const notDealt: NotDealt[] = (peekEvent?.cards ?? [])
       .filter((c) => c.verdict !== "dealt")
       .map((c) => {
-        const label = this.cardLabels.get(c.id);
+        // `c.id` is the card's gameId (4.4), which is also how a diagnostic's
+        // `where` names it, so the two agree without a second lookup.
+        const label = this.cardLabels.get(this.cardKey(c.id));
         const gameId = label?.gameId ?? c.id;
         const msg = diagByCard.get(gameId) ?? diagByCard.get(c.id);
         const handRef = msg !== undefined ? /@hand\.[a-z0-9_-]+/i.exec(msg)?.[0] : undefined;
@@ -414,19 +425,25 @@ export class Table {
     for (const box of this.bundle.boxes) this.session.advanceTurns(box.gameId ?? box.id, 1);
   }
 
+  /** A card reference - a gameId off a trace event, or the internal id a
+   *  Board surface holds - as the internal id the maps are keyed by (4.4). */
+  private cardKey(ref: string): string {
+    return this.cardHomes.has(ref) ? ref : this.cardIdsByGameId.get(ref) ?? ref;
+  }
+
   /** A card's box and deck, for revealing it in the editor. */
-  home(cardId: string): { box: string; deck: string; card: string } | undefined {
-    return this.cardHomes.get(cardId);
+  home(cardRef: string): { box: string; deck: string; card: string } | undefined {
+    return this.cardHomes.get(this.cardKey(cardRef));
   }
 
   /** A card's box, as the gameId the clocks and journal speak. */
-  boxOf(cardId: string): string | undefined {
-    return this.cardBoxes.get(cardId);
+  boxOf(cardRef: string): string | undefined {
+    return this.cardBoxes.get(this.cardKey(cardRef));
   }
 
-  /** A card's display label from its id (log rows, why-panels). */
-  label(cardId: string): { gameId: string; title?: string } {
-    return this.cardLabels.get(cardId) ?? { gameId: cardId };
+  /** A card's display label (log rows, why-panels). */
+  label(cardRef: string): { gameId: string; title?: string } {
+    return this.cardLabels.get(this.cardKey(cardRef)) ?? { gameId: cardRef };
   }
 
   /** A card face from its gameId, which is how a game's board snapshot names
@@ -457,7 +474,7 @@ export class Table {
   /** cardId -> everything its condition (and its deck's gate) reads, from the
    *  compiled ASTs. Built once; the ripple's attribution key. */
   private reads?: Map<string, Set<string>>;
-  private readsOf(cardId: string): Set<string> {
+  private readsOf(cardRef: string): Set<string> {
     if (!this.reads) {
       this.reads = new Map();
       for (const box of this.bundle.boxes) {
@@ -471,7 +488,7 @@ export class Table {
         }
       }
     }
-    return this.reads.get(cardId) ?? new Set();
+    return this.reads.get(this.cardKey(cardRef)) ?? new Set();
   }
 
   /** seq of a play entry -> the hand it was played out of, recorded at the
@@ -523,7 +540,7 @@ export class Table {
       for (const group of box.tagGroups) {
         for (const tag of group.tags) {
           for (const decl of tag.properties ?? []) {
-            push(`value.${tag.id}.${decl.name}`, `${tag.gameId}.${decl.name}`, group.gameId ?? group.id, decl);
+            push(`value.${effectiveGameId(tag)}.${decl.name}`, `${tag.gameId}.${decl.name}`, group.gameId ?? group.id, decl);
           }
         }
       }
@@ -535,7 +552,7 @@ export class Table {
       for (const deck of box.decks) {
         for (const decl of deck.properties ?? []) {
           if (decl.type !== "quality") continue;
-          push(`deck.${deck.id}.${decl.name}`, `${effectiveGameId(deck)}.${decl.name}`, effectiveGameId(box), decl);
+          push(`deck.${effectiveGameId(deck)}.${decl.name}`, `${effectiveGameId(deck)}.${decl.name}`, effectiveGameId(box), decl);
         }
       }
     }

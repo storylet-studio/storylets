@@ -418,7 +418,13 @@ namespace StoryletStudio.StoryletEngine.TestHost
         // -- shared scripted/peek plumbing ------------------------------------------
 
         /// <summary>Direct store writes for setup and setState: story/world are
-        /// single bags; box/deck/hand/value are keyed by immutable id.</summary>
+        /// single bags; box/deck/hand/value are keyed by the owner's GAMEID
+        /// (design/engine-server.md 4.4). The internal id is still accepted on
+        /// input for this release and raises a diagnostic; it is refused after
+        /// the next lockstep release. One case leans on that deliberately: two
+        /// boxes may each name a tag "docks", and a tag gameId is only unique
+        /// within its group, so "value.docks" names the FIRST such tag in bundle
+        /// order and the second stays addressable by id.</summary>
         private static void ApplyState(Flow session, JObject selector)
         {
             foreach (var scope in new[] { "story", "world" })
@@ -899,6 +905,10 @@ namespace StoryletStudio.StoryletEngine.TestHost
             // which is indistinguishable on a board read from a hole that was
             // never movable: the diagnostic is where the difference lives.
             var diagnostics = new List<string>();
+            // The two events nothing else can reach, rendered by the shared rule
+            // (the corpus's ScriptOp.expectTrace): "evict.hand", "evict.card"
+            // and "play.card" are gameIds from 4.4 on, and this is what says so.
+            var traces = new List<string>();
             // Parked flow blobs, by the name they were parked under. Held OUTSIDE
             // the engine on purpose: a park survives a content swap, which is the
             // case that makes a resume interesting.
@@ -908,6 +918,8 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 f.SubscribeTrace(e =>
                 {
                     if (e is DiagnosticEvent dg) { diagnostics.Add(dg.Message); return; }
+                    if (e is EvictEvent ev) { traces.Add($"evict {ev.Hand} {ev.Card} {ev.Reason}"); return; }
+                    if (e is PlayEvent pl) { traces.Add($"play {pl.Card} {pl.Outcome}"); return; }
                     List<TraceCard> cards = null;
                     if (e is DealEvent d) cards = d.Cards;
                     else if (e is PeekEvent pk) cards = pk.Cards;
@@ -948,6 +960,30 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     failures.Add($"{at}: expected a diagnostic containing \"{want}\", got {(diagnostics.Count == 0 ? "none" : Show(diagnostics))}");
                 }
             }
+            // Every string listed must appear among the events the op emitted.
+            // What it pins is IDENTITY: three of those four segments were
+            // internal ids until 4.4, so the cheapest assertion that can tell
+            // one form from the other is the whole requirement.
+            void CheckTrace(string at, JObject o)
+            {
+                if (!(o["expectTrace"] is JArray expected)) return;
+                foreach (var want in expected.Select(t => t.Value<string>()))
+                {
+                    if (!traces.Contains(want))
+                    {
+                        failures.Add($"{at}: expected the trace to carry \"{want}\", got {(traces.Count == 0 ? "no deal-time events" : Show(traces))}");
+                    }
+                }
+            }
+            // The reference runner's `collect`: every sink an op's assertions
+            // read is emptied before the op runs, so nothing an earlier op said
+            // can satisfy this one's expectation.
+            void Collect()
+            {
+                verdicts.Clear();
+                diagnostics.Clear();
+                traces.Clear();
+            }
             var names = HandGameIds(bundle);
 
             var script = (JArray)c["script"];
@@ -960,15 +996,16 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 switch (kind)
                 {
                     case "setState":
+                        Collect();
                         ApplyState(session, op);
+                        CheckDiagnostic(at, op);
                         break;
 
                     case "peek":
                     {
                         List<string> ids = null;
                         string peekError = null;
-                        verdicts.Clear();
-                        diagnostics.Clear();
+                        Collect();
                         try
                         {
                             var list = session.Peek(op.Value<string>("box") ?? "box",
@@ -999,11 +1036,11 @@ namespace StoryletStudio.StoryletEngine.TestHost
 
                     case "deal":
                     {
-                        verdicts.Clear();
-                        diagnostics.Clear();
+                        Collect();
                         var dealt = session.DealMany(StringList(op["hands"]));
                         CheckVerdicts(at, op);
                         CheckDiagnostic(at, op);
+                        CheckTrace(at, op);
                         if (op["expectBoard"] is JObject expectBoard)
                         {
                             foreach (var pair in expectBoard)
@@ -1096,6 +1133,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     {
                         var expectError = op.Value<bool?>("expectError") ?? false;
                         string error = null;
+                        Collect();
                         try
                         {
                             var advance = op.Value<double?>("advanceTurns");
@@ -1106,6 +1144,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         {
                             error = ex.Message;
                         }
+                        CheckTrace(at, op);
                         if (expectError && error == null)
                         {
                             failures.Add($"{at}: expected an error, play succeeded");

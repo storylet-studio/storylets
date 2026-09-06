@@ -95,7 +95,8 @@ diagnostic; never a silent pass, never a crash.
   playing, and to save / load `.storyletsave` files from the panel. The panel
   reads the flows off the engine, so one registration covers all of them.
 - **Trace + log**: `flow.subscribe_trace(handler)` streams deal / peek /
-  evict / play / write / turns / diagnostic events; create the ENGINE with
+  evict / play / write / turns / diagnostic events, naming every card, hand,
+  box and outcome by its gameId; create the ENGINE with
   `{"log": true}` to retain them. Two logs: `flow.log()` is that flow's own,
   `engine.log()` is the RUN's - every flow's events in one order, each entry
   naming its `flow`, which is the only place a story action in ANOTHER flow

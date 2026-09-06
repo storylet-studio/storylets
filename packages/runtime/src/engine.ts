@@ -190,12 +190,19 @@ export type TraceVerdict =
 /** One event on the deal/play log - "why did Ambush at the ford get dealt
  *  here?" is answered by the ask event's per-card verdicts and keys. The
  *  verb is the event type, so a peek is distinguishable from a deal when
- *  reading a run back. */
+ *  reading a run back.
+ *
+ *  IDENTITY IS BY GAMEID throughout (design/engine-server.md 4.4). It was
+ *  mixed until then: `deal.hand` and `peek.box` were gameIds while
+ *  `evict.hand`, `play.card` and every `cards[].id` were internal ids, so
+ *  every consumer outside the engine - the Board, the four examiners, the
+ *  Live Link, a wire a kiosk reads - mapped one to the other itself. */
 export type TraceEvent =
   | {
       type: "deal";
       /** Hand gameId. */
       hand: string;
+      /** `id` is the card's GAMEID (design/engine-server.md 4.4). */
       cards: { id: string; verdict: TraceVerdict; priority?: number; specificity?: number }[];
     }
   | {
@@ -203,11 +210,16 @@ export type TraceEvent =
       /** Box gameId. */
       box: string;
       criteria: Record<string, string>;
+      /** `id` is the card's GAMEID (design/engine-server.md 4.4). */
       cards: { id: string; verdict: TraceVerdict; priority?: number; specificity?: number }[];
     }
+  /** Hand and card gameIds. A card the build no longer has (`vanished`) has
+   *  no gameId left and is named by the id the board carried. */
   | { type: "evict"; hand: string; card: string; reason: TraceVerdict | "hand-condition" | "vanished" }
+  /** Card and outcome gameIds. */
   | { type: "play"; card: string; outcome: string; turn: number }
-  /** One landed outcome change; `path` is the resolved store location (a
+  /** One landed outcome change; `path` is the resolved store location, in the
+   *  address grammar `getProperty` takes - the owner segment is its gameId (a
    *  routed @hand write shows where it actually went, schema 3.6). `prev`
    *  is the value it replaced, so a log can read "0 -> 1". */
   | { type: "write"; target: string; path: string; value: ScalarValue; prev?: ScalarValue }
@@ -313,8 +325,8 @@ function conditionPasses(v: ScalarValue): boolean {
 // the two families drifted in the first place: the same row called PropertyView here,
 // ScopePropertyRow next to it, PropertyRow in the kernel. listProperties() returns PropertyRow.
 
-/** One kernel bag with its store path prefix (story / box.<id> / deck.<id>
- *  / hand.<id> / value.<id>): the state logger's mount surface
+/** One kernel bag with its store path prefix (story / box.<gameId> / deck.<gameId>
+ *  / hand.<gameId> / value.<gameId>): the state logger's mount surface
  *  (design/engine-runtimes.md 3.4 - the logger builds on the PropertyBag
  *  audit hook, so it needs the bags themselves, not just their rows).
  *  The Engine lists the shared bags, a Flow its own; the @world container
@@ -358,6 +370,44 @@ interface DeclSet {
   value: Map<string, PropertyDecl[]>;
 }
 
+/** The four owned property scopes: the ones whose address carries an owner
+ *  segment. `story` has no owner and `world` is the host's. */
+type OwnedScope = "box" | "deck" | "hand" | "value";
+const OWNED_SCOPES = ["box", "deck", "hand", "value"] as const;
+
+/** The owner segment of a property address, both ways round
+ *  (design/engine-server.md 4.4).
+ *
+ * `gameId` is the id the ADDRESS uses; `id` is the internal id everything
+ * inside the engine is keyed by - the bags, the save envelope, the ladders.
+ * Both maps are built in bundle order and a repeated gameId does NOT
+ * overwrite the first: box, hand and card gameIds are unique bundle-wide, but
+ * a TAG's is unique only within its group, and a group's only within its box,
+ * so two boxes may each name a tag "docks". `value.docks` names the first of
+ * the two, and the second stays reachable by its internal id - which is the
+ * one part of the internal-id form that cannot be retired on the same
+ * timetable as the rest.
+ */
+interface OwnerIndex {
+  gameId: Map<string, string>;   // internal id -> gameId
+  id: Map<string, string>;       // gameId -> internal id (first in bundle order wins)
+}
+
+type OwnerIndexes = Record<OwnedScope, OwnerIndex>;
+
+const emptyOwnerIndexes = (): OwnerIndexes => ({
+  box: { gameId: new Map(), id: new Map() },
+  deck: { gameId: new Map(), id: new Map() },
+  hand: { gameId: new Map(), id: new Map() },
+  value: { gameId: new Map(), id: new Map() },
+});
+
+const indexOwner = (index: OwnerIndex, entity: { id: string; gameId?: string; title?: string }): void => {
+  const gameId = effectiveGameId(entity);
+  index.gameId.set(entity.id, gameId);
+  if (!index.id.has(gameId)) index.id.set(gameId, entity.id);
+};
+
 /** One side's five stores (shared on the engine, per-flow on each flow). */
 interface Partition {
   story: StateBag;
@@ -382,6 +432,8 @@ interface Internals {
   boxesById: Map<string, Box<Expression>>;
   handsById: Map<string, { hand: Hand<Expression>; box: Box<Expression> }>;
   handsByGameId: Map<string, { hand: Hand<Expression>; box: Box<Expression> }>;
+  /** The owner segment of a property address, both ways round (4.4). */
+  owners: OwnerIndexes;
   templatesById: Map<string, HandTemplate<Expression>>;
   groupsById: Map<string, { group: TagGroup; box: Box<Expression> }>;
   requiredGroups: Set<string>;
@@ -444,20 +496,58 @@ const handDeclsOf = (internals: Internals, hand: Hand<Expression>): PropertyDecl
   return hand.properties ?? [];
 };
 
-/** Build one side of the partition from the bundle. */
+/**
+ * One owned property's ADDRESS, owner segment and all: `box.village.mood`.
+ *
+ * The stores, the save envelope and the ladders stay keyed by internal id -
+ * a save must survive a rename, which is the whole reason ids exist - so this
+ * is the one place the two vocabularies meet, and it is a formatter, never a
+ * lookup key. An owner the build no longer has (a save that outlived an edit)
+ * keeps the id it arrived with: there is no gameId left to give it, which is
+ * the rule a load report's evictions have always used.
+ */
+const addressOf = (internals: Internals, kind: OwnedScope, id: string): string =>
+  `${kind}.${internals.owners[kind].gameId.get(id) ?? id}`;
+
+/**
+ * Resolve a property address's owner segment to the internal id the stores are
+ * keyed by. `legacy` says the caller used the pre-4.4 form - an internal id
+ * where a gameId belongs - which resolves for THIS release and earns a
+ * diagnostic; the next lockstep release refuses it. Undefined when the segment
+ * names no owner at all, which is the caller's "no <kind> store" error.
+ */
+const resolveOwner = (internals: Internals, kind: OwnedScope, segment: string): { id: string; legacy: boolean } | undefined => {
+  const byGameId = internals.owners[kind].id.get(segment);
+  if (byGameId !== undefined) return { id: byGameId, legacy: false };
+  // A gameId that equals its id took the branch above, so anything reaching
+  // here and known as an id is genuinely the old spelling.
+  if (internals.owners[kind].gameId.has(segment)) return { id: segment, legacy: true };
+  return undefined;
+};
+
+/** What a legacy address is told. It NAMES the address to move to, because
+ *  "that form is deprecated" without the replacement leaves a host grepping a
+ *  bundle for ids it never chose. */
+const legacyAddressMessage = (internals: Internals, kind: OwnedScope, segment: string, name: string): string =>
+  `"${kind}.${segment}.${name}" names the ${kind} by its internal id; write "${addressOf(internals, kind, segment)}.${name}". `
+  + `The internal-id form is refused after the next release.`;
+
+/** Build one side of the partition from the bundle. The bags are KEYED by
+ *  internal id and ADDRESSED by gameId; see addressOf. */
 const buildPartition = (internals: Internals, half: (scope: FlaggedScope, decls: PropertyDecl[]) => PropertyDecl[]): Partition => {
   const b = internals.bundle;
+  const at = (kind: OwnedScope, id: string): string => `${addressOf(internals, kind, id)}.`;
   return {
     story: bagFromDecls(half("story", b.story.properties), "story."),
-    box: new Map(b.boxes.map((box) => [box.id, bagFromDecls(half("box", box.properties), `box.${box.id}.`)])),
+    box: new Map(b.boxes.map((box) => [box.id, bagFromDecls(half("box", box.properties), at("box", box.id))])),
     deck: new Map(b.boxes.flatMap((box) => box.decks.map(
-      (deck): [string, StateBag] => [deck.id, bagFromDecls(half("deck", deck.properties), `deck.${deck.id}.`)]))),
+      (deck): [string, StateBag] => [deck.id, bagFromDecls(half("deck", deck.properties), at("deck", deck.id))]))),
     // A template instance inherits the template's property declarations;
     // a standalone hand declares its own (schema 2.6).
     hand: new Map(b.boxes.flatMap((box) => box.hands.map(
-      (hand): [string, StateBag] => [hand.id, bagFromDecls(half("hand", handDeclsOf(internals, hand)), `hand.${hand.id}.`)]))),
+      (hand): [string, StateBag] => [hand.id, bagFromDecls(half("hand", handDeclsOf(internals, hand)), at("hand", hand.id))]))),
     value: new Map(b.boxes.flatMap((box) => box.tagGroups.flatMap((group) => group.tags.map(
-      (tag): [string, StateBag] => [tag.id, bagFromDecls(half("value", tag.properties ?? []), `value.${tag.id}.`)])))),
+      (tag): [string, StateBag] => [tag.id, bagFromDecls(half("value", tag.properties ?? []), at("value", tag.id))])))),
   };
 };
 
@@ -571,6 +661,7 @@ function walkScope(
  *  values have nowhere to land); an owner the build has and the save lacks
  *  keeps every default. */
 function walkPartition(
+  internals: Internals,
   decls: DeclSet,
   values: PropsPartition | undefined,
   flow: string | undefined,
@@ -584,8 +675,12 @@ function walkPartition(
     const savedKind = values?.[kind] ?? {};
     const ids = [...new Set([...decls[kind].keys(), ...Object.keys(savedKind)])].sort();
     for (const id of ids) {
+      // The report's `path` is exactly what listProperties() prints and what
+      // setProperty takes: one grammar, so an operator reading a hot-swap
+      // report can paste the address straight back in (4.4).
+      const owner = addressOf(internals, kind, id);
       out[kind][id] = walkScope(decls[kind].get(id), savedKind[id],
-        (n) => `${kind}.${id}.${n}`, flow, draft);
+        (n) => `${owner}.${n}`, flow, draft);
     }
   }
   return out;
@@ -639,6 +734,7 @@ export class Engine {
       cardsById: new Map(), cardsByGameId: new Map(),
       boxesByGameId: new Map(), boxesById: new Map(),
       handsById: new Map(), handsByGameId: new Map(),
+      owners: emptyOwnerIndexes(),
       templatesById: new Map(), groupsById: new Map(),
       requiredGroups: new Set(),
       nodeCache: new WeakMap(),
@@ -666,11 +762,14 @@ export class Engine {
     for (const box of bundle.boxes) {
       internals.boxesById.set(box.id, box);
       internals.boxesByGameId.set(effectiveGameId(box), box);
+      indexOwner(internals.owners.box, box);
       for (const group of box.tagGroups) {
         internals.groupsById.set(group.id, { group, box });
         if (group.required === true) internals.requiredGroups.add(group.id);
+        for (const tag of group.tags) indexOwner(internals.owners.value, tag);
       }
       for (const deck of box.decks) {
+        indexOwner(internals.owners.deck, deck);
         if (deck.shared === true) internals.hasShared = true;
         for (const card of deck.cards) {
           const entry = { card, deck, box };
@@ -685,6 +784,7 @@ export class Engine {
       for (const hand of box.hands) {
         internals.handsById.set(hand.id, { hand, box });
         internals.handsByGameId.set(effectiveGameId(hand), { hand, box });
+        indexOwner(internals.owners.hand, hand);
       }
     }
     this.initLadders();
@@ -910,7 +1010,8 @@ export class Engine {
 
   /**
    * Read shared state by path: "world.x", "story.gold" (when shared),
-   * "box.b_x.heat" (when shared). A ref that resolves PER-FLOW throws,
+   * "box.village.heat" (when shared) - the owner segment is its GAMEID
+   * (design/engine-server.md 4.4). A ref that resolves PER-FLOW throws,
    * naming the fix - silently answering with some flow's copy (or a junk
    * default) was the bug Patter's engine.getProperty guard exists to stop.
    */
@@ -950,15 +1051,27 @@ export class Engine {
       throw new Error(`no property at "${path}"`);
     }
     if (parts.length === 3 && (parts[0] === "box" || parts[0] === "deck" || parts[0] === "hand" || parts[0] === "value")) {
-      const kind = parts[0] as Exclude<PartitionKind, "story">;
-      const [, id, name] = parts as unknown as [string, string, string];
+      const kind = parts[0] as OwnedScope;
+      const [, segment, name] = parts as unknown as [string, string, string];
+      const owner = resolveOwner(this.internals, kind, segment);
+      if (owner === undefined) throw new Error(`no ${kind} store "${segment}"`);
+      if (owner.legacy) this.diagnose(legacyAddressMessage(this.internals, kind, segment, name));
+      const id = owner.id;
       const bag = this.internals.shared[kind].get(id);
       if (bag !== undefined && bag.get(name) !== undefined) return { kind: "bag", bag, name };
       if (this.internals.flowDecls[kind].get(id)?.some((d) => d.name === name)) perFlow();
-      if (bag === undefined && !this.internals.flowDecls[kind].has(id)) throw new Error(`no ${kind} store "${id}"`);
+      if (bag === undefined && !this.internals.flowDecls[kind].has(id)) throw new Error(`no ${kind} store "${segment}"`);
       throw new Error(`no property at "${path}"`);
     }
     throw new Error(`bad property path "${path}"`);
+  }
+
+  /** The engine's own surface has no flow, so an engine-level diagnostic
+   *  carries the empty flow id - the same way a LoadReport's shared half
+   *  carries no flow. It reaches the run log and the engine tap; there is
+   *  nowhere else for it to go, and it fires only on a legacy address. */
+  private diagnose(message: string): void {
+    this.internals.emitEngine("", { type: "diagnostic", where: "property address", message });
   }
 
   /** The shared surface as examiner rows: @world (read through the
@@ -990,10 +1103,9 @@ export class Engine {
       for (const row of bag.rows()) out.push(row);
     };
     add("story", this.internals.shared.story);
-    for (const [id, bag] of this.internals.shared.box) add(`box.${id}`, bag);
-    for (const [id, bag] of this.internals.shared.deck) add(`deck.${id}`, bag);
-    for (const [id, bag] of this.internals.shared.hand) add(`hand.${id}`, bag);
-    for (const [id, bag] of this.internals.shared.value) add(`value.${id}`, bag);
+    for (const kind of OWNED_SCOPES) {
+      for (const [id, bag] of this.internals.shared[kind]) add(addressOf(this.internals, kind, id), bag);
+    }
     return out;
   }
 
@@ -1003,7 +1115,7 @@ export class Engine {
   listBags(): BagMount[] {
     const mounts: BagMount[] = [{ prefix: "story", bag: this.internals.shared.story }];
     for (const kind of ["box", "deck", "hand", "value"] as const) {
-      for (const [id, bag] of this.internals.shared[kind]) mounts.push({ prefix: `${kind}.${id}`, bag });
+      for (const [id, bag] of this.internals.shared[kind]) mounts.push({ prefix: addressOf(this.internals, kind, id), bag });
     }
     return mounts;
   }
@@ -1092,7 +1204,7 @@ export class Engine {
     flows: [string, FlowSave][];
   } {
     const draft = emptyDraft();
-    const shared = walkPartition(this.internals.sharedDecls,
+    const shared = walkPartition(this.internals, this.internals.sharedDecls,
       envelope.shared?.props, undefined, draft);
     const spent: string[] = [];
     for (const cardId of envelope.shared?.spent ?? []) {
@@ -1120,7 +1232,7 @@ export class Engine {
     draft: ReportDraft,
   ): FlowSave {
     const internals = this.internals;
-    const props = walkPartition(internals.flowDecls, saved.props, id, draft);
+    const props = walkPartition(internals, internals.flowDecls, saved.props, id, draft);
 
     const cooldowns: Record<string, number> = {};
     for (const [cardId, turn] of Object.entries(saved.cooldowns ?? {})) {
@@ -1772,8 +1884,11 @@ export class Flow {
   ): { ordered: CardEntry[]; handEnv: HandEnv } {
     const { box } = ask;
     const handEnv = this.buildHandEnv(ask);
-    const verdict = (id: string, v: TraceVerdict): void => {
-      trace?.push({ id, verdict: v });
+    // Identity on the trace is by gameId (4.4), so the helper takes the CARD
+    // rather than an id: every call site had one in hand, and taking the id
+    // was the whole of how the two vocabularies got mixed.
+    const verdict = (card: Card<Expression>, v: TraceVerdict): void => {
+      trace?.push({ id: effectiveGameId(card), verdict: v });
     };
 
     // The hand's condition: ask-constant, evaluated once (schema 3.1 step 4).
@@ -1801,22 +1916,22 @@ export class Flow {
       for (const card of deck.cards) {
         const shared = cardIsShared(card, deckShared);
         if (!gateOk.get(deck.id)) {
-          verdict(card.id, "deck-gate");
+          verdict(card, "deck-gate");
           continue;
         }
         // Taken out of the world by somebody's shared one-shot. Checked
         // before the flow's own clock, because "cooldown" would point the
         // reader at a turn counter that has nothing to do with it.
         if (shared && this.engine.isTaken(card.id)) {
-          verdict(card.id, "taken");
+          verdict(card, "taken");
           continue;
         }
         if ((this.cooldowns[card.id] ?? 0) > turn) {
-          verdict(card.id, "cooldown");
+          verdict(card, "cooldown");
           continue;
         }
         if (!this.tagsMatch(card, handEnv.boundTags)) {
-          verdict(card.id, "tags");
+          verdict(card, "tags");
           continue;
         }
         // The label is only read when an eval THROWS and only when tracing, so
@@ -1824,12 +1939,12 @@ export class Flow {
         // when tracing is on, where the cost is already accepted.
         if (card.condition && !this.passes(card.condition, deckCtx,
           this.tracing ? `card ${card.gameId} condition` : undefined)) {
-          verdict(card.id, "condition");
+          verdict(card, "condition");
           continue;
         }
         const refused = claimed(card, shared);   // claims, last (schema 3.1 step 6)
         if (refused) {
-          verdict(card.id, refused);
+          verdict(card, refused);
           continue;
         }
 
@@ -1840,7 +1955,7 @@ export class Flow {
           try {
             const v = this.eval(card.priority, deckCtx);
             if (typeof v !== "number") {
-              verdict(card.id, "priority");
+              verdict(card, "priority");
               continue;
             }
             priority = v;
@@ -1848,7 +1963,7 @@ export class Flow {
             if (this.tracing) {
               this.emit({ type: "diagnostic", where: `card ${card.gameId} priority`, message: e instanceof Error ? e.message : String(e) });
             }
-            verdict(card.id, "priority");
+            verdict(card, "priority");
             continue;
           }
         }
@@ -1890,12 +2005,14 @@ export class Flow {
       i = j;
     }
     for (const s of scored) {
-      trace?.push({ id: s.entry.card.id, verdict: "dealt", priority: s.priority, specificity: s.spec });
+      trace?.push({ id: effectiveGameId(s.entry.card), verdict: "dealt", priority: s.priority, specificity: s.spec });
     }
     return { ordered: scored.map((s) => s.entry), handEnv };
   }
 
-  /** Flip eligible-but-not-taken trace entries to "capped". */
+  /** Flip eligible-but-not-taken trace entries to "capped". `taken` is keyed
+   *  by GAMEID, as the trace rows are (4.4): the two must move together or
+   *  every dealt card silently reads as capped. */
   private capTrace(
     trace: { id: string; verdict: TraceVerdict; priority?: number; specificity?: number }[],
     taken: ReadonlySet<string>,
@@ -1952,7 +2069,7 @@ export class Flow {
     // returned nothing (2026-08-29).
     const listed = n === undefined ? ordered : ordered.slice(0, Math.max(n, 0));
     if (trace) {
-      this.capTrace(trace, new Set(listed.map((e) => e.card.id)));
+      this.capTrace(trace, new Set(listed.map((e) => effectiveGameId(e.card))));
       this.emit({ type: "peek", box: effectiveGameId(box), criteria, cards: trace }, this.turnCounts.get(box.id) ?? 0);
     }
     return { box: effectiveGameId(box), cards: listed.map((e) => this.view(e)) };
@@ -1990,8 +2107,13 @@ export class Flow {
       // reading the board sees the eviction), so they are collected here and
       // emitted once the survivors are set.
       const evicted: { card: string; reason: Extract<TraceEvent, { type: "evict" }>["reason"] }[] = [];
+      // The card is named by gameId (4.4). A card the build no longer has -
+      // the `vanished` branch below - has no gameId left, so it is named by
+      // the id the board carries, which is the rule a load report has always
+      // used for the same reason.
       const evict = (cardId: string, reason: Extract<TraceEvent, { type: "evict" }>["reason"]): false => {
-        evicted.push({ card: cardId, reason });
+        const known = this.internals.cardsById.get(cardId);
+        evicted.push({ card: known ? effectiveGameId(known.card) : cardId, reason });
         return false;
       };
       const survivors = (this.boardContents.get(hand.id) ?? []).filter((cardId) => {
@@ -2008,7 +2130,7 @@ export class Flow {
       });
       this.boardContents.set(hand.id, survivors);
       if (this.tracing) {
-        for (const e of evicted) this.emit({ type: "evict", hand: hand.id, card: e.card, reason: e.reason }, turn);
+        for (const e of evicted) this.emit({ type: "evict", hand: effectiveGameId(hand), card: e.card, reason: e.reason }, turn);
       }
     }
 
@@ -2029,7 +2151,8 @@ export class Flow {
       // `sharedCopies` hands anywhere (schema 3.5, shared-scarcity 5).
       const { ordered } = this.runAsk(ask,
         (card, shared) => (own.has(card.id) ? "claimed" : this.claimVerdict(card, shared, claimCounts, worldClaims)), trace);
-      const added = ordered.slice(0, free).map((e) => e.card.id);
+      const taking = ordered.slice(0, free);
+      const added = taking.map((e) => e.card.id);
       this.boardContents.set(hand.id, [...contents, ...added]);
       for (const id of added) {
         claimCounts.set(id, (claimCounts.get(id) ?? 0) + 1);
@@ -2037,7 +2160,7 @@ export class Flow {
       }
       // Emitted after the hand is set: a handler reading board() sees the deal.
       if (trace) {
-        this.capTrace(trace, new Set(added));
+        this.capTrace(trace, new Set(taking.map((e) => effectiveGameId(e.card))));
         this.emit({ type: "deal", hand: effectiveGameId(hand), cards: trace }, this.turnCounts.get(box.id) ?? 0);
       }
     }
@@ -2156,7 +2279,12 @@ export class Flow {
       (this.boardContents.get(handId) ?? []).filter((id) => id !== entry.card.id));
     this.turnCounts.set(entry.box.id, newTurn);
     // Emitted last: a handler reading the board and the clock sees the play.
-    if (this.tracing) this.emit({ type: "play", card: entry.card.id, outcome: effectiveGameId(outcome), turn: newTurn }, newTurn);
+    if (this.tracing) this.emit({ type: "play", card: effectiveGameId(entry.card), outcome: effectiveGameId(outcome), turn: newTurn }, newTurn);
+  }
+
+  /** One owned property's address, owner segment and all (4.4). */
+  private address(kind: OwnedScope, id: string): string {
+    return addressOf(this.internals, kind, id);
   }
 
   /** Land one change in whichever partition declares the name: the flow's
@@ -2196,15 +2324,15 @@ export class Flow {
         return { path: `world.${name}`, ...(prev !== undefined ? { prev } : {}) };
       }
       case "story": return this.landIn("story", undefined, name, value, `story.${name}`);
-      case "box": return this.landIn("box", entry.box.id, name, value, `box.${entry.box.id}.${name}`);
-      case "deck": return this.landIn("deck", entry.deck.id, name, value, `deck.${entry.deck.id}.${name}`);
+      case "box": return this.landIn("box", entry.box.id, name, value, `${this.address("box", entry.box.id)}.${name}`);
+      case "deck": return this.landIn("deck", entry.deck.id, name, value, `${this.address("deck", entry.deck.id)}.${name}`);
       case "hand": {
         // Write-back routing (schema 3.6): the composed name remembers its
         // source store; writes to criteria/chosen-tag names are errors.
         const source = handEnv.sources.get(name);
         if (!source) throw new Error(`@hand.${name} is not composed in this ask`);
         if (source.kind === "criteria") throw new Error(`@hand.${name} is a chosen tag / criteria name and cannot be written`);
-        return this.landIn(source.kind, source.id, name, value, `${source.kind}.${source.id}.${name}`);
+        return this.landIn(source.kind, source.id, name, value, `${this.address(source.kind, source.id)}.${name}`);
       }
       default: throw new Error(`bad change target scope "@${scope}"`);
     }
@@ -2243,7 +2371,7 @@ export class Flow {
     this.assertOpen();
     const mounts: BagMount[] = [{ prefix: "story", bag: this.stores.story }];
     for (const kind of ["box", "deck", "hand", "value"] as const) {
-      for (const [id, bag] of this.stores[kind]) mounts.push({ prefix: `${kind}.${id}`, bag });
+      for (const [id, bag] of this.stores[kind]) mounts.push({ prefix: addressOf(this.internals, kind, id), bag });
     }
     return mounts;
   }
@@ -2282,16 +2410,23 @@ export class Flow {
       }
     };
     add("story", this.internals.shared.story, this.stores.story);
-    for (const kind of ["box", "deck", "hand", "value"] as const) {
+    for (const kind of OWNED_SCOPES) {
       const ids = new Set([...this.internals.shared[kind].keys(), ...this.stores[kind].keys()]);
-      for (const id of ids) add(`${kind}.${id}`, this.internals.shared[kind].get(id), this.stores[kind].get(id));
+      for (const id of ids) {
+        add(addressOf(this.internals, kind, id), this.internals.shared[kind].get(id), this.stores[kind].get(id));
+      }
     }
     return out;
   }
 
-  /** Read by path: "world.x", "story.gold", "value.v_docks.danger",
-   *  "box.b_x.heat", "deck.k_main.n", "hand.h_board.owner" - the flow's
-   *  merged view, routed by the declaration's sharing. */
+  /** Read by path: "world.x", "story.gold", "value.docks.danger",
+   *  "box.village.heat", "deck.wares.n", "hand.the-elder.zone" - the flow's
+   *  merged view, routed by the declaration's sharing.
+   *
+   *  The owner segment is the entity's GAMEID, the name it is called by
+   *  everywhere else (4.4). Its internal id is accepted for this release and
+   *  earns a `diagnostic` naming the address to move to; the next lockstep
+   *  release refuses it. */
   getProperty(path: string): ScalarValue {
     this.assertOpen();
     const found = this.resolvePath(path);
@@ -2326,11 +2461,17 @@ export class Flow {
       return { kind: "bag", own: this.stores.story, shared: this.internals.shared.story, name: parts[1]! };
     }
     if (parts.length === 3 && (parts[0] === "box" || parts[0] === "deck" || parts[0] === "hand" || parts[0] === "value")) {
-      const kind = parts[0] as Exclude<PartitionKind, "story">;
-      const own = this.stores[kind].get(parts[1]!);
-      const shared = this.internals.shared[kind].get(parts[1]!);
-      if (own === undefined && shared === undefined) throw new Error(`no ${parts[0]} store "${parts[1]}"`);
-      return { kind: "bag", ...(own !== undefined ? { own } : {}), ...(shared !== undefined ? { shared } : {}), name: parts[2]! };
+      const kind = parts[0] as OwnedScope;
+      const [, segment, name] = parts as unknown as [string, string, string];
+      const owner = resolveOwner(this.internals, kind, segment);
+      if (owner === undefined) throw new Error(`no ${kind} store "${segment}"`);
+      if (owner.legacy && this.tracing) {
+        this.emit({ type: "diagnostic", where: "property address", message: legacyAddressMessage(this.internals, kind, segment, name) });
+      }
+      const own = this.stores[kind].get(owner.id);
+      const shared = this.internals.shared[kind].get(owner.id);
+      if (own === undefined && shared === undefined) throw new Error(`no ${kind} store "${segment}"`);
+      return { kind: "bag", ...(own !== undefined ? { own } : {}), ...(shared !== undefined ? { shared } : {}), name };
     }
     throw new Error(`bad property path "${path}"`);
   }

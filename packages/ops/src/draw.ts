@@ -19,8 +19,8 @@ export interface AskOptions {
   n?: number;
   /** Deal: the hand to refresh (by gameId). */
   hand?: string;
-  /** State overrides applied before the ask, path -> value
-   *  (e.g. "value.v_docks.danger" -> 3). */
+  /** State overrides applied before the ask, path -> value, the owner segment
+   *  by gameId (e.g. "value.docks.danger" -> 3; 4.4). */
   sets?: Record<string, ScalarValue>;
   seed?: number;
   /** Deal all hands first (so claims are visible in the result). */

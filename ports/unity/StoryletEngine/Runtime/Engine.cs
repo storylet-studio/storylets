@@ -85,6 +85,32 @@ namespace StoryletStudio.StoryletEngine
         }
     }
 
+    /// <summary>The owner segment of a property address, both ways round
+    /// (design/engine-server.md 4.4).
+    ///
+    /// GameId is the id the ADDRESS uses; Id is the internal id everything
+    /// inside the engine is keyed by - the bags, the save envelope, the
+    /// ladders. Both maps are built in bundle order and a repeated gameId does
+    /// NOT overwrite the first: box, hand and card gameIds are unique
+    /// bundle-wide, but a TAG's is unique only within its group, and a group's
+    /// only within its box, so two boxes may each name a tag "docks".
+    /// "value.docks" names the first of the two, and the second stays reachable
+    /// by its internal id - which is the one part of the internal-id form that
+    /// cannot be retired on the same timetable as the rest.</summary>
+    internal sealed class OwnerIndex
+    {
+        /// <summary>Internal id -> gameId.</summary>
+        public readonly Dictionary<string, string> GameId = new Dictionary<string, string>();
+        /// <summary>GameId -> internal id; first in bundle order wins.</summary>
+        public readonly Dictionary<string, string> Id = new Dictionary<string, string>();
+
+        public void Add(string id, string gameId)
+        {
+            GameId[id] = gameId;
+            if (!Id.ContainsKey(gameId)) Id[gameId] = id;
+        }
+    }
+
     // One side's five stores (shared on the engine, per-flow on each flow).
     internal sealed class Partition
     {
@@ -197,6 +223,7 @@ namespace StoryletStudio.StoryletEngine
 
     public sealed class TraceCard
     {
+        /// <summary>The card's GAMEID (design/engine-server.md 4.4).</summary>
         public string Id;
         public TraceVerdict Verdict;
         public double? Priority;
@@ -204,7 +231,14 @@ namespace StoryletStudio.StoryletEngine
     }
 
     /// <summary>One event on the deal/play log. The verb is the event type, so a
-    /// peek is distinguishable from a deal when reading a run back.</summary>
+    /// peek is distinguishable from a deal when reading a run back.
+    ///
+    /// IDENTITY IS BY GAMEID throughout (design/engine-server.md 4.4). It was
+    /// mixed until then: DealEvent.Hand and PeekEvent.Box were gameIds while
+    /// EvictEvent's pair, PlayEvent.Card and every TraceCard.Id were internal
+    /// ids, so every consumer outside the engine - the Board, the four
+    /// examiners, the Live Link, a wire a kiosk reads - mapped one to the
+    /// other itself.</summary>
     public abstract class TraceEvent { }
 
     public sealed class DealEvent : TraceEvent
@@ -222,6 +256,9 @@ namespace StoryletStudio.StoryletEngine
         public List<TraceCard> Cards;
     }
 
+    /// <summary>Hand and card gameIds. A card the build no longer has (Reason
+    /// "vanished") has no gameId left and is named by the id the board
+    /// carried.</summary>
     public sealed class EvictEvent : TraceEvent
     {
         public string Hand;
@@ -230,6 +267,7 @@ namespace StoryletStudio.StoryletEngine
         public string Reason;
     }
 
+    /// <summary>Card and outcome gameIds.</summary>
     public sealed class PlayEvent : TraceEvent
     {
         public string Card;
@@ -237,9 +275,10 @@ namespace StoryletStudio.StoryletEngine
         public double Turn;
     }
 
-    /// <summary>One landed outcome change; Path is the resolved store location (a
-    /// routed @hand write shows where it actually went, schema 3.6). Prev is the
-    /// value it replaced, so a log can read "0 -> 1".</summary>
+    /// <summary>One landed outcome change; Path is the resolved store location,
+    /// in the address grammar GetProperty takes - the owner segment is its
+    /// gameId (a routed @hand write shows where it actually went, schema 3.6).
+    /// Prev is the value it replaced, so a log can read "0 -> 1".</summary>
     public sealed class WriteEvent : TraceEvent
     {
         public string Target;
@@ -294,7 +333,8 @@ namespace StoryletStudio.StoryletEngine
     // empty subclass would be a type a bag's own row could never satisfy.
 
     /// <summary>One kernel bag with its store path prefix (world / story /
-    /// box.&lt;id&gt; / deck.&lt;id&gt; / hand.&lt;id&gt; / value.&lt;id&gt;): the state logger's
+    /// box.&lt;gameId&gt; / deck.&lt;gameId&gt; / hand.&lt;gameId&gt; /
+    /// value.&lt;gameId&gt;): the state logger's
     /// mount surface (design/engine-runtimes.md 3.4 - the logger builds on
     /// the PropertyBag audit hook, so it needs the bags themselves, not just
     /// their rows). Load() replaces the flow's bags, so re-enumerate after
@@ -348,6 +388,71 @@ namespace StoryletStudio.StoryletEngine
         internal readonly OrderedMap<string, HandTemplate> _templatesById = new OrderedMap<string, HandTemplate>();
         internal readonly OrderedMap<string, (TagGroup Group, Box Box)> _groupsById = new OrderedMap<string, (TagGroup, Box)>();
         internal readonly HashSet<string> requiredGroups = new HashSet<string>();
+
+        /// <summary>The owner segment of a property address, both ways round,
+        /// for the four OWNED scopes: the ones whose address carries an owner
+        /// segment (design/engine-server.md 4.4). "story" has no owner and
+        /// "world" is the host's.</summary>
+        private readonly OwnerIndex _boxOwners = new OwnerIndex();
+        private readonly OwnerIndex _deckOwners = new OwnerIndex();
+        private readonly OwnerIndex _handOwners = new OwnerIndex();
+        private readonly OwnerIndex _valueOwners = new OwnerIndex();
+
+        /// <summary>The four owned scopes, in the order every walk over them
+        /// takes.</summary>
+        internal static readonly string[] OwnedScopes = { "box", "deck", "hand", "value" };
+
+        private OwnerIndex Owners(string kind)
+        {
+            switch (kind)
+            {
+                case "box": return _boxOwners;
+                case "deck": return _deckOwners;
+                case "hand": return _handOwners;
+                default: return _valueOwners;
+            }
+        }
+
+        /// <summary>One owned property owner's ADDRESS, owner segment and all:
+        /// "box.village". The stores, the save envelope and the ladders stay
+        /// keyed by internal id - a save must survive a rename, which is the
+        /// whole reason ids exist - so this is the one place the two
+        /// vocabularies meet, and it is a formatter, never a lookup key. An
+        /// owner the build no longer has (a save that outlived an edit) keeps
+        /// the id it arrived with: there is no gameId left to give it, which is
+        /// the rule a load report's evictions have always used.</summary>
+        internal string AddressOf(string kind, string id)
+        {
+            return Owners(kind).GameId.TryGetValue(id, out var gameId) ? $"{kind}.{gameId}" : $"{kind}.{id}";
+        }
+
+        /// <summary>Resolve a property address's owner segment to the internal
+        /// id the stores are keyed by. `legacy` says the caller used the pre-4.4
+        /// form - an internal id where a gameId belongs - which resolves for
+        /// THIS release and earns a diagnostic; the next lockstep release
+        /// refuses it. False when the segment names no owner at all, which is
+        /// the caller's "no &lt;kind&gt; store" error.</summary>
+        internal bool TryResolveOwner(string kind, string segment, out string id, out bool legacy)
+        {
+            var owners = Owners(kind);
+            if (owners.Id.TryGetValue(segment, out id)) { legacy = false; return true; }
+            // A gameId that equals its id took the branch above, so anything
+            // reaching here and known as an id is genuinely the old spelling.
+            if (owners.GameId.ContainsKey(segment)) { id = segment; legacy = true; return true; }
+            id = null;
+            legacy = false;
+            return false;
+        }
+
+        /// <summary>What a legacy address is told. It NAMES the address to move
+        /// to, because "that form is deprecated" without the replacement leaves
+        /// a host grepping a bundle for ids it never chose.</summary>
+        internal string LegacyAddressMessage(string kind, string segment, string name)
+        {
+            return $"\"{kind}.{segment}.{name}\" names the {kind} by its internal id; "
+                + $"write \"{AddressOf(kind, segment)}.{name}\". "
+                + "The internal-id form is refused after the next release.";
+        }
 
         // Quality ladders (quality.md), declaration-level so partition-blind.
         internal readonly Dictionary<string, List<string>> _worldLadders = new Dictionary<string, List<string>>();
@@ -422,13 +527,16 @@ namespace StoryletStudio.StoryletEngine
             {
                 _boxesById.Set(box.Id, box);
                 _boxesByGameId.Set(Model.EffectiveGameId(box), box);
+                _boxOwners.Add(box.Id, Model.EffectiveGameId(box));
                 foreach (var group in box.TagGroups)
                 {
                     _groupsById.Set(group.Id, (group, box));
                     if (group.Required) requiredGroups.Add(group.Id);
+                    foreach (var tag in group.Tags) _valueOwners.Add(tag.Id, Model.EffectiveGameId(tag));
                 }
                 foreach (var deck in box.Decks)
                 {
+                    _deckOwners.Add(deck.Id, Model.EffectiveGameId(deck));
                     if (deck.Shared == true) _hasShared = true;
                     foreach (var card in deck.Cards)
                     {
@@ -444,6 +552,7 @@ namespace StoryletStudio.StoryletEngine
                     var entry = new HandInBox { Hand = hand, Box = box };
                     _handsById.Set(hand.Id, entry);
                     _handsByGameId.Set(Model.EffectiveGameId(hand), entry);
+                    _handOwners.Add(hand.Id, Model.EffectiveGameId(hand));
                 }
             }
             InitLadders();
@@ -494,18 +603,20 @@ namespace StoryletStudio.StoryletEngine
             return hand.Properties ?? new List<PropertyDecl>();
         }
 
-        /// <summary>Build the shared stores and the @world seam.</summary>
+        /// <summary>Build the shared stores and the @world seam. The bags are
+        /// KEYED by internal id and ADDRESSED by gameId; see AddressOf.</summary>
         private void InitShared()
         {
             var shared = new Partition { Story = BagFromDecls(Half("story", _bundle.Story.Properties, true), "story.") };
+            string At(string kind, string id) => AddressOf(kind, id) + ".";
             foreach (var box in _bundle.Boxes)
             {
-                shared.Box.Set(box.Id, BagFromDecls(Half("box", box.Properties, true), $"box.{box.Id}."));
-                foreach (var deck in box.Decks) shared.Deck.Set(deck.Id, BagFromDecls(Half("deck", deck.Properties, true), $"deck.{deck.Id}."));
-                foreach (var hand in box.Hands) shared.Hand.Set(hand.Id, BagFromDecls(Half("hand", HandDecls(hand), true), $"hand.{hand.Id}."));
+                shared.Box.Set(box.Id, BagFromDecls(Half("box", box.Properties, true), At("box", box.Id)));
+                foreach (var deck in box.Decks) shared.Deck.Set(deck.Id, BagFromDecls(Half("deck", deck.Properties, true), At("deck", deck.Id)));
+                foreach (var hand in box.Hands) shared.Hand.Set(hand.Id, BagFromDecls(Half("hand", HandDecls(hand), true), At("hand", hand.Id)));
                 foreach (var group in box.TagGroups)
                     foreach (var tag in group.Tags)
-                        shared.Value.Set(tag.Id, BagFromDecls(Half("value", tag.Properties ?? new List<PropertyDecl>(), true), $"value.{tag.Id}."));
+                        shared.Value.Set(tag.Id, BagFromDecls(Half("value", tag.Properties ?? new List<PropertyDecl>(), true), At("value", tag.Id)));
             }
             _shared = shared;
             if (_hostWorld == null)
@@ -552,10 +663,10 @@ namespace StoryletStudio.StoryletEngine
         internal Partition BuildFlowPartition()
         {
             var p = new Partition { Story = BagFromDecls(_flowDecls.Story, "story.") };
-            foreach (var pair in _flowDecls.Box) p.Box.Set(pair.Key, BagFromDecls(pair.Value, $"box.{pair.Key}."));
-            foreach (var pair in _flowDecls.Deck) p.Deck.Set(pair.Key, BagFromDecls(pair.Value, $"deck.{pair.Key}."));
-            foreach (var pair in _flowDecls.Hand) p.Hand.Set(pair.Key, BagFromDecls(pair.Value, $"hand.{pair.Key}."));
-            foreach (var pair in _flowDecls.Value) p.Value.Set(pair.Key, BagFromDecls(pair.Value, $"value.{pair.Key}."));
+            foreach (var pair in _flowDecls.Box) p.Box.Set(pair.Key, BagFromDecls(pair.Value, AddressOf("box", pair.Key) + "."));
+            foreach (var pair in _flowDecls.Deck) p.Deck.Set(pair.Key, BagFromDecls(pair.Value, AddressOf("deck", pair.Key) + "."));
+            foreach (var pair in _flowDecls.Hand) p.Hand.Set(pair.Key, BagFromDecls(pair.Value, AddressOf("hand", pair.Key) + "."));
+            foreach (var pair in _flowDecls.Value) p.Value.Set(pair.Key, BagFromDecls(pair.Value, AddressOf("value", pair.Key) + "."));
             return p;
         }
 
@@ -744,7 +855,8 @@ namespace StoryletStudio.StoryletEngine
         // --- engine-level state access -------------------------------------------
 
         /// <summary>Read shared state by path: "world.x", "story.gold" (when
-        /// shared), "box.b_x.heat" (when shared). A ref that resolves PER-FLOW
+        /// shared), "box.village.heat" (when shared) - the owner segment is its
+        /// GAMEID (design/engine-server.md 4.4). A ref that resolves PER-FLOW
         /// throws, naming the fix (Patter's teaching rule).</summary>
         public StoryletValue GetProperty(string path)
         {
@@ -767,26 +879,44 @@ namespace StoryletStudio.StoryletEngine
             }
             if (parts.Length == 3 && (parts[0] == "box" || parts[0] == "deck" || parts[0] == "hand" || parts[0] == "value"))
             {
-                var sharedKind = KindOf(_shared, parts[0]);
-                var flowDecls = FlowDeclsOf(parts[0]);
-                var bag = sharedKind.GetOrDefault(parts[1]);
+                var kind = parts[0];
+                var segment = parts[1];
+                var name = parts[2];
+                if (!TryResolveOwner(kind, segment, out var id, out var legacy))
+                {
+                    throw new StoryletError($"no {kind} store \"{segment}\"");
+                }
+                if (legacy) Diagnose(LegacyAddressMessage(kind, segment, name));
+                var sharedKind = KindOf(_shared, kind);
+                var flowDecls = FlowDeclsOf(kind);
+                var bag = sharedKind.GetOrDefault(id);
                 if (bag != null)
                 {
-                    var v = bag.Get(parts[2]);
+                    var v = bag.Get(name);
                     if (v != null) return v;
                 }
-                var decls = flowDecls.GetOrDefault(parts[1]);
+                var decls = flowDecls.GetOrDefault(id);
                 if (decls != null)
                 {
                     foreach (var d in decls)
                     {
-                        if (d.Name == parts[2]) throw new StoryletError($"\"{path}\" is per-flow state - read it on a Flow, not the Engine");
+                        if (d.Name == name) throw new StoryletError($"\"{path}\" is per-flow state - read it on a Flow, not the Engine");
                     }
                 }
-                if (bag == null && decls == null) throw new StoryletError($"no {parts[0]} store \"{parts[1]}\"");
+                if (bag == null && decls == null) throw new StoryletError($"no {kind} store \"{segment}\"");
                 throw new StoryletError($"no property at \"{path}\"");
             }
             throw new StoryletError($"bad property path \"{path}\"");
+        }
+
+        /// <summary>The engine's own surface has no flow, so an engine-level
+        /// diagnostic carries the EMPTY flow id - the same way a LoadReport's
+        /// shared half carries no flow. It reaches the run log and the engine
+        /// tap; there is nowhere else for it to go, and it fires only on a
+        /// legacy address.</summary>
+        private void Diagnose(string message)
+        {
+            EmitEngine("", new DiagnosticEvent { Where = "property address", Message = message }, null);
         }
 
         public void SetProperty(string path, StoryletValue value)
@@ -799,9 +929,20 @@ namespace StoryletStudio.StoryletEngine
                 return;
             }
             // Reuse the read-side routing: a per-flow or unknown ref throws the
-            // same message before anything is written.
+            // same message before anything is written, and a legacy address says
+            // so exactly once - the read did the diagnosing, so this second
+            // resolve is silent.
             GetProperty(path);
-            PropertyBag bag = parts.Length == 2 ? _shared.Story : KindOf(_shared, parts[0]).GetOrDefault(parts[1]);
+            PropertyBag bag;
+            if (parts.Length == 2)
+            {
+                bag = _shared.Story;
+            }
+            else
+            {
+                TryResolveOwner(parts[0], parts[1], out var id, out _);
+                bag = KindOf(_shared, parts[0]).GetOrDefault(id);
+            }
             // A HOST write, in any scope: silent under the firing rule, visible to the
             // audit hook, and never refused by a Writable == false - that flag is the
             // story's promise about its own outcomes, and this is the game speaking.
@@ -867,10 +1008,10 @@ namespace StoryletStudio.StoryletEngine
                 }
             }
             Add("story", _shared.Story);
-            foreach (var pair in _shared.Box) Add($"box.{pair.Key}", pair.Value);
-            foreach (var pair in _shared.Deck) Add($"deck.{pair.Key}", pair.Value);
-            foreach (var pair in _shared.Hand) Add($"hand.{pair.Key}", pair.Value);
-            foreach (var pair in _shared.Value) Add($"value.{pair.Key}", pair.Value);
+            foreach (var kind in OwnedScopes)
+            {
+                foreach (var pair in KindOf(_shared, kind)) Add(AddressOf(kind, pair.Key), pair.Value);
+            }
             return rows;
         }
 
@@ -880,10 +1021,13 @@ namespace StoryletStudio.StoryletEngine
         public List<BagMount> ListBags()
         {
             var mounts = new List<BagMount> { new BagMount { Prefix = "story", Bag = _shared.Story } };
-            foreach (var pair in _shared.Box) mounts.Add(new BagMount { Prefix = $"box.{pair.Key}", Bag = pair.Value });
-            foreach (var pair in _shared.Deck) mounts.Add(new BagMount { Prefix = $"deck.{pair.Key}", Bag = pair.Value });
-            foreach (var pair in _shared.Hand) mounts.Add(new BagMount { Prefix = $"hand.{pair.Key}", Bag = pair.Value });
-            foreach (var pair in _shared.Value) mounts.Add(new BagMount { Prefix = $"value.{pair.Key}", Bag = pair.Value });
+            foreach (var kind in OwnedScopes)
+            {
+                foreach (var pair in KindOf(_shared, kind))
+                {
+                    mounts.Add(new BagMount { Prefix = AddressOf(kind, pair.Key), Bag = pair.Value });
+                }
+            }
             return mounts;
         }
 
@@ -1128,7 +1272,7 @@ namespace StoryletStudio.StoryletEngine
         {
             var outP = new PropsPartition();
             outP.Story = WalkScope(decls.Story, values?.Story, n => "story." + n, flow, draft);
-            foreach (var kind in new[] { "box", "deck", "hand", "value" })
+            foreach (var kind in OwnedScopes)
             {
                 var declKind = decls.Kind(kind);
                 var savedKind = SavedKind(values, kind);
@@ -1140,7 +1284,11 @@ namespace StoryletStudio.StoryletEngine
                 var target = SavedKind(outP, kind);
                 foreach (var id in ids)
                 {
-                    var prefix = kind + "." + id + ".";
+                    // The report's Path is exactly what ListProperties() prints
+                    // and what SetProperty takes: one grammar, so an operator
+                    // reading a hot-swap report can paste the address straight
+                    // back in (4.4).
+                    var prefix = AddressOf(kind, id) + ".";
                     var savedBag = savedKind != null ? savedKind.GetOrDefault(id) : null;
                     target.Set(id, WalkScope(declKind.GetOrDefault(id), savedBag, n => prefix + n, flow, draft));
                 }

@@ -19,8 +19,9 @@
 //                                                             play / evict / turns event
 //   bundle: { t:"bundle", v:1, build, data }                - EDITOR -> game: the full .storyletsc
 //                                                             JSON as a string
-// Identity in frames is by gameId (hands, boxes, cards); the trace event is
-// the runtime's own object, verbatim, whatever ids it carries.
+// Identity in frames is by gameId (hands, boxes, cards), and since 4.4 that
+// holds for the trace event too: it is forwarded verbatim, and the runtime's
+// own ids are gameIds now, so the rule has no exception left.
 //
 // Patterpad's createDebugLink is the template (Patter play-helpers/debug.ts):
 // hello first, frames queue until the socket opens, a missing editor is a

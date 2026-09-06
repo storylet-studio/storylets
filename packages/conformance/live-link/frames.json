@@ -31,71 +31,71 @@
       "hand": "the-inn",
       "cards": [
         {
-          "id": "c_amb_forest",
+          "id": "wind-in-the-leaves",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_forge",
+          "id": "ring-of-the-anvil",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_night",
+          "id": "night-settles",
           "verdict": "condition"
         },
         {
-          "id": "c_bryna",
+          "id": "answer-brynas-summons",
           "verdict": "condition"
         },
         {
-          "id": "c_forge_first",
+          "id": "known-at-the-forge",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_men",
+          "id": "the-moneylenders-men",
           "verdict": "condition"
         },
         {
-          "id": "c_gareth_thanks",
+          "id": "gareths-gratitude",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_troubled",
+          "id": "gareth-looks-troubled",
           "verdict": "tags"
         },
         {
-          "id": "c_mira_distracted",
+          "id": "mira-seems-distracted",
           "verdict": "condition"
         },
         {
-          "id": "c_mira_letter",
+          "id": "the-sealed-letter",
           "verdict": "condition"
         },
         {
-          "id": "c_forest_peril",
+          "id": "the-forest-turns",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_bloom",
+          "id": "the-tree-blooms",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_night",
+          "id": "the-glowing-tree",
           "verdict": "tags"
         },
         {
-          "id": "c_arrive",
+          "id": "arrive-at-the-gate",
           "verdict": "dealt",
           "priority": 10,
           "specificity": 1
         },
         {
-          "id": "c_inn_first",
+          "id": "settle-at-the-inn",
           "verdict": "dealt",
           "priority": 3,
           "specificity": 1
         },
         {
-          "id": "c_amb_market",
+          "id": "market-bustle",
           "verdict": "capped",
           "priority": 0,
           "specificity": 0
@@ -126,67 +126,67 @@
       "hand": "the-mystic-tree",
       "cards": [
         {
-          "id": "c_amb_forge",
+          "id": "ring-of-the-anvil",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_market",
+          "id": "market-bustle",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_night",
+          "id": "night-settles",
           "verdict": "tags"
         },
         {
-          "id": "c_arrive",
+          "id": "arrive-at-the-gate",
           "verdict": "tags"
         },
         {
-          "id": "c_bryna",
+          "id": "answer-brynas-summons",
           "verdict": "tags"
         },
         {
-          "id": "c_forge_first",
+          "id": "known-at-the-forge",
           "verdict": "tags"
         },
         {
-          "id": "c_inn_first",
+          "id": "settle-at-the-inn",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_men",
+          "id": "the-moneylenders-men",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_thanks",
+          "id": "gareths-gratitude",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_troubled",
+          "id": "gareth-looks-troubled",
           "verdict": "tags"
         },
         {
-          "id": "c_mira_distracted",
+          "id": "mira-seems-distracted",
           "verdict": "tags"
         },
         {
-          "id": "c_mira_letter",
+          "id": "the-sealed-letter",
           "verdict": "tags"
         },
         {
-          "id": "c_forest_peril",
+          "id": "the-forest-turns",
           "verdict": "condition"
         },
         {
-          "id": "c_tree_bloom",
+          "id": "the-tree-blooms",
           "verdict": "condition"
         },
         {
-          "id": "c_tree_night",
+          "id": "the-glowing-tree",
           "verdict": "condition"
         },
         {
-          "id": "c_amb_forest",
+          "id": "wind-in-the-leaves",
           "verdict": "dealt",
           "priority": 0,
           "specificity": 0
@@ -219,71 +219,71 @@
       "hand": "the-forge",
       "cards": [
         {
-          "id": "c_amb_forest",
+          "id": "wind-in-the-leaves",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_night",
+          "id": "night-settles",
           "verdict": "condition"
         },
         {
-          "id": "c_arrive",
+          "id": "arrive-at-the-gate",
           "verdict": "claimed"
         },
         {
-          "id": "c_bryna",
+          "id": "answer-brynas-summons",
           "verdict": "condition"
         },
         {
-          "id": "c_inn_first",
+          "id": "settle-at-the-inn",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_men",
+          "id": "the-moneylenders-men",
           "verdict": "condition"
         },
         {
-          "id": "c_gareth_thanks",
+          "id": "gareths-gratitude",
           "verdict": "condition"
         },
         {
-          "id": "c_gareth_troubled",
+          "id": "gareth-looks-troubled",
           "verdict": "condition"
         },
         {
-          "id": "c_mira_distracted",
+          "id": "mira-seems-distracted",
           "verdict": "tags"
         },
         {
-          "id": "c_mira_letter",
+          "id": "the-sealed-letter",
           "verdict": "tags"
         },
         {
-          "id": "c_forest_peril",
+          "id": "the-forest-turns",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_bloom",
+          "id": "the-tree-blooms",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_night",
+          "id": "the-glowing-tree",
           "verdict": "tags"
         },
         {
-          "id": "c_forge_first",
+          "id": "known-at-the-forge",
           "verdict": "dealt",
           "priority": 3,
           "specificity": 1
         },
         {
-          "id": "c_amb_forge",
+          "id": "ring-of-the-anvil",
           "verdict": "dealt",
           "priority": 0,
           "specificity": 0
         },
         {
-          "id": "c_amb_market",
+          "id": "market-bustle",
           "verdict": "capped",
           "priority": 0,
           "specificity": 0
@@ -327,7 +327,7 @@
     "flow": "main",
     "event": {
       "type": "play",
-      "card": "c_arrive",
+      "card": "arrive-at-the-gate",
       "outcome": "step-through",
       "turn": 1
     }
@@ -370,7 +370,7 @@
     "flow": "main",
     "event": {
       "type": "play",
-      "card": "c_forge_first",
+      "card": "known-at-the-forge",
       "outcome": "admire-the-work",
       "turn": 2
     }
@@ -447,69 +447,69 @@
       "hand": "the-inn",
       "cards": [
         {
-          "id": "c_amb_forest",
+          "id": "wind-in-the-leaves",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_forge",
+          "id": "ring-of-the-anvil",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_night",
+          "id": "night-settles",
           "verdict": "condition"
         },
         {
-          "id": "c_arrive",
+          "id": "arrive-at-the-gate",
           "verdict": "condition"
         },
         {
-          "id": "c_bryna",
+          "id": "answer-brynas-summons",
           "verdict": "condition"
         },
         {
-          "id": "c_forge_first",
+          "id": "known-at-the-forge",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_men",
+          "id": "the-moneylenders-men",
           "verdict": "condition"
         },
         {
-          "id": "c_gareth_thanks",
+          "id": "gareths-gratitude",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_troubled",
+          "id": "gareth-looks-troubled",
           "verdict": "tags"
         },
         {
-          "id": "c_mira_distracted",
+          "id": "mira-seems-distracted",
           "verdict": "condition"
         },
         {
-          "id": "c_mira_letter",
+          "id": "the-sealed-letter",
           "verdict": "condition"
         },
         {
-          "id": "c_forest_peril",
+          "id": "the-forest-turns",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_bloom",
+          "id": "the-tree-blooms",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_night",
+          "id": "the-glowing-tree",
           "verdict": "tags"
         },
         {
-          "id": "c_inn_first",
+          "id": "settle-at-the-inn",
           "verdict": "dealt",
           "priority": 3,
           "specificity": 1
         },
         {
-          "id": "c_amb_market",
+          "id": "market-bustle",
           "verdict": "dealt",
           "priority": 0,
           "specificity": 0
@@ -540,67 +540,67 @@
       "hand": "the-mystic-tree",
       "cards": [
         {
-          "id": "c_amb_forge",
+          "id": "ring-of-the-anvil",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_market",
+          "id": "market-bustle",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_night",
+          "id": "night-settles",
           "verdict": "tags"
         },
         {
-          "id": "c_arrive",
+          "id": "arrive-at-the-gate",
           "verdict": "tags"
         },
         {
-          "id": "c_bryna",
+          "id": "answer-brynas-summons",
           "verdict": "tags"
         },
         {
-          "id": "c_forge_first",
+          "id": "known-at-the-forge",
           "verdict": "tags"
         },
         {
-          "id": "c_inn_first",
+          "id": "settle-at-the-inn",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_men",
+          "id": "the-moneylenders-men",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_thanks",
+          "id": "gareths-gratitude",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_troubled",
+          "id": "gareth-looks-troubled",
           "verdict": "tags"
         },
         {
-          "id": "c_mira_distracted",
+          "id": "mira-seems-distracted",
           "verdict": "tags"
         },
         {
-          "id": "c_mira_letter",
+          "id": "the-sealed-letter",
           "verdict": "tags"
         },
         {
-          "id": "c_forest_peril",
+          "id": "the-forest-turns",
           "verdict": "condition"
         },
         {
-          "id": "c_tree_bloom",
+          "id": "the-tree-blooms",
           "verdict": "condition"
         },
         {
-          "id": "c_tree_night",
+          "id": "the-glowing-tree",
           "verdict": "condition"
         },
         {
-          "id": "c_amb_forest",
+          "id": "wind-in-the-leaves",
           "verdict": "dealt",
           "priority": 0,
           "specificity": 0
@@ -633,69 +633,69 @@
       "hand": "the-forge",
       "cards": [
         {
-          "id": "c_amb_forest",
+          "id": "wind-in-the-leaves",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_market",
+          "id": "market-bustle",
           "verdict": "claimed"
         },
         {
-          "id": "c_amb_night",
+          "id": "night-settles",
           "verdict": "condition"
         },
         {
-          "id": "c_arrive",
+          "id": "arrive-at-the-gate",
           "verdict": "condition"
         },
         {
-          "id": "c_bryna",
+          "id": "answer-brynas-summons",
           "verdict": "condition"
         },
         {
-          "id": "c_forge_first",
+          "id": "known-at-the-forge",
           "verdict": "condition"
         },
         {
-          "id": "c_inn_first",
+          "id": "settle-at-the-inn",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_men",
+          "id": "the-moneylenders-men",
           "verdict": "condition"
         },
         {
-          "id": "c_gareth_thanks",
+          "id": "gareths-gratitude",
           "verdict": "condition"
         },
         {
-          "id": "c_mira_distracted",
+          "id": "mira-seems-distracted",
           "verdict": "tags"
         },
         {
-          "id": "c_mira_letter",
+          "id": "the-sealed-letter",
           "verdict": "tags"
         },
         {
-          "id": "c_forest_peril",
+          "id": "the-forest-turns",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_bloom",
+          "id": "the-tree-blooms",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_night",
+          "id": "the-glowing-tree",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_troubled",
+          "id": "gareth-looks-troubled",
           "verdict": "dealt",
           "priority": 4,
           "specificity": 3
         },
         {
-          "id": "c_amb_forge",
+          "id": "ring-of-the-anvil",
           "verdict": "dealt",
           "priority": 0,
           "specificity": 0
@@ -764,69 +764,69 @@
       "hand": "the-forge",
       "cards": [
         {
-          "id": "c_amb_forest",
+          "id": "wind-in-the-leaves",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_forge",
+          "id": "ring-of-the-anvil",
           "verdict": "claimed"
         },
         {
-          "id": "c_amb_night",
+          "id": "night-settles",
           "verdict": "condition"
         },
         {
-          "id": "c_arrive",
+          "id": "arrive-at-the-gate",
           "verdict": "cooldown"
         },
         {
-          "id": "c_bryna",
+          "id": "answer-brynas-summons",
           "verdict": "condition"
         },
         {
-          "id": "c_forge_first",
+          "id": "known-at-the-forge",
           "verdict": "cooldown"
         },
         {
-          "id": "c_inn_first",
+          "id": "settle-at-the-inn",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_men",
+          "id": "the-moneylenders-men",
           "verdict": "condition"
         },
         {
-          "id": "c_gareth_thanks",
+          "id": "gareths-gratitude",
           "verdict": "condition"
         },
         {
-          "id": "c_mira_distracted",
+          "id": "mira-seems-distracted",
           "verdict": "tags"
         },
         {
-          "id": "c_mira_letter",
+          "id": "the-sealed-letter",
           "verdict": "tags"
         },
         {
-          "id": "c_forest_peril",
+          "id": "the-forest-turns",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_bloom",
+          "id": "the-tree-blooms",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_night",
+          "id": "the-glowing-tree",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_troubled",
+          "id": "gareth-looks-troubled",
           "verdict": "dealt",
           "priority": 4,
           "specificity": 3
         },
         {
-          "id": "c_amb_market",
+          "id": "market-bustle",
           "verdict": "capped",
           "priority": 0,
           "specificity": 0
@@ -861,67 +861,67 @@
       "hand": "the-inn",
       "cards": [
         {
-          "id": "c_amb_forest",
+          "id": "wind-in-the-leaves",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_forge",
+          "id": "ring-of-the-anvil",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_night",
+          "id": "night-settles",
           "verdict": "condition"
         },
         {
-          "id": "c_arrive",
+          "id": "arrive-at-the-gate",
           "verdict": "cooldown"
         },
         {
-          "id": "c_bryna",
+          "id": "answer-brynas-summons",
           "verdict": "condition"
         },
         {
-          "id": "c_forge_first",
+          "id": "known-at-the-forge",
           "verdict": "cooldown"
         },
         {
-          "id": "c_inn_first",
+          "id": "settle-at-the-inn",
           "verdict": "claimed"
         },
         {
-          "id": "c_gareth_men",
+          "id": "the-moneylenders-men",
           "verdict": "condition"
         },
         {
-          "id": "c_gareth_thanks",
+          "id": "gareths-gratitude",
           "verdict": "tags"
         },
         {
-          "id": "c_gareth_troubled",
+          "id": "gareth-looks-troubled",
           "verdict": "tags"
         },
         {
-          "id": "c_mira_distracted",
+          "id": "mira-seems-distracted",
           "verdict": "condition"
         },
         {
-          "id": "c_mira_letter",
+          "id": "the-sealed-letter",
           "verdict": "condition"
         },
         {
-          "id": "c_forest_peril",
+          "id": "the-forest-turns",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_bloom",
+          "id": "the-tree-blooms",
           "verdict": "tags"
         },
         {
-          "id": "c_tree_night",
+          "id": "the-glowing-tree",
           "verdict": "tags"
         },
         {
-          "id": "c_amb_market",
+          "id": "market-bustle",
           "verdict": "dealt",
           "priority": 0,
           "specificity": 0

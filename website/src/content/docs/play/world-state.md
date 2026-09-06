@@ -81,14 +81,25 @@ expression language a designer writes in; the API takes a plain path. The paths 
 |---|---|
 | `world.<name>` | your game's state |
 | `story.<name>` | the story's own global state |
-| `box.<id>.<name>` | a box's properties |
-| `deck.<id>.<name>` | a deck's properties |
-| `hand.<id>.<name>` | a hand's properties |
-| `value.<tagId>.<name>` | a tag's own properties |
+| `box.<box>.<name>` | a box's properties |
+| `deck.<deck>.<name>` | a deck's properties |
+| `hand.<hand>.<name>` | a hand's properties |
+| `value.<tag>.<name>` | a tag's own properties |
+
+The owner is named by the name you gave it: a box, deck, hand or tag is addressed by the same
+gameId you write in a shard and read on a card. So the Elder's zone is
+`hand.the-elder.zone`, and the docks' danger is `value.docks.danger`.
 
 `getProperty` reads the same paths, and `listProperties()` returns every declared property
 with its path, type, current value and default. That list is what the in-engine
 [examiners](/play/dev-tools/#the-property-examiner) are built from.
+
+:::caution[Addresses used to take an internal id]
+Before this release the owner segment was the entity's internal id (`hand.h_elder.zone`), the
+id shards use to survive renames, not the name you write. That form still resolves, and the
+runtime tells you on the trace which address to move to. It is refused after the next release,
+so run your game once with the trace on and fix what it names.
+:::
 
 ## When to write it
 

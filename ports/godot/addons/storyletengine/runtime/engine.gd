@@ -58,6 +58,19 @@ var _templates_by_id: Dictionary = {}
 var _groups_by_id: Dictionary = {}      # id -> {"group", "box"}
 var _required_groups: Dictionary = {}   # id -> true
 
+# The owner segment of a property address, both ways round (design change 4.4).
+#
+# The first map answers "what is this store called?" (internal id -> gameId) and
+# the second "which store is that?" (gameId -> internal id). Both are built in
+# bundle order and a repeated gameId does NOT overwrite the first: box, hand and
+# card gameIds are unique bundle-wide, but a TAG's is unique only within its
+# group, and a group's only within its box, so two boxes may each name a tag
+# "docks". "value.docks" names the first of the two, and the second stays
+# reachable by its internal id - which is the one part of the internal-id form
+# that cannot be retired on the same timetable as the rest.
+var _owner_game_ids: Dictionary = {"box": {}, "deck": {}, "hand": {}, "value": {}}
+var _owner_ids: Dictionary = {"box": {}, "deck": {}, "hand": {}, "value": {}}
+
 # Quality ladders (quality.md), declaration-level so partition-blind.
 var _world_ladders: Dictionary = {}
 var _story_ladders: Dictionary = {}
@@ -119,6 +132,58 @@ static func _bag_from_decls(decls: Array, path_prefix: String) -> StoryletProper
 	})
 
 
+# --- the owner segment of a property address (design change 4.4) -----------------
+
+## @internal - file one entity under its scope, both ways round. A repeated
+## gameId leaves the first winner in place: see the note on _owner_ids.
+func _index_owner(kind: String, entity: Dictionary) -> void:
+	var game_id := StoryletBundle.effective_game_id(entity)
+	var id := str(entity["id"])
+	(_owner_game_ids[kind] as Dictionary)[id] = game_id
+	var by_game_id: Dictionary = _owner_ids[kind]
+	if not by_game_id.has(game_id):
+		by_game_id[game_id] = id
+
+
+## @internal - one owned property owner's ADDRESS, segment and all:
+## "box.village" for the box whose internal id is "b_village".
+##
+## The stores, the save envelope and the ladders stay keyed by internal id - a
+## save must survive a rename, which is the whole reason ids exist - so this is
+## the one place the two vocabularies meet, and it is a formatter, never a
+## lookup key. An owner the build no longer has (a save that outlived an edit)
+## keeps the id it arrived with: there is no gameId left to give it, which is
+## the rule a load report's evictions have always used.
+func address_of(kind: String, id: String) -> String:
+	var game_id = (_owner_game_ids[kind] as Dictionary).get(id)
+	return "%s.%s" % [kind, game_id if game_id != null else id]
+
+
+## @internal - the same address's owner segment resolved back to the internal id
+## the stores are keyed by: {"id", "legacy"}, or {} when the segment names no
+## owner at all (which is the caller's "no <kind> store" refusal). "legacy" says
+## the caller used the pre-4.4 form - an internal id where a gameId belongs -
+## which resolves for THIS release and earns a diagnostic; the next lockstep
+## release refuses it.
+func resolve_owner(kind: String, segment: String) -> Dictionary:
+	var by_game_id = (_owner_ids[kind] as Dictionary).get(segment)
+	if by_game_id != null:
+		return {"id": str(by_game_id), "legacy": false}
+	# A gameId that equals its id took the branch above, so anything reaching
+	# here and known as an id is genuinely the old spelling.
+	if (_owner_game_ids[kind] as Dictionary).has(segment):
+		return {"id": segment, "legacy": true}
+	return {}
+
+
+## @internal - what a legacy address is told. It NAMES the address to move to,
+## because "that form is deprecated" without the replacement leaves a host
+## grepping a bundle for ids it never chose.
+func legacy_address_message(kind: String, segment: String, name: String) -> String:
+	return '"%s.%s.%s" names the %s by its internal id; write "%s.%s". The internal-id form is refused after the next release.' \
+		% [kind, segment, name, kind, address_of(kind, segment), name]
+
+
 ## new StoryletEngine(bundle, opts). Options: {"seed": int (default 0; each
 ## flow's PRNG default), "log": bool | {"cap": int} (per-flow retained
 ## logs), "world": {"get": Callable, "set": Callable?} (the host's @world
@@ -168,11 +233,15 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 	for box in _bundle["boxes"]:
 		_boxes_by_id[box["id"]] = box
 		_boxes_by_game_id[StoryletBundle.effective_game_id(box)] = box
+		_index_owner("box", box)
 		for group in box["tagGroups"]:
 			_groups_by_id[group["id"]] = {"group": group, "box": box}
 			if group.get("required", false):
 				_required_groups[group["id"]] = true
+			for tag in group["tags"]:
+				_index_owner("value", tag)
 		for deck in box["decks"]:
+			_index_owner("deck", deck)
 			if deck.get("shared", false) == true:
 				_has_shared = true
 			for card in deck["cards"]:
@@ -186,6 +255,7 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 		for hand in box["hands"]:
 			_hands_by_id[hand["id"]] = {"hand": hand, "box": box}
 			_hands_by_game_id[StoryletBundle.effective_game_id(hand)] = {"hand": hand, "box": box}
+			_index_owner("hand", hand)
 	_init_ladders()
 
 	# Both halves, precomputed once (a bundle never changes): each open_flow
@@ -216,18 +286,21 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 
 ## Build the shared stores and the @world seam. The host binding sticks for
 ## the engine's lifetime; reset/load_game rebuild the shared bags around it.
+##
+## The bags are KEYED by internal id and ADDRESSED by gameId; see address_of.
 func _init_shared() -> void:
+	var at := func(kind: String, owner_id: String) -> String: return address_of(kind, owner_id) + "."
 	var shared := {"story": _bag_from_decls(_half("story", _bundle["story"].get("properties", []), true), "story."),
 		"box": {}, "deck": {}, "hand": {}, "value": {}}
 	for box in _bundle["boxes"]:
-		shared["box"][box["id"]] = _bag_from_decls(_half("box", box.get("properties", []), true), "box.%s." % box["id"])
+		shared["box"][box["id"]] = _bag_from_decls(_half("box", box.get("properties", []), true), at.call("box", box["id"]))
 		for deck in box["decks"]:
-			shared["deck"][deck["id"]] = _bag_from_decls(_half("deck", deck.get("properties", []), true), "deck.%s." % deck["id"])
+			shared["deck"][deck["id"]] = _bag_from_decls(_half("deck", deck.get("properties", []), true), at.call("deck", deck["id"]))
 		for hand in box["hands"]:
-			shared["hand"][hand["id"]] = _bag_from_decls(_half("hand", hand_decls(hand), true), "hand.%s." % hand["id"])
+			shared["hand"][hand["id"]] = _bag_from_decls(_half("hand", hand_decls(hand), true), at.call("hand", hand["id"]))
 		for group in box["tagGroups"]:
 			for tag in group["tags"]:
-				shared["value"][tag["id"]] = _bag_from_decls(_half("value", tag.get("properties", []), true), "value.%s." % tag["id"])
+				shared["value"][tag["id"]] = _bag_from_decls(_half("value", tag.get("properties", []), true), at.call("value", tag["id"]))
 	_shared = shared
 	if _host_world != null:
 		_world = {"get": _host_world["get"], "set": _host_world.get("set")}
@@ -464,9 +537,11 @@ func _shared_claims_except(id: String) -> Dictionary:
 # --- engine-level state access ---------------------------------------------------
 
 ## Read shared state by path: "world.x", "story.gold" (when shared),
-## "box.b_x.heat" (when shared). A ref that resolves PER-FLOW is refused,
-## naming the fix (Patter's teaching rule). Returns the value, or null with
-## push_error.
+## "box.village.heat" (when shared) - the owner segment is its GAMEID (design
+## change 4.4), and its internal id is accepted for this release with a
+## `diagnostic` naming the address to move to. A ref that resolves PER-FLOW is
+## refused, naming the fix (Patter's teaching rule). Returns the value, or null
+## with push_error.
 func get_property(path: String) -> Variant:
 	var r := _resolve_shared(path)
 	if r.has("error"):
@@ -520,8 +595,14 @@ func _resolve_shared(path: String) -> Dictionary:
 		return {"error": 'no property at "%s"' % path}
 	if parts.size() == 3 and ["box", "deck", "hand", "value"].has(parts[0]):
 		var kind := parts[0]
-		var id := parts[1]
+		var segment := parts[1]
 		var name := parts[2]
+		var owner := resolve_owner(kind, segment)
+		if owner.is_empty():
+			return {"error": 'no %s store "%s"' % [kind, segment]}
+		if owner["legacy"]:
+			_diagnose(legacy_address_message(kind, segment, name))
+		var id: String = owner["id"]
 		var bag = _shared[kind].get(id)
 		if bag != null and (bag as StoryletPropertyBag).get_value(name) != null:
 			return {"kind": "bag", "bag": bag, "name": name}
@@ -529,9 +610,17 @@ func _resolve_shared(path: String) -> Dictionary:
 			if d["name"] == name:
 				return {"error": '"%s" is per-flow state - read it on a Flow, not the Engine' % path}
 		if bag == null and not _flow_decls[kind].has(id):
-			return {"error": 'no %s store "%s"' % [kind, id]}
+			return {"error": 'no %s store "%s"' % [kind, segment]}
 		return {"error": 'no property at "%s"' % path}
 	return {"error": 'bad property path "%s"' % path}
+
+
+## The engine's own surface has no flow, so an engine-level diagnostic carries
+## the EMPTY flow id - the same way a load report's shared half carries no flow.
+## It reaches the run's log and the engine tap; there is nowhere else for it to
+## go, and it fires only on a legacy address.
+func _diagnose(message: String) -> void:
+	emit_engine("", {"type": "diagnostic", "where": "property address", "message": message})
 
 
 ## The shared surface as examiner rows: @world (read through the resolver)
@@ -555,7 +644,7 @@ func list_properties() -> Array:
 	_add_rows(out, "story", _shared["story"])
 	for kind in ["box", "deck", "hand", "value"]:
 		for id in _shared[kind]:
-			_add_rows(out, "%s.%s" % [kind, id], _shared[kind][id])
+			_add_rows(out, address_of(kind, id), _shared[kind][id])
 	return out
 
 
@@ -572,7 +661,7 @@ func list_bags() -> Array:
 	var mounts: Array = [{"prefix": "story", "bag": _shared["story"]}]
 	for kind in ["box", "deck", "hand", "value"]:
 		for id in _shared[kind]:
-			mounts.append({"prefix": "%s.%s" % [kind, id], "bag": _shared[kind][id]})
+			mounts.append({"prefix": address_of(kind, id), "bag": _shared[kind][id]})
 	return mounts
 
 
@@ -734,9 +823,11 @@ func _project_mismatch(envelope: Dictionary) -> String:
 # as list_properties() prints it and exactly as get_property and set_property
 # accept it: "story.name" for the story scope, "scope.owner.name" for the box,
 # deck, hand and tag scopes. No "@", which belongs to the expression language and
-# not to an address. The owner segment is the engine's own id today, the same gap
-# every other address in the API has; design change 4.4 moves property addresses
-# and trace events to gameIds together, in all four runtimes.
+# not to an address. The owner segment is the entity's gameId, the name it is
+# called by everywhere else (design change 4.4), so an operator reading a
+# hot-swap report can paste the address straight back in. An owner the build no
+# longer has keeps the id the save arrived with: there is no gameId left to give
+# it, which is the rule the report's evictions have always used.
 
 ## The report under construction: unsorted, until _finish_report orders it.
 static func _empty_draft() -> Dictionary:
@@ -824,8 +915,11 @@ func _walk_partition(decls: Dictionary, values: Dictionary, flow, draft: Diction
 		var ordered: Array = ids.keys()
 		ordered.sort()
 		for id in ordered:
+			# The report's "path" is exactly what list_properties() prints and
+			# what set_property takes: one grammar, so an operator reading a
+			# hot-swap report can paste the address straight back in (4.4).
 			out[kind][id] = _walk_scope(decl_kind.get(id, []), saved_kind.get(id, {}),
-				"%s.%s." % [kind, id], flow, draft)
+				address_of(kind, id) + ".", flow, draft)
 	return out
 
 

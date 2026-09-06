@@ -4,8 +4,12 @@
 // Patterplay. This supplies what is storylets' own: which bags to watch, and the non-property
 // state (turns / cooldowns / board) as flattened paths.
 //
-// Flattened path scheme (the JS play-helpers logger's, verbatim):
-//   world.x / story.x / box.<id>.x / deck.<id>.x / hand.<id>.x / value.<id>.x
+// Flattened path scheme (the JS play-helpers logger's, verbatim). A property's
+// owner segment is its GAMEID (design/engine-server.md 4.4); the three
+// non-property keys stay on the internal ids the save envelope is keyed by,
+// which is what they are read off:
+//   world.x / story.x / box.<gameId>.x / deck.<gameId>.x / hand.<gameId>.x
+//   value.<gameId>.x
 //   turn:<boxId>      per-box clocks
 //   cooldown:<cardId> next-eligible turns
 //   board:<handId>    hand contents (card ids, dealt order)
@@ -22,36 +26,32 @@ namespace StoryletStudio.StoryletEngine
     public static class StoryletStateLogger
     {
         /// <summary>The full flattened snapshot of ONE FLOW's view - the
-        /// shared partitions plus that flow's own - straight off the save
-        /// envelope, so "what the snapshot sees" is by construction "what a
-        /// save persists". @world is not here for the same reason it is not
-        /// in the envelope: the host owns that container and mounts/saves it
-        /// itself.</summary>
+        /// shared partitions plus that flow's own - plus its turns / cooldowns
+        /// / board. @world is not here for the same reason it is not in a save
+        /// envelope: the host owns that container and mounts/saves it itself.
+        ///
+        /// Taken off the BAGS, which is what a save envelope is made of, rather
+        /// than off the envelope itself. The two used to be interchangeable;
+        /// from 4.4 they are not, because a property ADDRESS names its owner by
+        /// gameId while the envelope stays keyed by internal id (a save has to
+        /// survive a rename). The bags carry the address, so reading them is
+        /// what keeps this snapshot and the live logger's lines in ONE path
+        /// space - which is the invariant the whole diff rests on.</summary>
         public static OrderedMap<string, StoryletValue> SnapshotState(Engine engine, Flow flow)
         {
-            var env = engine.SaveGame();
-            var flowSave = env.Flows.GetOrDefault(flow.Id);
             var snapshot = new OrderedMap<string, StoryletValue>();
-            void Bag(string prefix, OrderedMap<string, StoryletValue> values)
-            {
-                if (values == null) return;
-                foreach (var pair in values) snapshot.Set($"{prefix}.{pair.Key}", pair.Value);
-            }
             // Shared under the flow's own: names are disjoint (shared XOR
             // per-flow by declaration), so one path space holds both.
-            Bag("story", env.Shared.Props.Story);
-            Bag("story", flowSave?.Props.Story);
-            void Kind(string kind, OrderedMap<string, OrderedMap<string, StoryletValue>> shared, OrderedMap<string, OrderedMap<string, StoryletValue>> own)
+            var mounts = engine.ListBags();
+            mounts.AddRange(flow.ListBags());
+            foreach (var mount in mounts)
             {
-                foreach (var pair in shared) Bag($"{kind}.{pair.Key}", pair.Value);
-                if (own == null) return;
-                foreach (var pair in own) Bag($"{kind}.{pair.Key}", pair.Value);
+                foreach (var row in mount.Bag.Rows())
+                {
+                    if (row.Value != null) snapshot.Set(row.Path, row.Value);
+                }
             }
-            Kind("box", env.Shared.Props.Box, flowSave?.Props.Box);
-            Kind("deck", env.Shared.Props.Deck, flowSave?.Props.Deck);
-            Kind("hand", env.Shared.Props.Hand, flowSave?.Props.Hand);
-            Kind("value", env.Shared.Props.Value, flowSave?.Props.Value);
-            foreach (var pair in ExtraState(flowSave)) snapshot.Set(pair.Key, pair.Value);
+            foreach (var pair in ExtraState(engine.SaveGame().Flows.GetOrDefault(flow.Id))) snapshot.Set(pair.Key, pair.Value);
             return snapshot;
         }
 
@@ -80,9 +80,11 @@ namespace StoryletStudio.StoryletEngine
             {
                 Mounts = () =>
                 {
-                    // A BagMount's Prefix ("story", "deck.<id>") is the engine's label for the
-                    // mount; the kernel composes paths from the BAG's own PathPrefix ("story.",
-                    // "deck.<id>."), so no prefix is passed. Same strings, one owner.
+                    // A BagMount's Prefix ("story", "deck.<gameId>") is the engine's label for
+                    // the mount; the kernel composes paths from the BAG's own PathPrefix
+                    // ("story.", "deck.<gameId>."), so no prefix is passed. The engine builds
+                    // both off one AddressOf, so the label and the composed path agree by
+                    // construction rather than by two spellings kept in step (4.4).
                     var mounts = engine.ListBags();
                     var live = engine.GetFlow(flowId);
                     if (live != null) mounts.AddRange(live.ListBags());

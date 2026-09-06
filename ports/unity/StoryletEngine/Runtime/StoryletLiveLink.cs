@@ -19,9 +19,11 @@
 //                                                           - after hello, and after every deal /
 //                                                             play / evict / turns event
 //   bundle: { t:"bundle", v:1, build, data }                - EDITOR -> game: the full .storyletsc JSON
-// Identity in frames is by gameId; the trace event is the runtime's own, in
-// the reference's key order, so the shared fixture
-// (packages/conformance/live-link/) can hold this client byte for byte.
+// Identity in frames is by gameId, the trace event's own included since design
+// change 4.4 took the runtime's whole trace to gameIds: this client no longer
+// maps anything, it forwards what the engine emitted, in the reference's key
+// order, so the shared fixture (packages/conformance/live-link/) can hold it
+// byte for byte.
 //
 // It never throws into your game, and if the editor isn't listening every call
 // is a silent no-op (a shipped game has nothing on 127.0.0.1:4472, so it stays

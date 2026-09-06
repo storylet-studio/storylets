@@ -35,26 +35,27 @@ export { createKernelStateLogger, diffState };
 export type { StateSnapshot, StateChange, StateLogger, StateLoggerAdapter, StateLoggerOptions };
 
 /** The full flattened snapshot of ONE FLOW's view - the shared partitions
- *  plus that flow's own - straight off the save envelope, so "what the
- *  snapshot sees" is by construction "what a save persists". @world is not
- *  here for the same reason it is not in the envelope: the host owns that
- *  container and mounts/saves it itself (createWorldContainer). */
+ *  plus that flow's own - plus its turns / cooldowns / board. @world is not
+ *  here for the same reason it is not in a save envelope: the host owns that
+ *  container and mounts/saves it itself (createWorldContainer).
+ *
+ *  Taken off the BAGS, which is what a save envelope is made of, rather than
+ *  off the envelope itself. The two used to be interchangeable; from 4.4 they
+ *  are not, because a property ADDRESS names its owner by gameId while the
+ *  envelope stays keyed by internal id (a save has to survive a rename). The
+ *  bags carry the address, so reading them is what keeps this snapshot and
+ *  the live logger's lines in ONE path space - which is the invariant the
+ *  whole diff rests on. */
 export function snapshotState(engine: Engine, flow: Flow): StateSnapshot {
-  const env = engine.saveGame();
-  const flowSave = env.flows[flow.id];
   const out: StateSnapshot = {};
-  const bag = (prefix: string, values: Record<string, ScalarValue> | undefined): void => {
-    for (const [name, value] of Object.entries(values ?? {})) out[`${prefix}.${name}`] = value;
-  };
   // Shared under the flow's own: names are disjoint (shared XOR per-flow by
   // declaration), so one path space holds both without collision.
-  bag("story", env.shared.props.story);
-  bag("story", flowSave?.props.story);
-  for (const kind of ["box", "deck", "hand", "value"] as const) {
-    for (const [id, values] of Object.entries(env.shared.props[kind])) bag(`${kind}.${id}`, values);
-    for (const [id, values] of Object.entries(flowSave?.props[kind] ?? {})) bag(`${kind}.${id}`, values);
+  for (const { bag } of [...engine.listBags(), ...flow.listBags()]) {
+    for (const row of bag.rows()) {
+      if (row.value !== undefined) out[row.path] = row.value as ScalarValue;
+    }
   }
-  Object.assign(out, extraState(env.flows[flow.id]));
+  Object.assign(out, extraState(engine.saveGame().flows[flow.id]));
   return out;
 }
 

@@ -786,15 +786,15 @@ export interface LoadEviction {
  *  `path` is the engine's property address, spelled exactly as
  *  `Flow.listProperties()` / `Engine.listProperties()` print it and exactly as
  *  `getProperty` and `setProperty` accept it: `story.<name>` for the story
- *  scope, `<scope>.<owner>.<name>` for the box, deck, hand and tag scopes. No
- *  `@`, which belongs to the expression language and not to an address.
+ *  scope, `<scope>.<ownerGameId>.<name>` for the box, deck, hand and tag
+ *  scopes. No `@`, which belongs to the expression language and not to an
+ *  address.
  *
- *  The owner segment is the engine's own id today, not a gameId - the same gap
- *  every other address in the API has. Design change 4.4 ("identity by
- *  gameId") moves property addresses and trace events to gameIds together,
- *  across all four runtimes; until it lands, a report is spelled the way the
- *  rest of the engine is spelled, because a second grammar here would be worse
- *  than one uniform gap. */
+ *  The owner segment is its GAMEID (design/engine-server.md 4.4), the name it
+ *  is called by everywhere else, so an operator reading a hot-swap report can
+ *  paste the address straight into `setProperty`. An owner the build no longer
+ *  has keeps the id the save carried: there is no gameId left to give it,
+ *  which is the rule the eviction list above has always used. */
 export interface LoadProperty {
   flow?: string;
   path: string;

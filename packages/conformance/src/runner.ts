@@ -185,10 +185,22 @@ export function runScriptedCase(c: ScriptedCase): string[] {
   // indistinguishable on a board read from a hole that was never movable: the
   // diagnostic is the only place the difference lives.
   let diagnosticSink: string[] = [];
+  // The two events nothing else can reach, rendered by the shared rule
+  // (types.ts, ScriptOp's expectTrace): `evict.hand`, `evict.card` and
+  // `play.card` are gameIds from 4.4 on, and this is what says so.
+  let traceSink: string[] = [];
   const watch = (f: Flow): Flow => {
     f.subscribeTrace((e) => {
       if (e.type === "diagnostic") {
         diagnosticSink.push(e.message);
+        return;
+      }
+      if (e.type === "evict") {
+        traceSink.push(`evict ${e.hand} ${e.card} ${e.reason}`);
+        return;
+      }
+      if (e.type === "play") {
+        traceSink.push(`play ${e.card} ${e.outcome}`);
         return;
       }
       if (e.type !== "deal" && e.type !== "peek") return;
@@ -207,8 +219,16 @@ export function runScriptedCase(c: ScriptedCase): string[] {
   const collect = (run: () => void): Map<string, string> => {
     verdictSink = new Map();
     diagnosticSink = [];
+    traceSink = [];
     run();
     return verdictSink;
+  };
+  const checkTrace = (at: string, expected: string[] | undefined, said: string[]): void => {
+    for (const want of expected ?? []) {
+      if (!said.includes(want)) {
+        failures.push(`${at}: expected the trace to carry "${want}", got ${said.length === 0 ? "no evict or play events at all" : show(said)}`);
+      }
+    }
   };
   const checkDiagnostic = (at: string, expected: string | undefined, said: string[]): void => {
     if (expected === undefined) return;
@@ -231,8 +251,9 @@ export function runScriptedCase(c: ScriptedCase): string[] {
     const at = `op ${index} (${op.op})`;
     switch (op.op) {
       case "setState": {
-        const { op: _ignored, flow: _flow, ...selector } = op;
-        applyState(flowOf(op.flow), selector);
+        const { op: _ignored, flow: _flow, expectDiagnostic: _diag, ...selector } = op;
+        collect(() => { applyState(flowOf(op.flow), selector); });
+        checkDiagnostic(at, op.expectDiagnostic, diagnosticSink);
         break;
       }
       case "openFlow":
@@ -295,6 +316,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         const verdicts = collect(() => { dealt = session.dealMany(op.hands); });
         checkVerdicts(at, op.expectVerdicts, verdicts);
         checkDiagnostic(at, op.expectDiagnostic, diagnosticSink);
+        checkTrace(at, op.expectTrace, traceSink);
         const names = handGameIds(c.bundle);
         for (const [handId, expected] of Object.entries(op.expectBoard ?? {})) {
           const board = session.board();
@@ -355,12 +377,15 @@ export function runScriptedCase(c: ScriptedCase): string[] {
       }
       case "play": {
         let error: string | undefined;
-        try {
-          flowOf(op.flow).play(op.card, op.outcome, op.from,
-            op.advanceTurns !== undefined ? { advanceTurns: op.advanceTurns } : {});
-        } catch (e) {
-          error = String(e);
-        }
+        collect(() => {
+          try {
+            flowOf(op.flow).play(op.card, op.outcome, op.from,
+              op.advanceTurns !== undefined ? { advanceTurns: op.advanceTurns } : {});
+          } catch (e) {
+            error = String(e);
+          }
+        });
+        checkTrace(at, op.expectTrace, traceSink);
         if (op.expectError && error === undefined) {
           failures.push(`${at}: expected an error, play succeeded`);
         }

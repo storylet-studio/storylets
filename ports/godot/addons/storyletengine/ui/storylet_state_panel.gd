@@ -9,6 +9,11 @@
 # and saves / loads the whole run to a .storyletsave file through
 # StoryletSave.
 #
+# A property row's address names its owner by gameId too, since design change
+# 4.4 - "box.village.mood", not "box.b_village.mood" - so the filter box and
+# everything the panel writes back speak the names an author chose. The rows
+# arrive addressed from the bags; nothing here composes a path.
+#
 # The log panel (design 2.3: the session's retained log surfaced in every
 # examiner; the old port's Unreal log panel is the high-water mark): the
 # lines of session.log() behind per-kind filters (a peek files under Deal -

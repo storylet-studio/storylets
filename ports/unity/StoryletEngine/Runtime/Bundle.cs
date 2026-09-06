@@ -532,10 +532,10 @@ namespace StoryletStudio.StoryletEngine
     /// prints it and exactly as GetProperty and SetProperty accept it:
     /// "story.name" for the story scope, "scope.owner.name" for the box, deck,
     /// hand and tag scopes. No "@", which belongs to the expression language and
-    /// not to an address. The owner segment is the engine's own id today, the
-    /// same gap every other address in the API has; design change 4.4 moves
-    /// property addresses and trace events to gameIds together, in all four
-    /// runtimes.</summary>
+    /// not to an address. The owner segment is its GAMEID (design change 4.4,
+    /// which moved property addresses and trace events to gameIds together, in
+    /// all four runtimes); an owner the build no longer has keeps the id the
+    /// save arrived with, since there is no gameId left to give it.</summary>
     public sealed class LoadProperty
     {
         public string Flow;

@@ -217,8 +217,8 @@ right now, in ranking order, without dealing anything.
 | `--seed N` | both | The flow's seed. Defaults to 0. |
 | `--deal-all` | both | Deal every hand first, so cards other hands have claimed are already gone. |
 
-`--set` takes the same paths the runtime does: `story.started`, `world.market_day`,
-`value.v_docks.danger`, `box.b_x.heat`.
+`--set` takes the same paths the runtime does, the owner named as you name it in a shard:
+`story.started`, `world.market_day`, `value.docks.danger`, `box.street.heat`.
 
 `--deal-all` is how you see exclusivity from the command line: with every other hand dealt
 first, the cards they hold don't come up in yours.

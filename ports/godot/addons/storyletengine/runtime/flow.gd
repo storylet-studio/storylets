@@ -68,10 +68,11 @@ func _init(engine: StoryletEngine, flow_id: String, seed_value: int) -> void:
 	id = flow_id
 	_prng = StoryletMulberry32.new(seed_value)
 	var fd: Dictionary = engine._flow_decls
+	# Keyed by internal id and ADDRESSED by gameId (StoryletEngine.address_of).
 	var stores := {"story": StoryletEngine._bag_from_decls(fd["story"], "story."), "box": {}, "deck": {}, "hand": {}, "value": {}}
 	for kind in ["box", "deck", "hand", "value"]:
 		for owner_id in fd[kind]:
-			stores[kind][owner_id] = StoryletEngine._bag_from_decls(fd[kind][owner_id], "%s.%s." % [kind, owner_id])
+			stores[kind][owner_id] = StoryletEngine._bag_from_decls(fd[kind][owner_id], engine.address_of(kind, owner_id) + ".")
 	_stores = stores
 	for box in engine._bundle["boxes"]:
 		_turn_counts[box["id"]] = 0.0
@@ -732,29 +733,29 @@ func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
 		for card in deck["cards"]:
 			var shared := _card_is_shared(card, deck_shared)
 			if not gate_ok[deck["id"]]:
-				_verdict(trace, card["id"], "deck-gate")
+				_verdict(trace, card, "deck-gate")
 				continue
 			# Taken out of the world by somebody's shared one-shot. Checked
 			# before this flow's own clock, because "cooldown" would point the
 			# reader at a turn counter that has nothing to do with it.
 			if shared and _engine.is_taken(card["id"]):
-				_verdict(trace, card["id"], "taken")
+				_verdict(trace, card, "taken")
 				continue
 			if float(_cooldowns.get(card["id"], 0.0)) > turn_now:
-				_verdict(trace, card["id"], "cooldown")
+				_verdict(trace, card, "cooldown")
 				continue
 			if not _tags_match(card, hand_env["bound_tags"]):
-				_verdict(trace, card["id"], "tags")
+				_verdict(trace, card, "tags")
 				continue
 			var ctx := deck_ctx
 			# The label is only read when an eval THROWS and only when tracing, so
 			# formatting it per card was waste on the path that matters.
 			if card.has("condition") and not _passes(card["condition"], ctx, ("card %s condition" % str(card.get("gameId", card["id"]))) if _tracing() else ""):
-				_verdict(trace, card["id"], "condition")
+				_verdict(trace, card, "condition")
 				continue
 			var refused: String = claimed.call(card, shared)   # claims, last (schema 3.1 step 6)
 			if refused != "":
-				_verdict(trace, card["id"], refused)
+				_verdict(trace, card, refused)
 				continue
 
 			var priority: float
@@ -764,10 +765,10 @@ func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
 				if StoryletExpression.is_error(v):
 					if _tracing():
 						_emit({"type": "diagnostic", "where": "card %s priority" % str(card.get("gameId", card["id"])), "message": v.message})
-					_verdict(trace, card["id"], "priority")
+					_verdict(trace, card, "priority")
 					continue
 				if not StoryletValues.is_number(v):
-					_verdict(trace, card["id"], "priority")
+					_verdict(trace, card, "priority")
 					continue
 				priority = float(v)
 			else:
@@ -815,19 +816,24 @@ func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
 		i = j
 	if trace != null:
 		for s in scored:
-			trace.append({"id": s["entry"]["card"]["id"], "verdict": "dealt", "priority": s["priority"], "specificity": s["spec"]})
+			trace.append({"id": StoryletBundle.effective_game_id(s["entry"]["card"]), "verdict": "dealt", "priority": s["priority"], "specificity": s["spec"]})
 	var ordered: Array = []
 	for s in scored:
 		ordered.append(s["entry"])
 	return {"ordered": ordered, "hand_env": hand_env}
 
 
-static func _verdict(trace, id: String, v: String) -> void:
+# Identity on the trace is by gameId (design change 4.4), so this takes the
+# CARD rather than an id: every call site had one in hand, and taking the id was
+# the whole of how the two vocabularies got mixed.
+static func _verdict(trace, card: Dictionary, v: String) -> void:
 	if trace != null:
-		trace.append({"id": id, "verdict": v})
+		trace.append({"id": StoryletBundle.effective_game_id(card), "verdict": v})
 
 
-# Flip eligible-but-not-taken trace entries to "capped".
+# Flip eligible-but-not-taken trace entries to "capped". `taken` is keyed by
+# GAMEID, as the trace rows are (4.4): the two must move together or every
+# dealt card silently reads as capped.
 static func _cap_trace(trace: Array, taken: Dictionary) -> void:
 	for entry in trace:
 		if entry["verdict"] == "dealt" and not taken.has(entry["id"]):
@@ -905,7 +911,7 @@ func peek(box_ref: String, criteria: Dictionary = {}, n = null) -> Dictionary:
 	if trace != null:
 		var taken := {}
 		for e in listed:
-			taken[e["card"]["id"]] = true
+			taken[StoryletBundle.effective_game_id(e["card"])] = true
 		_cap_trace(trace, taken)
 		_emit({"type": "peek", "box": StoryletBundle.effective_game_id(box), "criteria": criteria.duplicate(), "cards": trace}, _turn_counts.get(box["id"], 0.0))
 	var cards: Array = []
@@ -969,6 +975,11 @@ func deal_many(hand_refs = null) -> Dictionary:
 		# Trace events fire after the state they report has landed (a handler
 		# reading the board sees the eviction), so they are collected here and
 		# emitted once the survivors are set.
+		#
+		# The card is named by gameId (4.4). A card the build no longer has - the
+		# "vanished" reason below - has no gameId left, so it is named by the id
+		# the board carries, which is the rule a load report has always used for
+		# the same reason.
 		var evicted: Array = []
 		for card_id in _board_contents.get(hand["id"], []):
 			var reason := ""
@@ -989,11 +1000,13 @@ func deal_many(hand_refs = null) -> Dictionary:
 			if reason == "":
 				survivors.append(card_id)
 			else:
-				evicted.append({"card": card_id, "reason": reason})
+				var known = _engine._cards_by_id.get(card_id)
+				evicted.append({"card": StoryletBundle.effective_game_id(known["card"]) if known != null else card_id,
+					"reason": reason})
 		_board_contents[hand["id"]] = survivors
 		if _tracing():
 			for e in evicted:
-				_emit({"type": "evict", "hand": hand["id"], "card": e["card"], "reason": e["reason"]}, turn_now)
+				_emit({"type": "evict", "hand": StoryletBundle.effective_game_id(hand), "card": e["card"], "reason": e["reason"]}, turn_now)
 
 	var claim_counts := _claims()
 	# Taken once for the whole batch and kept in step with the local ledger
@@ -1022,8 +1035,13 @@ func deal_many(hand_refs = null) -> Dictionary:
 		var res := _run_ask(ask, claimed, trace)
 		var ordered: Array = res["ordered"]
 		var take := ordered.size() if is_inf(free) else mini(int(free), ordered.size())
+		# The entries as well as their ids: the board is keyed by internal id and
+		# the trace by gameId (4.4), so both readings of "what this hand took"
+		# come off one slice rather than two walks that could disagree.
+		var taking: Array = []
 		var added: Array = []
 		for k in take:
+			taking.append(ordered[k])
 			added.append(ordered[k]["card"]["id"])
 		var next_contents := contents.duplicate()
 		next_contents.append_array(added)
@@ -1034,8 +1052,8 @@ func deal_many(hand_refs = null) -> Dictionary:
 		# Emitted after the hand is set: a handler reading board() sees the deal.
 		if trace != null:
 			var taken := {}
-			for id in added:
-				taken[id] = true
+			for e in taking:
+				taken[StoryletBundle.effective_game_id(e["card"])] = true
 			_cap_trace(trace, taken)
 			_emit({"type": "deal", "hand": StoryletBundle.effective_game_id(hand), "cards": trace}, _turn_counts.get(box["id"], 0.0))
 
@@ -1226,7 +1244,7 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 	_turn_counts[entry["box"]["id"]] = new_turn
 	# Emitted last: a handler reading the board and the clock sees the play.
 	if _tracing():
-		_emit({"type": "play", "card": entry["card"]["id"], "outcome": StoryletBundle.effective_game_id(outcome), "turn": new_turn}, new_turn)
+		_emit({"type": "play", "card": StoryletBundle.effective_game_id(entry["card"]), "outcome": StoryletBundle.effective_game_id(outcome), "turn": new_turn}, new_turn)
 	return ""
 
 
@@ -1278,9 +1296,9 @@ func _apply_write(target: String, value, entry: Dictionary, hand_env: Dictionary
 		"story":
 			return _land_in("story", null, name, value, "story.%s" % name)
 		"box":
-			return _land_in("box", entry["box"]["id"], name, value, "box.%s.%s" % [entry["box"]["id"], name])
+			return _land_in("box", entry["box"]["id"], name, value, "%s.%s" % [_address("box", entry["box"]["id"]), name])
 		"deck":
-			return _land_in("deck", entry["deck"]["id"], name, value, "deck.%s.%s" % [entry["deck"]["id"], name])
+			return _land_in("deck", entry["deck"]["id"], name, value, "%s.%s" % [_address("deck", entry["deck"]["id"]), name])
 		"hand":
 			# Write-back routing (schema 3.6): the composed name remembers its
 			# source store; writes to criteria/chosen-tag names are errors.
@@ -1289,8 +1307,13 @@ func _apply_write(target: String, value, entry: Dictionary, hand_env: Dictionary
 				return {"error": "@hand.%s is not composed in this ask" % name}
 			if source["kind"] == "criteria":
 				return {"error": "@hand.%s is a chosen tag / criteria name and cannot be written" % name}
-			return _land_in(source["kind"], source["id"], name, value, "%s.%s.%s" % [source["kind"], source["id"], name])
+			return _land_in(source["kind"], source["id"], name, value, "%s.%s" % [_address(source["kind"], source["id"]), name])
 	return {"error": 'bad change target scope "@%s"' % scope}
+
+
+# One owned property owner's address, gameId segment and all (4.4).
+func _address(kind: String, owner_id: String) -> String:
+	return _engine.address_of(kind, owner_id)
 
 
 static func _land(bag: StoryletPropertyBag, name: String, value, path: String) -> Dictionary:
@@ -1343,7 +1366,7 @@ func list_bags() -> Array:
 	var mounts: Array = [{"prefix": "story", "bag": _stores["story"]}]
 	for kind in ["box", "deck", "hand", "value"]:
 		for owner_id in _stores[kind]:
-			mounts.append({"prefix": "%s.%s" % [kind, owner_id], "bag": _stores[kind][owner_id]})
+			mounts.append({"prefix": _address(kind, owner_id), "bag": _stores[kind][owner_id]})
 	return mounts
 
 
@@ -1374,18 +1397,25 @@ func list_properties() -> Array:
 		for owner_id in _stores[kind]:
 			ids[owner_id] = true
 		for owner_id in ids:
+			var mount := _address(kind, owner_id)
 			var shared = _engine._shared[kind].get(owner_id)
 			if shared != null:
-				StoryletEngine._add_rows(out, "%s.%s" % [kind, owner_id], shared)
+				StoryletEngine._add_rows(out, mount, shared)
 			var own = _stores[kind].get(owner_id)
 			if own != null:
-				StoryletEngine._add_rows(out, "%s.%s" % [kind, owner_id], own)
+				StoryletEngine._add_rows(out, mount, own)
 	return out
 
 
-## Read by path: "world.x", "story.gold", "value.v_docks.danger", ... - the
-## flow's merged view, routed by the declaration's sharing. Returns the
-## value, or null (with push_error) on a bad path or undeclared property.
+## Read by path: "world.x", "story.gold", "value.docks.danger",
+## "box.village.heat", "deck.wares.n", "hand.the-elder.zone" - the flow's merged
+## view, routed by the declaration's sharing. Returns the value, or null (with
+## push_error) on a bad path or undeclared property.
+##
+## The owner segment is the entity's GAMEID, the name it is called by everywhere
+## else (design change 4.4). Its internal id is accepted for this release and
+## earns a `diagnostic` naming the address to move to; the next lockstep release
+## refuses it.
 func get_property(path: String) -> Variant:
 	if _closed:
 		push_error('StoryletFlow.get_property: flow "%s" is closed' % id)
@@ -1397,10 +1427,15 @@ func get_property(path: String) -> Variant:
 	elif parts.size() == 2 and parts[0] == "story":
 		value = _read_story(parts[1])
 	elif parts.size() == 3 and ["box", "deck", "hand", "value"].has(parts[0]):
-		if _stores[parts[0]].get(parts[1]) == null and _engine._shared[parts[0]].get(parts[1]) == null:
+		var owner := _resolve_owner(parts[0], parts[1], parts[2])
+		if owner.is_empty():
 			push_error('StoryletFlow.get_property: no %s store "%s"' % [parts[0], parts[1]])
 			return null
-		value = _read_pair(parts[0], parts[1], parts[2])
+		var owner_id: String = owner["id"]
+		if _stores[parts[0]].get(owner_id) == null and _engine._shared[parts[0]].get(owner_id) == null:
+			push_error('StoryletFlow.get_property: no %s store "%s"' % [parts[0], parts[1]])
+			return null
+		value = _read_pair(parts[0], owner_id, parts[2])
 	else:
 		push_error('StoryletFlow.get_property: bad property path "%s"' % path)
 		return null
@@ -1433,8 +1468,13 @@ func set_property(path: String, value) -> String:
 		name = parts[1]
 	elif parts.size() == 3 and ["box", "deck", "hand", "value"].has(parts[0]):
 		kind = parts[0]
-		owner_id = parts[1]
 		name = parts[2]
+		var owner := _resolve_owner(kind, parts[1], name)
+		if owner.is_empty():
+			var unknown := 'no %s store "%s"' % [kind, parts[1]]
+			push_error("StoryletFlow.set_property: " + unknown)
+			return unknown
+		owner_id = owner["id"]
 	else:
 		var bad := 'bad property path "%s"' % path
 		push_error("StoryletFlow.set_property: " + bad)
@@ -1460,6 +1500,21 @@ func set_property(path: String, value) -> String:
 	if change.has("error"):
 		return change["error"]
 	return ""
+
+
+# A property address's owner segment, resolved to the internal id the stores are
+# keyed by: {"id", "legacy"}, or {} when it names no owner (the caller's "no
+# <kind> store" refusal). The pre-4.4 form - an internal id where a gameId
+# belongs - resolves for this release and SAYS SO on the trace, so a host can
+# find its old addresses before the next lockstep release refuses them.
+func _resolve_owner(kind: String, segment: String, name: String) -> Dictionary:
+	var owner := _engine.resolve_owner(kind, segment)
+	if owner.is_empty():
+		return owner
+	if owner["legacy"] and _tracing():
+		_emit({"type": "diagnostic", "where": "property address",
+			"message": _engine.legacy_address_message(kind, segment, name)})
+	return owner
 
 
 # _bind_state_groups reads world/story through this (a diagnostic path, so

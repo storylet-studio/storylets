@@ -42,12 +42,13 @@ describe("the deal/play trace", () => {
     const peek = events.find((e): e is Extract<TraceEvent, { type: "peek" }> => e.type === "peek")!;
     expect(peek.box).toBe("box");
     expect(peek.criteria).toEqual({ zone: "docks" });
-    const byId = Object.fromEntries(peek.cards.map((c) => [c.id, c]));
-    expect(byId["c_hero"]).toMatchObject({ verdict: "dealt", priority: 5, specificity: 2 });
-    expect(byId["c_market"]).toMatchObject({ verdict: "tags" });
-    expect(byId["c_shut"]).toMatchObject({ verdict: "condition" });
-    expect(byId["c_broken"]).toMatchObject({ verdict: "condition" });   // an eval error is a failed condition...
-    expect(byId["c_low"]).toMatchObject({ verdict: "capped" });         // eligible, below the peek cap of 1
+    // Keyed by GAMEID: identity on a trace event is by gameId (4.4).
+    const byGameId = Object.fromEntries(peek.cards.map((c) => [c.id, c]));
+    expect(byGameId["hero"]).toMatchObject({ verdict: "dealt", priority: 5, specificity: 2 });
+    expect(byGameId["market"]).toMatchObject({ verdict: "tags" });
+    expect(byGameId["shut"]).toMatchObject({ verdict: "condition" });
+    expect(byGameId["broken"]).toMatchObject({ verdict: "condition" });   // an eval error is a failed condition...
+    expect(byGameId["low"]).toMatchObject({ verdict: "capped" });         // eligible, below the peek cap of 1
     // ...and never a silent one: the diagnostic names the error.
     const diagnostic = events.find((e): e is Extract<TraceEvent, { type: "diagnostic" }> => e.type === "diagnostic")!;
     expect(diagnostic.where).toBe("card broken condition");
@@ -61,10 +62,10 @@ describe("the deal/play trace", () => {
 
     session.deal("seat");
     session.play("c_hero", "go", "seat");
-    expect(events.find((e) => e.type === "play")).toMatchObject({ card: "c_hero", outcome: "go", turn: 1 });
+    expect(events.find((e) => e.type === "play")).toMatchObject({ card: "hero", outcome: "go", turn: 1 });
     const writes = events.filter((e): e is Extract<TraceEvent, { type: "write" }> => e.type === "write");
     expect(writes).toMatchObject([
-      { target: "@hand.danger", path: "value.v_docks.danger", value: 1 },   // routed to the zone (schema 3.6)
+      { target: "@hand.danger", path: "value.docks.danger", value: 1 },   // routed to the zone (schema 3.6)
       { target: "@story.gold", path: "story.gold", value: 1 },
     ]);
   });
@@ -77,15 +78,17 @@ describe("the deal/play trace", () => {
     session.dealMany();
     const deal = events.find((e): e is Extract<TraceEvent, { type: "deal" }> => e.type === "deal")!;
     expect(deal.hand).toBe("seat");
-    expect(deal.cards.find((c) => c.id === "c_hero")).toMatchObject({ verdict: "dealt" });
+    expect(deal.cards.find((c) => c.id === "hero")).toMatchObject({ verdict: "dealt" });
 
     // Flip the world so the seated card's condition lapses; the next deal
     // evicts it with the reason on the trace.
     events.length = 0;
     session.setProperty("story.open", false);
     session.dealMany();
+    // Hand and card by gameId, matching the deal event beside them (4.4);
+    // both were internal ids until then.
     expect(events.find((e) => e.type === "evict")).toMatchObject({
-      hand: "h_seat", card: "c_hero", reason: "condition",
+      hand: "seat", card: "hero", reason: "condition",
     });
   });
 
@@ -126,7 +129,7 @@ describe("the session log", () => {
     // A play and its writes share one turn stamp: one action, one moment.
     expect(log.find((e) => e.type === "write" && e.target === "@story.gold"))
       .toMatchObject({ path: "story.gold", prev: 0, value: 1, turn: 1 });
-    expect(log[4]).toMatchObject({ type: "play", card: "c_hero", turn: 1 });
+    expect(log[4]).toMatchObject({ type: "play", card: "hero", turn: 1 });
     expect(log[5]).toMatchObject({ type: "turns", box: "box", turn: 3 });
   });
 

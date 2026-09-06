@@ -40,11 +40,13 @@ function handDecls(box: SourceBox, hand: SourceBox["hands"]["hands"][number]): P
  * it with the `@` dropped: "world.time_wall", "story.visits",
  * "box.street.mood", "value.docks.danger".
  *
- * The owner segment is accepted as EITHER the gameId or the internal id. The
+ * The owner segment is accepted as EITHER the gameId or the internal id, which
+ * is the engine's own rule for a release (design/engine-server.md 4.4): the
  * contract is written by gameId, like everything that crosses the project's
- * border; the running engine addresses its bags by internal id. A contract that
- * matched only one of the two would be right about a name and wrong about the
- * only place the name is ever read.
+ * border, and the engine now addresses its bags the same way, with the
+ * internal-id form still resolving so a venue provisioned before the change
+ * does not go dark on the night. Both stay accepted here for as long as they
+ * are accepted there.
  */
 function declarations(source: SourceProject): Map<string, { decl: PropertyDecl; path: string; where: string }> {
   const out = new Map<string, { decl: PropertyDecl; path: string; where: string }>();

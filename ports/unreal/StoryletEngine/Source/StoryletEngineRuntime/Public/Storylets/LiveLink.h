@@ -15,8 +15,8 @@
 //                                                          after hello, and after every deal /
 //                                                          play / evict / turns event
 // The frames are compact JSON in the reference's key order, byte for byte
-// (the fixture is compared as text): identity by gameId for hands, boxes and
-// cards; the trace event keeps the runtime's own ids.
+// (the fixture is compared as text): identity by gameId throughout, for hands,
+// boxes and cards, on the board frames and on the trace event alike (4.4).
 //
 // The flow is reached through a provider rather than held, and the host
 // forwards trace events itself (onTrace): a wrapper whose flow object

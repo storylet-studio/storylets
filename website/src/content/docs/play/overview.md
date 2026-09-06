@@ -116,10 +116,10 @@ Two things to hold on to:
 ```
 world.gold
 story.reputation
-box.b_village.heat
-deck.k_arrival.visits
-hand.h_inn.owner
-value.v_forest.peril
+box.village.heat
+deck.arrival.visits
+hand.the-inn.owner
+value.forest.peril
 ```
 
 `listProperties()` returns rows carrying these paths, and the in-engine examiners are built on
