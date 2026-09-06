@@ -87,6 +87,7 @@ import type {
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { applyStates, captureBefore } from "./history.js";
 import type { FileState } from "./history.js";
+import { countEdit, readRemote, refuseWrite } from "./remote.js";
 import { commentsOf } from "@storylet-studio/model";
 import type { CanvasFurniture, Card, Comment, CommentMark, DeckShard, Outcome, RedrawPolicy, ScalarValue } from "@storylet-studio/model";
 import { MAP_CANVAS } from "../shared/api.js";
@@ -263,11 +264,32 @@ let structCounter = 0;
  *  for a standalone (structural) change. Exported for the project-wide
  *  Replace (replace.ts), which is the same path with more files in it. */
 export function commit(session: ProjectSession, label: string, key: string, writes: FileState[]): OpenResult | { error: string } {
+  // The role the project was fetched with, where there is one. An author's key
+  // may change the cards and the comments; the shape is the designer's, and the
+  // editor says so rather than offering an edit the far end would refuse.
+  const refusal = refuseWrite(readRemote(session.loaded.dir)?.role, writes.map((w) => w.path));
+  if (refusal !== undefined) return { error: refusal };
   const before = captureBefore(writes.map((w) => w.path));
   if (!applyStates(writes)) return { error: "could not write (locked or read-only?)" };
   session.history.record(label, key, before, writes);
+  countLogicalEdit(session.loaded.dir, key);
   return reload(session);
 }
+
+/** The last edit counted against a remote, so a typing session on one card is
+ *  one unpushed edit rather than one per autosave: the coalesce key is what
+ *  undo steps by, and it is the honest unit here too. */
+let lastCounted: { dir: string; key: string } | undefined;
+
+/** Count a write against the project's remote, if it has one. */
+export function countLogicalEdit(dir: string, key: string): void {
+  if (lastCounted?.dir === dir && lastCounted.key === key) return;
+  lastCounted = { dir, key };
+  countEdit(dir);
+}
+
+/** Start the count again: a pull or a push has made the project level. */
+export function forgetLastCounted(): void { lastCounted = undefined; }
 
 
 /** Live Link: told after every write that lands through here (a commit, an
@@ -739,6 +761,9 @@ export function undo(session: ProjectSession): OpenResult | null {
   const states = session.history.undo();
   if (!states) return null;
   applyStates(states);
+  // An undo is a change to the files like any other, and the server has not
+  // seen it either: it counts, and it is its own logical edit.
+  countLogicalEdit(session.loaded.dir, `undo:${structCounter++}`);
   return reload(session);
 }
 
@@ -746,6 +771,7 @@ export function redo(session: ProjectSession): OpenResult | null {
   const states = session.history.redo();
   if (!states) return null;
   applyStates(states);
+  countLogicalEdit(session.loaded.dir, `redo:${structCounter++}`);
   return reload(session);
 }
 

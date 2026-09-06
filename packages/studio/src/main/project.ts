@@ -17,8 +17,9 @@ import type { Bundle, Card, CoverageDriver, HandTemplate, PlayRung, PropertyDecl
 import type { SourceBox } from "@storylet-studio/compiler";
 import type {
   BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectSettingsDto,
-  PropertyDeclDto, ShardVcDto, VcStatusDto,
+  PropertyDeclDto, RemoteDto, ShardVcDto, VcStatusDto,
 } from "../shared/api.js";
+import { addressOf, readRemote } from "./remote.js";
 import { History } from "./history.js";
 import { resetShardStatus, shardStatus } from "./vc.js";
 import type { ShardRef } from "./vc.js";
@@ -318,7 +319,26 @@ export function createProject(parentDir: string, name: string): { path: string }
 }
 
 export function openResult(session: ProjectSession, problems: Problem[]): OpenResult {
-  return { project: session.dto, problems };
+  // The remote rides on every result rather than being asked for separately,
+  // because everything that depends on it - the read-only rule, the unpushed
+  // count - changes on the same beat as the project does. It is one small file
+  // read beside a re-validate, and nothing at all for a project with no server.
+  const remote = remoteDto(session.loaded.dir);
+  return { project: session.dto, problems, ...(remote !== undefined ? { remote } : {}) };
+}
+
+/** The open project's remote, as the renderer is told it. Never the key. */
+export function remoteDto(dir: string): RemoteDto | undefined {
+  const remote = readRemote(dir);
+  if (remote === undefined) return undefined;
+  return {
+    address: addressOf(remote),
+    installation: remote.installation,
+    version: remote.version,
+    revision: remote.revision,
+    role: remote.role,
+    edits: remote.edits ?? 0,
+  };
 }
 
 /** The project-level settings (from the .storyletproj shard) for the dialog. */

@@ -65,9 +65,10 @@ import { mountLiveLinkChip } from "./live-link.js";   // Live Link: the bottom-r
 import type { LiveLinkChip } from "./live-link.js";
 import { canvasId, MAP_CANVAS } from "../../shared/api.js";
 import { showUpdaterDialog, feedUpdaterDownloadProgress } from "./updater-dialog.js";
+import { askServer } from "./server-dialog.js";
 import type {
   BoxEdit, BoxKit, CardDto, CardEdit, ConditionProperty, TagGroupEdit, MenuCommand, OpenResult, Problem, ProjectDto,
-  ShardVcDto, TemplateEdit, StudioApi, StudioState, ThemeChoice,
+  RemoteDto, ShardVcDto, TemplateEdit, StudioApi, StudioState, ThemeChoice,
   BoxDto, CommentDto, CommentMarkerDto, CoverageOverlayDto, ReviewAt, ReviewItemDto } from "../../shared/api.js";
 
 declare global { interface Window { studio: StudioApi; } }
@@ -77,6 +78,10 @@ const studio = window.studio;
 let state: StudioState = { theme: "system", recents: [], panes: { nav: true, inspector: true }, autoRebuild: false, viewMode: "node", boardPinned: true, boardFollow: false, boardView: "map", searchPinned: true, coveragePinned: true, linksPinned: true, showResolved: false, reviewWalk: false, coverageOverlay: false };
 // navExpanded hydrates from state after getState() resolves (see boot).
 let project: ProjectDto | undefined;
+/** Where the open project came from, when it came from a server (9.1). Absent
+ *  for an ordinary project, which is what makes every server-shaped thing in
+ *  this file quiet by default. */
+let remote: RemoteDto | undefined;
 /** Live Link's bottom-right chip; mounted at boot, shown while a project is open. */
 let liveLinkChip: LiveLinkChip | undefined;
 let problems: Problem[] = [];
@@ -1198,6 +1203,7 @@ const AUTOSAVE_MS = 700;
  */
 function applyResult(result: OpenResult): void {
   project = result.project;
+  remote = result.remote;
   // Every surface asks play-ladder.ts what it may draw, and this is the one
   // place the answer arrives (design/engine-server.md 4.10). Seeded on every
   // result, not only on open: changing Play in Project Settings comes back
@@ -1378,7 +1384,7 @@ function mountShell(): void {
   // (a tab switch, an outcome opening), which would hand back editable fields.
   // Capture the click and re-apply the guard once the redraw has settled.
   shell.centre.addEventListener("click", () => {
-    if (docLocked) queueMicrotask(() => applyDocVc());
+    if (docLocked || shapeReadOnly()) queueMicrotask(() => applyDocVc());
   }, true);
 }
 
@@ -1415,12 +1421,43 @@ function docVcKeys(): string | undefined {
   return undefined;
 }
 
+/**
+ * Does the OPEN document write one of the shape shards?
+ *
+ * The same discriminants `docVcKeys` uses, asked of the shard rather than of
+ * the lock: cards and their decks are the writer's, and everything else on the
+ * list - a box, its tags, its hands, its templates, the project's own page - is
+ * the shape, which under an author's key is the designer's to change (9.1).
+ */
+function docIsShape(): boolean {
+  const ins = inspected;
+  if (ins?.kind === "card" || ins?.kind === "deck") return false;
+  if (ins?.kind === "template" || ins?.kind === "hand" || ins?.kind === "tagGroup") return true;
+  const f = focus;
+  if (f?.kind === "deck") return false;
+  return f?.kind === "box" || f?.kind === "hands" || f?.kind === "project";
+}
+
+/** The shape is read-only under an author's key. Never under a designer's, and
+ *  never for a project that did not come from a server. */
+const shapeReadOnly = (): boolean => remote?.role === "author" && docIsShape();
+
+/** The line a read-only shape document opens with: the far end's own sentence,
+ *  which is what a push would be refused with, said before the edit instead of
+ *  after it. */
+const shapeNotice = (): HTMLElement => el("div", { className: "vc-lock" },
+  el("span", { className: "vc-lock-glyph", text: icon.readOnly }),
+  el("span", { text: "Read-only: pull as designer to change the shape." }));
+
 /** Apply the open document's version-control state: read-only + a notice
  *  naming the holder when somebody else has it. */
 function applyDocVc(): void {
   const host = shell.centre;
   const holders = new Set(vcOf(docVcKeys())?.lockedBy ?? []);
-  lockControls(host, holders.size > 0);
+  // The role's rule rides the same mechanism as a held shard, because it is
+  // the same thing to the author: this page does not type, and here is why.
+  const shape = shapeReadOnly();
+  lockControls(host, holders.size > 0 || shape);
   // A frame of the page that writes a DIFFERENT shard (the box page's Hand
   // templates and Tags tabs) takes its state from that shard instead.
   host.querySelectorAll<HTMLElement>("[data-vc-scope]").forEach((frame) => {
@@ -1432,6 +1469,7 @@ function applyDocVc(): void {
   docLocked = docHolders.length > 0;
   host.querySelector(":scope > .vc-lock")?.remove();
   if (docLocked) host.prepend(lockNotice(docHolders));
+  else if (shape) host.prepend(shapeNotice());
 }
 
 /** The topbar chip: the open page's state, in the same words as the badge and
@@ -2310,8 +2348,10 @@ function restoredPlace(): { focus: Focus; inspected?: Inspected } | undefined {
  *  screen - the same no-project rendering boot uses. */
 async function closeProject(): Promise<void> {
   await flushSaves();
-  await studio.closeProject();
+  // False when the author was asked about unpushed edits and said no.
+  if (!(await studio.closeProject())) return;
   project = undefined;
+  remote = undefined;
   focus = undefined;
   inspected = undefined;
   detail = undefined;
@@ -2332,6 +2372,7 @@ async function adopt(pending: Promise<OpenResult | { error: string } | null>): P
   // A different project is a different sitting: tab choices do not carry over.
   if (project !== undefined && project.dir !== result.project.dir) resetDocTabMemory();
   project = result.project;
+  remote = result.remote;
   setPlayRung(result.project.play);
   problems = result.problems;
   problemAt = 0;
@@ -2412,12 +2453,80 @@ async function exportPack(): Promise<void> {
   flash(`Packed ${baseName(result.path)}`, "ok");
 }
 
-/** Open a pack: explode it somewhere the author chooses, then open that. The
- *  result is an ordinary project open, so it goes through `adopt` like any
- *  other - a pack that has been unpacked is just a project. */
+/**
+ * Open a pack: explode it somewhere the author chooses, then open that. The
+ * result is an ordinary project open, so it goes through `adopt` like any
+ * other - a pack that has been unpacked is just a project.
+ *
+ * A pack that names an address is the one case with a question in it: the
+ * connect dialog opens with the address filled in, and the code is typed as it
+ * always is. Cancel opens the pack as it stands, with no record of where it
+ * came from, which is exactly what this command did before there was an
+ * exchange at all.
+ */
 async function openPack(): Promise<void> {
   await flushSaves();
-  await adopt(studio.openPack());
+  const picked = await studio.choosePack();
+  if (picked === null) return;
+  if (picked.address !== undefined) {
+    const answered = await connect({ address: picked.address, offerForget: true });
+    if (answered === "connected" || answered === "busy") return;
+  }
+  await adopt(studio.openPackAt(picked.path));
+}
+
+/**
+ * The connect dialog, and what it asks for.
+ *
+ * "busy" means the dialog did something of its own (forgetting a key) and the
+ * caller should not fall through to its alternative; "connected" means a
+ * project is open; "cancelled" means nothing happened.
+ */
+async function connect(opts: { address?: string; offerForget?: boolean } = {}): Promise<"connected" | "cancelled" | "busy"> {
+  const answer = await askServer(opts);
+  if (answer === null) return "cancelled";
+  if ("forget" in answer) {
+    await studio.forgetServer(answer.forget);
+    return "busy";
+  }
+  const result = await studio.connectServer(answer.address, answer.code);
+  if (result === null) return "cancelled";
+  if ("error" in result) { flashError(result.error); return "cancelled"; }
+  await adopt(Promise.resolve(result));
+  return "connected";
+}
+
+/** Take the server's latest revision into the open project. */
+async function serverPull(): Promise<void> {
+  await flushSaves();
+  const done = await studio.serverPull();
+  if (done === null) return;
+  if ("error" in done) { flashError(done.error); return; }
+  applyResult(done.result);
+  renderWorkspace();
+  const counts = `${done.merged} merged, ${done.added} added`;
+  if (done.conflicts > 0) {
+    // The ERROR voice, as the returned-pack merge uses: the merge landed, but
+    // walking away from unresolved conflicts thinking you were done is exactly
+    // what a quiet toast would let somebody do.
+    flashError(`Pulled revision ${done.revision}: ${counts}; ${done.conflicts} conflict(s) need a look - see the .storyletconflict files`);
+  } else {
+    flash(`Pulled revision ${done.revision}: ${counts}`, "ok");
+  }
+}
+
+/** Send the open project up, and say what came back. */
+async function serverPush(): Promise<void> {
+  await flushSaves();
+  const done = await studio.serverPush();
+  if (done === null) return;
+  if ("error" in done) { flashError(done.error); return; }
+  applyResult(done.result);
+  renderWorkspace();
+  // A refusal is the far end's own sentence, shown as it stands: it is the one
+  // thing here nobody should paraphrase.
+  if ("refusal" in done) { flashError(done.refusal); return; }
+  flash(`Pushed as revision ${done.revision} (${done.changed} shard${done.changed === 1 ? "" : "s"})`, "ok");
 }
 
 /**
@@ -2536,6 +2645,12 @@ function onMenu(command: MenuCommand): void {
     case "export-html": if (project) void exportPlayable(); break;   // Publish Playable HTML
     case "export-pack": if (project) void exportPack(); break;
     case "open-pack": void openPack(); break;
+    // The pack exchange. Connect is offered whatever is open; Pull and Push
+    // only reach a project that came from a server, and their menu is not
+    // there otherwise.
+    case "connect-server": void connect({ ...(remote !== undefined ? { address: remote.address, offerForget: true } : {}) }); break;
+    case "server-pull": if (project) void serverPull(); break;
+    case "server-push": if (project) void serverPush(); break;
     case "merge-pack": if (project) void mergePack(); break;
     case "project-settings": if (project) projectSettingsPanel.open(command.section); break;
     case "identity": void saveIdentity(); break;

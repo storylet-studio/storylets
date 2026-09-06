@@ -192,7 +192,13 @@ const api: StudioApi = {
   exportXlsx: () => ipcRenderer.invoke("xlsx:export"),   // Publish Spreadsheet
   exportHtml: () => ipcRenderer.invoke("html:export"),   // Publish Playable HTML
   exportPack: () => ipcRenderer.invoke("pack:export"),
-  openPack: () => ipcRenderer.invoke("pack:open"),
+  choosePack: () => ipcRenderer.invoke("pack:choose"),
+  openPackAt: (path: string) => ipcRenderer.invoke("pack:openAt", path),
+  // The pack exchange: three calls, and the key never crosses this bridge.
+  connectServer: (address: string, code: string) => ipcRenderer.invoke("server:connect", address, code),
+  forgetServer: (address: string) => ipcRenderer.invoke("server:forget", address),
+  serverPull: () => ipcRenderer.invoke("server:pull"),
+  serverPush: () => ipcRenderer.invoke("server:push"),
   mergePackPlan: () => ipcRenderer.invoke("pack:mergePlan"),
   mergePackCommit: () => ipcRenderer.invoke("pack:mergeCommit"),
   mergePackDrop: () => ipcRenderer.invoke("pack:mergeDrop"),

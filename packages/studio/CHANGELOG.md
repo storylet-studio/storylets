@@ -10,6 +10,10 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **File ▸ Connect to a server…**, which asks for an address and a code. With both, the project is fetched and opened, and a **Server** menu appears for that project with Pull, Push… and a line saying where it stands. Pull takes the latest into the project by id, leaving `.storyletconflict` sidecars where the two disagree; Push sends it back and shows what came of it. Edits the far end has not seen are counted in that line and in the window title, and the app asks before quitting or closing over them. A project that did not come from a server has none of this.
+
 ## [0.6.0] - 2026-09-06
 
 ### Added

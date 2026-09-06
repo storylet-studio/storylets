@@ -175,7 +175,7 @@ show, on [Keyboard shortcuts](/storyletter/shortcuts/).
 | Menu | Items |
 |---|---|
 | Storyletter (macOS only) | About Storyletter · User Information… |
-| File | New Project… (`Cmd+N`) · Open Project… (`Cmd+O`) · New Card (`Shift+Cmd+N`) · Save (`Cmd+S`) · Open Recent · Project Settings… (`Cmd+,`) · User Information… (Windows and Linux) · Close Project · Open Storyletpack… · Export as Storyletpack… · Merge Returned Storyletpack… |
+| File | New Project… (`Cmd+N`) · Open Project… (`Cmd+O`) · New Card (`Shift+Cmd+N`) · Save (`Cmd+S`) · Open Recent · Project Settings… (`Cmd+,`) · User Information… (Windows and Linux) · Close Project · Open Storyletpack… · Export as Storyletpack… · Merge Returned Storyletpack… · Connect to a server… |
 | Edit | Undo (`Cmd+Z`) · Redo (`Shift+Cmd+Z`) · Duplicate (`Cmd+D`) · Cut · Copy · Paste · Select All · Find… (`Cmd+F`) · Replace… (`Cmd+Alt+F`; `Ctrl+H` on Windows and Linux) |
 | Play | The Board (`Cmd+T`) · Live Link |
 | Review | Review Feedback (`Shift+Cmd+R`) · Next Feedback (`F8`) · Previous Feedback (`Shift+F8`) · Coverage… (`Shift+Cmd+C`) · Links… · Find Property Usage… · Show Resolved Comments |
@@ -187,6 +187,7 @@ A few notes:
 
 - **Undo** and **Redo** reverse any edit to any kind of item, through the same
   version-control path a save takes, not just the text field you're in.
+- **Connect to a server…** asks for an address and a code.
 - **Publish Playable HTML…** writes one self-contained `.html` file that plays the project
   in any browser, with no engine, server or install: the Board, with the player's place
   saved in that browser. See

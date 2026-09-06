@@ -5,15 +5,24 @@
 // preload bridge, quit when all windows close (no window-less process).
 // ---------------------------------------------------------------------------
 
-import { BrowserWindow, app, dialog, ipcMain, protocol, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, protocol, safeStorage, shell } from "electron";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { hostname } from "node:os";
 import { currentUserAsync, writeBinaryFile, writeTextFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { openToolWindow, pinToolWindow, rescueToolWindow, savedWindowRect } from "@wildwinter/app-shell/tool-window";
 import type { ToolWindowBounds } from "@wildwinter/app-shell/tool-window";
 import { StudioStore } from "./store.js";
+import type { SecretCodec } from "./store.js";
 import { refreshMenu } from "./menu.js";
+// The pack exchange (design/engine-server.md 9.1): three calls over plain HTTP
+// for a project that came from a server, and nothing at all for one that did not.
+import {
+  addressOf, failed, normaliseAddress, openPackBytes, packProject, pair, planPull, pullPack, pushPack,
+  menuState, reachable, readRemote, remoteInPack, resolveLeave, statusLine, writeRemote, REMOTE_FILE,
+} from "./remote.js";
+import type { LeaveChoice, PullPlan, RemoteRecord } from "./remote.js";
 import { compileBundle, compileForLivePush, createProject, currentProjectHash, exportBundle, openProject, openResult, projectSettings, validate, vcStatus } from "./project.js";
 import { createLiveLinkServer, type LiveLinkServer } from "./live-link.js";   // Live Link
 import { setProjectWrittenListener } from "./mutate.js";   // Live Link: refresh a connected game after a write
@@ -28,7 +37,7 @@ import {
   duplicateDeck, duplicateTagGroup, duplicateHand, duplicateTemplate, handDetail, moveBox, moveCard, moveDeck, moveHand, templateDetail, redo, renameDeck,
   saveHand,
   declareProperty, deleteCommentMessage, repointTag,
-  saveBox, saveCard, saveTagGroup, saveProjectSettings, saveTemplate, proposeDrivers, undo, moveCardsOnCanvas, createCardOnCanvas, layoutDeck,
+  saveBox, saveCard, saveTagGroup, saveProjectSettings, saveTemplate, proposeDrivers, undo, moveCardsOnCanvas, createCardOnCanvas, layoutDeck, countLogicalEdit, forgetLastCounted,
   moveComment, postComment, setCanvasFurniture, setCommentResolved, setGroupSpatial, setZonePolygon, moveSitesOnMap, removeSitesFromMap, createZone, restackZone, addBackground, editBackground, restackBackground, removeBackground,
 } from "./mutate.js";
 // Find: the Property and Replace tabs
@@ -47,7 +56,7 @@ import type { Bundle, Comment, Frame, PropertyDecl, SaveFile, ScalarValue, Stack
 import type { BackgroundEdit } from "./mutate.js";
 import { ASSET_SCHEME, assetUrl } from "../shared/api.js";
 import type {
-  BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOverlayDto, CoverageReport, DeckGraph, GraphEdge, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, MapBackgroundDto, PaneState, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
+  BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOverlayDto, CoverageReport, DeckGraph, GraphEdge, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
 } from "../shared/api.js";
 import { JOB_PROGRESS_CHANNEL, MAP_CANVAS, PROJECT_CHANGED } from "../shared/api.js";
 import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
@@ -73,6 +82,35 @@ if (process.env["STORYLETTER_DEBUG_PORT"] !== undefined) {
 }
 
 let window: BrowserWindow | undefined;
+
+/** The author has answered the leaving question (or there was none to ask), so
+ *  the next close and the next quit go straight through (9.1). */
+let leaving = false;
+
+/**
+ * Where a paired key is held at rest: the OS's own store where there is one.
+ *
+ * `safeStorage` is the keychain on macOS, DPAPI on Windows, and the desktop's
+ * secret service on Linux; where none of them answers it says so, and the key
+ * sits in the settings file as it would have anyway. Nothing here fails
+ * because of it: a key that cannot be unsealed reads as no key, and the author
+ * is offered the dialog rather than a call that would be refused.
+ */
+function osSecret(): SecretCodec {
+  return {
+    seal: (plain) => (safeStorage.isEncryptionAvailable()
+      ? `sealed:${safeStorage.encryptString(plain).toString("base64")}`
+      : plain),
+    unseal: (sealed) => {
+      if (!sealed.startsWith("sealed:")) return sealed;
+      try {
+        return safeStorage.decryptString(Buffer.from(sealed.slice("sealed:".length), "base64"));
+      } catch {
+        return undefined;
+      }
+    },
+  };
+}
 
 let tableWindow: BrowserWindow | undefined;
 let coverageWindow: BrowserWindow | undefined;
@@ -229,7 +267,93 @@ function scheduleLivePush(): void {
   }, 500);
 }
 
-const menu = (): void => refreshMenu(window, store.get(), liveLinkOn());
+// --- the pack exchange, main's half (design/engine-server.md 9.1) -------------
+//
+// Every piece of this is gated on the OPEN PROJECT having come from a server
+// and this app still holding the key for it. With no remote there is no Server
+// menu, no status line, no role and no prompt on the way out: an editor that
+// has never been pointed at one carries a single File item and nothing else.
+
+/** The head revision each server-backed project was last seen at, learned in
+ *  the background so the status line can say "behind" without a call on the
+ *  menu's own path. A session's worth, keyed by project folder, never stored. */
+const serverHeads = new Map<string, number>();
+
+interface ServerContext { dir: string; remote: RemoteRecord; address: string; key: string }
+
+/** The open project's remote AND the key for it, or nothing. Both halves: a
+ *  remote whose key has been forgotten is a project like any other. */
+function serverContext(): ServerContext | undefined {
+  const dir = session?.loaded.dir;
+  if (dir === undefined) return undefined;
+  const remote = readRemote(dir);
+  if (remote === undefined) return undefined;
+  const address = addressOf(remote);
+  const held = store.serverKey(address);
+  return held === undefined ? undefined : { dir, remote, address, key: held.key };
+}
+
+const standingOf = (ctx: ServerContext): { revision: number; edits: number; head?: number } => {
+  const head = serverHeads.get(ctx.dir);
+  return {
+    revision: ctx.remote.revision,
+    edits: ctx.remote.edits ?? 0,
+    ...(head !== undefined ? { head } : {}),
+  };
+};
+
+/** The window's suffix, which is the status line again so an author with the
+ *  menu closed still knows. Silent while the project is level, and silent
+ *  always for a project with no server. */
+function retitle(ctx: ServerContext | undefined): void {
+  if (!window || window.isDestroyed()) return;
+  const edits = ctx?.remote.edits ?? 0;
+  window.setTitle(edits > 0 && ctx !== undefined ? `Storyletter (${statusLine(standingOf(ctx))})` : "Storyletter");
+}
+
+const menu = (): void => {
+  const ctx = serverContext();
+  const dir = session?.loaded.dir;
+  refreshMenu(window, store.get(), liveLinkOn(), menuState(
+    ctx?.remote, ctx !== undefined, dir !== undefined ? serverHeads.get(dir) : undefined,
+  ));
+  retitle(ctx);
+};
+
+/** The unpushed count as the menu and the title last showed it. */
+let shownEdits: number | undefined;
+
+/** After every write that lands: the count may have moved. Compared rather
+ *  than rebuilt blindly, because a write happens on every autosave and a menu
+ *  rebuild does not belong on that path. */
+function noteProjectWritten(): void {
+  const edits = session === undefined ? undefined : readRemote(session.loaded.dir)?.edits;
+  if (edits === shownEdits) return;
+  shownEdits = edits;
+  menu();
+}
+
+/**
+ * Ask the server where it has got to, once, in the background.
+ *
+ * Silent on failure, deliberately: a server that is not on this network
+ * is the ordinary case for a project opened on a train, and it is not
+ * something to interrupt anybody about. What it costs is one pack fetched and
+ * thrown away, which is the only way to learn the head revision over the calls
+ * this app makes.
+ */
+function refreshHead(): void {
+  const ctx = serverContext();
+  if (ctx === undefined) return;
+  void (async () => {
+    const head = await pullPack(ctx.address, ctx.key, {
+      installation: ctx.remote.installation, version: ctx.remote.version,
+    });
+    if (failed(head)) return;
+    serverHeads.set(ctx.dir, head.revision);
+    menu();
+  })();
+}
 
 /** A path the OS handed us before the window existed (open-file fires during
  *  cold launch on macOS), waiting for the renderer to collect it at boot. */
@@ -253,7 +377,13 @@ async function unpackToChosenDir(packPath: string): Promise<OpenResult | { error
   if (dirPick.canceled || target === undefined) return null;
   try {
     const { shards, assets } = await runUnpack(readFileSync(packPath), target);
-    const batch = writeTextFiles(shards.map((w) => ({ filePath: w.path, content: w.content })));
+    // The record a server-issued pack carries is NOT written by this route. A
+    // pack opened by file is an ordinary project until somebody connects: the
+    // role it names would otherwise make the shape read-only in an editor that
+    // has no server to explain it and no menu to act on it.
+    const batch = writeTextFiles(shards
+      .filter((w) => w.path !== join(target, REMOTE_FILE))
+      .map((w) => ({ filePath: w.path, content: w.content })));
     if (!batch.success) {
       const first = batch.results.find((r) => !r.success);
       return { error: `could not write the unpacked project: ${first?.message ?? "unknown"}` };
@@ -481,13 +611,235 @@ function openAt(path: string): OpenResult | { error: string } {
   dropShardCaches();
   const reply = projects.openAt(path);
   session = projects.current();
+  // A project that came from a server: start the count afresh for it, and ask
+  // in the background where the server has got to. Both no-ops otherwise.
+  forgetLastCounted();
+  shownEdits = session === undefined ? undefined : readRemote(session.loaded.dir)?.edits;
+  refreshHead();
   return reply;
+}
+
+// --- the pack exchange: landing a pack, pulling, pushing ----------------------
+
+/**
+ * Explode pack bytes into a folder the author picks, and open it.
+ *
+ * ONE PATH for both cases the spec separates, because the merge already is
+ * both. A folder that does not hold this project yet has nothing to merge
+ * against, so every shard is written verbatim as an add; a folder that DOES
+ * hold it gets `unpack --merge` semantics, id by id, with conflicts landing as
+ * sidecars the problems bar shows. Which of the two happened is a fact about
+ * the folder, not a mode anybody has to choose.
+ */
+async function landPack(
+  bytes: Buffer, remote: RemoteRecord | undefined,
+): Promise<OpenResult | { error: string } | null> {
+  const dirPick = await dialog.showOpenDialog(window!, {
+    title: "Where should the project go?",
+    message: "Choose a folder. The pack is unpacked into it as a project and opened.",
+    buttonLabel: "Unpack Here",
+    properties: ["openDirectory", "createDirectory"],
+  });
+  const target = dirPick.filePaths[0];
+  if (dirPick.canceled || target === undefined) return null;
+  try {
+    const plan = await planPull(target, bytes, undefined);
+    const failure = commitPlan(plan);
+    if (failure !== undefined) return { error: failure };
+    // The record goes in AFTER the shards, and only when the author connected:
+    // a pack opened by file alone is an ordinary project, whatever its manifest
+    // once said about where it came from.
+    if (remote !== undefined) writeRemote(target, remote);
+    return openAt(target);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Write a plan's shards, sidecars and pictures. Returns the reason it could
+ *  not, or nothing. */
+function commitPlan(plan: PullPlan): string | undefined {
+  const batch = writeTextFiles([...plan.writes, ...plan.sidecars]
+    .map((w) => ({ filePath: w.path, content: w.content })));
+  if (!batch.success) {
+    const first = batch.results.find((r) => !r.success);
+    return `could not write the project: ${first?.message ?? "unknown"}`;
+  }
+  // Pictures go straight to disk rather than through the text writer: they are
+  // bytes, and nothing downstream should be asked to diff or merge them.
+  for (const asset of plan.assets) {
+    mkdirSync(dirname(asset.path), { recursive: true });
+    writeFileSync(asset.path, asset.bytes);
+  }
+  return undefined;
+}
+
+/** The far end's own issues, as problems the bar can show. A refusal is shown
+ *  where every other thing wrong with the project is shown. */
+function serverProblems(dir: string, refusal: string, details: unknown): Problem[] {
+  const rows = Array.isArray(details)
+    ? (details as { severity?: string; path?: string; message?: string; where?: string }[])
+    : [];
+  return [
+    { severity: "error", path: dir, message: refusal },
+    ...rows
+      .filter((r) => typeof r.message === "string")
+      .map((r): Problem => ({
+        severity: r.severity === "warning" ? "warning" : "error",
+        path: r.path !== undefined ? join(dir, r.path) : dir,
+        ...(r.where !== undefined ? { where: r.where } : {}),
+        message: r.message!,
+      })),
+  ];
+}
+
+/** A refused push that came back with conflict sidecars: write them where the
+ *  author will meet them, which is beside the shards that disagreed. */
+function writeRefusedSidecars(dir: string, details: unknown): void {
+  if (!Array.isArray(details)) return;
+  for (const row of details as { path?: string; text?: string }[]) {
+    if (typeof row.path !== "string" || typeof row.text !== "string") continue;
+    const path = join(dir, row.path);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, row.text, "utf8");
+  }
+}
+
+/** Take the server's latest revision into the open project. */
+async function serverPull(): Promise<ServerPullResult> {
+  const ctx = serverContext();
+  if (ctx === undefined || session === undefined) return null;
+  await flushEditor();   // a merge reads the working copy off disk
+  const head = await pullPack(ctx.address, ctx.key, {
+    installation: ctx.remote.installation, version: ctx.remote.version,
+  });
+  if (failed(head)) return { error: head.error };
+  serverHeads.set(ctx.dir, head.revision);
+  // The ancestor is the revision we last pulled, which the far end still has:
+  // it keeps every pack it sent, so the merge never has to ask which base.
+  // Already level with the head means the head IS the ancestor, and the merge
+  // is then a no-op over the author's own edits rather than a rewrite of every
+  // shard against an empty base.
+  const base = head.revision === ctx.remote.revision
+    ? head
+    : await pullPack(ctx.address, ctx.key, {
+        installation: ctx.remote.installation, version: ctx.remote.version, revision: ctx.remote.revision,
+      });
+  if (failed(base)) return { error: base.error };
+  try {
+    const plan = await planPull(ctx.dir, head.bytes, base.bytes);
+    const writes = [...plan.writes, ...plan.sidecars];
+    const before = captureBefore(writes.map((w) => w.path));
+    const failure = commitPlan(plan);
+    if (failure !== undefined) return { error: failure };
+    // ONE undo step for the whole pull, as the returned-pack merge is one: a
+    // revision is one act, and unpicking it shard by shard would leave the
+    // project in a state neither end ever had.
+    session.history.record("Pull from server", `pull:${structKey()}`, before,
+      writes.map((w) => ({ path: w.path, content: w.content })));
+    // Level with the server at ITS revision. The edit count is left alone
+    // rather than zeroed: a merge that folded local edits in leaves them
+    // unpushed, and saying "in sync" over them would be a lie.
+    writeRemote(ctx.dir, { ...ctx.remote, revision: head.revision, role: head.role });
+    scheduleLivePush();
+    menu();
+    return {
+      result: openResult(session, validate(session)),
+      revision: head.revision,
+      merged: plan.merged, added: plan.added, conflicts: plan.conflicts,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Send the open project up. A refusal is not a fault in the plumbing: it is
+ *  the far end saying no, in its own words, and it is shown as it stands. */
+async function serverPush(): Promise<ServerPushResult> {
+  const ctx = serverContext();
+  if (ctx === undefined || session === undefined) return null;
+  await flushEditor();   // a pack is a snapshot of the FILES
+  let pack: Buffer;
+  try {
+    pack = await packProject(ctx.dir);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const identity = store.get().identity;
+  const pushed = await pushPack(ctx.address, ctx.key, {
+    pack,
+    installation: ctx.remote.installation,
+    version: ctx.remote.version,
+    base: ctx.remote.revision,
+    ...(identity !== undefined ? { identity } : {}),
+  });
+  if (failed(pushed)) {
+    if (pushed.code === "conflict") writeRefusedSidecars(ctx.dir, pushed.details);
+    const problems = [...validate(session), ...serverProblems(ctx.dir, pushed.error, pushed.details)];
+    return { result: openResult(session, problems), refusal: pushed.error };
+  }
+  serverHeads.set(ctx.dir, pushed.revision);
+  writeRemote(ctx.dir, { ...ctx.remote, revision: pushed.revision, edits: 0 });
+  forgetLastCounted();
+  menu();
+  return {
+    result: openResult(session, validate(session)),
+    revision: pushed.revision,
+    changed: pushed.changed?.length ?? 0,
+  };
+}
+
+/**
+ * The way out of a project the server has not seen the whole of.
+ *
+ * One prompt, three buttons, and the middle one names the act it is in the
+ * middle of: quitting or closing. A push that lands lets go; a push that is
+ * REFUSED does not, and the app stays where the author can act on it, which is
+ * the whole reason the refusal is worth reaching at this moment at all.
+ */
+async function mayLeaveProject(act: "quit" | "close"): Promise<boolean> {
+  const ctx = serverContext();
+  if (ctx === undefined || (ctx.remote.edits ?? 0) === 0) return true;
+  const leave = act === "quit" ? "Quit without pushing" : "Close without pushing";
+  const online = await reachable(ctx.address);
+  const buttons = online ? ["Push to server", leave, "Cancel"] : [leave, "Cancel"];
+  const answer = await dialog.showMessageBox(window!, {
+    type: "question",
+    message: statusLine(standingOf(ctx)),
+    detail: online
+      ? "This project has edits the server has not seen."
+      : "This project has edits the server has not seen, and the server cannot be reached.",
+    buttons,
+    defaultId: 0,
+    cancelId: buttons.length - 1,
+  });
+  const choice: LeaveChoice = online
+    ? (["push", "leave", "cancel"] as const)[answer.response] ?? "cancel"
+    : (["leave", "cancel"] as const)[answer.response] ?? "cancel";
+  const outcome = await resolveLeave(choice, async () => {
+    const pushed = await serverPush();
+    if (pushed === null) return { error: "there is nothing to push to." };
+    if ("error" in pushed) return { error: pushed.error };
+    if ("refusal" in pushed) return { error: pushed.refusal };
+    return { revision: pushed.revision };
+  });
+  if (outcome.refusal !== undefined && window && !window.isDestroyed()) {
+    // The problems bar already has it (the push wrote it there); this is the
+    // window coming back to the front with the reason on it.
+    window.webContents.send("project:opened", openResult(session!, [
+      ...validate(session!), ...serverProblems(ctx.dir, outcome.refusal, undefined),
+    ]));
+  }
+  return outcome.go;
 }
 
 function wireIpc(): void {
   ipcMain.handle("state:get", () => store.get());
 
   ipcMain.handle("project:openDialog", async (): Promise<OpenResult | { error: string } | null> => {
+    // Opening another project over one the server has not seen the whole of is
+    // one of the three ways out that ask first (9.1).
+    if (!(await mayLeaveProject("close"))) return null;
     const picked = await dialog.showOpenDialog(window!, {
       title: "Open a storylets project",
       message: "Choose your project's .storylets folder.",
@@ -502,10 +854,13 @@ function wireIpc(): void {
   // there through a native dialog run in main where a person picked them. A
   // renderer naming a directory of its own is not a route into the file system
   // (Patterpad's guard, which we did not have).
-  ipcMain.handle("project:openPath", (_event, path: string) =>
-    (projects.isKnownPath(path) ? openAt(path) : { error: "that project is not one of yours" }));
+  ipcMain.handle("project:openPath", async (_event, path: string) => {
+    if (!(await mayLeaveProject("close"))) return null;
+    return projects.isKnownPath(path) ? openAt(path) : { error: "that project is not one of yours" };
+  });
 
   ipcMain.handle("project:create", async (_event, name: string): Promise<OpenResult | { error: string } | null> => {
+    if (!(await mayLeaveProject("close"))) return null;
     const picked = await dialog.showOpenDialog(window!, {
       title: "Choose where to create the project",
       // Patterpad's wording, and its shape: say what will be CREATED here,
@@ -532,6 +887,7 @@ function wireIpc(): void {
    * always means putting it somewhere first.
    */
   ipcMain.handle("example:open", async (_event, name: string): Promise<OpenResult | { error: string } | null> => {
+    if (!(await mayLeaveProject("close"))) return null;
     const source = examplePath(name);
     if (source === undefined) return { error: `no example called "${name}" shipped with this build` };
     // `title` alone is INVISIBLE on macOS: the native open panel ignores it, so
@@ -561,7 +917,8 @@ function wireIpc(): void {
   // while keeping recents); the tool windows then close outright, because a
   // Board or a Find over no project is not a stale view, it is a view of
   // nothing.
-  ipcMain.handle("project:close", (): void => {
+  ipcMain.handle("project:close", async (): Promise<boolean> => {
+    if (!(await mayLeaveProject("close"))) return false;
     projects.closeCurrent();
     session = undefined;
     dropShardCaches();
@@ -574,6 +931,7 @@ function wireIpc(): void {
     // menu rebuild puts the Play > Live Link tick back in step.
     liveLink?.stop();
     menu();
+    return true;
   });
 
   /** Show the project's folder in Finder / the file manager (Patterpad's
@@ -1464,7 +1822,16 @@ function wireIpc(): void {
     }
   });
 
-  ipcMain.handle("pack:open", async (): Promise<OpenResult | { error: string } | null> => {
+  /**
+   * Open Storyletpack, first half: choose the file, and say whether it names an
+   * address.
+   *
+   * Two halves rather than one, because a pack that came from a server is a
+   * pack you can either connect to or open flat, and only the author can say
+   * which. A pack that names none is opened as it always was, in the second
+   * call, with nobody asked anything.
+   */
+  ipcMain.handle("pack:choose", async (): Promise<{ path: string; address?: string } | null> => {
     const packPick = await dialog.showOpenDialog(window!, {
       title: "Open a Storyletpack",
       message: "Choose a .storyletpack to unpack into a project.",
@@ -1474,8 +1841,82 @@ function wireIpc(): void {
     });
     const packPath = packPick.filePaths[0];
     if (packPick.canceled || packPath === undefined) return null;
-    return unpackToChosenDir(packPath);
+    try {
+      const carried = await remoteInPack(readFileSync(packPath), dirname(packPath));
+      return carried === undefined
+        ? { path: packPath }
+        : { path: packPath, address: addressOf(carried) };
+    } catch {
+      // A pack we cannot read here is a pack the unpack will report on properly.
+      return { path: packPath };
+    }
   });
+
+  /** Open a chosen pack flat: the project only, with no record of where it came
+   *  from. What Cancel on the connect dialog falls back to. */
+  ipcMain.handle("pack:openAt", async (_event, path: string): Promise<OpenResult | { error: string } | null> => {
+    if (!(await mayLeaveProject("close"))) return null;
+    try {
+      return await landPack(readFileSync(path), undefined);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  // --- the pack exchange ------------------------------------------------------
+
+  /**
+   * Address and code in, project out.
+   *
+   * The code is spent on the way past: it is exchanged for a key, which is kept
+   * in this app's settings under the address and never in a project. Then the
+   * project is fetched and opened, which is the whole of connecting - there is
+   * no separate first pull to remember to do.
+   */
+  ipcMain.handle("server:connect", async (
+    _event, address: string, code: string,
+  ): Promise<OpenResult | { error: string } | null> => {
+    if (!(await mayLeaveProject("close"))) return null;
+    const dialled = normaliseAddress(address);
+    const identity = store.get().identity;
+    const paired = await pair(
+      dialled, code,
+      { app: `Storyletter ${app.getVersion()}`, host: hostname() },
+      identity,
+    );
+    if (failed(paired)) return { error: paired.error };
+    store.setServerKey(dialled, {
+      key: paired.key, role: paired.role,
+      ...(paired.installation !== "" ? { installation: paired.installation } : {}),
+    });
+    const pulled = await pullPack(dialled, paired.key, {
+      ...(paired.installation !== "" ? { installation: paired.installation } : {}),
+    });
+    if (failed(pulled)) return { error: pulled.error };
+    const landed = await landPack(pulled.bytes, {
+      schema: "storylets/server-provenance@0",
+      server: pulled.server,
+      address: dialled,
+      installation: pulled.installation,
+      version: pulled.version,
+      revision: pulled.revision,
+      role: pulled.role,
+      pulledAt: new Date().toISOString(),
+      edits: 0,
+    });
+    if (landed !== null && !("error" in landed)) menu();
+    return landed;
+  });
+
+  /** Forget the key paired with an address. Every piece of chrome that
+   *  depended on it goes with it. */
+  ipcMain.handle("server:forget", (_event, address: string): void => {
+    store.forgetServer(normaliseAddress(address));
+    menu();
+  });
+
+  ipcMain.handle("server:pull", (): Promise<ServerPullResult> => serverPull());
+  ipcMain.handle("server:push", (): Promise<ServerPushResult> => serverPush());
 
   // Whatever the OS handed us at launch (a double-clicked project or pack), if
   // anything. The renderer asks first and falls back to the last project, so
@@ -1570,6 +2011,9 @@ function wireIpc(): void {
       // One undo step for the whole merge: a returned pack is one act, and
       // unpicking it shard by shard would be worse than useless.
       session.history.record("Merge returned storyletpack", `pack:${structKey()}`, before, writes.map((w) => ({ path: w.path, content: w.content })));
+      // A write like any other, including to the server: a merged-in return leg
+      // is one more thing the far end has not seen.
+      countLogicalEdit(session.loaded.dir, `pack:${structKey()}`);
       scheduleLivePush();   // Live Link: a merge is a write like any other
       return openResult(session, validate(session));
     } catch (e) {
@@ -1740,6 +2184,19 @@ function createWindow(): void {
     },
   });
   window.once("ready-to-show", () => window?.show());
+  // Closing the editor is one of the three ways out (9.1): with edits the
+  // server has not seen, the close waits for an answer. `leaving` is what an
+  // answered prompt sets so the second close goes straight through, and it is
+  // also what Quit sets, so Cmd+Q asks once rather than twice.
+  window.on("close", (event) => {
+    if (leaving || window === undefined) return;
+    event.preventDefault();
+    void mayLeaveProject("quit").then((go) => {
+      if (!go) return;
+      leaving = true;
+      window?.close();
+    });
+  });
   window.on("closed", () => { window = undefined; liveLink?.stop(); });   // closing the editor closes the live link
   watchInDev(window, "editor");
 
@@ -1814,10 +2271,12 @@ function contentTypeFor(file: string): string {
 }
 
 void app.whenReady().then(() => {
-  store = new StudioStore(app.getPath("userData"));
+  store = new StudioStore(app.getPath("userData"), osSecret());
   serveAssets();
   wireIpc();
-  setProjectWrittenListener(scheduleLivePush);   // Live Link: every saved edit reaches a connected game
+  // Live Link: every saved edit reaches a connected game. And the unpushed
+  // count may have moved with it, which the menu and the title say.
+  setProjectWrittenListener(() => { scheduleLivePush(); noteProjectWritten(); });
   createWindow();
   menu();
   // Auto-update. `configureUpdater` FIRST, or every prompt is addressed to "This
@@ -1842,4 +2301,18 @@ void app.whenReady().then(() => {
 app.on("window-all-closed", () => app.quit());
 
 // The last chance to tidy: after this there is no undo chain to protect.
-app.on("before-quit", () => sweepOrphanAssets(session));
+//
+// And the last chance to ask, too. A push at quit stages a revision and
+// advances nothing, so pushing half-done work is harmless; a push that is
+// REFUSED leaves the app open on the problems bar, because a refusal reached
+// at the moment of quitting is the one an author most needs to still be there
+// to act on.
+app.on("before-quit", (event) => {
+  if (leaving) { sweepOrphanAssets(session); return; }
+  event.preventDefault();
+  void mayLeaveProject("quit").then((go) => {
+    if (!go) return;
+    leaving = true;
+    app.quit();
+  });
+});

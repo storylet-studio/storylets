@@ -23,9 +23,28 @@ function tildePath(p: string): string {
   return abs === home || abs.startsWith(home + sep) ? `~${abs.slice(home.length)}` : abs;
 }
 
+/**
+ * The Server menu's state, or nothing at all.
+ *
+ * Nothing at all is the ordinary case and the important one: the menu does not
+ * exist until the OPEN PROJECT came from a server and this app still holds the
+ * key for it. It is conditional on the project, never on the install, so an
+ * editor that has never been pointed at one has no trace of the exchange
+ * beyond the single File item.
+ */
+export interface ServerMenuState {
+  /** The line under Pull and Push: "In sync", "Behind: revision 7 on the
+   *  server", "3 edits unpushed". Drawn as a disabled item, which is what a
+   *  menu's own status line is. */
+  status: string;
+}
+
 /** `liveLink`: the Live Link server is up (listening or connected), so Play >
- *  Live Link shows ticked; it is the server's state, not a remembered one. */
-export function refreshMenu(window: BrowserWindow | undefined, state: StudioState, liveLink = false): void {
+ *  Live Link shows ticked; it is the server's state, not a remembered one.
+ *  `server`: the open project came from one and we still hold its key. */
+export function refreshMenu(
+  window: BrowserWindow | undefined, state: StudioState, liveLink = false, server?: ServerMenuState,
+): void {
   const send = (command: MenuCommand) => () => window?.webContents.send("menu", command);
   // The family's labels, from the shell's table rather than typed here (the menu
   // spine, app-shell 0.16.0). They read the same as the strings they replace -
@@ -140,6 +159,18 @@ export function refreshMenu(window: BrowserWindow | undefined, state: StudioStat
         { label: "Open Storyletpack\u2026", click: send({ cmd: "open-pack" }) },
         { label: "Export as Storyletpack\u2026", click: send({ cmd: "export-pack" }) },
         { label: "Merge Returned Storyletpack\u2026", click: send({ cmd: "merge-pack" }) },
+        // The pack exchange's one door, beside the other pack items because it
+        // is the same act over a wire: it asks for an address and a code, and
+        // it is for somebody who already has both. Everything else the exchange
+        // grows - the Server menu, the status, the role - waits for a project
+        // that came from one.
+        //
+        // Not in the shell's `namedMenuItems` yet, and it should be: Patterpad
+        // has no remote of its own, so there is nothing to mirror today, but a
+        // pack is shared between the two apps and so is this label. It goes to
+        // from-storylets as a proposal, and the spine takes it if Patterpad
+        // ever grows the other half.
+        { label: "Connect to a server\u2026", click: send({ cmd: "connect-server" }) },
         { type: "separator" },
         // A12: on macOS there is NO File > Close Window, which is Patterpad's
         // written decision and was reversed here without a note. Quit in the app
@@ -234,6 +265,17 @@ export function refreshMenu(window: BrowserWindow | undefined, state: StudioStat
         { label: "Auto Rebuild", type: "checkbox", checked: state.autoRebuild, click: send({ cmd: "toggle-auto-rebuild" }) },
       ],
     },
+    // Beside Publish, and only while there is one: Publish is the other menu
+    // that sends the project somewhere, and this is that act over a wire.
+    ...(server === undefined ? [] : [{
+      label: "Server",
+      submenu: [
+        { label: "Pull", click: send({ cmd: "server-pull" }) },
+        { label: "Push", click: send({ cmd: "server-push" }) },
+        { type: "separator" as const },
+        { label: server.status, enabled: false },
+      ],
+    } as Electron.MenuItemConstructorOptions]),
     {
       label: "View",
       submenu: [

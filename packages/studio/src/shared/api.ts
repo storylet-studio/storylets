@@ -533,9 +533,47 @@ export interface VcStatusDto {
 export type { BoxKit };
 export type { PlayRung };
 
+/**
+ * Where an open project came from, when it came from a server.
+ *
+ * Present only for a project that was pulled: an ordinary project has no
+ * remote, and every piece of the editor that answers to one is quiet until
+ * this arrives.
+ */
+export interface RemoteDto {
+  /** What the app dials. */
+  address: string;
+  installation: string;
+  version: string;
+  /** The revision this project is level with. */
+  revision: number;
+  /** The role of the key it was fetched with. An author's makes the shape
+   *  shards read-only; a designer's makes nothing read-only. */
+  role: "author" | "designer";
+  /** Shard writes since the last push or pull. */
+  edits: number;
+}
+
+/** What a Pull did. The project payload rides along so the editor refreshes
+ *  through the same path as any other write, conflict sidecars and all. */
+export type ServerPullResult =
+  | { result: OpenResult; revision: number; merged: number; added: number; conflicts: number }
+  | { error: string }
+  | null;
+
+/** What a Push did. A refusal is not an error in the plumbing sense: it is the
+ *  far end saying no, in its own words, and it is shown verbatim. */
+export type ServerPushResult =
+  | { result: OpenResult; revision: number; changed: number }
+  | { result: OpenResult; refusal: string }
+  | { error: string }
+  | null;
+
 export interface OpenResult {
   project: ProjectDto;
   problems: Problem[];
+  /** Absent for an ordinary project. */
+  remote?: RemoteDto;
   /** Launch at an item (`storyletter <path> --at <where>`): land HERE instead
    *  of the remembered place. Main resolves the query; the renderer goes there
    *  the way it goes to a Find hit. Absent on every ordinary open. */
@@ -1114,6 +1152,11 @@ export type MenuCommand =
   | { cmd: "open-pack" }
   | { cmd: "export-pack" }
   | { cmd: "merge-pack" }
+  // The pack exchange (File ▸ Connect to a server…, and the Server menu that
+  // appears once a project has come from one).
+  | { cmd: "connect-server" }
+  | { cmd: "server-pull" }
+  | { cmd: "server-push" }
   | { cmd: "live-link" }   // Play > Live Link: toggle the server (the bottom-right chip mirrors it)
   | { cmd: "theme"; theme: ThemeChoice }
   | { cmd: "nav-back" }
@@ -1125,11 +1168,13 @@ export interface StudioApi {
   getState(): Promise<StudioState>;
   /** Open via the system dialog; null = cancelled. */
   openProjectDialog(): Promise<OpenResult | { error: string } | null>;
-  openProjectPath(path: string): Promise<OpenResult | { error: string }>;
+  /** Null when the author was asked about unpushed edits and said no. */
+  openProjectPath(path: string): Promise<OpenResult | { error: string } | null>;
   /** Show the open project's folder in Finder / the file manager. */
   revealProject(): void;
-  /** Close the open project and return to the welcome screen. */
-  closeProject(): Promise<void>;
+  /** Close the open project and return to the welcome screen. False when the
+   *  author was asked about unpushed edits and said no. */
+  closeProject(): Promise<boolean>;
   /** Scaffold a new project (runInit) under a chosen parent dir; null = cancelled. */
   createProject(name: string): Promise<OpenResult | { error: string } | null>;
   /** Copy a shipped worked example somewhere the author owns, and open it. Null
@@ -1498,9 +1543,7 @@ export interface StudioApi {
   /** Write the open project to a .storyletpack (native save dialog).
    *  Null = cancelled. */
   exportPack(): Promise<{ path: string } | { error: string } | null>;
-  /** Open a .storyletpack as a project: pick a pack, pick where to explode it,
-   *  then open the result. Null = cancelled at either step. */
-  openPack(): Promise<OpenResult | { error: string } | null>;
+
   /** Fold a RETURNED pack into the open project, merging by id against the
    *  pack that was sent. Null = cancelled. */
   /** Pick the two packs and RUN the merge, without writing: the summary is what
@@ -1511,6 +1554,27 @@ export interface StudioApi {
   mergePackCommit(): Promise<OpenResult | { error: string } | null>;
   /** Throw the planned merge away: the author declined it. */
   mergePackDrop(): Promise<void>;
+
+  // --- the pack exchange ------------------------------------------------------
+  // Three calls over plain HTTP, for someone who was given an address and a
+  // code. Everything here is main's: the renderer never sees a key.
+
+  /** Pair with the address, fetch the project, and open it. Null when a picker
+   *  was cancelled. */
+  connectServer(address: string, code: string): Promise<OpenResult | { error: string } | null>;
+  /** Open Storyletpack, first half: pick the pack, and say whether it names an
+   *  address. Null when the picker was cancelled. */
+  choosePack(): Promise<{ path: string; address?: string } | null>;
+  /** Open a chosen pack as a project, with no record of where it came from:
+   *  what a cancelled connect falls back to, and what a pack that names no
+   *  address does straight away. Null = cancelled at the folder picker. */
+  openPackAt(path: string): Promise<OpenResult | { error: string } | null>;
+  /** Forget the key paired with this address. */
+  forgetServer(address: string): Promise<void>;
+  /** Take the server's latest revision into the open project. */
+  serverPull(): Promise<ServerPullResult>;
+  /** Send the open project up. */
+  serverPush(): Promise<ServerPushResult>;
   /** Whatever the OS handed the app at launch: a double-clicked project, or a
    *  double-clicked pack (which unpacks first). Null = nothing was passed, so
    *  boot falls back to the last project. Consumed once. */

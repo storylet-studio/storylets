@@ -41,6 +41,20 @@ interface StudioSlice {
   navExpanded?: string[];
   mapGroups?: Record<string, string>;
   canvasCameras?: Record<string, { x: number; y: number; scale: number }>;
+  /** The keys a pack exchange was paired with, by address. Here and never in a
+   *  project: a key belongs to the person at the keyboard, like the identity
+   *  two fields up, and a shard that carried one would hand it to everybody the
+   *  project is ever sent to. Sealed by the host when the OS offers somewhere
+   *  to seal it (see `secret` on the constructor). */
+  servers?: Record<string, StoredServerKey>;
+}
+
+/** One paired address. `role` rides along because the editor needs it before
+ *  any call is made: it is what the shape shards are read-only under. */
+export interface StoredServerKey {
+  key: string;
+  role: "author" | "designer";
+  installation?: string;
 }
 
 // A deck opens on its NODE canvas: a deck is a web of cards that lead to each
@@ -147,10 +161,22 @@ function healLegacyPlace(file: string): void {
   }
 }
 
+/** How a secret is held at rest. The host supplies the OS's own sealing where
+ *  there is one; the default is the honest no-op, which is what a machine with
+ *  no keychain has anyway. */
+export interface SecretCodec {
+  seal: (plain: string) => string;
+  unseal: (sealed: string) => string | undefined;
+}
+
+const PLAIN: SecretCodec = { seal: (s) => s, unseal: (s) => s };
+
 export class StudioStore {
   private readonly store: AppStore<LastPlace, StudioSlice>;
+  private readonly secret: SecretCodec;
 
-  constructor(dir: string) {
+  constructor(dir: string, secret: SecretCodec = PLAIN) {
+    this.secret = secret;
     migrateFlatFile(join(dir, "studio-state.json"));
     healLegacyPlace(join(dir, "studio-state.json"));
     this.store = createAppStore<LastPlace, StudioSlice>({
@@ -174,7 +200,11 @@ export class StudioStore {
     // The renderer's flat shape keeps its `boardView` field: computed for the
     // CURRENT project, "map" when it never chose (the Board falls back to List
     // when there is no map to show). The keyed record stays main-side.
-    const { boardViews, ...app } = s.app;
+    // `servers` is stripped with `boardViews`, and for a stronger reason than
+    // shape: this object crosses to the renderer, and a key has no business
+    // over there. What the renderer is told about a server is its status line.
+    const { boardViews, servers, ...app } = s.app;
+    void servers;
     const boardPlace = s.lastProject !== undefined ? boardViews[s.lastProject] : undefined;
     return {
       ...app,
@@ -245,6 +275,37 @@ export class StudioStore {
   setLastPlace(place: LastPlace): void { this.store.setPlace(place); }
   setPanes(panes: PaneState): void { this.store.setPanes(panes); }
   setIdentity(identity: { name: string; email?: string }): void { this.store.setIdentity(identity); }
+
+  // --- the pack exchange's keys, by address ---------------------------------------
+  // Kept whole rather than merged into: forgetting one has to actually remove
+  // it, and a patch that only overwrote fields would leave a dead key in the
+  // file for anyone reading it later.
+
+  /** The key paired with this address, unsealed, or nothing. */
+  serverKey(address: string): StoredServerKey | undefined {
+    const stored = this.store.get().app.servers?.[address];
+    if (stored === undefined) return undefined;
+    const key = this.secret.unseal(stored.key);
+    // A key we can no longer unseal (a keychain that moved machines) is a key
+    // that is gone: say so by having none, so the author is offered the dialog
+    // rather than a call that will be refused.
+    return key === undefined ? undefined : { ...stored, key };
+  }
+
+  setServerKey(address: string, entry: StoredServerKey): void {
+    const servers = { ...this.store.get().app.servers };
+    servers[address] = { ...entry, key: this.secret.seal(entry.key) };
+    this.store.patchApp({ servers });
+  }
+
+  /** Forget this server: the key goes, and with it every piece of chrome that
+   *  depended on it. */
+  forgetServer(address: string): void {
+    const servers = { ...this.store.get().app.servers };
+    if (!(address in servers)) return;
+    delete servers[address];
+    this.store.patchApp({ servers });
+  }
 
   setBoardPinned(on: boolean): void { this.store.setWindow(BOARD, { pinned: on }); }
   setSearchPinned(on: boolean): void { this.store.setWindow(SEARCH, { pinned: on }); }
