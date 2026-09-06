@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-06
+
 ### Added
 
 - **Hand positions carried in a bundle's `maps` block** (2026-09-05). A map may carry `sites`, a list of `{hand, x, y}` saying where each placed hand stands, and `describe_bundle` counts it beside the zones and the pictures (design/engine-server.md 4.3). The parsed Dictionary IS the bundle here, so a host reads the positions straight off it. Still INERT PAYLOAD: nothing in the engine reads any of it. The bundle view counts it on the map's line. No corpus change: a position is not a behaviour.

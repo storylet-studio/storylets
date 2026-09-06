@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-06
+
 ### Added
 
 - **A box that counts in time: `turn: { seconds: N }`** (2026-09-05; design/engine-server.md 4.8). A box may declare that its turns are TIME rather than plays. One branch in `play` is the whole of it in the engine: in a timed box the default advance is 0 instead of `settings.playAdvancesTurns`, so a designer cannot declare the convention and then forget to switch play-advance off; a call that names `advanceTurns` still gets what it asked for. The host ticks the box as it always could - the runtime has no clock and gains none - and `redraw: N` on its cards reads as N x `seconds`, which is what every surface now SAYS rather than anything the engine does differently. `describeBundle` reports the unit on `BoxSummary` and the four bundle inspectors show `turn = 60s`, so an integrator reading a bundle knows which boxes their host must tick. The compiler refuses a `seconds` that is not a positive integer, and warns about a timed box whose every card says `redraw: "always"`, since nothing in it then rests. Corpus first: six cases, corpus version 5.

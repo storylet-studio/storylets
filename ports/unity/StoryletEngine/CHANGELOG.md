@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-06
+
 ### Added
 
 - **Hand positions carried in a bundle's `maps` block** (2026-09-05). `BundleMap.Sites` is a list of `MapSite` (a hand gameId and a point), parsed and handed over like the zones and the pictures beside it, and reported as `MapSummary.Sites` (design/engine-server.md 4.3). Still INERT PAYLOAD: nothing in the engine reads any of it. The bundle inspector counts it on the map's line ("village - zone: zones 1, pictures 1, sites 2"). No corpus change: a position is not a behaviour.

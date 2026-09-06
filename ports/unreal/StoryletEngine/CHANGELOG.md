@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-06
+
 ### Added
 
 - **Hand positions carried in a bundle's `maps` block** (2026-09-05). `BundleMap::sites` is a list of `MapSite` (a hand gameId and a point), parsed and handed over like the zones and the pictures beside it, and reported as `MapSummary::sites` (design/engine-server.md 4.3). Still INERT PAYLOAD: nothing in the engine reads any of it. The asset Inspector gains the **Maps (carried, not read)** section the other three inspectors already had, counting zones, pictures and sites, and `FStoryletBundleDescription` gains `Maps` so Blueprint can read the same. No corpus change: a position is not a behaviour.
