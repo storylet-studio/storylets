@@ -178,6 +178,22 @@ describe("the contract line on a box page", () => {
     expect(gid.hasAttribute("disabled")).toBe(false);
   });
 
+  // The claim is on the NAME, so it goes with the name (2026-09-07). The same
+  // loose end as the hand's, and the same fix: this page shares the heading.
+  it("lets the claim go while the box is being renamed in place", () => {
+    const host = document.createElement("div");
+    setDocTab("box:b_1", "contents");
+    renderBoxCentre(host, { ...box, contract: ["Ticked at the-park every 60s"] }, () => {}, stubActions());
+    const gid = host.querySelector<HTMLElement>(".doc-gid .gid")!;
+    const title = host.querySelector<HTMLInputElement>("input.doc-title")!;
+    title.value = "The Long Street";
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(gid.textContent).toContain("the-long-street");
+    expect(gid.classList.contains("gid-bound")).toBe(false);
+    expect(gid.title).not.toContain("Ticked at the-park");
+    expect([...host.querySelectorAll<HTMLElement>(".doc-contract")].filter((p) => !p.hidden)).toEqual([]);
+  });
+
   it("says one line per venue for a project that tours", () => {
     const host = document.createElement("div");
     setDocTab("box:b_1", "contents");

@@ -48,7 +48,7 @@ import type { Focus, ViewActions } from "./views.js";
 import { foldVc, lockControls, lockNotice, paintVcBadges, shapeNotice } from "./vc-view.js";
 import {
   renderCardWorkspace, renderTemplateWorkspace, renderHandWorkspace, renderTagGroupWorkspace,
-  renderBoxTabBody, renderDeckTabBody, docTabFor, expandOutcome, setDocTab, resetDocTabMemory,
+  renderBoxTabBody, renderDeckTabBody, docTabFor, expandOutcome, refreshGameIds, setDocTab, resetDocTabMemory,
 } from "./inspector.js";
 import type { Detail, Inspected, InspectorHost } from "./inspector.js";
 import { createProjectSettings } from "./project-settings.js";
@@ -1465,6 +1465,10 @@ function applyDocVc(): void {
     if (st?.lockedBy?.length) { for (const who of st.lockedBy) holders.add(who); lockControls(frame, true); }
     else if (holders.size === 0) lockControls(frame, false);
   });
+  // The address chips were painted before any of this ran, so the ones that
+  // have just been shut still offer the click that opens their editor. Told
+  // here, which is the only place that knows they are shut.
+  refreshGameIds(host);
   docHolders = [...holders];
   docLocked = docHolders.length > 0;
   host.querySelector(":scope > .vc-lock")?.remove();
@@ -2371,8 +2375,15 @@ async function adopt(pending: Promise<OpenResult | { error: string } | null>): P
   if (result === null) return;
   if ("error" in result) { welcomeError = result.error; project = undefined; clearVc(); state = await studio.getState(); renderWelcome(); return; }
   welcomeError = "";
-  // A different project is a different sitting: tab choices do not carry over.
-  if (project !== undefined && project.dir !== result.project.dir) resetDocTabMemory();
+  // A different project is a different sitting: tab choices do not carry over,
+  // and NEITHER DOES ANY SERVER CHROME (2026-09-07). The status and the server's
+  // own problems belong to the project being left, so they go before the new
+  // one's are read rather than being overwritten a line at a time.
+  if (project !== undefined && project.dir !== result.project.dir) {
+    resetDocTabMemory();
+    remote = undefined;
+    problems = [];
+  }
   project = result.project;
   remote = result.remote;
   setPlayRung(result.project.play);
@@ -2523,7 +2534,13 @@ async function serverPull(): Promise<void> {
   if ("error" in done) { flashError(done.error); return; }
   applyResult(done.result);
   renderWorkspace();
-  const counts = `${done.merged} merged, ${done.added} added`;
+  // The venue's own file is taken whole rather than merged (4.11), so it is
+  // counted apart: "16 merged, 0 added" over 17 shards was a shard nobody could
+  // account for, and the one it left out was the contract.
+  const counts = [
+    `${done.merged} merged`, `${done.added} added`,
+    ...(done.replaced > 0 ? [`${done.replaced} contract${done.replaced === 1 ? "" : "s"} taken`] : []),
+  ].join(", ");
   if (done.conflicts > 0) {
     // The ERROR voice, as the returned-pack merge uses: the merge landed, but
     // walking away from unresolved conflicts thinking you were done is exactly
@@ -2561,6 +2578,10 @@ async function serverPush(breaks: ContractBreakDto[] = []): Promise<void> {
     if ("error" in done) { flashError(done.error); return; }
     applyResult(done.result);
     renderWorkspace();
+    // Nothing differed from the revision the far end holds, which is the server
+    // saying the work is already there. A remark, not a refusal: it is said in
+    // the quiet voice and nothing is filed in the problems bar.
+    if ("unchanged" in done) { flash(done.unchanged, "ok"); return; }
     if ("refusal" in done) {
       if (done.breaks === undefined || done.breaks.length === 0) { flashError(done.refusal); return; }
       asking = {

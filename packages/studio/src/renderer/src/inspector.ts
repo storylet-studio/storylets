@@ -205,6 +205,23 @@ function editFromCard(card: CardDto): Required<CardEdit> {
     })),
   };
 }
+/** The nudge that repaints an address chip in place. Its own event so the chip
+ *  keeps its own paint function, rather than the caller reaching in to rewrite
+ *  a tooltip it would then have to keep in step. */
+const GID_REPAINT = "gid:repaint";
+
+/**
+ * Repaint every address chip under `host`.
+ *
+ * For the pass that DISABLES them: the read-only rule (an author's key over a
+ * shape shard) and a held shard both arrive after the document is drawn, and a
+ * chip painted before them was still saying "click to edit" over a control
+ * nothing would open (2026-09-07).
+ */
+export function refreshGameIds(host: ParentNode): void {
+  host.querySelectorAll(".gid").forEach((chip) => chip.dispatchEvent(new Event(GID_REPAINT)));
+}
+
 // A gameId field (Patterpad's model): the address is *derived from the title*
 // until the author sites one, so it reads as a quiet auto value rather than a
 // typed-in literal. Click it for a small popover to override, or to hand it
@@ -214,20 +231,41 @@ function gameIdField(
   /** What a venue depends on this address being (design/engine-server.md 4.11).
    *  It reads as the field's HINT and not as a refusal: the refusal is the
    *  server's, on push (9.1), and a rename field that simply would not type
-   *  would leave a designer with no way to see why. */
-  contract?: string[],
+   *  would leave a designer with no way to see why.
+   *
+   *  ASKED at every paint, not read once: the claim is on the NAME the venue
+   *  bound, so it lets go the moment this address stops being that name. It
+   *  used to be a fixed list, and a rename in place left the mark and the hint
+   *  standing until the page was re-entered (2026-09-07). */
+  contract?: () => string[] | undefined,
 ): { root: HTMLElement; refresh: () => void } {
   const root = el("button", { className: "gid" });
   const paint = (): void => {
     const pinned = get().trim();
-    root.className = `gid${pinned ? "" : " gid-auto"}${contract?.length ? " gid-bound" : ""}`;
-    const usual = pinned ? "Game id - fixed by hand (click to edit)" : "Game id - follows the title (click to override)";
-    root.title = contract?.length ? [...contract, usual].join("\n") : usual;
+    const bound = contract?.();
+    // Toggled rather than assigned: a repaint must not sweep away a class
+    // somebody else put here, and the read-only pass marks this button with one
+    // (`vc-off`) that is how it is opened up again.
+    root.classList.add("gid");
+    root.classList.toggle("gid-auto", pinned === "");
+    root.classList.toggle("gid-bound", (bound?.length ?? 0) > 0);
+    // The click hint goes when the chip cannot be clicked: under an author's
+    // key the shape is read-only and this button is disabled, and an invitation
+    // to click a dead control is worse than no hint at all. What shut it is
+    // said above the document, by the notice that shut it.
+    const shut = (root as HTMLButtonElement).disabled;
+    const usual = pinned
+      ? `Game id - fixed by hand${shut ? "" : " (click to edit)"}`
+      : `Game id - follows the title${shut ? "" : " (click to override)"}`;
+    root.title = bound?.length ? [...bound, usual].join("\n") : usual;
     root.replaceChildren(
       el("span", { className: "gid-value", text: pinned || derived() || "(unnamed)" }),
       el("span", { className: "gid-tag", text: pinned ? "pinned" : "auto" }),
     );
   };
+  // Repainted from outside by `refreshGameIds`, which is how a chip learns it
+  // has been disabled: the read-only pass runs after the document is drawn.
+  root.addEventListener(GID_REPAINT, () => paint());
   root.addEventListener("click", () => {
     // THE SHELL'S editor (app-shell `id-editor.ts`), which is Patterpad's lifted
     // into the kit: an address is a family-wide idea, not a storylets one, and
@@ -625,6 +663,11 @@ export function documentHeading(label: string, opts: {
    *  (design/engine-server.md 4.11), in the density grammar: quiet, and only
    *  when there IS a venue, which is almost never. */
   contract?: string[];
+  /** Does the claim still hold? Asked again whenever the address is edited: a
+   *  venue's claim is on the NAME it bound, so renaming the entity in place
+   *  lets it go, and the line and the chip's mark go with it. Absent means it
+   *  always holds, which is what everything but a rename field wants. */
+  contractHolds?: () => boolean;
   purpose?: IdentityField & { placeholder?: string; commit: () => void; commitOn?: "input" | "blur" };
   menu?: { label: string; danger?: boolean; onClick: () => void }[];
   /** The comment-thread opener, in the TOPLINE beside the ⋯ menu: the row that
@@ -660,10 +703,23 @@ export function documentHeading(label: string, opts: {
     topline.append(more);
   }
   head.append(topline);
+  // The venue's claim, built once and shown while it holds. One line per
+  // installation and nothing at all otherwise, which is the density rule: a
+  // project with no server has no venue to be told about.
+  const claim = (): string[] | undefined =>
+    ((opts.contractHolds?.() ?? true) ? opts.contract : undefined);
+  const claimLines = (opts.contract ?? []).map((line) => el("p", { className: "doc-contract", text: line }));
+  const paintClaim = (): void => {
+    const held = claim() !== undefined;
+    for (const line of claimLines) line.hidden = !held;
+  };
   let gid: { root: HTMLElement; refresh: () => void } | undefined;
   if (opts.gameId) {
     const g = opts.gameId;
-    gid = gameIdField(g.get, g.set, () => gameIdify(g.deriveFrom()) || g.fallback, g.commit, opts.contract);
+    gid = gameIdField(g.get, g.set, () => gameIdify(g.deriveFrom()) || g.fallback,
+      // The rename is what can let the claim go, so the lines are asked again
+      // on the same beat the chip is.
+      () => { g.commit(); paintClaim(); }, claim);
   }
   // The title and the address share ONE ROW, the address right-aligned. It used
   // to have a row of its own under the title, which cost a line of vertical space
@@ -674,7 +730,7 @@ export function documentHeading(label: string, opts: {
     const t = opts.title;
     const input = el("input", { className: "insp-input insp-title doc-title" });
     input.value = t.get(); input.placeholder = t.placeholder ?? "Title";
-    input.addEventListener("input", () => { t.set(input.value); gid?.refresh(); if ((t.commitOn ?? "input") === "input") { t.commit(); opts.afterEdit?.(); } });
+    input.addEventListener("input", () => { t.set(input.value); gid?.refresh(); paintClaim(); if ((t.commitOn ?? "input") === "input") { t.commit(); opts.afterEdit?.(); } });
     input.addEventListener("change", () => { t.commit(); opts.afterEdit?.(); });
     titleRow.append(input);
   }
@@ -688,12 +744,9 @@ export function documentHeading(label: string, opts: {
   }
   if (gid) titleRow.append(el("div", { className: "doc-gid" }, gid.root));
   if (titleRow.childElementCount > 0) head.append(titleRow);
-  // The venue's claim on this entity, under the name it claims. One line per
-  // installation and nothing at all otherwise, which is the density rule: a
-  // project with no server has no venue to be told about.
-  for (const line of opts.contract ?? []) {
-    head.append(el("p", { className: "doc-contract", text: line }));
-  }
+  // The venue's claim on this entity, under the name it claims.
+  for (const line of claimLines) head.append(line);
+  paintClaim();
   if (opts.purpose) {
     const p = opts.purpose;
     // LABELLED, and the same word on all seven types that have this field
@@ -954,6 +1007,9 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
     properties: detail.properties.map((p) => ({ ...p })),
   };
   const commit = (): void => h.saveHand(boxId, detail.id, edit);
+  /** The address this hand answers to as it is being edited: the pinned one, or
+   *  the one the title derives, which is what the chip itself shows. */
+  const addressNow = (): string => edit.gameId.trim() || gameIdify(edit.title) || detail.gameId;
   const redraw = (): void => draw();
   const standalone = (): boolean => edit.template === undefined || edit.template === "";
 
@@ -968,7 +1024,13 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
       purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "<what sits here, and why>", commit },
       menu: [{ label: "Delete hand", danger: true, onClick: () => h.deleteHand(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.title || detail.gameId, a) },
-      ...(detail.contract !== undefined ? { contract: detail.contract } : {}),
+      // A venue binds a NAME, so the claim holds only while this hand still
+      // answers to the one it bound. Renaming it in place is exactly when a
+      // designer needs to watch the claim let go, and until 2026-09-07 the line
+      // and the mark stood until the page was re-entered.
+      ...(detail.contract !== undefined
+        ? { contract: detail.contract, contractHolds: () => addressNow() === detail.gameId }
+        : {}),
     }));
     const declared = standalone() ? edit.rule?.slots ?? "unbounded" : templateNow?.slots ?? "unbounded";
     const slotsNow = /^\d+$/.test(edit.slots) ? Number(edit.slots)

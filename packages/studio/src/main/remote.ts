@@ -33,7 +33,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { join, relative, sep } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { canonicalStringify, parseSource, walkProjectFiles } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS } from "@storylet-studio/model";
 import {
@@ -153,7 +153,34 @@ export interface BaseRecord {
 }
 
 /**
- * A shard's canonical text, hashed.
+ * A shard in the MERGE's own normal form: `runMerge(x, x, x)`.
+ *
+ * The order of an id-keyed array is never a change (the ruling of 2026-09-07,
+ * which the far end compares by too). The merge sorts every keyed array and
+ * every open map as it folds, so a pulled shard comes back ordered whether or
+ * not the copy on disk was, and a comparison of canonical TEXT then reads a
+ * sort as four edits nobody made. Asking the merge itself is what keeps the two
+ * ends agreeing about what a change is: there is one normal form and it is the
+ * one the merge already defines.
+ *
+ * A shard the merge cannot type - anything that is not one of ours - is its own
+ * normal form, because there is no strategy to normalise it with.
+ */
+export function normalForm(shard: Record<string, unknown>): Record<string, unknown> {
+  try {
+    return runMerge(shard, shard, shard).merged;
+  } catch {
+    return shard;
+  }
+}
+
+/** The same, over text: the normal form's canonical bytes. */
+const normalText = (text: string): string =>
+  canonicalStringify(normalForm(parseSource(text) as Record<string, unknown>));
+
+/**
+ * A shard's canonical text, hashed - in the normal form above, so that the
+ * order of an id-keyed array cannot count as an edit.
  *
  * Text that will not parse is hashed as it stands rather than skipped: a shard
  * somebody has broken by hand is still a difference from what the server sent,
@@ -162,7 +189,7 @@ export interface BaseRecord {
 export function shardHash(text: string): string {
   let canonical = text;
   try {
-    canonical = canonicalStringify(parseSource(text) as Record<string, unknown>);
+    canonical = normalText(text);
   } catch { /* not parseable: its bytes are the only honest answer */ }
   return createHash("sha256").update(canonical).digest("hex");
 }
@@ -267,6 +294,12 @@ const AUTHOR_SHARDS: readonly string[] = [
   SHARD_EXTENSIONS.deck, SHARD_EXTENSIONS.notes, SHARD_EXTENSIONS.view,
 ];
 
+/** Is this path an installation contract? The one shard neither side edits and
+ *  the venue writes whole, which is why a pull takes it rather than merging it
+ *  (design/engine-server.md 4.11). */
+export const isContractShard = (path: string): boolean =>
+  path.toLowerCase().endsWith(SHARD_EXTENSIONS.contract);
+
 /** Is this path one of the shards that carry the shape? A file that is not a
  *  shard at all is nobody's contract and is not counted. */
 export function isShapeShard(path: string): boolean {
@@ -296,6 +329,26 @@ export interface CallFailure {
 
 export const failed = <T>(r: T | CallFailure): r is CallFailure =>
   typeof r === "object" && r !== null && "error" in r;
+
+/**
+ * Is this the far end saying the push would change nothing?
+ *
+ * INFORMATION, not a fault: "nothing in that pack differs from revision 3, so
+ * there is nothing to push" is the server confirming the work is already there,
+ * and it was being filed in the problems bar beside the things that are wrong
+ * with the project. It belongs in a toast, said once and gone.
+ *
+ * Recognised by the sentence because the far end has no code of its own for it:
+ * it is a plain bad request, like a dozen refusals that ARE faults. The two
+ * codes that carry a way through them are excluded first, and anything this
+ * does not recognise stays an error - the cost of missing one is a row in the
+ * bar, and the cost of guessing too freely would be a real refusal shown as a
+ * toast somebody can miss.
+ */
+export const nothingToPush = (failure: CallFailure): boolean =>
+  failure.code !== "conflict" && failure.code !== "contract_break"
+  && failure.offline !== true
+  && /nothing to push/i.test(failure.error);
 
 /** An address as typed, tidied into one we can build a URL from. */
 export function normaliseAddress(address: string): string {
@@ -646,7 +699,8 @@ export async function packAddress(bytes: Buffer | Uint8Array, dir: string): Prom
 }
 
 export interface PullPlan {
-  /** Merged and added shards, absolute, ready to write. */
+  /** Merged, replaced and added shards, absolute, ready to write. A shard the
+   *  merge left exactly as it already stands is NOT here: see `planPull`. */
   writes: { path: string; content: string }[];
   /** `.storyletconflict` sidecars for the shards that disagreed. */
   sidecars: { path: string; content: string }[];
@@ -654,6 +708,8 @@ export interface PullPlan {
   assets: { path: string; bytes: Uint8Array }[];
   merged: number;
   added: number;
+  /** Contract shards taken from the pack whole. The venue owns its own file. */
+  replaced: number;
   conflicts: number;
   /** The pulled revision's shards, hashed: the base the unpushed count is
    *  measured against once this plan is written. Worked out here because the
@@ -671,6 +727,19 @@ export interface PullPlan {
  * whose conflicts resolve to OURS with a sidecar, present only theirs is
  * written verbatim as an add, present only ours is LEFT ALONE, because a
  * whole-file delete is never propagated.
+ *
+ * With ONE exception, and it is the contract shard: the venue always wins its
+ * own file (design/engine-server.md 4.11), so a pull REPLACES it whole rather
+ * than merging it. Until 2026-09-07 it went through the 3-way like everything
+ * else, and a pull after a rename kept the old copy: the merge is keyed by
+ * entry, so the local list of hands survived a list the server had rewritten,
+ * and the project was then validating against a contract no venue held. Nobody
+ * hand-edits this file, so there is nothing of ours in it to lose.
+ *
+ * A merge whose result is what is already on disk WRITES NOTHING. The merge
+ * emits its own normal form (sorted keyed arrays), so a shard stored in another
+ * order comes back reordered and identical in every other way; rewriting it
+ * would leave an author who has typed nothing looking at "4 edits unpushed".
  */
 export async function planPull(
   dir: string, head: Buffer | Uint8Array, base: Buffer | Uint8Array | undefined,
@@ -678,7 +747,7 @@ export async function planPull(
   const theirs = await openPackBytes(head, dir);
   const ancestor = base === undefined ? undefined : (await openPackBytes(base, dir)).shards;
   const plan: PullPlan = {
-    writes: [], sidecars: [], assets: [], merged: 0, added: 0, conflicts: 0,
+    writes: [], sidecars: [], assets: [], merged: 0, added: 0, replaced: 0, conflicts: 0,
     base: hashShards(theirs.shards),
   };
 
@@ -695,7 +764,13 @@ export async function planPull(
         throw new Error(`${name}: the ${side} copy will not parse (${e instanceof Error ? e.message : String(e)})`);
       }
     };
-    const ours = read(readFileSync(path, "utf8"), "local");
+    const ourText = readFileSync(path, "utf8");
+    if (isContractShard(name)) {
+      plan.replaced++;
+      if (shardHash(ourText) !== shardHash(theirText)) plan.writes.push({ path, content: theirText });
+      continue;
+    }
+    const ours = read(ourText, "local");
     const baseText = ancestor?.get(name);
     // NO BASE ENTRY means the shard did not exist at the revision we pulled, so
     // there is no ancestor and every field of theirs reads as an add. `{}` is
@@ -706,8 +781,12 @@ export async function planPull(
       ours,
       read(theirText, "pulled"),
     );
-    plan.writes.push({ path, content: canonicalStringify(result.merged) });
+    const content = canonicalStringify(result.merged);
     plan.merged++;
+    // Order alone is not a change, so a result the file already says is not a
+    // write. The merge's output is normal already; ours is put in the same form
+    // to be asked.
+    if (content !== canonicalStringify(normalForm(ours))) plan.writes.push({ path, content });
     if (result.conflicts.length > 0) {
       plan.sidecars.push({ path: `${path}${CONFLICT_SIDECAR_EXTENSION}`, content: conflictSidecar(result) });
       plan.conflicts += result.conflicts.length;
@@ -726,6 +805,56 @@ export async function packProject(dir: string): Promise<Buffer> {
   return runPack(dir, { assets: true });
 }
 
+// --- what the far end says, as the problems bar shows it ------------------------------
+
+/** Where a project's problems are counted from: the folder, and the project
+ *  shard's own path within it, which is what a problem about the project as a
+ *  whole is anchored to. */
+export interface ProjectAnchor {
+  dir: string;
+  /** The project shard, project-relative. Empty when the project would not load
+   *  far enough to have one. */
+  project: string;
+}
+
+/**
+ * The far end's own issues, as problems the bar can show. A refusal is shown
+ * where every other thing wrong with the project is shown.
+ *
+ * PROJECT-RELATIVE, like every other row (2026-09-07). Every problem the
+ * compiler raises names a shard the way the project names it, and the bar's own
+ * labels are built by reading those paths; these arrived absolute, so a refusal
+ * about a deck sat in the bar wearing the whole of somebody's home folder. What
+ * anchors a refusal about the project rather than about one shard is the project
+ * shard itself, which the bar already reads as "Project settings".
+ *
+ * ...and a refusal is filed ONCE. It used to go in whatever the details
+ * carried, so a far end that named the same sentence in a detail row put it in
+ * the bar twice, once relative and once absolute.
+ */
+export function serverProblems(
+  anchor: ProjectAnchor, refusal: string, details: unknown,
+): { severity: "error" | "warning"; path: string; where?: string; message: string }[] {
+  const rows = Array.isArray(details)
+    ? (details as { severity?: string; path?: string; message?: string; where?: string }[])
+    : [];
+  // The far end names its shards the way the project does; one that arrives
+  // absolute (a copy of a path we sent it) is put back into the project's own
+  // terms rather than shown as it stands.
+  const rel = (path: string): string =>
+    (isAbsolute(path) ? relative(anchor.dir, path) : path).split(sep).join("/");
+  const detailed = rows
+    .filter((r) => typeof r.message === "string")
+    .map((r) => ({
+      severity: r.severity === "warning" ? "warning" as const : "error" as const,
+      path: r.path !== undefined ? rel(r.path) : anchor.project,
+      ...(r.where !== undefined ? { where: r.where } : {}),
+      message: r.message!,
+    }));
+  const said = detailed.some((p) => p.message === refusal);
+  return said ? detailed : [{ severity: "error", path: anchor.project, message: refusal }, ...detailed];
+}
+
 // --- what the menu and the window say ------------------------------------------------
 
 /** What we know about a project's standing with its server. `head` is the far
@@ -735,6 +864,37 @@ export interface RemoteStanding {
   revision: number;
   edits: number;
   head?: number;
+}
+
+/**
+ * What this SITTING has learned about where a project stands with its server:
+ * the far end's head revision, asked for in the background, and the unpushed
+ * count as the menu and the title last drew it.
+ *
+ * A session's worth and never stored, and DROPPED WHOLE WHEN THE PROJECT
+ * CHANGES (2026-09-07). Both facts belong to one project: keeping them across a
+ * switch left the window saying where the project just closed stood, over the
+ * one that had just opened. There is nothing here worth carrying - a head is one
+ * call to learn again, and the count is read off the shards - so the honest move
+ * is to forget it all and ask again.
+ */
+export class ServerSession {
+  private readonly heads = new Map<string, number>();
+
+  /** The unpushed count as the menu and the title last showed it. Undefined
+   *  before anything has been drawn, which is also what a switch leaves. */
+  shownEdits: number | undefined;
+
+  /** The far end's latest revision for this project, when we have been told it. */
+  head(dir: string): number | undefined { return this.heads.get(dir); }
+
+  noteHead(dir: string, revision: number): void { this.heads.set(dir, revision); }
+
+  /** A different project is a different standing: everything here goes. */
+  forget(): void {
+    this.heads.clear();
+    this.shownEdits = undefined;
+  }
 }
 
 const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
@@ -867,6 +1027,11 @@ export const LEAVE_SETTLE_MS = 1500;
 
 /** What the prompt turns into once the push has landed. */
 export const pushedLine = (revision: number): string => `Pushed as revision ${revision}`;
+
+/** ...and when the far end says the pack differs from its revision in nothing
+ *  at all. The work is safe, which is what the person leaving wants to know,
+ *  and claiming a push that did not happen would be the wrong way to say it. */
+export const levelLine = (revision: number): string => `Already level with revision ${revision}`;
 
 /** The answer, read back. An index that is not one of the buttons is a cancel:
  *  a way out we did not offer is not a way out. */

@@ -42,10 +42,11 @@ import {
   saveCard, setGroupSpatial, setZonePolygon, undo,
 } from "./mutate.js";
 import {
-  BASE_FILE, PULL_AS_DESIGNER, REMOTE_FILE, addressOf, askLeave, contractBreaks, failed,
-  forgetShardHashes, hashProject, isShapeShard, leaveChoice, leavePrompt, menuState, normaliseAddress,
-  openPackBytes, pair, packAddress, packProject, planConnect, planPull, projectStatusLine, pullPack,
-  pushPack, pushedLine, readBase, readRemote, refusalPrompt, refuseWrite, remoteInPack, resolveLeave,
+  BASE_FILE, PULL_AS_DESIGNER, REMOTE_FILE, ServerSession, addressOf, askLeave, contractBreaks, failed,
+  forgetShardHashes, hashProject, isShapeShard, leaveChoice, leavePrompt, levelLine, menuState,
+  normalForm, normaliseAddress, nothingToPush, openPackBytes, pair, packAddress, packProject,
+  planConnect, planPull, projectStatusLine, pullPack, pushPack, pushedLine, readBase, readRemote,
+  refusalPrompt, refuseWrite, remoteInPack, resolveLeave, serverProblems, shardHash,
   statusLine, unpushedShards, writeBase, writeRemote,
 } from "./remote.js";
 import type { InAppPrompt, LeavePrompt, PairedKey, RemoteRecord } from "./remote.js";
@@ -356,8 +357,11 @@ describe("pulling", () => {
 
     // Ours stands in the file, and the sidecar records the disagreement: that
     // is the merge's own rule, and it is what the problems bar then shows.
-    const merged = plan.writes.find((w) => w.path === deck.path)!;
-    expect(merged.content).toContain("Our title");
+    // The file is not REWRITTEN to say what it already says (2026-09-07): the
+    // merge resolved to ours, so there is nothing for the plan to write, and a
+    // write here would leave an author who typed nothing looking at an edit.
+    expect(plan.writes.find((w) => w.path === deck.path)).toBeUndefined();
+    expect(readFileSync(deck.path, "utf8")).toContain("Our title");
     expect(JSON.parse(plan.sidecars[0]!.content).conflicts).toHaveLength(1);
   });
 
@@ -365,10 +369,12 @@ describe("pulling", () => {
     const mine = copyExample("pull-level");
     const deck = findDeck(mine);
     writeFileSync(deck.path, deck.text.replace(deck.title, "Only mine"), "utf8");
-    // The head IS the ancestor, so there is nothing of theirs to take.
+    // The head IS the ancestor, so there is nothing of theirs to take - and
+    // therefore nothing to write over the edit either.
     const plan = await planPull(mine, server.revisions[0]!, server.revisions[0]!);
     expect(plan.conflicts).toBe(0);
-    expect(plan.writes.find((w) => w.path === deck.path)!.content).toContain("Only mine");
+    expect(plan.writes.find((w) => w.path === deck.path)).toBeUndefined();
+    expect(readFileSync(deck.path, "utf8")).toContain("Only mine");
   });
 
   it("takes a shard the server has and we do not, verbatim", async () => {
@@ -380,6 +386,37 @@ describe("pulling", () => {
     const write = plan.writes.find((w) => w.path === join(mine, "extra.storyletnotes"));
     expect(write).toBeDefined();
     expect(plan.added).toBe(1);
+  });
+
+  // THE VENUE ALWAYS WINS ITS OWN FILE (design/engine-server.md 4.11). Found by
+  // hand on 2026-09-07: the pack carried a newer contract, the project kept the
+  // old one, and the toast said "16 merged" of seventeen shards. The base the
+  // far end sends for an older revision carries no contract at all, so every
+  // key of a merged one read as added on both sides and resolved to ours.
+  it("takes the venue's own contract whole rather than merging it", async () => {
+    const mine = copyExample("pull-contract");
+    const theirs = copyExample("pull-contract-theirs");
+    const ours = contract(mine, { revision: 1, hands: ["the-wall"] });
+    const newer = contract(theirs, { revision: 4, hands: ["the-long-wall"] });
+
+    const plan = await planPull(mine, await runPack(theirs, { assets: true }), server.revisions[0]!);
+    const write = plan.writes.find((w) => w.path === ours.path);
+    expect(write?.content, "the pack's copy, whole").toBe(readFileSync(newer.path, "utf8"));
+    // Counted apart, so the numbers in the toast account for every shard, and
+    // never as a merge: there is nothing here two sides could disagree about.
+    expect(plan.replaced).toBe(1);
+    expect(plan.conflicts).toBe(0);
+    expect(plan.sidecars).toHaveLength(0);
+  });
+
+  it("counts the contract even when the pack's copy is the one we already have", async () => {
+    const mine = copyExample("pull-contract-same");
+    const theirs = copyExample("pull-contract-same-theirs");
+    const ours = contract(mine, { revision: 4, hands: ["the-wall"] });
+    contract(theirs, { revision: 4, hands: ["the-wall"] });
+    const plan = await planPull(mine, await runPack(theirs, { assets: true }), server.revisions[0]!);
+    expect(plan.replaced).toBe(1);
+    expect(plan.writes.find((w) => w.path === ours.path), "nothing to write").toBeUndefined();
   });
 });
 
@@ -438,6 +475,85 @@ describe("pushing", () => {
     if (!failed(pushed)) return;
     expect(pushed.code).toBe("conflict");
     expect(Array.isArray(pushed.details)).toBe(true);
+  });
+});
+
+// The far end's own words, and where each of them belongs. Both faults here
+// were found by pushing a project that had nothing to push (2026-09-07): the
+// remark was filed as an error, and the rows it was filed beside wore absolute
+// paths where every other row in the bar is project-relative.
+describe("what the far end says, and where it is shown", () => {
+  const anchor = { dir: join("/tmp", "saltmarsh.storylets"), project: "saltmarsh.storyletproj" };
+
+  it("reads 'nothing to push' as a remark rather than a refusal", () => {
+    expect(nothingToPush({
+      error: 'Nothing in that pack differs from revision 3 of "seed", so there is nothing to push.',
+      code: "bad_request",
+    })).toBe(true);
+    // Everything else stays an error, refusals with a way through them included.
+    expect(nothingToPush({ error: "That push does not merge cleanly.", code: "conflict" })).toBe(false);
+    expect(nothingToPush({ error: "That push breaks 1 thing this end depends on.", code: "contract_break" })).toBe(false);
+    expect(nothingToPush({ error: PULL_AS_DESIGNER, code: "forbidden_shard" })).toBe(false);
+    // ...and a server nobody reached said nothing at all.
+    expect(nothingToPush({ error: "fetch failed", offline: true })).toBe(false);
+  });
+
+  it("names shards the way the project does", () => {
+    const rows = serverProblems(anchor, "That push breaks 1 thing this end depends on.", [
+      {
+        severity: "error", path: "encounters/hands.storylethands", where: "the-wall",
+        message: 'hand "the-wall" is bound by a station at the-park',
+      },
+      // One that arrives absolute is put back into the project's own terms.
+      { severity: "warning", path: join(anchor.dir, "encounters", "box.storyletbox"), message: "a warning" },
+      // ...and one about nothing in particular is anchored to the project shard,
+      // which is what the bar reads as "Project settings".
+      { severity: "error", message: "something about the whole project" },
+    ]);
+    expect(rows.map((r) => r.path)).toEqual([
+      "saltmarsh.storyletproj",
+      "encounters/hands.storylethands",
+      "encounters/box.storyletbox",
+      "saltmarsh.storyletproj",
+    ]);
+    expect(rows.every((r) => !r.path.startsWith("/"))).toBe(true);
+    expect(rows[1]!.where).toBe("the-wall");
+    expect(rows[2]!.severity).toBe("warning");
+  });
+
+  it("files a refusal once, however the details repeat it", () => {
+    const refusal = "That push does not merge cleanly against revision 4.";
+    expect(serverProblems(anchor, refusal, undefined)).toEqual([
+      { severity: "error", path: "saltmarsh.storyletproj", message: refusal },
+    ]);
+    // The same sentence in a detail row is the same problem: once, in the terms
+    // the details put it in, rather than twice with two different paths.
+    const twice = serverProblems(anchor, refusal, [{ path: "encounters/decks/docks.storyletdeck", message: refusal }]);
+    expect(twice).toEqual([
+      { severity: "error", path: "encounters/decks/docks.storyletdeck", message: refusal },
+    ]);
+  });
+});
+
+// Where a project stands with its server is a fact about THAT project, and a
+// project switch used to keep it: the window went on saying where the one just
+// closed stood (2026-09-07).
+describe("the server state a sitting holds", () => {
+  it("forgets every project's standing when the project changes", () => {
+    const sitting = new ServerSession();
+    sitting.noteHead("/projects/one", 7);
+    sitting.shownEdits = 3;
+    expect(sitting.head("/projects/one")).toBe(7);
+    expect(statusLine({ revision: 3, edits: 0, head: sitting.head("/projects/one")! }))
+      .toBe("Behind: revision 7 on the server");
+
+    sitting.forget();
+    expect(sitting.head("/projects/one")).toBeUndefined();
+    expect(sitting.shownEdits).toBeUndefined();
+    // Nothing known is nothing claimed: the line says where the project itself
+    // says it stands, and asks the server again.
+    expect(statusLine({ revision: 3, edits: 0, ...(sitting.head("/projects/one") !== undefined ? { head: 7 } : {}) }))
+      .toBe("In sync");
   });
 });
 
@@ -791,6 +907,51 @@ describe("unpushed shards", () => {
     expect(readBase(dir)).toBeUndefined();
   });
 
+  // ORDER IS NEVER A CHANGE (the ruling of 2026-09-07, which the far end
+  // compares by too). Found by pulling into a project nobody had touched and
+  // reading "4 edits unpushed": the merge re-emits name-keyed lists sorted -
+  // `properties` in the project file, `fields` in two box shards - and a base
+  // of canonical TEXT counted the sort. The format sorts a list keyed by ID on
+  // its own way out, so these are the lists where the two ends could disagree.
+  it("does not count the order of a name-keyed list", () => {
+    const { dir } = levelProject("count-order-hash");
+    const proj = findProject(dir);
+    const reversed = reorderProperties(proj.text);
+    expect(reversed, "the same shard, stored the other way round").not.toBe(proj.text);
+    expect(shardHash(reversed)).toBe(shardHash(proj.text));
+    // The normal form is the merge's own, so a shard already in it is unmoved.
+    expect(canonicalStringify(normalForm(parseSource(proj.text) as Record<string, unknown>)))
+      .toBe(canonicalStringify(normalForm(parseSource(reversed) as Record<string, unknown>)));
+
+    writeFileSync(proj.path, reversed, "utf8");
+    forgetShardHashes();
+    expect(unpushedShards(dir)).toBe(0);
+  });
+
+  it("reads In sync after a pull that only reordered a shard, and rewrites nothing", async () => {
+    const { dir } = levelProject("count-order-pull");
+    const proj = findProject(dir);
+    const before = readFileSync(proj.path, "utf8");
+
+    // The server's copy of the same revision, with the project's own properties
+    // the other way round: the shape a pack comes back in once anything at that
+    // end has merged it.
+    const theirs = copyExample("count-order-pull-theirs");
+    const theirProj = findProject(theirs);
+    writeFileSync(theirProj.path, reorderProperties(theirProj.text), "utf8");
+
+    const plan = await planPull(dir, await runPack(theirs, { assets: true }), server.revisions[0]!);
+    expect(plan.writes.find((w) => w.path === proj.path), "nothing to write").toBeUndefined();
+    expect(plan.conflicts).toBe(0);
+
+    for (const write of plan.writes) writeFileSync(write.path, write.content, "utf8");
+    writeBase(dir, 2, plan.base);
+    forgetShardHashes();
+    expect(readFileSync(proj.path, "utf8"), "left exactly as it was").toBe(before);
+    expect(unpushedShards(dir)).toBe(0);
+    expect(statusLine({ revision: 2, edits: unpushedShards(dir) })).toBe("In sync");
+  });
+
   it("keeps the base out of the pack, and out of the shards", async () => {
     const { dir } = levelProject("count-base-file");
     expect(existsSync(join(dir, BASE_FILE))).toBe(true);
@@ -950,6 +1111,18 @@ describe("leaving with edits the server has not seen", () => {
     expect(outcome).toEqual({ go: true });
   });
 
+  // A push the far end answers "nothing in that pack differs" to is a way out
+  // rather than a refusal: the work is already there. The closing word says so
+  // instead of claiming a push that did not happen.
+  it("says the work is already there when the far end says nothing differs", async () => {
+    const seen: string[] = [];
+    const outcome = await resolveLeave("push", async () => ({ revision: 4 }), async (revision) => {
+      seen.push(levelLine(revision));
+    });
+    expect(seen).toEqual(["Already level with revision 4"]);
+    expect(outcome).toEqual({ go: true });
+  });
+
   it("says nothing of the kind when there was no push, or when it was refused", async () => {
     const settle = async (): Promise<void> => { throw new Error("nothing landed, so nothing landed"); };
     expect(await resolveLeave("cancel", landed, settle)).toEqual({ go: false });
@@ -1099,6 +1272,40 @@ describe("connecting, in the order it spends things", () => {
 });
 
 // --- fixtures ----------------------------------------------------------------
+
+/** The project shard, which is where the story's own properties live. */
+function findProject(dir: string): { path: string; text: string } {
+  const loaded = loadProject(dir);
+  const path = join(dir, loaded.source!.path);
+  return { path, text: readFileSync(path, "utf8") };
+}
+
+/** The same project shard with its story properties the other way round: a
+ *  difference of ORDER and nothing else, which the format keeps (it sorts lists
+ *  keyed by id, and these are keyed by name) and the merge does not. */
+function reorderProperties(text: string): string {
+  const shard = parseSource(text) as { story: { properties: unknown[] } };
+  return canonicalStringify({
+    ...shard,
+    story: { ...shard.story, properties: [...shard.story.properties].reverse() },
+  });
+}
+
+/** An installation contract in a project, which is a file in `contracts/` at
+ *  the root and the one shard the venue writes whole. */
+function contract(dir: string, what: { revision: number; hands: string[] }): { path: string; text: string } {
+  const path = join(dir, "contracts", "the-park.storyletcontract");
+  const text = canonicalStringify({
+    schema: "storylets/contract@0",
+    installation: "the-park",
+    by: "Storylet Server 0.1.0",
+    revision: what.revision,
+    hands: what.hands,
+  });
+  mkdirSync(join(dir, "contracts"), { recursive: true });
+  writeFileSync(path, text, "utf8");
+  return { path, text };
+}
 
 /** The first deck shard in a project, with a title we can edit on both sides. */
 function findDeck(dir: string): { path: string; rel: string; text: string; title: string } {

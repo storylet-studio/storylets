@@ -8,7 +8,7 @@
 import { BrowserWindow, app, dialog, ipcMain, protocol, safeStorage, shell } from "electron";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { hostname } from "node:os";
 import { currentUserAsync, writeBinaryFile, writeTextFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { openToolWindow, pinToolWindow, rescueToolWindow, savedWindowRect } from "@wildwinter/app-shell/tool-window";
@@ -22,9 +22,10 @@ import {
   addressOf, askLeave, contractBreaks, failed, forgetShardHashes, hashProject, leavePrompt, normaliseAddress,
   openPackBytes, packAddress, packProject, planConnect, planPull, pullPack, pushPack, menuState, projectStatusLine,
   pushedLine, reachable, readRemote, refusalPrompt, resolveLeave, unpushedShards, writeBase, writeRemote,
+  levelLine, nothingToPush, serverProblems, ServerSession,
   LEAVE_SETTLE_MS, REMOTE_FILE,
 } from "./remote.js";
-import type { InAppPrompt, LeaveChoice, LeavePrompt, PullPlan, RemoteRecord } from "./remote.js";
+import type { InAppPrompt, LeaveChoice, LeavePrompt, ProjectAnchor, PullPlan, RemoteRecord } from "./remote.js";
 import { compileBundle, compileForLivePush, createProject, currentProjectHash, exportBundle, openProject, openResult, projectSettings, validate, vcStatus } from "./project.js";
 import { createLiveLinkServer, type LiveLinkServer } from "./live-link.js";   // Live Link
 import { setProjectWrittenListener } from "./mutate.js";   // Live Link: refresh a connected game after a write
@@ -276,10 +277,12 @@ function scheduleLivePush(): void {
 // menu, no status line, no role and no prompt on the way out: an editor that
 // has never been pointed at one carries a single File item and nothing else.
 
-/** The head revision each server-backed project was last seen at, learned in
- *  the background so the status line can say "behind" without a call on the
- *  menu's own path. A session's worth, keyed by project folder, never stored. */
-const serverHeads = new Map<string, number>();
+/** What this sitting knows about where the open project stands with its server:
+ *  the head revision, learned in the background so the status line can say
+ *  "behind" without a call on the menu's own path, and the count last drawn.
+ *  Dropped whole on a project switch - the rule and the reason are in
+ *  remote.ts, beside the rest of the server state. */
+const serverSession = new ServerSession();
 
 interface ServerContext { dir: string; remote: RemoteRecord; address: string; key: string }
 
@@ -310,7 +313,7 @@ function serverContext(): ServerContext | undefined {
  *  `unpushedShards`), which is what keeps it in step with the last keystroke
  *  rather than one event behind it. */
 const standingOf = (ctx: ServerContext): { revision: number; edits: number; head?: number } => {
-  const head = serverHeads.get(ctx.dir);
+  const head = serverSession.head(ctx.dir);
   return {
     revision: ctx.remote.revision,
     edits: unpushedShards(ctx.dir),
@@ -337,16 +340,13 @@ const menu = (): void => {
   const ctx = serverContext();
   const dir = session?.loaded.dir;
   const standing = ctx === undefined ? undefined : standingOf(ctx);
-  shownEdits = standing?.edits;
+  serverSession.shownEdits = standing?.edits;
   refreshMenu(window, store.get(), liveLinkOn(), menuState(
     ctx?.remote, ctx !== undefined, standing?.edits ?? 0,
-    dir !== undefined ? serverHeads.get(dir) : undefined,
+    dir !== undefined ? serverSession.head(dir) : undefined,
   ));
   retitle(ctx, standing);
 };
-
-/** The unpushed count as the menu and the title last showed it. */
-let shownEdits: number | undefined;
 
 /** After every write that lands - a commit, an undo, a redo - the count may
  *  have moved. Compared rather than rebuilt blindly, because a write happens on
@@ -354,7 +354,7 @@ let shownEdits: number | undefined;
 function noteProjectWritten(): void {
   const ctx = serverContext();
   const edits = ctx === undefined ? undefined : unpushedShards(ctx.dir);
-  if (edits === shownEdits) return;
+  if (edits === serverSession.shownEdits) return;
   menu();
 }
 
@@ -375,7 +375,7 @@ function refreshHead(): void {
       installation: ctx.remote.installation, version: ctx.remote.version,
     });
     if (failed(head)) return;
-    serverHeads.set(ctx.dir, head.revision);
+    serverSession.noteHead(ctx.dir, head.revision);
     menu();
   })();
 }
@@ -656,12 +656,19 @@ function openAt(path: string): OpenResult | { error: string } {
   // Before the new project's shards land, so the outgoing project's entries go
   // rather than accumulating across a session of switching.
   dropShardCaches();
+  // EVERY PIECE OF SERVER STATE GOES WITH THE PROJECT IT DESCRIBES (2026-09-07).
+  // A head learned in the background and a count last drawn are facts about the
+  // project being left; keeping them meant the window said where the OLD project
+  // stood while the new one was on screen.
+  serverSession.forget();
   const reply = projects.openAt(path);
   session = projects.current();
-  // A project that came from a server: note where it stands, and ask in the
-  // background where the server has got to. Both no-ops otherwise.
-  const opened = serverContext();
-  shownEdits = opened === undefined ? undefined : unpushedShards(opened.dir);
+  // ...and the menu the shell rebuilt DURING that open described the old project
+  // too, because this mirror only becomes true on the line above. Drawn again
+  // here, from the project that is actually open.
+  menu();
+  // A project that came from a server: ask in the background where the server
+  // has got to. A no-op otherwise.
   refreshHead();
   return reply;
 }
@@ -750,24 +757,10 @@ function commitPlan(plan: PullPlan): string | undefined {
   return undefined;
 }
 
-/** The far end's own issues, as problems the bar can show. A refusal is shown
- *  where every other thing wrong with the project is shown. */
-function serverProblems(dir: string, refusal: string, details: unknown): Problem[] {
-  const rows = Array.isArray(details)
-    ? (details as { severity?: string; path?: string; message?: string; where?: string }[])
-    : [];
-  return [
-    { severity: "error", path: dir, message: refusal },
-    ...rows
-      .filter((r) => typeof r.message === "string")
-      .map((r): Problem => ({
-        severity: r.severity === "warning" ? "warning" : "error",
-        path: r.path !== undefined ? join(dir, r.path) : dir,
-        ...(r.where !== undefined ? { where: r.where } : {}),
-        message: r.message!,
-      })),
-  ];
-}
+/** Where the problems bar counts this project's paths from: the folder, and the
+ *  project shard a problem about the whole project is anchored to. */
+const projectAnchor = (open: ProjectSession): ProjectAnchor =>
+  ({ dir: open.loaded.dir, project: open.loaded.source?.path ?? "" });
 
 /** A refused push that came back with conflict sidecars: write them where the
  *  author will meet them, which is beside the shards that disagreed. */
@@ -790,7 +783,7 @@ async function serverPull(): Promise<ServerPullResult> {
     installation: ctx.remote.installation, version: ctx.remote.version,
   });
   if (failed(head)) return { error: head.error };
-  serverHeads.set(ctx.dir, head.revision);
+  serverSession.noteHead(ctx.dir, head.revision);
   // The ancestor is the revision we last pulled, which the far end still has:
   // it keeps every pack it sent, so the merge never has to ask which base.
   // Already level with the head means the head IS the ancestor, and the merge
@@ -810,9 +803,13 @@ async function serverPull(): Promise<ServerPullResult> {
     if (failure !== undefined) return { error: failure };
     // ONE undo step for the whole pull, as the returned-pack merge is one: a
     // revision is one act, and unpicking it shard by shard would leave the
-    // project in a state neither end ever had.
-    session.history.record("Pull from server", `pull:${structKey()}`, before,
-      writes.map((w) => ({ path: w.path, content: w.content })));
+    // project in a state neither end ever had. A pull that wrote nothing -
+    // everything of theirs is already what is here - records no step: an undo
+    // that puts nothing back is not a step anybody wants on their stack.
+    if (writes.length > 0) {
+      session.history.record("Pull from server", `pull:${structKey()}`, before,
+        writes.map((w) => ({ path: w.path, content: w.content })));
+    }
     // Level with the server at ITS revision, and the base moves to what the
     // server sent rather than to what is now on disk: a merge that folded local
     // edits in leaves them unpushed, and they still differ from the pulled
@@ -824,7 +821,7 @@ async function serverPull(): Promise<ServerPullResult> {
     return {
       result: openResult(session, validate(session)),
       revision: head.revision,
-      merged: plan.merged, added: plan.added, conflicts: plan.conflicts,
+      merged: plan.merged, added: plan.added, replaced: plan.replaced, conflicts: plan.conflicts,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
@@ -866,8 +863,14 @@ async function serverPush(
     ...(identity !== undefined ? { identity } : {}),
   });
   if (failed(pushed)) {
+    // A push that would change nothing is the far end confirming the work is
+    // already there. It goes to a toast, and nothing about it is filed: the
+    // problems bar is for things wrong with the project.
+    if (nothingToPush(pushed)) {
+      return { result: openResult(session, validate(session)), unchanged: pushed.error };
+    }
     if (pushed.code === "conflict") writeRefusedSidecars(ctx.dir, pushed.details);
-    const problems = [...validate(session), ...serverProblems(ctx.dir, pushed.error, pushed.details)];
+    const problems = [...validate(session), ...serverProblems(projectAnchor(session), pushed.error, pushed.details)];
     // The one refusal with a way through it: the far end named things this
     // change breaks, and a designer who meant it says so break by break.
     const breaks = pushed.code === "contract_break" ? contractBreaks(pushed.details) : [];
@@ -877,7 +880,7 @@ async function serverPush(
       ...(breaks.length > 0 ? { breaks } : {}),
     };
   }
-  serverHeads.set(ctx.dir, pushed.revision);
+  serverSession.noteHead(ctx.dir, pushed.revision);
   writeRemote(ctx.dir, { ...ctx.remote, revision: pushed.revision });
   // The base moves to what was just sent, which is what is on disk: the pack
   // was made from these files a moment ago and nothing has touched them since.
@@ -977,18 +980,23 @@ async function mayLeaveProject(act: "quit" | "close"): Promise<boolean> {
   // dialog in front of it. A refusal that NAMES BREAKS is the one that then
   // needs one, so the breaks travel back for it.
   let breaks: ContractBreakDto[] | undefined;
+  // ...and the far end may answer that the pack differs from its revision in
+  // nothing at all, which is a way out rather than a refusal: the work is
+  // already there, and the closing word says so instead of claiming a push.
+  let level = false;
   const outcome = await resolveLeave(
     choice,
     async () => {
       const pushed = await serverPush();
       if (pushed === null) return { error: "there is nothing to push to." };
       if ("error" in pushed) return { error: pushed.error };
+      if ("unchanged" in pushed) { level = true; return { revision: ctx.remote.revision }; }
       if ("refusal" in pushed) { breaks = pushed.breaks; return { error: pushed.refusal }; }
       return { revision: pushed.revision };
     },
     // The beat of confirmation: the dialog is still up, and it turns into the
     // revision the work landed as before the window goes.
-    async (revision) => { await holdLeaveDialog(pushedLine(revision)); },
+    async (revision) => { await holdLeaveDialog(level ? levelLine(revision) : pushedLine(revision)); },
   );
   // However this ended, the dialog the person answered is finished with. Held
   // open until now on purpose (a push takes as long as the far end takes), so
@@ -998,7 +1006,7 @@ async function mayLeaveProject(act: "quit" | "close"): Promise<boolean> {
     // The problems bar already has it (the push wrote it there); this is the
     // window coming back to the front with the reason on it.
     window.webContents.send("project:opened", openResult(session!, [
-      ...validate(session!), ...serverProblems(ctx.dir, outcome.refusal, undefined),
+      ...validate(session!), ...serverProblems(projectAnchor(session!), outcome.refusal, undefined),
     ]));
     if (breaks !== undefined && breaks.length > 0) {
       // The one refusal with a way through it: the push dialog opens on the

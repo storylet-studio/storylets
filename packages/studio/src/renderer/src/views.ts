@@ -11,7 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import { icon, renderStepperBar } from "@wildwinter/app-shell";
-import { PLACE_GROUP } from "@storylet-studio/model";
+import { gameIdify, PLACE_GROUP } from "@storylet-studio/model";
 import { el } from "./dom.js";
 import { colourIndex } from "../../shell/colour.js";
 import { previewCondition } from "./expr-panels.js";
@@ -659,7 +659,16 @@ export function renderBoxCentre(
       { label: "Duplicate box", onClick: () => actions.duplicateBox(box.id) },
       { label: "Delete box", danger: true, onClick: () => actions.deleteBox(box.id) },
     ],
-    ...(box.contract !== undefined ? { contract: box.contract } : {}),
+    // The venue's claim is on the NAME it bound: renaming the box in place lets
+    // it go, and the line and the chip's mark go with it rather than standing
+    // until the page is re-entered (the hand's fault of 2026-09-07, which this
+    // page shares because it shares the heading).
+    ...(box.contract !== undefined
+      ? {
+          contract: box.contract,
+          contractHolds: () => (pinned.trim() || gameIdify(titled) || box.gameId) === box.gameId,
+        }
+      : {}),
   });
   // The MAP is offered by a box that has one, which means a tag group marked
   // spatial. A tab rather than a setting of a view switch, because a box page is

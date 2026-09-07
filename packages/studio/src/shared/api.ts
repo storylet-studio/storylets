@@ -607,7 +607,9 @@ export interface ContractBreakDto {
 /** What a Pull did. The project payload rides along so the editor refreshes
  *  through the same path as any other write, conflict sidecars and all. */
 export type ServerPullResult =
-  | { result: OpenResult; revision: number; merged: number; added: number; conflicts: number }
+  /** `replaced` counts the contract shards taken from the pack whole: the venue
+   *  owns its own file, so a pull never merges one (4.11). */
+  | { result: OpenResult; revision: number; merged: number; added: number; replaced: number; conflicts: number }
   | { error: string }
   | null;
 
@@ -619,6 +621,10 @@ export type ServerPushResult =
    *  far end depends on, which a designer may push anyway by acknowledging each
    *  one. Every other refusal has none, and is shown and left. */
   | { result: OpenResult; refusal: string; breaks?: ContractBreakDto[] }
+  /** The far end saying the pack differs from its revision in nothing at all.
+   *  Not a refusal to file: the work is already there, so it is said once in a
+   *  toast and the problems bar is left alone. */
+  | { result: OpenResult; unchanged: string }
   | { error: string }
   | null;
 

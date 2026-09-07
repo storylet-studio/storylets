@@ -28,6 +28,16 @@ here is part of shipping, not a courtesy.
 
 - **Connect asks where the project goes before it spends your code.** A code is single use, and it was exchanged for a key before the folder was chosen, so backing out of the folder picker cost you the code and left you with nothing. The folder is asked for first, a folder that already has something in it is refused before anything is spent, and only then is the code used.
 
+- **A pull takes the venue's copy of the installation contract.** The pack carried the contract the server had just rewritten and the project kept the old one, so it went on validating against names no venue held, and the count in the toast was one short of the shards in the pack. The venue owns its own file: a pull now takes it whole, and says so - "16 merged, 0 added, 1 contract taken".
+
+- **A pull no longer leaves a project reading "4 edits unpushed" with nothing edited.** Pulling re-sorted lists that are stored by name - a box's card fields, the project's own properties - and the unpushed count read the new order as an edit. Order is not a change: the count and the comparison behind it use the same normal form the merge does, so a pull into a project nobody has touched reads "In sync", and a shard the pull would only reorder is left exactly as it was.
+
+- **"Nothing to push" is a passing remark, not a problem.** Pushing a project the far end already has said so in the problems bar, beside the things that are actually wrong with the project. It is a toast now. Problems that DO come from the server name their shard the way every other row does ("encounters/hands.storylethands") instead of carrying the whole path from the top of your disk, and a refusal is listed once rather than twice.
+
+- **Opening another project clears the last one's server chrome.** The status beside the project name and the server's own problems belonged to the project you had just left, and stayed on screen until something else happened to redraw them.
+
+- **Renaming a hand or a box a venue depends on updates its page as you type.** The line saying "Dealt at the-park", the dashed mark on the address and its tooltip all went on claiming the old name until you left the page and came back, while the problems bar next door had already caught up. And under a key that may not change the shape, the address chip no longer invites a click it will not answer.
+
 - **Dragging a zone outline no longer rewrites what hands chose.** Moving a zone on a box map moved the outline as asked and also stripped the zone from the hands it had left behind, one of them losing its whole `chosen` block, with no warning and the project left invalid. Geometry is geometry: moving, reshaping, restacking or drawing a zone writes the tags shard and nothing else. A hand's zone changes when you drag that hand's pin, which is the gesture that means it.
 
 ### Changed
