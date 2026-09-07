@@ -255,8 +255,8 @@ exits 1.
 ## contract show
 
 What each [installation contract](/format/shards/#the-installation-contract) in the project
-depends on: the hands a venue's stations are bound to, the boxes its scheduler ticks, the
-properties its clocks drive, the fields its crew read.
+depends on: the hands dealt there, the boxes ticked on a schedule, the properties a clock
+drives, the fields read outside the game.
 
 ```
 $ storyletengine contract show the-park.storylets

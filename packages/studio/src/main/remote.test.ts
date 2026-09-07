@@ -24,7 +24,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { StudioStore } from "./store.js";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -35,18 +35,20 @@ import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
 import { loadProject, runFormat, runPack } from "@storylet-studio/ops";
 import { openProject } from "./project.js";
+import type { ProjectSession } from "./project.js";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
 import {
-  commit, createHand, forgetLastCounted, moveCardsOnCanvas, moveSitesOnMap, postComment, saveBox,
-  saveCard, setGroupSpatial, setZonePolygon,
+  commit, createHand, moveCardsOnCanvas, moveSitesOnMap, postComment, redo, saveBox,
+  saveCard, setGroupSpatial, setZonePolygon, undo,
 } from "./mutate.js";
 import {
-  PULL_AS_DESIGNER, REMOTE_FILE, addressOf, askLeave, clearEdits, contractBreaks, countEdit, failed,
-  isShapeShard, leaveChoice, leavePrompt, menuState, normaliseAddress, openPackBytes, pair,
-  packAddress, packProject, planPull, pullPack, pushPack, readRemote, refuseWrite, remoteInPack,
-  resolveLeave, statusLine, writeRemote,
+  BASE_FILE, PULL_AS_DESIGNER, REMOTE_FILE, addressOf, askLeave, contractBreaks, failed,
+  forgetShardHashes, hashProject, isShapeShard, leaveChoice, leavePrompt, menuState, normaliseAddress,
+  openPackBytes, pair, packAddress, packProject, planConnect, planPull, projectStatusLine, pullPack,
+  pushPack, pushedLine, readBase, readRemote, refusalPrompt, refuseWrite, remoteInPack, resolveLeave,
+  statusLine, unpushedShards, writeBase, writeRemote,
 } from "./remote.js";
-import type { InAppPrompt, LeavePrompt, RemoteRecord } from "./remote.js";
+import type { InAppPrompt, LeavePrompt, PairedKey, RemoteRecord } from "./remote.js";
 
 const example = fileURLToPath(new URL("../../../../examples/saltmarsh.storylets", import.meta.url));
 
@@ -97,6 +99,9 @@ class FakeServer {
   breaks?: { severity: string; path?: string; where?: string; message: string }[];
   /** Seal the packs it sends with the record a real one carries. */
   sealed = false;
+  /** How many codes have been spent here. A single-use code is spent at the
+   *  pair call, so this is what "nothing was spent" is checked against. */
+  pairs = 0;
   private server?: Server;
   private port = 0;
   private readonly keys = new Map<string, string>();
@@ -135,6 +140,7 @@ class FakeServer {
       send(status, { error: { code, message, ...(details !== undefined ? { details } : {}) } });
 
     if (url.pathname === "/v1/pair" && req.method === "POST") {
+      this.pairs++;
       const code = String(body["code"] ?? "");
       const role = code === "AUTH-0001" ? "author" : code === "DSGN-0001" ? "designer" : undefined;
       if (role === undefined) {
@@ -268,7 +274,7 @@ describe("connecting", () => {
       schema: "storylets/server-provenance@0",
       server: pulled.server, address: normaliseAddress(server.origin),
       installation: pulled.installation, version: pulled.version,
-      revision: pulled.revision, role: pulled.role, edits: 0,
+      revision: pulled.revision, role: pulled.role,
     });
 
     // It is a project, and it says where it came from.
@@ -311,9 +317,10 @@ describe("the Server menu", () => {
   };
 
   it("is there only with a remote AND a key for it", () => {
-    expect(menuState(undefined, true)).toBeUndefined();
-    expect(menuState(remote, false)).toBeUndefined();
-    expect(menuState(remote, true)).toEqual({ status: "In sync" });
+    expect(menuState(undefined, true, 0)).toBeUndefined();
+    expect(menuState(remote, false, 0)).toBeUndefined();
+    expect(menuState(remote, true, 0)).toEqual({ status: "In sync" });
+    expect(menuState(remote, true, 2)).toEqual({ status: "2 edits unpushed" });
   });
 
   it("says which of the three things is true", () => {
@@ -587,7 +594,7 @@ describe("two jobs at one venue", () => {
     store.setServerKey(server.origin, { key: author.key, role: author.role, installation: author.installation });
     writeRemote(writing, {
       schema: "storylets/server-provenance@0", server: server.origin, address: server.origin,
-      installation: "the-park", version: "seed", revision: 1, role: "author", edits: 0,
+      installation: "the-park", version: "seed", revision: 1, role: "author",
     });
 
     // ...and now the same person pairs a SECOND project as a designer.
@@ -597,7 +604,7 @@ describe("two jobs at one venue", () => {
     store.setServerKey(server.origin, { key: designer.key, role: designer.role, installation: designer.installation });
     writeRemote(shaping, {
       schema: "storylets/server-provenance@0", server: server.origin, address: server.origin,
-      installation: "the-park", version: "seed", revision: 1, role: "designer", edits: 0,
+      installation: "the-park", version: "seed", revision: 1, role: "designer",
     });
 
     expect(keyFor(store, writing)).toEqual({ key: author.key, role: "author" });
@@ -626,13 +633,13 @@ describe("two jobs at one venue", () => {
     const writing = copyExample("forget-slot");
     writeRemote(writing, {
       schema: "storylets/server-provenance@0", server: server.origin, address: server.origin,
-      installation: "the-park", version: "seed", revision: 1, role: "author", edits: 0,
+      installation: "the-park", version: "seed", revision: 1, role: "author",
     });
     store.forgetServer(addressOf(readRemote(writing)!), readRemote(writing)!.role);
 
     // The author's project has no key now, so it has no Server menu either.
     expect(keyFor(store, writing)).toBeUndefined();
-    expect(menuState(readRemote(writing), false)).toBeUndefined();
+    expect(menuState(readRemote(writing), false, 0)).toBeUndefined();
     expect(store.serverKey(server.origin, "designer")!.key).toBe("designer-key");
   });
 });
@@ -677,10 +684,9 @@ describe("the role, in the editor", () => {
     const session = opened.session;
     const remote: RemoteRecord = {
       schema: "storylets/server-provenance@0", server: "http://x", installation: "the-park",
-      version: "seed", revision: 1, role: "author", edits: 0,
+      version: "seed", revision: 1, role: "author",
     };
     writeRemote(dir, remote);
-    forgetLastCounted();
 
     const box = session.dto.boxes[0]!;
     const refused = saveBox(session, box.id, { purpose: "an author reaching at the shape" });
@@ -693,44 +699,104 @@ describe("the role, in the editor", () => {
   });
 });
 
-describe("unpushed edits", () => {
-  it("counts a shard write and clears on a push", () => {
-    const dir = copyExample("edits");
+// The unpushed count, rebuilt 2026-09-07 after the author checked it by hand.
+// It was a tally: it counted logical edits rather than changed shards, it
+// counted an undo and a redo as further edits (type, undo read as 2; again, 4),
+// and it was only ever redrawn on the next event, so the edit showed up at the
+// undo. It is now the NUMBER OF SHARDS whose canonical text differs from the
+// revision last pulled, asked of the files every time.
+describe("unpushed shards", () => {
+  /** A project with a remote and a base at revision 1: everything level. */
+  const levelProject = (label: string): { dir: string; session: ProjectSession } => {
+    const dir = copyExample(label);
     const opened = openProject(dir);
     if ("error" in opened) throw new Error(opened.error);
-    const session = opened.session;
     writeRemote(dir, {
       schema: "storylets/server-provenance@0", server: "http://x", installation: "the-park",
-      version: "seed", revision: 1, role: "designer", edits: 0,
+      version: "seed", revision: 1, role: "designer",
     });
-    forgetLastCounted();
-    expect(readRemote(dir)!.edits).toBe(0);
+    forgetShardHashes();
+    writeBase(dir, 1, hashProject(dir));
+    return { dir, session: opened.session };
+  };
 
-    const box = session.dto.boxes[0]!;
-    const deck = box.decks[0]!;
-    const card = deck.cards[0]!;
-    const saved = saveCard(session, deck.id, card.id, { title: "An edited title" });
-    expect("error" in saved).toBe(false);
-    expect(readRemote(dir)!.edits).toBe(1);
-    expect(statusLine({ revision: 1, edits: readRemote(dir)!.edits ?? 0 })).toBe("1 edit unpushed");
-
-    // A second edit to the SAME card is the same logical edit, as it is for undo.
-    saveCard(session, deck.id, card.id, { title: "An edited title again" });
-    expect(readRemote(dir)!.edits).toBe(1);
-    // A different one is not.
-    commit(session, "test", "struct:1", [{ path: join(dir, "extra.storyletnotes"), content: "{schema:'storylets/notes@0'}\n" }]);
-    expect(readRemote(dir)!.edits).toBe(2);
-
-    clearEdits(dir, 4);
-    expect(readRemote(dir)!.edits).toBe(0);
-    expect(readRemote(dir)!.revision).toBe(4);
-    expect(statusLine({ revision: 4, edits: 0 })).toBe("In sync");
+  it("is nothing at all until something differs", () => {
+    const { dir } = levelProject("count-level");
+    expect(unpushedShards(dir)).toBe(0);
+    expect(statusLine({ revision: 1, edits: unpushedShards(dir) })).toBe("In sync");
   });
 
-  it("counts nothing at all for a project with no remote", () => {
-    const dir = copyExample("no-remote");
-    countEdit(dir);
+  it("reads in sync again after an undo: a typed edit put back is not unpushed", () => {
+    const { dir, session } = levelProject("count-undo");
+    const deck = session.dto.boxes[0]!.decks[0]!;
+    const card = deck.cards[0]!;
+    expect("error" in saveCard(session, deck.id, card.id, { title: "An edited title" })).toBe(false);
+    expect(unpushedShards(dir)).toBe(1);
+
+    // THE FAULT THIS REPLACED: type then undo read as two edits, because both
+    // were counted and neither was compared with anything.
+    expect(undo(session)).not.toBeNull();
+    expect(unpushedShards(dir)).toBe(0);
+
+    // ...and a redo puts it back to one, for the same reason: the shard differs.
+    expect(redo(session)).not.toBeNull();
+    expect(unpushedShards(dir)).toBe(1);
+  });
+
+  it("counts SHARDS, however many times each was typed in", () => {
+    const { dir, session } = levelProject("count-shards");
+    const deck = session.dto.boxes[0]!.decks[0]!;
+    const card = deck.cards[0]!;
+    saveCard(session, deck.id, card.id, { title: "An edited title" });
+    saveCard(session, deck.id, card.id, { title: "An edited title again" });
+    saveCard(session, deck.id, card.id, { title: "And once more" });
+    expect(unpushedShards(dir), "one shard, three keystrokes").toBe(1);
+
+    // A second shard is a second difference.
+    commit(session, "test", "struct:1", [{
+      path: join(dir, "extra.storyletnotes"), content: "{schema:'storylets/notes@0'}\n",
+    }]);
+    expect(unpushedShards(dir)).toBe(2);
+    expect(statusLine({ revision: 1, edits: unpushedShards(dir) })).toBe("2 edits unpushed");
+  });
+
+  it("forgives a reformat and notices a hand edit", () => {
+    const { dir } = levelProject("count-canonical");
+    const deck = findDeck(dir);
+    // The same shard, spaced differently: the base is a hash of the CANONICAL
+    // text, so nothing here differs.
+    writeFileSync(deck.path, `\n${deck.text}\n\n`, "utf8");
+    expect(unpushedShards(dir)).toBe(0);
+    // A change to what it SAYS does differ.
+    writeFileSync(deck.path, deck.text.replace(deck.title, "Something else entirely"), "utf8");
+    expect(unpushedShards(dir)).toBe(1);
+  });
+
+  it("counts a shard added or deleted since the pull", () => {
+    const { dir } = levelProject("count-addremove");
+    writeFileSync(join(dir, "extra.storyletnotes"), "{schema:'storylets/notes@0'}\n", "utf8");
+    expect(unpushedShards(dir)).toBe(1);
+    rmSync(join(dir, "extra.storyletnotes"));
+    expect(unpushedShards(dir)).toBe(0);
+
+    const deck = findDeck(dir);
+    rmSync(deck.path);
+    expect(unpushedShards(dir), "a deleted shard is a difference the server has not seen").toBe(1);
+  });
+
+  it("says nothing unpushed for a project with no base, and none for one with no remote", () => {
+    const dir = copyExample("count-no-base");
+    expect(unpushedShards(dir)).toBe(0);
     expect(readRemote(dir)).toBeUndefined();
+    expect(readBase(dir)).toBeUndefined();
+  });
+
+  it("keeps the base out of the pack, and out of the shards", async () => {
+    const { dir } = levelProject("count-base-file");
+    expect(existsSync(join(dir, BASE_FILE))).toBe(true);
+    const opened = await openPackBytes(await packProject(dir), dir);
+    expect([...opened.shards.keys()]).not.toContain(BASE_FILE);
+    expect([...opened.shards.keys()]).not.toContain(REMOTE_FILE);
   });
 });
 
@@ -755,20 +821,32 @@ describe("the prompt on the way out", () => {
     indexOf(prompt, label);
   const nativeRefusal = async (): Promise<number> => { throw new Error("the native box must not be reached"); };
 
-  it("says where the project stands, and offers the act it is in the middle of", () => {
-    expect(leavePrompt(standing, "quit", true)).toMatchObject({
-      message: "3 edits unpushed",
-      detail: "This project has edits the server has not seen.",
+  it("names its project, says where it stands, and offers the act it is in the middle of", () => {
+    // IT NAMES THE PROJECT (2026-09-07). This is asked at the one moment two are
+    // in play - opening one over another, which is how connecting to a server
+    // lands a pulled project - and unnamed it read as if it were about the one
+    // arriving rather than the one being left.
+    expect(leavePrompt("This Room", standing, "quit", true)).toMatchObject({
+      message: "This Room: 3 edits unpushed",
+      detail: "This Room has edits the server has not seen.",
       buttons: ["Push to server", "Quit without pushing", "Cancel"],
       defaultId: 0, cancelId: 2,
     });
-    expect(leavePrompt(standing, "close", true).buttons[1]).toBe("Close without pushing");
+    expect(leavePrompt("This Room", standing, "close", true).buttons[1]).toBe("Close without pushing");
+    expect(projectStatusLine("This Room", { revision: 3, edits: 1 })).toBe("This Room: 1 edit unpushed");
+  });
+
+  it("falls back to the general word for a project with no name to give", () => {
+    expect(leavePrompt("  ", standing, "quit", true)).toMatchObject({
+      message: "This project: 3 edits unpushed",
+      detail: "This project has edits the server has not seen.",
+    });
   });
 
   it("offers no push when the server cannot be reached, and says so", () => {
-    const prompt = leavePrompt(standing, "quit", false);
+    const prompt = leavePrompt("This Room", standing, "quit", false);
     expect(prompt.detail).toBe(
-      "This project has edits the server has not seen, and the server cannot be reached.");
+      "This Room has edits the server has not seen, and the server cannot be reached.");
     expect(prompt.buttons).toEqual(["Quit without pushing", "Cancel"]);
     // The edits wait: there is no way through this prompt that pushes.
     expect(prompt.choices).not.toContain("push");
@@ -778,7 +856,7 @@ describe("the prompt on the way out", () => {
     const leave = act === "quit" ? "Quit without pushing" : "Close without pushing";
 
     it(`answers all three ways on the ${act} path`, async () => {
-      const prompt = leavePrompt(standing, act, true);
+      const prompt = leavePrompt("This Room", standing, act, true);
       expect(await askLeave(prompt, clicks("Push to server"), nativeRefusal)).toBe("push");
       expect(await askLeave(prompt, clicks(leave), nativeRefusal)).toBe("leave");
       expect(await askLeave(prompt, clicks("Cancel"), nativeRefusal)).toBe("cancel");
@@ -786,18 +864,18 @@ describe("the prompt on the way out", () => {
   }
 
   it("reads an index that is not a button as a cancel", () => {
-    const prompt = leavePrompt(standing, "quit", true);
+    const prompt = leavePrompt("This Room", standing, "quit", true);
     expect(leaveChoice(prompt, 7)).toBe("cancel");
     expect(leaveChoice(prompt, -1)).toBe("cancel");
   });
 
   it("falls back to the native box when there is no renderer to ask", async () => {
-    const prompt = leavePrompt(standing, "quit", true);
+    const prompt = leavePrompt("This Room", standing, "quit", true);
     expect(await askLeave(prompt, undefined, press("Cancel"))).toBe("cancel");
   });
 
   it("falls back when the renderer never says it drew the dialog", async () => {
-    const prompt = leavePrompt(standing, "quit", true);
+    const prompt = leavePrompt("This Room", standing, "quit", true);
     const silent = (): InAppPrompt =>
       ({ shown: new Promise<void>(() => { /* never */ }), answer: new Promise<number>(() => { /* never */ }) });
     expect(await askLeave(prompt, silent, press("Cancel"), 10)).toBe("cancel");
@@ -810,7 +888,7 @@ describe("the prompt on the way out", () => {
     // The fault this split exists for, found by launching the app and leaving
     // the prompt sitting there: one deadline over both the bridge and the human
     // put a system box on top of the dialog four seconds in.
-    const prompt = leavePrompt(standing, "quit", true);
+    const prompt = leavePrompt("This Room", standing, "quit", true);
     let click = (_index: number): void => { /* replaced */ };
     const thinking = (): InAppPrompt => ({
       shown: Promise.resolve(),
@@ -823,7 +901,7 @@ describe("the prompt on the way out", () => {
   });
 
   it("reads an answer that is not a button as a cancel, however it arrives", async () => {
-    const prompt = leavePrompt(standing, "quit", true);
+    const prompt = leavePrompt("This Room", standing, "quit", true);
     const confused = (): InAppPrompt => ({ shown: Promise.resolve(), answer: Promise.resolve(9) });
     expect(await askLeave(prompt, confused, nativeRefusal)).toBe("cancel");
     // ...and a renderer that drew it and then fell over answers as Cancel too,
@@ -852,6 +930,171 @@ describe("leaving with edits the server has not seen", () => {
 
   it("does NOT go when the push is refused, and says why", async () => {
     expect(await resolveLeave("push", refused)).toEqual({ go: false, refusal: PULL_AS_DESIGNER });
+  });
+
+  // The person is leaving, and the last thing they see must be that the work is
+  // safe: not theatre, but "my project is securely pushed". The prompt turns
+  // into the revision it landed as, and the app waits there before it lets go.
+  it("holds a word of confirmation between the push landing and the window going", async () => {
+    const seen: string[] = [];
+    let held = false;
+    const outcome = await resolveLeave("push", landed, async (revision) => {
+      seen.push(pushedLine(revision));
+      // The wait is injected, so what is tested is the SEQUENCE rather than a
+      // second and a half of a test suite's time.
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      held = true;
+    });
+    expect(seen).toEqual(["Pushed as revision 9"]);
+    expect(held, "the app must not let go until the beat has been held").toBe(true);
+    expect(outcome).toEqual({ go: true });
+  });
+
+  it("says nothing of the kind when there was no push, or when it was refused", async () => {
+    const settle = async (): Promise<void> => { throw new Error("nothing landed, so nothing landed"); };
+    expect(await resolveLeave("cancel", landed, settle)).toEqual({ go: false });
+    expect(await resolveLeave("leave", landed, settle)).toEqual({ go: true });
+    expect(await resolveLeave("push", refused, settle)).toEqual({ go: false, refusal: PULL_AS_DESIGNER });
+  });
+});
+
+// A refusal reached at the moment of leaving used to leave the person exactly
+// where they were with only the problems bar as evidence, and on the connect
+// path the pulled project never opened: they pressed Push to server and nothing
+// visibly happened. The prompt says it now, in the far end's own words.
+describe("a refused push, at the prompt", () => {
+  const standing = { revision: 3, edits: 1 };
+
+  it("shows the refusal, and offers one way out of it", () => {
+    const prompt = refusalPrompt("This Room", standing, PULL_AS_DESIGNER);
+    expect(prompt).toMatchObject({
+      message: "This Room: 1 edit unpushed",
+      detail: PULL_AS_DESIGNER,
+      buttons: ["Stay"],
+      defaultId: 0, cancelId: 0,
+    });
+    // There is no way through it: Stay is a cancel, and cancel does not leave.
+    expect(leaveChoice(prompt, 0)).toBe("cancel");
+    expect(leaveChoice(prompt, 1)).toBe("cancel");
+  });
+
+  it("takes each of the three refusals through the prompt in the words they came in", async () => {
+    // Every one of these is the far end saying no with no way through it, so
+    // every one gets the same one-button prompt with its own sentence in it.
+    const dir = copyExample("refused-at-prompt");
+    writeRemote(dir, {
+      schema: "storylets/server-provenance@0", server: server.origin, address: server.origin,
+      installation: "the-park", version: "seed", revision: 1, role: "author",
+    });
+
+    /** The push a leaving prompt makes: no note, no acknowledgements. */
+    const pushOut = async (key: string): Promise<{ revision: number } | { error: string }> => {
+      const sent = await pushPack(server.origin, key, {
+        pack: await packProject(dir), installation: "the-park", version: "seed", base: 1,
+      });
+      return failed(sent) ? { error: sent.error } : { revision: sent.revision };
+    };
+
+    // 1. A conflict, whose sidecars come back with it.
+    server.refuseNext = {
+      status: 409, code: "conflict",
+      message: "Somebody else pushed revision 2 while you were working. Pull, then push again.",
+      details: [{ path: "main/decks/one.storyletdeck.storyletconflict", text: "conflict\n" }],
+    };
+    const clash = await resolveLeave("push", () => pushOut(designerKey));
+    expect(clash.go).toBe(false);
+    expect(refusalPrompt("This Room", standing, clash.refusal!)).toMatchObject({
+      detail: "Somebody else pushed revision 2 while you were working. Pull, then push again.",
+      buttons: ["Stay"],
+    });
+
+    // 2. A project the far end will not compile.
+    server.refuseNext = {
+      status: 422, code: "invalid",
+      message: "That project does not build here: 2 errors. Nothing was recorded.",
+    };
+    const broken = await resolveLeave("push", () => pushOut(designerKey));
+    expect(broken).toEqual({
+      go: false,
+      refusal: "That project does not build here: 2 errors. Nothing was recorded.",
+    });
+    expect(refusalPrompt("This Room", standing, broken.refusal!).buttons).toEqual(["Stay"]);
+
+    // 3. The key rule: an author's key reaching at the shape.
+    const box = findBox(dir);
+    writeFileSync(box.path, box.text.replace(box.title, "A shape an author may not change"), "utf8");
+    const rebuked = await resolveLeave("push", () => pushOut(authorKey));
+    expect(rebuked.go).toBe(false);
+    expect(rebuked.refusal).toContain(PULL_AS_DESIGNER);
+    expect(refusalPrompt("This Room", standing, rebuked.refusal!)).toMatchObject({
+      detail: rebuked.refusal,
+      buttons: ["Stay"],
+    });
+  });
+});
+
+// Connecting spends a single-use code, so it asks where the project goes FIRST.
+describe("connecting, in the order it spends things", () => {
+  const device = { app: "Storyletter", host: "test" };
+  /** A pair call the fake can count, so "nothing was spent" is a fact rather
+   *  than an inference. */
+  const kept: PairedKey[] = [];
+  const keepKey = (_dialled: string, paired: PairedKey): void => { kept.push(paired); };
+
+  it("does not pair at all when the folder picker is cancelled", async () => {
+    kept.length = 0;
+    const before = server.pairs;
+    const planned = await planConnect({
+      address: server.origin, code: "DSGN-0001", device,
+      chooseFolder: async () => null,
+      keepKey,
+    });
+    expect(planned, "backing out of the picker is not an error, it is nothing at all").toBeNull();
+    // THE FAULT THIS FIXES: the code was already gone by this point.
+    expect(server.pairs).toBe(before);
+    expect(kept).toEqual([]);
+  });
+
+  it("does not pair when the folder will not do, and says why", async () => {
+    kept.length = 0;
+    const before = server.pairs;
+    const occupied = mkdtempSync(join(tmpdir(), "remote-occupied-"));
+    writeFileSync(join(occupied, "something.txt"), "already here\n", "utf8");
+    const planned = await planConnect({
+      address: server.origin, code: "DSGN-0001", device,
+      chooseFolder: async () => occupied,
+      refuseFolder: () => "there is already something in that folder, and the project needs one of its own.",
+      keepKey,
+    });
+    expect(planned).toEqual({
+      error: "there is already something in that folder, and the project needs one of its own.",
+    });
+    expect(server.pairs).toBe(before);
+    expect(kept).toEqual([]);
+  });
+
+  it("pairs and pulls once there is somewhere for the project to go", async () => {
+    kept.length = 0;
+    const target = join(mkdtempSync(join(tmpdir(), "remote-connect-")), "saltmarsh.storylets");
+    const planned = await planConnect({
+      address: server.origin, code: "DSGN-0001", device,
+      chooseFolder: async () => target,
+      refuseFolder: () => undefined,
+      keepKey,
+    });
+    expect(planned).not.toBeNull();
+    if (planned === null || failed(planned)) throw new Error("the fake would not connect");
+    expect(planned.target).toBe(target);
+    expect(planned.remote.installation).toBe("the-park");
+    // The head of the version this key is paired against: a first pull takes
+    // whatever the far end has got to, which earlier tests here have moved on.
+    expect(planned.remote.revision).toBe(server.head);
+    expect(planned.remote.role).toBe("designer");
+    expect(kept).toHaveLength(1);
+    // ...and what came back really is the project.
+    const plan = await planPull(target, planned.bytes, undefined);
+    expect(plan.added).toBeGreaterThan(0);
+    expect(Object.keys(plan.base).length).toBe(plan.added);
   });
 });
 

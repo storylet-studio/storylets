@@ -17,7 +17,7 @@
 
 import { labelled } from "@wildwinter/app-shell";
 import { el } from "./dom.js";
-import type { LeavePromptDto } from "../../shared/api.js";
+import type { LeavePromptDto, LeaveSettledDto } from "../../shared/api.js";
 
 export interface ConnectAnswer {
   address: string;
@@ -208,17 +208,34 @@ export function askLeave(opts: LeavePromptDto): Promise<number> {
   return new Promise((resolve) => {
     const dlg = el("dialog", "confirm-dialog server-dialog leave-dialog");
     // The status line is the headline, as it is on the push dialog: where the
-    // project stands is the whole reason the question is being asked.
-    dlg.append(el("div", "confirm-title", opts.message));
-    dlg.append(el("div", "confirm-body", opts.detail));
+    // project stands is the whole reason the question is being asked, and it
+    // NAMES the project, because the moment it is asked is the moment a second
+    // one is arriving.
+    const title = el("div", "confirm-title", opts.message);
+    const body = el("div", "confirm-body", opts.detail);
+    dlg.append(title, body);
 
     const actions = el("div", "confirm-actions");
     let done = false;
+    let guard: ReturnType<typeof setTimeout> | undefined;
+    const shut = (): void => {
+      if (live?.dlg === dlg) live = undefined;
+      if (guard !== undefined) clearTimeout(guard);
+      dlg.close();
+      dlg.remove();
+    };
     const finish = (index: number): void => {
       if (done) return;
       done = true;
-      dlg.close();
-      dlg.remove();
+      // THE DIALOG STAYS UP. A push takes as long as the far end takes, and the
+      // person who pressed Push to server is owed the sight of it landing, so
+      // main answers this dialog rather than the click doing it: it turns into
+      // "Pushed as revision N", or it is taken down with nothing to say. The
+      // buttons go at once, because they have been used.
+      actions.remove();
+      // ...and if main never speaks again, it goes anyway. A modal nobody can
+      // dismiss is worse than a dialog that closed a moment early.
+      guard = setTimeout(shut, HOLD_LIMIT);
       resolve(index);
     };
 
@@ -234,7 +251,39 @@ export function askLeave(opts: LeavePromptDto): Promise<number> {
 
     // Esc is Cancel, not a fourth answer: main is waiting on an index.
     dlg.addEventListener("cancel", (e) => { e.preventDefault(); finish(opts.cancelId); });
+    live = {
+      dlg,
+      settle: (message) => {
+        title.textContent = message;
+        body.remove();
+      },
+      shut,
+    };
     document.body.append(dlg);
     dlg.showModal();
   });
+}
+
+/** The dialog waiting on main's last word, when there is one up. */
+let live: { dlg: HTMLDialogElement; settle: (message: string) => void; shut: () => void } | undefined;
+
+/** How long a dialog waits for main before it takes itself down. Longer than a
+ *  push can take, because while a push is running this dialog IS the sign that
+ *  something is happening. */
+const HOLD_LIMIT = 60_000;
+
+/**
+ * Main's last word on the prompt it asked.
+ *
+ * With a message the dialog turns into it - no buttons, held for the beat main
+ * is holding too - and without one it simply goes: cancelled, left, or refused,
+ * where the refusal has its own prompt to follow. A renderer with nothing up
+ * (main fell back to the native box) has nothing to do.
+ */
+export function settleLeave(opts: LeaveSettledDto): void {
+  const held = live;
+  if (held === undefined) return;
+  if (opts.message === undefined || opts.message === "") { held.shut(); return; }
+  held.settle(opts.message);
+  setTimeout(() => held.shut(), Math.max(0, opts.holdMs));
 }

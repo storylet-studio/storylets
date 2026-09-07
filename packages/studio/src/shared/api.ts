@@ -568,12 +568,29 @@ export interface RemoteDto {
  * meaning cannot drift apart across the bridge.
  */
 export interface LeavePromptDto {
-  /** The headline: where the project stands, in the status line's own words. */
+  /** The headline: where the project stands, in the status line's own words,
+   *  with the project named. It is asked at the one moment a SECOND project is
+   *  arriving, so an unnamed headline read as if it were about that one. */
   message: string;
   detail: string;
   buttons: string[];
   defaultId: number;
   cancelId: number;
+}
+
+/**
+ * What the leaving prompt turns into once it has been answered.
+ *
+ * The dialog is held open past the click, because a push takes as long as the
+ * far end takes: `message` is the closing word to show in its place ("Pushed as
+ * revision 12"), and its absence means there is nothing to say and the dialog
+ * should just go. `holdMs` is how long the renderer keeps it up, which is the
+ * same length main waits before it lets the window go: two timers of one length
+ * so a main process that goes away cannot leave a modal standing.
+ */
+export interface LeaveSettledDto {
+  message?: string;
+  holdMs: number;
 }
 
 /**
@@ -1662,6 +1679,9 @@ export interface StudioApi {
    *  next door, and for the same reason: the app has ONE dialog style, and the
    *  only native surfaces are the file and folder pickers. */
   onLeavePrompt(handler: (opts: LeavePromptDto) => Promise<number>): void;
+  /** The answered prompt's last word: the revision a push landed as, held for a
+   *  beat, or nothing to say and straight down. */
+  onLeaveSettled(handler: (opts: LeaveSettledDto) => void): void;
 
   // --- The auto-updater (design/shared-shell.md, sixth slice) -----------------
   // Four channels the shell's updater expects a renderer to answer. It does NOT

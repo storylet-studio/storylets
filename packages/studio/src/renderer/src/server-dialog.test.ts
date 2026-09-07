@@ -7,7 +7,7 @@
 // what is shown, and the key that goes back is the far end's, never ours.
 
 import { beforeAll, describe, expect, it } from "vitest";
-import { askLeave, askPush } from "./server-dialog.js";
+import { askLeave, askPush, settleLeave } from "./server-dialog.js";
 
 // jsdom carries the <dialog> element but not its modal behaviour, so the two
 // methods the dialog calls are supplied here. Nothing under test depends on
@@ -93,56 +93,110 @@ describe("the push dialog", () => {
 });
 
 describe("the leaving prompt", () => {
-  const leaveDialog = (): HTMLDialogElement => document.querySelector("dialog.leave-dialog")!;
+  const leaveDialog = (): HTMLDialogElement | null =>
+    document.querySelector("dialog.leave-dialog");
   const leaveButton = (label: string): HTMLButtonElement =>
-    [...leaveDialog().querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label)!;
+    [...leaveDialog()!.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label)!;
+  /** One turn of the event loop, which is all a zero-length hold needs. */
+  const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
   const QUITTING = {
-    message: "3 edits unpushed",
-    detail: "This project has edits the server has not seen.",
+    message: "This Room: 3 edits unpushed",
+    detail: "This Room has edits the server has not seen.",
     buttons: ["Push to server", "Quit without pushing", "Cancel"],
     defaultId: 0, cancelId: 2,
   };
 
-  it("wears the app's own dialog, with the status line as its headline", async () => {
+  it("wears the app's own dialog, with the named status line as its headline", async () => {
     const answered = askLeave(QUITTING);
     // The push dialog's classes, because the app has one dialog style and the
     // only native surfaces are the file and folder pickers.
-    expect(leaveDialog().classList.contains("confirm-dialog")).toBe(true);
-    expect(leaveDialog().querySelector(".confirm-title")?.textContent).toBe("3 edits unpushed");
-    expect(leaveDialog().querySelector(".confirm-body")?.textContent)
-      .toBe("This project has edits the server has not seen.");
+    expect(leaveDialog()!.classList.contains("confirm-dialog")).toBe(true);
+    // It NAMES its project: the one moment it is asked is the moment a second
+    // project is arriving over this one.
+    expect(leaveDialog()!.querySelector(".confirm-title")?.textContent)
+      .toBe("This Room: 3 edits unpushed");
+    expect(leaveDialog()!.querySelector(".confirm-body")?.textContent)
+      .toBe("This Room has edits the server has not seen.");
     leaveButton("Cancel").click();
     expect(await answered).toBe(2);
-    expect(document.querySelector("dialog.leave-dialog")).toBeNull();
+    // The dialog is HELD past the click, because main answers it: a push takes
+    // as long as the far end takes. Nothing to say means it just goes.
+    expect(leaveDialog()).not.toBeNull();
+    settleLeave({ holdMs: 0 });
+    expect(leaveDialog()).toBeNull();
   });
 
   it("answers with the INDEX of the button, whichever it is", async () => {
     const pushed = askLeave(QUITTING);
     leaveButton("Push to server").click();
     expect(await pushed).toBe(0);
+    settleLeave({ holdMs: 0 });
 
     const left = askLeave(QUITTING);
     leaveButton("Quit without pushing").click();
     expect(await left).toBe(1);
+    settleLeave({ holdMs: 0 });
+  });
+
+  it("turns into the revision the push landed as, and holds it there", async () => {
+    // The person is leaving, and the last thing they see must be that the work
+    // is safe. The buttons go at the click; the closing word replaces the
+    // question, and the dialog takes itself down after the same beat main is
+    // waiting out.
+    const answered = askLeave(QUITTING);
+    leaveButton("Push to server").click();
+    expect(await answered).toBe(0);
+    expect(leaveDialog()!.querySelector(".confirm-actions"), "the buttons have been used").toBeNull();
+
+    settleLeave({ message: "Pushed as revision 12", holdMs: 0 });
+    expect(leaveDialog()!.querySelector(".confirm-title")?.textContent).toBe("Pushed as revision 12");
+    expect(leaveDialog()!.querySelector(".confirm-body")).toBeNull();
+    expect([...leaveDialog()!.querySelectorAll("button")]).toEqual([]);
+    await tick();
+    expect(leaveDialog()).toBeNull();
   });
 
   it("names the act it is in the middle of, and offers no push when offline", async () => {
     const closing = askLeave({
-      message: "1 edit unpushed",
-      detail: "This project has edits the server has not seen, and the server cannot be reached.",
+      message: "This Room: 1 edit unpushed",
+      detail: "This Room has edits the server has not seen, and the server cannot be reached.",
       buttons: ["Close without pushing", "Cancel"],
       defaultId: 0, cancelId: 1,
     });
-    expect([...leaveDialog().querySelectorAll("button")].map((b) => b.textContent))
+    expect([...leaveDialog()!.querySelectorAll("button")].map((b) => b.textContent))
       .toEqual(["Close without pushing", "Cancel"]);
     leaveButton("Close without pushing").click();
     expect(await closing).toBe(0);
+    settleLeave({ holdMs: 0 });
+  });
+
+  it("offers one way out of a refusal, and it is not a way out", async () => {
+    // The refusal prompt is this same dialog with the far end's sentence in it.
+    const answered = askLeave({
+      message: "This Room: 1 edit unpushed",
+      detail: "pull as designer to change the shape",
+      buttons: ["Stay"],
+      defaultId: 0, cancelId: 0,
+    });
+    expect(leaveDialog()!.querySelector(".confirm-body")?.textContent)
+      .toBe("pull as designer to change the shape");
+    expect([...leaveDialog()!.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Stay"]);
+    leaveButton("Stay").click();
+    expect(await answered).toBe(0);
+    settleLeave({ holdMs: 0 });
   });
 
   it("reads Esc as Cancel: main is waiting on an index, not on silence", async () => {
     const answered = askLeave(QUITTING);
-    leaveDialog().dispatchEvent(new Event("cancel", { cancelable: true }));
+    leaveDialog()!.dispatchEvent(new Event("cancel", { cancelable: true }));
     expect(await answered).toBe(2);
+    settleLeave({ holdMs: 0 });
+  });
+
+  it("ignores a last word when there is no dialog to say it to", () => {
+    // Main fell back to the native box, so nothing here was ever drawn.
+    expect(() => settleLeave({ message: "Pushed as revision 3", holdMs: 0 })).not.toThrow();
+    expect(leaveDialog()).toBeNull();
   });
 });

@@ -18,6 +18,16 @@ here is part of shipping, not a courtesy.
 
 - **The unpushed count is somewhere you can read it.** It was a suffix on the window title, which on macOS is never drawn: the title bar is the app's own topbar. "3 edits unpushed" sits beside the project name there instead, quietly, and says nothing at all while the project is level with the server.
 
+- **The unpushed count is right, and it keeps up.** It was a running tally of edits, so it counted an undo and a redo as further edits (typing once and undoing it read as two, again as four) and it only caught up at whatever happened next. It is now the number of SHARDS that differ from the revision you last pulled, worked out afresh after every write: type and undo and it reads in sync again, edit one card ten times and it reads one, and the topbar, the Server menu and the window agree the moment the edit lands. Reformatting a shard is not a change, and a shard added or removed is.
+
+- **The question on the way out names the project it is about.** It is asked at the one moment two projects are in play - opening one over another, which is how connecting to a server lands a pulled project - and it read as though it were about the one arriving. It now says "This Room: 1 edit unpushed" and "This Room has edits the server has not seen."
+
+- **A push refused on the way out says so.** Pressing **Push to server** at that question on a project the far end will not take - a conflict, a project that does not build there, a key that may not change the shape - left you exactly where you were with only the problems bar as evidence, and the project you were opening never opened. The refusal is shown in the question itself, in the far end's own words, with one button: **Stay**.
+
+- **A push from that question ends with a word of confirmation.** You are leaving, so the last thing you see is that the work is safe: the dialog turns into "Pushed as revision 12" for a moment before the window closes, the app quits, or the other project opens.
+
+- **Connect asks where the project goes before it spends your code.** A code is single use, and it was exchanged for a key before the folder was chosen, so backing out of the folder picker cost you the code and left you with nothing. The folder is asked for first, a folder that already has something in it is refused before anything is spent, and only then is the code used.
+
 - **Dragging a zone outline no longer rewrites what hands chose.** Moving a zone on a box map moved the outline as asked and also stripped the zone from the hands it had left behind, one of them losing its whole `chosen` block, with no warning and the project left invalid. Geometry is geometry: moving, reshaping, restacking or drawing a zone writes the tags shard and nothing else. A hand's zone changes when you drag that hand's pin, which is the gesture that means it.
 
 ### Changed

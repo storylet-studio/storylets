@@ -65,7 +65,7 @@ import { mountLiveLinkChip } from "./live-link.js";   // Live Link: the bottom-r
 import type { LiveLinkChip } from "./live-link.js";
 import { canvasId, MAP_CANVAS } from "../../shared/api.js";
 import { showUpdaterDialog, feedUpdaterDownloadProgress } from "./updater-dialog.js";
-import { askLeave, askPush, askServer } from "./server-dialog.js";
+import { askLeave, askPush, askServer, settleLeave } from "./server-dialog.js";
 import type { PushOptions } from "./server-dialog.js";
 import type {
   BoxEdit, BoxKit, CardDto, CardEdit, ConditionProperty, ContractBreakDto, TagGroupEdit, MenuCommand, OpenResult, PackOffer, Problem, ProjectDto,
@@ -1208,6 +1208,9 @@ const AUTOSAVE_MS = 700;
 function applyResult(result: OpenResult): void {
   project = result.project;
   remote = result.remote;
+  // The lead carries the unpushed count, and every write moves it: redrawn here
+  // rather than only on a full workspace render, which a keystroke does not do.
+  renderProjectLead();
   // Every surface asks play-ladder.ts what it may draw, and this is the one
   // place the answer arrives (design/engine-server.md 4.10). Seeded on every
   // result, not only on open: changing Play in Project Settings comes back
@@ -2228,12 +2231,23 @@ function openNewProject(): void {
   });
 }
 
+/**
+ * The name, the way home, and - for a project a server has not seen the whole
+ * of - where it stands. Built in views.ts so what it says is testable.
+ *
+ * Its own function because the unpushed count moves on every write, and a write
+ * does not repaint the workspace: until 2026-09-07 the lead only caught up at
+ * the next full render, so an edit showed up in it at whatever happened next.
+ */
+function renderProjectLead(): void {
+  if (!project) return;
+  shell.topbarLead.replaceChildren(projectLead(project, remote, () => actions.focus({ kind: "project" })));
+}
+
 function renderWorkspace(): void {
   reportLinkFocus();
   if (!project) return;
-  // The name, the way home, and - for a project a server has not seen the whole
-  // of - where it stands. Built in views.ts so what it says is testable.
-  shell.topbarLead.replaceChildren(projectLead(project, remote, () => actions.focus({ kind: "project" })));
+  renderProjectLead();
   renderNavPane();
   if (!renderCardPanes() && !renderDetailPanes()) fillCentre();
   renderProblemsBar();
@@ -2784,6 +2798,9 @@ async function boot(): Promise<void> {
   // quitting, and a question nobody is listening for falls back to a native box
   // the app is not supposed to be wearing.
   studio.onLeavePrompt((opts) => askLeave(opts));
+  // ...and what becomes of it: the dialog is held open past the click, so main
+  // either turns it into the revision the push landed as or takes it down.
+  studio.onLeaveSettled((opts) => settleLeave(opts));
   studio.onSearchNavigate(goTo);   // Find hits, and the `--at` jump of a running app
   // Find's Replace tab: main asks for pending edits on disk before it rewrites,
   // and says when it has, so the open document shows the new text.

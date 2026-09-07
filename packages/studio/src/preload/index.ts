@@ -7,7 +7,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { JOB_PROGRESS_CHANNEL, PROJECT_CHANGED } from "../shared/api.js";
 import type { JobProgress } from "../shared/api.js";
 import type {
-  BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, LeavePromptDto, LiveLinkFrame, LiveLinkStatus, MenuCommand, OpenResult, PackOffer, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
+  BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, LeavePromptDto, LeaveSettledDto, LiveLinkFrame, LiveLinkStatus, MenuCommand, OpenResult, PackOffer, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
   UpdaterPromptOptions,
   UpdaterDownloadProgress,
 } from "../shared/api.js";
@@ -241,6 +241,13 @@ const api: StudioApi = {
         () => ipcRenderer.send("server:leave-reply", opts.cancelId),
       );
     });
+  },
+
+  // ...and what becomes of that dialog once it has been answered. It is held
+  // open past the click, so somebody has to take it down: either with a closing
+  // word (a push landed) or with nothing to say (cancelled, left, refused).
+  onLeaveSettled: (handler: (opts: LeaveSettledDto) => void) => {
+    ipcRenderer.on("server:leave-settled", (_event, opts: LeaveSettledDto) => handler(opts));
   },
 
   // The auto-updater's four channels. The names are the shell's UPDATER_CHANNELS

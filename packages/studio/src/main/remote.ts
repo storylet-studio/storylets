@@ -19,6 +19,11 @@
 // declares the installation, the version and the base as fields of the request
 // instead.
 //
+// ...and, beside it, `storylets.server.base.json`: one hash per shard of the
+// revision last pulled, which is what "unpushed" is measured against. See the
+// note at BASE_FILE for why it is a file beside the project rather than a tally
+// or something under the app's settings.
+//
 // THE KEY DECIDES WHAT MAY CHANGE. An author's key may change deck and comment
 // shards; everything else is the shape, and the editor says so with the same
 // sentence the far end would refuse with. That is a courtesy, not the
@@ -27,8 +32,9 @@
 // ---------------------------------------------------------------------------
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, relative, sep } from "node:path";
-import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
+import { canonicalStringify, parseSource, walkProjectFiles } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS } from "@storylet-studio/model";
 import {
   CONFLICT_SIDECAR_EXTENSION, conflictSidecar, runMerge, runPack, runUnpack,
@@ -52,11 +58,16 @@ export type RemoteRole = "author" | "designer";
 /**
  * What a project remembers about where it came from.
  *
- * The first six fields are the pack's own; `address` and `edits` are ours.
- * `address` is what Storyletter dials, which is what somebody typed and need
- * not be the origin the far end calls itself by; `edits` is the count of shard
- * writes since the last push or pull, which is the whole of the unpushed
- * signal.
+ * The six declared fields are the pack's own; `address` is ours: it is what
+ * Storyletter dials, which is what somebody typed and need not be the origin
+ * the far end calls itself by.
+ *
+ * There is NO edit tally here any more (2026-09-07). One was kept until an
+ * author checked it by hand: it counted logical edits rather than changed
+ * shards, it counted an undo and a redo as further edits, and it was only ever
+ * redrawn on the next event, so typing once and undoing it read as two. What is
+ * unpushed is a fact about the files, so it is asked of the files: see
+ * `unpushedShards`.
  */
 export interface RemoteRecord {
   schema: typeof REMOTE_SCHEMA;
@@ -69,8 +80,6 @@ export interface RemoteRecord {
   /** What Storyletter dials. Absent on a record written by the far end, where
    *  `server` is the only address there is. */
   address?: string;
-  /** Shard writes since the last successful push or pull. */
-  edits?: number;
 }
 
 /** The address a record is dialled at. */
@@ -99,23 +108,146 @@ export function writeRemote(dir: string, remote: RemoteRecord): void {
   writeFileSync(join(dir, REMOTE_FILE), `${JSON.stringify(remote, null, 2)}\n`, "utf8");
 }
 
+// --- what the server last sent, and what differs from it ---------------------------
+
+/** Every shard extension there is: what a pack carries, and what the base is
+ *  a hash of, one per file. */
+const SHARD_EXTS: readonly string[] = Object.values(SHARD_EXTENSIONS);
+
 /**
- * Count a shard write against the remote, if there is one.
+ * The revision last pulled, one hash per shard.
  *
- * Called from the one place every editor write goes through, so "edits since
- * the last push" costs a project with no remote a single `existsSync`.
+ * WHERE IT LIVES, and why (2026-09-07). Three places were on the table: the
+ * whole base pack, a hash map beside the project, or a hash map under the app's
+ * own settings folder keyed by the project's path. This is the middle one, a
+ * plain JSON file at the project root beside `storylets.server.json`.
+ *
+ *   - BESIDE THE PROJECT, not under the app's settings, because the base
+ *     belongs to the project and not to this machine. A project moved, renamed,
+ *     copied to a laptop or restored from a backup keeps its base and still
+ *     knows what it has not pushed; a settings key on a path would be stale the
+ *     moment the folder moved, and would accumulate rows for projects deleted
+ *     years ago.
+ *   - HASHES, not the base pack, because the only question asked of it is "is
+ *     this shard still the one the server sent". A pack is a megabyte of zip in
+ *     the author's own project folder to answer a yes or no; the merge, which
+ *     is the one thing that does want the base bytes, fetches them from the far
+ *     end, which keeps every pack it ever sent.
+ *   - CANONICAL text, hashed, so a reformat that changes no content reads as no
+ *     change, which is the same rule the byte contract everywhere else uses.
+ *
+ * It is not a shard extension, so `pack` never walks it and it can never travel
+ * inside a pack; the leading `storylets.` groups it beside the record it
+ * belongs with.
  */
-export function countEdit(dir: string, howMany = 1): void {
-  const remote = readRemote(dir);
-  if (remote === undefined) return;
-  writeRemote(dir, { ...remote, edits: (remote.edits ?? 0) + howMany });
+export const BASE_FILE = "storylets.server.base.json";
+
+const BASE_SCHEMA = "storylets/server-base@0";
+
+export interface BaseRecord {
+  schema: typeof BASE_SCHEMA;
+  /** The revision these hashes are of. */
+  revision: number;
+  /** Project-relative shard path -> a hash of its canonical text. */
+  shards: Record<string, string>;
 }
 
-/** Level with the server again: a pull or a push landed. */
-export function clearEdits(dir: string, revision: number): void {
-  const remote = readRemote(dir);
-  if (remote === undefined) return;
-  writeRemote(dir, { ...remote, revision, edits: 0 });
+/**
+ * A shard's canonical text, hashed.
+ *
+ * Text that will not parse is hashed as it stands rather than skipped: a shard
+ * somebody has broken by hand is still a difference from what the server sent,
+ * and pretending otherwise would say "in sync" over a file that is anything but.
+ */
+export function shardHash(text: string): string {
+  let canonical = text;
+  try {
+    canonical = canonicalStringify(parseSource(text) as Record<string, unknown>);
+  } catch { /* not parseable: its bytes are the only honest answer */ }
+  return createHash("sha256").update(canonical).digest("hex");
+}
+
+/** Hashes already worked out, keyed by path and validated by EXACT text, so an
+ *  unchanged shard is answered from memory: identical bytes cannot canonicalise
+ *  differently. Bounded by one project's shard count; the editor opens many in
+ *  a session, so it is dropped with the other shard caches on a switch. */
+const hashes = new Map<string, { text: string; hash: string }>();
+
+/** Empty the hash cache. Pairs with the compiler's `clearParseCache`; the
+ *  editor drops all three together when it changes project. */
+export function forgetShardHashes(): void { hashes.clear(); }
+
+const relKey = (dir: string, path: string): string => relative(dir, path).split(sep).join("/");
+
+/** Every shard in a project on disk, hashed, keyed project-relative. */
+export function hashProject(dir: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const full of walkProjectFiles(dir, SHARD_EXTS)) {
+    let text: string;
+    try { text = readFileSync(full, "utf8"); } catch { continue; }
+    const remembered = hashes.get(full);
+    const hash = remembered?.text === text ? remembered.hash : shardHash(text);
+    hashes.set(full, { text, hash });
+    out[relKey(dir, full)] = hash;
+  }
+  return out;
+}
+
+/** The same, over a pack's shard map. Anything in there that is not a shard
+ *  (the far end's own record, say) is not part of the comparison. */
+export function hashShards(shards: Map<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, text] of shards) {
+    if (!SHARD_EXTS.some((ext) => name.toLowerCase().endsWith(ext))) continue;
+    out[name] = shardHash(text);
+  }
+  return out;
+}
+
+/** Read the base, or nothing when there is none (or none we can read: a base we
+ *  cannot parse is one we have no business guessing at). */
+export function readBase(dir: string): BaseRecord | undefined {
+  const path = join(dir, BASE_FILE);
+  if (!existsSync(path)) return undefined;
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as BaseRecord;
+    if (parsed.schema !== BASE_SCHEMA) return undefined;
+    if (typeof parsed.revision !== "number") return undefined;
+    if (typeof parsed.shards !== "object" || parsed.shards === null) return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Move the base: a pull or a push has made the project level with `revision`,
+ *  and `shards` is what that revision holds. */
+export function writeBase(dir: string, revision: number, shards: Record<string, string>): void {
+  const base: BaseRecord = { schema: BASE_SCHEMA, revision, shards };
+  writeFileSync(join(dir, BASE_FILE), `${JSON.stringify(base, null, 2)}\n`, "utf8");
+}
+
+/**
+ * How many shards differ from the revision last pulled.
+ *
+ * THE unpushed signal, and the only one: a shard whose canonical text is no
+ * longer the server's counts once however many times it has been typed in, an
+ * undo that puts it back stops it counting, and a shard added or deleted since
+ * counts too, because either is a difference the server has not seen.
+ *
+ * No base means nothing to compare against, which reads as nothing unpushed.
+ * That is the honest answer rather than a cautious one: a project with no base
+ * is one this app has never pulled, and calling every shard in it unpushed
+ * would put a number on the window of a project nobody has changed.
+ */
+export function unpushedShards(dir: string): number {
+  const base = readBase(dir);
+  if (base === undefined) return 0;
+  const now = hashProject(dir);
+  let differ = 0;
+  for (const [path, hash] of Object.entries(base.shards)) if (now[path] !== hash) differ++;
+  for (const path of Object.keys(now)) if (base.shards[path] === undefined) differ++;
+  return differ;
 }
 
 // --- which shards a role may change ------------------------------------------------
@@ -134,8 +266,6 @@ export function clearEdits(dir: string, revision: number): void {
 const AUTHOR_SHARDS: readonly string[] = [
   SHARD_EXTENSIONS.deck, SHARD_EXTENSIONS.notes, SHARD_EXTENSIONS.view,
 ];
-
-const SHARD_EXTS: readonly string[] = Object.values(SHARD_EXTENSIONS);
 
 /** Is this path one of the shards that carry the shape? A file that is not a
  *  shard at all is nobody's contract and is not counted. */
@@ -392,6 +522,68 @@ export async function pushPack(
   };
 }
 
+/** What connecting worked out: where the project goes, the bytes to put there,
+ *  and the record to write beside them. */
+export interface ConnectPlan {
+  target: string;
+  bytes: Buffer;
+  remote: RemoteRecord;
+}
+
+/**
+ * Connect: a folder first, then the code spent, then the project.
+ *
+ * THE ORDER IS THE POINT (2026-09-07). A pairing code is single use and is gone
+ * the moment it is exchanged for a key, and this used to pair, pull, and only
+ * then ask where the project should go - so somebody who thought better of the
+ * folder, or picked the wrong one and pressed Cancel, had already spent their
+ * code and had to go and ask for another. Nothing is spent until there is
+ * somewhere for what comes back to live.
+ *
+ * The three callbacks are what main does with a window: choose a folder, say
+ * why one will not do, and keep a key. Everything else is here, where a real
+ * server on a loopback port can be pointed at it.
+ */
+export async function planConnect(opts: {
+  address: string;
+  code: string;
+  device: { app: string; host: string };
+  identity?: { name: string; email?: string };
+  /** Where should the project go? `null` when the person backed out. */
+  chooseFolder: () => Promise<string | null>;
+  /** The reason that folder will not do, or nothing. Refused BEFORE pairing,
+   *  which is the whole reason it is asked here rather than after. */
+  refuseFolder?: (dir: string) => string | undefined;
+  keepKey: (dialled: string, paired: PairedKey) => void;
+}): Promise<ConnectPlan | CallFailure | null> {
+  const target = await opts.chooseFolder();
+  if (target === null) return null;
+  const occupied = opts.refuseFolder?.(target);
+  if (occupied !== undefined) return { error: occupied };
+  const dialled = normaliseAddress(opts.address);
+  const paired = await pair(dialled, opts.code, opts.device, opts.identity);
+  if (failed(paired)) return paired;
+  opts.keepKey(dialled, paired);
+  const pulled = await pullPack(dialled, paired.key, {
+    ...(paired.installation !== "" ? { installation: paired.installation } : {}),
+  });
+  if (failed(pulled)) return pulled;
+  return {
+    target,
+    bytes: pulled.bytes,
+    remote: {
+      schema: REMOTE_SCHEMA,
+      server: pulled.server,
+      address: dialled,
+      installation: pulled.installation,
+      version: pulled.version,
+      revision: pulled.revision,
+      role: pulled.role,
+      pulledAt: new Date().toISOString(),
+    },
+  };
+}
+
 // --- the merge (pack-merge-back.md section 3, per shard) ---------------------------
 
 /** A pack exploded in memory: project-relative path -> text, with the record
@@ -463,6 +655,11 @@ export interface PullPlan {
   merged: number;
   added: number;
   conflicts: number;
+  /** The pulled revision's shards, hashed: the base the unpushed count is
+   *  measured against once this plan is written. Worked out here because the
+   *  pack is already open, and a second unzip to answer the same question would
+   *  be the plan and the base disagreeing waiting to happen. */
+  base: Record<string, string>;
 }
 
 /**
@@ -480,7 +677,10 @@ export async function planPull(
 ): Promise<PullPlan> {
   const theirs = await openPackBytes(head, dir);
   const ancestor = base === undefined ? undefined : (await openPackBytes(base, dir)).shards;
-  const plan: PullPlan = { writes: [], sidecars: [], assets: [], merged: 0, added: 0, conflicts: 0 };
+  const plan: PullPlan = {
+    writes: [], sidecars: [], assets: [], merged: 0, added: 0, conflicts: 0,
+    base: hashShards(theirs.shards),
+  };
 
   for (const name of [...theirs.shards.keys()].sort()) {
     const theirText = theirs.shards.get(name)!;
@@ -548,13 +748,13 @@ const plural = (n: number, one: string, many: string): string => (n === 1 ? one 
  * is what gates every piece of server-shaped chrome" (9.1).
  */
 export function menuState(
-  remote: RemoteRecord | undefined, hasKey: boolean, head?: number,
+  remote: RemoteRecord | undefined, hasKey: boolean, edits: number, head?: number,
 ): { status: string } | undefined {
   if (remote === undefined || !hasKey) return undefined;
   return {
     status: statusLine({
       revision: remote.revision,
-      edits: remote.edits ?? 0,
+      edits,
       ...(head !== undefined ? { head } : {}),
     }),
   };
@@ -570,6 +770,21 @@ export function statusLine(standing: RemoteStanding): string {
   }
   return "In sync";
 }
+
+/**
+ * The status line with the project it is about in front of it.
+ *
+ * For the two places where a person could be looking at one project and reading
+ * about another: the prompt on the way out (which is asked at the moment a
+ * second project is arriving) and the window's own suffix. An empty name falls
+ * back to "This project", because a headline reading ": 1 edit unpushed" would
+ * be worse than the general word.
+ */
+export const projectStatusLine = (name: string, standing: RemoteStanding): string =>
+  `${namedOr(name)}: ${statusLine(standing)}`;
+
+/** The project's display name, or the general word for one. */
+const namedOr = (name: string): string => (name.trim() === "" ? "This project" : name.trim());
 
 // --- leaving a project with edits the server has not seen ----------------------------
 
@@ -595,24 +810,63 @@ export interface LeavePrompt {
   cancelId: number;
 }
 
-/** What the author is asked on the way out, and what each answer means. */
+/**
+ * What the author is asked on the way out, and what each answer means.
+ *
+ * IT NAMES ITS PROJECT (2026-09-07), headline and body both. This question is
+ * asked at the one moment two projects are in play - opening one over another
+ * with edits unpushed, which is how connecting to a server lands a pulled
+ * project - and unnamed it read as if it were about the project arriving rather
+ * than the one being left.
+ */
 export function leavePrompt(
-  standing: RemoteStanding, act: "quit" | "close", online: boolean,
+  project: string, standing: RemoteStanding, act: "quit" | "close", online: boolean,
 ): LeavePrompt {
   const leave = act === "quit" ? "Quit without pushing" : "Close without pushing";
   const buttons = online ? ["Push to server", leave, "Cancel"] : [leave, "Cancel"];
   const choices: LeaveChoice[] = online ? ["push", "leave", "cancel"] : ["leave", "cancel"];
+  const who = namedOr(project);
   return {
-    message: statusLine(standing),
+    message: projectStatusLine(project, standing),
     detail: online
-      ? "This project has edits the server has not seen."
-      : "This project has edits the server has not seen, and the server cannot be reached.",
+      ? `${who} has edits the server has not seen.`
+      : `${who} has edits the server has not seen, and the server cannot be reached.`,
     buttons,
     choices,
     defaultId: 0,
     cancelId: buttons.length - 1,
   };
 }
+
+/**
+ * The same prompt again, when the push it offered was refused.
+ *
+ * Until 2026-09-07 a refusal at this moment left the person exactly where they
+ * were with only the problems bar as evidence, and (on the connect path) the
+ * pulled project silently never opened: they had pressed Push to server and
+ * nothing visibly happened. The refusal is shown here, in the far end's own
+ * words, with the one honest way out of it.
+ */
+export function refusalPrompt(
+  project: string, standing: RemoteStanding, refusal: string,
+): LeavePrompt {
+  return {
+    message: projectStatusLine(project, standing),
+    detail: refusal,
+    buttons: ["Stay"],
+    choices: ["cancel"],
+    defaultId: 0,
+    cancelId: 0,
+  };
+}
+
+/** How long the confirmation after a push is held in front of the person
+ *  before the app lets go. Long enough to read four words and no longer:
+ *  this is not theatre, it is "my project is securely pushed". */
+export const LEAVE_SETTLE_MS = 1500;
+
+/** What the prompt turns into once the push has landed. */
+export const pushedLine = (revision: number): string => `Pushed as revision ${revision}`;
 
 /** The answer, read back. An index that is not one of the buttons is a cancel:
  *  a way out we did not offer is not a way out. */
@@ -677,12 +931,21 @@ export async function askLeave(
  * whole reason this is a function rather than three lines at the prompt: a
  * refusal reached at the moment of quitting is the one an author most needs to
  * still be in the project to act on.
+ *
+ * `settle` is the beat between a push landing and the app letting go: the
+ * person is leaving, and the last thing they should see is that the work is
+ * safe. It is awaited rather than fired off, because the whole point of it is
+ * that the window does not go until it has been seen.
  */
 export async function resolveLeave(
-  choice: LeaveChoice, push: () => Promise<{ revision: number } | CallFailure>,
+  choice: LeaveChoice,
+  push: () => Promise<{ revision: number } | CallFailure>,
+  settle?: (revision: number) => Promise<void>,
 ): Promise<{ go: boolean; refusal?: string }> {
   if (choice === "cancel") return { go: false };
   if (choice === "leave") return { go: true };
   const pushed = await push();
-  return failed(pushed) ? { go: false, refusal: pushed.error } : { go: true };
+  if (failed(pushed)) return { go: false, refusal: pushed.error };
+  await settle?.(pushed.revision);
+  return { go: true };
 }

@@ -19,7 +19,7 @@ import type {
   BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectSettingsDto,
   PropertyDeclDto, RemoteDto, ShardVcDto, VcStatusDto,
 } from "../shared/api.js";
-import { addressOf, readRemote, statusLine } from "./remote.js";
+import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
 import { History } from "./history.js";
 import { resetShardStatus, shardStatus } from "./vc.js";
 import type { ShardRef } from "./vc.js";
@@ -331,17 +331,20 @@ export function openResult(session: ProjectSession, problems: Problem[]): OpenRe
 export function remoteDto(dir: string): RemoteDto | undefined {
   const remote = readRemote(dir);
   if (remote === undefined) return undefined;
+  // Worked out from the shards themselves, every time, so the count on the
+  // window is never one event behind the edit that moved it.
+  const edits = unpushedShards(dir);
   return {
     address: addressOf(remote),
     installation: remote.installation,
     version: remote.version,
     revision: remote.revision,
     role: remote.role,
-    edits: remote.edits ?? 0,
+    edits,
     // The menu's own line, said once and read by both. The far end's head is
     // not asked for here: learning it costs a call, so the menu carries it and
     // this says what the project on disk knows.
-    status: statusLine({ revision: remote.revision, edits: remote.edits ?? 0 }),
+    status: statusLine({ revision: remote.revision, edits }),
   };
 }
 

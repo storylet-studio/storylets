@@ -32,6 +32,7 @@ import { commentsOf, markOf } from "@storylet-studio/model";
 import type { Comment, TagGroup } from "@storylet-studio/model";
 import type { ProjectSession } from "./project.js";
 import type { Problem } from "../shared/api.js";
+import { REMOTE_FILE, forgetShardHashes, hashProject, unpushedShards, writeBase, writeRemote } from "./remote.js";
 
 const exampleDir = fileURLToPath(new URL("../../../../examples/saltmarsh.storylets", import.meta.url));
 
@@ -2128,5 +2129,46 @@ describe("durability, written from the editor", () => {
     const after = projectSettings(opened.session).story.find((p) => p.name === "reputation")!;
     expect(after.shared).toBe(false);
     expect(after.durable).toBe(true);
+  });
+});
+
+// The write path and the server, 2026-09-07. A commit used to tally an edit
+// into the remote record on its way past, which made the record a second source
+// of truth about work the server has not seen - and a wrong one, since an undo
+// tallied another edit rather than taking one back. It writes nothing there now:
+// what is unpushed is read off the shards.
+describe("what a write tells the server", () => {
+  const remoteRecord = (session: ProjectSession): string =>
+    join(session.loaded.dir, REMOTE_FILE);
+
+  it("leaves the record alone, and the count follows the shards", () => {
+    const session = scratchProject();
+    const dir = session.loaded.dir;
+    writeRemote(dir, {
+      schema: "storylets/server-provenance@0", server: "http://x", installation: "the-park",
+      version: "seed", revision: 1, role: "designer",
+    });
+    forgetShardHashes();
+    writeBase(dir, 1, hashProject(dir));
+    const written = readFileSync(remoteRecord(session), "utf8");
+
+    const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
+    expect(saveCard(session, docks, ratJob.id, { title: "A different job" })).not.toHaveProperty("error");
+    expect(unpushedShards(dir)).toBe(1);
+    expect(readFileSync(remoteRecord(session), "utf8"), "the record is not a tally").toBe(written);
+
+    // ...and an undo takes it back, which the tally could not: it counted the
+    // undo as a further edit, so typing once and undoing it read as two.
+    expect(undo(session)).not.toBeNull();
+    expect(unpushedShards(dir)).toBe(0);
+    expect(readFileSync(remoteRecord(session), "utf8")).toBe(written);
+  });
+
+  it("counts nothing at all for a project with no server", () => {
+    const session = scratchProject();
+    const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
+    saveCard(session, docks, ratJob.id, { title: "A different job" });
+    expect(existsSync(remoteRecord(session))).toBe(false);
+    expect(unpushedShards(session.loaded.dir)).toBe(0);
   });
 });

@@ -93,7 +93,7 @@ import type {
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { applyStates, captureBefore } from "./history.js";
 import type { FileState } from "./history.js";
-import { countEdit, readRemote, refuseWrite } from "./remote.js";
+import { readRemote, refuseWrite } from "./remote.js";
 import { commentsOf } from "@storylet-studio/model";
 import type { CanvasFurniture, Card, Comment, CommentMark, DeckShard, Outcome, RedrawPolicy, ScalarValue } from "@storylet-studio/model";
 import { MAP_CANVAS } from "../shared/api.js";
@@ -278,24 +278,12 @@ export function commit(session: ProjectSession, label: string, key: string, writ
   const before = captureBefore(writes.map((w) => w.path));
   if (!applyStates(writes)) return { error: "could not write (locked or read-only?)" };
   session.history.record(label, key, before, writes);
-  countLogicalEdit(session.loaded.dir, key);
+  // NOTHING is tallied here any more (2026-09-07). What the server has not seen
+  // is a fact about the shards on disk, worked out by comparing them with the
+  // revision last pulled (remote.ts `unpushedShards`), so a write counts by
+  // changing a file rather than by being announced.
   return reload(session);
 }
-
-/** The last edit counted against a remote, so a typing session on one card is
- *  one unpushed edit rather than one per autosave: the coalesce key is what
- *  undo steps by, and it is the honest unit here too. */
-let lastCounted: { dir: string; key: string } | undefined;
-
-/** Count a write against the project's remote, if it has one. */
-export function countLogicalEdit(dir: string, key: string): void {
-  if (lastCounted?.dir === dir && lastCounted.key === key) return;
-  lastCounted = { dir, key };
-  countEdit(dir);
-}
-
-/** Start the count again: a pull or a push has made the project level. */
-export function forgetLastCounted(): void { lastCounted = undefined; }
 
 
 /** Live Link: told after every write that lands through here (a commit, an
@@ -767,9 +755,10 @@ export function undo(session: ProjectSession): OpenResult | null {
   const states = session.history.undo();
   if (!states) return null;
   applyStates(states);
-  // An undo is a change to the files like any other, and the server has not
-  // seen it either: it counts, and it is its own logical edit.
-  countLogicalEdit(session.loaded.dir, `undo:${structCounter++}`);
+  // An undo is a change to the files like any other, and it is counted the same
+  // way: by what the shards now say. An undo back to the pulled text is not an
+  // unpushed edit at all, which is what an author who types and undoes expects
+  // and what the old tally got wrong in both directions.
   return reload(session);
 }
 
@@ -777,7 +766,6 @@ export function redo(session: ProjectSession): OpenResult | null {
   const states = session.history.redo();
   if (!states) return null;
   applyStates(states);
-  countLogicalEdit(session.loaded.dir, `redo:${structCounter++}`);
   return reload(session);
 }
 
