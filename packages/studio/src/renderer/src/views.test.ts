@@ -4,7 +4,7 @@
 // (the ranking machinery is recessive, in the inspector).
 
 import { describe, expect, it, vi } from "vitest";
-import { cardHasContent, navId, renderBoxCentre, renderDeckCentre, renderDecksCentre, renderHandsCentre, renderNav, renderProblems, renderProjectCentre } from "./views.js";
+import { cardHasContent, navId, projectLead, renderBoxCentre, renderDeckCentre, renderDecksCentre, renderHandsCentre, renderNav, renderProblems, renderProjectCentre } from "./views.js";
 import type { Focus, ViewActions } from "./views.js";
 import { resetDocTabMemory, setDocTab } from "./inspector.js";
 import type { BoxDto, CardDto, DeckDto, ProjectDto } from "../../shared/api.js";
@@ -520,5 +520,35 @@ describe("cardHasContent (the delete guard)", () => {
     expect(cardHasContent(fresh({ purpose: "   ", condition: " " }))).toBe(false);
     expect(cardHasContent(fresh({ fields: [{ name: "scene", value: "  " }] }))).toBe(false);
     expect(cardHasContent(fresh({ tags: [{ group: "zone", values: [] }] }))).toBe(false);
+  });
+});
+
+describe("the topbar's project name", () => {
+  // Where the unpushed count LIVES. It used to be a suffix on the OS window
+  // title, which on macOS is never drawn: `titleBarStyle: "hiddenInset"` fuses
+  // the topbar into the title bar, so "3 edits unpushed" was written to a bar
+  // that does not exist and the in-app one read "This Room - Storyletter".
+  const project = { name: "This Room", dir: "/p/this-room.storylets" };
+  const go = (): void => { /* the way home; not what is under test */ };
+
+  it("says nothing about a server for a project that has none", () => {
+    const lead = projectLead(project, undefined, go);
+    expect(lead.textContent).toBe("This Room - Storyletter");
+    expect(lead.querySelector(".pname-note")).toBeNull();
+    // And it is still the way home, with WHERE in the tooltip: two projects can
+    // share a name and nothing else on screen tells them apart.
+    expect(lead.dataset["tip"]).toBe("The project overview\n/p/this-room.storylets");
+  });
+
+  it("carries the status line, in the Server menu's own words, when there are edits", () => {
+    const lead = projectLead(project, { status: "3 edits unpushed", edits: 3 }, go);
+    expect(lead.querySelector(".pname-note")?.textContent).toBe(" - 3 edits unpushed");
+    expect(lead.textContent).toBe("This Room - Storyletter - 3 edits unpushed");
+  });
+
+  it("is silent while the project is level with the server: nothing nags", () => {
+    const lead = projectLead(project, { status: "In sync", edits: 0 }, go);
+    expect(lead.textContent).toBe("This Room - Storyletter");
+    expect(lead.querySelector(".pname-note")).toBeNull();
   });
 });

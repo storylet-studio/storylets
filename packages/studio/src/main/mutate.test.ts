@@ -20,7 +20,7 @@ import {
   handDetail, moveBox, moveCard, moveDeck, moveHand, proposeDrivers, renameDeck,
   saveBox, saveCard, saveHand, saveProjectSettings, saveTagGroup, saveTemplate,
   moveCardsOnCanvas, layoutDeck,
-  setGroupSpatial, setZonePolygon, moveSitesOnMap,
+  createZone, setGroupSpatial, setZonePolygon, moveSitesOnMap,
   tagGroupDetail, templateDetail, undo, restackZone,
   moveComment, postComment, setCanvasFurniture, setCommentResolved,
   declareProperty, deleteCommentMessage, repointTag,
@@ -887,7 +887,7 @@ describe("a venue's claim on the project", () => {
   it("gives the bound hand one line, and leaves the others alone", () => {
     const session = installed({ hands: ["docks-street"] });
     expect(handDetail(session, encBox, "h_docks")!.contract)
-      .toEqual(["Bound at the-park: a station deals this hand"]);
+      .toEqual(["Dealt at the-park"]);
   });
 
   it("gives a ticked box its line, in the venue's own unit", () => {
@@ -1360,12 +1360,13 @@ describe("the map (spatial tag groups)", () => {
     });
   });
 
-  it("restacking a zone changes which one owns the sites in the overlap", () => {
-    // The rule the map runs on, from a third direction: geometry did not move and
-    // the site did not move, but what is in FRONT of what did.
+  it("restacking a zone changes the drawing order and nobody's binding", () => {
+    // The ruling of 2026-09-07 from a third direction: what is in FRONT of what
+    // is a fact about the picture. A hand's zone is the hand's own, and only
+    // dragging its pin says otherwise.
     const session = scratchProject();
     // The market is drawn INSIDE the docks, and listed after it, so it starts in
-    // front and owns anything standing in it.
+    // front and takes a pin dropped in the overlap.
     setZonePolygon(session, encBox, "d_zone", "v_docks",
       [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 200 }, { x: 0, y: 200 }]);
     setZonePolygon(session, encBox, "d_zone", "v_market",
@@ -1374,15 +1375,10 @@ describe("the map (spatial tag groups)", () => {
     moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 80, y: 80 }]);
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_market" });
 
-    const sent = restackZone(session, encBox, "d_zone", "v_market", "back");
-    expect(sent).toMatchObject({ rebound: [{ id: hand, zone: "v_docks" }] });
-    expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
-
-    // And back again, one undo step each way.
-    restackZone(session, encBox, "d_zone", "v_market", "front");
+    const before = readFileSync(join(session.loaded.dir, "encounters", "hands.storylethands"), "utf8");
+    expect("error" in restackZone(session, encBox, "d_zone", "v_market", "back")).toBe(false);
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_market" });
-    expect(undo(session)).not.toBeNull();
-    expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
+    expect(readFileSync(join(session.loaded.dir, "encounters", "hands.storylethands"), "utf8")).toBe(before);
   });
 
   it("writes nothing for a move that would change nothing", () => {
@@ -1391,7 +1387,7 @@ describe("the map (spatial tag groups)", () => {
     const before = readFileSync(join(session.loaded.dir, "encounters", "tags.storylettags"), "utf8");
     // v_market is listed last, so it is already the frontmost.
     const moved = restackZone(session, encBox, "d_zone", "v_market", "front");
-    expect(moved).toMatchObject({ rebound: [] });
+    expect("error" in moved).toBe(false);
     expect(readFileSync(join(session.loaded.dir, "encounters", "tags.storylettags"), "utf8")).toBe(before);
   });
 
@@ -1413,50 +1409,89 @@ describe("the map (spatial tag groups)", () => {
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_market" });
   });
 
-  it("moves the hands a RESHAPED zone now covers, and looses the ones it has left", () => {
-    // The same rule from the other side. A boundary dragged over a site has moved
-    // that hand as surely as dragging the site would have.
+  it("DRAGGING A ZONE touches the tags shard and nothing else", () => {
+    // The fault of 2026-09-07, and the ruling that answers it. Dragging the
+    // `door` zone about sixty points moved the geometry as asked AND stripped
+    // `chosen` off two hands, one of them losing the block whole, with nothing
+    // said and the project left invalid ("nothing chosen for the tag group").
+    // Geometry is the designer's drawing; a binding is content.
     const session = scratchProject();
     drawZones(session);
     const hand = handsOf(session)[0]!.id;
     moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 50, y: 50 }]);   // in the docks
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
 
-    // Shrink the docks away from the site: nothing else covers it, so it comes loose.
+    const handsPath = join(session.loaded.dir, "encounters", "hands.storylethands");
+    const mapPath = join(session.loaded.dir, "encounters", "map.storyletmap");
+    const hands = readFileSync(handsPath, "utf8");
+    const map = readFileSync(mapPath, "utf8");
+
+    // Drag the docks right away from the site. Nothing else covers it, and the
+    // hand keeps the zone it was given: a pin sitting outside its outline is
+    // visible and harmless, and dragging the pin is the gesture that moves it.
     const shrunk = setZonePolygon(session, encBox, "d_zone", "v_docks",
       [{ x: 500, y: 500 }, { x: 560, y: 500 }, { x: 560, y: 560 }, { x: 500, y: 560 }]);
-    expect(shrunk).toMatchObject({ rebound: [{ id: hand, zone: null }] });
-    expect(handsOf(session)[0]!.chosen).toBeUndefined();
+    expect("error" in shrunk).toBe(false);
+    expect(readFileSync(join(session.loaded.dir, "encounters", "tags.storylettags"), "utf8"))
+      .toContain("500");
+    expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
+    expect(readFileSync(handsPath, "utf8")).toBe(hands);
+    expect(readFileSync(mapPath, "utf8")).toBe(map);
 
-    // Draw the market over where the site actually is: it takes the hand in.
+    // And from the other side: an outline drawn over a site takes nobody in.
     const grown = setZonePolygon(session, encBox, "d_zone", "v_market",
       [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
-    expect(grown).toMatchObject({ rebound: [{ id: hand, zone: "v_market" }] });
-    expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_market" });
+    expect("error" in grown).toBe(false);
+    expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
+    expect(readFileSync(handsPath, "utf8")).toBe(hands);
   });
 
-  it("a zone's shape and the hands it moved are ONE undo step", () => {
+  it("a zone drawn from nothing takes no hand in either", () => {
+    // The third geometry gesture, under the same ruling: a new outline over a
+    // site is still somebody drawing, not somebody rebinding.
+    const session = scratchProject();
+    drawZones(session);
+    const hand = handsOf(session)[0]!.id;
+    moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 50, y: 50 }]);
+    const handsPath = join(session.loaded.dir, "encounters", "hands.storylethands");
+    const hands = readFileSync(handsPath, "utf8");
+    const drawn = createZone(session, encBox, "d_zone",
+      [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
+    expect("error" in drawn).toBe(false);
+    expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
+    expect(readFileSync(handsPath, "utf8")).toBe(hands);
+  });
+
+  it("a zone's shape is ONE undo step, and takes no binding with it", () => {
     const session = scratchProject();
     drawZones(session);
     const hand = handsOf(session)[0]!.id;
     moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 50, y: 50 }]);
     setZonePolygon(session, encBox, "d_zone", "v_docks",
       [{ x: 500, y: 500 }, { x: 560, y: 500 }, { x: 560, y: 560 }, { x: 500, y: 560 }]);
-    expect(handsOf(session)[0]!.chosen).toBeUndefined();
+    expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
     expect(undo(session)).not.toBeNull();
-    // The outline came back, so the hand it had loosed comes back with it.
+    expect(polygonOf(groupIn(session).tags[0]!))
+      .toEqual([{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 200 }, { x: 0, y: 200 }]);
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
   });
 
   it("leaves an UNPLACED hand's binding alone: no position, no opinion", () => {
-    // Otherwise opening a map would loose every hand nobody had placed yet.
+    // Otherwise one pin dragged out of every zone would loose every hand nobody
+    // had placed yet. A copy of the first hand is the second: same binding, and
+    // no site, because a duplicate is not standing anywhere.
     const session = scratchProject();
     drawZones(session);
-    const hand = handsOf(session)[0]!.id;
-    const other = handsOf(session)[0]!.chosen;
-    setZonePolygon(session, encBox, "d_zone", "v_docks",
-      [{ x: 500, y: 500 }, { x: 560, y: 500 }, { x: 560, y: 560 }, { x: 500, y: 560 }]);
-    expect(handsOf(session).find((h) => h.id === hand)!.chosen).toEqual(other);
+    const placed = handsOf(session)[0]!.id;
+    const copied = duplicateHand(session, encBox, placed);
+    expect("error" in copied).toBe(false);
+    if ("error" in copied) return;
+    const kept = { ...handsOf(session).find((h) => h.id === copied.handId)!.chosen };
+    expect(kept).toEqual({ d_zone: "v_docks" });
+
+    moveSitesOnMap(session, encBox, "d_zone", [{ id: placed, x: 900, y: 900 }]);
+    expect(handsOf(session).find((h) => h.id === placed)!.chosen).toBeUndefined();
+    expect(handsOf(session).find((h) => h.id === copied.handId)!.chosen).toEqual(kept);
   });
 
   it("is ONE undo step: the site and the binding arrived from one gesture", () => {

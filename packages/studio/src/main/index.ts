@@ -19,11 +19,11 @@ import { refreshMenu } from "./menu.js";
 // The pack exchange (design/engine-server.md 9.1): three calls over plain HTTP
 // for a project that came from a server, and nothing at all for one that did not.
 import {
-  addressOf, contractBreaks, failed, normaliseAddress, openPackBytes, packAddress, packProject, pair,
-  planPull, pullPack, pushPack, menuState, reachable, readRemote, resolveLeave, statusLine,
-  writeRemote, REMOTE_FILE,
+  addressOf, askLeave, contractBreaks, failed, leavePrompt, normaliseAddress, openPackBytes, packAddress,
+  packProject, pair, planPull, pullPack, pushPack, menuState, reachable, readRemote, resolveLeave,
+  statusLine, writeRemote, REMOTE_FILE,
 } from "./remote.js";
-import type { LeaveChoice, PullPlan, RemoteRecord } from "./remote.js";
+import type { InAppPrompt, LeaveChoice, LeavePrompt, PullPlan, RemoteRecord } from "./remote.js";
 import { compileBundle, compileForLivePush, createProject, currentProjectHash, exportBundle, openProject, openResult, projectSettings, validate, vcStatus } from "./project.js";
 import { createLiveLinkServer, type LiveLinkServer } from "./live-link.js";   // Live Link
 import { setProjectWrittenListener } from "./mutate.js";   // Live Link: refresh a connected game after a write
@@ -57,7 +57,7 @@ import type { Bundle, Comment, Frame, PropertyDecl, SaveFile, ScalarValue, Stack
 import type { BackgroundEdit } from "./mutate.js";
 import { ASSET_SCHEME, assetUrl } from "../shared/api.js";
 import type {
-  BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOverlayDto, CoverageReport, DeckGraph, GraphEdge, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, PackOffer, ContractBreakDto, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
+  BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOverlayDto, CoverageReport, DeckGraph, GraphEdge, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, PackOffer, ContractBreakDto, LeavePromptDto, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
 } from "../shared/api.js";
 import { JOB_PROGRESS_CHANNEL, MAP_CANVAS, PROJECT_CHANGED } from "../shared/api.js";
 import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
@@ -282,15 +282,24 @@ const serverHeads = new Map<string, number>();
 
 interface ServerContext { dir: string; remote: RemoteRecord; address: string; key: string }
 
-/** The open project's remote AND the key for it, or nothing. Both halves: a
- *  remote whose key has been forgotten is a project like any other. */
+/**
+ * The open project's remote AND the key for it, or nothing.
+ *
+ * Both halves: a remote whose key has been forgotten is a project like any
+ * other. The key is the one whose ROLE matches this project's sidecar, because
+ * a person with both jobs at one venue holds two (9.1 point 5): keyed by
+ * address alone, pairing a second project as a designer overwrote the author
+ * key, and the author's project then pulled as a designer with the read-only
+ * rule gone. A project whose role has no key held is a project like any other,
+ * which is the honest answer: the connect dialog is what offers to fix it.
+ */
 function serverContext(): ServerContext | undefined {
   const dir = session?.loaded.dir;
   if (dir === undefined) return undefined;
   const remote = readRemote(dir);
   if (remote === undefined) return undefined;
   const address = addressOf(remote);
-  const held = store.serverKey(address);
+  const held = store.serverKey(address, remote.role);
   return held === undefined ? undefined : { dir, remote, address, key: held.key };
 }
 
@@ -833,32 +842,85 @@ async function serverPush(
 }
 
 /**
+ * Ask the question in the app's own dialog, when there is a renderer to ask.
+ *
+ * Nothing when there is not: the fallback below is what an unanswerable
+ * question falls back to, and `askLeave` chooses between them.
+ */
+function inAppPrompt(): { ask: (prompt: LeavePrompt) => InAppPrompt; done: () => void } | undefined {
+  const target = window;
+  if (!target || target.isDestroyed()) return undefined;
+  let clear = (): void => { /* nothing registered until something is asked */ };
+  return {
+    /** Called however the question was answered, native fallback included, so a
+     *  prompt that was never replied to leaves no listeners behind. */
+    done: () => clear(),
+    ask: (prompt) => {
+      let drawn = (): void => { /* replaced below, before anything can call it */ };
+      let answered: (index: number) => void = () => { /* likewise */ };
+      const shown = new Promise<void>((resolve) => { drawn = resolve; });
+      const answer = new Promise<number>((resolve) => { answered = resolve; });
+      const up = (): void => drawn();
+      const reply = (_event: unknown, index: unknown): void =>
+        answered(typeof index === "number" ? index : prompt.cancelId);
+      ipcMain.on("server:leave-shown", up);
+      ipcMain.on("server:leave-reply", reply);
+      clear = (): void => {
+        ipcMain.removeListener("server:leave-shown", up);
+        ipcMain.removeListener("server:leave-reply", reply);
+      };
+      // Buttons and nothing else cross: what each index MEANS stays this side.
+      target.webContents.send("server:leave-prompt", {
+        message: prompt.message, detail: prompt.detail, buttons: prompt.buttons,
+        defaultId: prompt.defaultId, cancelId: prompt.cancelId,
+      } satisfies LeavePromptDto);
+      return { shown, answer };
+    },
+  };
+}
+
+/**
+ * The fallback, for a renderer that has gone or will not answer.
+ *
+ * PARENTLESS on purpose. Attached to the editor window this is a sheet, and on
+ * the close path that window's close has already been deferred: dismissing the
+ * sheet let the deferred close through whatever button had been clicked, which
+ * is how Cancel came to close the window and Push came to close it without
+ * pushing (found end to end, 2026-09-07). App-modal, it answers and nothing
+ * else happens.
+ */
+async function nativePrompt(prompt: LeavePrompt): Promise<number> {
+  const answer = await dialog.showMessageBox({
+    type: "question",
+    message: prompt.message,
+    detail: prompt.detail,
+    buttons: [...prompt.buttons],
+    defaultId: prompt.defaultId,
+    cancelId: prompt.cancelId,
+  });
+  return answer.response;
+}
+
+/**
  * The way out of a project the server has not seen the whole of.
  *
  * One prompt, three buttons, and the middle one names the act it is in the
  * middle of: quitting or closing. A push that lands lets go; a push that is
  * REFUSED does not, and the app stays where the author can act on it, which is
  * the whole reason the refusal is worth reaching at this moment at all.
+ *
+ * The prompt is the RENDERER's (2026-09-07), in the same classes as the push
+ * dialog beside it: the app has one dialog style, and the only native surfaces
+ * are the file and folder pickers.
  */
 async function mayLeaveProject(act: "quit" | "close"): Promise<boolean> {
   const ctx = serverContext();
   if (ctx === undefined || (ctx.remote.edits ?? 0) === 0) return true;
-  const leave = act === "quit" ? "Quit without pushing" : "Close without pushing";
   const online = await reachable(ctx.address);
-  const buttons = online ? ["Push to server", leave, "Cancel"] : [leave, "Cancel"];
-  const answer = await dialog.showMessageBox(window!, {
-    type: "question",
-    message: statusLine(standingOf(ctx)),
-    detail: online
-      ? "This project has edits the server has not seen."
-      : "This project has edits the server has not seen, and the server cannot be reached.",
-    buttons,
-    defaultId: 0,
-    cancelId: buttons.length - 1,
-  });
-  const choice: LeaveChoice = online
-    ? (["push", "leave", "cancel"] as const)[answer.response] ?? "cancel"
-    : (["leave", "cancel"] as const)[answer.response] ?? "cancel";
+  const prompt = leavePrompt(standingOf(ctx), act, online);
+  const asking = inAppPrompt();
+  const choice: LeaveChoice = await askLeave(prompt, asking?.ask, nativePrompt);
+  asking?.done();
   // The push at this moment carries no note and no acknowledgements: there is no
   // dialog in front of it. A refusal that NAMES BREAKS is the one that then
   // needs one, so the breaks travel back for it.
@@ -1954,10 +2016,22 @@ function wireIpc(): void {
     return landed;
   });
 
-  /** Forget the key paired with an address. Every piece of chrome that
-   *  depended on it goes with it. */
+  /**
+   * Forget the key paired with an address. Every piece of chrome that depended
+   * on it goes with it.
+   *
+   * ONE SLOT when there is an open project at that address: the key it uses,
+   * leaving the other role's alone, because somebody who authors here and
+   * designs here has said nothing about the other job. With no such project -
+   * a pack offering an address before anything is open - the address goes
+   * whole, since there is nothing to narrow it by and half a forgotten server
+   * would carry on appearing.
+   */
   ipcMain.handle("server:forget", (_event, address: string): void => {
-    store.forgetServer(normaliseAddress(address));
+    const dialled = normaliseAddress(address);
+    const open = serverContext();
+    if (open !== undefined && open.address === dialled) store.forgetServer(dialled, open.remote.role);
+    else store.forgetServer(dialled);
     menu();
   });
 

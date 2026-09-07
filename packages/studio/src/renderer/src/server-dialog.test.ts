@@ -7,7 +7,7 @@
 // what is shown, and the key that goes back is the far end's, never ours.
 
 import { beforeAll, describe, expect, it } from "vitest";
-import { askPush } from "./server-dialog.js";
+import { askLeave, askPush } from "./server-dialog.js";
 
 // jsdom carries the <dialog> element but not its modal behaviour, so the two
 // methods the dialog calls are supplied here. Nothing under test depends on
@@ -89,5 +89,60 @@ describe("the push dialog", () => {
     button("Cancel").click();
     expect(await answered).toBeNull();
     expect(document.querySelector("dialog.push-dialog")).toBeNull();
+  });
+});
+
+describe("the leaving prompt", () => {
+  const leaveDialog = (): HTMLDialogElement => document.querySelector("dialog.leave-dialog")!;
+  const leaveButton = (label: string): HTMLButtonElement =>
+    [...leaveDialog().querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label)!;
+
+  const QUITTING = {
+    message: "3 edits unpushed",
+    detail: "This project has edits the server has not seen.",
+    buttons: ["Push to server", "Quit without pushing", "Cancel"],
+    defaultId: 0, cancelId: 2,
+  };
+
+  it("wears the app's own dialog, with the status line as its headline", async () => {
+    const answered = askLeave(QUITTING);
+    // The push dialog's classes, because the app has one dialog style and the
+    // only native surfaces are the file and folder pickers.
+    expect(leaveDialog().classList.contains("confirm-dialog")).toBe(true);
+    expect(leaveDialog().querySelector(".confirm-title")?.textContent).toBe("3 edits unpushed");
+    expect(leaveDialog().querySelector(".confirm-body")?.textContent)
+      .toBe("This project has edits the server has not seen.");
+    leaveButton("Cancel").click();
+    expect(await answered).toBe(2);
+    expect(document.querySelector("dialog.leave-dialog")).toBeNull();
+  });
+
+  it("answers with the INDEX of the button, whichever it is", async () => {
+    const pushed = askLeave(QUITTING);
+    leaveButton("Push to server").click();
+    expect(await pushed).toBe(0);
+
+    const left = askLeave(QUITTING);
+    leaveButton("Quit without pushing").click();
+    expect(await left).toBe(1);
+  });
+
+  it("names the act it is in the middle of, and offers no push when offline", async () => {
+    const closing = askLeave({
+      message: "1 edit unpushed",
+      detail: "This project has edits the server has not seen, and the server cannot be reached.",
+      buttons: ["Close without pushing", "Cancel"],
+      defaultId: 0, cancelId: 1,
+    });
+    expect([...leaveDialog().querySelectorAll("button")].map((b) => b.textContent))
+      .toEqual(["Close without pushing", "Cancel"]);
+    leaveButton("Close without pushing").click();
+    expect(await closing).toBe(0);
+  });
+
+  it("reads Esc as Cancel: main is waiting on an index, not on silence", async () => {
+    const answered = askLeave(QUITTING);
+    leaveDialog().dispatchEvent(new Event("cancel", { cancelable: true }));
+    expect(await answered).toBe(2);
   });
 });

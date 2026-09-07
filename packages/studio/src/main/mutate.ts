@@ -25,16 +25,22 @@ export interface MapSiteMove { id: string; x: number; y: number }
 export interface SiteRebinding { id: string; zone: string | null }
 
 /**
- * THE rule of the map: a pinned hand belongs to the zone its pin is standing in.
+ * THE rule of the map: a hand whose PIN is dragged belongs to the zone it was
+ * dropped in.
  *
- * Applied after either side of that sentence changes - the pin moved, or the
- * zones did - so the two can never drift apart. That is why it is one function
- * called from three places rather than a rule the canvas applies on drops: an
- * outline dragged over a pin has moved that hand just as surely as dragging the
- * pin would have, and a map where those two gestures disagree is a map that
- * cannot be trusted.
+ * ONE GESTURE, and only one (the ruling of 2026-09-07). Until then this ran
+ * after either side of that sentence changed - the pin moved, or the zones did -
+ * and the second half was wrong: nudging an outline sixty points quietly
+ * stripped `chosen` off the hands it had left behind, one of them losing the
+ * block whole, and left the project invalid with nothing said. Geometry is the
+ * designer's drawing; a binding is content, and content changes where somebody
+ * changes it. The canvas has said so since 2026-08-06 (`applyOutline` in
+ * map-view.ts); this is the write path agreeing.
  *
- * A hand whose pin ends up outside every zone is left LOOSE: its binding is
+ * A pin left sitting outside the zone it is bound to is visible, harmless, and
+ * fixed by dragging it - which is the gesture that means it.
+ *
+ * A hand whose pin is DROPPED outside every zone is left LOOSE: its binding is
  * cleared rather than quietly kept. If that hand needs a zone the compiler says
  * so ("missing chosen tag ... a hand is fully concrete") and the author sees an
  * error, which is the honest outcome; keeping the old zone would leave the map
@@ -44,8 +50,8 @@ export interface SiteRebinding { id: string; zone: string | null }
  * therefore no opinion, and must keep the binding it was given elsewhere.
  * Bindings that belong to a template are never touched (see `bindHand`).
  *
- * `positions` overrides what the sidecar holds, for the caller that is in the
- * middle of moving sites and has not written them yet.
+ * `positions` overrides what the map shard holds, for the one caller there is:
+ * the site drag, in the middle of moving sites and yet to write them.
  */
 function bindSitesToZones(
   box: SourceBox, groupId: string, positions?: Record<string, { x: number; y: number }>,
@@ -1418,7 +1424,7 @@ export function setGroupSpatial(
  */
 export function createZone(
   session: ProjectSession, boxId: string, groupId: string, polygon: { x: number; y: number }[],
-): { result: OpenResult; tagId: string; rebound: SiteRebinding[] } | { error: string } {
+): { result: OpenResult; tagId: string } | { error: string } {
   const box = locateBox(session, boxId);
   const group = box?.tags.groups.find((g) => g.id === groupId);
   if (!box || !group) return { error: `unknown tag group (id ${groupId})` };
@@ -1428,31 +1434,30 @@ export function createZone(
   const templates = withPolygon(tag, polygon);
   if (templates !== undefined) tag.templates = templates;
   group.tags.push(tag);
-  // A new outline drawn over existing sites takes those hands in, by the same rule
-  // as every other change to either side.
-  const rebound = bindSitesToZones(box, groupId);
+  // The tags shard and nothing else: a new outline drawn over existing sites
+  // takes nobody in (see `bindSitesToZones`).
   const result = commit(session, "Draw a zone", `struct:${structCounter++}`, [
     { path: tagsFile(session, box), content: canonicalStringify(box.tags) },
-    ...(rebound.length > 0 ? [{ path: handsFile(session, box), content: canonicalStringify(box.hands) }] : []),
   ]);
-  return "error" in result ? result : { result, tagId: tag.id, rebound };
+  return "error" in result ? result : { result, tagId: tag.id };
 }
 
 /**
  * Set (or clear) a zone's outline. One commit per gesture, so one undo step per
  * traced or dragged shape.
  *
- * The shape having moved, the hands standing in it may have too: a boundary
- * dragged over a pin puts that hand in this zone, and a boundary dragged off one
- * takes it out (and, if nothing else covers it, leaves it loose and erroring).
- * That is the same rule a pin drag obeys, applied from the other side, and it is
- * written in the SAME commit so the geometry and the hands it moved undo as one
- * act.
+ * THE TAGS SHARD AND NOTHING ELSE. Moving, reshaping or clearing an outline does
+ * not touch a single hand's `chosen` binding (the ruling of 2026-09-07): a zone
+ * is geometry and a binding is content, and dragging a zone sixty points used to
+ * strip `chosen` off every hand the outline left behind - one of them losing the
+ * block entirely - with nothing said and the project left invalid. The canvas
+ * has said this since 2026-08-06 (see `applyOutline` in map-view.ts); this side
+ * had not caught up.
  */
 export function setZonePolygon(
   session: ProjectSession, boxId: string, groupId: string, tagId: string,
   polygon: { x: number; y: number }[] | undefined,
-): { result: OpenResult; rebound: SiteRebinding[] } | { error: string } {
+): { result: OpenResult } | { error: string } {
   const box = locateBox(session, boxId);
   const group = box?.tags.groups.find((g) => g.id === groupId);
   const tag = group?.tags.find((t) => t.id === tagId);
@@ -1460,32 +1465,28 @@ export function setZonePolygon(
   const templates = withPolygon(tag, polygon);
   if (templates === undefined) delete tag.templates;
   else tag.templates = templates;
-  const rebound = bindSitesToZones(box, groupId);
   // Keyed per zone, so dragging one shape's vertices coalesces into one step while
   // moving a different zone starts a new one.
   const result = commit(session, polygon === undefined ? "Clear a zone" : "Shape a zone", `zone:${tagId}`, [
     { path: tagsFile(session, box), content: canonicalStringify(box.tags) },
-    ...(rebound.length > 0 ? [{ path: handsFile(session, box), content: canonicalStringify(box.hands) }] : []),
   ]);
-  return "error" in result ? result : { result, rebound };
+  return "error" in result ? result : { result };
 }
 
 /**
  * Move a zone through the stack: front, forward, backward, back.
  *
- * A VIEW gesture with a content consequence, and it has to be honest about the
- * second half. Which zone owns a pin is the frontmost zone the pin stands in
- * (`zoneAt`), so restacking can rebind hands wherever two zones overlap - a room
- * brought in front of its wing takes the hands standing in it. That is the rule
- * this map already runs on (geometry moves, bindings follow), so it is one
- * commit reporting its rebindings exactly as a reshape does.
+ * A VIEW gesture, and only that. Which zone is drawn in front of which changes
+ * the picture; it changes no hand's binding, by the same ruling as a reshape
+ * (2026-09-07). A pin that now looks as if it stands in the room rather than the
+ * wing is a pin somebody can drag, and dragging it is the gesture that means it.
  *
  * A move that changes nothing returns without writing: "bring to front" on the
  * frontmost zone should not cost a file write or an undo step.
  */
 export function restackZone(
   session: ProjectSession, boxId: string, groupId: string, tagId: string, move: StackMove,
-): { result: OpenResult; rebound: SiteRebinding[] } | { error: string } {
+): { result: OpenResult } | { error: string } {
   const box = locateBox(session, boxId);
   const group = box?.tags.groups.find((g) => g.id === groupId);
   const tag = group?.tags.find((t) => t.id === tagId);
@@ -1495,10 +1496,9 @@ export function restackZone(
   const drawn = group.tags.filter((t) => polygonOf(t) !== undefined)
     .map((t) => { const z = zOf(t); return { id: t.id, ...(z !== undefined ? { z } : {}) }; });
   const z = restack(drawn, tagId, move);
-  if (z === undefined) return { result: reload(session), rebound: [] };
+  if (z === undefined) return { result: reload(session) };
 
   tag.templates = withZ(tag, z);
-  const rebound = bindSitesToZones(box, groupId);
   // Its OWN undo step, not the `zone:<id>` key a reshape uses. That key exists to
   // coalesce a continuous gesture - dragging one shape's vertices is one edit,
   // however many frames it took - and a restack is a discrete command from a
@@ -1506,9 +1506,8 @@ export function restackZone(
   // before it, which is not what anybody pressing undo once is asking for.
   const result = commit(session, "Restack a zone", `struct:${structCounter++}`, [
     { path: tagsFile(session, box), content: canonicalStringify(box.tags) },
-    ...(rebound.length > 0 ? [{ path: handsFile(session, box), content: canonicalStringify(box.hands) }] : []),
   ]);
-  return "error" in result ? result : { result, rebound };
+  return "error" in result ? result : { result };
 }
 
 /**

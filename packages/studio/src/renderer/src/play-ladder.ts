@@ -30,14 +30,15 @@ export const PLAY_RUNGS: readonly PlayRung[] = ["solo", "shared", "venue"];
  *  brings. Read on the Play field, and nowhere else: the point of the ladder
  *  is that the features it governs are silent about it.
  *
- *  `venue` is not a rung an author picks. It is set by the Storylet Server a
- *  project came from, and the label and blurb here exist for the one case that
- *  needs them: a project that already carries it, whose field must say what it
- *  is rather than lie about it. */
+ *  `venue` is not a rung an author picks. It is set by the server a project came
+ *  from, and the label and blurb here exist for the one case that needs them: a
+ *  project that already carries it, whose field must say what it is rather than
+ *  lie about it. Neither of them names a product: the editor knows about
+ *  servers, not about which one (9.1, "half-obvious, and no more"). */
 export const RUNG_LABEL: Record<PlayRung, string> = {
   solo: "Solo",
   shared: "Shared world",
-  venue: "Venue (set by a Storylet Server)",
+  venue: "Venue (set by the server this project came from)",
 };
 
 export const RUNG_BLURB: Record<PlayRung, string> = {

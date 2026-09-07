@@ -43,7 +43,7 @@ import type { PaneShell } from "@wildwinter/app-shell";
 import {
   renderBoxCentre, renderDeckCentre, renderDecksCentre, renderHandsCentre, renderNav, renderProblems, renderProjectCentre, renderReviewBar,
 } from "./views.js";
-import { cardHasContent, crumbTrail, navId, setCameFrom, vcKeys } from "./views.js";
+import { cardHasContent, crumbTrail, navId, projectLead, setCameFrom, vcKeys } from "./views.js";
 import type { Focus, ViewActions } from "./views.js";
 import { foldVc, lockControls, lockNotice, paintVcBadges, shapeNotice } from "./vc-view.js";
 import {
@@ -65,7 +65,7 @@ import { mountLiveLinkChip } from "./live-link.js";   // Live Link: the bottom-r
 import type { LiveLinkChip } from "./live-link.js";
 import { canvasId, MAP_CANVAS } from "../../shared/api.js";
 import { showUpdaterDialog, feedUpdaterDownloadProgress } from "./updater-dialog.js";
-import { askPush, askServer } from "./server-dialog.js";
+import { askLeave, askPush, askServer } from "./server-dialog.js";
 import type { PushOptions } from "./server-dialog.js";
 import type {
   BoxEdit, BoxKit, CardDto, CardEdit, ConditionProperty, ContractBreakDto, TagGroupEdit, MenuCommand, OpenResult, PackOffer, Problem, ProjectDto,
@@ -711,10 +711,10 @@ const actions: ViewActions = {
             const shaped = await studio.setZonePolygon(box.id, group, tagId, polygon.length === 0 ? undefined : polygon);
             if ("error" in shaped) { flashError(shaped.error); return; }
             if (polygon.length === 0) { applyAndRedraw(shaped.result); return; }
+            // A quiet save: the canvas has already drawn the new outline, and a
+            // dragged outline rebinds nobody (see `applyOutline` in map-view.ts),
+            // so there is nothing to tell it about.
             applyResult(shaped.result);
-            // A dragged outline can take hands in and turn others loose. The canvas
-            // is still up and holding a selection, so it is TOLD rather than rebuilt.
-            mapView?.rebound(shaped.rebound);
             void refreshVc();
           })();
         },
@@ -2231,21 +2231,9 @@ function openNewProject(): void {
 function renderWorkspace(): void {
   reportLinkFocus();
   if (!project) return;
-  // A13: the project name is a WAY HOME, as it is in Patterpad. The project
-  // overview page existed with exactly one route to it - the navigator's project
-  // row - so collapsing the navigator made the page unreachable. Patterpad
-  // reaches its overview two ways, the topbar name being one.
-  // ...and the tooltip says WHERE, because two projects can share a name and
-  // nothing else on the screen tells them apart - which bit the author on a
-  // second copy of the Village. Patterpad's topbar name carries the root path
-  // for exactly this reason; ours keeps the destination line above it, since
-  // this button also goes somewhere and Patterpad's does not say so.
-  shell.topbarLead.replaceChildren(el("button", {
-    className: "pname",
-    text: `${project.name} - Storyletter`,
-    tip: `The project overview\n${project.dir}`,
-    onClick: () => actions.focus({ kind: "project" }),
-  }));
+  // The name, the way home, and - for a project a server has not seen the whole
+  // of - where it stands. Built in views.ts so what it says is testable.
+  shell.topbarLead.replaceChildren(projectLead(project, remote, () => actions.focus({ kind: "project" })));
   renderNavPane();
   if (!renderCardPanes() && !renderDetailPanes()) fillCentre();
   renderProblemsBar();
@@ -2791,6 +2779,11 @@ async function boot(): Promise<void> {
   studio.onUpdaterSaveBeforeInstall(async () => { await saver.flush(); return { ok: !saver.pending }; });
   studio.onUpdaterPrompt((opts) => showUpdaterDialog(opts));
   studio.onUpdaterDownloadProgress(feedUpdaterDownloadProgress);
+  // The way out of a project the server has not seen the whole of. Registered
+  // at boot for the same reason as the four above: main asks at the moment of
+  // quitting, and a question nobody is listening for falls back to a native box
+  // the app is not supposed to be wearing.
+  studio.onLeavePrompt((opts) => askLeave(opts));
   studio.onSearchNavigate(goTo);   // Find hits, and the `--at` jump of a running app
   // Find's Replace tab: main asks for pending edits on disk before it rewrites,
   // and says when it has, so the open document shows the new text.

@@ -41,20 +41,48 @@ interface StudioSlice {
   navExpanded?: string[];
   mapGroups?: Record<string, string>;
   canvasCameras?: Record<string, { x: number; y: number; scale: number }>;
-  /** The keys a pack exchange was paired with, by address. Here and never in a
-   *  project: a key belongs to the person at the keyboard, like the identity
-   *  two fields up, and a shard that carried one would hand it to everybody the
-   *  project is ever sent to. Sealed by the host when the OS offers somewhere
-   *  to seal it (see `secret` on the constructor). */
-  servers?: Record<string, StoredServerKey>;
+  /** The keys a pack exchange was paired with, by address and then by ROLE.
+   *  Here and never in a project: a key belongs to the person at the keyboard,
+   *  like the identity two fields up, and a shard that carried one would hand
+   *  it to everybody the project is ever sent to. Sealed by the host when the
+   *  OS offers somewhere to seal it (see `secret` on the constructor).
+   *
+   *  TWO SLOTS PER ADDRESS, because a person with both jobs holds two keys
+   *  (design/engine-server.md 9.1 point 5). Keyed by address alone until
+   *  2026-09-07, which meant pairing a second project as a designer overwrote
+   *  the author key for the same server: the author's project then pulled as a
+   *  designer, its sidecar flipped role, and the read-only rule on the shape
+   *  went with it. A project uses the slot its own sidecar's role names. */
+  servers?: Record<string, ServerSlots>;
 }
 
-/** One paired address. `role` rides along because the editor needs it before
- *  any call is made: it is what the shape shards are read-only under. */
+/** The keys held for one address: at most one per role. A file written before
+ *  the split holds a single key here instead, which is read as the one slot
+ *  its own `role` names. */
+export type ServerSlots = Partial<Record<ServerRole, StoredServerKey>> | StoredServerKey;
+
+export type ServerRole = "author" | "designer";
+
+/** One paired key. `role` rides along because the editor needs it before any
+ *  call is made: it is what the shape shards are read-only under, and it is now
+ *  also the slot the key sits in. */
 export interface StoredServerKey {
   key: string;
-  role: "author" | "designer";
+  role: ServerRole;
   installation?: string;
+}
+
+/** Is this the pre-split shape: one key for the address, whatever its role? */
+const isSingleKey = (slots: ServerSlots): slots is StoredServerKey =>
+  typeof (slots as StoredServerKey).key === "string";
+
+/** The slots at an address, with a pre-split single key read as the one slot it
+ *  belongs in. Read-time only: nothing rewrites the file until a key is paired
+ *  or forgotten, so an old file keeps working and a new one is written in the
+ *  new shape the first time either happens. */
+function slotsOf(slots: ServerSlots | undefined): Partial<Record<ServerRole, StoredServerKey>> {
+  if (slots === undefined) return {};
+  return isSingleKey(slots) ? { [slots.role]: slots } : slots;
 }
 
 // A deck opens on its NODE canvas: a deck is a web of cards that lead to each
@@ -276,34 +304,74 @@ export class StudioStore {
   setPanes(panes: PaneState): void { this.store.setPanes(panes); }
   setIdentity(identity: { name: string; email?: string }): void { this.store.setIdentity(identity); }
 
-  // --- the pack exchange's keys, by address ---------------------------------------
+  // --- the pack exchange's keys, by address and role --------------------------------
   // Kept whole rather than merged into: forgetting one has to actually remove
   // it, and a patch that only overwrote fields would leave a dead key in the
   // file for anyone reading it later.
 
-  /** The key paired with this address, unsealed, or nothing. */
-  serverKey(address: string): StoredServerKey | undefined {
-    const stored = this.store.get().app.servers?.[address];
+  /** Unseal a stored key, or say there is none. A key we can no longer unseal
+   *  (a keychain that moved machines) is a key that is gone: say so by having
+   *  none, so the author is offered the dialog rather than a call that will be
+   *  refused. */
+  private unsealed(stored: StoredServerKey | undefined): StoredServerKey | undefined {
     if (stored === undefined) return undefined;
     const key = this.secret.unseal(stored.key);
-    // A key we can no longer unseal (a keychain that moved machines) is a key
-    // that is gone: say so by having none, so the author is offered the dialog
-    // rather than a call that will be refused.
     return key === undefined ? undefined : { ...stored, key };
   }
 
+  /**
+   * The key paired with this address for this role, unsealed, or nothing.
+   *
+   * With no role asked for, the answer is the address's only key: a caller
+   * that has no role to match by (a pack offering its address before anything
+   * has been opened) should not be handed one of two at random.
+   */
+  serverKey(address: string, role?: ServerRole): StoredServerKey | undefined {
+    const slots = slotsOf(this.store.get().app.servers?.[address]);
+    if (role !== undefined) return this.unsealed(slots[role]);
+    const held = Object.values(slots);
+    return held.length === 1 ? this.unsealed(held[0]) : undefined;
+  }
+
+  /** Which roles this address holds a key for. What "Forget this server" reads
+   *  to say what it is about to forget. */
+  serverRoles(address: string): ServerRole[] {
+    return Object.keys(slotsOf(this.store.get().app.servers?.[address])) as ServerRole[];
+  }
+
+  /** Keep a key in its own role's slot, leaving the other role's alone. */
   setServerKey(address: string, entry: StoredServerKey): void {
     const servers = { ...this.store.get().app.servers };
-    servers[address] = { ...entry, key: this.secret.seal(entry.key) };
+    servers[address] = {
+      ...slotsOf(servers[address]),
+      [entry.role]: { ...entry, key: this.secret.seal(entry.key) },
+    };
     this.store.patchApp({ servers });
   }
 
-  /** Forget this server: the key goes, and with it every piece of chrome that
-   *  depended on it. */
-  forgetServer(address: string): void {
+  /**
+   * Forget this server: the key goes, and with it every piece of chrome that
+   * depended on it.
+   *
+   * With a role, ONE slot goes and the other stays, which is what an author who
+   * also designs at this venue means by forgetting the key the open project
+   * uses. With no role, the address goes whole: there is no open project to
+   * narrow it by, so leaving half of it behind would be forgetting a server
+   * that then carries on appearing.
+   */
+  forgetServer(address: string, role?: ServerRole): void {
     const servers = { ...this.store.get().app.servers };
-    if (!(address in servers)) return;
-    delete servers[address];
+    const slots = slotsOf(servers[address]);
+    if (role === undefined) {
+      if (!(address in servers)) return;
+      delete servers[address];
+    } else {
+      if (slots[role] === undefined) return;
+      const kept = { ...slots };
+      delete kept[role];
+      if (Object.keys(kept).length === 0) delete servers[address];
+      else servers[address] = kept;
+    }
     this.store.patchApp({ servers });
   }
 

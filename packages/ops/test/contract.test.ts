@@ -206,7 +206,7 @@ describe("the lines an editor shows", () => {
       })],
     }));
     expect(notes.get("hand:the-forge")!.map((n) => n.line))
-      .toEqual(["Bound at the-park: a station deals this hand"]);
+      .toEqual(["Dealt at the-park"]);
     expect(notes.get("box:street")!.map((n) => n.line)).toEqual(["Ticked at the-park every 60s"]);
     expect(notes.get("property:story.visits")!.map((n) => n.line)).toEqual(["Carried in pockets at the-park"]);
     expect(notes.get("field:prompt")!.map((n) => n.line)).toEqual(["Read by the crew at the-park"]);

@@ -21,6 +21,10 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ### Changed
 
+- **`contract show` says `dealt here` against a hand a venue depends on**, in place of a sentence
+  about what deals it. What the far end runs is the far end's business; what the contract records is
+  that this hand is dealt at that installation.
+
 - **The box map moved into a shard of its own, `map.storyletmap`.** Where a box's hands stand
   used to sit inside `view.storyletview` beside the deck canvases. It does not any more: a
   hand's position ships in the bundle's `maps` block and is where a screen or a kiosk stands,

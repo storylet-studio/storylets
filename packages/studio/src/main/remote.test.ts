@@ -25,23 +25,28 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { StudioStore } from "./store.js";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 // JSZip only to SEAL a pack the fake sends, which is the one thing the public
 // pack op does not do (the record is the far end's file, added on the way out).
 // The pack itself is still `runPack`'s.
 import JSZip from "jszip";
-import { loadProject, runPack } from "@storylet-studio/ops";
+import { loadProject, runFormat, runPack } from "@storylet-studio/ops";
 import { openProject } from "./project.js";
-import { commit, forgetLastCounted, saveBox, saveCard } from "./mutate.js";
+import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
 import {
-  PULL_AS_DESIGNER, REMOTE_FILE, addressOf, clearEdits, contractBreaks, countEdit, failed,
-  isShapeShard, menuState, normaliseAddress, openPackBytes, pair, packAddress, packProject,
-  planPull, pullPack, pushPack, readRemote, refuseWrite, remoteInPack, resolveLeave, statusLine,
-  writeRemote,
+  commit, createHand, forgetLastCounted, moveCardsOnCanvas, moveSitesOnMap, postComment, saveBox,
+  saveCard, setGroupSpatial, setZonePolygon,
+} from "./mutate.js";
+import {
+  PULL_AS_DESIGNER, REMOTE_FILE, addressOf, askLeave, clearEdits, contractBreaks, countEdit, failed,
+  isShapeShard, leaveChoice, leavePrompt, menuState, normaliseAddress, openPackBytes, pair,
+  packAddress, packProject, planPull, pullPack, pushPack, readRemote, refuseWrite, remoteInPack,
+  resolveLeave, statusLine, writeRemote,
 } from "./remote.js";
-import type { RemoteRecord } from "./remote.js";
+import type { InAppPrompt, LeavePrompt, RemoteRecord } from "./remote.js";
 
 const example = fileURLToPath(new URL("../../../../examples/saltmarsh.storylets", import.meta.url));
 
@@ -429,6 +434,60 @@ describe("pushing", () => {
   });
 });
 
+describe("what Storyletter sends is in the format's own canonical form", () => {
+  /** Every shard in this project, in the canonical bytes `storyletengine format`
+   *  would write. Empty means the project on disk already IS that. */
+  const notCanonical = (dir: string): string[] => {
+    const result = runFormat(loadProject(dir));
+    expect(result.issues).toEqual([]);
+    return [...result.changed.map((w) => w.path), ...result.removed]
+      .map((path) => relative(dir, path)).sort();
+  };
+
+  it("writes shards a formatter would not touch, so a push is byte-stable", async () => {
+    // The other half of a push that comes back "not in sync": the far end stores
+    // what it is sent in its own canonical order, so a pack whose shards were
+    // written in some other order reads as a shape change on files nobody
+    // touched. Nothing here can fix the far end's comparison, and it does not
+    // try; what it holds is OUR end of the bargain, which is that every shard
+    // this app writes is already canonical.
+    const dir = copyExample("canonical");
+    // The fixture first, so a failure says which half moved.
+    expect(notCanonical(dir), "the worked example is not canonical to begin with").toEqual([]);
+
+    const opened = openProject(dir);
+    if ("error" in opened) throw new Error(opened.error);
+    const session = opened.session;
+    const box = session.dto.boxes[0]!;
+    const deck = box.decks[0]!;
+
+    // One edit through each shard the editor writes: a card (deck), a box, a
+    // hand and its map site, a zone outline (tags), a canvas (view), a comment
+    // (notes), and the project file.
+    expect("error" in saveCard(session, deck.id, deck.cards[0]!.id, { title: "Rewritten" })).toBe(false);
+    expect("error" in saveBox(session, box.id, { purpose: "Rewritten too" })).toBe(false);
+    const hand = createHand(session, box.id);
+    if ("error" in hand) throw new Error(hand.error);
+    const group = session.loaded.source!.boxes[0]!.tags.groups[0]!;
+    expect("error" in setGroupSpatial(session, box.id, group.id, true)).toBe(false);
+    expect("error" in setZonePolygon(session, box.id, group.id, group.tags[0]!.id,
+      [{ x: 0, y: 0 }, { x: 90, y: 0 }, { x: 90, y: 90 }, { x: 0, y: 90 }])).toBe(false);
+    expect("error" in moveSitesOnMap(session, box.id, group.id,
+      [{ id: hand.handId, x: 40, y: 40 }])).toBe(false);
+    expect("error" in moveCardsOnCanvas(session, deck.id, [{ id: deck.cards[0]!.id, x: 30, y: 60 }])).toBe(false);
+    expect("error" in postComment(session, deck.cards[0]!.id, "t_1", "Sam", "Does this read?")).toBe(false);
+
+    expect(notCanonical(session.loaded.dir)).toEqual([]);
+
+    // And what actually goes up: every shard in the pack, byte for byte what a
+    // formatter would leave.
+    const sent = await openPackBytes(await packProject(session.loaded.dir), session.loaded.dir);
+    for (const [name, text] of sent.shards) {
+      expect(canonicalStringify(parseSource(text)), `${name} was packed in some other order`).toBe(text);
+    }
+  });
+});
+
 describe("the note and the breaks a push carries", () => {
   it("sends the note up with the pack", async () => {
     const mine = copyExample("push-note");
@@ -500,6 +559,81 @@ describe("a pack that names where it came from", () => {
   it("answers with nothing for an ordinary pack, and for bytes that are not one", async () => {
     expect(await packAddress(server.revisions[0]!, seedDir)).toBeUndefined();
     expect(await packAddress(Buffer.from("not a zip"), seedDir)).toBeUndefined();
+  });
+});
+
+describe("two jobs at one venue", () => {
+  /** What main does with the open project in hand: the key whose ROLE matches
+   *  this project's sidecar. Written out here because the caller is the Electron
+   *  half and this is the whole of the rule it applies. */
+  const keyFor = (store: StudioStore, dir: string): { key: string; role: string } | undefined => {
+    const remote = readRemote(dir);
+    if (remote === undefined) return undefined;
+    const held = store.serverKey(addressOf(remote), remote.role);
+    return held === undefined ? undefined : { key: held.key, role: held.role };
+  };
+
+  it("keeps an author's project and a designer's project apart at one address", async () => {
+    // The fault of 2026-09-07, end to end. Pairing the designer project second
+    // used to overwrite the author project's key, and the author's project then
+    // pulled as a designer: its sidecar flipped role, and the read-only rule on
+    // the shape went with it.
+    const settings = mkdtempSync(join(tmpdir(), "remote-two-roles-"));
+    const store = new StudioStore(settings);
+
+    const writing = copyExample("two-roles-author");
+    const author = await pair(server.origin, "AUTH-0001", { app: "Storyletter", host: "test" });
+    if (failed(author)) throw new Error(author.error);
+    store.setServerKey(server.origin, { key: author.key, role: author.role, installation: author.installation });
+    writeRemote(writing, {
+      schema: "storylets/server-provenance@0", server: server.origin, address: server.origin,
+      installation: "the-park", version: "seed", revision: 1, role: "author", edits: 0,
+    });
+
+    // ...and now the same person pairs a SECOND project as a designer.
+    const shaping = copyExample("two-roles-designer");
+    const designer = await pair(server.origin, "DSGN-0001", { app: "Storyletter", host: "test" });
+    if (failed(designer)) throw new Error(designer.error);
+    store.setServerKey(server.origin, { key: designer.key, role: designer.role, installation: designer.installation });
+    writeRemote(shaping, {
+      schema: "storylets/server-provenance@0", server: server.origin, address: server.origin,
+      installation: "the-park", version: "seed", revision: 1, role: "designer", edits: 0,
+    });
+
+    expect(keyFor(store, writing)).toEqual({ key: author.key, role: "author" });
+    expect(keyFor(store, shaping)).toEqual({ key: designer.key, role: "designer" });
+    expect(author.key).not.toBe(designer.key);
+
+    // The author's project is still an author's, so the shape is still refused
+    // to it: the rule that went missing when the key was overwritten.
+    expect(refuseWrite(readRemote(writing)!.role, ["/p/a.storylethands"])).toBe(PULL_AS_DESIGNER);
+    expect(refuseWrite(readRemote(shaping)!.role, ["/p/a.storylethands"])).toBeUndefined();
+
+    // And a pull with the author's key really is an author's pull: the pack the
+    // far end sends back says so.
+    const pulled = await pullPack(server.origin, keyFor(store, writing)!.key, { installation: "the-park", version: "seed" });
+    expect(failed(pulled)).toBe(false);
+    if (failed(pulled)) return;
+    expect(pulled.role).toBe("author");
+  });
+
+  it("forgetting the open project's key leaves the other job's alone", () => {
+    const settings = mkdtempSync(join(tmpdir(), "remote-forget-slot-"));
+    const store = new StudioStore(settings);
+    store.setServerKey(server.origin, { key: "author-key", role: "author" });
+    store.setServerKey(server.origin, { key: "designer-key", role: "designer" });
+
+    const writing = copyExample("forget-slot");
+    writeRemote(writing, {
+      schema: "storylets/server-provenance@0", server: server.origin, address: server.origin,
+      installation: "the-park", version: "seed", revision: 1, role: "author", edits: 0,
+    });
+    store.forgetServer(addressOf(readRemote(writing)!), readRemote(writing)!.role);
+
+    // The author's project has no key now, so it has no Server menu either.
+    expect(keyFor(store, writing)).toBeUndefined();
+    expect(menuState(readRemote(writing), false)).toBeUndefined();
+    expect(store.serverKey(server.origin, "designer")!.key).toBe("designer-key");
   });
 });
 
@@ -597,6 +731,106 @@ describe("unpushed edits", () => {
     const dir = copyExample("no-remote");
     countEdit(dir);
     expect(readRemote(dir)).toBeUndefined();
+  });
+});
+
+describe("the prompt on the way out", () => {
+  // The app has ONE dialog style, and until 2026-09-07 this question wore the
+  // OS's: a `showMessageBox` attached to the editor window, which on the close
+  // path had already had its close deferred. Dismissing that sheet let the
+  // deferred close through whatever button had been clicked, so Cancel closed
+  // the window and Push closed it without pushing. The prompt is the renderer's
+  // now; the native box is the fallback and nothing else.
+  const standing = { revision: 3, edits: 3 };
+  const indexOf = (prompt: LeavePrompt, label: string): number => {
+    const at = prompt.buttons.indexOf(label);
+    if (at < 0) throw new Error(`no "${label}" button in [${prompt.buttons.join(", ")}]`);
+    return at;
+  };
+  /** A renderer that draws the dialog and then somebody clicks `label`. */
+  const clicks = (label: string) => (prompt: LeavePrompt): InAppPrompt =>
+    ({ shown: Promise.resolve(), answer: Promise.resolve(indexOf(prompt, label)) });
+  /** The same, natively. */
+  const press = (label: string) => async (prompt: LeavePrompt): Promise<number> =>
+    indexOf(prompt, label);
+  const nativeRefusal = async (): Promise<number> => { throw new Error("the native box must not be reached"); };
+
+  it("says where the project stands, and offers the act it is in the middle of", () => {
+    expect(leavePrompt(standing, "quit", true)).toMatchObject({
+      message: "3 edits unpushed",
+      detail: "This project has edits the server has not seen.",
+      buttons: ["Push to server", "Quit without pushing", "Cancel"],
+      defaultId: 0, cancelId: 2,
+    });
+    expect(leavePrompt(standing, "close", true).buttons[1]).toBe("Close without pushing");
+  });
+
+  it("offers no push when the server cannot be reached, and says so", () => {
+    const prompt = leavePrompt(standing, "quit", false);
+    expect(prompt.detail).toBe(
+      "This project has edits the server has not seen, and the server cannot be reached.");
+    expect(prompt.buttons).toEqual(["Quit without pushing", "Cancel"]);
+    // The edits wait: there is no way through this prompt that pushes.
+    expect(prompt.choices).not.toContain("push");
+  });
+
+  for (const act of ["quit", "close"] as const) {
+    const leave = act === "quit" ? "Quit without pushing" : "Close without pushing";
+
+    it(`answers all three ways on the ${act} path`, async () => {
+      const prompt = leavePrompt(standing, act, true);
+      expect(await askLeave(prompt, clicks("Push to server"), nativeRefusal)).toBe("push");
+      expect(await askLeave(prompt, clicks(leave), nativeRefusal)).toBe("leave");
+      expect(await askLeave(prompt, clicks("Cancel"), nativeRefusal)).toBe("cancel");
+    });
+  }
+
+  it("reads an index that is not a button as a cancel", () => {
+    const prompt = leavePrompt(standing, "quit", true);
+    expect(leaveChoice(prompt, 7)).toBe("cancel");
+    expect(leaveChoice(prompt, -1)).toBe("cancel");
+  });
+
+  it("falls back to the native box when there is no renderer to ask", async () => {
+    const prompt = leavePrompt(standing, "quit", true);
+    expect(await askLeave(prompt, undefined, press("Cancel"))).toBe("cancel");
+  });
+
+  it("falls back when the renderer never says it drew the dialog", async () => {
+    const prompt = leavePrompt(standing, "quit", true);
+    const silent = (): InAppPrompt =>
+      ({ shown: new Promise<void>(() => { /* never */ }), answer: new Promise<number>(() => { /* never */ }) });
+    expect(await askLeave(prompt, silent, press("Cancel"), 10)).toBe("cancel");
+    const threw = (): InAppPrompt =>
+      ({ shown: Promise.reject(new Error("the renderer went")), answer: Promise.resolve(0) });
+    expect(await askLeave(prompt, threw, press("Cancel"))).toBe("cancel");
+  });
+
+  it("WAITS for the person once the dialog is up: a long think is not a fallback", async () => {
+    // The fault this split exists for, found by launching the app and leaving
+    // the prompt sitting there: one deadline over both the bridge and the human
+    // put a system box on top of the dialog four seconds in.
+    const prompt = leavePrompt(standing, "quit", true);
+    let click = (_index: number): void => { /* replaced */ };
+    const thinking = (): InAppPrompt => ({
+      shown: Promise.resolve(),
+      answer: new Promise<number>((resolve) => { click = resolve; }),
+    });
+    const answering = askLeave(prompt, thinking, nativeRefusal, 5);
+    await new Promise((r) => setTimeout(r, 30));   // well past the deadline
+    click(0);
+    expect(await answering).toBe("push");
+  });
+
+  it("reads an answer that is not a button as a cancel, however it arrives", async () => {
+    const prompt = leavePrompt(standing, "quit", true);
+    const confused = (): InAppPrompt => ({ shown: Promise.resolve(), answer: Promise.resolve(9) });
+    expect(await askLeave(prompt, confused, nativeRefusal)).toBe("cancel");
+    // ...and a renderer that drew it and then fell over answers as Cancel too,
+    // rather than putting a second dialog in front of a person who has one.
+    const fell = (): InAppPrompt =>
+      ({ shown: Promise.resolve(), answer: Promise.reject(new Error("gone")) });
+    expect(await askLeave(prompt, fell, nativeRefusal)).toBe("cancel");
   });
 });
 

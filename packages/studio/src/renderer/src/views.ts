@@ -177,6 +177,36 @@ export function setCameFrom(from: { label: string; go: () => void } | undefined)
 }
 
 
+/**
+ * The topbar's lead: the project's name, which is also the way home.
+ *
+ * A13: the project name is a WAY HOME, as it is in Patterpad. The overview page
+ * had exactly one route to it - the navigator's project row - so collapsing the
+ * navigator made it unreachable. The tooltip says WHERE, because two projects
+ * can share a name and nothing else on screen tells them apart.
+ *
+ * AND, for a project a server has not seen the whole of, where it stands. That
+ * suffix used to live in the OS window title, where on macOS nobody could read
+ * it: `titleBarStyle: "hiddenInset"` means the OS title is never drawn, so
+ * "3 edits unpushed" was written to a bar that does not exist (found end to
+ * end, 2026-09-07). It sits here now, in the same quiet register and the same
+ * words as the Server menu's status line, and it is SILENT while the project is
+ * level: a project in sync says nothing, exactly as it said nothing before.
+ */
+export function projectLead(
+  project: { name: string; dir: string },
+  remote: { status: string; edits: number } | undefined,
+  go: () => void,
+): HTMLElement {
+  const button = el("button", {
+    className: "pname", tip: `The project overview\n${project.dir}`, onClick: go,
+  }, `${project.name} - Storyletter`);
+  if (remote !== undefined && remote.edits > 0) {
+    button.append(el("span", { className: "pname-note", text: ` - ${remote.status}` }));
+  }
+  return button;
+}
+
 export function crumbTrail(segments: { label: string; go: () => void }[], ...right: (Node | null)[]): HTMLElement {
   const bar = el("div", { className: "crumbs" });
   const up = segments[segments.length - 1];

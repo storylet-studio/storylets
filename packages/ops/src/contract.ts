@@ -216,8 +216,10 @@ export function contractIssues(source: SourceProject): Issue[] {
 export interface ContractNote {
   /** The installation that depends on this entity. */
   installation: string;
-  /** The line itself, in the density grammar ("Bound at the-park: a station
-   *  deals this hand"). */
+  /** The line itself, in the density grammar ("Dealt at the-park", "Ticked at
+   *  the-park every 60s"). Says what the venue depends on, in the format's own
+   *  words: what runs at the other end is the other end's business and no name
+   *  for it belongs in a line an author reads. */
   line: string;
 }
 
@@ -239,7 +241,7 @@ export function contractNotes(source: SourceProject): Map<string, ContractNote[]
   for (const contract of source.contracts) {
     const at = contract.shard.installation;
     for (const hand of contract.shard.hands ?? []) {
-      push(`hand:${hand}`, { installation: at, line: `Bound at ${at}: a station deals this hand` });
+      push(`hand:${hand}`, { installation: at, line: `Dealt at ${at}` });
     }
     for (const [gameId, want] of Object.entries(contract.shard.boxes ?? {})) {
       push(`box:${gameId}`, { installation: at, line: `Ticked at ${at} every ${want.turn}s` });

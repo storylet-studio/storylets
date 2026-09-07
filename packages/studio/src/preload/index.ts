@@ -7,7 +7,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { JOB_PROGRESS_CHANNEL, PROJECT_CHANGED } from "../shared/api.js";
 import type { JobProgress } from "../shared/api.js";
 import type {
-  BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, LiveLinkFrame, LiveLinkStatus, MenuCommand, OpenResult, PackOffer, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
+  BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, LeavePromptDto, LiveLinkFrame, LiveLinkStatus, MenuCommand, OpenResult, PackOffer, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
   UpdaterPromptOptions,
   UpdaterDownloadProgress,
 } from "../shared/api.js";
@@ -221,6 +221,26 @@ const api: StudioApi = {
   },
   onMenu: (handler: (command: MenuCommand) => void) => {
     ipcRenderer.on("menu", (_event, command: MenuCommand) => handler(command));
+  },
+
+  // The way out of a project the server has not seen the whole of. Shaped like
+  // the updater's prompt below: main sends the question, the renderer draws it
+  // in the app's own dialog, and the answer goes back as a button index.
+  onLeavePrompt: (handler: (opts: LeavePromptDto) => Promise<number>) => {
+    ipcRenderer.on("server:leave-prompt", (_event, opts: LeavePromptDto) => {
+      // TWO messages, not one. "shown" goes back at once and is how main tells a
+      // renderer that is drawing the dialog from one that is not there at all;
+      // the reply comes when somebody clicks, which is however long a person
+      // takes. Timing the person instead put a native box on top of the dialog
+      // after four seconds.
+      let answer: Promise<number>;
+      try { answer = handler(opts); } catch { answer = Promise.resolve(opts.cancelId); }
+      ipcRenderer.send("server:leave-shown");
+      void answer.then(
+        (idx) => ipcRenderer.send("server:leave-reply", idx),
+        () => ipcRenderer.send("server:leave-reply", opts.cancelId),
+      );
+    });
   },
 
   // The auto-updater's four channels. The names are the shell's UPDATER_CHANNELS

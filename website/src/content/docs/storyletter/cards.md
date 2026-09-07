@@ -47,8 +47,8 @@ one each per playthrough) and **Properties** (the deck's own `@deck` state).
 
 Whether you're shown **Shared across playthroughs** depends on the project's
 [Play setting](/storyletter/workspace/#play-how-much-of-the-app-you-see): a solo project
-hasn't got it. A project served by a Storylet Server also gets **Durable** beside it; see the
-Storylet Server documentation.
+hasn't got it. A project whose Play setting reads Venue (set by the server it came from) also
+gets **Durable** beside it.
 
 ## The card document
 
@@ -90,8 +90,8 @@ Everything about how this card gets dealt, on one page.
   effectively shared. Offered only then, because on an unshared card it does nothing.
   Defaults to **Copies**, so the common "one in the world, one to a customer" needs
   nothing set.
-- **Durable** appears on a project served by a Storylet Server, beside Shared and in the same
-  three settings; see the Storylet Server documentation.
+- **Durable** appears on a project whose Play setting reads Venue, beside Shared and in the same
+  three settings: the value survives the run boundary the server it came from draws.
 - **Where**: the one you reach for most. It answers "where does this
   card come up?" in a sentence: **Anywhere**, or **The Inn**, or **anywhere in the
   forest**, or a combination. **Change** opens a picker with two sections, **Places**

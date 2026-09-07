@@ -577,6 +577,100 @@ export function statusLine(standing: RemoteStanding): string {
 export type LeaveChoice = "push" | "leave" | "cancel";
 
 /**
+ * The prompt itself, worked out here so the strings and the button order are
+ * one thing rather than three.
+ *
+ * `choices` is what each button MEANS, parallel to `buttons`, and it never
+ * crosses to the renderer: the renderer is handed labels and answers with an
+ * index, exactly as the updater's prompt does, so only this side knows which
+ * index is a push.
+ */
+export interface LeavePrompt {
+  /** The headline: where the project stands, in the status line's own words. */
+  message: string;
+  detail: string;
+  buttons: string[];
+  choices: readonly LeaveChoice[];
+  defaultId: number;
+  cancelId: number;
+}
+
+/** What the author is asked on the way out, and what each answer means. */
+export function leavePrompt(
+  standing: RemoteStanding, act: "quit" | "close", online: boolean,
+): LeavePrompt {
+  const leave = act === "quit" ? "Quit without pushing" : "Close without pushing";
+  const buttons = online ? ["Push to server", leave, "Cancel"] : [leave, "Cancel"];
+  const choices: LeaveChoice[] = online ? ["push", "leave", "cancel"] : ["leave", "cancel"];
+  return {
+    message: statusLine(standing),
+    detail: online
+      ? "This project has edits the server has not seen."
+      : "This project has edits the server has not seen, and the server cannot be reached.",
+    buttons,
+    choices,
+    defaultId: 0,
+    cancelId: buttons.length - 1,
+  };
+}
+
+/** The answer, read back. An index that is not one of the buttons is a cancel:
+ *  a way out we did not offer is not a way out. */
+export function leaveChoice(prompt: LeavePrompt, index: number): LeaveChoice {
+  return prompt.choices[index] ?? "cancel";
+}
+
+/**
+ * The renderer, asked.
+ *
+ * TWO promises, and the split is the whole point. `shown` says the dialog is up
+ * and settles in milliseconds; `answer` settles when somebody clicks, which is
+ * however long a person takes to read a question about their unpushed work. One
+ * promise for both would mean timing the PERSON, and a four-second deadline on
+ * a human answer puts a second dialog on top of the first: found by launching
+ * the app and leaving the prompt sitting there, which is what it is for.
+ */
+export interface InAppPrompt {
+  shown: Promise<void>;
+  answer: Promise<number>;
+}
+
+/** How long the renderer has to say the dialog is up before the fallback is
+ *  used. Short on purpose: this bounds a message crossing the bridge, not a
+ *  person, and a renderer that is not going to draw it has already not. */
+export const LEAVE_PROMPT_TIMEOUT = 4000;
+
+/**
+ * Ask the question, in the app's own dialog where there is one.
+ *
+ * The app must not wear two dialog styles, so the prompt is the renderer's:
+ * the same classes and the same manners as the push dialog next door. The
+ * native box stays as the FALLBACK and only that - a renderer that has gone, or
+ * one that never says it drew the thing - because the alternative is an author
+ * who cannot answer a question that is blocking their quit.
+ */
+export async function askLeave(
+  prompt: LeavePrompt,
+  inApp: ((prompt: LeavePrompt) => InAppPrompt) | undefined,
+  native: (prompt: LeavePrompt) => Promise<number>,
+  timeoutMs = LEAVE_PROMPT_TIMEOUT,
+): Promise<LeaveChoice> {
+  if (inApp === undefined) return leaveChoice(prompt, await native(prompt));
+  const asked = inApp(prompt);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const waited = new Promise<"gone">((resolve) => { timer = setTimeout(() => resolve("gone"), timeoutMs); });
+  // A rejection is folded into the value rather than caught, so one arriving
+  // after the race has given up is handled rather than left loose.
+  const up = asked.shown.then(() => "shown" as const, () => "gone" as const);
+  const first = await Promise.race([up, waited]);
+  clearTimeout(timer);
+  if (first === "shown") {
+    return leaveChoice(prompt, await asked.answer.then((index) => index, () => prompt.cancelId));
+  }
+  return leaveChoice(prompt, await native(prompt));
+}
+
+/**
  * What to do with the answer.
  *
  * A push that lands lets go; a push that is REFUSED does not, and that is the

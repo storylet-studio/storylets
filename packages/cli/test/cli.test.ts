@@ -561,7 +561,7 @@ describe("contract show", () => {
     const r = await call("contract", "show", withContract());
     expect(r.code).toBe(0);
     expect(r.out[0]).toContain("the-park  (Storylet Server 0.1.0, revision 12)");
-    expect(r.out.join("\n")).toContain("hand      docks-street   a station deals this hand");
+    expect(r.out.join("\n")).toContain("hand      docks-street   dealt here");
     expect(r.out.join("\n")).toContain("property  story.reputation");
   });
 

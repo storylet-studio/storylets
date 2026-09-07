@@ -438,7 +438,7 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
         const by = [shard.by, shard.revision !== undefined ? `revision ${shard.revision}` : undefined]
           .filter((x) => x !== undefined).join(", ");
         io.log(`${shard.installation}${by !== "" ? `  (${by})` : ""}  (${contract.path})`);
-        for (const hand of shard.hands ?? []) io.log(`  hand      ${hand}   a station deals this hand`);
+        for (const hand of shard.hands ?? []) io.log(`  hand      ${hand}   dealt here`);
         for (const [box, want] of Object.entries(shard.boxes ?? {})) {
           io.log(`  box       ${box}   the scheduler ticks it every ${want.turn}s`);
         }

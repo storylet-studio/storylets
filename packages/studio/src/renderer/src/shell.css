@@ -418,6 +418,9 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    it is reached for: it is a title first and a door second. */
 button.pname { background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: inherit; }
 button.pname:hover { color: var(--accent); }
+/* Where a server-backed project stands, beside its name: quieter again than the
+   name, because it is a fact about the project and never a nag. */
+.pname-note { opacity: 0.7; }
 .kit-dialog {
   border: none; border-radius: var(--radius-md); padding: 22px 24px;
   background: var(--surface); color: var(--ink);

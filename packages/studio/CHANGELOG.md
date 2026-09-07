@@ -10,7 +10,19 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The question on the way out is the app's own dialog now, and it answers correctly.** Closing the editor with edits the server had not seen asked in a system box attached to that window, whose close had already been held back: dismissing it let the close through whatever you had clicked, so **Cancel** closed the window and **Push to server** closed it without pushing. It is drawn where the Push dialog is drawn, in the same words, and Cancel now means cancel. A system box is still there for the case where the window cannot answer at all.
+
+- **An author's key and a designer's key for the same server no longer overwrite each other.** Connecting a second project as a designer replaced the key the first project was using, so the author's project quietly became a designer's: its role flipped and the shape pages stopped being read-only. Keys are held per address AND role now, and a project uses the one its own role names. **Forget this server** forgets the key the open project uses and leaves the other job's alone; with no project open at that address it forgets the address.
+
+- **The unpushed count is somewhere you can read it.** It was a suffix on the window title, which on macOS is never drawn: the title bar is the app's own topbar. "3 edits unpushed" sits beside the project name there instead, quietly, and says nothing at all while the project is level with the server.
+
+- **Dragging a zone outline no longer rewrites what hands chose.** Moving a zone on a box map moved the outline as asked and also stripped the zone from the hands it had left behind, one of them losing its whole `chosen` block, with no warning and the project left invalid. Geometry is geometry: moving, reshaping, restacking or drawing a zone writes the tags shard and nothing else. A hand's zone changes when you drag that hand's pin, which is the gesture that means it.
+
 ### Changed
+
+- **"Venue" says where it came from rather than naming a product**: the Play field reads "Venue (set by the server this project came from)". A hand a venue depends on says "Dealt at the-park" in its page header, in place of a sentence about what deals it.
 
 - **The map is its own shard now, and the node canvas is the author's.** Where a box's hands stand has moved out of `view.storyletview` into `map.storyletmap` beside it (design/engine-server.md 9.1 point 5): a site ships in the bundle and is where a screen or a kiosk stands, so it is the shape, while a deck's canvas never leaves the project folder. Opening a project written before the split changes nothing on screen; the map moves itself the first time you touch it, in the same undo step as the edit that moved it, and never goes back. `storyletengine format` moves a whole project at once. The compiled bundle is unchanged.
 

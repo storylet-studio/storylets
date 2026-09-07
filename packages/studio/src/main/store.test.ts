@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StudioStore } from "./store.js";
@@ -160,5 +160,110 @@ describe("the Board's List | Map choice belongs to a PROJECT", () => {
     store.forgetProject("/a/one.storylets");
     store.touchProject("/a/one.storylets", "One");
     expect(store.get().boardView).toBe("map");
+  });
+});
+
+describe("the pack exchange's keys", () => {
+  // One venue, two jobs, two keys (design/engine-server.md 9.1 point 5). Keyed
+  // by address alone until 2026-09-07: pairing a second project as a designer
+  // overwrote the author key for the same server, and the author's project then
+  // pulled as a designer with its sidecar flipped and the read-only rule gone.
+  const AT = "https://the-park.example";
+
+  const store = (dir: string): StudioStore => new StudioStore(dir);
+
+  it("keeps one key per role at one address, and hands each project its own", () => {
+    const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+    const s = store(dir);
+    s.setServerKey(AT, { key: "author-key", role: "author", installation: "the-park" });
+    s.setServerKey(AT, { key: "designer-key", role: "designer", installation: "the-park" });
+
+    // Each project asks with the role its own sidecar records.
+    expect(s.serverKey(AT, "author")).toMatchObject({ key: "author-key", role: "author" });
+    expect(s.serverKey(AT, "designer")).toMatchObject({ key: "designer-key", role: "designer" });
+    expect(s.serverRoles(AT).sort()).toEqual(["author", "designer"]);
+
+    // And across instances, because the whole point is that neither pairing
+    // costs the other one its key.
+    const again = store(dir);
+    expect(again.serverKey(AT, "author")!.key).toBe("author-key");
+    expect(again.serverKey(AT, "designer")!.key).toBe("designer-key");
+  });
+
+  it("pairing the same role again replaces that key and leaves the other", () => {
+    const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+    const s = store(dir);
+    s.setServerKey(AT, { key: "author-key", role: "author" });
+    s.setServerKey(AT, { key: "designer-key", role: "designer" });
+    s.setServerKey(AT, { key: "author-again", role: "author" });
+    expect(s.serverKey(AT, "author")!.key).toBe("author-again");
+    expect(s.serverKey(AT, "designer")!.key).toBe("designer-key");
+  });
+
+  it("forgets ONE slot when a role is named, and the address when none is", () => {
+    const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+    const s = store(dir);
+    s.setServerKey(AT, { key: "author-key", role: "author" });
+    s.setServerKey(AT, { key: "designer-key", role: "designer" });
+
+    // What Forget this server does with a project open: the key that project
+    // uses goes, and the other job is left alone.
+    s.forgetServer(AT, "author");
+    expect(s.serverKey(AT, "author")).toBeUndefined();
+    expect(s.serverKey(AT, "designer")!.key).toBe("designer-key");
+
+    // With no project to narrow it by, the address goes whole.
+    s.setServerKey(AT, { key: "author-key", role: "author" });
+    s.forgetServer(AT);
+    expect(s.serverRoles(AT)).toEqual([]);
+    expect(store(dir).serverRoles(AT)).toEqual([]);
+  });
+
+  it("answers with nothing when no role is named and there are two", () => {
+    // A pack offering an address before anything is open has no role to match
+    // by, and one of two at random is the bug this keying exists to stop.
+    const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+    const s = store(dir);
+    s.setServerKey(AT, { key: "author-key", role: "author" });
+    expect(s.serverKey(AT)!.key).toBe("author-key");
+    s.setServerKey(AT, { key: "designer-key", role: "designer" });
+    expect(s.serverKey(AT)).toBeUndefined();
+  });
+
+  it("reads a file written before the split as the one slot its role names", () => {
+    // The pre-split shape is a single key at the address. It keeps working, and
+    // is written into its own slot the next time anything is paired.
+    const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+    const file = join(dir, "studio-state.json");
+    writeFileSync(file, `${JSON.stringify({
+      recents: [], panes: {}, windows: {},
+      app: { servers: { [AT]: { key: "old-key", role: "author", installation: "the-park" } } },
+    }, null, 2)}\n`, "utf8");
+
+    const s = store(dir);
+    expect(s.serverKey(AT, "author")!.key).toBe("old-key");
+    expect(s.serverKey(AT, "designer")).toBeUndefined();
+    s.setServerKey(AT, { key: "designer-key", role: "designer" });
+    expect(s.serverKey(AT, "author")!.key).toBe("old-key");
+    expect(s.serverKey(AT, "designer")!.key).toBe("designer-key");
+  });
+
+  it("holds a key sealed, and reads a key it cannot unseal as none at all", () => {
+    // The host seals with the OS's own store where there is one. A key that will
+    // not unseal (a keychain that moved machines) is a key that is gone: the
+    // author is offered the dialog rather than a call that would be refused.
+    const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+    const sealed = new StudioStore(dir, {
+      seal: (plain) => `sealed:${plain}`,
+      unseal: (s) => (s.startsWith("sealed:") ? s.slice("sealed:".length) : undefined),
+    });
+    sealed.setServerKey(AT, { key: "author-key", role: "author" });
+    expect(sealed.serverKey(AT, "author")!.key).toBe("author-key");
+    // The same file read by a host whose keychain says no.
+    const lost = new StudioStore(dir, { seal: (p) => p, unseal: () => undefined });
+    expect(lost.serverKey(AT, "author")).toBeUndefined();
+    // ...and it is still THERE, so "forget this server" still has something to
+    // forget rather than silently doing nothing.
+    expect(lost.serverRoles(AT)).toEqual(["author"]);
   });
 });

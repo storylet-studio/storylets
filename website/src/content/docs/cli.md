@@ -261,8 +261,8 @@ properties its clocks drive, the fields its crew read.
 ```
 $ storyletengine contract show the-park.storylets
 the-park  (Storylet Server 0.1.0, revision 12)  (contracts/the-park.storyletcontract)
-  hand      the-well   a station deals this hand
-  hand      the-forge   a station deals this hand
+  hand      the-well   dealt here
+  hand      the-forge   dealt here
   box       street   the scheduler ticks it every 60s
   property  world.time_phase
   property  story.visits

@@ -560,6 +560,23 @@ export interface RemoteDto {
 }
 
 /**
+ * The question on the way out of a project with edits the server has not seen.
+ *
+ * Buttons and nothing else: which index means push, which means go anyway and
+ * which means stay is main's business, and the renderer answers with an index
+ * exactly as it does for the updater's prompt. That way the wording and the
+ * meaning cannot drift apart across the bridge.
+ */
+export interface LeavePromptDto {
+  /** The headline: where the project stands, in the status line's own words. */
+  message: string;
+  detail: string;
+  buttons: string[];
+  defaultId: number;
+  cancelId: number;
+}
+
+/**
  * One thing a push would break at the far end, in its own words.
  *
  * The push dialog lists these with a tick each, and the second attempt names
@@ -880,8 +897,12 @@ export interface MapZoneDto {
 }
 
 /**
- * A hand whose zone changed as a side effect of an edit on the map: a pin
- * dropped, an outline dragged, a zone drawn or cleared.
+ * A hand whose zone changed as a side effect of dragging its PIN.
+ *
+ * Only that gesture. Reshaping, moving, restacking or drawing a zone leaves
+ * every hand's binding alone (the ruling of 2026-09-07): geometry is the
+ * designer's drawing and a binding is content, so an outline nudged sixty
+ * points must never quietly rewrite what a hand chose.
  *
  * `zone` null means the hand now sits in NO zone. That is not a quiet state: a
  * hand that needs a zone and has none is an error, and the Problems bar will be
@@ -1071,9 +1092,8 @@ export interface HandDetail {
   /** The box's tag groups (for chosen pickers and rule bindings). */
   groups: { gameId: string; values: string[] }[];
   /** What a VENUE depends on about this hand, one line per installation
-   *  (design/engine-server.md 4.11): "Bound at the-park: a station deals this
-   *  hand". Derived, like `movableFrom`: it exists for the editor and is stored
-   *  nowhere. */
+   *  (design/engine-server.md 4.11): "Dealt at the-park". Derived, like
+   *  `movableFrom`: it exists for the editor and is stored nowhere. */
   contract?: string[];
 }
 
@@ -1419,7 +1439,7 @@ export interface StudioApi {
    *  gives it the shape in one undo step. */
   createZone(
     boxId: string, groupId: string, polygon: { x: number; y: number }[],
-  ): Promise<{ result: OpenResult; tagId: string; rebound: SiteRebinding[] } | { error: string }>;
+  ): Promise<{ result: OpenResult; tagId: string } | { error: string }>;
   /** Set or clear a zone's outline: one undo step per shape. */
   /** Import a picture behind a map: opens a picker, copies the file into the
    *  box's assets folder, and places it by the drop rule. Null when the author
@@ -1443,14 +1463,14 @@ export interface StudioApi {
   ): Promise<OpenResult | { error: string }>;
   /** Take a picture off the map. The file stays and is swept at session end. */
   removeBackground(boxId: string, groupId: string, backgroundId: string): Promise<OpenResult | { error: string }>;
-  /** Move a zone through the stack. Which zone owns a pin is the frontmost one
-   *  it stands in, so this can rebind hands where zones overlap. */
+  /** Move a zone through the stack. Drawing order only: a hand's zone is the
+   *  hand's own binding and no geometry gesture touches it. */
   restackZone(
     boxId: string, groupId: string, tagId: string, move: "front" | "forward" | "backward" | "back",
-  ): Promise<{ result: OpenResult; rebound: SiteRebinding[] } | { error: string }>;
+  ): Promise<{ result: OpenResult } | { error: string }>;
   setZonePolygon(
     boxId: string, groupId: string, tagId: string, polygon: { x: number; y: number }[] | undefined,
-  ): Promise<{ result: OpenResult; rebound: SiteRebinding[] } | { error: string }>;
+  ): Promise<{ result: OpenResult } | { error: string }>;
   /** Take hands off the map: the sites go, the hands stay. */
   removeSitesFromMap(boxId: string, handIds: string[]): Promise<OpenResult | { error: string }>;
   /** Record where hand sites now sit. `zone: null` says "in no zone", which is
@@ -1636,6 +1656,12 @@ export interface StudioApi {
   onLiveLinkFrame(handler: (frame: LiveLinkFrame) => void): void;
 
   onMenu(handler: (command: MenuCommand) => void): void;
+
+  /** main asks the way out of a project the server has not seen the whole of;
+   *  answer with the chosen button INDEX. Same contract as the updater's prompt
+   *  next door, and for the same reason: the app has ONE dialog style, and the
+   *  only native surfaces are the file and folder pickers. */
+  onLeavePrompt(handler: (opts: LeavePromptDto) => Promise<number>): void;
 
   // --- The auto-updater (design/shared-shell.md, sixth slice) -----------------
   // Four channels the shell's updater expects a renderer to answer. It does NOT

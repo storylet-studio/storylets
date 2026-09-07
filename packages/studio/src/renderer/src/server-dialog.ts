@@ -1,5 +1,6 @@
 // ---------------------------------------------------------------------------
-// The two dialogs of the pack exchange: connecting, and pushing.
+// The dialogs of the pack exchange: connecting, pushing, and the way out of a
+// project the server has not seen the whole of.
 //
 // Connect to a server is one modal, two fields, and no explanation. It is for
 // somebody who was given an address and a code and knows what they mean. There
@@ -16,6 +17,7 @@
 
 import { labelled } from "@wildwinter/app-shell";
 import { el } from "./dom.js";
+import type { LeavePromptDto } from "../../shared/api.js";
 
 export interface ConnectAnswer {
   address: string;
@@ -183,5 +185,56 @@ export function askPush(opts: PushOptions): Promise<PushAnswer | null> {
     document.body.append(dlg);
     dlg.showModal();
     queueMicrotask(() => (breaks.length > 0 ? ticks[0]! : note).focus());
+  });
+}
+
+// --- leaving with edits the server has not seen -------------------------------
+
+/**
+ * The way out: push, go anyway, or stay.
+ *
+ * The app's own dialog rather than the OS's, which is not a matter of taste.
+ * Until 2026-09-07 this was a native `showMessageBox` attached to the editor
+ * window, and on the close path that window's close had already been deferred:
+ * dismissing the sheet let the deferred close through whatever button was
+ * clicked, so Cancel closed the window and Push closed it without pushing. It
+ * also wore the OS's typography beside two dialogs that wear the app's.
+ *
+ * Resolves the button INDEX, which is `showMessageBox`'s contract and the
+ * updater prompt's: main knows what each index means, and nothing over here
+ * has to.
+ */
+export function askLeave(opts: LeavePromptDto): Promise<number> {
+  return new Promise((resolve) => {
+    const dlg = el("dialog", "confirm-dialog server-dialog leave-dialog");
+    // The status line is the headline, as it is on the push dialog: where the
+    // project stands is the whole reason the question is being asked.
+    dlg.append(el("div", "confirm-title", opts.message));
+    dlg.append(el("div", "confirm-body", opts.detail));
+
+    const actions = el("div", "confirm-actions");
+    let done = false;
+    const finish = (index: number): void => {
+      if (done) return;
+      done = true;
+      dlg.close();
+      dlg.remove();
+      resolve(index);
+    };
+
+    opts.buttons.forEach((label, i) => {
+      // The way out reads as the quiet one, the default as the affirmative:
+      // the pairing every other confirm in the app uses.
+      const button = el("button", i === opts.cancelId ? "confirm-btn cancel" : "confirm-btn", label);
+      button.addEventListener("click", () => finish(i));
+      actions.append(button);
+      if (i === opts.defaultId) queueMicrotask(() => button.focus());
+    });
+    dlg.append(actions);
+
+    // Esc is Cancel, not a fourth answer: main is waiting on an index.
+    dlg.addEventListener("cancel", (e) => { e.preventDefault(); finish(opts.cancelId); });
+    document.body.append(dlg);
+    dlg.showModal();
   });
 }
