@@ -604,6 +604,51 @@ export interface ContractBreakDto {
   message: string;
 }
 
+/**
+ * What was typed into the connect dialog's Address field, read.
+ *
+ * ONE FIELD, TWO SHAPES, because there are two ways an address and a code get
+ * handed over and a third box would be a third thing to get wrong: a bare
+ * address, typed, with the code alongside it; or the whole link off a screen,
+ * which carries the code in its path and the certificate's fingerprint in its
+ * query. A link fills in the other field and pins; a bare address is what it
+ * always was.
+ *
+ * HERE rather than in main, because the dialog is the renderer's and the
+ * connect call is main's, and both need to read the same thing the same way.
+ * Recognised by the `/pair/` segment and nothing else: an address belongs to
+ * whoever runs the far end, and this is not the place to have opinions about
+ * what one looks like.
+ */
+export interface PairingLink {
+  /** The address to dial: the link's origin, or the text as it stands. */
+  address: string;
+  /** The code out of the link's path, when there was one. */
+  code?: string;
+  /** The certificate the answer must come over, when the link named one. */
+  fingerprint?: string;
+}
+
+export function readPairingLink(text: string): PairingLink {
+  const trimmed = text.trim();
+  const mark = "/pair/";
+  if (!/^https?:\/\//i.test(trimmed) || !trimmed.includes(mark)) return { address: trimmed };
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return { address: trimmed };
+  }
+  const code = decodeURIComponent(url.pathname.slice(url.pathname.indexOf(mark) + mark.length))
+    .replace(/\/+$/, "").trim();
+  const fingerprint = (url.searchParams.get("fingerprint") ?? "").trim();
+  return {
+    address: url.origin,
+    ...(code !== "" ? { code } : {}),
+    ...(fingerprint !== "" ? { fingerprint } : {}),
+  };
+}
+
 /** What a Pull did. The project payload rides along so the editor refreshes
  *  through the same path as any other write, conflict sidecars and all. */
 export type ServerPullResult =
@@ -1633,12 +1678,14 @@ export interface StudioApi {
   mergePackDrop(): Promise<void>;
 
   // --- the pack exchange ------------------------------------------------------
-  // Three calls over plain HTTP, for someone who was given an address and a
-  // code. Everything here is main's: the renderer never sees a key.
+  // Three calls, for someone who was given an address and a code. Everything
+  // here is main's: the renderer never sees a key.
 
   /** Pair with the address, fetch the project, and open it. Null when a picker
-   *  was cancelled. */
-  connectServer(address: string, code: string): Promise<OpenResult | { error: string } | null>;
+   *  was cancelled. `fingerprint` is the certificate the answer must be coming
+   *  over, when a whole link was pasted rather than a bare address; without one
+   *  the address is taken on trust the first time, as it always was. */
+  connectServer(address: string, code: string, fingerprint?: string): Promise<OpenResult | { error: string } | null>;
   /** Open Storyletpack, first half: pick the pack, and say whether it names an
    *  address. Null when the picker was cancelled. */
   choosePack(): Promise<{ path: string; address?: string } | null>;

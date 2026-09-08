@@ -195,7 +195,8 @@ const api: StudioApi = {
   choosePack: () => ipcRenderer.invoke("pack:choose"),
   openPackAt: (path: string) => ipcRenderer.invoke("pack:openAt", path),
   // The pack exchange: three calls, and the key never crosses this bridge.
-  connectServer: (address: string, code: string) => ipcRenderer.invoke("server:connect", address, code),
+  connectServer: (address: string, code: string, fingerprint?: string) =>
+    ipcRenderer.invoke("server:connect", address, code, fingerprint),
   forgetServer: (address: string) => ipcRenderer.invoke("server:forget", address),
   serverPull: () => ipcRenderer.invoke("server:pull"),
   serverPush: (note?: string, acknowledge?: string[]) =>

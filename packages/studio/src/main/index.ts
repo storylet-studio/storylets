@@ -284,7 +284,12 @@ function scheduleLivePush(): void {
  *  remote.ts, beside the rest of the server state. */
 const serverSession = new ServerSession();
 
-interface ServerContext { dir: string; remote: RemoteRecord; address: string; key: string }
+interface ServerContext {
+  dir: string; remote: RemoteRecord; address: string; key: string;
+  /** The certificate every call to this address must come over, or "" where
+   *  there is none to pin. */
+  pin: string;
+}
 
 /**
  * The open project's remote AND the key for it, or nothing.
@@ -304,7 +309,13 @@ function serverContext(): ServerContext | undefined {
   if (remote === undefined) return undefined;
   const address = addressOf(remote);
   const held = store.serverKey(address, remote.role);
-  return held === undefined ? undefined : { dir, remote, address, key: held.key };
+  if (held === undefined) return undefined;
+  // THE PROJECT'S OWN FIRST. Both places hold the number and they agree, but
+  // the record beside the shards is the one that travelled with the project,
+  // so a project carried to another machine pins from the first call rather
+  // than from whenever this machine last paired.
+  const pin = remote.fingerprint ?? held.fingerprint ?? "";
+  return { dir, remote, address, key: held.key, pin };
 }
 
 /** How the open project stands with its server: the revision it is level with,
@@ -373,7 +384,7 @@ function refreshHead(): void {
   void (async () => {
     const head = await pullPack(ctx.address, ctx.key, {
       installation: ctx.remote.installation, version: ctx.remote.version,
-    });
+    }, ctx.pin);
     if (failed(head)) return;
     serverSession.noteHead(ctx.dir, head.revision);
     menu();
@@ -781,7 +792,7 @@ async function serverPull(): Promise<ServerPullResult> {
   await flushEditor();   // a merge reads the working copy off disk
   const head = await pullPack(ctx.address, ctx.key, {
     installation: ctx.remote.installation, version: ctx.remote.version,
-  });
+  }, ctx.pin);
   if (failed(head)) return { error: head.error };
   serverSession.noteHead(ctx.dir, head.revision);
   // The ancestor is the revision we last pulled, which the far end still has:
@@ -793,7 +804,7 @@ async function serverPull(): Promise<ServerPullResult> {
     ? head
     : await pullPack(ctx.address, ctx.key, {
         installation: ctx.remote.installation, version: ctx.remote.version, revision: ctx.remote.revision,
-      });
+      }, ctx.pin);
   if (failed(base)) return { error: base.error };
   try {
     const plan = await planPull(ctx.dir, head.bytes, base.bytes);
@@ -861,7 +872,7 @@ async function serverPush(
     ...(opts.note !== undefined && opts.note.trim() !== "" ? { note: opts.note.trim() } : {}),
     ...(opts.acknowledge !== undefined && opts.acknowledge.length > 0 ? { acknowledge: opts.acknowledge } : {}),
     ...(identity !== undefined ? { identity } : {}),
-  });
+  }, ctx.pin);
   if (failed(pushed)) {
     // A push that would change nothing is the far end confirming the work is
     // already there. It goes to a toast, and nothing about it is filed: the
@@ -971,7 +982,7 @@ async function mayLeaveProject(act: "quit" | "close"): Promise<boolean> {
   const standing = standingOf(ctx);
   if (standing.edits === 0) return true;
   const name = projectName();
-  const online = await reachable(ctx.address);
+  const online = await reachable(ctx.address, ctx.pin);
   const prompt = leavePrompt(name, standing, act, online);
   const asking = inAppPrompt();
   const choice: LeaveChoice = await askLeave(prompt, asking?.ask, nativePrompt);
@@ -2084,9 +2095,13 @@ function wireIpc(): void {
    * in this app's settings under the address and never in a project. Then the
    * project is fetched and opened, which is the whole of connecting - there is
    * no separate first pull to remember to do.
+   *
+   * `fingerprint` is there when a whole link was pasted into the dialog rather
+   * than a bare address: the certificate every call to this address must come
+   * over from now on, kept with the key and beside the project's shards.
    */
   ipcMain.handle("server:connect", async (
-    _event, address: string, code: string,
+    _event, address: string, code: string, fingerprint?: string,
   ): Promise<OpenResult | { error: string } | null> => {
     if (!(await mayLeaveProject("close"))) return null;
     // THE FOLDER FIRST (2026-09-07). A code is single use and is spent the
@@ -2099,11 +2114,17 @@ function wireIpc(): void {
       address, code,
       device: { app: `Storyletter ${app.getVersion()}`, host: hostname() },
       ...(identity !== undefined ? { identity } : {}),
+      ...(fingerprint !== undefined && fingerprint !== "" ? { pin: fingerprint } : {}),
       chooseFolder: askProjectFolder,
       refuseFolder: notEmpty,
       keepKey: (dialled, paired) => store.setServerKey(dialled, {
         key: paired.key, role: paired.role,
         ...(paired.installation !== "" ? { installation: paired.installation } : {}),
+        // The number goes in the settings with the key it was agreed beside;
+        // the project's own record gets it too, from the plan below.
+        ...(paired.fingerprint !== undefined && paired.fingerprint !== ""
+          ? { fingerprint: paired.fingerprint }
+          : fingerprint !== undefined && fingerprint !== "" ? { fingerprint } : {}),
       }),
     });
     if (planned === null) return null;

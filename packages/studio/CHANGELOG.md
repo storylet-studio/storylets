@@ -54,6 +54,8 @@ here is part of shipping, not a courtesy.
 
 - **Push asks first**: a note for the revision list, and, when the far end refuses because the change breaks something it depends on, one tick per refusal in its own words before it will send again. Under a key that may not change the shape, the shape pages open read-only with the reason on them, instead of letting an edit start and refusing it on save. A `.storyletpack` opened from the desktop makes the same offer File ▸ Open Storyletpack makes.
 
+- **The Address field takes a whole link as well as an address.** Paste the link you were given and the code fills itself in; you can still edit it. A link that names the certificate at the other end pins it, and one quiet line under the field says so. Every call after that - pairing, Pull, Push - refuses an address answering with a different certificate before it sends anything, with a plain sentence rather than a warning to click through. An address with no certificate to pin works exactly as it did and says nothing about it.
+
 ## [0.6.0] - 2026-09-06
 
 ### Added

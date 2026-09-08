@@ -1005,3 +1005,6 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .push-tick { margin-top: 0.15rem; flex: none; }
 .push-hint,
 .push-status { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted); }
+/* The connect dialog's one quiet line, under Address when a pasted link named a
+   certificate. Same voice as the two above, and it says its piece once. */
+.server-pin { margin: 0.35rem 0 0; font-size: 0.85rem; color: var(--muted); }

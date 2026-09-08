@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
-// The pack exchange: pack bytes over plain HTTP, to and from a server whose
-// address and code somebody was given.
+// The pack exchange: pack bytes to and from a server whose address and code
+// somebody was given.
 //
 // This is the generic half of the round trip the send envelope already has
 // (pack-merge-back.md). A pack goes out, a pack comes back, and the merge is
@@ -33,6 +33,10 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import https from "node:https";
+import type { RequestOptions } from "node:https";
+import type { Duplex } from "node:stream";
+import tls from "node:tls";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { canonicalStringify, parseSource, walkProjectFiles } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS } from "@storylet-studio/model";
@@ -80,6 +84,20 @@ export interface RemoteRecord {
   /** What Storyletter dials. Absent on a record written by the far end, where
    *  `server` is the only address there is. */
   address?: string;
+  /**
+   * The certificate this project is pinned to: the SHA-256 of the far end's
+   * own, in the shape it hands it over (`SHA256:` and base64). Every call to
+   * this address then refuses a socket showing anything else, before a key is
+   * sent over it.
+   *
+   * ABSENT means nothing to pin, and that is an ordinary state rather than a
+   * lapsed one: an address reached over plain HTTP has no certificate, and one
+   * behind a certificate the machine already trusts hands over no fingerprint
+   * to pin either. Beside the address rather than only in the settings because
+   * it belongs to the project's idea of where it came from, exactly as the
+   * address does: a project moved to another machine still knows.
+   */
+  fingerprint?: string;
 }
 
 /** The address a record is dialled at. */
@@ -356,35 +374,211 @@ export function normaliseAddress(address: string): string {
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
+// --- pinning the certificate at the other end ---------------------------------------
+
+/**
+ * THE WHOLE OF THE PINNING, and the two sentences it can say.
+ *
+ * A server on somebody's own network has no certificate anything trusts out of
+ * the box, so the address is agreed once - by a link that carries the
+ * certificate's fingerprint, or by the first pairing - and every call after
+ * that refuses a socket showing a different one. That is what SSH does, and on
+ * a network with no certificate authority in it there is nothing better.
+ *
+ * WHY IT IS A HAND-MADE HANDSHAKE AND NOT `checkServerIdentity`. The recipe
+ * that reads well - turn verification off, compare the fingerprint in
+ * `checkServerIdentity` - checks NOTHING, because Node calls that hook only
+ * while it is verifying a chain, and a self-signed certificate has already
+ * failed the chain by then. So the connection is made here, in the agent's own
+ * `createConnection`: the handshake finishes, the certificate is compared, and
+ * the socket is handed to the request only on a match. Nothing of the request
+ * - the bearer above all - has been written to it at that point, which is the
+ * entire property worth having.
+ *
+ * A REFUSED PIN IS NOT "OFFLINE". Something answered; it was not the right
+ * something. The caller must not offer to wait for it.
+ */
+export const PIN_REFUSED = "That address is not the server this project was paired with.";
+
+/** ...and the one said at pairing, where there is a link to compare against
+ *  rather than a record. Different words because it is a different moment: the
+ *  person is holding the thing that disagrees. */
+export const LINK_PIN_REFUSED = "The server's certificate does not match the link you were given.";
+
+/** The code both refusals carry, so a caller can tell them from a refusal
+ *  about permission without reading the sentence. */
+export const FINGERPRINT_CHANGED = "fingerprint_changed";
+
+/**
+ * A fingerprint reduced to plain lowercase hex, whichever shape it arrived in.
+ *
+ * THREE SHAPES, one number: `SHA256:` and base64, which is what a pairing link
+ * and a pair response carry; colon-separated uppercase hex, which is what
+ * Node's `fingerprint256` gives; and bare hex, which is what somebody who read
+ * the certificate with their own tools is holding. Anything that is not
+ * thirty-two bytes reduces to nothing, and nothing never matches anything -
+ * including another nothing, which is what keeps an unreadable certificate
+ * from passing a pin by accident.
+ */
+export function fingerprintHex(fingerprint: string): string {
+  const text = fingerprint.trim();
+  const body = /^sha256:/i.test(text) ? text.slice("SHA256:".length) : text;
+  const hex = body.replace(/:/g, "").toLowerCase();
+  if (/^[0-9a-f]{64}$/.test(hex)) return hex;
+  const raw = Buffer.from(body.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  return raw.length === 32 ? raw.toString("hex") : "";
+}
+
+/** Are these the same certificate? Two blanks are NOT: a pin is a statement
+ *  about a certificate, and there is no certificate here to make one about. */
+export const samePin = (a: string, b: string): boolean => {
+  const wanted = fingerprintHex(a);
+  return wanted !== "" && wanted === fingerprintHex(b);
+};
+
+/** A refused pin, kept apart from every other reason a socket did not work so
+ *  the caller can say the right sentence about it. */
+class PinRefused extends Error {}
+
+/** A name goes in SNI and an address does not (RFC 6066), and Node warns about
+ *  it. A server reached by its address sends none, which is right: the pin is
+ *  what says which server this is. */
+const isAddress = (host: string): boolean => /^[\d.]+$/.test(host) || host.includes(":");
+
+/**
+ * An agent that will hand the request a socket only to the pinned certificate.
+ *
+ * One socket, never kept alive: a pooled socket is one whose pin was checked
+ * for some earlier request, and the saving is a handshake on a call that
+ * happens when a person presses a menu item.
+ */
+class PinnedAgent extends https.Agent {
+  constructor(private readonly wanted: string, private readonly timeoutMs: number) {
+    super({ keepAlive: false, maxSockets: 1 });
+  }
+
+  override createConnection(
+    options: RequestOptions, callback?: (err: Error | null, stream: Duplex) => void,
+  ): Duplex | undefined {
+    const host = String(options.host ?? options.hostname ?? "");
+    const socket = tls.connect({
+      host,
+      port: Number(options.port ?? 443),
+      ...(isAddress(host) ? {} : { servername: host }),
+      // Off, and the pin stands in its place: there is no chain to walk behind
+      // a certificate that signed itself, and "this exact certificate" says
+      // more than any chain would have.
+      rejectUnauthorized: false,
+    }, () => {
+      const shown = socket.getPeerCertificate().fingerprint256 ?? "";
+      if (!samePin(this.wanted, shown)) {
+        socket.destroy();
+        callback?.(new PinRefused(PIN_REFUSED), socket);
+        return;
+      }
+      // ONLY NOW is the request allowed near it.
+      callback?.(null, socket);
+    });
+    socket.setTimeout(this.timeoutMs, () => {
+      socket.destroy(new Error(`${host} did not finish the handshake in ${this.timeoutMs}ms`));
+    });
+    socket.on("error", (e: Error) => { callback?.(e, socket); });
+    // NOTHING RETURNED: a socket returned from here is used at once, and the
+    // handshake has not happened yet. The callback above is the whole point.
+    return undefined;
+  }
+}
+
+/** What either transport below comes back with, which is as much of a response
+ *  as anything here reads. */
+interface Answered { ok: boolean; status: number; statusText: string; text: string }
+
+/** What a call sends. Narrower than `RequestInit` on purpose: the pinned path
+ *  is `https.request`, which takes a string body and plain headers, and the
+ *  two transports must not be able to drift apart in what they accept. */
+interface CallInit { method: string; headers?: Record<string, string>; body?: string }
+
+/** The ordinary transport: the host's own `fetch`, exactly as before. */
+async function sendPlain(url: string, init: CallInit, timeoutMs: number): Promise<Answered> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...init, signal: abort.signal });
+    return {
+      ok: response.ok, status: response.status, statusText: response.statusText,
+      text: await response.text(),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The pinned one. `fetch` cannot be given an agent, so a pinned call is an
+ *  `https.request` and this is the whole of the difference. */
+function sendPinned(url: string, init: CallInit, pin: string, timeoutMs: number): Promise<Answered> {
+  const target = new URL(url);
+  return new Promise<Answered>((settle, fail) => {
+    const agent = new PinnedAgent(pin, timeoutMs);
+    const done = (act: () => void): void => { agent.destroy(); act(); };
+    const request = https.request({
+      hostname: target.hostname,
+      port: target.port === "" ? 443 : Number(target.port),
+      path: `${target.pathname}${target.search}`,
+      method: init.method,
+      headers: init.headers ?? {},
+      agent,
+    }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk: Buffer) => { chunks.push(chunk); });
+      response.on("end", () => {
+        const status = response.statusCode ?? 0;
+        done(() => settle({
+          ok: status >= 200 && status < 300,
+          status,
+          statusText: response.statusMessage ?? "",
+          text: Buffer.concat(chunks).toString("utf8"),
+        }));
+      });
+      response.on("error", (e: Error) => { done(() => fail(e)); });
+    });
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error(`no answer from ${target.host} in ${timeoutMs}ms`));
+    });
+    request.on("error", (e: Error) => { done(() => fail(e)); });
+    if (init.body !== undefined) request.write(init.body);
+    request.end();
+  });
+}
+
 /** The body of a refusal, in the shape the far end sends it. */
 interface WireErrorBody { error?: { code?: string; message?: string; details?: unknown } }
 
-async function call<T>(url: string, init: RequestInit, timeoutMs = 30_000): Promise<T | CallFailure> {
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), timeoutMs);
-  let response: Response;
+async function call<T>(url: string, init: CallInit, pin = "", timeoutMs = 30_000): Promise<T | CallFailure> {
+  let answer: Answered;
   try {
-    response = await fetch(url, { ...init, signal: abort.signal });
+    answer = pin !== "" && /^https:/i.test(url)
+      ? await sendPinned(url, init, pin, timeoutMs)
+      : await sendPlain(url, init, timeoutMs);
   } catch (e) {
+    // The one failure to reach the far end that is NOT a reason to offer to
+    // wait: something answered, wearing the wrong certificate.
+    if (e instanceof PinRefused) return { error: PIN_REFUSED, code: FINGERPRINT_CHANGED };
     // Nothing answered: a laptop asleep in a cupboard, a wrong address, a
     // network that is not this one. The caller offers to wait rather than to
     // fix something.
     return { error: e instanceof Error ? e.message : String(e), offline: true };
-  } finally {
-    clearTimeout(timer);
   }
-  const text = await response.text();
-  if (!response.ok) {
+  if (!answer.ok) {
     let body: WireErrorBody = {};
-    try { body = JSON.parse(text) as WireErrorBody; } catch { /* not JSON: the status is all we have */ }
+    try { body = JSON.parse(answer.text) as WireErrorBody; } catch { /* not JSON: the status is all we have */ }
     return {
-      error: body.error?.message ?? `${response.status} ${response.statusText}`,
+      error: body.error?.message ?? `${answer.status} ${answer.statusText}`,
       ...(body.error?.code !== undefined ? { code: body.error.code } : {}),
       ...(body.error?.details !== undefined ? { details: body.error.details } : {}),
     };
   }
   try {
-    return JSON.parse(text) as T;
+    return JSON.parse(answer.text) as T;
   } catch {
     return { error: "that address answered with something that is not an answer to this." };
   }
@@ -401,16 +595,16 @@ const bearer = (key: string): Record<string, string> => ({ authorization: `Beare
  * "the server cannot be reached" and "the server said no" are two different
  * things to be told.
  */
-export async function reachable(address: string, timeoutMs = 2500): Promise<boolean> {
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), timeoutMs);
+export async function reachable(address: string, pin = "", timeoutMs = 2500): Promise<boolean> {
+  const url = normaliseAddress(address);
   try {
-    await fetch(normaliseAddress(address), { method: "HEAD", signal: abort.signal });
+    if (pin !== "" && /^https:/i.test(url)) await sendPinned(url, { method: "HEAD" }, pin, timeoutMs);
+    else await sendPlain(url, { method: "HEAD" }, timeoutMs);
     return true;
   } catch {
+    // A refused pin lands here with everything else, and rightly: the question
+    // asked was "is the server there", and the answer is no.
     return false;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -422,23 +616,40 @@ export interface PairedKey {
   /** What the far end calls this installation, for nothing but the dialog's
    *  own confirmation line. */
   name?: string;
+  /** The certificate the far end says is its own, to be pinned from here on.
+   *  Empty or absent where there is none to pin. */
+  fingerprint?: string;
 }
 
-/** Spend the code, get the key. Unauthenticated by definition: the code is the
- *  authorisation, which is why it is short-lived and single use. */
+/**
+ * Spend the code, get the key. Unauthenticated by definition: the code is the
+ * authorisation, which is why it is short-lived and single use.
+ *
+ * `pin` is the fingerprint a pasted link carried, and it does TWO things:
+ * the socket is refused before the code goes over it if the certificate is
+ * not that one, and the answer is refused after if the far end names a
+ * different one. The second is not made redundant by the first: they are
+ * different claims, one about the socket and one about what the server says
+ * of itself, and a disagreement between them is the clearest possible sign
+ * that this is not the arrangement somebody was handed.
+ *
+ * Without a `pin` the answer's own fingerprint is taken as it stands, which is
+ * trust on first use and is the whole of what a bare address can offer.
+ */
 export async function pair(
   address: string, code: string, device: { app: string; host: string },
-  identity?: { name: string; email?: string },
+  identity?: { name: string; email?: string }, pin = "",
 ): Promise<PairedKey | CallFailure> {
   const answer = await call<{
     key?: string;
     principal?: { role?: string };
     installation?: { installation?: string; name?: string };
+    fingerprint?: string;
   }>(`${normaliseAddress(address)}/v1/pair`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ code: code.trim(), device, ...(identity ? { identity } : {}) }),
-  });
+  }, pin);
   if (failed(answer)) return answer;
   const role = answer.principal?.role;
   if (typeof answer.key !== "string" || answer.key === "") {
@@ -447,11 +658,16 @@ export async function pair(
   if (role !== "author" && role !== "designer") {
     return { error: `this key is a ${String(role ?? "kind")} key, and a project is pulled with an author's or a designer's.` };
   }
+  const shown = typeof answer.fingerprint === "string" ? answer.fingerprint.trim() : "";
+  // Nothing is kept: this returns before anything is written down, and the key
+  // that came back is dropped on the floor with the rest of the answer.
+  if (pin !== "" && !samePin(pin, shown)) return { error: LINK_PIN_REFUSED, code: FINGERPRINT_CHANGED };
   return {
     key: answer.key,
     role,
     installation: answer.installation?.installation ?? "",
     ...(answer.installation?.name !== undefined ? { name: answer.installation.name } : {}),
+    ...(shown !== "" ? { fingerprint: shown } : {}),
   };
 }
 
@@ -470,6 +686,7 @@ export interface PulledPack {
  *  time after. */
 export async function pullPack(
   address: string, key: string, opts: { installation?: string; version?: string; revision?: number } = {},
+  pin = "",
 ): Promise<PulledPack | CallFailure> {
   const url = new URL(`${normaliseAddress(address)}/v1/console/project/pull`);
   if (opts.installation !== undefined) url.searchParams.set("installation", opts.installation);
@@ -479,7 +696,7 @@ export async function pullPack(
     revision?: { revision?: number; version?: string; installation?: string };
     pack?: string;
     provenance?: { server?: string; installation?: string; version?: string; revision?: number; role?: string };
-  }>(url.toString(), { method: "GET", headers: bearer(key) });
+  }>(url.toString(), { method: "GET", headers: bearer(key) }, pin);
   if (failed(answer)) return answer;
   if (typeof answer.pack !== "string" || answer.pack === "") {
     return { error: "that address answered without a pack." };
@@ -547,7 +764,7 @@ export async function pushPack(
   address: string, key: string, body: {
     pack: Buffer; installation: string; version: string; base: number;
     note?: string; acknowledge?: string[]; identity?: { name: string; email?: string };
-  },
+  }, pin = "",
 ): Promise<PushedRevision | CallFailure> {
   const answer = await call<{ revision?: { revision?: number }; changed?: string[]; issues?: PushedRevision["issues"] }>(
     `${normaliseAddress(address)}/v1/console/project/push`,
@@ -564,6 +781,7 @@ export async function pushPack(
         ...(body.identity !== undefined ? { identity: body.identity } : {}),
       }),
     },
+    pin,
   );
   if (failed(answer)) return answer;
   const revision = answer.revision?.revision;
@@ -602,6 +820,10 @@ export async function planConnect(opts: {
   code: string;
   device: { app: string; host: string };
   identity?: { name: string; email?: string };
+  /** The certificate a pasted link named, when one was pasted. The pair call
+   *  is refused over anything else, and the pull that follows is pinned to
+   *  whatever the pairing settled on. */
+  pin?: string;
   /** Where should the project go? `null` when the person backed out. */
   chooseFolder: () => Promise<string | null>;
   /** The reason that folder will not do, or nothing. Refused BEFORE pairing,
@@ -614,12 +836,16 @@ export async function planConnect(opts: {
   const occupied = opts.refuseFolder?.(target);
   if (occupied !== undefined) return { error: occupied };
   const dialled = normaliseAddress(opts.address);
-  const paired = await pair(dialled, opts.code, opts.device, opts.identity);
+  const paired = await pair(dialled, opts.code, opts.device, opts.identity, opts.pin ?? "");
   if (failed(paired)) return paired;
+  // What is pinned from here on: what the far end named, or, where it named
+  // nothing, whatever the link said. A far end with no certificate names
+  // nothing and no link carries one, and then nothing is pinned at all.
+  const pinned = paired.fingerprint ?? opts.pin ?? "";
   opts.keepKey(dialled, paired);
   const pulled = await pullPack(dialled, paired.key, {
     ...(paired.installation !== "" ? { installation: paired.installation } : {}),
-  });
+  }, pinned);
   if (failed(pulled)) return pulled;
   return {
     target,
@@ -633,6 +859,7 @@ export async function planConnect(opts: {
       revision: pulled.revision,
       role: pulled.role,
       pulledAt: new Date().toISOString(),
+      ...(pinned !== "" ? { fingerprint: pinned } : {}),
     },
   };
 }

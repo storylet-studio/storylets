@@ -70,6 +70,13 @@ export interface StoredServerKey {
   key: string;
   role: ServerRole;
   installation?: string;
+  /** The certificate this address was paired over, if it had one: the same
+   *  number the project's own record beside its shards carries. Kept here as
+   *  well because it belongs with the key - the two were agreed in the same
+   *  breath, and a key sent to a server showing a different certificate is the
+   *  one thing pinning exists to prevent. Not a secret, and not sealed: it is
+   *  a public fingerprint, printed on the far end's own screen. */
+  fingerprint?: string;
 }
 
 /** Is this the pre-split shape: one key for the address, whatever its role? */

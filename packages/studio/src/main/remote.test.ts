@@ -24,6 +24,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
+import { createServer as createTlsServer } from "node:https";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { StudioStore } from "./store.js";
 import { tmpdir } from "node:os";
@@ -42,13 +44,15 @@ import {
   saveCard, setGroupSpatial, setZonePolygon, undo,
 } from "./mutate.js";
 import {
-  BASE_FILE, PULL_AS_DESIGNER, REMOTE_FILE, ServerSession, addressOf, askLeave, contractBreaks, failed,
-  forgetShardHashes, hashProject, isShapeShard, leaveChoice, leavePrompt, levelLine, menuState,
+  BASE_FILE, FINGERPRINT_CHANGED, LINK_PIN_REFUSED, PIN_REFUSED, PULL_AS_DESIGNER, REMOTE_FILE,
+  ServerSession, addressOf, askLeave, contractBreaks, failed,
+  fingerprintHex, forgetShardHashes, hashProject, isShapeShard, leaveChoice, leavePrompt, levelLine, menuState,
   normalForm, normaliseAddress, nothingToPush, openPackBytes, pair, packAddress, packProject,
   planConnect, planPull, projectStatusLine, pullPack, pushPack, pushedLine, readBase, readRemote,
-  refusalPrompt, refuseWrite, remoteInPack, resolveLeave, serverProblems, shardHash,
+  reachable, refusalPrompt, refuseWrite, remoteInPack, resolveLeave, samePin, serverProblems, shardHash,
   statusLine, unpushedShards, writeBase, writeRemote,
 } from "./remote.js";
+import { readPairingLink } from "../shared/api.js";
 import type { InAppPrompt, LeavePrompt, PairedKey, RemoteRecord } from "./remote.js";
 
 const example = fileURLToPath(new URL("../../../../examples/saltmarsh.storylets", import.meta.url));
@@ -100,16 +104,25 @@ class FakeServer {
   breaks?: { severity: string; path?: string; where?: string; message: string }[];
   /** Seal the packs it sends with the record a real one carries. */
   sealed = false;
+  /** What the pair response says its certificate is. Empty is what a plain
+   *  listener sends and means there is nothing to pin; a TLS one is set to its
+   *  own, or to somebody else's when the test wants the two to disagree. */
+  fingerprint = "";
   /** How many codes have been spent here. A single-use code is spent at the
    *  pair call, so this is what "nothing was spent" is checked against. */
   pairs = 0;
   private server?: Server;
+  private secure = false;
   private port = 0;
   private readonly keys = new Map<string, string>();
 
-  async start(seed: Buffer): Promise<void> {
+  async start(seed: Buffer, certificate?: { cert: string; key: string }): Promise<void> {
     this.revisions.push(seed);
-    this.server = createServer((req, res) => { void this.route(req, res); });
+    const handle = (req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse): void => {
+      void this.route(req, res);
+    };
+    this.secure = certificate !== undefined;
+    this.server = certificate === undefined ? createServer(handle) : createTlsServer(certificate, handle);
     await new Promise<void>((resolve) => this.server!.listen(0, "127.0.0.1", resolve));
     const address = this.server.address();
     this.port = typeof address === "object" && address !== null ? address.port : 0;
@@ -119,7 +132,7 @@ class FakeServer {
     await new Promise<void>((resolve) => this.server?.close(() => resolve()));
   }
 
-  get origin(): string { return `http://127.0.0.1:${this.port}`; }
+  get origin(): string { return `${this.secure ? "https" : "http"}://127.0.0.1:${this.port}`; }
   get head(): number { return this.revisions.length; }
 
   private roleOf(req: { headers: Record<string, unknown> }): string | undefined {
@@ -155,7 +168,7 @@ class FakeServer {
         principal: { principal: "p1", label: "Sam", role, issuedAt: "2026-09-06T09:00:00.000Z" },
         installation: { installation: "the-park", name: "The Park After Dark" },
         server: { version: "0.1.0", wire: "storyletengine/wire@1" },
-        fingerprint: "aa:bb",
+        fingerprint: this.fingerprint,
       });
       return;
     }
@@ -1268,6 +1281,240 @@ describe("connecting, in the order it spends things", () => {
     const plan = await planPull(target, planned.bytes, undefined);
     expect(plan.added).toBeGreaterThan(0);
     expect(Object.keys(plan.base).length).toBe(plan.added);
+  });
+});
+
+// --- pinning the far end's certificate ---------------------------------------
+
+/**
+ * A self-signed certificate, minted here, because there is no other way to ask
+ * the question.
+ *
+ * The whole of what pinning claims is "a socket to THIS certificate and no
+ * other", and nothing tests that but a real TLS handshake against a real
+ * certificate that a real second certificate can be swapped for. Node parses
+ * certificates and cannot write one, and nothing in this repo's tree mints one
+ * either, so the twenty lines below are a DER writer and an X.509 v3 body.
+ * They write ONE shape; Node's own TLS is what has to accept it, which is what
+ * the tests below ask by serving through it.
+ *
+ * P-256 and `ecdsa-with-SHA256`, because it is a couple of milliseconds to
+ * mint where RSA is a third of a second, and this file mints several.
+ */
+function selfSigned(cn: string): { cert: string; key: string; fingerprint: string } {
+  const size = (n: number): Buffer => {
+    if (n < 0x80) return Buffer.from([n]);
+    const out: number[] = [];
+    for (let left = n; left > 0; left >>>= 8) out.unshift(left & 0xff);
+    return Buffer.from([0x80 | out.length, ...out]);
+  };
+  const node = (tag: number, body: Buffer): Buffer => Buffer.concat([Buffer.from([tag]), size(body.length), body]);
+  const sequence = (...parts: Buffer[]): Buffer => node(0x30, Buffer.concat(parts));
+  const oid = (dotted: string): Buffer => {
+    const arcs = dotted.split(".").map(Number);
+    const bytes = [arcs[0]! * 40 + arcs[1]!];
+    for (const arc of arcs.slice(2)) {
+      const chunk: number[] = [];
+      for (let left = arc; ; left >>>= 7) { chunk.unshift(left & 0x7f); if (left < 0x80) break; }
+      for (let i = 0; i < chunk.length - 1; i++) chunk[i]! |= 0x80;
+      bytes.push(...chunk);
+    }
+    return node(0x06, Buffer.from(bytes));
+  };
+  const stamp = (at: Date): Buffer => {
+    const two = (n: number): string => String(n).padStart(2, "0");
+    return node(0x17, Buffer.from(
+      `${two(at.getUTCFullYear() % 100)}${two(at.getUTCMonth() + 1)}${two(at.getUTCDate())}`
+      + `${two(at.getUTCHours())}${two(at.getUTCMinutes())}${two(at.getUTCSeconds())}Z`, "ascii"));
+  };
+
+  const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const spki = Buffer.from(publicKey.export({ type: "spki", format: "der" }));
+  const algorithm = sequence(oid("1.2.840.10045.4.3.2"));
+  const name = sequence(node(0x31, sequence(oid("2.5.4.3"), node(0x0c, Buffer.from(cn, "utf8")))));
+  const now = Date.now();
+  // A subjectAltName for the loopback both ways round. Nothing here checks it
+  // (the pin replaces chain verification entirely), but a certificate that
+  // could not serve a real name would be a poor stand-in for one that does.
+  const sans = sequence(oid("2.5.29.17"), node(0x04, sequence(
+    node(0x82, Buffer.from("localhost", "ascii")),
+    node(0x87, Buffer.from([127, 0, 0, 1])),
+  )));
+  const body = sequence(
+    node(0xa0, node(0x02, Buffer.from([2]))),          // v3
+    node(0x02, Buffer.from([0x2b, 0x17, 0x09, 0x05])),  // a positive, minimal serial
+    algorithm,
+    name,
+    sequence(stamp(new Date(now - 60_000)), stamp(new Date(now + 86_400_000))),
+    name,
+    spki,
+    node(0xa3, sequence(sans)),
+  );
+  const der = sequence(body, algorithm, node(0x03, Buffer.concat([Buffer.from([0]), sign("sha256", body, privateKey)])));
+  const pem = (label: string, bytes: Buffer): string =>
+    `-----BEGIN ${label}-----\n${bytes.toString("base64").replace(/(.{64})/g, "$1\n").replace(/\n$/, "")}\n-----END ${label}-----\n`;
+  return {
+    cert: pem("CERTIFICATE", der),
+    key: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    fingerprint: `SHA256:${createHash("sha256").update(der).digest("base64").replace(/=+$/, "")}`,
+  };
+}
+
+describe("what was typed into the Address field", () => {
+  it("reads a whole pairing link as an address, a code and a certificate", () => {
+    expect(readPairingLink("https://the-park.local:4480/pair/PFYB-H6VW?fingerprint=SHA256:abc")).toEqual({
+      address: "https://the-park.local:4480",
+      code: "PFYB-H6VW",
+      fingerprint: "SHA256:abc",
+    });
+  });
+
+  it("leaves a bare address alone, and pins nothing", () => {
+    expect(readPairingLink("  https://the-park.local:4480  ")).toEqual({
+      address: "https://the-park.local:4480",
+    });
+    // Not a link, however much it looks like one: no scheme, so no opinions.
+    expect(readPairingLink("the-park.local:4480")).toEqual({ address: "the-park.local:4480" });
+  });
+
+  it("takes the code out of a link that names no certificate", () => {
+    expect(readPairingLink("http://127.0.0.1:4480/pair/PFYB-H6VW")).toEqual({
+      address: "http://127.0.0.1:4480",
+      code: "PFYB-H6VW",
+    });
+  });
+});
+
+describe("the same number, however it is written", () => {
+  const certificate = selfSigned("the same number");
+  const hex = fingerprintHex(certificate.fingerprint);
+
+  it("reads the three shapes one number arrives in", () => {
+    expect(hex).toMatch(/^[0-9a-f]{64}$/);
+    // What Node's own `fingerprint256` gives: colons, and upper case.
+    const colonised = (hex.match(/../g) ?? []).join(":").toUpperCase();
+    expect(fingerprintHex(colonised)).toBe(hex);
+    expect(fingerprintHex(hex)).toBe(hex);
+  });
+
+  it("reduces anything that is not thirty-two bytes to nothing, which matches nothing", () => {
+    expect(fingerprintHex("aa:bb")).toBe("");
+    expect(fingerprintHex("")).toBe("");
+    expect(samePin("", "")).toBe(false);
+    expect(samePin(certificate.fingerprint, hex)).toBe(true);
+  });
+});
+
+describe("pinning the far end's certificate", () => {
+  const device = { app: "Storyletter", host: "test" };
+  const mine = selfSigned("the park");
+  const somebody = selfSigned("somebody else");
+  let tls: FakeServer;
+
+  beforeAll(async () => {
+    tls = new FakeServer();
+    tls.fingerprint = mine.fingerprint;
+    await tls.start(await runPack(seedDir, { assets: true }), { cert: mine.cert, key: mine.key });
+  });
+
+  afterAll(async () => { await tls.stop(); });
+
+  it("pairs over the pinned certificate and hands the number back", async () => {
+    const paired = await pair(tls.origin, "DSGN-0001", device, undefined, mine.fingerprint);
+    expect(failed(paired)).toBe(false);
+    if (failed(paired)) return;
+    expect(paired.role).toBe("designer");
+    expect(paired.fingerprint).toBe(mine.fingerprint);
+  });
+
+  it("refuses a certificate that is not the pinned one BEFORE the code is spent", async () => {
+    const before = tls.pairs;
+    const paired = await pair(tls.origin, "DSGN-0001", device, undefined, somebody.fingerprint);
+    expect(failed(paired)).toBe(true);
+    if (!failed(paired)) return;
+    expect(paired.error).toBe(PIN_REFUSED);
+    expect(paired.code).toBe(FINGERPRINT_CHANGED);
+    // The whole point: something answered, so this is not "offline", and the
+    // code never reached it, so it has not been spent.
+    expect(paired.offline).toBeUndefined();
+    expect(tls.pairs).toBe(before);
+  });
+
+  it("pins the pull and the push the same way, and the bearer never goes over a refused socket", async () => {
+    const paired = await pair(tls.origin, "DSGN-0001", device, undefined, mine.fingerprint);
+    if (failed(paired)) throw new Error("the fake would not pair");
+
+    const pulled = await pullPack(tls.origin, paired.key, {}, mine.fingerprint);
+    expect(failed(pulled)).toBe(false);
+    if (failed(pulled)) return;
+
+    const wrongPull = await pullPack(tls.origin, paired.key, {}, somebody.fingerprint);
+    expect(wrongPull).toEqual({ error: PIN_REFUSED, code: FINGERPRINT_CHANGED });
+
+    const pushes = tls.pushes.length;
+    const wrongPush = await pushPack(tls.origin, paired.key, {
+      pack: pulled.bytes, installation: "the-park", version: "seed", base: pulled.revision,
+    }, somebody.fingerprint);
+    expect(wrongPush).toEqual({ error: PIN_REFUSED, code: FINGERPRINT_CHANGED });
+    expect(tls.pushes.length, "nothing was written to a socket that failed the pin").toBe(pushes);
+
+    const pushed = await pushPack(tls.origin, paired.key, {
+      pack: pulled.bytes, installation: "the-park", version: "seed", base: pulled.revision,
+    }, mine.fingerprint);
+    expect(failed(pushed)).toBe(false);
+  });
+
+  it("says the far end is not there when the head check meets a different certificate", async () => {
+    expect(await reachable(tls.origin, mine.fingerprint)).toBe(true);
+    expect(await reachable(tls.origin, somebody.fingerprint)).toBe(false);
+  });
+
+  it("refuses a pair response that names a certificate the link did not, and keeps nothing", async () => {
+    tls.fingerprint = somebody.fingerprint;   // the socket is ours; the answer is not
+    const kept: PairedKey[] = [];
+    const target = join(mkdtempSync(join(tmpdir(), "remote-pin-")), "saltmarsh.storylets");
+    const planned = await planConnect({
+      address: tls.origin, code: "DSGN-0001", device, pin: mine.fingerprint,
+      chooseFolder: async () => target,
+      keepKey: (_dialled, paired) => { kept.push(paired); },
+    });
+    tls.fingerprint = mine.fingerprint;
+    expect(planned).toEqual({ error: LINK_PIN_REFUSED, code: FINGERPRINT_CHANGED });
+    expect(kept, "a refused answer leaves no key behind").toEqual([]);
+    expect(existsSync(target)).toBe(false);
+  });
+
+  it("connects with the link's number and writes it beside the shards", async () => {
+    const kept: PairedKey[] = [];
+    const target = join(mkdtempSync(join(tmpdir(), "remote-pinned-")), "saltmarsh.storylets");
+    const planned = await planConnect({
+      address: tls.origin, code: "AUTH-0001", device, pin: mine.fingerprint,
+      chooseFolder: async () => target,
+      keepKey: (_dialled, paired) => { kept.push(paired); },
+    });
+    if (planned === null || failed(planned)) throw new Error("the fake would not connect");
+    expect(planned.remote.fingerprint).toBe(mine.fingerprint);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.fingerprint).toBe(mine.fingerprint);
+  });
+
+  it("pins nothing at all on a plain remote, and says nothing about it", async () => {
+    // The fake at the top of this file is plain HTTP and answers with an empty
+    // fingerprint, which is what a listener with no certificate carries.
+    expect(server.fingerprint).toBe("");
+    const kept: PairedKey[] = [];
+    const target = join(mkdtempSync(join(tmpdir(), "remote-plain-")), "saltmarsh.storylets");
+    const planned = await planConnect({
+      address: server.origin, code: "DSGN-0001", device,
+      chooseFolder: async () => target,
+      keepKey: (_dialled, paired) => { kept.push(paired); },
+    });
+    if (planned === null || failed(planned)) throw new Error("the fake would not connect");
+    expect(planned.remote.fingerprint).toBeUndefined();
+    expect(kept[0]!.fingerprint).toBeUndefined();
+    // ...and a pin handed to a plain address is not a reason to refuse it:
+    // there is nothing on that socket to compare against.
+    expect(await reachable(server.origin, mine.fingerprint)).toBe(true);
   });
 });
 

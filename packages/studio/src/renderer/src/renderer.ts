@@ -2519,7 +2519,7 @@ async function connect(opts: { address?: string; offerForget?: boolean } = {}): 
     await studio.forgetServer(answer.forget);
     return "busy";
   }
-  const result = await studio.connectServer(answer.address, answer.code);
+  const result = await studio.connectServer(answer.address, answer.code, answer.fingerprint);
   if (result === null) return "cancelled";
   if ("error" in result) { flashError(result.error); return "cancelled"; }
   await adopt(Promise.resolve(result));

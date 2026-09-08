@@ -7,6 +7,13 @@
 // is nothing here about what is at the other end, nowhere to go and read about
 // it, and nothing to sign up to: an address, a code, Connect.
 //
+// THE ADDRESS FIELD TAKES EITHER SHAPE, because there are two ways the pair of
+// them gets handed over: read out, and typed into the two boxes; or copied
+// whole off a screen, in which case the code is already in the text and a
+// second box to retype it into is a second thing to get wrong. A pasted link
+// fills the code in and pins the certificate it names, and says so in one
+// quiet line and no more than that. A bare address is what it always was.
+//
 // Push is a note and a look at where the project stands, and, when the far end
 // has refused with things this change breaks, one tick per break in the far
 // end's own words. Nothing here paraphrases a refusal.
@@ -17,12 +24,22 @@
 
 import { labelled } from "@wildwinter/app-shell";
 import { el } from "./dom.js";
+import { readPairingLink } from "../../shared/api.js";
 import type { LeavePromptDto, LeaveSettledDto } from "../../shared/api.js";
 
 export interface ConnectAnswer {
   address: string;
   code: string;
+  /** The certificate the address must answer with, out of a pasted link.
+   *  Absent when a bare address was typed, which pins nothing. */
+  fingerprint?: string;
 }
+
+/** The one line the dialog gains, and the whole of the user-visible change. It
+ *  appears only when a link named a certificate: there is nothing useful to
+ *  say about an address that named none, and a padlock nobody asked for is
+ *  chrome rather than information. */
+const PINNED_LINE = "Pinned to the server's certificate.";
 
 export interface ConnectOptions {
   /** Filled in when we already know where this is going: the open project's
@@ -46,8 +63,50 @@ export function askServer(opts: ConnectOptions = {}): Promise<ConnectAnswer | { 
     const code = el("input", "insp-input");
     code.type = "text";
 
+    // Quiet, and hidden until a link says otherwise.
+    const pinned = el("p", "server-pin", PINNED_LINE);
+    pinned.hidden = true;
+
+    /** The certificate a pasted link named, and the address it named it FOR.
+     *  Both, because a fingerprint is a statement about one address and follows
+     *  it out of the field: see below. */
+    let fingerprint: string | undefined;
+    let pinnedFor: string | undefined;
+
+    /**
+     * A link pasted into the Address field folds into the two fields.
+     *
+     * On `input` rather than `paste`, because text arrives by drag, by the
+     * middle button and by the menu as well, and a link that only worked when
+     * it came from one of them would be the sort of thing nobody reports.
+     * Nothing happens unless the text really is a link with a code in it, so
+     * an address typed a character at a time is never touched.
+     *
+     * The code goes in and the person may still edit it: the field is not
+     * locked, because a link read off a screen with a code beside it is a
+     * situation that happens and this is not the place to argue about it.
+     *
+     * ...AND THE PIN GOES WHEN THE ADDRESS DOES, which is the half that is
+     * easy to leave out (found by driving the dialog: paste a link, then type
+     * a different address over it). A fingerprint belongs to one address, and
+     * a line still saying "pinned" over an address the link never named would
+     * be claiming something about a server nobody has agreed to.
+     */
+    const fold = (): void => {
+      const read = readPairingLink(address.value);
+      if (read.code !== undefined) {
+        address.value = read.address;
+        code.value = read.code;
+        fingerprint = read.fingerprint;
+        pinnedFor = read.fingerprint === undefined ? undefined : read.address;
+      }
+      if (address.value.trim() !== pinnedFor) { fingerprint = undefined; pinnedFor = undefined; }
+      pinned.hidden = fingerprint === undefined;
+    };
+    address.addEventListener("input", fold);
+
     // The shell's captioned field, so this dialog has no look of its own.
-    dlg.append(el("div", "confirm-body", labelled("Address", address), labelled("Code", code)));
+    dlg.append(el("div", "confirm-body", labelled("Address", address), pinned, labelled("Code", code)));
 
     const actions = el("div", "confirm-actions");
     let done = false;
@@ -71,7 +130,7 @@ export function askServer(opts: ConnectOptions = {}): Promise<ConnectAnswer | { 
       const a = address.value.trim();
       const c = code.value.trim();
       if (a === "" || c === "") return;   // both, or nothing to do
-      finish({ address: a, code: c });
+      finish({ address: a, code: c, ...(fingerprint !== undefined ? { fingerprint } : {}) });
     };
     connect.addEventListener("click", submit);
     for (const input of [address, code]) {
