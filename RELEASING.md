@@ -213,4 +213,9 @@ These are written down so nobody has to rediscover them.
 **npm caches package metadata**, so if you ever do publish to the registry, a plain `npm view`
 can report the version you just replaced for a few minutes afterwards. Use `--prefer-online`
 when checking by hand. This has twice made a successful publish look like a failed one on the
-Patter side.
+Patter side. And it is not only npm's cache: on 2026-09-13 the registry's own package document,
+fetched directly, showed the runtime and the play helpers untouched since the week before for
+more than ten minutes after `changeset publish` had listed both under "Successfully published",
+with their tarballs answering 404, while the model published in the same run was there within
+seconds. The publish was fine. Give the registry a quarter of an hour before reading anything
+into it.
