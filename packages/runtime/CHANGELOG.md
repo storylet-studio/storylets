@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-13
+
 ### Added
 
 - **Outcome fields** (2026-09-13; design/outcome-fields-brief.md). A box may declare `outcomeFields` beside its card template, and an outcome fills them in `fields` exactly as a card fills the card template: the one line a press shows ("The notice is in your pocket") without spending a card on it. `OutcomeView.fields` hands them to the host with the outcome, as the bundle wrote them, and the engine never reads them; a stripped bundle keeps them, since they are game data and not author metadata. The compiler holds them to the card template's rule, so an unknown or mistyped field fails at publish and names the outcome. A bundle from a project that declares none is byte for byte what it was. Corpus first: one case and a new `assertOutcomeFields` op, corpus version 8.

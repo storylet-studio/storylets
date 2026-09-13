@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-13
+
 ### Added
 
 - **An outcome carries fields, and they reach the game with the outcome** (2026-09-13). A box declares `outcomeFields` beside the card template it already declares, and an outcome fills them the way a card fills its own: `flow.outcomes(card_id, hand_id)` hands each view's `"fields"` over exactly as the bundle wrote it, present only where the outcome has any. That is the line a venue's phone shows after a press ("The notice is in your pocket.") without spending a card on it. The engine never reads them, as it never reads a card's: they are game data, validated at publish and inert here. Parity with the JS runtime, corpus-pinned (corpus version 8).

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-13
+
 ### Added
 
 - **An outcome carries fields, declared by its box** (2026-09-13). A box may now declare `outcomeFields` beside the card template it already declares, and an outcome fills them the way a card fills `fields`: `Box.OutcomeFields` is a `List<FieldDecl>`, empty when the box declares none, and `Outcome.Fields` is a field name -> value map, null when the outcome carries none. `Flow.Outcomes` hands them straight out on `OutcomeView.Fields`, exactly as the bundle wrote them, alongside the title. INERT: the engine never reads a field and none of them is addressable from an expression, so a press can say one line ("The notice is in your pocket") without spending a card on it. A bundle with neither key parses and behaves as before. Parity with the JS runtime, corpus-pinned (corpus version 8).

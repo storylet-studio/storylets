@@ -10,7 +10,15 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-13
+
+### Added
+
+- **Outcomes carry fields of their own.** The box's **Card template** tab now has two lists: **Card fields**, as before, and **Outcome fields** below it, declaring what every outcome in the box may carry in the same shape. Fill them in the open outcome's new **Fields** block, between its purpose and its condition, with the same controls a card's Fields tab uses; a box that declares none shows no block. They are what an outcome hands your game once the press lands (the line to show after it, say) and cost no card. The tab's count is both lists together, a problem with an outcome field opens the outcome, and Find and Replace covers them.
+
 ### Fixed
+
+- **A cleared field is no field.** Blanking a card field used to store an empty string, which for a boolean, enum or number field was a publish error nothing in the editor could clear: "(unset)" in the picker stored a string. A blanked field of either kind now drops its key, so the host falls back to the declared default, which is what a default is for.
 
 - **The question on the way out is the app's own dialog now, and it answers correctly.** Closing the editor with edits the server had not seen asked in a system box attached to that window, whose close had already been held back: dismissing it let the close through whatever you had clicked, so **Cancel** closed the window and **Push to server** closed it without pushing. It is drawn where the Push dialog is drawn, in the same words, and Cancel now means cancel. A system box is still there for the case where the window cannot answer at all.
 
