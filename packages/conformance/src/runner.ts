@@ -433,6 +433,15 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         }
         break;
       }
+      case "assertOutcomeFields": {
+        const views = flowOf(op.flow).outcomes(op.card, op.from);
+        const actual = Object.fromEntries(Object.keys(op.expect).map((g) =>
+          [g, views.find((v) => v.gameId === g)?.fields ?? {}]));
+        if (!same(actual, op.expect)) {
+          failures.push(`${at}: expected ${show(op.expect)}, got ${show(actual)}`);
+        }
+        break;
+      }
       case "assertState": {
         for (const [path, expected] of Object.entries(op.expect)) {
           let actual: ScalarValue | undefined;

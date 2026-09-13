@@ -220,8 +220,15 @@ function applyEdit(box: SourceBox, existing: Card<string>, edit: CardEdit): Card
     if (edit.durable === null) delete next.durable; else next.durable = edit.durable;
   }
   if (edit.fields !== undefined) {
+    // A blank value is no value: the key goes, and the host falls back to the
+    // declared default, which is the only thing a default is for (the compiler
+    // never fills one and the runtime hands the sparse map through). Storing
+    // the "" used to leave a typed field impossible to unset: "(unset)" in a
+    // boolean or enum picker stored a string that then failed publish for not
+    // being a boolean. Patterpad's sparse game data is the same rule (ruled
+    // 2026-09-13, with outcome fields, which were written this way first).
     const fields: Record<string, ScalarValue> = {};
-    for (const { name, value } of edit.fields) fields[name] = coerceField(value);
+    for (const { name, value } of edit.fields) if (!blank(value)) fields[name] = coerceField(value);
     if (Object.keys(fields).length > 0) next.fields = fields; else delete next.fields;
   }
   if (edit.outcomes !== undefined) {
@@ -238,6 +245,15 @@ function applyEdit(box: SourceBox, existing: Card<string>, edit: CardEdit): Card
       if (o.title?.trim()) outcome.title = o.title;
       if (o.purpose?.trim()) outcome.purpose = o.purpose;
       if (!blank(o.gate)) outcome.condition = o.gate;
+      // The outcome's own fields, through the SAME coercion as the card's
+      // above: a blank value is no value (the key goes), and an outcome with
+      // nothing set carries no `fields` key at all, so every project written
+      // before the key existed saves back byte-identical.
+      if (o.fields !== undefined) {
+        const fields: Record<string, ScalarValue> = {};
+        for (const { name, value } of o.fields) if (!blank(value)) fields[name] = coerceField(value);
+        if (Object.keys(fields).length > 0) outcome.fields = fields;
+      }
       return outcome;
     });
   }
@@ -991,6 +1007,14 @@ export function saveBox(session: ProjectSession, boxId: string, edit: BoxEdit): 
   // no `turn` key at all and the shard reads as it always did.
   if (edit.turn !== undefined) { if (edit.turn === null) delete b.turn; else b.turn = { seconds: edit.turn.seconds }; }
   if (edit.fields !== undefined) b.fields = edit.fields.map(declFromDto);
+  // The outcome half of the template. Deleted when the list empties rather
+  // than written as `outcomeFields: []`, the way `turn` is: a box that declares
+  // none must carry no key, so a project that has never seen an outcome field
+  // saves back exactly as it was read.
+  if (edit.outcomeFields !== undefined) {
+    if (edit.outcomeFields.length > 0) b.outcomeFields = edit.outcomeFields.map(declFromDto);
+    else delete b.outcomeFields;
+  }
   if (edit.properties !== undefined) b.properties = edit.properties.map(declFromDto);
   return commit(session, "Edit box", `box:${boxId}`, [{ path: boxFile(session, box), content: canonicalStringify(box.box) }]);
 }

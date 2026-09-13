@@ -1238,6 +1238,7 @@ namespace StoryletStudio.StoryletEngine
                 GameId = Model.EffectiveGameId(o),
                 Title = o.Title,
                 Purpose = o.Purpose,
+                Fields = o.Fields,
                 Available = Passes(o.Condition, ctx),
             }).ToList();
         }

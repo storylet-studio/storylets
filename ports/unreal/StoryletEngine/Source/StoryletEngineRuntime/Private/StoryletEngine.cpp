@@ -567,6 +567,13 @@ TArray<FStoryletOutcomeView> UStoryletFlow::Outcomes(const FString& CardRef, con
 			V.Title = Ue(O.title);
 			V.Purpose = Ue(O.purpose);
 			V.bAvailable = O.available;
+			for (const auto& Pair : O.fields)
+			{
+				FStoryletFieldEntry Entry;
+				Entry.Name = Ue(Pair.first);
+				Entry.Value = ConvertValue(Pair.second);
+				V.Fields.Add(MoveTemp(Entry));
+			}
 			Out.Add(MoveTemp(V));
 		}
 	}

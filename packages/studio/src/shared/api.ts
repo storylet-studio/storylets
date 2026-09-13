@@ -274,6 +274,9 @@ export interface OutcomeDto {
   gate?: string;
   /** Change lines for the read view, e.g. "@story.reputation ← ... - 1". */
   changes: string[];
+  /** Template data the box's `outcomeFields` declares, shaped exactly as a
+   *  card's `fields`: the values SET on this outcome, nothing for the rest. */
+  fields: { name: string; value: string }[];
 }
 
 export interface CardDto {
@@ -315,6 +318,9 @@ export interface OutcomeEdit {
   /** Gate source; blank = ungated. */
   gate?: string;
   changes: { target: string; value: string }[];
+  /** The outcome's template data, as a card edit's `fields`: a blank value
+   *  deletes the key, and an outcome with none carries no `fields` at all. */
+  fields?: { name: string; value: string }[];
 }
 
 /** A card edit in source form: only the keys present are applied. */
@@ -458,6 +464,10 @@ export interface BoxDto {
   turn?: { seconds: number };
   /** The card template - the fields a card may set. */
   fields: FieldDeclDto[];
+  /** The other half of the same template - the fields an OUTCOME may set. A
+   *  box that declares none sends an empty list, as a box with no card fields
+   *  does; the shard keeps no key at all. */
+  outcomeFields: FieldDeclDto[];
   properties: PropertyDeclDto[];
   decks: DeckDto[];
   templates: TemplateDto[];
@@ -705,6 +715,10 @@ export interface BoxEdit {
    *  plays again. Absent leaves it as it was, like every other field here. */
   turn?: { seconds: number } | null;
   fields?: FieldDeclDto[];
+  /** The outcome template. An empty list clears it: the box keeps no
+   *  `outcomeFields` key rather than an empty one, so a project that never
+   *  declared any saves byte-identical. */
+  outcomeFields?: FieldDeclDto[];
   properties?: PropertyDeclDto[];
 }
 

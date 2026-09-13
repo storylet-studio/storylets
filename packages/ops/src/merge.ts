@@ -127,7 +127,11 @@ const DECLS = keyed("name", object({}));
 const CARD = object({
   tags: { kind: "map", of: SET },   // tags are sets of tag ids per group
   fields: RECORD,
-  outcomes: keyed("id", object({ changes: RECORD })),
+  // An outcome's own fields merge per NAME, exactly as a card's do and for the
+  // same reason: two people filling different fields of one outcome (the
+  // after-line and a sound cue, say) is two unrelated edits, and a whole-object
+  // 3-way would make them collide.
+  outcomes: keyed("id", object({ changes: RECORD, fields: RECORD })),
 });
 
 /** The merge strategies, exported so a test can walk them against the model's
@@ -150,7 +154,10 @@ export const MERGE_SPECS: Record<MergeFileType, Strategy> = {
     })),
   }),
   box: object({
-    box: object({ fields: DECLS, properties: DECLS, ranking: RECORD }),
+    // `outcomeFields` is the outcome half of the card template (model
+    // `Box.outcomeFields`), and merges as the card half does: name-keyed, so
+    // two people declaring different outcome fields both land.
+    box: object({ fields: DECLS, outcomeFields: DECLS, properties: DECLS, ranking: RECORD }),
   }),
   // The arrangement layer, which merges more than anything else: positions churn.
   // A POINT is atomic per card, deliberately. Taking x from one side and y from

@@ -102,6 +102,10 @@ for (const o of flow.outcomes(card.id, "the-inn")) {
 }
 ```
 
+An outcome view is `{ id, gameId, title?, purpose?, fields?, available }`. Its `fields` are
+the outcome's own handoff, there when the box declares outcome fields: the line to show once
+the press lands, say.
+
 `play` throws before changing anything if the outcome is gated shut or the card isn't in that
 hand. You can only play a card that's on the board.
 

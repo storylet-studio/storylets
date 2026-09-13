@@ -17,7 +17,8 @@ extends SceneTree
 
 ## Ops that run ON a flow, and so open one lazily. Everything else must not.
 const FLOW_OPS := ["setState", "peek", "deal", "assertBoard", "play",
-	"advanceTurns", "assertOutcomes", "assertOutcomeOrder", "assertState"]
+	"advanceTurns", "assertOutcomes", "assertOutcomeOrder", "assertOutcomeFields",
+	"assertState"]
 
 ## The load report's comparison separator: a UNIT SEPARATOR, because it cannot
 ## occur in an id, a gameId or a property name.
@@ -130,6 +131,51 @@ static func _show_list(list: Array) -> String:
 	for s in list:
 		parts.append("\"%s\"" % str(s))
 	return "[" + ",".join(parts) + "]"
+
+
+# Field dictionaries compare as DICTIONARIES: same names, values by value and
+# key order irrelevant. Numbers come out of JSON as floats here, so the corpus
+# writing 2 and a bundle carrying 2.0 are the same field.
+static func _same_fields(a: Dictionary, b: Dictionary) -> bool:
+	if a.size() != b.size():
+		return false
+	for name in a:
+		if not b.has(name):
+			return false
+		if not StoryletValues.value_equals(StoryletValues.to_value(a[name]), StoryletValues.to_value(b[name])):
+			return false
+	return true
+
+
+static func _same_field_sets(a: Dictionary, b: Dictionary) -> bool:
+	if a.size() != b.size():
+		return false
+	for game_id in a:
+		if not b.has(game_id):
+			return false
+		if not _same_fields(a[game_id], b[game_id]):
+			return false
+	return true
+
+
+# Fields as a comparable line, names sorted: the failure has to read the same
+# whichever order the two sides happen to hold their names in.
+static func _show_fields(d: Dictionary) -> String:
+	var names := d.keys()
+	names.sort()
+	var parts: Array = []
+	for name in names:
+		parts.append("%s: %s" % [str(name), StoryletValues.show(StoryletValues.to_value(d[name]))])
+	return "{" + ", ".join(parts) + "}"
+
+
+static func _show_field_sets(d: Dictionary) -> String:
+	var ids := d.keys()
+	ids.sort()
+	var parts: Array = []
+	for game_id in ids:
+		parts.append("%s %s" % [str(game_id), _show_fields(d[game_id])])
+	return "{" + ", ".join(parts) + "}"
 
 
 # Direct store writes for setup and setState: story/world are single bags;
@@ -598,6 +644,22 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				var want: Array = op["expect"]
 				if got != want:
 					failures.append("%s: expected [%s], got [%s]" % [at, ", ".join(want), ", ".join(got)])
+
+			"assertOutcomeFields":
+				# An outcome's fields ride out to the game exactly as the bundle
+				# wrote them - the engine never reads them. An outcome carrying
+				# none reads as an EMPTY dictionary, not a missing key.
+				var with_fields := session.outcomes(op["card"], op["from"])
+				var want_fields: Dictionary = op["expect"]
+				var got_fields := {}
+				for game_id in want_fields:
+					got_fields[game_id] = {}
+					for v in with_fields:
+						if v["gameId"] == game_id:
+							got_fields[game_id] = v.get("fields", {})
+							break
+				if not _same_field_sets(got_fields, want_fields):
+					failures.append("%s: expected %s, got %s" % [at, _show_field_sets(want_fields), _show_field_sets(got_fields)])
 
 			"assertState":
 				for path in op["expect"]:

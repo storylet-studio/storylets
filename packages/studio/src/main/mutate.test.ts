@@ -251,6 +251,73 @@ describe("card mutations", () => {
     expect(onDisk).toContain('"@story.reputation": "@story.reputation + 1"');
   });
 
+  it("saving an outcome's fields round-trips them, coerced as a card's are", () => {
+    // The outcome half of the card template (2026-09-13). The same coercion as
+    // a card field: a number typed into a number field is stored as one.
+    const session = scratchProject();
+    // Declared first, as an author would: a field nothing declares is a publish
+    // error, and this test should leave a project that still compiles.
+    saveBox(session, encBox, { outcomeFields: [
+      { name: "after", type: "string", default: "" },
+      { name: "weight", type: "number", default: "0" },
+    ] });
+    const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
+    const accepted = ratJob.outcomes[0]!;
+    const edit = (fields: { name: string; value: string }[]): void => {
+      saveCard(session, docks, ratJob.id, {
+        outcomes: [{ id: accepted.id, gameId: "accepted", title: "Take it", changes: [], fields }],
+      });
+    };
+    edit([{ name: "after", value: "The rat keeper nods." }, { name: "weight", value: "2" }]);
+    const onDisk = readFileSync(dockDeckFile(session), "utf8");
+    expect(onDisk).toContain('after: "The rat keeper nods."');
+    expect(onDisk).toContain("weight: 2");
+    const reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    const back = reopened.session.dto.boxes[0]!.decks[0]!.cards
+      .find((c) => c.id === ratJob.id)!.outcomes.find((o) => o.id === accepted.id)!;
+    expect(back.fields).toEqual([{ name: "after", value: "The rat keeper nods." }, { name: "weight", value: "2" }]);
+
+    // Emptied: the key goes rather than storing "", and an outcome with
+    // nothing set carries no `fields` key at all - so a project that has never
+    // used one saves back exactly as it was read.
+    edit([{ name: "after", value: "" }, { name: "weight", value: "" }]);
+    expect(readFileSync(dockDeckFile(session), "utf8")).not.toContain("after:");
+    const empty = openProject(session.loaded.dir);
+    if ("error" in empty) throw new Error(empty.error);
+    const outcome = empty.session.loaded.source!.boxes[0]!.decks
+      .flatMap((d) => d.shard.cards).find((c) => c.id === ratJob.id)!
+      .outcomes.find((o) => o.id === accepted.id)!;
+    expect("fields" in outcome).toBe(false);
+  });
+
+  it("a blanked CARD field drops its key rather than storing \"\", so a typed field can be unset", () => {
+    // Ruled 2026-09-13 alongside outcome fields, and Patterpad's rule for game
+    // data: absence is "use the declared default". The old "" made "(unset)"
+    // in a boolean or enum picker a publish error nothing in the UI could clear.
+    const session = scratchProject();
+    saveBox(session, encBox, { fields: [
+      { name: "cue", type: "string", default: "" },
+      { name: "quiet", type: "boolean", default: "false" },
+    ] });
+    const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
+    saveCard(session, docks, ratJob.id, { fields: [{ name: "cue", value: "bell" }, { name: "quiet", value: "true" }] });
+    let onDisk = readFileSync(dockDeckFile(session), "utf8");
+    expect(onDisk).toContain('cue: "bell"');
+    expect(onDisk).toContain("quiet: true");
+
+    saveCard(session, docks, ratJob.id, { fields: [{ name: "cue", value: "" }, { name: "quiet", value: "" }] });
+    onDisk = readFileSync(dockDeckFile(session), "utf8");
+    expect(onDisk).not.toContain("cue:");
+    expect(onDisk).not.toContain("quiet:");
+    const reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    const card = reopened.session.loaded.source!.boxes[0]!.decks
+      .flatMap((d) => d.shard.cards).find((c) => c.id === ratJob.id)!;
+    expect(card.fields?.["cue"]).toBeUndefined();
+    expect(card.fields?.["quiet"]).toBeUndefined();
+  });
+
   it("duplicates a card (fresh ids, deduped gameId, inserted after the original)", () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
@@ -643,6 +710,47 @@ describe("box mutations", () => {
       { name: "patter-scene", type: "string", default: "" },
       { name: "weight", type: "number", default: 2 },
     ]);
+  });
+
+  it("edits the box OUTCOME fields, and writes no key at all when the list empties", () => {
+    const session = scratchProject();
+    const boxFile = join(session.loaded.dir, "encounters", "box.storyletbox");
+    const before = readFileSync(boxFile, "utf8");
+    expect(before).not.toContain("outcomeFields");   // or the second half proves nothing
+
+    expect(saveBox(session, encBox, { outcomeFields: [
+      { name: "after", type: "string", default: "" },
+      { name: "cue", type: "enum", default: "silence", values: ["silence", "bell"] },
+    ] })).not.toHaveProperty("error");
+    let reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    expect(reopened.session.loaded.source!.boxes[0]!.box.box.outcomeFields).toEqual([
+      { name: "after", type: "string", default: "" },
+      { name: "cue", type: "enum", default: "silence", values: ["silence", "bell"] },
+    ]);
+    expect(reopened.session.dto.boxes.find((b) => b.id === encBox)!.outcomeFields.map((f) => f.name))
+      .toEqual(["after", "cue"]);
+
+    // Emptied: the key is DELETED, not written as `outcomeFields: []`. A box
+    // that declares none must read as it always did, so a project saved by an
+    // editor that knows about the key is byte-identical to one that never met
+    // it - which is the whole promise the format made when the key landed.
+    expect(saveBox(session, encBox, { outcomeFields: [] })).not.toHaveProperty("error");
+    expect(readFileSync(boxFile, "utf8")).not.toContain("outcomeFields");
+    reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    expect("outcomeFields" in reopened.session.loaded.source!.boxes[0]!.box.box).toBe(false);
+    expect(reopened.session.dto.boxes.find((b) => b.id === encBox)!.outcomeFields).toEqual([]);
+  });
+
+  it("a box edit that says nothing about outcome fields leaves them alone", () => {
+    const session = scratchProject();
+    saveBox(session, encBox, { outcomeFields: [{ name: "after", type: "string", default: "" }] });
+    saveBox(session, encBox, { title: "Street encounters" });
+    const reopened = openProject(session.loaded.dir);
+    if ("error" in reopened) throw new Error(reopened.error);
+    expect(reopened.session.loaded.source!.boxes[0]!.box.box.outcomeFields)
+      .toEqual([{ name: "after", type: "string", default: "" }]);
   });
 
   it("edits the ranking specificity flag", () => {

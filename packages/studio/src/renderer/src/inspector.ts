@@ -202,6 +202,10 @@ function editFromCard(card: CardDto): Required<CardEdit> {
       ...(o.purpose !== undefined ? { purpose: o.purpose } : {}),
       ...(o.gate !== undefined ? { gate: o.gate } : {}),
       changes: o.changes.map(parseChange),
+      // Always present, as the card's `fields` is: the Fields block pushes into
+      // it, and a key that appears only once something is set would have to be
+      // guarded at every touch.
+      fields: o.fields.map((f) => ({ name: f.name, value: f.value })),
     })),
   };
 }
@@ -344,7 +348,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     ], tab, (next) => { setDocTab(tabKey, next); drawCentre(); }));
 
     if (tab === "outcomes") {
-      view.append(el("div", { className: "doc-panel" }, outcomeAccordion(edit, catalogue, commit, setExpanded, h)));
+      view.append(el("div", { className: "doc-panel" }, outcomeAccordion(edit, box.outcomeFields, catalogue, commit, setExpanded, h)));
       centre.replaceChildren(view);
       return;
     }
@@ -597,32 +601,43 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       if (!f) { f = { name, value: "" }; edit.fields.push(f); }
       f.value = value;
     };
-    const fieldBody: HTMLElement[] = [];
-    for (const decl of box.fields) {
-      const current = edit.fields.find((f) => f.name === decl.name)?.value ?? "";
-      let control: HTMLElement;
-      if (decl.type === "boolean" || (decl.type === "enum" && (decl.values?.length ?? 0) > 0)) {
-        // A declared type is a contract: offer its values, don't ask for typing.
-        const sel = el("select", { className: "insp-input insp-mono" });
-        const none = el("option", { text: "(unset)" }); none.value = ""; sel.append(none);
-        const opts = decl.type === "boolean" ? ["true", "false"] : decl.values!;
-        for (const v of opts) { const o = el("option", { text: v }); o.value = v; if (v === current) o.selected = true; sel.append(o); }
-        sel.addEventListener("change", () => { setField(decl.name, sel.value); commit(); });
-        control = sel;
-      } else {
-        // string / number / flags: text, coerced on save.
-        const input = el("input", { className: "insp-input insp-mono" });
-        input.value = current; input.placeholder = `<${decl.type}>`;
-        input.addEventListener("input", () => setField(decl.name, input.value));
-        input.addEventListener("change", commit);
-        control = input;
-      }
-      fieldBody.push(el("div", { className: "doc-row" }, el("span", { className: "doc-row-label", text: decl.name }), control));
-    }
+    const fieldBody = box.fields.map((decl) =>
+      fieldRow(decl, edit.fields.find((f) => f.name === decl.name)?.value ?? "",
+        (v) => setField(decl.name, v), commit));
     return [el("div", { className: "doc-panel" }, ...fieldBody)];
   }
 
   drawCentre();
+}
+
+/**
+ * One declared field as a label + control row, the control chosen by the
+ * declared type (rule 7: a declared type is a contract, so offer its values
+ * rather than asking for typing).
+ *
+ * Shared by the card's Fields tab and an outcome's Fields block, which is why
+ * it is out here: the two lists are the same question asked of two entities
+ * (design/outcome-fields-brief.md), and a copy of this would have drifted the
+ * first time a type gained a control.
+ */
+function fieldRow(decl: FieldDeclDto, current: string, set: (value: string) => void, commit: () => void): HTMLElement {
+  let control: HTMLElement;
+  if (decl.type === "boolean" || (decl.type === "enum" && (decl.values?.length ?? 0) > 0)) {
+    const sel = el("select", { className: "insp-input insp-mono" });
+    const none = el("option", { text: "(unset)" }); none.value = ""; sel.append(none);
+    const opts = decl.type === "boolean" ? ["true", "false"] : decl.values!;
+    for (const v of opts) { const o = el("option", { text: v }); o.value = v; if (v === current) o.selected = true; sel.append(o); }
+    sel.addEventListener("change", () => { set(sel.value); commit(); });
+    control = sel;
+  } else {
+    // string / number / flags: text, coerced on save.
+    const input = el("input", { className: "insp-input insp-mono" });
+    input.value = current; input.placeholder = `<${decl.type}>`;
+    input.addEventListener("input", () => set(input.value));
+    input.addEventListener("change", commit);
+    control = input;
+  }
+  return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label", text: decl.name }), control);
 }
 
 // The identity panel every entity's inspector opens with: Title (where the type
@@ -819,7 +834,7 @@ function commentBubble(on: string, count: number, open: (anchor: HTMLElement) =>
 
 // The outcomes accordion in the centre: a light row per outcome that expands in
 // place to its full (wide) editor. Only one is open at a time.
-function outcomeAccordion(edit: Required<CardEdit>, catalogue: ConditionProperty[], commit: () => void, setExpanded: (id: string | undefined) => void, h: InspectorHost): HTMLElement {
+function outcomeAccordion(edit: Required<CardEdit>, outcomeFields: FieldDeclDto[], catalogue: ConditionProperty[], commit: () => void, setExpanded: (id: string | undefined) => void, h: InspectorHost): HTMLElement {
   const list = el("div", { className: "cardedit-outcomes" });
   const duplicate = (o: OutcomeEdit): void => {
     const at = edit.outcomes.indexOf(o);
@@ -830,6 +845,9 @@ function outcomeAccordion(edit: Required<CardEdit>, catalogue: ConditionProperty
       ...o, id: freshOutcomeId(), gameId: gid,
       ...(o.title !== undefined ? { title: `${o.title} (copy)` } : {}),
       changes: o.changes.map((c) => ({ ...c })),
+      // Copied, not shared: a spread would leave the clone editing the
+      // original's rows, which is the bug `changes` above already avoids.
+      ...(o.fields !== undefined ? { fields: o.fields.map((f) => ({ ...f })) } : {}),
     };
     edit.outcomes.splice(at + 1, 0, clone); commit(); setExpanded(clone.id);
   };
@@ -878,7 +896,7 @@ function outcomeAccordion(edit: Required<CardEdit>, catalogue: ConditionProperty
       ]);
     });
     item.append(header);
-    if (open) item.append(outcomeBody(o, catalogue, commit, () => fillOutcomeHeader(header, o, true, catalogue), () => remove(o), h));
+    if (open) item.append(outcomeBody(o, outcomeFields, catalogue, commit, () => fillOutcomeHeader(header, o, true, catalogue), () => remove(o), h));
     list.append(item);
   }
   const add = el("button", { className: "insp-add", text: "+ Outcome" });
@@ -896,7 +914,7 @@ function outcomeAccordion(edit: Required<CardEdit>, catalogue: ConditionProperty
 
 // The expanded outcome's full editor - wide, inline in the centre. Field edits
 // commit and refresh the header (syncHeader) so its summary stays live.
-function outcomeBody(o: OutcomeEdit, catalogue: ConditionProperty[], commit: () => void, syncHeader: () => void, remove: () => void, h: InspectorHost): HTMLElement {
+function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: ConditionProperty[], commit: () => void, syncHeader: () => void, remove: () => void, h: InspectorHost): HTMLElement {
   const save = (): void => { commit(); syncHeader(); };
   const body = el("div", { className: "outcome-body" });
 
@@ -924,6 +942,25 @@ function outcomeBody(o: OutcomeEdit, catalogue: ConditionProperty[], commit: () 
   purpose.addEventListener("input", () => { o.purpose = purpose.value; commit(); });
   purpose.addEventListener("change", commit);
   body.append(purpose);
+
+  // The outcome's template data, straight after the paper and before the
+  // machinery: an after-line is prose the author writes in the same breath as
+  // the purpose, not a condition. Drawn ONLY when the box declares outcome
+  // fields - an outcome is an item inside a card, not a page of its own, so the
+  // empty-state teaching a card's Fields tab carries would be a paragraph of
+  // box configuration in the middle of somebody's writing. The box's Card
+  // template tab is where the declaring is taught.
+  if (outcomeFields.length > 0) {
+    const setField = (name: string, value: string): void => {
+      const fields = o.fields ?? (o.fields = []);
+      const f = fields.find((x) => x.name === name);
+      if (f) f.value = value; else fields.push({ name, value });
+    };
+    const rows = outcomeFields.map((decl) =>
+      fieldRow(decl, o.fields?.find((f) => f.name === decl.name)?.value ?? "",
+        (v) => setField(decl.name, v), save));
+    body.append(bare("Fields", "what this outcome hands the game", ...rows));
+  }
 
   const gateHost = el("div", { className: "insp-exed" });
   mountCondition(gateHost, { src: o.gate ?? "", properties: catalogue, onChange: (src) => { if (src.trim()) o.gate = src; else delete o.gate; save(); } });
@@ -1257,8 +1294,22 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     }
   } else if (tab === "template") {
     const fields: FieldDeclDto[] = box.fields.map((f) => ({ ...f, values: f.values ? [...f.values] : undefined }));
-    view.append(el("div", { className: `doc-panel${fields.length === 0 ? " empty" : ""}` }, propList(fields, () => h.saveBox(box.id, { fields }), "+ Field", { sharingSwitches: false })),
+    // The tab used to BE the label, so this list carried no head of its own.
+    // It has one now that a second list shares the page: an unlabelled list
+    // above a labelled one reads as the labelled one's preamble.
+    view.append(sectHead("Card fields"),
+      el("div", { className: `doc-panel${fields.length === 0 ? " empty" : ""}` }, propList(fields, () => h.saveBox(box.id, { fields }), "+ Field", { sharingSwitches: false })),
       el("p", { className: "doc-tab-note", text: "The template for this box's cards: the fields every card can carry." }));
+    // The outcome half, on the SAME tab (2026-09-13). The tab vocabulary is
+    // fixed (storyletter.md), and these are two halves of one template rather
+    // than two subjects: what a card carries and what a press hands back. A
+    // second list under its own overline says that, where a second tab would
+    // have claimed they were unrelated. Same component as the card list (rule
+    // 6), same sharing answer: field data carries no state.
+    const outcomeFields: FieldDeclDto[] = box.outcomeFields.map((f) => ({ ...f, values: f.values ? [...f.values] : undefined }));
+    view.append(sectHead("Outcome fields"),
+      el("div", { className: `doc-panel${outcomeFields.length === 0 ? " empty" : ""}` }, propList(outcomeFields, () => h.saveBox(box.id, { outcomeFields }), "+ Field", { sharingSwitches: false })),
+      el("p", { className: "doc-tab-note", text: "The same for this box's outcomes: the fields every outcome can carry, handed to the game with the press." }));
   } else {
     const properties: PropertyDeclDto[] = box.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
     view.append(el("div", { className: `doc-panel${properties.length === 0 ? " empty" : ""}` }, propList(properties, () => h.saveBox(box.id, { properties }), "+ Property")),

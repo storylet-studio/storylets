@@ -79,7 +79,9 @@ if (!Flow->Play(CardGameId, OutcomeGameId, HandGameId, Error)) { /* Error says w
 
 Everything above is **Blueprint-callable**, with every view converted to a Blueprint struct
 (`FStoryletDealtCard`, `FStoryletOutcomeView`, `FStoryletBoxView`, `FStoryletHandContents`), so a
-designer can deal and play from a widget without C++. `BoardForBox(BoxRef)` sits beside
+designer can deal and play from a widget without C++. An `FStoryletOutcomeView` carries the
+outcome's own `Fields` as `FStoryletDealtCard` carries the card's, when the box declares
+outcome fields. `BoardForBox(BoxRef)` sits beside
 `Board()` and `PlayAdvancing` beside `Play` because Blueprint pins take no optional arguments.
 `Play` returns false and fills `Error` if the outcome is gated shut or the card isn't in that
 hand; nothing changes in that case.

@@ -72,8 +72,9 @@ export interface PropertyDecl {
   purpose?: string;
 }
 
-/** A card-template field (box-defined). Data for the host; the engine never
- *  interprets fields and they are not addressable from expressions. */
+/** A template field (box-defined), of the card template or of the outcome
+ *  fields. Data for the host; the engine never interprets fields and they are
+ *  not addressable from expressions. */
 export interface FieldDecl {
   name: string;
   type: PropertyType;
@@ -326,6 +327,11 @@ export interface Outcome<E> {
   /** Target ("@scope.name") -> expression; all right-hand sides evaluate
    *  against pre-play state (schema 3.7). */
   changes: Record<string, E>;
+  /** Template data, as `Card.fields` is: field name -> value, declared by
+   *  the box's `outcomeFields`, validated at publish, and handed to the host
+   *  with the outcome. The engine never reads it: a press can say one line
+   *  ("The notice is in your pocket") without spending a card on it. */
+  fields?: Record<string, ScalarValue>;
 }
 
 export interface Card<E> {
@@ -644,6 +650,10 @@ export interface Box<E> {
   turn?: { seconds: number };
   /** The card template: what every card in this box carries. */
   fields: FieldDecl[];
+  /** What every outcome in this box may carry, declared the same way.
+   *  Absent when the box declares none, so a bundle without them is byte for
+   *  byte what it was. */
+  outcomeFields?: FieldDecl[];
   properties: PropertyDecl[];
   tagGroups: TagGroup[];
   decks: Deck<E>[];
@@ -1049,6 +1059,10 @@ export interface ContractShard {
   properties?: ContractProperty[];
   /** Card-template field names the crew and the bridges read. */
   fields?: string[];
+  /** Outcome field names they read, the same way: the after-line a station
+   *  shows when a press lands. What `fields` is to the card template, this is
+   *  to the box's `outcomeFields`. */
+  outcomeFields?: string[];
 }
 
 /**
@@ -1301,6 +1315,9 @@ export interface BoxShard {
     /** Declares a timed box (see `Box.turn`); compiled through unchanged. */
     turn?: { seconds: number };
     fields: FieldDecl[];
+    /** The outcome fields (see `Box.outcomeFields`); a shard without the key
+     *  declares none. */
+    outcomeFields?: FieldDecl[];
     properties: PropertyDecl[];
   };
 }

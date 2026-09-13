@@ -201,6 +201,13 @@ the box.
     ],
     gameId: "village",
     id: "b_village",
+    outcomeFields: [
+      {
+        default: "",
+        name: "after",
+        type: "string",
+      },
+    ],
     properties: [],
     purpose: "Every story beat in and around the village.",
     ranking: {
@@ -213,8 +220,10 @@ the box.
 
 `fields` is the **card template**: what every card in this box carries. Fields are data for
 your game (a scene id, an animation reference, a text key). The engine never interprets them
-and expressions can't read them. `properties` is the `@box` scope. `ranking.specificity` is
-the one per-box ranking toggle.
+and expressions can't read them. `outcomeFields` is the same again for **outcomes**: what an
+outcome in this box may carry, declared the same way, for the line your game shows after a
+press without spending a card on it. Leave it out when you have none. `properties` is the
+`@box` scope. `ranking.specificity` is the one per-box ranking toggle.
 
 An optional `turn` makes this a **timed box**:
 
@@ -404,6 +413,9 @@ which makes every `redraw: never` card in it
           changes: {
             "@story.act": "\"act-1\"",
           },
+          fields: {
+            after: "The gate swings shut behind you.",
+          },
           gameId: "step-through",
           id: "c_arrive_o",
           title: "Step through the gate",
@@ -448,7 +460,10 @@ Reading a card top to bottom:
   match any binding of any other group the box declares. Exclusions are written as conditions
   over `@hand`, not as negative tags.
 - **`outcomes`** are the choices. Each has a `changes` map from a fully-qualified
-  `@scope.name` target to an expression, plus an optional `condition` that gates it.
+  `@scope.name` target to an expression, plus an optional `condition` that gates it. When the
+  box declares `outcomeFields`, an outcome fills them in a `fields` map of its own, exactly
+  as the card fills the card template: here `after` is the line the game shows once the gate
+  is stepped through. The engine hands it over with the outcome and never reads it.
 
 ## Property declarations
 

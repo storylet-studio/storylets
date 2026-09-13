@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -5857,6 +5857,164 @@
           "expect": [
             "stand",
             "pay",
+            "leave"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an outcome's fields reach the game with the outcome, untouched",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "outcomeFields": [
+              {
+                "name": "after",
+                "type": "string",
+                "default": ""
+              },
+              {
+                "name": "weight",
+                "type": "number",
+                "default": 0
+              },
+              {
+                "name": "quiet",
+                "type": "boolean",
+                "default": false
+              }
+            ],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_notice",
+                    "gameId": "notice",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_take",
+                        "gameId": "take",
+                        "changes": {},
+                        "fields": {
+                          "after": "The notice is in your pocket.",
+                          "quiet": true,
+                          "weight": 2
+                        }
+                      },
+                      {
+                        "id": "o_leave",
+                        "gameId": "leave",
+                        "changes": {}
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_notice"
+            ]
+          }
+        },
+        {
+          "op": "assertOutcomeFields",
+          "card": "c_notice",
+          "from": "h_q",
+          "expect": {
+            "take": {
+              "after": "The notice is in your pocket.",
+              "quiet": true,
+              "weight": 2
+            },
+            "leave": {}
+          }
+        },
+        {
+          "op": "assertOutcomes",
+          "card": "c_notice",
+          "from": "h_q",
+          "expect": {
+            "take": true,
+            "leave": true
+          }
+        },
+        {
+          "op": "assertOutcomeOrder",
+          "card": "c_notice",
+          "from": "h_q",
+          "expect": [
+            "take",
             "leave"
           ]
         }

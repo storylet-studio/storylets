@@ -42,7 +42,8 @@ mostly install notes and the local spelling.
 4. **Read the card's fields** and do whatever your game does with them: play a scene, run an
    animation, put text on screen.
 5. **Ask for the outcomes**, offer the available ones, and **play** the one the player picks.
-   State writes, the cooldown starts, the clock advances.
+   State writes, the cooldown starts, the clock advances. An outcome carries fields of its
+   own when the box declares them, so the line you show after the press can come with it.
 
 Then save and load the whole run through one call.
 
@@ -87,7 +88,7 @@ On a **flow** (one playthrough):
 | `deal(hand)` | Refresh one hand; returns its new contents. A refresh evicts cards no longer eligible and fills empty slots; a card that is still eligible stays dealt, so a newly eligible card waits for an empty slot |
 | `dealMany(hands?)` | Refresh several or all hands, same rule; returns what was dealt, keyed by hand |
 | `board(box?)` | The current contents of every hand, or of one box's hands |
-| `outcomes(card, hand)` | This card's outcomes with availability, evaluated against current state |
+| `outcomes(card, hand)` | This card's outcomes with availability, evaluated against current state, and each one's fields |
 | `play(card, outcome, hand, { advanceTurns })` | Apply an outcome |
 | `advanceTurns(box, n)` | Advance one box's clock |
 | `turn(box)` | Read one box's clock |

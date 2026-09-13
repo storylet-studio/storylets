@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
 // Project-wide find-and-replace over the TEXT an author writes: the title and
 // purpose of every item (project name, box, deck, card, outcome, hand, hand
-// template, tag group) and the string-typed field values on cards. Patter's
-// replace.ts, ported to shards (its scope there is the source-language prose).
+// template, tag group) and the string-typed field values on cards AND on
+// outcomes. Patter's replace.ts, ported to shards (its scope there is the
+// source-language prose).
 //
 // It NEVER touches ids, gameIds (addresses, edited elsewhere), conditions,
 // changes or property declarations: a replace is a writing tool, not a
@@ -39,7 +40,7 @@ export interface ReplaceOptions {
 }
 
 /** Which text of an item: its title, its purpose, the project's name, or a
- *  card field (`field:<name>`). */
+ *  card or outcome field (`field:<name>`). */
 export type ReplaceField = "title" | "purpose" | "name" | `field:${string}`;
 
 /** One replaced string, for the preview / confirm list. */
@@ -175,9 +176,22 @@ function replaceDeck(
 
     let outcomesChanged = false;
     const outcomes = card.outcomes.map((o): Outcome<string> => {
-      const n = titled(o, "outcome", cardTrail);
-      if (n) outcomesChanged = true;
-      return n ?? o;
+      let next = titled(o, "outcome", cardTrail) ?? o;
+      if (next !== o) outcomesChanged = true;
+      // An outcome's own fields, on the same terms as a card's: string values
+      // only, because a venue's after-line is prose an author rewrites and a
+      // number or a flag is not text (2026-09-13).
+      if (o.fields) {
+        let fieldsChanged = false;
+        const fields = { ...o.fields };
+        for (const [fname, value] of Object.entries(o.fields)) {
+          if (typeof value !== "string") continue;
+          const after = sub(o.id, "outcome", `field:${fname}`, cardTrail, value);
+          if (after !== undefined) { fields[fname] = after; fieldsChanged = true; }
+        }
+        if (fieldsChanged) { next = { ...next, fields }; outcomesChanged = true; }
+      }
+      return next;
     });
     if (outcomesChanged) { next = { ...next, outcomes }; changed = true; }
     return next;

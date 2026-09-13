@@ -91,8 +91,9 @@ foreach (var o in _flow.Outcomes(card.Id, "the-inn"))         // ask when you sh
 ```
 
 A `DealtCard` carries `Id`, `GameId`, `Title`, `Purpose` and the card's fields; render it in
-your own UI. `Play` throws before changing anything if the outcome is gated shut or the card
-isn't in that hand.
+your own UI. An `OutcomeView` carries the same identity, `Available`, and the outcome's own
+`Fields` when the box declares outcome fields. `Play` throws before changing anything if the
+outcome is gated shut or the card isn't in that hand.
 
 ## Your game's state
 

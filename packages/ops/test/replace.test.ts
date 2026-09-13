@@ -98,6 +98,47 @@ describe("runReplace", () => {
     }]);
   });
 
+  it("replaces an outcome's string field, and leaves its numbers alone", () => {
+    // Outcome fields are new (2026-09-13) and the example declares none, so the
+    // case is BUILT here rather than taken from the project: one outcome given
+    // an after-line and a number, in a copy of the loaded source. What is pinned
+    // is that an outcome field is reachable, is rewritten, is named
+    // `field:<name>` against the OUTCOME's id, and that a non-string value is
+    // left alone exactly as a card's is.
+    const box = loaded.source!.boxes[0]!;
+    const deck = box.decks.find((d) => (d.shard.cards ?? []).some((c) => c.outcomes.length > 0))!;
+    const card = deck.shard.cards.find((c) => c.outcomes.length > 0)!;
+    const outcome = card.outcomes[0]!;
+    const withFields = {
+      ...outcome,
+      fields: { after: "The zzz-forge falls quiet.", weight: 3 },
+    };
+    const patchedDeck = {
+      ...deck,
+      shard: {
+        ...deck.shard,
+        cards: deck.shard.cards.map((c) => (c === card ? { ...c, outcomes: [withFields, ...c.outcomes.slice(1)] } : c)),
+      },
+    };
+    const patched = {
+      ...loaded,
+      source: {
+        ...loaded.source!,
+        boxes: [{ ...box, decks: box.decks.map((d) => (d === deck ? patchedDeck : d)) }, ...loaded.source!.boxes.slice(1)],
+      },
+    };
+
+    const plan = runReplace(patched, { query: "zzz-forge", replacement: "zzz-mill" });
+    expect(plan.hits).toEqual([{
+      id: outcome.id, kind: "outcome", field: "field:after",
+      location: [box.box.box.title, deck.shard.deck.title, card.title ?? card.gameId],
+      before: "The zzz-forge falls quiet.", after: "The zzz-mill falls quiet.",
+    }]);
+    const write = plan.writes.find((w) => w.path.endsWith(deck.path.split("/").pop()!))!;
+    expect(write.content).toContain('after: "The zzz-mill falls quiet."');
+    expect(write.content).toContain("weight: 3");
+  });
+
   it("is case-insensitive by default, case-sensitive on request, whole-word on request", () => {
     expect(runReplace(loaded, { query: "HAMMER", replacement: "x" }).hits).toHaveLength(2);
     expect(runReplace(loaded, { query: "HAMMER", replacement: "x", caseSensitive: true }).hits).toHaveLength(0);

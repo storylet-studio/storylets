@@ -12,12 +12,12 @@ import type { BoxDto, CardDto, DeckDto } from "../../shared/api.js";
 
 const card: CardDto = {
   id: "c_1", gameId: "patrol", title: "The patrol", condition: "", priority: "1", redraw: "30",
-  tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [{ id: "o_1", gameId: "done", changes: [] }],
+  tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [{ id: "o_1", gameId: "done", changes: [], fields: [] }],
 };
 const deck: DeckDto = { id: "k_1", gameId: "main", properties: [], cards: [card] };
 const plainBox: BoxDto = {
   id: "b_1", gameId: "street", ranking: { specificity: true },
-  fields: [], properties: [], decks: [deck], templates: [], tagGroups: [], hands: [],
+  fields: [], outcomeFields: [], properties: [], decks: [deck], templates: [], tagGroups: [], hands: [],
 };
 const timedBox: BoxDto = { ...plainBox, turn: { seconds: 60 } };
 

@@ -122,6 +122,11 @@ struct FStoryletOutcomeView
 
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	bool bAvailable = false;
+
+	/** Outcome-template data, declared by the box's outcome fields. Passed
+	 *  through as the bundle wrote it; empty when the outcome carries none. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FStoryletFieldEntry> Fields;
 };
 
 /** One hand's contents (dealt order), keyed by the hand's gameId: the shape

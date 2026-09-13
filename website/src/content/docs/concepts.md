@@ -49,6 +49,10 @@ An **outcome** is a choice on a card. Playing it writes the outcome's changes in
 An outcome can have its own **condition**, and whether it's available is checked at the moment you ask,
 not when the card was dealt.
 
+A box can also give its outcomes **custom game fields**, declared beside the card's and
+filled the same way: the one line your game shows after the press, say, without spending a
+card on it. The engine hands them to your game with the outcome and never reads them.
+
 ## Hands, hand templates and the Board
 
 A **hand** is a named place your game deals to for your game: "the inn", "encounters in the forest", "what's

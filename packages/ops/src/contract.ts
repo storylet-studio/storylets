@@ -121,6 +121,7 @@ export function contractIssues(source: SourceProject): Issue[] {
   const hands = new Set<string>();
   const boxes = new Map<string, { turn?: number; path: string; gameId: string }>();
   const fields = new Set<string>();
+  const outcomeFields = new Set<string>();
   for (const box of source.boxes) {
     for (const hand of box.hands.hands) hands.add(effectiveGameId(hand));
     boxes.set(effectiveGameId(box.box.box), {
@@ -129,6 +130,7 @@ export function contractIssues(source: SourceProject): Issue[] {
       gameId: effectiveGameId(box.box.box),
     });
     for (const field of box.box.box.fields ?? []) fields.add(field.name);
+    for (const field of box.box.box.outcomeFields ?? []) outcomeFields.add(field.name);
   }
   const decls = declarations(source);
 
@@ -208,6 +210,15 @@ export function contractIssues(source: SourceProject): Issue[] {
         message: `card field "${field}" is read by the crew at ${at}; no box declares it any more`,
       });
     }
+    // The outcome half of the same promise: a station showing an outcome's
+    // after-line depends on the box still declaring it (outcome-fields-brief).
+    for (const field of shard.outcomeFields ?? []) {
+      if (outcomeFields.has(field)) continue;
+      issues.push({
+        severity: "error", path: contract.path, where: field, field: "outcomeFields",
+        message: `outcome field "${field}" is read by the crew at ${at}; no box declares it any more`,
+      });
+    }
   }
   return issues;
 }
@@ -252,6 +263,9 @@ export function contractNotes(source: SourceProject): Map<string, ContractNote[]
     }
     for (const field of contract.shard.fields ?? []) {
       push(`field:${field}`, { installation: at, line: `Read by the crew at ${at}` });
+    }
+    for (const field of contract.shard.outcomeFields ?? []) {
+      push(`outcomeField:${field}`, { installation: at, line: `Read by the crew at ${at}` });
     }
   }
   return notes;

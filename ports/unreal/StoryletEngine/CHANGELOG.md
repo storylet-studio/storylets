@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **An outcome carries fields, declared by its box** (2026-09-13). A box already declares the card template every card in it fills in; it may now declare an outcome template beside it, `outcomeFields`, and an outcome may fill that in with `fields`. The engine never reads either: `Outcome::fields` is parsed as a card's fields are, `Box::outcomeFields` as the card template is, and `OutcomeView::fields` hands the values to the game with the outcome exactly as the bundle wrote them, the way a title is handed over. Blueprint reads them as `FStoryletOutcomeView::Fields`, the same `FStoryletFieldEntry` rows `FStoryletDealtCard::Fields` already carries. A box that declares no outcome template, and an outcome that fills nothing in, read as empty, so a bundle written before this is unchanged. Parity with the JS runtime, corpus-pinned (corpus version 8). What it is for: the line a phone shows the moment a press lands, without spending a card on it.
+
 ## [0.5.0] - 2026-09-06
 
 ### Added

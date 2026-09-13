@@ -365,6 +365,22 @@ static std::string showSorted(std::vector<std::string> list)
     return showList(std::move(list));
 }
 
+/** A field map as a JSON object with its keys sorted, so two maps compare by
+ *  what they hold and not by the order they were written in. */
+static std::string showFields(const OrderedMap<std::string, StoryletValue>& fields)
+{
+    std::vector<std::string> keys;
+    for (const auto& pair : fields) keys.push_back(pair.first);
+    std::sort(keys.begin(), keys.end());
+    std::string out = "{";
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+        if (i) out += ",";
+        out += "\"" + keys[i] + "\":" + fields.at(keys[i]).toJsonString();
+    }
+    return out + "}";
+}
+
 /** The keys named by an expectReport array of objects, sorted. */
 static std::string wantKeys(const JsonValue& array, const std::vector<std::string>& fields)
 {
@@ -476,7 +492,7 @@ static bool needsFlow(const std::string& kind)
 {
     return kind == "setState" || kind == "peek" || kind == "deal" || kind == "assertBoard"
         || kind == "play" || kind == "advanceTurns" || kind == "assertOutcomes"
-        || kind == "assertOutcomeOrder" || kind == "assertState";
+        || kind == "assertOutcomeOrder" || kind == "assertOutcomeFields" || kind == "assertState";
 }
 
 /** Execute the ops in order; every expect must match exactly, expectError ops
@@ -854,6 +870,36 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
                 for (size_t i = 0; i < want.size(); i++) w += (i ? ", " : "") + want[i];
                 for (size_t i = 0; i < got.size(); i++) g += (i ? ", " : "") + got[i];
                 failures.push_back(at + ": expected [" + w + "], got [" + g + "]");
+            }
+        }
+        else if (kind == "assertOutcomeFields")
+        {
+            // What the box's outcome template filled in, carried to the game
+            // with the outcome and never read on the way: the bundle's own
+            // values, and an empty map for an outcome that declares none.
+            const JsonValue& expect = op.at("expect");
+            std::vector<OutcomeView> views = session->outcomes(op.strOr("card"), op.strOr("from"));
+            for (const auto& pair : expect.obj)
+            {
+                OrderedMap<std::string, StoryletValue> actual;
+                for (const auto& v : views)
+                {
+                    if (v.gameId == pair.first)
+                    {
+                        actual = v.fields;
+                        break;
+                    }
+                }
+                OrderedMap<std::string, StoryletValue> wanted;
+                for (const auto& field : pair.second.obj)
+                {
+                    wanted.set(field.first, bundleloader::ToValue(field.second));
+                }
+                if (showFields(actual) != showFields(wanted))
+                {
+                    failures.push_back(at + ": " + pair.first + " expected " + showFields(wanted)
+                        + ", got " + showFields(actual));
+                }
             }
         }
         else if (kind == "assertState")

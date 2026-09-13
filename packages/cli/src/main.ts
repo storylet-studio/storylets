@@ -447,6 +447,7 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
           io.log(`  property  ${contractPropertyPath(entry)}${type !== undefined ? `   ${type}` : ""}`);
         }
         for (const field of shard.fields ?? []) io.log(`  field     ${field}   the crew and the bridges read it`);
+        for (const field of shard.outcomeFields ?? []) io.log(`  field     ${field}   the crew and the bridges read it, on an outcome`);
       }
       return 0;
     }

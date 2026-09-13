@@ -191,6 +191,10 @@ namespace StoryletStudio.StoryletEngine
         public string GameId;
         public string Title;
         public string Purpose;
+        /// <summary>The outcome's fields, exactly as the bundle carries them:
+        /// game data declared by the box's OutcomeFields, never read by the
+        /// engine.</summary>
+        public OrderedMap<string, StoryletValue> Fields;
         /// <summary>Evaluated against CURRENT state at the moment of the ask.</summary>
         public bool Available;
     }

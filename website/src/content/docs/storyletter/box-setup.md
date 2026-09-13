@@ -24,6 +24,9 @@ A box has six tabs, plus **Maps** when one of its tag groups is a place.
   values.
   Change a field's name or type and you reshape every card in the box, so in a team this
   is usually lead-owned.
+  The same tab declares the box's **Outcome fields** below its card fields: what an
+  outcome in this box may carry, shaped exactly the same way and filled in each outcome's
+  own editor. The tab's count is both lists together.
 - **Hand templates** lists the kinds of hand the box declares, each row showing its
   bindings, its slot count and how many hands use it. Click one to open it.
 - **Tags** lists the tag groups, each row showing its name and its tags as colour chips.

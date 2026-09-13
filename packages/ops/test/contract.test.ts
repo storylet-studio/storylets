@@ -29,6 +29,7 @@ interface Fix {
   hand?: string;
   story?: PropertyDecl[];
   fields?: FieldDecl[];
+  outcomeFields?: FieldDecl[];
 }
 
 const contract = (over: Partial<ContractShard> = {}): ContractShard => ({
@@ -58,6 +59,7 @@ const project = (f: Fix): SourceProject => ({
         id: "b_1", gameId: f.box ?? "street", ranking: { specificity: true },
         ...(f.turn !== undefined ? { turn: f.turn } : {}),
         fields: f.fields ?? [{ name: "prompt", type: "string", default: "" }],
+        ...(f.outcomeFields !== undefined ? { outcomeFields: f.outcomeFields } : {}),
         properties: [],
       },
     },
@@ -176,6 +178,27 @@ describe("a contracted card field", () => {
     expect(issues).toHaveLength(1);
     expect(issues[0]!.message).toBe(
       'card field "cue" is read by the crew at the-park; no box declares it any more');
+  });
+});
+
+describe("a contracted outcome field", () => {
+  const after = [{ name: "after", type: "string" as const, default: "" }];
+
+  it("is fine while some box declares it among its outcome fields", () => {
+    expect(check({ outcomeFields: after, contracts: [contract({ outcomeFields: ["after"] })] })).toEqual([]);
+  });
+
+  it("is an error when no box declares it any more, naming the outcome half", () => {
+    const issues = check({ contracts: [contract({ outcomeFields: ["after"] })] });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.field).toBe("outcomeFields");
+    expect(issues[0]!.message).toBe(
+      'outcome field "after" is read by the crew at the-park; no box declares it any more');
+  });
+
+  it("is not satisfied by a CARD field of the same name: the two templates are two promises", () => {
+    const issues = check({ fields: after, contracts: [contract({ outcomeFields: ["after"] })] });
+    expect(issues).toHaveLength(1);
   });
 });
 

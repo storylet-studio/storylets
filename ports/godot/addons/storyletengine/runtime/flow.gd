@@ -1127,8 +1127,9 @@ func _resolve_dealt(card_id: String, hand_ref: String) -> Dictionary:
 
 ## Outcome availability, evaluated against CURRENT state on every ask (schema
 ## 3.1/5) - never a deal-time snapshot. Returns Array of {"id", "gameId",
-## "title"?, "purpose"?, "available"}; a bad reference push_errors and
-## returns [].
+## "title"?, "purpose"?, "fields"?, "available"}; a bad reference push_errors
+## and returns []. "fields" is the outcome's game data, declared by the box's
+## outcomeFields and handed over exactly as the bundle wrote it.
 func outcomes(card_id: String, from_hand: String) -> Array:
 	if _closed:
 		push_error('StoryletFlow.outcomes: flow "%s" is closed' % id)
@@ -1146,6 +1147,8 @@ func outcomes(card_id: String, from_hand: String) -> Array:
 			view["title"] = o["title"]
 		if o.has("purpose"):
 			view["purpose"] = o["purpose"]
+		if o.has("fields"):
+			view["fields"] = o["fields"]
 		view["available"] = _passes(o.get("condition"), ctx)
 		out.append(view)
 	return out

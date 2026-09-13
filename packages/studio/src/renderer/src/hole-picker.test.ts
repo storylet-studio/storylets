@@ -13,7 +13,7 @@ import type { BoxDto, HandDetail } from "../../shared/api.js";
 
 const box: BoxDto = {
   id: "b_1", gameId: "street", ranking: { specificity: true },
-  fields: [], properties: [], decks: [], templates: [], tagGroups: [], hands: [],
+  fields: [], outcomeFields: [], properties: [], decks: [], templates: [], tagGroups: [], hands: [],
 };
 
 const detail = (over: Partial<HandDetail> = {}): HandDetail => ({

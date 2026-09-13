@@ -1909,7 +1909,10 @@ function cardTabFor(field: string | undefined): string | undefined {
   switch (field) {
     case "condition": case "priority": case "copies": case "sharedCopies": case "tags": return "dealing";
     case "fields": return "fields";
-    case "changes": return "outcomes";
+    // An outcome's fields are edited inside the outcome, so the box's outcome
+    // template sends the author to the Outcomes tab rather than to Fields,
+    // which is the CARD's half of the same template.
+    case "changes": case "outcomeFields": return "outcomes";
     default: return undefined;
   }
 }

@@ -57,7 +57,8 @@ Patterpad publishes to `../patter-dist/` in the same way.
 
 There's no text a player would read, no localisation and no captions. A card is its
 condition, its ranking inputs, its redraw policy, its tags, its outcomes and its box-shaped
-fields, which keeps a bundle small.
+fields, and an outcome is its condition, its changes and its own box-shaped fields, which
+keeps a bundle small.
 
 Author metadata is kept. Titles and purposes ship by default because they make a trace
 readable: "why did *Ambush at the ford* get dealt here?" is a question the log can then

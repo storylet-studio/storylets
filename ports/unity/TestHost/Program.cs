@@ -473,6 +473,40 @@ namespace StoryletStudio.StoryletEngine.TestHost
         private static string Show(IEnumerable<string> list) =>
             "[" + string.Join(",", list.Select(s => "\"" + s + "\"")) + "]";
 
+        // -- outcome fields ---------------------------------------------------------
+        //
+        // Compared as MAPS, key order left out of it: an outcome's fields are the
+        // bundle's own object and no runtime promises the order it walks them in.
+        // An outcome that carries none reads as empty, so a null map and a `{}`
+        // expectation agree.
+
+        private static bool FieldsMatch(OrderedMap<string, StoryletValue> actual, JObject expected)
+        {
+            var count = actual == null ? 0 : actual.Count;
+            if (count != expected.Count) return false;
+            foreach (var pair in expected)
+            {
+                if (actual == null || !actual.TryGetValue(pair.Key, out var value)) return false;
+                if (!value.ValueEquals(StoryletJson.ToValue(pair.Value))) return false;
+            }
+            return true;
+        }
+
+        private static string ShowFields(OrderedMap<string, StoryletValue> fields)
+        {
+            if (fields == null) return "{}";
+            var parts = fields.Keys.OrderBy(k => k, StringComparer.Ordinal)
+                .Select(k => "\"" + k + "\":" + fields[k].ToJsonString());
+            return "{" + string.Join(",", parts) + "}";
+        }
+
+        private static string ShowJsonFields(JObject fields)
+        {
+            var parts = fields.Properties().OrderBy(p => p.Name, StringComparer.Ordinal)
+                .Select(p => "\"" + p.Name + "\":" + StoryletJson.ToValue(p.Value).ToJsonString());
+            return "{" + string.Join(",", parts) + "}";
+        }
+
         // -- the load report (design/engine-server.md 4.9) --------------------------
         //
         // A report's lists are compared as SORTED lists of canonical strings, not
@@ -589,6 +623,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 case "advanceTurns":
                 case "assertOutcomes":
                 case "assertOutcomeOrder":
+                case "assertOutcomeFields":
                 case "assertState":
                     return true;
                 default:
@@ -1225,6 +1260,27 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         if (!want.SequenceEqual(got))
                         {
                             failures.Add($"{at}: expected [{string.Join(", ", want)}], got [{string.Join(", ", got)}]");
+                        }
+                        break;
+                    }
+
+                    case "assertOutcomeFields":
+                    {
+                        // Game data riding out with the outcome, as a card's
+                        // fields ride out with the card: the engine hands over
+                        // what the bundle wrote and reads none of it. An outcome
+                        // that carries none reads as an empty map, never a hole.
+                        var expect = (JObject)op["expect"];
+                        var views = session.Outcomes(op.Value<string>("card"), op.Value<string>("from"));
+                        foreach (var pair in expect)
+                        {
+                            var view = views.Find(v => v.GameId == pair.Key);
+                            var actual = view != null ? view.Fields : null;
+                            var expected = (JObject)pair.Value;
+                            if (!FieldsMatch(actual, expected))
+                            {
+                                failures.Add($"{at}: {pair.Key} expected {ShowJsonFields(expected)}, got {ShowFields(actual)}");
+                            }
                         }
                         break;
                     }

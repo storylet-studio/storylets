@@ -12,12 +12,12 @@ import type { BoxDto, CardDto, DeckDto } from "../../shared/api.js";
 
 const oneShot: CardDto = {
   id: "c_1", gameId: "the-well", title: "The well", condition: "", priority: "0", redraw: "never",
-  tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [{ id: "o_1", gameId: "done", changes: [] }],
+  tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [{ id: "o_1", gameId: "done", changes: [], fields: [] }],
 };
 const deck: DeckDto = { id: "k_1", gameId: "main", properties: [], cards: [oneShot] };
 const box: BoxDto = {
   id: "b_1", gameId: "street", ranking: { specificity: true },
-  fields: [], properties: [], decks: [deck], templates: [], tagGroups: [], hands: [],
+  fields: [], outcomeFields: [], properties: [], decks: [deck], templates: [], tagGroups: [], hands: [],
 };
 
 const host = (over: Partial<InspectorHost> = {}): InspectorHost => ({

@@ -85,6 +85,9 @@ class BoxLookup {
   readonly title: string;
   readonly groups: TagGroup[];
   readonly fields: FieldDecl[];
+  /** The outcome half of the card template (2026-09-13). Empty for a box that
+   *  declares none, which is every box that predates the key. */
+  readonly outcomeFields: FieldDecl[];
   readonly templates: Map<string, HandTemplate<string>>;
   private readonly tagNames = new Map<string, string>();
   private readonly handNames = new Map<string, string>();
@@ -93,6 +96,7 @@ class BoxLookup {
     this.title = label(box.box.box);
     this.groups = box.tags.groups;
     this.fields = box.box.box.fields ?? [];
+    this.outcomeFields = box.box.box.outcomeFields ?? [];
     this.templates = new Map(box.hands.templates.map((t) => [t.id, t]));
     for (const group of this.groups) for (const tag of group.tags) this.tagNames.set(tag.id, effectiveGameId(tag));
     for (const hand of box.hands.hands) this.handNames.set(hand.id, effectiveGameId(hand));
@@ -229,6 +233,10 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
           outcomeRows.push({
             box: lookup.title, deck: deckTitle, card: label(card), outcome: label(outcome),
             gameId: effectiveGameId(outcome), when: outcome.condition ?? "", changes: changes(outcome),
+            // The outcome's own fields, filled from its box's declarations the
+            // way a card's are from the deck sheet's: the value, else the
+            // declared default, so a reader sees what the host will get.
+            ...Object.fromEntries(lookup.outcomeFields.map((f) => [`of:${f.name}`, scalar(outcome.fields?.[f.name] ?? f.default)])),
             purpose: outcome.purpose ?? "",
           });
         }
@@ -238,6 +246,15 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
   }
 
   // --- Outcomes ---------------------------------------------------------------
+  // The outcome-field columns sit between Changes and Purpose, which is where
+  // the deck sheet puts a card's: after the machinery, before the prose. This
+  // sheet spans every box, so the columns are the UNION of what the boxes
+  // declare, in box order; a row from a box that declares a name nothing else
+  // does simply leaves the other boxes' columns empty.
+  const outcomeFieldNames: string[] = [];
+  for (const lookup of boxes) {
+    for (const f of lookup.outcomeFields) if (!outcomeFieldNames.includes(f.name)) outcomeFieldNames.push(f.name);
+  }
   const outcomes = wb.addWorksheet("Outcomes");
   outcomes.columns = [
     ...boxColumn,
@@ -247,6 +264,7 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
     { header: "gameId", key: "gameId", width: 24 },
     { header: "When", key: "when", width: 36 },
     { header: "Changes", key: "changes", width: 60 },
+    ...outcomeFieldNames.map((name) => ({ header: name, key: `of:${name}`, width: 14 })),
     { header: "Purpose", key: "purpose", width: 48 },
   ];
   bold(outcomes);

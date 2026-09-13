@@ -575,6 +575,35 @@ export const fixtures: Fixtures = {
         { op: "assertOutcomeOrder", card: "c_debt", from: "h_q", expect: ["stand", "pay", "leave"] },
       ] },
 
+    // An outcome carries game data of its own, declared by the box beside the
+    // card template (schema 2.3/2.7): the line a press shows without spending
+    // a card on it. The engine hands it out with the outcome and never reads
+    // it, so the whole contract is that every value arrives exactly as the
+    // bundle wrote it, in every type, and that an outcome with none says so
+    // with an empty record rather than an absent one or a default.
+    { name: "an outcome's fields reach the game with the outcome, untouched",
+      outcomeFields: [
+        { name: "after", type: "string", default: "" },
+        { name: "weight", type: "number", default: 0 },
+        { name: "quiet", type: "boolean", default: false },
+      ],
+      cards: [{ id: "c_notice", outcomes: [
+        { id: "o_take", order: 0,
+          fields: { after: "The notice is in your pocket.", weight: 2, quiet: true } },
+        { id: "o_leave", order: 1 },
+      ] }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_notice"] } },
+        { op: "assertOutcomeFields", card: "c_notice", from: "h_q", expect: {
+          take: { after: "The notice is in your pocket.", quiet: true, weight: 2 },
+          leave: {},
+        } },
+        // Availability and order are unchanged by fields riding along.
+        { op: "assertOutcomes", card: "c_notice", from: "h_q", expect: { take: true, leave: true } },
+        { op: "assertOutcomeOrder", card: "c_notice", from: "h_q", expect: ["take", "leave"] },
+      ] },
+
     // --- quality: the ordered story-stage type (design/quality.md) -------------
     //
     // Stage names chosen to sort WRONGLY as strings throughout (alphabetically

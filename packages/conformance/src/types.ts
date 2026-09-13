@@ -17,7 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AstNode, ScalarValue } from "@wildwinter/expr";
-import type { Bundle, LoadReport, PropertyDecl, RedrawPolicy } from "@storylet-studio/model";
+import type { Bundle, FieldDecl, LoadReport, PropertyDecl, RedrawPolicy } from "@storylet-studio/model";
 
 export type ScopeBag = Record<string, ScalarValue>;
 
@@ -186,6 +186,10 @@ export type ScriptOp =
   /** The ORDER `outcomes()` hands them back in, exactly. Separate from
    *  `assertOutcomes`, which is a map and so says nothing about sequence. */
   | { op: "assertOutcomeOrder"; flow?: string; card: string; from: string; expect: string[] }
+  /** The FIELDS each named outcome (by gameId) hands back, exactly as the
+   *  bundle wrote them: game data the engine passes through and never reads
+   *  (schema 2.7). An outcome with none reads as `{}`. */
+  | { op: "assertOutcomeFields"; flow?: string; card: string; from: string; expect: Record<string, Record<string, ScalarValue>> }
   /** Paths: "turn.b_x", "story.gold", "value.docks.danger", "box.x.heat",
    *  "world.x", ... - read on the op's flow (the merged view). The owner
    *  segment is a gameId (4.4), box-qualified for a tag gameId two boxes
@@ -285,6 +289,8 @@ export interface OutcomeFixture {
    *  dealt card is building the player's menu. Source shards are id-sorted for
    *  the merge; a bundle has no merge story. */
   order?: number;
+  /** Outcome-field data, against the fixture's `outcomeFields`. */
+  fields?: Record<string, ScalarValue>;
 }
 
 export interface CardFixture {
@@ -399,6 +405,10 @@ export interface BundleFixture {
   world?: PropertyDecl[];
   /** The @box scope's declarations. */
   boxProperties?: PropertyDecl[];
+  /** The box's card template; the scaffold declares none. */
+  fields?: FieldDecl[];
+  /** The box's outcome fields (schema 2.3); the scaffold declares none. */
+  outcomeFields?: FieldDecl[];
   /** "stripped" builds a bundle with all titles/purposes omitted (schema 2.7). */
   metadata?: "full" | "stripped";
   settings?: { playAdvancesTurns?: number };

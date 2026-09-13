@@ -143,6 +143,10 @@ namespace storylets
         std::string purpose;
         /** Evaluated against CURRENT state at the moment of the ask. */
         bool available = false;
+        /** Outcome-template data, the names declared by the box's
+         *  outcomeFields. Handed over as the bundle wrote it, never read by
+         *  the engine; empty when the outcome carries none. */
+        OrderedMap<std::string, StoryletValue> fields;
     };
 
     /** What a peek returns: the top of the stock, looked at and put back. The
@@ -1539,6 +1543,7 @@ namespace storylets
                 v.title = o.title;
                 v.purpose = o.purpose;
                 v.available = passes(o.condition, ctx);
+                v.fields = o.fields;
                 views.push_back(std::move(v));
             }
             return views;

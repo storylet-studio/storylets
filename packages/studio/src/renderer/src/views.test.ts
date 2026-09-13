@@ -17,11 +17,11 @@ const deck: DeckDto = {
     purpose: "Cutthroats spring from the reeds.",
     condition: "@hand.danger >= 2", priority: 2, redraw: "5",
     tags: [{ group: "zone", values: ["docks"] }], copies: "", sharedCopies: "", fields: [],
-    outcomes: [{ id: "o_1", gameId: "flee", changes: [] }],
+    outcomes: [{ id: "o_1", gameId: "flee", changes: [], fields: [] }],
   }],
 };
 const box: BoxDto = {
-  id: "b_1", gameId: "box", ranking: { specificity: true }, fields: [], properties: [], decks: [deck],
+  id: "b_1", gameId: "box", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [], decks: [deck],
   templates: [{ id: "t_1", gameId: "street-hands", bindings: ["zone = ?"], slots: "3", instances: 1 }],
   tagGroups: [{ id: "d_1", gameId: "zone", values: ["docks", "market"] }],
   hands: [{ id: "h_1", gameId: "docks-street", template: "street-hands", slots: 2, tags: {} }],
@@ -504,7 +504,7 @@ describe("cardHasContent (the delete guard)", () => {
   // an author has typed or gated or tagged anything, deleting it asks first.
   const fresh = (over: Partial<CardDto> = {}): CardDto => ({
     id: "c_n", gameId: "new-card", title: "New card", priority: 0, redraw: "always",
-    tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [{ id: "o_1", gameId: "continue", title: "Continue", changes: [] }],
+    tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [{ id: "o_1", gameId: "continue", title: "Continue", changes: [], fields: [] }],
     ...over,
   });
 
@@ -524,12 +524,24 @@ describe("cardHasContent (the delete guard)", () => {
 
   it("counts an authored outcome, but not the default one", () => {
     expect(cardHasContent(fresh({ outcomes: [
-      { id: "o_1", gameId: "continue", title: "Continue", changes: ["@story.gold ← 1"] },
+      { id: "o_1", gameId: "continue", title: "Continue", changes: ["@story.gold ← 1"], fields: [] },
     ] }))).toBe(true);
     expect(cardHasContent(fresh({ outcomes: [
-      { id: "o_1", gameId: "a", title: "A", changes: [] },
-      { id: "o_2", gameId: "b", title: "B", changes: [] },
+      { id: "o_1", gameId: "a", title: "A", changes: [], fields: [] },
+      { id: "o_2", gameId: "b", title: "B", changes: [], fields: [] },
     ] }))).toBe(true);
+  });
+
+  it("counts a filled outcome field, which is often all an author wrote", () => {
+    // The after-line a venue reads (design/outcome-fields-brief.md): a card
+    // whose one outcome carries it has had work done on it, and deleting it
+    // must ask. Whitespace is not work, as everywhere else here.
+    expect(cardHasContent(fresh({ outcomes: [
+      { id: "o_1", gameId: "continue", title: "Continue", changes: [], fields: [{ name: "after", value: "The door shuts." }] },
+    ] }))).toBe(true);
+    expect(cardHasContent(fresh({ outcomes: [
+      { id: "o_1", gameId: "continue", title: "Continue", changes: [], fields: [{ name: "after", value: "  " }] },
+    ] }))).toBe(false);
   });
 
   it("does not count whitespace as content", () => {

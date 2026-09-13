@@ -24,7 +24,7 @@ import type {
   HandFixture, OutcomeFixture, PeekCase, ScriptedCase, TemplateFixture,
 } from "./types.js";
 
-export const CORPUS_VERSION = 7;
+export const CORPUS_VERSION = 8;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>
@@ -134,6 +134,7 @@ const expandOutcome = (f: OutcomeFixture): Outcome<Expression> => ({
   changes: sortRecord(Object.fromEntries(
     Object.entries(f.changes ?? {}).map(([target, src]) => [target, compileSrc(src)]),
   )),
+  ...(f.fields !== undefined ? { fields: sortRecord(f.fields) } : {}),
 });
 
 const expandCard = (f: CardFixture, strip: boolean, s: Scaffold): Card<Expression> => ({
@@ -215,7 +216,8 @@ export function expandBundle(f: BundleFixture): Bundle {
     gameId: "box",
     ranking: f.ranking ?? { specificity: true },
     ...(f.turn !== undefined ? { turn: f.turn } : {}),
-    fields: [],
+    fields: f.fields ?? [],
+    ...(f.outcomeFields !== undefined ? { outcomeFields: f.outcomeFields } : {}),
     properties: f.boxProperties ?? [],
     tagGroups: byId(allGroups),
     decks: byId(decks.map((d) => expandDeck(d, strip, scaffold))),

@@ -582,6 +582,31 @@ export function compileProject(source: SourceProject): CompileResult {
 
     // Decks and cards.
     const fieldDecls = new Map((boxDecl.fields ?? []).map((f) => [f.name, f]));
+    const outcomeFieldDecls = new Map((boxDecl.outcomeFields ?? []).map((f) => [f.name, f]));
+    // A field's values against its template, for a card's fields and an
+    // outcome's alike: the two templates have one shape and one rule. `field`
+    // names the shard key the problem is under, which is how the editor knows
+    // which page to open.
+    const checkFields = (
+      decls: Map<string, { type: string; values?: string[] }>, values: Record<string, unknown> | undefined,
+      template: string, field: string, path: string, where: string,
+    ): void => {
+      for (const [name, value] of Object.entries(values ?? {})) {
+        const decl = decls.get(name);
+        if (!decl) {
+          report({ severity: "error", path, where, field, message: `field "${name}" is not in the box's ${template}` });
+          continue;
+        }
+        const ok = decl.type === "number" ? typeof value === "number"
+          : decl.type === "boolean" ? typeof value === "boolean"
+          : decl.type === "flags" ? Array.isArray(value) && value.every((x) => typeof x === "string" && (decl.values ?? []).includes(x))
+          : decl.type === "enum" ? typeof value === "string" && (decl.values ?? []).includes(value)
+          : typeof value === "string";
+        if (!ok) {
+          report({ severity: "error", path, where, field, message: `field "${name}" does not match its declared type "${decl.type}"` });
+        }
+      }
+    };
     const decks: Deck<Expression>[] = [];
     for (const { path, shard } of sourceBox.decks) {
       const deckDecl = shard.deck;
@@ -644,21 +669,7 @@ export function compileProject(source: SourceProject): CompileResult {
             message: `durable, but its redraw is ${JSON.stringify(card.redraw ?? "always")}: only "never" means anything past the run, since a cooldown is a turn of a clock that resets with it` });
         }
 
-        for (const [name, value] of Object.entries(card.fields ?? {})) {
-          const decl = fieldDecls.get(name);
-          if (!decl) {
-            report({ severity: "error", path, where: effectiveGameId(card), field: "fields", message: `field "${name}" is not in the box's card template` });
-            continue;
-          }
-          const ok = decl.type === "number" ? typeof value === "number"
-            : decl.type === "boolean" ? typeof value === "boolean"
-            : decl.type === "flags" ? Array.isArray(value) && value.every((x) => typeof x === "string" && (decl.values ?? []).includes(x))
-            : decl.type === "enum" ? typeof value === "string" && (decl.values ?? []).includes(value)
-            : typeof value === "string";
-          if (!ok) {
-            report({ severity: "error", path, where: effectiveGameId(card), field: "fields", message: `field "${name}" does not match its declared type "${decl.type}"` });
-          }
-        }
+        checkFields(fieldDecls, card.fields, "card template", "fields", path, effectiveGameId(card));
 
         const outcomeGameIds = new Map<string, string>();
         const outcomes: Outcome<Expression>[] = [];
@@ -666,6 +677,7 @@ export function compileProject(source: SourceProject): CompileResult {
           claimId(outcome.id, path, `${effectiveGameId(card)}/${effectiveGameId(outcome)}`);
           checkGameId("outcome", outcome, path);
           uniqueGameIds(`outcome (card "${effectiveGameId(card)}")`, outcomeGameIds, effectiveGameId(outcome), path);
+          checkFields(outcomeFieldDecls, outcome.fields, "outcome fields", "outcomeFields", path, `${effectiveGameId(card)}/${effectiveGameId(outcome)}`);
           const changes: Record<string, Expression> = {};
           for (const [target, src] of Object.entries(outcome.changes ?? {})) {
             const match = /^@(world|story|box|deck|hand)\.[a-z][a-z0-9_-]*$/.exec(target);
@@ -733,6 +745,9 @@ export function compileProject(source: SourceProject): CompileResult {
               ? { condition: expr(outcome.condition!, deckSchema, path, `${effectiveGameId(card)}/${effectiveGameId(outcome)}`, "outcome condition", "condition") }
               : {}),
             changes: sortRecord(changes),
+            // Game data, not author metadata: kept in a stripped bundle, as a
+            // card's fields are.
+            ...(outcome.fields !== undefined ? { fields: sortRecord(outcome.fields) } : {}),
           });
         }
 
@@ -984,6 +999,9 @@ export function compileProject(source: SourceProject): CompileResult {
       ranking: { specificity: boxDecl.ranking?.specificity ?? true },
       ...(timed ? { turn: { seconds: boxDecl.turn!.seconds } } : {}),
       fields: boxDecl.fields ?? [],
+      // Only when the box declares some: a bundle from a project without them
+      // stays byte for byte what it was.
+      ...((boxDecl.outcomeFields ?? []).length > 0 ? { outcomeFields: boxDecl.outcomeFields } : {}),
       properties: boxDecl.properties ?? [],
       tagGroups: byId(tagGroups),
       decks: byId(decks),

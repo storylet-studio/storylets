@@ -128,6 +128,12 @@ describe("runExportXlsx on the example project", async () => {
     expect(outcomes.rowCount - 1).toBe(result.counts.outcomes);
   });
 
+  it("gives the Outcomes sheet no field columns when no box declares any", () => {
+    // The example declares no outcome fields, and a project that has never met
+    // the key must export exactly as it did before it existed.
+    expect(headers(wb.getWorksheet("Outcomes")!)).not.toContain("after");
+  });
+
   it("lists hands with their template, their tags through the template's hole, and slots", () => {
     const hands = wb.getWorksheet("Hands")!;
     expect(headers(hands)).toEqual(["Hand", "gameId", "Template", "When", "Tags", "Slots", "Purpose"]);
@@ -149,6 +155,42 @@ describe("runExportXlsx on the example project", async () => {
 
   it("suggests the project's name as the file name", () => {
     expect(spreadsheetFileName(source)).toBe("The Hamlet.xlsx");
+  });
+});
+
+describe("outcome fields on the Outcomes sheet", () => {
+  // The outcome half of the card template (2026-09-13). Built here rather than
+  // put in the example, for the reason the card-field tests take their names
+  // FROM the project: what is pinned is the layout - a column per declared
+  // outcome field, between Changes and Purpose, carrying the value or the
+  // declared default - and not what the Hamlet happens to say.
+  it("adds a column per declared field, after Changes and before Purpose", async () => {
+    const one = loadProject(exampleDir).source!;
+    const box = one.boxes[0]!;
+    const deck = box.decks.find((d) => (d.shard.cards ?? []).some((c) => c.outcomes.length > 0))!;
+    const card = deck.shard.cards.find((c) => c.outcomes.length > 0)!;
+    const filled = { ...card.outcomes[0]!, fields: { after: "The door swings shut." } };
+    const source: SourceProject = {
+      ...one,
+      boxes: [{
+        ...box,
+        box: { ...box.box, box: { ...box.box.box, outcomeFields: [
+          { name: "after", type: "string", default: "" },
+          { name: "cue", type: "string", default: "silence" },
+        ] } },
+        decks: box.decks.map((d) => (d === deck ? {
+          ...d,
+          shard: { ...d.shard, cards: d.shard.cards.map((c) => (c === card ? { ...c, outcomes: [filled, ...c.outcomes.slice(1)] } : c)) },
+        } : d)),
+      }],
+    };
+    const { wb: book } = await exported(source);
+    const outcomes = book.getWorksheet("Outcomes")!;
+    expect(headers(outcomes)).toEqual(["Deck", "Card", "Outcome", "gameId", "When", "Changes", "after", "cue", "Purpose"]);
+    const row = rowWhere(outcomes, 4, filled.gameId ?? filled.id);
+    expect(row[7]).toBe("The door swings shut.");
+    // Unset: the declared default, so the sheet says what the host will get.
+    expect(row[8]).toBe("silence");
   });
 });
 

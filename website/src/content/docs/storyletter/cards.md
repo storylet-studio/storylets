@@ -112,6 +112,12 @@ open one expands into its full editor: title, purpose, its own condition, and it
 **Move down**, **Duplicate** and **Remove**; the open editor also ends with a
 **Remove outcome** button.
 
+If the box declares **outcome fields**, the open outcome also has a **Fields** block,
+between its purpose and its condition: one row per declared field, with the same controls
+as the card's own Fields tab. They're what this outcome hands your game once the press
+lands, the line to show after it, say, and they cost no card. A box that declares none
+shows no block.
+
 ### Fields
 
 The box's card template, as label-and-control rows: one row per declared field. The

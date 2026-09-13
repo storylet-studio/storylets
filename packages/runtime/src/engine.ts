@@ -157,6 +157,9 @@ export interface OutcomeView {
   gameId: string;
   title?: string;
   purpose?: string;
+  /** The outcome's fields, exactly as the bundle carries them: game data
+   *  declared by the box's `outcomeFields`, never read by the engine. */
+  fields?: Record<string, ScalarValue>;
   /** Evaluated against CURRENT state at the moment of the ask. */
   available: boolean;
 }
@@ -2266,6 +2269,7 @@ export class Flow {
       gameId: effectiveGameId(o),
       ...(o.title !== undefined ? { title: o.title } : {}),
       ...(o.purpose !== undefined ? { purpose: o.purpose } : {}),
+      ...(o.fields !== undefined ? { fields: o.fields } : {}),
       available: this.passes(o.condition, ctx),
     }));
   }

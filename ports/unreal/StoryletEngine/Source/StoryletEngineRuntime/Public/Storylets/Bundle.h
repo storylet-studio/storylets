@@ -175,8 +175,9 @@ namespace storylets
         std::string purpose;
     };
 
-    /** A card-template field (box-defined). Data for the host; the engine
-     *  never interprets fields and they are not addressable from expressions. */
+    /** A card-template or outcome-template field (box-defined). Data for the
+     *  host; the engine never interprets fields and they are not addressable
+     *  from expressions. */
     struct FieldDecl : ScopeDeclaration
     {
         std::string purpose;
@@ -216,6 +217,10 @@ namespace storylets
         /** Target ("@scope.name") -> expression; all right-hand sides evaluate
          *  against pre-play state (schema 3.7). */
         OrderedMap<std::string, ExpressionPtr> changes;
+        /** Outcome-template data: field name -> value, the names declared by
+         *  the box's outcomeFields. Handed to the host with the outcome, as
+         *  the title is; empty when the outcome carries none. */
+        OrderedMap<std::string, StoryletValue> fields;
     };
 
     struct Card
@@ -372,6 +377,9 @@ namespace storylets
         std::optional<double> turnSeconds;
         /** The card template: what every card in this box carries. */
         std::vector<FieldDecl> fields;
+        /** The outcome template: what an outcome in this box may carry. Empty
+         *  when the box declares none (the key is absent from the bundle). */
+        std::vector<FieldDecl> outcomeFields;
         std::vector<PropertyDecl> properties;
         std::vector<TagGroup> tagGroups;
         std::vector<Deck> decks;
@@ -742,6 +750,11 @@ namespace storylets
             {
                 for (const auto& pair : changes->obj) outcome.changes.set(pair.first, ToExpression(pair.second));
             }
+            const JsonValue* fields = o.find("fields");
+            if (fields && fields->isObject())
+            {
+                for (const auto& pair : fields->obj) outcome.fields.set(pair.first, ToValue(pair.second));
+            }
             return outcome;
         }
 
@@ -962,6 +975,11 @@ namespace storylets
             if (fields && fields->isArray())
             {
                 for (const auto& f : fields->arr) box.fields.push_back(ParseFieldDecl(f));
+            }
+            const JsonValue* outcomeFields = o.find("outcomeFields");
+            if (outcomeFields && outcomeFields->isArray())
+            {
+                for (const auto& f : outcomeFields->arr) box.outcomeFields.push_back(ParseFieldDecl(f));
             }
             const JsonValue* props = o.find("properties");
             if (props && props->isArray()) box.properties = ParsePropertyDecls(*props);

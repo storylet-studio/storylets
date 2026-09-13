@@ -188,6 +188,55 @@ const corpus: Case[] = [
     expectConflicts: [["both-changed", "o_1"]],
   },
   {
+    // The outcome's own fields (2026-09-13), which merge per NAME as a card's
+    // do. Two people filling different fields of one outcome - the after-line
+    // and a cue, say - is two unrelated edits; only the same field collides.
+    name: "outcome fields merge per name: different fields are clean, the same field conflicts",
+    base: deck([card("c_1", { outcomes: [{ id: "o_1", gameId: "go", changes: {}, fields: { after: "You leave.", cue: "door" } }] })]),
+    ours: deck([card("c_1", { outcomes: [{ id: "o_1", gameId: "go", changes: {}, fields: { after: "You step out.", cue: "door" } }] })]),
+    theirs: deck([card("c_1", { outcomes: [{ id: "o_1", gameId: "go", changes: {}, fields: { after: "You leave.", cue: "latch" } }] })]),
+    expect: deck([card("c_1", { outcomes: [{ id: "o_1", gameId: "go", changes: {}, fields: { after: "You step out.", cue: "latch" } }] })]),
+  },
+  {
+    name: "the same outcome field changed differently is one conflict, provisional OURS",
+    base: deck([card("c_1", { outcomes: [{ id: "o_1", gameId: "go", changes: {}, fields: { after: "You leave." } }] })]),
+    ours: deck([card("c_1", { outcomes: [{ id: "o_1", gameId: "go", changes: {}, fields: { after: "You step out." } }] })]),
+    theirs: deck([card("c_1", { outcomes: [{ id: "o_1", gameId: "go", changes: {}, fields: { after: "You slip away." } }] })]),
+    expect: deck([card("c_1", { outcomes: [{ id: "o_1", gameId: "go", changes: {}, fields: { after: "You step out." } }] })]),
+    expectConflicts: [["both-changed", "o_1"]],
+  },
+  {
+    // The box half of the same change: the outcome template. Name-keyed, so
+    // two designers declaring different outcome fields both land.
+    name: "box: two designers declare different outcome fields, clean",
+    base: {
+      schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", fields: [], outcomeFields: [{ name: "after", type: "string", default: "" }], properties: [] },
+    },
+    ours: {
+      schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", fields: [], outcomeFields: [
+        { name: "after", type: "string", default: "" },
+        { name: "cue", type: "string", default: "" },
+      ], properties: [] },
+    },
+    theirs: {
+      schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", fields: [], outcomeFields: [
+        { name: "after", type: "string", default: "" },
+        { name: "sound", type: "string", default: "" },
+      ], properties: [] },
+    },
+    expect: {
+      schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", fields: [], outcomeFields: [
+        { name: "after", type: "string", default: "" },
+        { name: "cue", type: "string", default: "" },
+        { name: "sound", type: "string", default: "" },
+      ], properties: [] },
+    },
+  },
+  {
     name: "a deck-gate edit and a card edit never collide",
     base: deck([card("c_1", { title: "Old" })], { condition: "" }),
     ours: deck([card("c_1", { title: "Old" })], { condition: "@story.open" }),

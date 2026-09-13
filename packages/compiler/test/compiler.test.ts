@@ -404,6 +404,7 @@ describe("publish-gate validation", () => {
   const minimal = (deckCards: unknown[], overrides: {
     templates?: unknown[]; hands?: unknown[]; story?: unknown[]; groups?: unknown[]; world?: unknown[];
     turn?: unknown; play?: string; deck?: Record<string, unknown>;
+    fields?: unknown[]; outcomeFields?: unknown[]; metadata?: "full" | "stripped";
   } = {}): SourceFile[] => [
     shard("p.storyletproj", {
       schema: "storylets/project@0",
@@ -412,14 +413,16 @@ describe("publish-gate validation", () => {
       world: { properties: overrides.world ?? [] },
       story: { properties: overrides.story ?? [] },
       templates: {},
-      export: { bundle: "dist/p.storyletsc", metadata: "full" },
+      export: { bundle: "dist/p.storyletsc", metadata: overrides.metadata ?? "full" },
     }),
     shard("b/box.storyletbox", {
       schema: "storylets/box@0",
       box: {
         id: "b_1", gameId: "b1", ranking: { specificity: true },
         ...(overrides.turn !== undefined ? { turn: overrides.turn } : {}),
-        fields: [], properties: [],
+        fields: overrides.fields ?? [],
+        ...(overrides.outcomeFields !== undefined ? { outcomeFields: overrides.outcomeFields } : {}),
+        properties: [],
       },
     }),
     shard("b/tags.storylettags", {
@@ -675,6 +678,15 @@ describe("publish-gate validation", () => {
       { id: "c_1", gameId: "c1", outcomes: [{ id: "o_1", gameId: "o1", changes: { "not-a-ref": "1" } }] },
     ])).issues;
     expect(fieldOf(changes, "change target")).toBe("changes");
+
+    // An outcome's field problem names the outcome AND the box's other
+    // template, so the editor can open the outcome rather than the card's
+    // Fields tab.
+    const outcomeFields = compileFiles(minimal([
+      { id: "c_1", gameId: "c1", outcomes: [{ id: "o_1", gameId: "o1", changes: {}, fields: { nosuch: "x" } }] },
+    ])).issues;
+    expect(fieldOf(outcomeFields, "outcome fields")).toBe("outcomeFields");
+    expect(outcomeFields.find((i) => i.message.includes("outcome fields"))?.where).toBe("c1/o1");
   });
 
   // --- the sharing flag (design/flows.md) -----------------------------------
@@ -1050,6 +1062,59 @@ describe("publish-gate validation", () => {
       { id: "c_1", gameId: "c1", fields: { rogue: 1 }, outcomes: [] },
     ]));
     expect(errors(result.issues).join()).toContain('field "rogue"');
+  });
+
+  // --- outcome fields (design/outcome-fields-brief.md) ------------------------
+  //
+  // The box declares them beside its card template and an outcome fills
+  // them; the compiler holds them to the same rule as a card's fields, and
+  // the bundle carries them as game data, which a stripped bundle keeps.
+  describe("outcome fields", () => {
+    const AFTER = [{ name: "after", type: "string", default: "" }, { name: "weight", type: "number", default: 0 }];
+    const card = (fields: Record<string, unknown> | undefined) => ({
+      id: "c_1", gameId: "c1", title: "Notice",
+      outcomes: [{ id: "o_1", gameId: "take", title: "Take it", changes: {}, ...(fields !== undefined ? { fields } : {}) }],
+    });
+
+    it("flags an outcome field the box does not declare, naming the outcome", () => {
+      const result = compileFiles(minimal([card({ rogue: "x" })], { outcomeFields: AFTER }));
+      const said = errors(result.issues).join();
+      expect(said).toContain('field "rogue" is not in the box\'s outcome fields');
+      expect(result.issues.find((i) => i.message.includes("rogue"))?.where).toBe("c1/take");
+    });
+
+    it("flags an outcome field of the wrong type", () => {
+      const result = compileFiles(minimal([card({ weight: "heavy" })], { outcomeFields: AFTER }));
+      expect(errors(result.issues).join()).toContain('field "weight" does not match its declared type "number"');
+    });
+
+    it("refuses an outcome field on a box that declares none, even one the card template has", () => {
+      const result = compileFiles(minimal([card({ after: "x" })], { fields: AFTER }));
+      expect(errors(result.issues).join()).toContain('field "after" is not in the box\'s outcome fields');
+    });
+
+    it("compiles them onto the outcome, key-sorted, and the box's declarations with them", () => {
+      const result = compileFiles(minimal([card({ weight: 2, after: "In your pocket." })], { outcomeFields: AFTER }));
+      expect(errors(result.issues)).toEqual([]);
+      const box = result.bundle!.boxes[0]!;
+      expect(box.outcomeFields).toEqual(AFTER);
+      const outcome = box.decks[0]!.cards[0]!.outcomes[0]!;
+      expect(Object.keys(outcome.fields!)).toEqual(["after", "weight"]);
+      expect(outcome.fields).toEqual({ after: "In your pocket.", weight: 2 });
+    });
+
+    it("keeps them in a stripped bundle, which drops the titles beside them", () => {
+      const result = compileFiles(minimal([card({ after: "In your pocket." })], { outcomeFields: AFTER, metadata: "stripped" }));
+      const outcome = result.bundle!.boxes[0]!.decks[0]!.cards[0]!.outcomes[0]!;
+      expect(outcome.title).toBeUndefined();
+      expect(outcome.fields).toEqual({ after: "In your pocket." });
+    });
+
+    it("writes no outcomeFields key at all for a box that declares none", () => {
+      const result = compileFiles(minimal([card(undefined)]));
+      expect("outcomeFields" in result.bundle!.boxes[0]!).toBe(false);
+      expect("fields" in result.bundle!.boxes[0]!.decks[0]!.cards[0]!.outcomes[0]!).toBe(false);
+    });
   });
 
   it("flags a hand pointing at a missing template", () => {

@@ -156,6 +156,12 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Target ("@scope.name") -> expression; all right-hand sides
         /// evaluate against pre-play state (schema 3.7).</summary>
         public OrderedMap<string, Expression> Changes = new OrderedMap<string, Expression>();
+        /// <summary>Template data, as Card.Fields is: field name -> value,
+        /// declared by the box's OutcomeFields, validated at publish, and handed
+        /// to the host with the outcome. The engine never reads it: a press can
+        /// say one line ("The notice is in your pocket") without spending a card
+        /// on it. Null when the outcome carries none.</summary>
+        public OrderedMap<string, StoryletValue> Fields;
     }
 
     public sealed class Card : IIdentified
@@ -317,6 +323,10 @@ namespace StoryletStudio.StoryletEngine
         public TurnUnit Turn;
         /// <summary>The card template: what every card in this box carries.</summary>
         public List<FieldDecl> Fields = new List<FieldDecl>();
+        /// <summary>What every outcome in this box may carry, declared the same
+        /// way. Empty when the box declares none, so a bundle without them is
+        /// byte for byte what it was.</summary>
+        public List<FieldDecl> OutcomeFields = new List<FieldDecl>();
         public List<PropertyDecl> Properties = new List<PropertyDecl>();
         public List<TagGroup> TagGroups = new List<TagGroup>();
         public List<Deck> Decks = new List<Deck>();

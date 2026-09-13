@@ -140,7 +140,7 @@ function renderReplace(): void {
     return row;
   }));
   if (replaceHits.length === 0) {
-    listEl.replaceChildren(none(!project ? "no project open" : query.trim() ? "nothing matches" : "type the text to find; titles, purposes and card fields are searched"));
+    listEl.replaceChildren(none(!project ? "no project open" : query.trim() ? "nothing matches" : "type the text to find; titles, purposes and the fields on cards and outcomes are searched"));
   }
 }
 

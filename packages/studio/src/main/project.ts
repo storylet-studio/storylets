@@ -101,6 +101,9 @@ const cardDto = (box: SourceBox, card: Card<string>): CardDto => ({
     ...(o.purpose !== undefined ? { purpose: o.purpose } : {}),
     ...(!blank(o.condition) ? { gate: o.condition } : {}),
     changes: Object.entries(o.changes ?? {}).map(([target, src]) => `${target} ← ${src}`),
+    // The outcome's template data, read exactly as the card's above it: a
+    // non-string value shown as its source text, coerced back on save.
+    fields: Object.entries(o.fields ?? {}).map(([name, value]) => ({ name, value: typeof value === "string" ? value : JSON.stringify(value) })),
   })),
 });
 
@@ -170,6 +173,9 @@ export function toDto(loaded: LoadedProject): ProjectDto {
         ? { contract: noted(`box:${effectiveGameId(box.box.box)}`)! } : {}),
       ...(box.box.box.turn !== undefined ? { turn: { seconds: box.box.box.turn.seconds } } : {}),
       fields: (box.box.box.fields ?? []).map(declDto),
+      // Absent on every box that declares none, which is every box older than
+      // 2026-09-13; an empty list is what the editor draws for that.
+      outcomeFields: (box.box.box.outcomeFields ?? []).map(declDto),
       properties: (box.box.box.properties ?? []).map(declDto),
       decks: box.decks
         .map((d, i) => ({ d, o: d.shard.deck.order ?? i }))

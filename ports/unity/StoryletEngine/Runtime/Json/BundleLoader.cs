@@ -221,6 +221,10 @@ namespace StoryletStudio.StoryletEngine
             {
                 foreach (var f in fields) box.Fields.Add(ParseFieldDecl((JObject)f));
             }
+            if (o["outcomeFields"] is JArray outcomeFields)
+            {
+                foreach (var f in outcomeFields) box.OutcomeFields.Add(ParseFieldDecl((JObject)f));
+            }
             if (o["properties"] is JArray props) box.Properties = ParsePropertyDecls(props);
             if (o["tagGroups"] is JArray groups)
             {
@@ -353,6 +357,11 @@ namespace StoryletStudio.StoryletEngine
             if (o["changes"] is JObject changes)
             {
                 foreach (var pair in changes) outcome.Changes.Set(pair.Key, StoryletJson.ToExpression(pair.Value));
+            }
+            if (o["fields"] is JObject outcomeFields)
+            {
+                outcome.Fields = new OrderedMap<string, StoryletValue>();
+                foreach (var pair in outcomeFields) outcome.Fields.Set(pair.Key, StoryletJson.ToValue(pair.Value));
             }
             return outcome;
         }

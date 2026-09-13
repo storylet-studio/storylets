@@ -397,7 +397,10 @@ export function cardHasContent(card: CardDto): boolean {
   // One outcome with no changes and the default title is what a new card ships
   // with; anything more is authored.
   const authoredOutcomes = card.outcomes.length > 1
-    || card.outcomes.some((o) => o.changes.length > 0 || o.gate !== undefined || (o.purpose ?? "") !== "");
+    || card.outcomes.some((o) => o.changes.length > 0 || o.gate !== undefined || (o.purpose ?? "") !== ""
+      // A filled outcome field is writing too: the after-line a venue reads is
+      // often the only thing an author put on the outcome.
+      || o.fields.some((f) => f.value.trim() !== ""));
   return !placeholderTitle || wrote || gated || tagged || filled || authoredOutcomes;
 }
 
@@ -686,7 +689,12 @@ export function renderBoxCentre(
     { key: "map", label: "Maps", ...(mapped.length > 0 ? { count: mapped.length } : {}) },
     { key: "contents", label: "Contents" },
     { key: "dealing", label: "Dealing" },
-    { key: "template", label: "Card template", count: box.fields.length },
+    // Both halves of the template count (2026-09-13). The tab holds two lists
+    // now - card fields and outcome fields - and a count of only the first
+    // would draw a dimmed "0", which docTabs teaches as EMPTY, on a tab that
+    // has content. A number that answers "is there anything in here" is worth
+    // more here than one that answers "how many card fields".
+    { key: "template", label: "Card template", count: box.fields.length + box.outcomeFields.length },
     { key: "templates", label: "Hand templates", count: box.templates.length },
     { key: "tags", label: "Tags", count: box.tagGroups.length },
     { key: "properties", label: "Properties", count: box.properties.length },
