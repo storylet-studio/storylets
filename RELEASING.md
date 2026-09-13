@@ -58,6 +58,15 @@ The pipeline runs three jobs:
 
 The draft is a staging area, so a half-built release is never visible. If one OS fails, fix it
 and re-run: the draft is still there and electron-builder reuses a draft whose tag matches.
+When the fix is a commit, move the tag to it (delete it on the remote, tag again, push once)
+rather than spending a version on a release nobody received.
+
+**The mac job failing at `security set-key-partition-list` with "The user name or passphrase
+you entered is not correct"** is electron-builder, not the secrets (2026-09-13, v0.7.0). Up to
+26.16.0 it unlocked its throwaway keychain with the certificate's password instead of the
+keychain's own, which macOS let pass until GitHub's `macos-26` image of 7 September 2026
+started checking; 26.16.1 carries the fix, and the studio pins at or above it. Re-running
+changes nothing: the same secrets signed 0.6.0 a week earlier on the older image.
 
 ## The four runtimes: `play-<engine>-vX.Y.Z`
 
