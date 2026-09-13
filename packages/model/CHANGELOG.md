@@ -1,5 +1,24 @@
 # @storylet-studio/model
 
+## 0.4.0
+
+### Minor Changes
+
+- b2222e4: Outcomes gain fields (design/outcome-fields-brief.md, 2026-09-13).
+  
+  `Outcome.fields?: Record<string, ScalarValue>` is template data as `Card.fields` is: field name to value, validated at publish, handed to the host with the outcome, never read by the engine. `Box.outcomeFields?: FieldDecl[]` declares which fields an outcome may carry, beside the card template and in the same shape, and `BoxShard.box.outcomeFields` is the source of it. Both are optional and absent when a box declares none, so a bundle from a project without them is byte for byte what it was, and `FieldDecl`'s comment now says it serves both templates.
+  
+  `ContractShard.outcomeFields?: string[]` lets a venue name the outcome fields its crew read, as `fields` names the card fields: a station showing an outcome's after-line is then a dependency `validate` refuses to break.
+- 7682cd8: `MapShard`: the box map gets a shard of its own, `map.storyletmap` (design/engine-server.md 9.1 point 5).
+  
+  Hand and zone placement used to sit in `view.storyletview` under `map`, beside the deck canvases. The two halves had stopped sharing an owner. A hand's position ships in the bundle's `maps` block, which since 4.3 makes it the thing a venue provisions its kiosks against: it is SHAPE, and a server's author key may not change it. A deck's node canvas is a working drawing that never leaves the project folder, and refusing an author their own canvas would be refusing them nothing the designer cares about. One file could not be both, and the ruling splits it.
+  
+  `MAP_SCHEMA` is `storylets/map@0`, `SHARD_EXTENSIONS` gains `map: ".storyletmap"`, and `MapShard` is `{ schema, map: BoxMap }`. The block is NESTED rather than flattened to the top level, and deliberately: its bytes are then exactly what the view shard held, so the migration is a move of a value rather than a reshaping of it, the merge strategy carries over word for word, and a reader that has to look in both places is one expression.
+  
+  `ViewShard.map` is deprecated and read-only for one release. It is still typed, so a reader that meets a project written before the split finds the map where it is; nothing writes it, `storyletengine format` moves it, and the compiler warns once per box naming that command. `ViewShard` itself now documents what it is left holding, which is the canvases.
+  
+  Nothing in the compiled bundle changed. The `maps` block is byte for byte what it was, so none of the four runtimes moved and no corpus case did either.
+
 ## 0.3.0
 
 ### Minor Changes
