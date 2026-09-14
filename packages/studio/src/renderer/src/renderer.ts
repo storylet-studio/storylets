@@ -53,6 +53,7 @@ import {
 import type { Detail, Inspected, InspectorHost } from "./inspector.js";
 import { createProjectSettings } from "./project-settings.js";
 import { mountPropertyList } from "./prop-list.js";
+import { revealRow } from "@wildwinter/app-shell";
 import { setPlayRung } from "./play-ladder.js";
 import { setPropertyNavigator } from "./expr-panels.js";
 import { createNavHistory, historyNav, toast } from "@wildwinter/app-shell";
@@ -2161,16 +2162,32 @@ const projectSettingsPanel = createProjectSettings(
 // definition is "in the box/deck you are looking at". An @hand ref that names
 // a tag group's own enum opens that group; any other @hand name is declared on
 // tags, so the box's Tags tab is its home.
+/**
+ * The jump's second half: the page is open, now the ROW, through app-shell's
+ * revealRow. It used to stop at the page, and a declaration below the fold was
+ * nowhere to be seen (reported 2026-09-14). A box's or a deck's tab can still be filling in from main when
+ * the render returns, and the World tab lives in a dialog that opens on its
+ * own time, so this asks again on the next frames rather than once, and gives
+ * up quietly after a moment: a name no page shows as a row (a tag group's,
+ * whose own page IS the definition) is not a fault.
+ */
+function landOn(name: string, tries = 12): void {
+  if (revealRow(document, name) || tries <= 0) return;
+  requestAnimationFrame(() => landOn(name, tries - 1));
+}
+
 setPropertyNavigator({
   goToDefinition(ref) {
-    if (ref.scope === "world") { projectSettingsPanel.open("world"); return; }
+    if (ref.scope === "world") { projectSettingsPanel.open("world"); landOn(ref.name); return; }
     // A jump, so it remembers the way back: the crumb bar's return control
     // (the Map's arriveFrom grammar) rather than leaving the author stranded
     // at the declaration (reported from use, 2026-08-26). World is exempt
     // above because a dialog dismisses back to where you were by itself.
     const here = returnHere();
-    const jump = (navigate: () => void): void =>
-      here ? arriveFrom(here.label, here.go, navigate) : (navigate(), renderWorkspace());
+    const jump = (navigate: () => void): void => {
+      if (here) arriveFrom(here.label, here.go, navigate); else { navigate(); renderWorkspace(); }
+      landOn(ref.name);
+    };
     if (ref.scope === "story") { jump(() => actions.focus({ kind: "story" })); return; }
     const box = currentBox();
     if (!box) return;

@@ -197,7 +197,10 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
         })));
       }
       const extra = opts.rowExtras?.(p);
-      list.append(expandableRow({ line: [name, type, def, ...(extra ? [extra] : []), up, down, del], details }));
+      // `name` is stamped on the row for app-shell's revealRow to land on:
+      // "Go to definition" used to open the page and stop there, with the
+      // declaration below the fold (reported 2026-09-14).
+      list.append(expandableRow({ line: [name, type, def, ...(extra ? [extra] : []), up, down, del], details, name: p.name }));
     });
     guard.check();
   }
@@ -209,3 +212,4 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
   // expression could reach. The field's own rollover says which it is.
   return { firstInvalid: () => guard.firstDuplicate() ?? firstIllegalPropertyName(host) };
 }
+

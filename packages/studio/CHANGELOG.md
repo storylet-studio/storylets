@@ -10,6 +10,10 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Go to definition lands on the declaration, not only on its page.** Right-clicking a property pill and choosing **Go to definition** opened the page the property is declared on and stopped there: with a long list the declaration was off screen, and nothing marked which row was meant. The row now comes to the middle of the page, opens its details (an enum's values are behind the expander, and they are usually what you came for) and is lit for a moment. The page is still the same page, and the crumb bar's way back is unchanged.
+
 ## [0.7.0] - 2026-09-13
 
 ### Added

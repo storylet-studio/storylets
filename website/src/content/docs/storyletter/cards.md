@@ -68,7 +68,7 @@ Everything about how this card gets dealt, on one page.
   declared properties, so it offers the names that exist. A property pill answers for
   itself: hover it for the property's purpose (and, for a quality, its ladder of stages),
   and right-click it for **Go to definition**, which opens the property where it's
-  declared, and **Find usages**, which opens [Find](/storyletter/workspace/#find) on
+  declared and lands on it, opened and lit for a moment, and **Find usages**, which opens [Find](/storyletter/workspace/#find) on
   everything that reads or writes it. The same works on the pills in an outcome's
   changes.
 - **Priority**: what cards are ordered on, and **higher goes first**. The hint under it
