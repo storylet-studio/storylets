@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-14
+
 ### Added
 
 - **A card with no outcomes is played with none** (2026-09-14). A masthead, a notice, a codex entry: a card whose play means "shown" has nothing to choose between, and until now it could not be played at all. `Flow::play(cardId, "", from)` on a card whose `outcomes` is empty now does everything a play does except the writes: it appends a `PlayRecord` whose `outcome` is "", so the play log and the history functions count it, advances the box's turn by the usual rule (nothing in a timed box, `settings.playAdvancesTurns` otherwise, an explicit `PlayOptions::advanceTurns` still honoured), applies the redraw policy (a cooldown, `never` spent, a shared one-shot marked taken), evicts the card from its hand, and emits the `Play` trace event with an empty `outcome`. There is no gate to check and nothing is written. "" is the spelling because it is the one every runtime can express, a Blueprint pin included: `UStoryletFlow::Play` and `PlayAdvancing` take an empty `OutcomeGameId` for it, and the log line reads `play <card>`. Two refusals, both before anything mutates: "" on a card that HAS outcomes (`card "<gameId>" has outcomes (<o1>, <o2>); name the one played`), and a named outcome on a card with none, refused as it always was. The Board demo draws one plain **Done** button where an open card's outcome buttons would be when it has none, and the Hamlet demo plays a scene whose card declares no outcome with "". Parity with the JS runtime, corpus-pinned (corpus version 9).

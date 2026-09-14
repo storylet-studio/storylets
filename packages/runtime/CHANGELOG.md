@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-14
+
 ### Added
 
 - **A card with no outcomes is played with none** (2026-09-14; the no-outcome-play brief). A masthead, a notice, a codex entry: a card whose play means "shown". `play(card, "", hand)` does everything a play does except the writes: the play log and the history functions (`count_played`, `turns_since_played` and the `_in` pair) count it, the played card's box turn advances by the usual rule (nothing for a timed box, and an explicit `advanceTurns` still wins), its redraw rests it, and it leaves its hand. The `play` trace event and the play record carry `outcome: ""`, so a save's shape does not depend on the card. `""` is the one spelling in all four runtimes, because a Blueprint pin cannot be absent. Only the empty-for-empty case is new: `""` on a card that has outcomes is refused (`card "x" has outcomes (a, b); name the one played`), and a named outcome on a card with none is refused as before. `outcomes()` still answers an empty list for such a card. Corpus first: three cases, the scripted `play` op's `outcome` is optional and a play with none traces as `play <card>`, corpus version 9.

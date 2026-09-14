@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-14
+
 ### Added
 
 - **A card with no outcomes is played with none** (2026-09-14). A masthead, a notice, a codex entry: a card whose play means "shown". `flow.play(card_id, "", hand_id)` on a card whose `outcomes` is empty does everything a play does except the writes: the play log records it with `"outcome": ""` and the history functions count it, the box's clock moves by the usual rule (nothing in a timed box, `playAdvancesTurns` otherwise, an explicit `advance_turns` still honoured), the redraw rests it (a cooldown, or never again, a shared one-shot marked taken), it leaves its hand, and the play trace event carries `"outcome": ""`. There is no gate to check and nothing is written. "" is the one spelling every runtime can express. Two refusals, both before any mutation: "" on a card that HAS outcomes returns `card "<id>" has outcomes (<o1>, <o2>); name the one played`, and a named outcome on a card with none is refused as before (`card "<id>" has no outcome "<name>"`). A save whose play record lacks `"outcome"` now loads it as "" rather than failing. The Board demo shows one "Done" button on an open card that has no outcomes, and the state panel logs such a play as `play <card>`. Parity with the JS runtime, corpus-pinned (corpus version 9).

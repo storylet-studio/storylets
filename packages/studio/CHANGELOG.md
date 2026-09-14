@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-14
+
 ### Added
 
 - **A card with no outcomes can be played.** On the Board, a card that declares no outcomes (a masthead, a notice, a codex entry) used to open to "This card has no outcomes." and nothing to press. It now has one **Done** button, which plays it straight away: it is counted as played, the clock moves and it leaves its hand, with nothing written. Its journal line reads `played "<card>"`, with no arrow and no outcome. A card whose outcomes are all locked still shows them locked.
