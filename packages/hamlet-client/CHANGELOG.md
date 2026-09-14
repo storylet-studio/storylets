@@ -5,6 +5,16 @@ attaches one zip to the matching GitHub Release, with `make_latest: false` so
 it never takes Storyletter's Latest badge from electron-updater. The release
 job reads the section for the tagged version out of this file.
 
+## [0.2.0] - 2026-09-14
+
+### Added
+
+- **A card with no outcomes is played with none, in all four hosts.** The web client and the Godot, Unity and Unreal projects resolve the outcome a scene reached in four steps now: a `gameEvent`, else the outcome named on the option taken, else the card's only outcome, else no outcome when the card declares none, which plays it with `""`. A card with several outcomes that a scene ends without naming still stops with an error. The Hamlet's 17 cards all have outcomes, so none takes the new step today.
+
+### Changed
+
+- **The Storylet Engine 0.7.0 in all four zips, up from 0.4.1**: the browser drop-in, and the Godot addon, the Unity package and the Unreal plugin copied into their projects. Since 0.4.1 the runtime gained outcome fields, timed boxes, a hole filled from a property, parking and restoring one flow, and a report of what a load dropped; the runtime's changelog has the detail.
+
 ## [0.1.0] - 2026-09-04
 
 ### Added

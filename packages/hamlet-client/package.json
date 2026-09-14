@@ -1,6 +1,6 @@
 {
   "name": "@storylet-studio/hamlet-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "description": "The Hamlet as a playable browser game: the Storylet Engine choosing the beat and Patter performing it, in one host.",
