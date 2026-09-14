@@ -30,10 +30,35 @@ var _fails := 0
 ## an EMPTY Array, which would otherwise read as a pass: this is what tells a
 ## case that finished apart from one that stopped half way.
 var _case_finished := false
+## The same guard one level up, for a whole family. An error in a runner's own
+## loop (a case missing a key, say) abandons the runner, which hands back its
+## typed default, a pass count of 0, and nothing ever reaches _fail: the run
+## printed "peek: 0/29" and still ended ALL PASS with exit 0. Each runner sets
+## this as its very last act, and _check_runner fails the family when it did not.
+var _runner_finished := false
+## And for the two probes the read-only case runs, which return their failures as
+## an Array and so read a crash as "no failures", exactly as a scripted case did.
+var _probe_finished := false
+## And for the whole run: an error in the run itself skipped quit(), and the
+## process then sat there until something killed it.
+var _run_finished := false
+var _exit_code := 1
 var _dialect: Dictionary = StoryletDialect.dialect()
 
 
 func _initialize() -> void:
+	_run_finished = false
+	_run_all()
+	if not _run_finished:
+		push_error("the corpus run stopped on a script error before it finished (see SCRIPT ERROR above)")
+		print("FAILED: the corpus run stopped on a script error before it finished")
+		quit(1)
+		return
+	quit(_exit_code)
+
+
+## Everything the run does, so that an error anywhere in it still ends in a quit.
+func _run_all() -> void:
 	var args := OS.get_cmdline_user_args()
 	var path: String
 	if args.size() > 0:
@@ -43,12 +68,12 @@ func _initialize() -> void:
 	var text := FileAccess.get_file_as_string(path)
 	if text == "":
 		push_error("corpus not found: " + path)
-		quit(2)
+		_finish(2)
 		return
 	var root = JSON.parse_string(text)
 	if not (root is Dictionary):
 		push_error("corpus is not valid JSON")
-		quit(2)
+		_finish(2)
 		return
 
 	var expressions: Array = root["expressions"]
@@ -56,10 +81,18 @@ func _initialize() -> void:
 	var peek: Array = root["peek"]
 	var scripted: Array = root["scripted"]
 
+	_runner_finished = false
 	var e := _run_expressions(expressions)
+	_check_runner("expressions")
+	_runner_finished = false
 	var sp := _run_specificity(specificity)
+	_check_runner("specificity")
+	_runner_finished = false
 	var p := _run_peek(peek)
+	_check_runner("peek")
+	_runner_finished = false
 	var s := _run_scripted(scripted)
+	_check_runner("scripted")
 
 	print("corpus version %d" % int(root["version"]))
 	print("expressions: %d/%d  specificity: %d/%d  peek: %d/%d  scripted: %d/%d" % [
@@ -71,30 +104,48 @@ func _initialize() -> void:
 	var expr_text := FileAccess.get_file_as_string(expr_path)
 	if expr_text == "":
 		push_error("expr parity corpus not found: " + expr_path)
-		quit(2)
+		_finish(2)
 		return
 	var expr_root = JSON.parse_string(expr_text)
 	if not (expr_root is Dictionary):
 		push_error("expr parity corpus is not valid JSON")
-		quit(2)
+		_finish(2)
 		return
 	var x_prng: Array = expr_root["prng"]
 	var x_expr: Array = expr_root["expressions"]
+	_runner_finished = false
 	var xp := _run_expr_prng(x_prng)
+	_check_runner("expr/prng")
+	_runner_finished = false
 	var xe := _run_expressions(x_expr)
+	_check_runner("expr/expressions")
 	# A family the corpus carries and this harness does not run is a check that
 	# cannot fail here, so a missing key is a failure, not a skip.
 	if not expr_root.has("registry"):
 		push_error("expr parity corpus has no registry family")
-		quit(2)
+		_finish(2)
 		return
 	var x_reg: Array = expr_root["registry"]
+	_runner_finished = false
 	var xr := _run_expr_registry(x_reg)
+	_check_runner("expr/registry")
 	print("expr corpus v%d - prng: %d/%d  expressions: %d/%d  registry: %d/%d" % [
 		int(expr_root["version"]), xp, x_prng.size(), xe, x_expr.size(), xr, x_reg.size()])
 
 	print("ALL PASS" if _fails == 0 else "%d FAILED" % _fails)
-	quit(0 if _fails == 0 else 1)
+	_finish(0 if _fails == 0 else 1)
+
+
+## Record the run's exit code and that the run reached its end.
+func _finish(code: int) -> void:
+	_exit_code = code
+	_run_finished = true
+
+
+## Fail a family whose runner did not reach its last line.
+func _check_runner(family: String) -> void:
+	if not _runner_finished:
+		_fail(family, "(runner)", "stopped on a script error part way through, so the cases after it never ran (see SCRIPT ERROR above)")
 
 
 func _fail(family: String, name: String, detail: String) -> void:
@@ -284,6 +335,7 @@ func _run_expr_prng(cases: Array) -> int:
 				break
 		if ok:
 			pass_count += 1
+	_runner_finished = true
 	return pass_count
 
 
@@ -319,6 +371,7 @@ func _run_expressions(cases: Array) -> int:
 				pass_count += 1
 			else:
 				_fail("expressions", name, "expected %s, got %s" % [StoryletValues.show(expected), StoryletValues.show(actual)])
+	_runner_finished = true
 	return pass_count
 
 
@@ -346,6 +399,7 @@ func _run_specificity(cases: Array) -> int:
 			pass_count += 1
 		else:
 			_fail("specificity", name, "expected %d, got %d" % [expected, actual])
+	_runner_finished = true
 	return pass_count
 
 
@@ -385,6 +439,7 @@ func _run_peek(cases: Array) -> int:
 			ok = false
 		if ok:
 			pass_count += 1
+	_runner_finished = true
 	return pass_count
 
 
@@ -398,13 +453,20 @@ func _run_scripted(cases: Array) -> int:
 		if not _case_finished:
 			failures.append("the case stopped on a script error before its last op (see SCRIPT ERROR above)")
 		if str(c["name"]).begins_with("an outcome may not write a read-only"):
+			_probe_finished = false
 			failures.append_array(_read_only_world_probe(c["bundle"]))
+			if not _probe_finished:
+				failures.append("the bound-world probe stopped on a script error (see SCRIPT ERROR above)")
+			_probe_finished = false
 			failures.append_array(_self_world_examiner(c["bundle"]))
+			if not _probe_finished:
+				failures.append("the self-backed examiner stopped on a script error (see SCRIPT ERROR above)")
 		if failures.is_empty():
 			pass_count += 1
 		else:
 			for f in failures:
 				_fail("scripted", c["name"], f)
+	_runner_finished = true
 	return pass_count
 
 
@@ -880,6 +942,7 @@ func _read_only_world_probe(bundle: Dictionary) -> Array:
 		"get": func(n: String): return vals.get(n),
 		"set": func(n: String, v) -> void: sets.append(n); vals[n] = v}})
 	if engine == null:
+		_probe_finished = true
 		return ["bound-world probe: engine would not create"]
 	var flow := engine.open_flow("main")
 	flow.deal("h_q")
@@ -895,6 +958,7 @@ func _read_only_world_probe(bundle: Dictionary) -> Array:
 		failures.append("bound-world probe: a writable property was refused: " + ok)
 	if sets != ["mood"]:
 		failures.append("bound-world probe: expected the host's set once, for mood; got %s" % str(sets))
+	_probe_finished = true
 	return failures
 
 
@@ -906,6 +970,7 @@ func _self_world_examiner(bundle: Dictionary) -> Array:
 	var failures: Array = []
 	var engine := StoryletEngine.create(bundle, {"seed": 0})
 	if engine == null:
+		_probe_finished = true
 		return ["self-backed examiner: engine would not create"]
 	var row := func(path: String) -> Dictionary:
 		for r in engine.list_properties():
@@ -913,6 +978,7 @@ func _self_world_examiner(bundle: Dictionary) -> Array:
 				return r
 		return {}
 	if (row.call("world.clock") as Dictionary).is_empty():
+		_probe_finished = true
 		return ["self-backed examiner: no row for world.clock"]
 	if bool((row.call("world.clock") as Dictionary)["writable"]):
 		failures.append("self-backed examiner: world.clock did not report writable: false")
@@ -925,6 +991,7 @@ func _self_world_examiner(bundle: Dictionary) -> Array:
 		failures.append("self-backed examiner: the host's write did not land")
 	if bool((row.call("world.clock") as Dictionary)["writable"]):
 		failures.append("self-backed examiner: a host write made the declaration writable")
+	_probe_finished = true
 	return failures
 
 
@@ -992,4 +1059,5 @@ func _run_expr_registry(cases: Array) -> int:
 			ok = false
 		if ok:
 			pass_count += 1
+	_runner_finished = true
 	return pass_count
