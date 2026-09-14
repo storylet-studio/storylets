@@ -320,6 +320,8 @@ describe("the Hamlet client", () => {
     expect(w.resolveOutcome(state({ labelled: "pay-them-off" }), ["pay-them-off", "walk-away"], "s")).toBe("pay-them-off");
     // 3. the only outcome the card has, when the scene said nothing at all
     expect(w.resolveOutcome(state({}), ["continue"], "s")).toBe("continue");
+    // ...or none at all, "", when the card declares no outcomes
+    expect(w.resolveOutcome(state({}), [], "s")).toBe("");
     // and loudly, rather than a guess, when nothing answers
     expect(() => w.resolveOutcome(state({}), ["a", "b"], "the-scene")).toThrow(/the-scene.*declares 2/s);
   });

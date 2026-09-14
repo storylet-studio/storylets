@@ -223,7 +223,10 @@ namespace StoryletStudio.StoryletEngine.Demo
             try
             {
                 _session.Play(card.Id, outcomeGameId, hand);
-                Append($"played \"{Label(card.Title, card.GameId)}\" -> {outcomeLabel}");
+                // A card with no outcomes is played with none: no arrow, nothing named.
+                Append(outcomeGameId == ""
+                    ? $"played \"{Label(card.Title, card.GameId)}\""
+                    : $"played \"{Label(card.Title, card.GameId)}\" -> {outcomeLabel}");
                 CollapseCard();
             }
             catch (StoryletError e)
@@ -384,10 +387,23 @@ namespace StoryletStudio.StoryletEngine.Demo
         }
 
         /// <summary>An open card's outcomes, beneath it. Unavailable ones still
-        /// show (the gate is part of the story), disabled and marked.</summary>
+        /// show (the gate is part of the story), disabled and marked. A card
+        /// with no outcomes at all gets one "Done" button, which plays it with
+        /// none (the outcome named "").</summary>
         private void DrawOutcomes(string hand, DealtCard card)
         {
             if (_openOutcomes == null) return;
+            if (_openOutcomes.Count == 0)
+            {
+                GUILayout.BeginHorizontal();
+                GUILayout.Space(40);
+                if (GUILayout.Button("Done", GUILayout.Width(260)))
+                {
+                    _pending = () => PlayOutcome(hand, card, "", "");
+                }
+                GUILayout.EndHorizontal();
+                return;
+            }
             foreach (var outcome in _openOutcomes)
             {
                 var label = Label(outcome.Title, outcome.GameId);

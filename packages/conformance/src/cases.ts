@@ -575,6 +575,59 @@ export const fixtures: Fixtures = {
         { op: "assertOutcomeOrder", card: "c_debt", from: "h_q", expect: ["stand", "pay", "leave"] },
       ] },
 
+    // A card with NO outcomes is played with none (the no-outcome-play brief,
+    // 2026-09-14): a masthead, a notice, a codex entry, whose play means
+    // "shown". It is everything a play is except the writes. The history
+    // counts it (c_after reads count_played), the box's turn moves, the redraw
+    // rests it (redraw 2 from turn 1 is back at turn 3), it leaves its hand,
+    // and the record survives a save with its empty outcome. A script that
+    // names no outcome sends "", the one spelling in every runtime.
+    { name: "a card with no outcomes is played with no outcome, and everything but the writes happens",
+      story: [{ name: "gold", type: "number", default: 5 }],
+      cards: [
+        // c_after outranks c_news, so the last deal reads c_after first however
+        // the hand orders a card it kept against one it gains.
+        { id: "c_news", priority: 1, redraw: 2 },
+        { id: "c_after", priority: 2, condition: 'count_played("news") >= 1' },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_news"] } },
+        { op: "assertOutcomeOrder", card: "c_news", from: "h_q", expect: [] },
+        { op: "play", card: "c_news", from: "h_q", expectTrace: ["play news"] },
+        { op: "assertState", expect: { "turn.b_x": 1, "story.gold": 5 } },
+        { op: "assertBoard", expect: { h_q: [] } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_after"] } },
+        { op: "saveLoad" },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_after"] } },
+        { op: "advanceTurns", box: "b_x", n: 2 },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_after", "c_news"] } },
+      ] },
+
+    // The new case is ONLY the empty-for-empty one. A play naming no outcome on
+    // a card that has outcomes is refused before anything moves.
+    { name: "a play naming no outcome is refused on a card that has outcomes, and changes nothing",
+      story: [{ name: "gold", type: "number", default: 5 }],
+      cards: [{ id: "c_job", outcomes: [{ id: "o_done", changes: { "@story.gold": "@story.gold + 1" } }] }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_job"] } },
+        { op: "play", card: "c_job", from: "h_q", expectError: true },
+        { op: "assertState", expect: { "turn.b_x": 0, "story.gold": 5 } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_job"] } },
+      ] },
+
+    // ...and an outcome named on a card with none is refused, as it always was.
+    { name: "an outcome named on a card with no outcomes is refused, and changes nothing",
+      cards: [{ id: "c_news" }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_news"] } },
+        { op: "play", card: "c_news", outcome: "done", from: "h_q", expectError: true },
+        { op: "assertState", expect: { "turn.b_x": 0 } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_news"] } },
+      ] },
+
     // An outcome carries game data of its own, declared by the box beside the
     // card template (schema 2.3/2.7): the line a press shows without spending
     // a card on it. The engine hands it out with the outcome and never reads

@@ -955,7 +955,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 {
                     if (e is DiagnosticEvent dg) { diagnostics.Add(dg.Message); return; }
                     if (e is EvictEvent ev) { traces.Add($"evict {ev.Hand} {ev.Card} {ev.Reason}"); return; }
-                    if (e is PlayEvent pl) { traces.Add($"play {pl.Card} {pl.Outcome}"); return; }
+                    if (e is PlayEvent pl) { traces.Add(pl.Outcome == "" ? $"play {pl.Card}" : $"play {pl.Card} {pl.Outcome}"); return; }
                     if (e is WriteEvent wr) { traces.Add($"write {wr.Target} {wr.Path}"); return; }
                     List<TraceCard> cards = null;
                     if (e is DealEvent d) cards = d.Cards;
@@ -1210,7 +1210,8 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         try
                         {
                             var advance = op.Value<double?>("advanceTurns");
-                            session.Play(op.Value<string>("card"), op.Value<string>("outcome"), op.Value<string>("from"),
+                            // No "outcome" key is a play with none, named "" (corpus version 9).
+                            session.Play(op.Value<string>("card"), op.Value<string>("outcome") ?? "", op.Value<string>("from"),
                                 advance != null ? new PlayOptions { AdvanceTurns = advance } : new PlayOptions());
                         }
                         catch (Exception ex)

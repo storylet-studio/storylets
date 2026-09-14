@@ -70,8 +70,9 @@ When every card gets dealt, the section is replaced by one line: "Every card get
 and no outcome of theirs was ever taken. Usually an outcome's condition is the culprit. A card
 that's dealt a thousand times and never played is invisible if you only count deals. A card
 with **no outcomes at all** - a news headline, a codex entry, content whose whole job is to be
-dealt and read - is not listed here and doesn't block a run from counting as exhausted:
-there is nothing to play, so "never played" would be an accusation it can't answer.
+dealt and read - is not listed here and doesn't block a run from counting as exhausted.
+Your game may play one, with no outcome, but a coverage run never does, so "never played"
+would be an accusation it can't answer.
 
 **Outcomes never played** finishes the sweep at the branch level: a card can be well covered
 while one of its outcomes is unreachable.

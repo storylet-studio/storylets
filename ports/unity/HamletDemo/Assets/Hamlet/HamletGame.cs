@@ -144,13 +144,15 @@ namespace StoryletStudio.Hamlet
         }
 
         /// <summary>An explicit gameEvent, else the option the player took, else the card's only
-        /// outcome. Loud when none of the three answers: guessing would move the world the wrong
+        /// outcome, else "" for a card that declares none (it is played with none). Loud when a
+        /// card with more than one outcome says nothing: guessing would move the world the wrong
         /// way, and the build catches this shape first (scripts/pairing.mjs).</summary>
         private string ResolveOutcome()
         {
             if (!string.IsNullOrEmpty(Playing.Outcome)) return Playing.Outcome;
             if (!string.IsNullOrEmpty(Playing.Labelled)) return Playing.Labelled;
             var declared = Story.Outcomes(Playing.Card.Id, At).Select(o => o.GameId).ToList();
+            if (declared.Count == 0) return "";
             if (declared.Count == 1) return declared[0];
             throw new InvalidOperationException($"scene \"{Playing.Card.GameId}\" ended without saying which outcome"
                 + $" it reached, and its card declares {declared.Count} ({string.Join(", ", declared)})");
@@ -161,7 +163,7 @@ namespace StoryletStudio.Hamlet
         {
             var card = Playing.Card; var outcome = ResolveOutcome();
             Story.Play(card.Id, outcome, At);
-            Log.Insert(0, $"{card.Title ?? card.GameId}: {outcome}");
+            Log.Insert(0, outcome == "" ? (card.Title ?? card.GameId) : $"{card.Title ?? card.GameId}: {outcome}");
             Playing = null;
             // Re-prime everywhere: a refresh evicts what is no longer eligible and fills
             // EMPTY slots; a still-eligible card keeps its seat (the survivor rule).

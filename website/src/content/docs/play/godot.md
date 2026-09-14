@@ -77,7 +77,8 @@ for outcome in flow.outcomes(card_id, hand_id):            # ask when you show t
 Card views and outcome views are Dictionaries: `id`, `gameId`, `title`, `purpose` and
 `fields` on a card; `available` on an outcome, and `fields` too when the box declares
 outcome fields. `play()` returns an error String, empty on
-success, and changes nothing if the outcome is gated shut or the card isn't in that hand.
+success, and changes nothing if the outcome is gated shut or the card isn't in that hand. A
+card with no outcomes is played with `""` as the outcome.
 
 ## Your game's state
 

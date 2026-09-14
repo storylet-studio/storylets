@@ -84,7 +84,8 @@ outcome's own `Fields` as `FStoryletDealtCard` carries the card's, when the box 
 outcome fields. `BoardForBox(BoxRef)` sits beside
 `Board()` and `PlayAdvancing` beside `Play` because Blueprint pins take no optional arguments.
 `Play` returns false and fills `Error` if the outcome is gated shut or the card isn't in that
-hand; nothing changes in that case.
+hand; nothing changes in that case. A card with no outcomes is played with an empty
+`OutcomeGameId`.
 
 ## Your game's state
 

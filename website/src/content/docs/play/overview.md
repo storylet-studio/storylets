@@ -44,6 +44,8 @@ mostly install notes and the local spelling.
 5. **Ask for the outcomes**, offer the available ones, and **play** the one the player picks.
    State writes, the cooldown starts, the clock advances. An outcome carries fields of its
    own when the box declares them, so the line you show after the press can come with it.
+   A card with no outcomes at all (a notice, a codex entry, a headline on a screen) is played
+   with none: pass `""` as the outcome once it has been shown.
 
 Then save and load the whole run through one call.
 
@@ -89,7 +91,7 @@ On a **flow** (one playthrough):
 | `dealMany(hands?)` | Refresh several or all hands, same rule; returns what was dealt, keyed by hand |
 | `board(box?)` | The current contents of every hand, or of one box's hands |
 | `outcomes(card, hand)` | This card's outcomes with availability, evaluated against current state, and each one's fields |
-| `play(card, outcome, hand, { advanceTurns })` | Apply an outcome |
+| `play(card, outcome, hand, { advanceTurns })` | Apply an outcome, or play a card that has none with `""` |
 | `advanceTurns(box, n)` | Advance one box's clock |
 | `turn(box)` | Read one box's clock |
 | `listBoxes()` | Every box: id, gameId, title, current turn |
@@ -107,6 +109,10 @@ Two things to hold on to:
 - **A dealt card doesn't carry outcome availability.** A card can sit on the board for many
   turns while the world moves, so ask `outcomes()` when you're about to show them and you
   get the current answer.
+- **A card with no outcomes is still played.** `outcomes()` answers an empty list for it.
+  Play it with `""` and everything a play does happens except the writes: it counts in the
+  play history, its cooldown starts, the clock advances and it leaves its hand. `""` on a card
+  that has outcomes is refused.
 - **You only play cards that are in a hand.** `play` needs the card to be on the board in the
   hand you name. Peeking shows you what a box would deal; it doesn't let you play from it.
 

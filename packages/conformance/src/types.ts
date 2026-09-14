@@ -116,6 +116,7 @@ export type TraceVerdictKind =
  *
  *     evict <hand> <card> <reason>
  *     play <card> <outcome>
+ *     play <card>                 a card with no outcomes, played with none
  *     write <target> <path>
  *
  * Deliberately only those three kinds, and deliberately a flat string rather
@@ -178,8 +179,10 @@ export type ScriptOp =
    *  must be refused (an unknown box). */
   | { op: "assertBoard"; flow?: string; box?: string; expect?: Record<string, string[]>; expectError?: true }
   /** `from` is the hand the card sits in: you never play a card from inside
-   *  the deck (schema 3.1). */
-  | { op: "play"; flow?: string; card: string; outcome: string; from: string; advanceTurns?: number; expectError?: true; expectTrace?: string[] }
+   *  the deck (schema 3.1). No `outcome` plays the card with none, which a
+   *  runtime receives as "" (the no-outcome-play brief): allowed exactly when
+   *  the card has no outcomes. */
+  | { op: "play"; flow?: string; card: string; outcome?: string; from: string; advanceTurns?: number; expectError?: true; expectTrace?: string[] }
   /** Each box has its own clock (schema 3.4), PER FLOW; `box` is the box id. */
   | { op: "advanceTurns"; flow?: string; box: string; n: number }
   | { op: "assertOutcomes"; flow?: string; card: string; from: string; expect: Record<string, boolean> }

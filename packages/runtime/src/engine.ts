@@ -221,7 +221,8 @@ export type TraceEvent =
   /** Hand and card gameIds. A card the build no longer has (`vanished`) has
    *  no gameId left and is named by the id the board carried. */
   | { type: "evict"; hand: string; card: string; reason: TraceVerdict | "hand-condition" | "vanished" }
-  /** Card and outcome gameIds. */
+  /** Card and outcome gameIds; `outcome` is "" for a card with no outcomes,
+   *  played with none. */
   | { type: "play"; card: string; outcome: string; turn: number }
   /** One landed outcome change; `path` is the resolved store location, in the
    *  address grammar `getProperty` takes - the owner segment is its gameId (a
@@ -2276,16 +2277,29 @@ export class Flow {
 
   /** Apply an outcome (schema 3.7): the card must sit in a hand on the
    *  board (you never play a card from inside the deck). Throws before any
-   *  mutation on a gated-shut outcome or a bad write target. */
+   *  mutation on a gated-shut outcome or a bad write target.
+   *
+   *  A card with NO outcomes is played with none, named as "" (the
+   *  no-outcome-play brief, 2026-09-14): a masthead, a notice, a codex entry,
+   *  whose play means "shown". It is everything a play is except the writes:
+   *  the play log and the history functions count it, the box's turn moves by
+   *  the usual rule, the redraw rests it and it leaves its hand. "" is the one
+   *  spelling in all four runtimes, because a Blueprint pin cannot be absent.
+   *  Only the empty-for-empty case is new: "" on a card that has outcomes is
+   *  refused, and a named outcome on a card with none is refused as before. */
   play(cardId: string, outcomeGameId: string, from: string, opts: PlayOptions = {}): void {
     this.assertOpen();
     const { entry, ask } = this.resolveDealt(cardId, from);
-    const outcome = entry.card.outcomes.find((o) => effectiveGameId(o) === outcomeGameId);
-    if (!outcome) throw new Error(`card "${effectiveGameId(entry.card)}" has no outcome "${outcomeGameId}"`);
+    const bare = outcomeGameId === "";
+    if (bare && entry.card.outcomes.length > 0) {
+      throw new Error(`card "${effectiveGameId(entry.card)}" has outcomes (${entry.card.outcomes.map((o) => effectiveGameId(o)).join(", ")}); name the one played`);
+    }
+    const outcome = bare ? undefined : entry.card.outcomes.find((o) => effectiveGameId(o) === outcomeGameId);
+    if (!bare && !outcome) throw new Error(`card "${effectiveGameId(entry.card)}" has no outcome "${outcomeGameId}"`);
 
     const handEnv = this.buildHandEnv(ask);
     const ctx = this.evalCtx(entry.box, entry.deck, handEnv);
-    if (!this.passes(outcome.condition, ctx)) {
+    if (outcome && !this.passes(outcome.condition, ctx)) {
       throw new Error(`outcome "${outcomeGameId}" on "${effectiveGameId(entry.card)}" is gated shut`);
     }
 
@@ -2303,7 +2317,7 @@ export class Flow {
     // Every right-hand side evaluates against PRE-play state, then all
     // writes land (schema 3.7).
     const writes: { target: string; value: ScalarValue }[] = [];
-    for (const [target, expr] of Object.entries(outcome.changes)) {
+    for (const [target, expr] of Object.entries(outcome?.changes ?? {})) {
       writes.push({ target, value: this.eval(expr, ctx) });
     }
     for (const { target, value } of writes) {
@@ -2311,7 +2325,8 @@ export class Flow {
       if (this.tracing) this.emit({ type: "write", target, path, value, ...(prev !== undefined ? { prev } : {}) }, newTurn);
     }
 
-    const record: PlayRecord = { card: effectiveGameId(entry.card), outcome: effectiveGameId(outcome), turn: newTurn };
+    const outcomeId = outcome ? effectiveGameId(outcome) : "";
+    const record: PlayRecord = { card: effectiveGameId(entry.card), outcome: outcomeId, turn: newTurn };
     this.playLog.push(record);
     this.indexPlay(record);
     if (entry.card.redraw === "never") {
@@ -2331,7 +2346,7 @@ export class Flow {
       (this.boardContents.get(handId) ?? []).filter((id) => id !== entry.card.id));
     this.turnCounts.set(entry.box.id, newTurn);
     // Emitted last: a handler reading the board and the clock sees the play.
-    if (this.tracing) this.emit({ type: "play", card: effectiveGameId(entry.card), outcome: effectiveGameId(outcome), turn: newTurn }, newTurn);
+    if (this.tracing) this.emit({ type: "play", card: effectiveGameId(entry.card), outcome: outcomeId, turn: newTurn }, newTurn);
   }
 
   /** One owned property's address, owner segment and all (4.4). */

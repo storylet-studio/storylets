@@ -12,7 +12,9 @@
 //   1. a gameEvent's gameData.outcome, wherever one fires, beats everything
 //      after it (the scene deciding late, having played the dialogue)
 //   2. otherwise the outcome named on the option the player took
-//   3. otherwise the card's only outcome, when it has exactly one
+//   3. otherwise the card's only outcome, when it has exactly one, or none
+//      ("") when the card declares no outcomes at all: a card with no
+//      outcomes is played with none, and its scene is the whole of it
 //
 // So a scene with no choice says nothing at all, and a scene with a choice
 // labels its options. A gameEvent is the escape hatch, not the routine case.
@@ -85,6 +87,9 @@ function answer(flow, state, optionId, open) {
 /**
  * Which outcome the performance reached, by the three steps above.
  *
+ * A card that declares no outcomes resolves to "", which is how every runtime
+ * spells playing a card with none.
+ *
  * Throws when the scene said nothing and the card has more than one outcome:
  * the host cannot guess, and guessing wrong would move the world the wrong way.
  * The build catches this shape before a player can (scripts/pairing.mjs); this
@@ -94,6 +99,7 @@ function resolveOutcome(state, declared, cardGameId) {
   if (state.outcome) return state.outcome;
   if (state.labelled) return state.labelled;
   if (declared.length === 1) return declared[0];
+  if (declared.length === 0) return "";   // a card with no outcomes is played with none
   throw new Error(
     `scene "${cardGameId}" ended without saying which outcome it reached, and its card declares `
     + `${declared.length} (${declared.join(", ")}). Label the options, or fire a gameEvent.`,

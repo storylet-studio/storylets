@@ -92,15 +92,16 @@ const renderHeader = (): void => {
 
 // --- the board ---------------------------------------------------------------
 
-/** Play one outcome and move the board, or report the refusal. */
-const playOutcome = (hand: string, card: DealtCard, outcome: OutcomeView): void => {
+/** Play one outcome and move the board, or report the refusal. With no
+ *  outcome, the card has none and is played with "" (its Done button). */
+const playOutcome = (hand: string, card: DealtCard, outcome?: OutcomeView): void => {
   try {
-    flow.play(card.id, outcome.gameId, hand);
+    flow.play(card.id, outcome?.gameId ?? "", hand);
   } catch (e) {
     say(`! ${message(e)}`);
     return;
   }
-  say(`played "${named(card.title, card.gameId)}" -> ${named(outcome.title, outcome.gameId)}`);
+  say(`played "${named(card.title, card.gameId)}"${outcome ? ` -> ${named(outcome.title, outcome.gameId)}` : ""}`);
   open = undefined;
   refill();
 };
@@ -116,11 +117,23 @@ const refill = (): void => {
 };
 
 /** The revealed outcomes of one card: available ones clickable, unavailable
- *  ones still shown but disabled and labelled "(locked)". */
+ *  ones still shown but disabled and labelled "(locked)". A card with no
+ *  outcomes at all gets one Done button instead, which plays it with none; a
+ *  card whose outcomes are all locked is not that card, and keeps them. */
 const renderOutcomes = (hand: string, card: DealtCard): HTMLElement => {
   const wrap = document.createElement("div");
   wrap.className = "bd-outcomes";
-  for (const outcome of flow.outcomes(card.id, hand)) {
+  const outcomes = flow.outcomes(card.id, hand);
+  if (outcomes.length === 0) {
+    const done = document.createElement("button");
+    done.type = "button";
+    done.className = "bd-outcome";
+    done.textContent = "Done";
+    done.addEventListener("click", () => playOutcome(hand, card));
+    wrap.append(done);
+    return wrap;
+  }
+  for (const outcome of outcomes) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "bd-outcome";

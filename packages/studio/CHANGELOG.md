@@ -10,6 +10,10 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **A card with no outcomes can be played.** On the Board, a card that declares no outcomes (a masthead, a notice, a codex entry) used to open to "This card has no outcomes." and nothing to press. It now has one **Done** button, which plays it straight away: it is counted as played, the clock moves and it leaves its hand, with nothing written. Its journal line reads `played "<card>"`, with no arrow and no outcome. A card whose outcomes are all locked still shows them locked.
+
 ### Fixed
 
 - **Go to definition lands on the declaration, not only on its page.** Right-clicking a property pill and choosing **Go to definition** opened the page the property is declared on and stopped there: with a long list the declaration was off screen, and nothing marked which row was meant. The row now comes to the middle of the page, opens its details (an enum's values are behind the expander, and they are usually what you came for) and is lit for a moment. The page is still the same page, and the crumb bar's way back is unchanged.

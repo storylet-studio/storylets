@@ -120,7 +120,8 @@ function formatLogBody(e: LogEntry, flow: string): string {
         + `${listed.length > 0 ? listed.join(", ") : "(none)"} (${e.cards.length} considered)`;
     }
     case "evict": return `${stamp}evict ${e.card} from ${e.hand} (${e.reason})`;
-    case "play": return `${stamp}play ${e.card} -> ${e.outcome}`;
+    // A card played with none ("") has no outcome to name.
+    case "play": return `${stamp}play ${e.card}${e.outcome === "" ? "" : ` -> ${e.outcome}`}`;
     case "write": return `${stamp}write ${e.path}: ${showVal(e.prev)} -> ${showVal(e.value)}`;
     case "turns": return `${stamp}turns ${e.box} -> ${e.turn}`;
     default: return `${stamp}diagnostic ${e.where}: ${e.message}`;

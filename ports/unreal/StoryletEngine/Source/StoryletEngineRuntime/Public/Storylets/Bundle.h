@@ -486,7 +486,8 @@ namespace storylets
 
     struct PlayRecord
     {
-        /** Card and outcome by gameId (feeds the play-history functions). */
+        /** Card and outcome by gameId (feeds the play-history functions).
+         *  The outcome is "" when a card with no outcomes was played. */
         std::string card;
         std::string outcome;
         double turn = 0;

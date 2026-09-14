@@ -136,9 +136,12 @@ function go(site: string | null): void {
  *  Note what is NOT here. There is no `setProperty` anywhere in this client.
  *  A game does not write @story behind the engine's back; it plays an outcome
  *  and lets the project's own changes say what that meant. */
-function take(card: DealtCard, outcome: OutcomeView): void {
-  flow.play(card.id, outcome.gameId, at!);
-  note(outcome.purpose ?? outcome.title ?? outcome.gameId);
+function take(card: DealtCard, outcome: OutcomeView | null): void {
+  // A card with NO outcomes is played with none, spelled "" in every runtime:
+  // it is still a play (history, the clock, the redraw), just one that writes
+  // nothing, so the journal names the card rather than a choice.
+  flow.play(card.id, outcome?.gameId ?? "", at!);
+  note(outcome ? outcome.purpose ?? outcome.title ?? outcome.gameId : card.title ?? card.gameId);
 
   // TIME IS THE PROJECT'S POLICY, NOT THE CLIENT'S. `play` already advanced
   // the clock, because the Village's own settings say `playAdvancesTurns: 1`.
@@ -162,7 +165,9 @@ function take(card: DealtCard, outcome: OutcomeView): void {
   // about it was a line that appeared in the journal behind you. The outcome's
   // own purpose is the designer's account of the consequence, and it is the
   // whole reason they wrote it, so it gets the screen it was written for.
-  showResult(card, outcome);
+  // A card played with none has no consequence to tell, so it just closes.
+  if (outcome) showResult(card, outcome);
+  else closeCard();
   save();
 }
 
@@ -267,7 +272,18 @@ function showCard(card: DealtCard): void {
   $("cardview-purpose").textContent = card.purpose ?? "";
   // `outcomes` evaluates each gate against the state RIGHT NOW, never against
   // a snapshot taken when the card was dealt.
-  $("cardview-choices").replaceChildren(...flow.outcomes(card.id, at!).map((o) => {
+  const outcomes = flow.outcomes(card.id, at!);
+  // A card with no outcomes at all is read and then played with none: one Done
+  // button. A card whose outcomes are all locked is NOT that card; it keeps them.
+  if (outcomes.length === 0) {
+    const done = el("button", { className: "choice", onClick: () => take(card, null) });
+    done.append(el("span", { className: "choice-title", text: "Done" }));
+    $("cardview-choices").replaceChildren(done);
+    $("cardview").hidden = false;
+    $("cardview-close").focus();
+    return;
+  }
+  $("cardview-choices").replaceChildren(...outcomes.map((o) => {
     const choice = el("button", {
       className: `choice${o.available ? "" : " locked"}`,
       onClick: () => { if (o.available) take(card, o); },

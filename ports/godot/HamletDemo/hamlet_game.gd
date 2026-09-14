@@ -140,27 +140,32 @@ func _run() -> void:
 ## The scene ended and reported an outcome; THAT is what the storylet engine
 ## plays. The world moves because of what was said in dialogue.
 ## An explicit gameEvent, else the option the player took, else the card's only
-## outcome. Loud when none of the three answers: guessing would move the world
-## the wrong way, and the build catches this shape first (scripts/pairing.mjs).
-func _resolve_outcome() -> String:
+## outcome, else "" for a card that declares none (it is played with no outcome).
+## Loud (null) when a card has several and none of those answers: guessing would
+## move the world the wrong way, and the build catches this shape first
+## (scripts/pairing.mjs).
+func _resolve_outcome() -> Variant:
 	if str(playing["outcome"]) != "": return str(playing["outcome"])
 	if str(playing["labelled"]) != "": return str(playing["labelled"])
 	var declared: Array = []
 	for o in story.outcomes(playing["card"]["id"], at): declared.append(str(o["gameId"]))
+	if declared.is_empty(): return ""
 	if declared.size() == 1: return declared[0]
 	push_error('scene "%s" ended without saying which outcome it reached, and its card declares %d (%s)'
 		% [playing["card"]["gameId"], declared.size(), ", ".join(declared)])
-	return ""
+	return null
 
 ## Called by the UI's Continue button, once the player has read what the scene said.
 func finish() -> void:
 	var card: Dictionary = playing["card"]
-	var outcome: String = _resolve_outcome()
-	if outcome == "":
+	var resolved = _resolve_outcome()
+	if resolved == null:
 		playing = null; return
+	var outcome: String = resolved
 	var err := story.play(card["id"], outcome, at)
 	if err != "": push_error(err)
-	log.push_front("%s: %s" % [card.get("title", card["gameId"]), outcome])
+	var title: String = card.get("title", card["gameId"])
+	log.push_front(title if outcome == "" else "%s: %s" % [title, outcome])
 	playing = null
 	# Re-prime EVERYWHERE: the outcome's changes, or anything the scene wrote to
 	# @world, may have re-gated content elsewhere. A refresh evicts what is no

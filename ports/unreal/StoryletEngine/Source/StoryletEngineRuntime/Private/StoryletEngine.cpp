@@ -451,6 +451,8 @@ namespace
 				return FString::Printf(TEXT("%sevict %s from %s (%s)"),
 					*Stamp, *Ue(E.card), *Ue(E.hand), *Ue(E.reason));
 			case storylets::TraceEvent::Kind::Play:
+				// A card with no outcomes is played with none: "play <card>".
+				if (E.outcome.empty()) return FString::Printf(TEXT("%splay %s"), *Stamp, *Ue(E.card));
 				return FString::Printf(TEXT("%splay %s -> %s"), *Stamp, *Ue(E.card), *Ue(E.outcome));
 			case storylets::TraceEvent::Kind::Write:
 				return FString::Printf(TEXT("%swrite %s: %s -> %s"),

@@ -57,7 +57,12 @@ void UStoryletBoardClickProxy::OnClicked()
 {
 	if (!Owner) return;
 
-	if (OutcomeGameId.IsEmpty())
+	if (bPlayWithNoOutcome)
+	{
+		// The Done button: a card with no outcomes is played with none.
+		Owner->PlayOutcome(Hand, CardGameId, CardLabel, FString(), OutcomeLabel);
+	}
+	else if (OutcomeGameId.IsEmpty())
 	{
 		Owner->SelectCard(Hand, CardGameId);
 	}
@@ -326,7 +331,9 @@ void UStoryletBoardDemoWidget::PlayOutcome(const FString& InHand, const FString&
 	FString Error;
 	if (Session->Play(InCardGameId, InOutcomeGameId, InHand, Error))
 	{
-		AppendTranscript(FString::Printf(TEXT("played \"%s\" -> %s"), *InCardLabel, *InOutcomeLabel));
+		AppendTranscript(InOutcomeGameId.IsEmpty()
+			? FString::Printf(TEXT("played \"%s\""), *InCardLabel)
+			: FString::Printf(TEXT("played \"%s\" -> %s"), *InCardLabel, *InOutcomeLabel));
 	}
 	else
 	{
@@ -511,7 +518,23 @@ void UStoryletBoardDemoWidget::RefreshBoard()
 			if (!bOpen) continue;
 
 			// Availability is asked for now, not remembered from deal time.
-			for (const FStoryletOutcomeView& Outcome : Session->Outcomes(Card.GameId, Hand.Hand))
+			const TArray<FStoryletOutcomeView> Outcomes = Session->Outcomes(Card.GameId, Hand.Hand);
+			if (Outcomes.Num() == 0)
+			{
+				// A card with no outcomes (a notice, a codex entry) is played with
+				// none: one plain Done button where the outcome buttons would be.
+				UButton* DoneButton = MakeButton(TEXT("Done"), BoardPalette::BtnPlay);
+				UStoryletBoardClickProxy* DoneProxy = MakeProxy(Hand.Hand, Card.GameId, CardLabel);
+				DoneProxy->bPlayWithNoOutcome = true;
+				DoneProxy->OutcomeLabel = TEXT("Done");
+				DoneButton->OnClicked.AddDynamic(DoneProxy, &UStoryletBoardClickProxy::OnClicked);
+
+				UVerticalBoxSlot* DoneSlot = Group->AddChildToVerticalBox(DoneButton);
+				DoneSlot->SetPadding(FMargin(36.f, 0.f, 0.f, 2.f));
+				DoneSlot->SetHorizontalAlignment(HAlign_Left);
+				continue;
+			}
+			for (const FStoryletOutcomeView& Outcome : Outcomes)
 			{
 				const FString OutcomeLabel = TitleOr(Outcome.Title, Outcome.GameId);
 				const FString ButtonLabel = Outcome.bAvailable ? OutcomeLabel : OutcomeLabel + TEXT(" (locked)");

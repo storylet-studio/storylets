@@ -25,6 +25,11 @@ const FLOW_OPS := ["setState", "peek", "deal", "assertBoard", "play",
 const REPORT_SEP := "\u001f"
 
 var _fails := 0
+## Set by _run_scripted_case as its very last act. A GDScript runtime error
+## (a missing key, say) abandons the function and hands back its typed default,
+## an EMPTY Array, which would otherwise read as a pass: this is what tells a
+## case that finished apart from one that stopped half way.
+var _case_finished := false
 var _dialect: Dictionary = StoryletDialect.dialect()
 
 
@@ -388,7 +393,10 @@ func _run_peek(cases: Array) -> int:
 func _run_scripted(cases: Array) -> int:
 	var pass_count := 0
 	for c in cases:
+		_case_finished = false
 		var failures := _run_scripted_case(c)
+		if not _case_finished:
+			failures.append("the case stopped on a script error before its last op (see SCRIPT ERROR above)")
 		if str(c["name"]).begins_with("an outcome may not write a read-only"):
 			failures.append_array(_read_only_world_probe(c["bundle"]))
 			failures.append_array(_self_world_examiner(c["bundle"]))
@@ -408,6 +416,7 @@ func _run_scripted_case(c: Dictionary) -> Array:
 	var seed := int(c.get("seed", 0))
 	var first_engine := StoryletEngine.create(bundle, {"seed": seed})
 	if first_engine == null:
+		_case_finished = true
 		return ["engine refused its options"]
 	# One mutable holder: GDScript lambdas capture by VALUE, so saveLoad's
 	# engine swap must go through a reference the flow_of closure shares.
@@ -446,7 +455,10 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				(rc["traces"] as Array).append("evict %s %s %s" % [e["hand"], e["card"], e["reason"]])
 				return
 			if e["type"] == "play":
-				(rc["traces"] as Array).append("play %s %s" % [e["card"], e["outcome"]])
+				# A play with no outcome renders as "play <card>", no trailing space.
+				var played: String = "play %s" % e["card"] if str(e["outcome"]) == "" \
+					else "play %s %s" % [e["card"], e["outcome"]]
+				(rc["traces"] as Array).append(played)
 				return
 			if e["type"] == "write":
 				(rc["traces"] as Array).append("write %s %s" % [e["target"], e["path"]])
@@ -611,7 +623,7 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				if op.has("advanceTurns"):
 					opts["advance_turns"] = float(op["advanceTurns"])
 				rc["traces"] = []
-				var error := session.play(op["card"], op["outcome"], op["from"], opts)
+				var error := session.play(op["card"], str(op.get("outcome", "")), op["from"], opts)
 				check_trace.call(at, op, failures)
 				var expect_error: bool = op.get("expectError", false)
 				if expect_error and error == "":
@@ -771,6 +783,7 @@ func _run_scripted_case(c: Dictionary) -> Array:
 
 			_:
 				failures.append("%s: unknown op" % at)
+	_case_finished = true
 	return failures
 
 

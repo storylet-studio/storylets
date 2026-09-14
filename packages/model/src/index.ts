@@ -786,6 +786,8 @@ export const SAVE_SCHEMA = "storylets/save@1";
 export interface PlayRecord {
   /** Card and outcome by gameId (feeds the play-history functions). */
   card: string;
+  /** "" for a card with no outcomes, played with none: the key is always
+   *  there, so a save's shape does not depend on the card. */
   outcome: string;
   turn: number;
 }

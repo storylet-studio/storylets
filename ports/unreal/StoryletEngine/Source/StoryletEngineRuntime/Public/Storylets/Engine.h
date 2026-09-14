@@ -1551,7 +1551,17 @@ namespace storylets
 
         /** Apply an outcome (schema 3.7): the card must sit in a hand on the
          *  board (you never play a card from inside the deck). Throws before
-         *  any mutation on a gated-shut outcome or a bad write target. */
+         *  any mutation on a gated-shut outcome or a bad write target.
+         *
+         *  A card with NO outcomes is played with none, named as "" (the
+         *  no-outcome-play brief, 2026-09-14): a masthead, a notice, a codex
+         *  entry, whose play means "shown". It is everything a play is except
+         *  the writes: the play log and the history functions count it, the
+         *  box's turn moves by the usual rule, the redraw rests it and it
+         *  leaves its hand. "" is the one spelling in all four runtimes,
+         *  because a Blueprint pin cannot be absent. Only the empty-for-empty
+         *  case is new: "" on a card that has outcomes is refused, and a named
+         *  outcome on a card with none is refused as before. */
         void play(
             const std::string& cardId,
             const std::string& outcomeGameId,
@@ -1561,24 +1571,39 @@ namespace storylets
             assertOpen();
             ResolvedDealt resolved = resolveDealt(cardId, from);
             const CardEntry& entry = resolved.entry;
-            const Outcome* outcome = nullptr;
-            for (const auto& o : entry.card->outcomes)
+            const bool bare = outcomeGameId.empty();
+            if (bare && !entry.card->outcomes.empty())
             {
-                if (EffectiveGameId(o) == outcomeGameId)
+                std::string named;
+                for (const auto& o : entry.card->outcomes)
                 {
-                    outcome = &o;
-                    break;
+                    if (!named.empty()) named += ", ";
+                    named += EffectiveGameId(o);
                 }
-            }
-            if (!outcome)
-            {
                 throw StoryletError("card \"" + EffectiveGameId(*entry.card)
-                    + "\" has no outcome \"" + outcomeGameId + "\"");
+                    + "\" has outcomes (" + named + "); name the one played");
+            }
+            const Outcome* outcome = nullptr;
+            if (!bare)
+            {
+                for (const auto& o : entry.card->outcomes)
+                {
+                    if (EffectiveGameId(o) == outcomeGameId)
+                    {
+                        outcome = &o;
+                        break;
+                    }
+                }
+                if (!outcome)
+                {
+                    throw StoryletError("card \"" + EffectiveGameId(*entry.card)
+                        + "\" has no outcome \"" + outcomeGameId + "\"");
+                }
             }
 
             HandEnv handEnv = buildHandEnv(resolved.ask);
             EvalContext ctx = evalCtx(*entry.box, entry.deck, handEnv);
-            if (!passes(outcome->condition, ctx))
+            if (outcome && !passes(outcome->condition, ctx))
             {
                 throw StoryletError("outcome \"" + outcomeGameId + "\" on \""
                     + EffectiveGameId(*entry.card) + "\" is gated shut");
@@ -1600,9 +1625,12 @@ namespace storylets
             // Every right-hand side evaluates against PRE-play state, then all
             // writes land (schema 3.7).
             std::vector<std::pair<std::string, StoryletValue>> writes;
-            for (const auto& change : outcome->changes)
+            if (outcome)
             {
-                writes.emplace_back(change.first, eval(change.second, ctx));
+                for (const auto& change : outcome->changes)
+                {
+                    writes.emplace_back(change.first, eval(change.second, ctx));
+                }
             }
             for (const auto& write : writes)
             {
@@ -1619,9 +1647,10 @@ namespace storylets
                 }
             }
 
+            const std::string outcomeId = outcome ? EffectiveGameId(*outcome) : std::string();
             PlayRecord record;
             record.card = EffectiveGameId(*entry.card);
-            record.outcome = EffectiveGameId(*outcome);
+            record.outcome = outcomeId;
             record.turn = newTurn;
             playLog_.push_back(std::move(record));
             indexPlay(playLog_.back());
@@ -1655,7 +1684,7 @@ namespace storylets
                 TraceEvent evt;
                 evt.kind = TraceEvent::Kind::Play;
                 evt.card = EffectiveGameId(*entry.card);
-                evt.outcome = EffectiveGameId(*outcome);
+                evt.outcome = outcomeId;
                 evt.turn = newTurn;
                 emit(std::move(evt), newTurn);
             }

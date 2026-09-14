@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **A card with no outcomes is played with none** (2026-09-14). `Flow.Play(cardId, "", from)` plays a card whose `Outcomes` list is empty, naming the outcome "" because that is the one spelling all four runtimes can express (a Blueprint pin cannot be absent). A masthead, a notice or a codex entry, whose play means "shown", no longer needs an outcome invented for it. It is everything a play is except the writes: a `PlayRecord` with `Outcome = ""` lands in the play log and the history functions count it, the box's turn moves by the usual rule (nothing in a timed box, `Settings.PlayAdvancesTurns` otherwise, an explicit `PlayOptions.AdvanceTurns` still honoured), the redraw rests it (a cooldown, a `never` spent, a shared one-shot taken), it leaves its hand, and the `PlayEvent` carries `Outcome = ""`. There is no gate to check and nothing to write. Only the empty-for-empty case is new: "" on a card that HAS outcomes is refused before anything changes (`card "c" has outcomes (a, b); name the one played`), and a named outcome on a card with none is refused as before. The Board demo draws one "Done" button under an open card with no outcomes, and the Hamlet demo resolves a scene whose card declares none to "". Parity with the JS runtime, corpus-pinned (corpus version 9).
+
 ## [0.6.0] - 2026-09-13
 
 ### Added

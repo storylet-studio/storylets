@@ -177,6 +177,23 @@ describe("createPropertyInspector", () => {
     inspector.destroy();
   });
 
+  it("names no outcome in the log line of a card played with none", () => {
+    const bare = expandBundle({
+      cards: [{ id: "c_notice", priority: 1, tags: { zone: ["docks"] }, outcomes: [] }],
+      hands: [{ id: "h_seat", rule: { bindings: { zone: "docks" } }, slots: 1 }],
+    });
+    const engine = new Engine(bare, { seed: 0, log: true });
+    const session = engine.openFlow("main");
+    const inspector = createPropertyInspector(engine, session, { pollMs: 0 });
+    session.deal("seat");
+    session.play("c_notice", "", "seat");
+    inspector.refresh();
+    const logText = inspector.el.querySelector(".sl-log")?.textContent ?? "";
+    expect(logText).toContain("play notice");
+    expect(logText).not.toContain("play notice ->");
+    inspector.destroy();
+  });
+
   it("hints when the engine retains no log", () => {
     const { inspector } = mount();   // created without the log option
     expect(inspector.el.querySelector(".sl-log")?.textContent).toContain("new Engine(bundle, { log: true })");

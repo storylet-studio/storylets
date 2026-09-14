@@ -1159,6 +1159,14 @@ func outcomes(card_id: String, from_hand: String) -> Array:
 ## float} overrides settings.playAdvancesTurns. Returns "" on success or the
 ## error message; errors before any mutation on a gated-shut outcome, an
 ## erroring change expression or a bad reference (the TS throw paths).
+##
+## A card with NO outcomes is played with none, named as "" (the one spelling
+## every runtime can express): a masthead, a notice, a codex entry, whose play
+## means "shown". It is everything a play is except the writes: the play log
+## and the history functions count it, the box's turn moves by the usual rule,
+## the redraw rests it and it leaves its hand. Only the empty-for-empty case is
+## new: "" on a card that has outcomes is refused, and a named outcome on a card
+## with none is refused as before.
 func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dictionary = {}) -> String:
 	if _closed:
 		var closed_msg := 'flow "%s" is closed' % id
@@ -1174,17 +1182,25 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 		return rd["error"]
 	var entry: Dictionary = rd["entry"]
 	var ask: Dictionary = rd["ask"]
+	var card_outcomes: Array = entry["card"]["outcomes"]
+	var bare := outcome_game_id == ""
+	if bare and not card_outcomes.is_empty():
+		var named: Array = []
+		for o in card_outcomes:
+			named.append(StoryletBundle.effective_game_id(o))
+		return 'card "%s" has outcomes (%s); name the one played' % [StoryletBundle.effective_game_id(entry["card"]), ", ".join(named)]
 	var outcome = null
-	for o in entry["card"]["outcomes"]:
-		if StoryletBundle.effective_game_id(o) == outcome_game_id:
-			outcome = o
-			break
-	if outcome == null:
-		return 'card "%s" has no outcome "%s"' % [StoryletBundle.effective_game_id(entry["card"]), outcome_game_id]
+	if not bare:
+		for o in card_outcomes:
+			if StoryletBundle.effective_game_id(o) == outcome_game_id:
+				outcome = o
+				break
+		if outcome == null:
+			return 'card "%s" has no outcome "%s"' % [StoryletBundle.effective_game_id(entry["card"]), outcome_game_id]
 
 	var hand_env := _build_hand_env(ask)
 	var ctx := _eval_ctx(entry["box"], entry["deck"], hand_env)
-	if not _passes(outcome.get("condition"), ctx):
+	if outcome != null and not _passes(outcome.get("condition"), ctx):
 		return 'outcome "%s" on "%s" is gated shut' % [outcome_game_id, StoryletBundle.effective_game_id(entry["card"])]
 
 	# The played card's box's clock advances (schema 3.4); computed up front
@@ -1203,8 +1219,9 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 	# Every right-hand side evaluates against PRE-play state, then all writes
 	# land (schema 3.7).
 	var writes: Array = []
-	for target in outcome.get("changes", {}):
-		var v = _eval(outcome["changes"][target], ctx)
+	var changes: Dictionary = {} if outcome == null else outcome.get("changes", {})
+	for target in changes:
+		var v = _eval(changes[target], ctx)
 		if StoryletExpression.is_error(v):
 			return v.message
 		writes.append({"target": target, "value": v})
@@ -1218,9 +1235,10 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 				evt["prev"] = landed["prev"]
 			_emit(evt, new_turn)
 
+	var outcome_id: String = "" if outcome == null else StoryletBundle.effective_game_id(outcome)
 	var record := {
 		"card": StoryletBundle.effective_game_id(entry["card"]),
-		"outcome": StoryletBundle.effective_game_id(outcome),
+		"outcome": outcome_id,
 		"turn": new_turn,
 	}
 	_play_log.append(record)
@@ -1247,7 +1265,7 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 	_turn_counts[entry["box"]["id"]] = new_turn
 	# Emitted last: a handler reading the board and the clock sees the play.
 	if _tracing():
-		_emit({"type": "play", "card": StoryletBundle.effective_game_id(entry["card"]), "outcome": StoryletBundle.effective_game_id(outcome), "turn": new_turn}, new_turn)
+		_emit({"type": "play", "card": StoryletBundle.effective_game_id(entry["card"]), "outcome": outcome_id, "turn": new_turn}, new_turn)
 	return ""
 
 
@@ -1590,7 +1608,7 @@ func restore(saved: Dictionary) -> void:
 		_cooldowns[card_id] = float(saved["cooldowns"][card_id])
 	_play_log = []
 	for record in saved.get("playLog", []):
-		_play_log.append({"card": str(record["card"]), "outcome": str(record["outcome"]), "turn": float(record["turn"])})
+		_play_log.append({"card": str(record["card"]), "outcome": str(record.get("outcome", "")), "turn": float(record["turn"])})
 	_rebuild_play_index()
 	_board_contents = {}
 	for hand_id in saved.get("board", {}):

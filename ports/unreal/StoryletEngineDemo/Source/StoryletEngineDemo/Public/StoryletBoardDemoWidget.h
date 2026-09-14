@@ -73,9 +73,15 @@ public:
 	UPROPERTY()
 	FString CardLabel;
 
-	/** Empty on a card button; set on an outcome button. */
+	/** Empty on a card button; set on an outcome button. Empty on the Done
+	 *  button too, which is told apart by bPlayWithNoOutcome, never by this. */
 	UPROPERTY()
 	FString OutcomeGameId;
+
+	/** Set on the Done button a card with no outcomes shows: the click plays
+	 *  the card with no outcome ("") rather than opening it. */
+	UPROPERTY()
+	bool bPlayWithNoOutcome = false;
 
 	UPROPERTY()
 	FString OutcomeLabel;
@@ -118,7 +124,8 @@ public:
 	void SelectCard(const FString& InHand, const FString& InCardGameId);
 
 	/** Play one outcome of one card. Labels come from the click proxy so the
-	 *  transcript can name what has just left the board. */
+	 *  transcript can name what has just left the board. An empty
+	 *  InOutcomeGameId plays a card with no outcomes (its Done button). */
 	void PlayOutcome(const FString& InHand, const FString& InCardGameId, const FString& InCardLabel,
 		const FString& InOutcomeGameId, const FString& InOutcomeLabel);
 

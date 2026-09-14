@@ -125,8 +125,9 @@ void FHamletGame::ChoicesFrom(const TArray<FPatterOption>& Options)
 	}
 }
 
-/** An explicit gameEvent, else the option the player took, else the card's only outcome.
- *  Loud when none of the three answers: guessing would move the world the wrong way, and
+/** An explicit gameEvent, else the option the player took, else the card's only outcome,
+ *  else "" for a card that declares none (played with no outcome). Loud when a card has
+ *  more than one and nothing said which: guessing would move the world the wrong way, and
  *  the build catches this shape first (scripts/pairing.mjs). */
 std::string FHamletGame::ResolveOutcome() const
 {
@@ -135,6 +136,7 @@ std::string FHamletGame::ResolveOutcome() const
 	TArray<FString> Declared;
 	for (const FStoryletOutcomeView& o : Story->Outcomes(Playing->Card.Id, At)) Declared.Add(o.GameId);
 	if (Declared.Num() == 1) return S(Declared[0]);
+	if (Declared.Num() == 0) return std::string();
 	throw StoryletError("scene \"" + S(Playing->Card.GameId) + "\" ended without saying which outcome it reached, and its card declares "
 		+ std::to_string(Declared.Num()) + " (" + S(FString::Join(Declared, TEXT(", "))) + ")");
 }
@@ -170,7 +172,8 @@ void FHamletGame::Finish()
 	const FStoryletDealtCard card = Playing->Card; const std::string outcome = ResolveOutcome();
 	FString PlayError;
 	if (!Story->Play(card.Id, F(outcome), At, PlayError)) throw StoryletError(S(PlayError));   // the wrapper reports; this demo throws, as the JS client does
-	Log.Insert((card.Title.IsEmpty() ? card.GameId : card.Title) + TEXT(": ") + F(outcome), 0);
+	const FString CardName = card.Title.IsEmpty() ? card.GameId : card.Title;
+	Log.Insert(outcome.empty() ? CardName : CardName + TEXT(": ") + F(outcome), 0);
 	Playing.Reset();
 	Story->DealMany(HandRefs);   // re-prime everywhere; a still-eligible card keeps its seat (the survivor rule)
 }

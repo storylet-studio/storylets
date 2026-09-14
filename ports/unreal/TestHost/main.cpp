@@ -543,7 +543,8 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             }
             if (e.kind == TraceEvent::Kind::Play)
             {
-                traces.push_back("play " + e.card + " " + e.outcome);
+                // A play with no outcome reads "play <card>", no trailing space.
+                traces.push_back(e.outcome.empty() ? "play " + e.card : "play " + e.card + " " + e.outcome);
                 return;
             }
             if (e.kind == TraceEvent::Kind::Write)

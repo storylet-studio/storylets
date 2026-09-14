@@ -200,7 +200,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         return;
       }
       if (e.type === "play") {
-        traceSink.push(`play ${e.card} ${e.outcome}`);
+        traceSink.push(e.outcome === "" ? `play ${e.card}` : `play ${e.card} ${e.outcome}`);
         return;
       }
       if (e.type === "write") {
@@ -401,7 +401,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         let error: string | undefined;
         collect(() => {
           try {
-            flowOf(op.flow).play(op.card, op.outcome, op.from,
+            flowOf(op.flow).play(op.card, op.outcome ?? "", op.from,
               op.advanceTurns !== undefined ? { advanceTurns: op.advanceTurns } : {});
           } catch (e) {
             error = String(e);

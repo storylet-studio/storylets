@@ -1245,21 +1245,36 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>Apply an outcome (schema 3.7): the card must sit in a hand on
         /// the board (you never play a card from inside the deck). Throws before
-        /// any mutation on a gated-shut outcome or a bad write target.</summary>
+        /// any mutation on a gated-shut outcome or a bad write target.
+        ///
+        /// A card with NO outcomes is played with none, named as "" (the
+        /// no-outcome-play brief, 2026-09-14): a masthead, a notice, a codex
+        /// entry, whose play means "shown". It is everything a play is except
+        /// the writes: the play log and the history functions count it, the
+        /// box's turn moves by the usual rule, the redraw rests it and it leaves
+        /// its hand. "" is the one spelling in all four runtimes, because a
+        /// Blueprint pin cannot be absent. Only the empty-for-empty case is new:
+        /// "" on a card that has outcomes is refused, and a named outcome on a
+        /// card with none is refused as before.</summary>
         public void Play(string cardId, string outcomeGameId, string from, PlayOptions opts = null)
         {
             AssertOpen();
             opts = opts ?? new PlayOptions();
             var (entry, ask) = ResolveDealt(cardId, from);
-            var outcome = entry.Card.Outcomes.Find(o => Model.EffectiveGameId(o) == outcomeGameId);
-            if (outcome == null)
+            var bare = outcomeGameId == "";
+            if (bare && entry.Card.Outcomes.Count > 0)
+            {
+                throw new StoryletError($"card \"{Model.EffectiveGameId(entry.Card)}\" has outcomes ({string.Join(", ", entry.Card.Outcomes.Select(o => Model.EffectiveGameId(o)))}); name the one played");
+            }
+            var outcome = bare ? null : entry.Card.Outcomes.Find(o => Model.EffectiveGameId(o) == outcomeGameId);
+            if (!bare && outcome == null)
             {
                 throw new StoryletError($"card \"{Model.EffectiveGameId(entry.Card)}\" has no outcome \"{outcomeGameId}\"");
             }
 
             var handEnv = BuildHandEnv(ask);
             var ctx = EvalCtx(entry.Box, entry.Deck, handEnv);
-            if (!Passes(outcome.Condition, ctx))
+            if (outcome != null && !Passes(outcome.Condition, ctx))
             {
                 throw new StoryletError($"outcome \"{outcomeGameId}\" on \"{Model.EffectiveGameId(entry.Card)}\" is gated shut");
             }
@@ -1278,7 +1293,8 @@ namespace StoryletStudio.StoryletEngine
             // Every right-hand side evaluates against PRE-play state, then all
             // writes land (schema 3.7).
             var writes = new List<KeyValuePair<string, StoryletValue>>();
-            foreach (var change in outcome.Changes)
+            // A bare play (no outcome) has nothing to write.
+            foreach (var change in outcome?.Changes ?? new OrderedMap<string, Expression>())
             {
                 writes.Add(new KeyValuePair<string, StoryletValue>(change.Key, Eval(change.Value, ctx)));
             }
@@ -1291,7 +1307,8 @@ namespace StoryletStudio.StoryletEngine
                 }
             }
 
-            var record = new PlayRecord { Card = Model.EffectiveGameId(entry.Card), Outcome = Model.EffectiveGameId(outcome), Turn = newTurn };
+            var outcomeId = outcome != null ? Model.EffectiveGameId(outcome) : "";
+            var record = new PlayRecord { Card = Model.EffectiveGameId(entry.Card), Outcome = outcomeId, Turn = newTurn };
             _playLog.Add(record);
             IndexPlay(record);
             if (entry.Card.Redraw.IsNever)
@@ -1317,7 +1334,7 @@ namespace StoryletStudio.StoryletEngine
             // Emitted last: a handler reading the board and the clock sees the play.
             if (Tracing)
             {
-                Emit(new PlayEvent { Card = Model.EffectiveGameId(entry.Card), Outcome = Model.EffectiveGameId(outcome), Turn = newTurn }, newTurn);
+                Emit(new PlayEvent { Card = Model.EffectiveGameId(entry.Card), Outcome = outcomeId, Turn = newTurn }, newTurn);
             }
         }
 

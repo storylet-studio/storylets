@@ -419,6 +419,8 @@ static func _format_log_entry(e: Dictionary) -> String:
 		"evict":
 			return "%sevict %s from %s (%s)" % [stamp, e["card"], e["hand"], e["reason"]]
 		"play":
+			if str(e.get("outcome", "")) == "":
+				return "%splay %s" % [stamp, e["card"]]
 			return "%splay %s -> %s" % [stamp, e["card"], e["outcome"]]
 		"write":
 			return "%swrite %s: %s -> %s" % [stamp, e["path"], _show_log_value(e.get("prev")), _show_log_value(e["value"])]

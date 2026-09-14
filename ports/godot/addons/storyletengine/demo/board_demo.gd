@@ -186,12 +186,17 @@ func _on_card_pressed(hand_game_id: String, card_id: String) -> void:
 
 func _on_outcome_pressed(hand_game_id: String, card: Dictionary, outcome: Dictionary) -> void:
 	# play() is the only mutating verb: it applies the changes, logs the play,
-	# takes the card out of its hand and advances that box's clock.
-	var err := _session.play(card["id"], outcome["gameId"], hand_game_id)
+	# takes the card out of its hand and advances that box's clock. A card with
+	# no outcomes is played with none, named as "".
+	var outcome_game_id: String = outcome.get("gameId", "")
+	var err := _session.play(card["id"], outcome_game_id, hand_game_id)
 	if err != "":
 		_append("! " + err)
 		return
-	_append('played "%s" -> %s' % [_display(card), _display(outcome)])
+	if outcome_game_id == "":
+		_append('played "%s"' % _display(card))
+	else:
+		_append('played "%s" -> %s' % [_display(card), _display(outcome)])
 	_collapse()
 	_refill()
 
@@ -241,7 +246,15 @@ func _outcomes_block(hand_game_id: String, card: Dictionary) -> MarginContainer:
 	var indent := MarginContainer.new()
 	indent.add_theme_constant_override("margin_left", 24)
 	var column := VBoxContainer.new()
-	for outcome in _session.outcomes(card["id"], hand_game_id):
+	var views := _session.outcomes(card["id"], hand_game_id)
+	if views.is_empty():
+		# A card with no outcomes (a notice, a codex entry) is still played:
+		# one Done button stands where the outcomes would.
+		var done := Button.new()
+		done.text = "Done"
+		done.pressed.connect(_on_outcome_pressed.bind(hand_game_id, card, {}))
+		column.add_child(done)
+	for outcome in views:
 		var button := Button.new()
 		if outcome["available"]:
 			button.text = _display(outcome)

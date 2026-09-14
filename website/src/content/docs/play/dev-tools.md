@@ -106,7 +106,8 @@ control labels in the same order, same transcript, one idiom each.
 - Every hand from `board()` is a labelled group of card buttons. An empty hand says
   `(nothing here right now)`.
 - Clicking a card reveals its outcomes beneath it. Available outcomes are clickable;
-  unavailable ones are still shown, disabled and labelled `(locked)`. Only one card is open at
+  unavailable ones are still shown, disabled and labelled `(locked)`. A card with no outcomes
+  shows one **Done** control instead, which plays it with no outcome. Only one card is open at
   a time.
 - Three controls: **Deal all hands**, **Next turn**, **Restart**.
 - A transcript records one line per action, newest last.

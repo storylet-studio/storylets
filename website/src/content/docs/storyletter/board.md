@@ -54,7 +54,9 @@ behind the rail's **State** tab, so the default view is the game.
 one full-width button per option. The open card floats over the bottom of the view -
 list or map alike - so it stays in front of you wherever the board has scrolled. An
 outcome whose condition isn't met is still shown, disabled and labelled `(locked)`,
-with a tooltip saying why.
+with a tooltip saying why. A card with no outcomes has one **Done** button instead, which
+plays it in one press: nothing is written, but it leaves its hand, its cooldown starts and
+the clock advances, so a box of notices plays the way a screen would.
 
 Playing takes two steps: pick an outcome, read what it'll change, then press **Continue**
 (focused for you, so Enter commits) or **Back** to change your mind. The card then leaves

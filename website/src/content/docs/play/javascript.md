@@ -102,6 +102,10 @@ for (const o of flow.outcomes(card.id, "the-inn")) {
 }
 ```
 
+A card with no outcomes gets an empty list. Play it with `""` once your game has shown it,
+`flow.play(card.id, "", "the-inn")`, and it counts as played: its cooldown starts and it
+leaves the hand, and nothing is written.
+
 An outcome view is `{ id, gameId, title?, purpose?, fields?, available }`. Its `fields` are
 the outcome's own handoff, there when the box declares outcome fields: the line to show once
 the press lands, say.

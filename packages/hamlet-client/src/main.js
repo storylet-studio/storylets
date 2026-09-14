@@ -123,7 +123,8 @@ function finish() {
     // move the world the wrong way (performance.js, resolveOutcome).
     const outcome = resolveOutcome(state, story.outcomes(card.id, at).map((o) => o.gameId), card.gameId);
     story.play(card.id, outcome, at);
-    log.unshift(`${card.title ?? card.gameId}: ${outcome}`);
+    // A card with no outcomes is played with none (""), so there is none to name.
+    log.unshift(outcome === "" ? `${card.title ?? card.gameId}` : `${card.title ?? card.gameId}: ${outcome}`);
     playing = null;
     // Re-prime EVERYWHERE, not just here: the outcome's changes, and anything the
     // scene wrote to @world, may have re-gated content in another place. The

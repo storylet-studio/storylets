@@ -106,12 +106,16 @@ public:
 
 	/** Apply an outcome (schema 3.7): the card must sit in FromHand on the
 	 *  board. False (with OutError) on a gated-shut outcome, a bad write
-	 *  target, or an unknown card/hand - nothing mutates on failure. */
+	 *  target, or an unknown card/hand - nothing mutates on failure.
+	 *  An EMPTY OutcomeGameId plays a card with no outcomes: everything a
+	 *  play does except the writes (logged, turn advanced, redraw applied,
+	 *  the card leaves its hand). Refused on a card that has outcomes. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	bool Play(const FString& CardRef, const FString& OutcomeGameId, const FString& FromHand, FString& OutError);
 
 	/** Play with an explicit turn advance (overrides the bundle's
-	 *  settings.playAdvancesTurns for this play only). */
+	 *  settings.playAdvancesTurns for this play only). An empty
+	 *  OutcomeGameId plays a card with no outcomes, as Play does. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	bool PlayAdvancing(const FString& CardRef, const FString& OutcomeGameId, const FString& FromHand,
 		double AdvanceTurns, FString& OutError);

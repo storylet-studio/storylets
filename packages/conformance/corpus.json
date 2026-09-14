@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -5859,6 +5859,466 @@
             "pay",
             "leave"
           ]
+        }
+      ]
+    },
+    {
+      "name": "a card with no outcomes is played with no outcome, and everything but the writes happens",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "gold",
+              "type": "number",
+              "default": 5
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_after",
+                    "gameId": "after",
+                    "condition": {
+                      "src": "count_played(\"news\") >= 1",
+                      "ast": [
+                        "bin",
+                        ">=",
+                        [
+                          "call",
+                          "count_played",
+                          [
+                            "s",
+                            "news"
+                          ]
+                        ],
+                        [
+                          "n",
+                          1
+                        ]
+                      ]
+                    },
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_news",
+                    "gameId": "news",
+                    "priority": 1,
+                    "redraw": 2,
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_news"
+            ]
+          }
+        },
+        {
+          "op": "assertOutcomeOrder",
+          "card": "c_news",
+          "from": "h_q",
+          "expect": []
+        },
+        {
+          "op": "play",
+          "card": "c_news",
+          "from": "h_q",
+          "expectTrace": [
+            "play news"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "turn.b_x": 1,
+            "story.gold": 5
+          }
+        },
+        {
+          "op": "assertBoard",
+          "expect": {
+            "h_q": []
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_after"
+            ]
+          }
+        },
+        {
+          "op": "saveLoad"
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_after"
+            ]
+          }
+        },
+        {
+          "op": "advanceTurns",
+          "box": "b_x",
+          "n": 2
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_after",
+              "c_news"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a play naming no outcome is refused on a card that has outcomes, and changes nothing",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "gold",
+              "type": "number",
+              "default": 5
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_job",
+                    "gameId": "job",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_done",
+                        "gameId": "done",
+                        "changes": {
+                          "@story.gold": {
+                            "src": "@story.gold + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "story",
+                                "gold"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_job"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_job",
+          "from": "h_q",
+          "expectError": true
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "turn.b_x": 0,
+            "story.gold": 5
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_job"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "an outcome named on a card with no outcomes is refused, and changes nothing",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_news",
+                    "gameId": "news",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_news"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_news",
+          "outcome": "done",
+          "from": "h_q",
+          "expectError": true
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "turn.b_x": 0
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_news"
+            ]
+          }
         }
       ]
     },

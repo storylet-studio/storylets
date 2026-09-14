@@ -20,6 +20,7 @@ import { confirmDialog } from "../src/confirm.js";
 import { colourIndex } from "../../shell/colour.js";
 import { Table, coerceStateInput, diffBoards, journalPlan } from "./model.js";
 import { runMarks } from "./run-marks.js";
+import { playChoices, playedTail } from "./play-choices.js";
 import { setPlayRung, shows } from "../src/play-ladder.js";
 import { createLiveRun } from "./live.js";   // Live Link: the game's run, rebuilt from its frames
 import type { LiveRun } from "./live.js";
@@ -318,9 +319,15 @@ function refreshBoard(): void {
 }
 
 function playPending(): void {
-  if (!table || !open || !pending) return;
+  if (pending !== undefined) playOpen(pending);
+}
+
+/** Play the open card: with the chosen outcome, or with none ("") for a card
+ *  that has no outcomes (its Done button). */
+function playOpen(outcome: string): void {
+  if (!table || !open) return;
   try {
-    table.play(open.card, pending, open.hand);
+    table.play(open.card, outcome, open.hand);
     // The running position, recorded before `open` is cleared: this hand is
     // where we are, and this card has now been seen for the rest of the run.
     marks.played(open.hand, open.card);
@@ -471,7 +478,7 @@ function journalRow(entry: BoardLogEntry): HTMLElement | null {
       return row("dealt", "j-deal", `${dealt.map((c) => `“${quote(table!.label(c.id))}”`).join(", ")} → ${entry.hand}`);
     }
     case "play":
-      return row("played", "j-play", `“${quote(table!.label(entry.card))}” → ${entry.outcome}`);
+      return row("played", "j-play", `“${quote(table!.label(entry.card))}”${playedTail(entry.outcome, "→")}`);
     case "write":
       return row("wrote", "j-write", `${entry.target} ${entry.prev !== undefined ? `${JSON.stringify(entry.prev)} → ` : ""}${JSON.stringify(entry.value)}`);
     case "evict":
@@ -538,7 +545,7 @@ function journalTextLine(e: BoardLogEntry): string | null {
         const dealt = e.cards.filter((c) => c.verdict === "dealt");
         return dealt.length ? `${t}\tdealt\t${dealt.map((c) => quote(table!.label(c.id))).join(", ")} -> ${e.hand}` : null;
       }
-      case "play": return `${t}\tplayed\t${quote(table!.label(e.card))} -> ${e.outcome}`;
+      case "play": return `${t}\tplayed\t${quote(table!.label(e.card))}${playedTail(e.outcome, "->")}`;
       case "write": return `${t}\twrote\t${e.target} ${e.prev !== undefined ? `${JSON.stringify(e.prev)} -> ` : ""}${JSON.stringify(e.value)}`;
       case "evict": return `${t}\tleft\t${quote(table!.label(e.card))} (${e.reason})`;
       case "turns": return `${t}\tturn\t${e.box} advances to ${e.turn}`;
@@ -697,15 +704,10 @@ function playPanel(): HTMLElement | null {
         el("button", { text: "Back", onClick: () => { pending = undefined; render(); } }),
         el("button", { className: "primary", text: "Continue", onClick: playPending })));
   } else {
-    const rowEl = el("div", { className: "pp-actions" });
-    for (const o of outcomes) {
-      const b = el("button", { className: o.available ? "" : "disabled", text: `${o.title ?? o.gameId}${o.available ? "" : " (locked)"}` });
-      if (!o.available) b.title = "Unavailable: this outcome's condition is not met in the current state";
-      else b.addEventListener("click", () => { pending = o.gameId; focusPending = true; render(); });
-      rowEl.append(b);
-    }
-    if (outcomes.length === 0) rowEl.append(el("span", { className: "empty", text: "This card has no outcomes." }));
-    panel.append(rowEl);
+    // A card with no outcomes gets one Done button that plays it with none.
+    panel.append(playChoices(outcomes,
+      (gameId) => { pending = gameId; focusPending = true; render(); },
+      () => playOpen("")));
   }
   return panel;
 }

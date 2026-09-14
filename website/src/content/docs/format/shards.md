@@ -464,6 +464,9 @@ Reading a card top to bottom:
   box declares `outcomeFields`, an outcome fills them in a `fields` map of its own, exactly
   as the card fills the card template: here `after` is the line the game shows once the gate
   is stepped through. The engine hands it over with the outcome and never reads it.
+  A card may have **no outcomes at all**: a notice, a headline on a screen, a codex entry,
+  whose whole job is to be shown. Your game plays one with no outcome once it has shown it, so
+  it still counts as played, rests by its `redraw` and leaves its hand; nothing is written.
 
 ## Property declarations
 

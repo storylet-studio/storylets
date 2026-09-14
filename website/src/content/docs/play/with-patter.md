@@ -33,12 +33,13 @@ options, one carrying each of those names. That is the whole link.
 
 ### Which outcome a scene reached
 
-Your host resolves it in three steps, and the last word wins:
+Your host resolves it in four steps, and the last word wins:
 
 1. **A `gameEvent`** with `outcome` in its Game Data, wherever one fires, beats anything before
    it. This is the scene deciding late, having played the dialogue.
 2. **Otherwise the outcome named on the option the player took.**
 3. **Otherwise the card's only outcome**, when it declares exactly one.
+4. **Otherwise no outcome**, when the card declares none: play it with `""`.
 
 Most scenes never reach step one. A card with a single outcome needs no Game Data anywhere, so a
 scene of pure narration says nothing at all; a card with several is answered by labelling its
