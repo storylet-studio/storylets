@@ -2436,14 +2436,28 @@ async function revalidate(): Promise<void> {
   const result = await studio.revalidate();
   if (!result) return;
   applyResult(result);
-  // Fall back only when the focus POINTS INTO a box that no longer resolves.
-  // The project page and the Story document carry no box, and treating that
-  // as dangling threw the author onto the first deck on every window focus -
-  // which is what made the Story restore look flaky: boot restored it, and
-  // the first revalidate stomped it (reported 2026-08-27).
+  repaintReplacedProject();
+  void refreshVc();
+}
+
+/**
+ * Repaint everything after a project arrives that may differ in SHAPE from the
+ * one on screen: a revalidate, or a merged pack, either of which can rename,
+ * add or remove boxes, decks and cards. `applyResult` repaints the lead and the
+ * problems bar and leaves the rest to its caller, which is right for a keystroke
+ * and wrong for these: a merge left the navigation on its pre-merge names until
+ * the window next regained focus (the Patter side's brief after patter #73,
+ * confirmed live 2026-09-15).
+ *
+ * Falls back only when the focus POINTS INTO a box that no longer resolves.
+ * The project page and the Story document carry no box, and treating that as
+ * dangling threw the author onto the first deck on every window focus, which
+ * is what made the Story restore look flaky: boot restored it, and the first
+ * revalidate stomped it (reported 2026-08-27).
+ */
+function repaintReplacedProject(): void {
   if (!focus || (focus.box !== undefined && !currentBox())) { focus = defaultFocus(); inspected = undefined; }
   renderWorkspace();
-  void refreshVc();
 }
 
 async function exportBundle(): Promise<void> {
@@ -2662,6 +2676,7 @@ async function mergePack(): Promise<void> {
   const result = await studio.mergePackCommit();
   if (result === null) return;
   if (!applied(result)) return;
+  repaintReplacedProject();
   // A conflict is not a failure, but it is not a success either: the shard was
   // written provisionally with OURS and a sidecar sits beside it.
   if (conflicts > 0) flashError(`${counts}; ${conflicts} conflict(s) need a look - see the .storyletconflict files`);

@@ -12,6 +12,8 @@ here is part of shipping, not a courtesy.
 
 ### Fixed
 
+- **Merging a returned pack updates the navigation straight away.** After **File ▸ Merge Returned Storyletpack**, the navigation kept the names and structure the project had before the merge (a renamed deck showed its old name) until the window next lost and regained focus, while the project underneath was already the merged one. It now repaints as the merge lands, the way a window-focus refresh always did.
+
 - **A card written without an `outcomes` key no longer breaks the project.** A deck shard whose card left the key out, rather than writing `outcomes: []`, made Find and the Story page's usage counts fail with `card.outcomes is not iterable`. A missing key now reads as an empty list when the project opens, which is what the format always meant by it.
 
 ## [0.8.0] - 2026-09-14
