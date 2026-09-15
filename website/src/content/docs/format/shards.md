@@ -467,6 +467,7 @@ Reading a card top to bottom:
   A card may have **no outcomes at all**: a notice, a headline on a screen, a codex entry,
   whose whole job is to be shown. Your game plays one with no outcome once it has shown it, so
   it still counts as played, rests by its `redraw` and leaves its hand; nothing is written.
+  Such a card may leave the `outcomes` key out altogether, which reads as an empty list.
 
 ## Property declarations
 

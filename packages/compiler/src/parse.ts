@@ -187,7 +187,18 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
         decksOk = false;
         continue;
       }
-      decks.push({ path: file.path, shard: deckParsed.value as unknown as DeckShard });
+      const shard = deckParsed.value as unknown as DeckShard;
+      // A card may leave out `outcomes` when it has none. The model says every
+      // card carries the list (`Card.outcomes: Outcome[]`), so a shard without
+      // the key reads as `outcomes: []` here, once, rather than at every reader:
+      // the compiler read it as `?? []` and nothing else did, and a parser script
+      // that deleted the key crashed Storyletter's search index on Dust and
+      // Print's read-and-done cards (2026-09-15). Only an ABSENT key is filled;
+      // anything else stays for the compiler to refuse.
+      for (const card of Array.isArray(shard.cards) ? shard.cards : []) {
+        if ((card as { outcomes?: unknown }).outcomes === undefined) card.outcomes = [];
+      }
+      decks.push({ path: file.path, shard });
     }
     if (!decksOk) continue;
 

@@ -1064,6 +1064,19 @@ describe("publish-gate validation", () => {
     expect(errors(result.issues).join()).toContain('field "rogue"');
   });
 
+  // Found on Dust and Print (2026-09-15): a parser script deleted the key from
+  // twenty-seven read-and-done cards, and Storyletter's search index threw
+  // "card.outcomes is not iterable". The parse fills the key once, so no reader
+  // has to remember to.
+  it("reads a card with no outcomes key as outcomes: [], the same content as writing the empty list", () => {
+    const keyless = parseOk(minimal([{ id: "c_1", gameId: "c1" }]));
+    expect(keyless.boxes[0]!.decks[0]!.shard.cards[0]!.outcomes).toEqual([]);
+    const keylessResult = compileProject(keyless);
+    expect(errors(keylessResult.issues)).toEqual([]);
+    const explicit = compileProject(parseOk(minimal([{ id: "c_1", gameId: "c1", outcomes: [] }])));
+    expect(keylessResult.bundle!.content.hash).toBe(explicit.bundle!.content.hash);
+  });
+
   // --- outcome fields (design/outcome-fields-brief.md) ------------------------
   //
   // The box declares them beside its card template and an outcome fills
