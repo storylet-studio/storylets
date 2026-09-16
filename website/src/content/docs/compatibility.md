@@ -47,7 +47,7 @@ pass, so this is something you can check, not something you hope for.
 
 A compiled [bundle](/format/bundle/) declares a **schema version** (`storylets/bundle@N`). A
 runtime plays any bundle whose schema it supports. That version is the one thing that cuts
-across everything, because bumping it's the one change that moves every runtime together.
+across everything, because bumping it is the one change that moves every runtime together.
 Each runtime, the editor, and the CLI otherwise version on their own.
 
 | Runtime | Ships as | Get it |
