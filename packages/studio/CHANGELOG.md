@@ -10,6 +10,33 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **Every icon is drawn.** The editor, the Board, Links, Coverage, Find, and the settings dialog draw
+  their icons from one set (Lucide, MIT licence) at one stroke weight, in place of the typed symbols
+  that used to vary with the platform's font. Separators in tooltips and status lines are drawn too,
+  and key hints say Ctrl on Windows and Linux and ⌘ on macOS.
+- **Section captions are words.** Project, Places, Purpose, Story state, the welcome groups, and the
+  rest read as sentence-case labels now. The card and deck tables' column heads keep their
+  uppercase.
+- **Buttons have edges.** Every button reads as a button at rest, with a border or a fill; segmented
+  controls (Cards | Table | Node, List | Map, Find's tabs, a quality's ladder) are one bordered
+  strip with the chosen option washed; one focus ring serves the whole window.
+- **Dialogs share one frame.** Connect to a server, Push, the kit picker, confirmations, the update
+  prompt, and About sit on the same panel with the same scrim and exit. About carries the
+  wordmark, and its version line no longer clips under the frame.
+- **The problems bar speaks plainly.** Every message the compiler can raise has its own sentence
+  naming the card, deck, hand, or box it is about and where that lives, in place of the raw
+  compiler string and `path [where]` fallback.
+- **Copy tidied throughout.** Tooltips, notes, placeholders, confirmations, and toasts are plain
+  sentences in UK English; placeholders say what to type in plain words; each confirmation that can
+  be undone says so.
+- **Small handling improvements.** After a drag, the moved cards, decks, boxes, or hands ease into
+  place rather than snapping. In a deck, shift-click selects the run of cards from the last one you
+  chose and ⌘/Ctrl-click toggles one. Pressing Escape in a title puts the old name back. A card's
+  grip shows on keyboard focus as well as hover. The window appears once its first view is ready,
+  rather than blank.
+
 ### Fixed
 
 - **Merging a returned pack updates the navigation straight away.** After **File ▸ Merge Returned Storyletpack**, the navigation kept the names and structure the project had before the merge (a renamed deck showed its old name) until the window next lost and regained focus, while the project underneath was already the merged one. It now repaints as the merge lands, the way a window-focus refresh always did.

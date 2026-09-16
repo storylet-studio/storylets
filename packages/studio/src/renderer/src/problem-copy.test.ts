@@ -116,7 +116,7 @@ describe("problemText", () => {
       .toBe("The Game ID “ambush” on “Ambush” is already used in encounters/decks/street.storyletdeck. Each one must be unique; change one of them.");
   });
 
-  it("speaks for every code without a bracket or a raw compiler tell", () => {
+  it("speaks for every code without a bracket or a raw compiler message", () => {
     for (const [code, message] of Object.entries(SAMPLES)) {
       const text = problemText(problem(message, { where: "ambush" }), { title: "Ambush" });
       expect(text, code).not.toContain("[");

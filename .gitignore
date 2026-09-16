@@ -4,7 +4,7 @@ dist/
 *.tsbuildinfo
 dist-electron/
 
-# Local Claude Code launch config (session-specific paths)
+# Local launch config (session-specific paths)
 .claude/launch.json
 
 # dotnet TestHost build output (ports)
