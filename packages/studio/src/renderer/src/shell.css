@@ -665,7 +665,8 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .where-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .where-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; }
 .where-any { color: var(--muted); font-size: 13.5px; }
-.where-place::before { content: "\2302"; margin-right: 5px; opacity: 0.75; font-size: 0.95em; }
+.where-place { display: inline-flex; align-items: center; gap: 4px; }
+.where-place > svg[data-icon] { opacity: 0.75; }
 .where-in { margin-left: 6px; color: var(--muted); font-size: 11.5px; }
 /* The contradiction: a warning, not an error. Nothing is broken, the rule
    resolved it, and the amber matches the map's two-zone site marker. */

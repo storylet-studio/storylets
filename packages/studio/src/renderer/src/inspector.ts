@@ -554,7 +554,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     if (m.places.length === 0 && m.regions.length === 0) {
       line.append(el("span", { className: "where-any", text: "Anywhere" }));
     } else {
-      for (const p of m.places) line.append(el("span", { className: "chip on where-place", text: p.title }));
+      for (const p of m.places) line.append(el("span", { className: "chip on where-place" }, iconNode("pin", 11), p.title));
       for (const r of m.regions) {
         for (const v of r.values) line.append(el("span", { className: "chip on where-region" }, chipDot(v), `anywhere in ${v}`));
       }
@@ -585,7 +585,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       for (const hd of box.hands) {
         const on = homes.includes(hd.gameId);
         const zone = Object.values(hd.tags)[0];
-        const chip = el("button", { className: `chip where-place${on ? " on" : ""}` }, hd.title ?? hd.gameId,
+        const chip = el("button", { className: `chip where-place${on ? " on" : ""}` }, iconNode("pin", 11), hd.title ?? hd.gameId,
           zone !== undefined ? el("span", { className: "where-in", text: zone }) : null);
         chip.addEventListener("click", () => toggle(PLACE_GROUP, hd.gameId));
         placeRow.append(chip);
