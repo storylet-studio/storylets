@@ -153,16 +153,21 @@
 
 /* ---- Footer ----------------------------------------------------------------- */
 /* Cream ink on plum-deep is brand, and stays. Every text colour is at AA on #1c1429. */
-.sy-foot { background: #1c1429; color: #b3a5c9; }
-.sy-foot-signup { padding-top: 26px; padding-bottom: 22px; border-bottom: 1px solid #2e2340; }
-.sy-foot-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; padding-top: 30px; padding-bottom: 34px; }
-.sy-foot-brand { display: flex; align-items: center; gap: 10px; font-family: var(--sy-read, "Newsreader", serif); font-size: 16px; color: #f3ede2; }
-.sy-foot-links { display: flex; flex-wrap: wrap; gap: 18px; }
-.sy-foot-links a { color: #b3a5c9; text-decoration: none; font-size: 14px; }
-.sy-foot-links a:hover { color: #f3ede2; text-decoration: underline; }
-.sy-foot-credit { font-size: 13px; color: #9d8fb8; margin: 0; }
-.sy-foot-credit a { color: #b3a5c9; text-decoration: underline; text-underline-offset: 0.15em; }
-.sy-foot-credit a:hover { color: #f3ede2; }
+/* The footer follows the Patter site's shape: the sign-up band, a rule, then brand and links on one
+   row and the credit on its own line. Link colours are set here at full specificity so no global
+   link rule can drop them to plum on plum. */
+.sy-foot { margin-top: 88px; background: #1c1429; color: #b3a5c9; }
+.sy-foot-signup { padding-top: 32px; padding-bottom: 24px; }
+.sy-foot-signup + .sy-foot-inner { border-top: 1px solid #2e2340; }
+.sy-foot-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; padding-top: 32px; padding-bottom: 36px; }
+.sy-foot-brand { display: flex; align-items: center; gap: 11px; }
+.sy-foot-brand span { font-family: var(--sy-read, "Newsreader", Georgia, serif); font-weight: 600; font-size: 17px; color: #f3ede2; }
+.sy-foot-links { display: flex; flex-wrap: wrap; gap: 12px 22px; font-size: 14px; }
+.sy-foot .sy-foot-links a { color: #d9d0e8; text-decoration: none; }
+.sy-foot .sy-foot-links a:hover { color: #ffffff; text-decoration: underline; text-underline-offset: 3px; }
+.sy-foot-credit { flex-basis: 100%; font-size: 13px; color: #b3a5c9; margin: 0; }
+.sy-foot .sy-foot-credit a { color: #d9d0e8; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.sy-foot .sy-foot-credit a:hover { color: #ffffff; }
 
 /* ---- Responsive ------------------------------------------------------------- */
 @media (max-width: 1000px) {
