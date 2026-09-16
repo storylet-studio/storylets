@@ -27,9 +27,9 @@ input {
    It used to restate all of it, including an 84px left inset for traffic lights
    on a window that carried an OS title bar anyway. */
 .cbar { gap: 12px; }
-.cbar .cname { font-family: var(--font-read); font-size: 0.85rem; color: var(--muted); }
-.cbar .field { font-size: 0.78rem; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
-.cbar .num { width: 64px; font-family: var(--font-mono); font-size: 0.78rem; }
+.cbar .cname { font-family: var(--font-read); font-size: 13.5px; color: var(--muted); }
+.cbar .field { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.cbar .num { width: 64px; font-family: var(--font-mono); font-size: 12.5px; }
 
 /* The driver note: quiet when drivers exist, a shade warmer when none do -
    the reader needs to know the test was never told how to reach @world. */
@@ -45,9 +45,9 @@ input {
 
 .cbody.stale { opacity: 0.5; }
 .cbody { flex: 1; overflow-y: auto; padding: 24px 28px; display: flex; flex-direction: column; gap: 24px; max-width: 720px; }
-.hint { color: var(--muted); font-size: 0.85rem; }
+.hint { color: var(--muted); font-size: 13.5px; }
 
-.meta { margin: -16px 0 0; color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.meta { margin: -16px 0 0; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .meta .sep { margin: 0 8px; opacity: 0.5; }
 
 /* The pin is the kit's .swin-pin now; nothing local left to say about it. */
@@ -63,33 +63,33 @@ input {
 .reveal:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .reflink {
-  font: inherit; font-family: var(--font-mono); font-size: 0.78rem;
+  font: inherit; font-family: var(--font-mono); font-size: 12.5px;
   border: none; background: none; padding: 0; color: var(--accent);
   text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
 }
 .reflink:hover { background: none; color: var(--ink); }
-.cerror { font-family: var(--font-mono); font-size: 0.82rem; color: var(--danger); white-space: pre-wrap; }
+.cerror { font-family: var(--font-mono); font-size: 13px; color: var(--danger); white-space: pre-wrap; }
 
 .summary { display: flex; align-items: baseline; gap: 12px; }
-.summary .big { font-family: var(--font-read); font-size: 2.2rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-.summary .sublabel { color: var(--muted); font-size: 0.85rem; }
+.summary .big { font-family: var(--font-read); font-size: 35px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.summary .sublabel { color: var(--muted); font-size: 13.5px; }
 
 .block { display: flex; flex-direction: column; gap: 8px; }
 /* A block's teaching line sits close under its caption, not floated on the
    paragraph's default margins (the density pass: quiet, and out of the way). */
 .block > .hint { margin: 0 0 2px; max-width: 60ch; }
 
-.qrow { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; }
+.qrow { display: flex; align-items: center; gap: 12px; font-size: 13.5px; }
 .qrow .qname { font-family: var(--font-mono); min-width: 180px; }
 .qrow .bar { flex: 1; height: 7px; background: var(--line-soft); border-radius: var(--radius-pill); overflow: hidden; }
 .qrow .fill { display: block; height: 100%; background: var(--warn); border-radius: var(--radius-pill); }
 .qrow.full .fill { background: var(--ok); }
-.qrow .count { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); min-width: 46px; text-align: right; font-variant-numeric: tabular-nums; }
-.qrow .warn { color: var(--warn); font-size: 0.74rem; }
+.qrow .count { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); min-width: 46px; text-align: right; font-variant-numeric: tabular-nums; }
+.qrow .warn { color: var(--warn); font-size: 12px; }
 
 .gap { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; border-top: 1px solid var(--line-soft); }
-.gap .gname { font-family: var(--font-read); font-size: 0.92rem; }
-.allgood { color: var(--ok); font-size: 0.9rem; }
+.gap .gname { font-family: var(--font-read); font-size: 14.5px; }
+.allgood { color: var(--ok); font-size: 14.5px; }
 
 .fixrow {
   display: flex; align-items: center; gap: 14px;
@@ -103,7 +103,7 @@ input {
 /* A report cut short by Cancel says so beside the headline: its numbers are
    real, but they speak for fewer runs than were asked for. */
 .summary .partial {
-  font-size: 0.74rem;
+  font-size: 12px;
   color: var(--warn);
   border: 1px solid currentColor;
   border-radius: var(--radius-pill);

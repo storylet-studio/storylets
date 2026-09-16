@@ -30,7 +30,7 @@ body {
 /* A section caption: sentence-case words, weight 600, in the UI face. The
    tracked-caps overline it used to be is retired ("Captions are words, not
    overlines", 2026-09-16); only table column heads keep uppercase. */
-.insp-label { font: 600 0.78rem/1.2 var(--font-ui); color: var(--muted); }
+.insp-label { font: 600 12.5px/1.2 var(--font-ui); color: var(--muted); }
 /* Buttons: no element rule. An action wears the shell's `.btn` (controls.css,
    via theme.css): bordered at rest, `.primary` / `.danger` filled, `.ghost` and
    `.icon` for the icon-only buttons in a bar. The element reset that used to
@@ -67,7 +67,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    content styling on the shell's pane classes. */
 /* the inspector pane is retired (dormant): hide its toggle and resizer */
 .topbar > .pane-toggle:last-child, .pane-resizer-insp { display: none; }
-.pname { font-size: 0.85rem; color: var(--muted); }
+.pname { font-size: 13.5px; color: var(--muted); }
 /* the topbar Play affordance: the shell's `.btn`, sized for the bar */
 .topbtn { padding: 2px 10px; }
 /* autosave status: a dot + word, calm when saved, amber while pending/saving */
@@ -76,7 +76,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 /* --- navigator (content over the shell's .pane-nav) ------------------------- */
 .pane-nav { border-right: 1px solid var(--line-soft); background: var(--surface); }
 .pane-nav .pane-inner {
-  padding: 12px 8px; display: flex; flex-direction: column; gap: 1px; font-size: 0.85rem;
+  padding: 12px 8px; display: flex; flex-direction: column; gap: 1px; font-size: 13.5px;
 }
 /* Nav rows never squeeze: when the list outgrows the pane it scrolls. Without
    this, a row with overflow:hidden (the card sub-rows' ellipsis) zeroes its
@@ -84,7 +84,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .pane-nav .pane-inner > * { flex: none; }
 /* The project's own row: no page of its own, so clicking it opens the
    Settings dialog (the container leaf carries its settings, rule 10). */
-.nav-project { display: block; width: 100%; text-align: left; font-family: var(--font-read); font-size: 1rem; font-weight: 600; color: var(--ink); padding: 2px 8px 8px; }
+.nav-project { display: block; width: 100%; text-align: left; font-family: var(--font-read); font-size: 16px; font-weight: 600; color: var(--ink); padding: 2px 8px 8px; }
 /* One row grammar for the whole tree: [chevron|spacer] label [count]. Depth is
    indentation; the open document's row is `sel`, its ancestors `on-path`. */
 .nav-row { display: flex; align-items: center; gap: 5px; width: 100%; text-align: left; padding-top: 3px; padding-bottom: 3px; padding-right: 8px; color: var(--ink); }
@@ -97,7 +97,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    weight (it is a top-level document), with a breath below before the boxes. */
 .nav-storyrow { font-weight: 600; margin-bottom: 6px; }
 .nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nav-row .nav-n { flex: none; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.nav-row .nav-n { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .nav-row.sel { background: var(--accent-soft); color: var(--accent); }
 .nav-row.on-path { color: var(--accent); }
 .nav-row.on-path .nav-n { color: var(--accent); opacity: 0.7; }
@@ -108,7 +108,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .nav-chev:hover { color: var(--accent); }
 .nav-chev.open { transform: rotate(90deg); }
 /* quick add rows */
-.nav-add { display: block; width: 100%; text-align: left; color: var(--muted); font-size: 0.8rem; padding-top: 2px; padding-bottom: 2px; }
+.nav-add { display: block; width: 100%; text-align: left; color: var(--muted); font-size: 13px; padding-top: 2px; padding-bottom: 2px; }
 .nav-add.nav-d2 { padding-left: 46px; }
 .nav-add.nav-d3 { padding-left: 60px; }
 .nav-add:hover { color: var(--accent); }
@@ -130,7 +130,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 /* card / table view switch (top-right of the centre head): the shell's `.seg`,
    its options sized up for the three view glyphs */
 .viewtoggle { align-self: center; }
-.viewtoggle .seg-opt { padding: 3px 9px; font-size: 0.85rem; }
+.viewtoggle .seg-opt { padding: 3px 9px; font-size: 13.5px; }
 /* Node view: the deck's cards on a canvas. It takes the height the centre has
    left rather than a fixed one, because a canvas is only useful at the size of
    the window - and the pane is a flex column, so `min-height: 0` is what stops
@@ -157,7 +157,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
   border-radius: var(--radius-sm);
   background: var(--ink);
   color: var(--surface);
-  font-size: 0.78rem; line-height: 1.35;
+  font-size: 12.5px; line-height: 1.35;
   pointer-events: none;       /* it must never intercept the click it describes */
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -176,7 +176,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   background: var(--card); color: var(--ink);
-  font: 0.78rem/1.35 var(--font-ui);
+  font: 12.5px/1.35 var(--font-ui);
   resize: none;
   box-shadow: var(--shadow-1);
 }
@@ -185,7 +185,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    say (notably that a deck's cards link to cards elsewhere, so an empty canvas
    is not mistaken for a broken one). */
 .nodestrip { flex: none; display: flex; align-items: center; gap: 14px; min-height: 26px; }
-.nodestrip .hint { font-size: 0.8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nodestrip .hint { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Pushes the camera controls to the right end, so the summary reads left to
    right and the buttons sit where a toolbar would. */
 .nodestrip .stripgap { flex: 1 1 auto; min-width: 8px; }
@@ -207,14 +207,14 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    3. CAMERA (Fit all, Show selection): the shell's `.btn`, at the right. */
 /* Which map this is. The name alone read as a stray word, so it is labelled and
    the NAME carries the weight. */
-.maphere { flex: none; display: inline-flex; align-items: baseline; gap: 5px; font-size: 0.78rem; }
+.maphere { flex: none; display: inline-flex; align-items: baseline; gap: 5px; font-size: 12.5px; }
 .maphere-of { color: var(--muted); }
 .maphere-name { color: var(--ink); font-family: var(--font-mono); font-size: 0.95em; }
 
 .nodestrip .striptools { flex: none; display: flex; align-items: center; gap: 6px; }
 .stripbtn {
   flex: none; display: inline-flex; align-items: center; gap: 5px;
-  font-size: 0.78rem; color: var(--ink);
+  font-size: 12.5px; color: var(--ink);
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm);
   padding: 3px 10px 3px 8px;
 }
@@ -228,7 +228,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 
 .stripchip {
   flex: none; display: inline-flex; align-items: center; gap: 5px;
-  font-size: 0.75rem; color: var(--ink);
+  font-size: 12px; color: var(--ink);
   background: none; border: 1px dashed var(--line); border-radius: var(--radius-pill);
   padding: 2px 10px 2px 7px;
 }
@@ -254,19 +254,19 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 }
 .mapside-cap {
   display: flex; align-items: baseline; justify-content: space-between;
-  padding: 8px 12px 3px; font: 600 0.78rem/1.3 var(--font-ui); color: var(--muted);
+  padding: 8px 12px 3px; font: 600 12.5px/1.3 var(--font-ui); color: var(--muted);
 }
 .mapside-cap:first-child { padding-top: 2px; }
-.mapside-waiting { font-weight: 400; font-size: 0.72rem; }
+.mapside-waiting { font-weight: 400; font-size: 11.5px; }
 .mapside-row {
   display: flex; align-items: center; gap: 7px; width: 100%;
   padding: 3px 12px; border: none; background: none; text-align: left;
-  font: inherit; font-size: 0.8rem; color: var(--ink); cursor: pointer;
+  font: inherit; font-size: 13px; color: var(--ink); cursor: pointer;
 }
 .mapside-row:hover { background: var(--accent-soft); }
 .mapside-row.todo .mapside-name { color: var(--muted); }
-.mapside-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 0.76rem; }
-.mapside-act { flex: none; font-size: 0.7rem; color: var(--accent); }
+.mapside-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 12px; }
+.mapside-act { flex: none; font-size: 11px; color: var(--accent); }
 .mapside-pin { flex: none; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--muted); }
 /* A hand has no zone colour of its own until it is placed, so its chip carries
    the pin's outline shape instead of a filled dot. */
@@ -277,7 +277,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    has, since a locked one is invisible to the pointer. Solid rather than dashed
    for exactly that reason - dashed means "not placed yet" in this strip. */
 .bgchip {
-  flex: none; font-size: 0.72rem; color: var(--muted);
+  flex: none; font-size: 11.5px; color: var(--muted);
   background: none; border: 1px solid var(--line); border-radius: var(--radius-sm);
   padding: 2px 8px; font-family: var(--font-mono);
   max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -290,7 +290,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 
 /* table (list) view of a deck's cards / a box's decks */
 .ctable-wrap { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
-.ctable { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+.ctable { border-collapse: collapse; width: 100%; font-size: 13.5px; }
 /* Column heads are the one caption that stays an overline (the shell's, from
    tokens.css): uppercase is the table's own convention. */
 .ctable thead th { text-align: left; padding: 0 10px 6px; border-bottom: 1px solid var(--line-soft); }
@@ -299,13 +299,13 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .ctable tbody tr:hover { background: var(--card); }
 .ctable tbody tr.sel { background: var(--accent-soft); }
 .ctable .ct-title { font-family: var(--font-read); }
-.ctable .ct-mono { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
-.ctable .ct-when { font-size: 0.78rem; }
+.ctable .ct-mono { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
+.ctable .ct-when { font-size: 12.5px; }
 .ctable td.ct-when { display: flex; align-items: baseline; gap: 4px; }
 .ctable .ct-dim { color: var(--muted); font-style: italic; }
 .ctable-new { border: 1px dashed var(--line); color: var(--muted); }
 .ctable-new:hover { border-color: var(--accent); color: var(--accent); background: none; }
-.ctable .ct-grip { width: 1.6rem; padding-right: 0; }
+.ctable .ct-grip { width: 25.5px; padding-right: 0; }
 
 /* drag-reorder: grip affordance + drop marks (Patterpad's model) */
 /* One grip grammar for every draggable (the Cards views' model): card-like
@@ -335,8 +335,8 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .scard.drop-after { box-shadow: 3px 0 0 var(--accent); }
 .ctable tr.drop-before td { box-shadow: inset 0 2px 0 var(--accent); }
 .ctable tr.drop-after td { box-shadow: inset 0 -2px 0 var(--accent); }
-.centre-head h2 { font-family: var(--font-read); font-size: 1.4rem; font-weight: 600; margin: 0; }
-.centre-head .sub { color: var(--muted); font-size: 0.85rem; font-style: italic; }
+.centre-head h2 { font-family: var(--font-read); font-size: 22.5px; font-weight: 600; margin: 0; }
+.centre-head .sub { color: var(--muted); font-size: 13.5px; font-style: italic; }
 
 .cards, .deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
 .scard, .deck-card {
@@ -354,8 +354,8 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .scard:hover, .deck-card:hover { border-color: color-mix(in oklab, var(--accent) 55%, var(--line)); background: var(--card); color: inherit; }
 .scard:hover h3, .deck-card:hover h3, .scard:hover .beat, .deck-card:hover .beat { color: inherit; }
 .scard.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow-1); }
-.scard h3, .deck-card h3 { font-family: var(--font-read); font-size: 1.02rem; font-weight: 600; margin: 0; }
-.scard .beat, .deck-card .beat { font-family: var(--font-read); font-size: 0.85rem; line-height: 1.4; margin: 0; }
+.scard h3, .deck-card h3 { font-family: var(--font-read); font-size: 16.5px; font-weight: 600; margin: 0; }
+.scard .beat, .deck-card .beat { font-family: var(--font-read); font-size: 13.5px; line-height: 1.4; margin: 0; }
 .beat.muted { color: var(--muted); font-style: italic; }
 /* The purpose field's label (B1). Quiet - it is the same word on every document
    and the reader only needs it once - but present, because a placeholder is not
@@ -373,20 +373,20 @@ button.pname:hover { color: var(--accent); }
    frame's, the name field is the shell's `.field`. What is the picker's own is
    its width and the reading face on the name. */
 .kit-dialog { --dialog-width: 560px; }
-.kit-name { display: block; width: 100%; margin: 6px 0 2px; font: 0.95rem var(--font-read); }
-.kit-what { margin: 0 0 4px; font: 0.85rem/1.5 var(--font-read); color: var(--ink); }
-.doc-explainer p { margin: 0 0 8px; font: 0.85rem/1.5 var(--font-read); color: var(--ink); }
+.kit-name { display: block; width: 100%; margin: 6px 0 2px; font: 15px var(--font-read); }
+.kit-what { margin: 0 0 4px; font: 13.5px/1.5 var(--font-read); color: var(--ink); }
+.doc-explainer p { margin: 0 0 8px; font: 13.5px/1.5 var(--font-read); color: var(--ink); }
 .doc-explainer p:last-child { margin-bottom: 0; }
-.doc-purpose-label { font: 600 0.78rem/1.2 var(--font-ui); color: var(--muted); margin-top: 2px; }
+.doc-purpose-label { font: 600 12.5px/1.2 var(--font-ui); color: var(--muted); margin-top: 2px; }
 /* What a VENUE depends on about this entity (design/engine-server.md 4.11).
    Always visible, unlike the teaching lines around it: it is not a gloss on the
    page, it is a fact about the world outside the project, and it is drawn only
    when there IS a venue - which on every project written so far is never. */
-.doc-contract { margin: 0; font-size: 0.76rem; line-height: 1.4; color: var(--muted); }
-.deck-card .sub { color: var(--muted); font-size: 0.75rem; }
+.doc-contract { margin: 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.deck-card .sub { color: var(--muted); font-size: 12px; }
 /* read-only condition preview on a card face: restrained (Patterpad's "if"
    idiom) - a quiet prefix and toned-down pills, not a loud chip strip. */
-.cardwhen { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; font-size: 0.78rem; color: var(--muted); }
+.cardwhen { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
 .cardwhen-if { font-family: var(--font-mono); color: var(--muted); flex: none; }
 /* Restrained: strip the loud fills and the boxy pill padding, leaving just a
    hair of horizontal padding so adjacent tokens read as words ("act is
@@ -394,20 +394,20 @@ button.pname:hover { color: var(--accent); }
    When cell. */
 .cardwhen .exed-pill, .ct-when .exed-pill {
   background: none; color: var(--ink); font-weight: 500; border-radius: 0;
-  padding: 0 0.14rem; margin: 0;
+  padding: 0 2px; margin: 0;
 }
 .cardwhen .exed-pill:hover, .ct-when .exed-pill:hover { filter: none; }
 .cardwhen .exed-pill-op, .ct-when .exed-pill-op { color: var(--muted); }
 .cardwhen .exed-pill-flagpos, .ct-when .exed-pill-flagpos { color: var(--ok); }
 .cardwhen .exed-pill-flagneg, .ct-when .exed-pill-flagneg { color: var(--danger); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; align-items: center; }
-.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 2px 9px; color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 2px 9px; color: var(--muted); }
 button.chip { cursor: pointer; }
 .chip.on { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); }
 /* The "new" ghost - faded until hovered (Patterpad's add-affordance treatment). */
 .scard.ghost, .deck-card.ghost {
   border-style: dashed; background: none; box-shadow: none; color: var(--muted);
-  align-items: center; justify-content: center; font-size: 0.85rem; min-height: 96px;
+  align-items: center; justify-content: center; font-size: 13.5px; min-height: 96px;
 }
 .scard.ghost:hover, .deck-card.ghost:hover { border-color: var(--accent); color: var(--accent); }
 
@@ -416,13 +416,13 @@ button.chip { cursor: pointer; }
 .listrow:hover { background: var(--card); border-color: var(--accent); }
 .listrow.ghost { border-style: dashed; background: none; color: var(--muted); align-items: center; flex-direction: row; }
 .listrow.ghost:hover { border-color: var(--accent); color: var(--accent); }
-.listname { font-family: var(--font-mono); font-size: 0.9rem; color: var(--ink); }
+.listname { font-family: var(--font-mono); font-size: 14.5px; color: var(--ink); }
 /* a titled item reads as a title (the mono voice is for name-like ids) */
-.listname.listtitle { font-family: var(--font-read); font-size: 0.95rem; font-weight: 600; }
+.listname.listtitle { font-family: var(--font-read); font-size: 15px; font-weight: 600; }
 /* a settings link in a rowlist: the gear costume (rule 10), never the add ghost */
 .listrow-settings .listname { font-family: var(--font-ui); color: var(--muted); }
 .listrow-settings .listname::before { content: "\2699\00a0 "; }
-.listmeta { font-size: 0.76rem; color: var(--muted); }
+.listmeta { font-size: 12px; color: var(--muted); }
 
 /* --- inspector -------------------------------------------------------------- */
 .pane-inspector { border-left: 1px solid var(--line-soft); background: var(--surface); }
@@ -440,7 +440,7 @@ button.chip { cursor: pointer; }
    and panel - ONE container material for every machinery cluster. */
 .doc-sect { display: flex; flex-direction: column; gap: 6px; }
 .doc-sect-head { display: flex; align-items: baseline; gap: 8px; }
-.doc-sect-hint { font-size: 0.74rem; color: var(--muted); }
+.doc-sect-hint { font-size: 12px; color: var(--muted); }
 /* Density (design language: quiet chrome - furniture recessive, shown on
    hover / focus, dimmed until relevant): the labels stay, the explanations
    wait. A section's hint appears when you approach the section; a Settings
@@ -485,22 +485,22 @@ button.chip { cursor: pointer; }
 button.doc-collapsed { cursor: pointer; }
 button.doc-collapsed:hover { background: none; }
 button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-collapsed-plus { color: var(--accent); border-color: var(--accent); }
-.doc-collapsed-sum { font-size: 0.78rem; color: var(--muted); }
+.doc-collapsed-sum { font-size: 12.5px; color: var(--muted); }
 .doc-collapsed-plus { margin-left: auto; color: var(--muted); display: inline-flex; align-items: center; border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 2px 6px; }
 .insp-head { display: flex; align-items: center; gap: 8px; }
 .insp-head .insp-label { flex: 1; }
 /* Remove: a `.btn` in the danger ink, filling on hover; it names its object. */
 .insp-del { color: var(--danger); }
 .insp-del:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: var(--surface); }
-.insp-del.small { padding: 2px 8px; font-size: 0.72rem; }
+.insp-del.small { padding: 2px 8px; font-size: 11.5px; }
 /* The up/down pair that sits beside a list row's Remove: the shell's icon
    buttons, plainly inert at the ends of the list. */
 .insp-moves { display: inline-flex; align-items: center; gap: 4px; }
-.insp-input { width: 100%; font-size: 0.88rem; }
-.insp-input.insp-title { font-family: var(--font-read); font-size: 1.1rem; font-weight: 600; }
-.insp-input.insp-mono { font-family: var(--font-mono); font-size: 0.8rem; }
+.insp-input { width: 100%; font-size: 14px; }
+.insp-input.insp-title { font-family: var(--font-read); font-size: 17.5px; font-weight: 600; }
+.insp-input.insp-mono { font-family: var(--font-mono); font-size: 13px; }
 .insp-input.insp-short { width: auto; max-width: 90px; }
-.insp-input.insp-beat { font-family: var(--font-read); font-size: 0.9rem; line-height: 1.45; resize: vertical; }
+.insp-input.insp-beat { font-family: var(--font-read); font-size: 14.5px; line-height: 1.45; resize: vertical; }
 .insp-segrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 /* a segmented choice inside a row: the shell's `.seg` */
 .insp-seg { flex: none; }
@@ -512,18 +512,18 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 /* rows whose control wraps (dimension chips): label aligns to the first line */
 .doc-row-top { align-items: start; }
 .doc-row-top .doc-row-label { padding-top: 3px; }
-.doc-row-label { font-size: 0.78rem; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-row-label { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* scalars don't stretch: selects size to content, only text fields fill */
 .doc-row > select.insp-input { width: auto; justify-self: start; }
-.insp-kv { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+.insp-kv { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
 .insp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .insp-exed { min-height: 30px; }
-.insp-add, .settings-add { align-self: flex-start; border: 1px dashed var(--line); color: var(--muted); background: none; padding: 4px 12px; border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-size: 0.82rem; }
+.insp-add, .settings-add { align-self: flex-start; border: 1px dashed var(--line); color: var(--muted); background: none; padding: 4px 12px; border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-size: 13px; }
 
 
 /* The hoist nudge on a tag group: one quiet line under the Properties list,
    shown only when a name is declared identically on every tag. */
-.insp-nudge { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 0.8rem; }
+.insp-nudge { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 13px; }
 .insp-add:hover, .settings-add:hover { border-color: var(--accent); color: var(--accent); background: none; }
 .settings-add { margin-top: 6px; }
 /* a value block inside the Values panel: hairline-separated, not its own card */
@@ -535,15 +535,15 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
    ("auto") until pinned. Click for the override popover. */
 .gid { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; padding: 5px 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: none; cursor: pointer; }
 .gid:hover { border-color: var(--accent); background: var(--card); }
-.gid-value { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gid-tag { font: 600 0.72rem var(--font-ui); color: var(--muted); flex: none; }
+.gid-value { font-family: var(--font-mono); font-size: 13px; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gid-tag { font: 600 11.5px var(--font-ui); color: var(--muted); flex: none; }
 .gid-auto .gid-value { color: var(--muted); font-style: italic; }
 /* the address a VENUE is bound to (design/engine-server.md 4.11): marked, never
    disabled. The refusal is the server's, on push; here it is a hint. */
 .gid-bound { border-style: dashed; }
 /* the override popover */
 .gid-pop { display: flex; flex-direction: column; gap: 8px; min-width: 240px; }
-.gid-pop-note { margin: 0; font-size: 0.74rem; line-height: 1.4; color: var(--muted); }
+.gid-pop-note { margin: 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
 /* Patterpad's id-editor row: Reset to auto on the left, Set on the right, and a
    hint that turns red rather than a field that quietly rewrites what you typed.
    (The editor itself is the shell's openGameIdEditor, buttons included.) */
@@ -570,19 +570,19 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
   transition: transform var(--dur-quick) var(--ease-standard);
 }
 .outcome-row.open .outcome-row-chev { transform: rotate(90deg); }
-.outcome-row-title { font-size: 0.88rem; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.outcome-row-sum { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.outcome-row-title { font-size: 14px; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outcome-row-sum { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
 .outcome-row-when { padding-left: 1.4em; }
 .outcome-body { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-top: 0; }
 /* the outcome's own paper: title + beat in the reading face, chromeless */
-.outcome-body .outcome-title { font-family: var(--font-read); font-size: 1rem; font-weight: 600; border: 0; background: none; padding: 0; border-radius: 0; }
+.outcome-body .outcome-title { font-family: var(--font-read); font-size: 16px; font-weight: 600; border: 0; background: none; padding: 0; border-radius: 0; }
 .outcome-body .outcome-title:focus-visible { outline: 0; box-shadow: 0 1px 0 var(--accent); }
-.outcome-body .outcome-beat { font-family: var(--font-read); font-size: 0.88rem; line-height: 1.45; color: var(--muted); border: 0; background: none; padding: 0; border-radius: 0; resize: vertical; }
+.outcome-body .outcome-beat { font-family: var(--font-read); font-size: 14px; line-height: 1.45; color: var(--muted); border: 0; background: none; padding: 0; border-radius: 0; resize: vertical; }
 .outcome-body .outcome-beat:focus-visible { outline: 0; box-shadow: 0 1px 0 var(--line); }
 .outcome-remove { align-self: flex-start; }
 .cardedit-outcomes .insp-add { margin-top: 2px; }
-.insp-muted, .insp-ro { color: var(--muted); font-size: 0.85rem; }
-.insp-ro.insp-mono { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink); }
+.insp-muted, .insp-ro { color: var(--muted); font-size: 13.5px; }
+.insp-ro.insp-mono { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
 .insp-kv { display: inline-flex; align-items: center; gap: 5px; }
 .doc-vblock .insp-ohead .insp-kv { flex: 1; }
 .doc-vblock .insp-ohead .insp-kv .insp-input { flex: 1; }
@@ -594,7 +594,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
    accent rather than coloured by how bad they are. It sits ABOVE the problems
    bar when both are up, because the walk is a mode you entered and the
    problems bar is ambient. */
-.reviewbar .stepbar-cat { color: var(--accent); font: 600 0.72rem var(--font-ui); }
+.reviewbar .stepbar-cat { color: var(--accent); font: 600 11.5px var(--font-ui); }
 /* A resolved thread is in the walk only because Show Resolved asked for it, so
    it is marked and recessive rather than absent. */
 .reviewbar .stepbar-cat.done { color: var(--muted); }
@@ -608,7 +608,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 /* The quick-fix chip at the right end is the shell's `.stepbar-action`
    (app-shell stepper.css). */
 /* the topbar health chip */
-.probstat { flex: none; display: inline-flex; align-items: center; justify-content: center; min-height: 18px; font-size: 0.72rem; font-variant-numeric: tabular-nums; border: 0; padding: 2px 8px; border-radius: var(--radius-pill); cursor: pointer; }
+.probstat { flex: none; display: inline-flex; align-items: center; justify-content: center; min-height: 18px; font-size: 11.5px; font-variant-numeric: tabular-nums; border: 0; padding: 2px 8px; border-radius: var(--radius-pill); cursor: pointer; }
 .probstat.ok { color: var(--ok); cursor: default; }
 .probstat.err { color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, transparent); }
 .probstat.warn { color: var(--warn); background: color-mix(in oklab, var(--warn) 14%, transparent); }
@@ -623,7 +623,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
    colours that used to be repeated here are gone with them - two apps holding
    the same three rules is how the other three went missing unnoticed. What stays
    is where a badge SITS, which is this app's layout and nobody else's. */
-.vc-badge { flex: none; font-size: 0.72rem; line-height: 1; opacity: 0.9; }
+.vc-badge { flex: none; font-size: 11.5px; line-height: 1; opacity: 0.9; }
 /* on a row: at the end of the line; on a card face: out of the grip's way */
 .nav-row > .vc-badge, .nav-project > .vc-badge { margin-left: 4px; }
 .listrow { position: relative; }
@@ -631,7 +631,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .scard > .vc-badge, .deck-card > .vc-badge { position: absolute; right: 11px; bottom: 9px; }
 .ctable td > .vc-badge { margin-left: 6px; }
 /* the topbar chip: the OPEN document's state, beside the save indicator */
-.vcstat { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--warn); white-space: nowrap; -webkit-app-region: no-drag; }
+.vcstat { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--warn); white-space: nowrap; -webkit-app-region: no-drag; }
 .vcstat.locked { color: var(--danger); }
 .vcstat[hidden] { display: none; }
 /* A document whose shard somebody else holds: a notice naming them, and the
@@ -643,7 +643,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
   padding: 7px 12px; border-radius: var(--radius-md);
   border: 1px solid color-mix(in oklab, var(--danger) 45%, var(--line));
   background: color-mix(in oklab, var(--danger) 8%, transparent);
-  color: var(--ink); font-size: 0.8rem;
+  color: var(--ink); font-size: 13px;
 }
 .vc-lock-glyph { color: var(--danger); flex: none; display: inline-flex; }
 .vc-readonly .vc-off { opacity: 0.55; cursor: default; }
@@ -651,11 +651,11 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .vc-readonly .doc-panel:focus-within { background: var(--card); border-color: var(--line-soft); box-shadow: none; }
 
 /* --- the New Box kit picker (the new-document moment) ------------------------ */
-.kit-sub { color: var(--muted); font-size: 0.82rem; margin: 0 0 6px; }
+.kit-sub { color: var(--muted); font-size: 13px; margin: 0 0 6px; }
 .kit-card { text-align: left; width: 100%; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: none; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }
 .kit-card:hover { border-color: var(--accent); background: var(--accent-soft); }
-.kit-card h3 { margin: 0; font-size: 0.95rem; }
-.kit-card p { margin: 0; color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
+.kit-card h3 { margin: 0; font-size: 15px; }
+.kit-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
 
 /* --- the Where row (design/where-and-selectors.md Part A) -------------------
    One place answer per card. A place chip wears a house so the DIRECT form
@@ -664,15 +664,15 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .where-body { display: flex; flex-direction: column; gap: 8px; }
 .where-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .where-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; }
-.where-any { color: var(--muted); font-size: 0.85rem; }
+.where-any { color: var(--muted); font-size: 13.5px; }
 .where-place::before { content: "\2302"; margin-right: 5px; opacity: 0.75; font-size: 0.95em; }
-.where-in { margin-left: 6px; color: var(--muted); font-size: 0.72rem; }
+.where-in { margin-left: 6px; color: var(--muted); font-size: 11.5px; }
 /* The contradiction: a warning, not an error. Nothing is broken, the rule
    resolved it, and the amber matches the map's two-zone site marker. */
-.where-warn { margin: 0; font-size: 0.78rem; line-height: 1.5; color: var(--warn); }
+.where-warn { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--warn); }
 .where-pick { display: flex; flex-direction: column; gap: 6px; min-width: 260px; max-width: 340px; }
 .where-pick .insp-label { margin-top: 4px; }
-.where-hint { margin: 6px 0 0; font-size: 0.72rem; line-height: 1.45; color: var(--muted); }
+.where-hint { margin: 6px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
 
 /* --- context menu (right-click) ---------------------------------------------
    The shell's (@wildwinter/app-shell/context-menu + context-menu.css, imported
@@ -680,7 +680,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 
 /* --- card editor in the centre (document-class content gets the width) ------ */
 /* the hierarchy trail: left-aligned ancestor segments, identical on every page */
-.crumbs { display: flex; align-items: center; gap: 4px; margin: -6px 0 2px; font-size: 0.82rem; }
+.crumbs { display: flex; align-items: center; gap: 4px; margin: -6px 0 2px; font-size: 13px; }
 /* The hierarchy trail is retired (2026-08-04): the navigator already shows where
    you are and jumps anywhere, and the trail could not answer the "get me out of
    here" reflex it looked like it should. Back is the one control left. */
@@ -693,7 +693,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .crumb-return:hover:not(:disabled) { color: var(--accent); }
 .crumb-spacer { flex: 1; }
 .centre-step { flex: none; }
-.centre-step-pos { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; }
+.centre-step-pos { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; }
 .centre-editor { max-width: var(--doc-measure); width: 100%; }
 /* the document heading of a centre editor: type label + overflow menu, the
    Title (or name), the gameId chip, and the Purpose - identity in one place,
@@ -726,27 +726,27 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
    right of the row so it sits where a document's bubble sits. */
 .outcome-gid { display: flex; align-items: center; gap: 8px; max-width: none; align-self: stretch; }
 .outcome-gid .gid { flex: 1; min-width: 0; }
-.doc-name { font-size: 1.1rem; }
+.doc-name { font-size: 17.5px; }
 /* the defining scalars, obvious near the top of the document */
 /* Settings tabs read as configuration (centre-clarity 7): grouped rows in a
    panel, caption + small description left, the control right, sized to fit */
 .cfg-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; align-items: center; }
 .cfg-row + .cfg-row { border-top: 1px solid var(--line-soft); padding-top: 10px; }
 .cfg-cap { display: flex; flex-direction: column; gap: 2px; }
-.cfg-cap > span { font: 500 0.85rem var(--font-ui); color: var(--ink); }
-.cfg-cap small { font: 0.76rem var(--font-ui); color: var(--muted); max-width: 46ch; }
+.cfg-cap > span { font: 500 13.5px var(--font-ui); color: var(--ink); }
+.cfg-cap small { font: 12px var(--font-ui); color: var(--muted); max-width: 46ch; }
 .cfg-ctl { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
 .cfg-ctl .doc-gid { min-width: 240px; max-width: none; }
 .cfg-ctl .toggle-cb { width: auto; padding: 0; border: 0; background: none; accent-color: var(--accent); cursor: pointer; }
 /* derived, read-only usage: the document's recessive footer */
-.doc-footer { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line-soft); color: var(--muted); font-size: 0.78rem; display: flex; flex-direction: column; gap: 3px; }
-.doc-head .doc-title { font-family: var(--font-read); font-size: 1.3rem; font-weight: 600; border: 0; background: none; padding: 2px 0; border-radius: 0; }
+.doc-footer { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line-soft); color: var(--muted); font-size: 12.5px; display: flex; flex-direction: column; gap: 3px; }
+.doc-head .doc-title { font-family: var(--font-read); font-size: 21px; font-weight: 600; border: 0; background: none; padding: 2px 0; border-radius: 0; }
 .doc-head .doc-title:focus-visible { outline: 0; box-shadow: 0 1px 0 var(--accent); }
 .doc-head .doc-purpose { border: 0; background: none; padding: 0; border-radius: 0; color: var(--muted); resize: vertical; }
 .doc-head .doc-purpose:focus-visible { outline: 0; box-shadow: 0 1px 0 var(--line); }
 /* a collection master's heading: same document heading, read-only title */
-.collection-title { font-family: var(--font-read); font-size: 1.3rem; font-weight: 600; margin: 0; padding: 2px 0; }
-.master-sub { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.collection-title { font-family: var(--font-read); font-size: 21px; font-weight: 600; margin: 0; padding: 2px 0; }
+.master-sub { margin: 0; color: var(--muted); font-size: 13.5px; }
 /* Where the project lives, under its name on the project page. Mono, because it
    is a path and not prose; one line with an ellipsis, because a deep path would
    otherwise push the page's own sentence down. Patterpad's `.overview-path`, in
@@ -754,7 +754,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .pdir {
   display: block; width: fit-content; max-width: 100%; padding: 0; margin: 1px 0 2px;
   border: none; background: none; cursor: pointer;
-  color: var(--muted); font: 0.75rem var(--font-mono); text-align: left;
+  color: var(--muted); font: 12px var(--font-mono); text-align: left;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Colour alone on hover. `width: fit-content` for the same reason: the house
@@ -763,23 +763,23 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .pdir:hover { color: var(--accent); background: none; }
 /* the container page's [Content | Settings] tabs, under the identity heading */
 .doc-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line-soft); }
-.doc-tab { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 14px; font-size: 0.85rem; color: var(--muted); border: 0; border-bottom: 2px solid transparent; border-radius: 0; margin-bottom: -1px; background: none; cursor: pointer; }
+.doc-tab { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 14px; font-size: 13.5px; color: var(--muted); border: 0; border-bottom: 2px solid transparent; border-radius: 0; margin-bottom: -1px; background: none; cursor: pointer; }
 .doc-tab:hover { color: var(--ink); background: none; }
 .doc-tab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
 /* counts where a count is meaningful; a zero-count tab stays, muted, with
    its explanation inside (tab-grammar 3: every document keeps one silhouette) */
-.doc-tab .doc-tab-n { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.doc-tab .doc-tab-n { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .doc-tab.on .doc-tab-n { color: var(--accent); opacity: 0.7; }
 .doc-tab.zero { opacity: 0.55; }
 .doc-tab.zero.on { opacity: 1; }
 /* a tab body's quiet explanation line (the "none declared" case and hints) */
-.doc-tab-note { margin: 0; font-size: 0.78rem; line-height: 1.4; color: var(--muted); }
+.doc-tab-note { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--muted); }
 /* master pages share the trail; their heading sits directly beneath it */
 .master-head { display: flex; flex-direction: column; gap: 4px; }
 
 /* the inspector holds a card's mechanical settings; a small note gives the
    priority number meaning against how the box ranks. */
-.insp-note { margin: -4px 0 0; font-size: 0.76rem; line-height: 1.35; color: var(--muted); }
+.insp-note { margin: -4px 0 0; font-size: 12px; line-height: 1.35; color: var(--muted); }
 /* The tuck above is for a note that is a flex child of the panel, where it
    trims the panel's own gap. A note that follows a cfg-panel instead (the
    timed box's consequence line) has no gap to trim, so the tuck lands it on
@@ -790,14 +790,14 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 /* The gap is load-bearing since app-shell 0.22.0: a settings row is a WELL now,
    bordered and on --card, and it draws no divider of its own. Without a gap the
    wells sit flush and read as one block instead of as things you can edit. */
-.set-list { display: flex; flex-direction: column; gap: 0.5rem; }
-.set-dim { color: var(--muted); font-style: italic; font-size: 0.8rem; }
+.set-list { display: flex; flex-direction: column; gap: 8px; }
+.set-dim { color: var(--muted); font-style: italic; font-size: 13px; }
 
 /* A second list under the first (World: declarations, then the coverage
    drivers that feed them) needs a heading to divide them; teaching text stays
    quiet, per the density pass. */
-.set-cap { margin: 22px 0 0; font: 600 0.8rem/1.3 var(--font-ui); }
-.set-note { margin: 2px 0 8px; font-size: 0.76rem; line-height: 1.4; color: var(--muted); max-width: 52ch; }
+.set-cap { margin: 22px 0 0; font: 600 13px/1.3 var(--font-ui); }
+.set-note { margin: 2px 0 8px; font-size: 12px; line-height: 1.4; color: var(--muted); max-width: 52ch; }
 /* An inline link-shaped button inside a note (the Story page's pointer to
    Project Settings > World). */
 .set-note .linklike { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
@@ -812,10 +812,10 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
    property name needs only its own width; the VALUE POOL is the field that
    grows, because it is the one that gets long. (Both selectors have to out-
    specify the shell's `.set-rowline input.set-name { flex: 1 }`.) */
-.set-ref { display: inline-flex; align-items: baseline; gap: 0; flex: 0 1 12rem; min-width: 7rem; }
-.set-scope { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
-.set-ref input.set-name { min-width: 4rem; }
-.set-rowline input.set-values { flex: 1 1 12rem; min-width: 6rem; }
+.set-ref { display: inline-flex; align-items: baseline; gap: 0; flex: 0 1 192px; min-width: 112px; }
+.set-scope { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.set-ref input.set-name { min-width: 64px; }
+.set-rowline input.set-values { flex: 1 1 192px; min-width: 96px; }
 /* A text field behind the expander (Purpose, on every list) fills its line
    instead of sitting at the browser's default twenty characters: a purpose is
    a sentence. Checkboxes and selects keep their own width. Patterpad's Purpose
@@ -828,7 +828,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 
 /* The Live Link chip is the shell's (@wildwinter/app-shell/link-status.css). */
 
-.set-uses { font: 0.72rem var(--font-mono); color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: var(--radius-pill); padding: 0.1rem 0.55rem; cursor: pointer; white-space: nowrap; }
+.set-uses { font: 11.5px var(--font-mono); color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: var(--radius-pill); padding: 1.5px 9px; cursor: pointer; white-space: nowrap; }
 .set-uses:hover { color: var(--accent); border-color: var(--accent); }
 
 
@@ -837,12 +837,12 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
    the type and the buttons are already right. Only the list of things the far
    end refused over is ours: one tick per break, in its own words, and the line
    saying where the project stands. */
-.push-refusal { margin: 0.7rem 0 0.2rem; color: var(--danger); }
-.push-breaks { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.4rem 0; max-height: 40vh; overflow-y: auto; }
-.push-break { display: flex; align-items: flex-start; gap: 0.45rem; line-height: 1.35; }
-.push-tick { margin-top: 0.15rem; flex: none; }
+.push-refusal { margin: 11px 0 3px; color: var(--danger); }
+.push-breaks { display: flex; flex-direction: column; gap: 5px; margin: 6.5px 0; max-height: 40vh; overflow-y: auto; }
+.push-break { display: flex; align-items: flex-start; gap: 7px; line-height: 1.35; }
+.push-tick { margin-top: 2.5px; flex: none; }
 .push-hint,
-.push-status { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted); }
+.push-status { margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }
 /* The connect dialog's one quiet line, under Address when a pasted link named a
    certificate. Same voice as the two above, and it says its piece once. */
-.server-pin { margin: 0.35rem 0 0; font-size: 0.85rem; color: var(--muted); }
+.server-pin { margin: 5.5px 0 0; font-size: 13.5px; color: var(--muted); }

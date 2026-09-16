@@ -14,7 +14,7 @@
    entirely. Double-click is the gesture; this only has to be discoverable. */
 .cardopen {
   position: absolute; right: 12px; bottom: 10px;
-  font: 500 0.68rem/1 var(--font-ui);
+  font: 500 11px/1 var(--font-ui);
   color: var(--muted);
   padding: 0; border: 0; background: none;
   opacity: 0; cursor: pointer;
@@ -25,7 +25,7 @@
 
 /* In the table it gets its own narrow column rather than floating over the row's
    right edge, where a row with long tags ran underneath it. */
-.ctable .ct-open { width: 3.4rem; padding-right: 12px; text-align: right; white-space: nowrap; }
+.ctable .ct-open { width: 54.5px; padding-right: 12px; text-align: right; white-space: nowrap; }
 .ctable .ct-open .cardopen { position: static; }
 .ctable tbody tr:hover .cardopen { opacity: 0.75; }
 

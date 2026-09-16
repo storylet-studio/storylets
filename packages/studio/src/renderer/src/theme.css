@@ -48,13 +48,27 @@
    face, weight 600, muted. Not an overline: the tracked-caps eyebrow is
    retired everywhere but table column heads, which wear the shell's
    `.overline` ("Captions are words, not overlines", design-language.md). */
-.caption { font: 600 0.8rem/1.3 var(--font-ui); color: var(--muted); }
+.caption { font: 600 13px/1.3 var(--font-ui); color: var(--muted); }
 
 /* The tool-window close is drawn now (toolWindowHead appends the vocabulary's
    `close` at 14px, the pin's size), so it takes the pin's box: the shell's own
    `.swin-close` line still sets a font and a text-glyph padding, and until
    that line goes the pair would sit at two heights. */
 .swin-close { padding: 4px; }
+
+/* Chrome has its own scale (design-language.md section 4, ruled 2026-09-16):
+   the navigator, inspector, top bar, status bars and tool-window heads are
+   sized in pixels off a 14px base and never off the root, so a reading-size
+   control cannot inflate them. Every chrome rule in this package is in px
+   for that reason (chrome-scale.test.ts holds the line), and the containers
+   below pin the base so unstyled text inside lands at 14px whatever the root
+   is. The literal stands in for the shell's `--chrome-size`, which does not
+   exist yet; swap the value for the token when it lands.
+   `.stepbar` is written at zero specificity because the shell's own
+   `.stepbar` font shorthand (still on the root scale) sits on the same
+   element: this pin is the base the bar inherits from once the shell
+   converts that rule, not an override of it today. */
+:where(.topbar, .pane-nav, .pane-inspector, .welcome, .swin-head, .stepbar) { font-size: 14px; }
 
 :root {
   --bg: #e6eaef;

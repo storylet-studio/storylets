@@ -45,5 +45,5 @@
    must not change width as the number does. */
 .canvaszoom {
   width: auto; min-width: 42px; padding: 0 5px;
-  font: 0.72rem/1 var(--font-ui); font-variant-numeric: tabular-nums;
+  font: 11.5px/1 var(--font-ui); font-variant-numeric: tabular-nums;
 }
