@@ -26,7 +26,7 @@ const dialog = (): HTMLDialogElement => document.querySelector("dialog.push-dial
 const button = (label: string): HTMLButtonElement =>
   [...dialog().querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label)!;
 const ticks = (): HTMLInputElement[] => [...dialog().querySelectorAll<HTMLInputElement>(".push-tick")];
-const note = (): HTMLInputElement => dialog().querySelector<HTMLInputElement>(".confirm-body input[type=text]")!;
+const note = (): HTMLInputElement => dialog().querySelector<HTMLInputElement>(".shell-dialog-body input[type=text]")!;
 
 const tick = (box: HTMLInputElement): void => {
   box.checked = true;
@@ -109,14 +109,14 @@ describe("the leaving prompt", () => {
 
   it("wears the app's own dialog, with the named status line as its headline", async () => {
     const answered = askLeave(QUITTING);
-    // The push dialog's classes, because the app has one dialog style and the
+    // The shell's dialog frame, because the app has one dialog style and the
     // only native surfaces are the file and folder pickers.
-    expect(leaveDialog()!.classList.contains("confirm-dialog")).toBe(true);
+    expect(leaveDialog()!.classList.contains("shell-dialog")).toBe(true);
     // It NAMES its project: the one moment it is asked is the moment a second
     // project is arriving over this one.
-    expect(leaveDialog()!.querySelector(".confirm-title")?.textContent)
+    expect(leaveDialog()!.querySelector(".shell-dialog-title")?.textContent)
       .toBe("This Room: 3 edits unpushed");
-    expect(leaveDialog()!.querySelector(".confirm-body")?.textContent)
+    expect(leaveDialog()!.querySelector(".shell-dialog-body")?.textContent)
       .toBe("This Room has edits the server has not seen.");
     leaveButton("Cancel").click();
     expect(await answered).toBe(2);
@@ -147,11 +147,11 @@ describe("the leaving prompt", () => {
     const answered = askLeave(QUITTING);
     leaveButton("Push to server").click();
     expect(await answered).toBe(0);
-    expect(leaveDialog()!.querySelector(".confirm-actions"), "the buttons have been used").toBeNull();
+    expect(leaveDialog()!.querySelector(".shell-dialog-actions"), "the buttons have been used").toBeNull();
 
     settleLeave({ message: "Pushed as revision 12", holdMs: 0 });
-    expect(leaveDialog()!.querySelector(".confirm-title")?.textContent).toBe("Pushed as revision 12");
-    expect(leaveDialog()!.querySelector(".confirm-body")).toBeNull();
+    expect(leaveDialog()!.querySelector(".shell-dialog-title")?.textContent).toBe("Pushed as revision 12");
+    expect(leaveDialog()!.querySelector(".shell-dialog-body")).toBeNull();
     expect([...leaveDialog()!.querySelectorAll("button")]).toEqual([]);
     await tick();
     expect(leaveDialog()).toBeNull();
@@ -179,7 +179,7 @@ describe("the leaving prompt", () => {
       buttons: ["Stay"],
       defaultId: 0, cancelId: 0,
     });
-    expect(leaveDialog()!.querySelector(".confirm-body")?.textContent)
+    expect(leaveDialog()!.querySelector(".shell-dialog-body")?.textContent)
       .toBe("pull as designer to change the shape");
     expect([...leaveDialog()!.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Stay"]);
     leaveButton("Stay").click();

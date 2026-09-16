@@ -18,9 +18,11 @@
 //   - no `links` branch. Theirs carries one because their About box shares this
 //     dialog; ours does not (About is the shell's, fed our wordmark), and the
 //     shell's own UpdaterPromptOptions has no links field to read.
-//   - the shell's `confirm-*` classes rather than a parallel set of our own, so
-//     this matches the themed confirm the rest of the app already uses.
+//   - the shell's dialog frame (dialogFrame) and `.btn` buttons rather than a
+//     parallel set of our own, so this matches the themed confirm the rest of
+//     the app already uses.
 
+import { dialogFrame } from "@wildwinter/app-shell/dialog";
 import { el } from "./dom.js";
 import type { UpdaterDownloadProgress, UpdaterPromptOptions } from "../../shared/api.js";
 
@@ -45,45 +47,41 @@ export function showUpdaterDialog(opts: UpdaterPromptOptions): Promise<number> {
     const defaultId = opts.defaultId ?? 0;
     const cancelId = opts.cancelId ?? opts.buttons.length - 1;
 
-    const dlg = el("dialog", "confirm-dialog updater-dialog");
-    dlg.append(el("div", "confirm-title", opts.message));
-    if (opts.detail) dlg.append(el("div", "confirm-body", opts.detail));
+    let done = false;
+    const finish = (idx: number): void => {
+      if (done) return;
+      done = true;
+      liveProgress = null;
+      resolve(idx);
+      frame.close();
+    };
+    const frame = dialogFrame({
+      title: opts.message, className: "updater-dialog",
+      // Esc is the cancel button, not a fourth answer: main is waiting on an index.
+      onClose: () => finish(cancelId),
+    });
+    if (opts.detail) frame.body.append(el("div", "confirm-body", opts.detail));
 
     if (opts.progress) {
       const track = el("div", "updater-progress-track");
       const bar = el("div", "updater-progress-bar");
       track.append(bar);
       const label = el("div", "updater-progress-label", "Starting download…");
-      dlg.append(track, label);
+      frame.body.append(track, label);
       liveProgress = { bar, label };
     }
 
-    const actions = el("div", "confirm-actions");
-    let done = false;
-    const finish = (idx: number): void => {
-      if (done) return;
-      done = true;
-      liveProgress = null;
-      dlg.close();
-      dlg.remove();
-      resolve(idx);
-    };
-
     opts.buttons.forEach((label, i) => {
-      // The last button is the way out, so it reads as the quiet one; the default
-      // is the affirmative. Matches the confirm dialog's cancel/confirm pairing.
-      const cls = i === cancelId ? "confirm-btn cancel" : "confirm-btn";
-      const b = el("button", cls, label);
+      // The default is the affirmative and wears the accent; every other button,
+      // the way out included, is the plain one. Matches the confirm dialog's
+      // cancel/confirm pairing.
+      const b = el("button", i === defaultId ? "btn primary" : "btn", label);
+      b.type = "button";
       b.addEventListener("click", () => finish(i));
-      actions.append(b);
+      frame.actions.append(b);
       if (i === defaultId) queueMicrotask(() => b.focus());
     });
-    dlg.append(actions);
 
-    // Esc is the cancel button, not a fourth answer: main is waiting on an index.
-    dlg.addEventListener("cancel", (e) => { e.preventDefault(); finish(cancelId); });
-
-    document.body.append(dlg);
-    dlg.showModal();
+    frame.open();
   });
 }

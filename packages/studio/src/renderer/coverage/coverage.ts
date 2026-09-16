@@ -87,7 +87,7 @@ function render(): void {
       el("label", { className: "field" }, "runs ", numberInput(runs, (n) => { runs = n; })),
       el("label", { className: "field" }, "max turns ", numberInput(maxTurns, (n) => { maxTurns = n; })),
       el("label", { className: "field" }, "seed ", numberInput(seed, (n) => { seed = n; })),
-      el("button", { className: "primary", text: busy ? "Running…" : "Run coverage", onClick: () => void run() }),
+      el("button", { className: "btn primary", text: busy ? "Running…" : "Run coverage", onClick: () => void run() }),
     ],
   });
 
@@ -103,7 +103,7 @@ function render(): void {
           ? `${driverCount} coverage driver${driverCount === 1 ? "" : "s"} feeding @world.`
           : "No coverage drivers. Content gated on @world will read as never dealt.",
     }),
-    el("button", { text: "Coverage drivers…", onClick: () => void studio.openProjectSettings("world") }),
+    el("button", { className: "btn", text: "Coverage drivers…", onClick: () => void studio.openProjectSettings("world") }),
   );
 
   // While a sweep runs, the results underneath belong to the PREVIOUS run.
@@ -200,7 +200,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
 
     // The per-hand lens - the writer/programmer contract, front and centre.
     el("section", { className: "block" },
-      el("span", { className: "overline", text: "By hand" }),
+      el("span", { className: "caption", text: "By hand" }),
       ...r.hands.map((h) => {
         const total = h.cardsDealt.length + h.cardsNeverDealt.length;
         const full = h.cardsNeverDealt.length === 0;
@@ -218,7 +218,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
     // Never dealt, with the honesty-net hint.
     gaps.length > 0
       ? el("section", { className: "block" },
-          el("span", { className: "overline", text: `Never dealt (${gaps.length})` }),
+          el("span", { className: "caption", text: `Never dealt (${gaps.length})` }),
           ...gaps.map((c) => revealRow("gap", { kind: "card", box: c.box, deck: c.deck, card: c.id },
             el("span", { className: "gname", text: c.title ?? c.gameId }),
             c.unwrittenRefs && c.unwrittenRefs.length > 0
@@ -238,7 +238,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
 
     unplayed.length > 0
       ? el("section", { className: "block" },
-          el("span", { className: "overline", text: `Dealt but never played (${unplayed.length})` }),
+          el("span", { className: "caption", text: `Dealt but never played (${unplayed.length})` }),
           el("p", { className: "hint", text: "These reach the board, but no outcome of theirs was ever taken. Check their outcome gates." }),
           ...unplayed.map((c) => revealRow("gap", { kind: "card", box: c.box, deck: c.deck, card: c.id },
             el("span", { className: "gname", text: c.title ?? c.gameId }),
@@ -252,7 +252,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
 
     deadOutcomes.length > 0
       ? el("section", { className: "block" },
-          el("span", { className: "overline", text: `Outcomes never played (${deadOutcomes.length})` }),
+          el("span", { className: "caption", text: `Outcomes never played (${deadOutcomes.length})` }),
           ...deadOutcomes.map((o) => {
             const card = cardById.get(o.card);
             const label = card ? `${card.title ?? card.gameId} · ${o.gameId}` : o.gameId;
@@ -270,7 +270,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
     // counts above would otherwise present as an ordinary gap.
     r.unprovidedHandRefs.length > 0 || r.diagnostics.length > 0
       ? el("section", { className: "block" },
-          el("span", { className: "overline", text: `Warnings (${r.unprovidedHandRefs.length + r.diagnostics.length})` }),
+          el("span", { className: "caption", text: `Warnings (${r.unprovidedHandRefs.length + r.diagnostics.length})` }),
           ...r.unprovidedHandRefs.map((u) => el("div", { className: "gap" },
             el("span", { className: "gname", text: `${u.where} reads ${u.ref}` }),
             el("span", { className: "hint", text: `never composed by ${u.hands.join(", ")}` }))),
@@ -284,7 +284,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
     hasDriverGap
       ? el("div", { className: "fixrow" },
           el("span", { className: "hint", text: "Some content is gated on host state nothing sets." }),
-          el("button", { text: busy ? "Working…" : "Add coverage drivers", onClick: () => void addDrivers() }),
+          el("button", { className: "btn", text: busy ? "Working…" : "Add coverage drivers", onClick: () => void addDrivers() }),
         )
       : null,
   ];

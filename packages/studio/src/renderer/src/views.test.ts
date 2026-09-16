@@ -319,11 +319,16 @@ describe("deck centre", () => {
     const card = host.querySelector<HTMLButtonElement>(".scard:not(.ghost)")!;
 
     card.click();
-    expect(selectCard).toHaveBeenCalledWith("c_1", false);
+    expect(selectCard).toHaveBeenCalledWith("c_1", "replace");
     expect(inspectCard).not.toHaveBeenCalled();
 
+    // The OS's three gestures: shift fills a run, cmd/ctrl toggles one card.
     card.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
-    expect(selectCard).toHaveBeenLastCalledWith("c_1", true);   // extends, not replaces
+    expect(selectCard).toHaveBeenLastCalledWith("c_1", "range");
+    card.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
+    expect(selectCard).toHaveBeenLastCalledWith("c_1", "toggle");
+    card.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true }));
+    expect(selectCard).toHaveBeenLastCalledWith("c_1", "toggle");
 
     card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
     expect(inspectCard).toHaveBeenCalledWith("b_1", "k_1", "c_1");

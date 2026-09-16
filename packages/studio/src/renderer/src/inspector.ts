@@ -22,7 +22,7 @@ import { whereModel, whereWarning } from "./where.js";
 import { gameIdify, isHoleRef, turnSpan, PLACE_GROUP } from "@storylet-studio/model";
 import { el } from "./dom.js";
 
-import { openContextMenu, openPopover } from "./context-menu.js";
+import { openContextMenu, openPopover } from "@wildwinter/app-shell/context-menu";
 import { chipDot } from "./views.js";
 import { mountChanges, mountCondition, previewCondition } from "./expr-panels.js";
 import { mountPropertyList, valueControl } from "./prop-list.js";
@@ -85,13 +85,15 @@ export interface InspectorHost {
   deleteHand(boxId: string, handId: string): void;
 }
 
-const overline = (text: string): HTMLElement => el("span", { className: "insp-label", text });
+// A section caption: sentence-case words in the UI face, weight 600, never a
+// tracked overline ("Captions are words, not overlines", 2026-09-16).
+const caption = (text: string): HTMLElement => el("span", { className: "insp-label", text });
 
-// One section grammar (centre-clarity 3): overline label OUTSIDE the panel,
+// One section grammar (centre-clarity 3): caption OUTSIDE the panel,
 // an optional muted hint on the same line, then the panel - one material for
 // every machinery cluster. The panel contains only content, never its label.
 const sectHead = (label: string, hint?: string): HTMLElement =>
-  el("div", { className: "doc-sect-head" }, overline(label),
+  el("div", { className: "doc-sect-head" }, caption(label),
     hint ? el("span", { className: "doc-sect-hint", text: hint }) : null);
 const sectParts = (label: string, hint: string | undefined, ...body: (Node | null)[]): Node[] =>
   [sectHead(label, hint), el("div", { className: "doc-panel" }, ...body)];
@@ -102,14 +104,14 @@ const section = (label: string, hint: string | undefined, ...body: (Node | null)
 const bare = (label: string, hint: string | undefined, ...body: (Node | null)[]): HTMLElement =>
   el("div", { className: "doc-sect" }, sectHead(label, hint), ...body);
 
-// An empty section costs one line, not a panel (centre-clarity 8): overline +
+// An empty section costs one line, not a panel (centre-clarity 8): caption +
 // quiet summary, with a ghost + that swaps in the real panel when there is
 // one to expand. A commit-driven redraw re-collapses it only while it is
 // still empty, which is the correct resting state.
 function emptySection(label: string, summary: string, expandTo?: () => Node[]): HTMLElement {
   const wrap = el("div", { className: "doc-sect" });
   const row = el(expandTo ? "button" : "div", { className: "doc-collapsed" },
-    overline(label), el("span", { className: "doc-collapsed-sum", text: summary }),
+    caption(label), el("span", { className: "doc-collapsed-sum", text: summary }),
     expandTo ? el("span", { className: "doc-collapsed-plus", text: "+" }) : null);
   if (expandTo) row.addEventListener("click", () => wrap.replaceChildren(...expandTo()));
   wrap.append(row);
@@ -166,9 +168,29 @@ function cfgCheck(checked: boolean, onChange: (v: boolean) => void): HTMLInputEl
 function textField(value: string, className: string, onInput: (v: string) => void, onChange: () => void): HTMLInputElement {
   const input = el("input", { className });
   input.value = value;
+  // An identifier is not prose: no red squiggle under a gameId or a mono name
+  // (parity row 52). Prose fields keep the platform's check.
+  if (/\binsp-mono\b|\bdoc-name\b/.test(className)) input.spellcheck = false;
   input.addEventListener("input", () => { onInput(input.value); onChange(); });
   input.addEventListener("change", onChange);
   return input;
+}
+
+/**
+ * The one thing a click-to-edit title owes: Esc puts back what it held when it
+ * got focus (parity row 50). The value goes back and `restore` re-takes it, so
+ * a title that commits as it is typed is committed back too; the window's own
+ * Esc handler then blurs the field, and with the value where it started no
+ * change event follows.
+ */
+function escapeRestores(input: HTMLInputElement, restore: (value: string) => void): void {
+  let atFocus = input.value;
+  input.addEventListener("focus", () => { atFocus = input.value; });
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || input.value === atFocus) return;
+    input.value = atFocus;
+    restore(atFocus);
+  });
 }
 
 // --- the card level (the big editor) ------------------------------------------
@@ -264,7 +286,7 @@ function gameIdField(
     root.title = bound?.length ? [...bound, usual].join("\n") : usual;
     root.replaceChildren(
       el("span", { className: "gid-value", text: pinned || derived() || "(unnamed)" }),
-      el("span", { className: "gid-tag", text: pinned ? "pinned" : "auto" }),
+      el("span", { className: "gid-tag", text: pinned ? "Pinned" : "Auto" }),
     );
   };
   // Repainted from outside by `refreshGameIds`, which is how a chip learns it
@@ -367,11 +389,11 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
 
     const priority = textField(edit.priority ?? "", "insp-input insp-mono insp-short", (v) => { edit.priority = v; }, commit);
     priority.placeholder = "0";
-    const seg = el("div", { className: "insp-seg" });
+    const seg = el("div", { className: "seg insp-seg" });
     const isNumber = /^\d+$/.test(edit.redraw ?? "");
     for (const [label, value] of [["always", "always"], ["never", "never"], ["turns", "5"]] as [string, string][]) {
       const on = label === "turns" ? isNumber : edit.redraw === value;
-      const b = el("button", { className: on ? "on" : "", text: label });
+      const b = el("button", { className: `seg-opt${on ? " on" : ""}`, text: label });
       b.addEventListener("click", () => { edit.redraw = label === "turns" ? (isNumber ? edit.redraw : "5") : value; commit(); drawCentre(); });
       seg.append(b);
     }
@@ -407,14 +429,14 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       value: boolean | null, deckSays: boolean, word: string,
       set: (v: boolean | null) => void,
     ): HTMLElement => {
-      const seg = el("div", { className: "insp-seg" });
+      const seg = el("div", { className: "seg insp-seg" });
       const states: [string, boolean | null][] = [
         [deckSays ? `deck (${word})` : `deck (not ${word})`, null],
         [word, true],
         [`not ${word}`, false],
       ];
       for (const [label, v] of states) {
-        const b = el("button", { className: value === v ? "on" : "", text: label });
+        const b = el("button", { className: `seg-opt${value === v ? " on" : ""}`, text: label });
         b.addEventListener("click", () => { set(v); commit(); drawCentre(); });
         seg.append(b);
       }
@@ -537,7 +559,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
         for (const v of r.values) line.append(el("span", { className: "chip on where-region" }, chipDot(v), `anywhere in ${v}`));
       }
     }
-    const open = el("button", { className: "where-edit", text: "Change", tip: "Choose the places and regions this card belongs to" });
+    const open = el("button", { className: "btn where-edit", text: "Change", tip: "Choose the places and regions this card belongs to" });
     open.addEventListener("click", () => openWherePicker(open));
     const warning = whereWarning(m);
     const body = el("div", { className: "where-body" }, el("div", { className: "where-head" }, line, open));
@@ -695,11 +717,11 @@ export function documentHeading(label: string, opts: {
   afterEdit?: () => void;
 }): HTMLElement {
   const head = el("div", { className: "doc-head" });
-  const topline = el("div", { className: "doc-topline" }, overline(label));
+  const topline = el("div", { className: "doc-topline" }, caption(label));
   if (opts.comments) {
     const c = opts.comments;
     const bubble = el("button", {
-      className: `doc-thread${c.count > 0 ? " has" : ""}`,
+      className: `btn ghost doc-thread${c.count > 0 ? " has" : ""}`,
       text: c.count > 0 ? `${icon.comment} ${c.count}` : icon.comment,
       tip: c.count > 0 ? `${c.count} open comment${c.count === 1 ? "" : "s"}` : "Comment on this",
     });
@@ -709,7 +731,7 @@ export function documentHeading(label: string, opts: {
   }
   if (opts.menu?.length) {
     const items = opts.menu;
-    const more = el("button", { className: "doc-menu", text: icon.more, tip: "More" });
+    const more = el("button", { className: "btn ghost icon doc-menu", text: icon.more, tip: "More" });
     more.addEventListener("click", (e) => {
       const r = more.getBoundingClientRect();
       e.preventDefault();
@@ -745,16 +767,21 @@ export function documentHeading(label: string, opts: {
     const t = opts.title;
     const input = el("input", { className: "insp-input insp-title doc-title" });
     input.value = t.get(); input.placeholder = t.placeholder ?? "Title";
-    input.addEventListener("input", () => { t.set(input.value); gid?.refresh(); paintClaim(); if ((t.commitOn ?? "input") === "input") { t.commit(); opts.afterEdit?.(); } });
+    const took = (v: string): void => { t.set(v); gid?.refresh(); paintClaim(); if ((t.commitOn ?? "input") === "input") { t.commit(); opts.afterEdit?.(); } };
+    input.addEventListener("input", () => took(input.value));
     input.addEventListener("change", () => { t.commit(); opts.afterEdit?.(); });
+    escapeRestores(input, took);
     titleRow.append(input);
   }
   if (opts.name) {
     const n = opts.name;
     const input = el("input", { className: "insp-input insp-mono doc-title doc-name" });
     input.value = n.get(); input.placeholder = n.placeholder ?? "Name";
-    input.addEventListener("input", () => { n.set(input.value); n.commit(); opts.afterEdit?.(); });
+    input.spellcheck = false;   // a name, not prose (parity row 52)
+    const took = (v: string): void => { n.set(v); n.commit(); opts.afterEdit?.(); };
+    input.addEventListener("input", () => took(input.value));
     input.addEventListener("change", () => { n.commit(); opts.afterEdit?.(); });
+    escapeRestores(input, took);
     titleRow.append(input);
   }
   if (gid) titleRow.append(el("div", { className: "doc-gid" }, gid.root));
@@ -823,7 +850,7 @@ function fillOutcomeHeader(row: HTMLElement, o: OutcomeEdit, open: boolean, cata
  */
 function commentBubble(on: string, count: number, open: (anchor: HTMLElement) => void): HTMLElement {
   const bubble = el("button", {
-    className: `doc-thread${count > 0 ? " has" : ""}`,
+    className: `btn ghost doc-thread${count > 0 ? " has" : ""}`,
     text: count > 0 ? `${icon.comment} ${count}` : icon.comment,
     tip: count > 0 ? `${count} open comment${count === 1 ? "" : "s"}` : "Comment on this outcome",
   });
@@ -974,7 +1001,7 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
   // second half of the sentence the hint was already starting.
   body.append(bare("Changes", "what it sets (a change replaces the value, so add one with @story.gold + 1)", changeHost));
 
-  body.append(el("button", { className: "insp-del small outcome-remove", text: "Remove outcome", onClick: remove }));
+  body.append(el("button", { className: "btn insp-del small outcome-remove", text: "Remove outcome", onClick: remove }));
   return body;
 }
 
@@ -1081,9 +1108,9 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
     if (tab === "slots") {
       if (standalone()) {
         const isBounded = edit.rule !== undefined && edit.rule.slots !== "unbounded" && String(edit.rule.slots).trim() !== "";
-        const seg = el("div", { className: "insp-seg" });
+        const seg = el("div", { className: "seg insp-seg" });
         for (const [label, on] of [["unbounded", !isBounded], ["bounded", isBounded]] as [string, boolean][]) {
-          const b = el("button", { className: on ? "on" : "", text: label });
+          const b = el("button", { className: `seg-opt${on ? " on" : ""}`, text: label });
           b.addEventListener("click", () => {
             if (!edit.rule) edit.rule = { bindings: [], condition: "", slots: "unbounded" };
             edit.rule.slots = label === "unbounded" ? "unbounded" : (isBounded ? edit.rule.slots : "3");
@@ -1244,9 +1271,9 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     const turnsHost = el("div");
     const drawTurns = (): void => {
       const timed = seconds !== undefined;
-      const seg = el("div", { className: "insp-seg" });
+      const seg = el("div", { className: "seg insp-seg" });
       for (const [label, on] of [["a play", !timed], ["every N seconds of play", timed]] as [string, boolean][]) {
-        const b = el("button", { className: on ? "on" : "", text: label });
+        const b = el("button", { className: `seg-opt${on ? " on" : ""}`, text: label });
         // A click on the choice already made does nothing: it must not reset a
         // seconds the designer has typed.
         if (!on) b.addEventListener("click", () => {
@@ -1405,9 +1432,9 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
       view.append(section("When", "the condition a card must also satisfy, shared by every instance", condHost));
 
       const isBounded = edit.slots !== "unbounded";
-      const seg = el("div", { className: "insp-seg" });
+      const seg = el("div", { className: "seg insp-seg" });
       for (const [label, on] of [["unbounded", !isBounded], ["bounded", isBounded]] as [string, boolean][]) {
-        const b = el("button", { className: on ? "on" : "", text: label });
+        const b = el("button", { className: `seg-opt${on ? " on" : ""}`, text: label });
         b.addEventListener("click", () => { edit.slots = label === "unbounded" ? "unbounded" : (isBounded ? edit.slots : "3"); commit(); draw(); });
         seg.append(b);
       }
@@ -1502,7 +1529,7 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
       name.value = v.gameId; name.placeholder = "Tag name";
       name.addEventListener("input", () => { v.gameId = name.value; });
       name.addEventListener("change", commit);
-      const del = el("button", { className: "insp-del small", text: "Remove", onClick: () => { edit.values.splice(i, 1); commit(); redraw(); } });
+      const del = el("button", { className: "btn insp-del small", text: "Remove", onClick: () => { edit.values.splice(i, 1); commit(); redraw(); } });
       // Up/down beside Remove, which is Patterpad's trio for a list of settings
       // rows (`moveItem` in its dom.ts, used by the field, property and cast
       // lists). Tags are stored id-sorted now, so the order an author arranges
@@ -1514,8 +1541,8 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
         [edit.values[i], edit.values[j]] = [edit.values[j]!, edit.values[i]!];
         commit(); redraw();
       };
-      const up = el("button", { className: "insp-move", text: "\u2191", tip: "Move up", onClick: () => swap(i - 1) }) as HTMLButtonElement;
-      const down = el("button", { className: "insp-move", text: "\u2193", tip: "Move down", onClick: () => swap(i + 1) }) as HTMLButtonElement;
+      const up = el("button", { className: "btn ghost icon insp-move", text: icon.up, tip: "Move up", onClick: () => swap(i - 1) }) as HTMLButtonElement;
+      const down = el("button", { className: "btn ghost icon insp-move", text: icon.down, tip: "Move down", onClick: () => swap(i + 1) }) as HTMLButtonElement;
       up.disabled = i === 0;
       down.disabled = i === edit.values.length - 1;
       block.append(el("div", { className: "insp-ohead" }, el("span", { className: "insp-kv" }, chipDot(v.gameId), name),
@@ -1536,7 +1563,7 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
           });
           rows.append(el("div", { className: "set-row" },
             el("span", { className: "set-label insp-mono", text: decl.name }), control,
-            el("span", { className: "set-dim", text: `group default ${decl.default || "(first stage)"}` })));
+            el("span", { className: "set-dim", text: `Group default ${decl.default || "(first stage)"}.` })));
         }
         block.append(bare("Starts at", "this tag's own value for what the group declares", rows));
       }

@@ -32,6 +32,10 @@ let hits: SearchHit[] = [];            // Find
 let usages: PropertyUsage[] = [];      // Property
 let replaceHits: ReplaceHit[] = [];    // Replace (the preview)
 let active = 0;
+/** The kind of thing a hit is, as a word: the caption beside a row is
+ *  sentence-case text now, not a tracked overline that hid the casing. */
+const KIND_WORD: Record<string, string> = { deck: "Deck", card: "Card", template: "Template", hand: "Hand", tagGroup: "Tag group", box: "Box", outcome: "Outcome" };
+const kindWord = (kind: string): string => KIND_WORD[kind] ?? `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
 let pinned = true;
 let token = 0;   // an out-of-order async answer must not overwrite a newer query
 
@@ -89,13 +93,13 @@ function choose(i: number): void {
 // --- rendering ----------------------------------------------------------------
 
 function none(text: string): HTMLElement {
-  return el("div", { className: "sr-none", text });
+  return el("div", { className: "empty sr-none", text });
 }
 
 function renderFind(): void {
   listEl.replaceChildren(...hits.map((hit, i) =>
     el("button", { className: `sr-row${i === active ? " active" : ""}`, onClick: () => choose(i) },
-      el("span", { className: "sr-kind", text: hit.kind }),
+      el("span", { className: "sr-kind", text: kindWord(hit.kind) }),
       el("span", { className: "sr-label", text: hit.label }),
       el("span", { className: "sr-sub", text: hit.sublabel }))));
   if (hits.length === 0) listEl.replaceChildren(none(project ? "nothing matches" : "no project open"));
@@ -109,7 +113,7 @@ function renderProperty(): void {
       ? `${item.location[item.location.length - 1] ?? ""} › ${item.title ?? item.gameId}`
       : item.title ?? item.gameId;
     return el("button", { className: `sr-row${i === active ? " active" : ""}`, onClick: () => choose(i) },
-      el("span", { className: "sr-kind", text: item.kind }),
+      el("span", { className: "sr-kind", text: kindWord(item.kind) }),
       el("span", { className: "sr-label", text: label }),
       el("span", { className: `sr-use ${u.use}`, text: u.use === "read" ? "reads" : "writes" }),
       el("span", { className: "sr-sub", text: `${u.where} · ${u.text}` }));
@@ -136,7 +140,7 @@ function renderReplace(): void {
         el("span", { className: "sr-arrow", text: " → " }),
         el("span", { className: "sr-after", text: h.after })),
       el("span", { className: "sr-sub", text: `${[...h.location, h.kind === "project" ? "project" : ""].filter((s) => s !== "").join(" › ")} · ${fieldLabel(h)}` }),
-      el("button", { className: "sr-rone", text: "Replace", onClick: () => void applyReplace(h) }));
+      el("button", { className: "btn sr-rone", text: "Replace", onClick: () => void applyReplace(h) }));
     return row;
   }));
   if (replaceHits.length === 0) {
@@ -218,7 +222,7 @@ async function applyReplace(only?: ReplaceHit): Promise<void> {
 function setMode(next: SearchMode): void {
   mode = next;
   for (const [m, btn] of tabEls) {
-    btn.classList.toggle("active", m === mode);
+    btn.classList.toggle("on", m === mode);
     btn.setAttribute("aria-selected", String(m === mode));
   }
   inputEl.placeholder = PLACEHOLDER[mode];
@@ -240,10 +244,10 @@ function mount(): void {
   // The tabs stand where the title did (Patterpad's bar: modes left, pin and
   // close right). The segmented control is our container, so it opts out of
   // the drag region itself; the shell's rule only covers the buttons inside.
-  const modes = el("div", { className: "swin-modes" });
+  const modes = el("div", { className: "seg swin-modes" });
   modes.setAttribute("role", "tablist");
   for (const { mode: m, label } of MODES) {
-    const btn = el("button", { className: "swin-mode", text: label, onClick: () => setMode(m) });
+    const btn = el("button", { className: "seg-opt swin-mode", text: label, onClick: () => setMode(m) });
     btn.type = "button";
     btn.setAttribute("role", "tab");
     tabEls.set(m, btn);
@@ -275,7 +279,7 @@ function mount(): void {
   replaceEl.placeholder = "Replace with…";
   replaceEl.spellcheck = false;
   replaceEl.addEventListener("input", () => { replacement = replaceEl.value; runSoon(); });
-  replaceAllBtn = el("button", { className: "swin-replace-all", text: "Replace all", onClick: () => void applyReplace() });
+  replaceAllBtn = el("button", { className: "btn primary swin-replace-all", text: "Replace all", onClick: () => void applyReplace() });
   replaceAllBtn.type = "button";
   replaceRow = el("div", { className: "swin-replace-row" }, replaceEl, replaceAllBtn);
   replaceRow.hidden = true;

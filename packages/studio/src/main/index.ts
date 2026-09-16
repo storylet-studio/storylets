@@ -1995,10 +1995,12 @@ function wireIpc(): void {
     if (!session) return { error: "no project open" };
     return moveComment(session, threadId, canvas, x, y, item);
   });
-  // Only http(s), and only from the renderer's own About/docs links: a URL is
-  // the one input that can reach the rest of the machine.
+  // A closed allow-list, not a scheme check: only the destinations the app
+  // itself puts on screen (the About box's links), so a compromised renderer
+  // cannot launch arbitrary URLs. A URL is the one input that can reach the
+  // rest of the machine (Patterpad's rule, parity row 29).
   ipcMain.handle("shell:openExternal", (_event, url: string) => {
-    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    if (ABOUT_LINKS.has(url)) void shell.openExternal(url);
   });
   ipcMain.handle("identity:get", () => store.get().identity);
   // What the VCS thinks the author is called, to OFFER when nothing is stored
@@ -2411,6 +2413,9 @@ function watchInDev(win: BrowserWindow, name: string): void {
   });
 }
 
+/** The About dialog's links: the only external URLs the renderer can open. */
+const ABOUT_LINKS = new Set(["https://storylet.studio", "https://ian.wildwinter.net"]);
+
 function createWindow(): void {
   window = new BrowserWindow({
     width: 1280,
@@ -2426,7 +2431,21 @@ function createWindow(): void {
       preload: join(import.meta.dirname, "../preload/index.cjs"),
     },
   });
-  window.once("ready-to-show", () => window?.show());
+  // Reveal only once the renderer signals (`app:ready`) that its INITIAL view is
+  // mounted: the restored project or the welcome screen. NOT on `ready-to-show`,
+  // which fires on the first paint of the pre-boot chrome and flashed an empty
+  // frame before boot() filled it (Patterpad's handshake, parity row 13). A
+  // fallback timer still reveals the window if the renderer errors before
+  // signalling, so a broken boot cannot leave it hidden.
+  let revealed = false;
+  const reveal = (): void => {
+    if (revealed) return;
+    revealed = true;
+    ipcMain.removeListener("app:ready", reveal);
+    window?.show();
+  };
+  ipcMain.on("app:ready", reveal);
+  setTimeout(reveal, 4000);
   // Closing the editor is one of the three ways out (9.1): with edits the
   // server has not seen, the close waits for an answer. `leaving` is what an
   // answered prompt sets so the second close goes straight through, and it is

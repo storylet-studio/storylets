@@ -10,12 +10,12 @@
 // in the document itself (design review 2026-08, A17).
 // ---------------------------------------------------------------------------
 
-import { icon, renderStepperBar } from "@wildwinter/app-shell";
+import { icon, renderStepperBar, wireReorder } from "@wildwinter/app-shell";
 import { gameIdify, PLACE_GROUP } from "@storylet-studio/model";
 import { el } from "./dom.js";
 import { colourIndex } from "../../shell/colour.js";
 import { previewCondition } from "./expr-panels.js";
-import { openContextMenu } from "./context-menu.js";
+import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { currentDocTab, docTabs, documentHeading, setDocTab } from "./inspector.js";
 import type { BoxDto, BoxEdit, CardDto, ConditionProperty, DeckDto, Problem, ProjectDto, ReviewItemDto, ViewMode } from "../../shared/api.js";
 
@@ -75,7 +75,7 @@ export interface ViewActions {
   deleteTagGroup(box: string, group: string): void;
   /** Select a card in the focused deck; `extend` adds to or removes from the
    *  selection (shift or cmd click) rather than replacing it. */
-  selectCard(card: string, extend: boolean): void;
+  selectCard(card: string, how: SelectHow): void;
   setViewMode(mode: ViewMode): void;
   /** Fill a node-view container: fetch the deck's links, then mount the canvas.
    *  Owned by the renderer because views.ts never touches IPC. */
@@ -88,38 +88,54 @@ export interface ViewActions {
   moveHand(box: string, hand: string, target: string, before: boolean): void;
 }
 
-// --- card drag-reorder (Patterpad's model: dragstart / dragover-mark / drop) --
-let dragCardId: string | null = null;
-const clearDropMarks = (host: HTMLElement): void =>
-  host.querySelectorAll(".drop-before, .drop-after").forEach((e) => e.classList.remove("drop-before", "drop-after"));
+// --- drag-reorder: the shell's wireReorder (dragstart / dragover-mark / drop) --
+// The marks (.dragging / .drop-before / .drop-after) are classes only; shell.css
+// draws them. Its onMove is (draggedId, before, targetId); the actions here
+// take (from, to, before), so the one wrapper below swaps the order, and arms
+// the settle.
 
-/** Make an element a drag source + drop target for card reordering. `axis`
- *  picks the midpoint test: "y" for table rows, "x" for the wrapping card grid. */
-function wireCardDrag(el: HTMLElement, cardId: string, axis: "x" | "y", onMove: (from: string, to: string, before: boolean) => void): void {
-  el.draggable = true;
-  el.dataset["card"] = cardId;
-  const host = (): HTMLElement => el.parentElement as HTMLElement;
-  el.addEventListener("dragstart", (e) => {
-    dragCardId = cardId; el.classList.add("dragging");
-    if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", cardId); }
+// --- the drop settle (FLIP) ---------------------------------------------------
+// A drop re-renders the list, and a list that re-renders snaps every item to
+// its new slot. Structural motion is the one kind the design language keeps
+// ("a row settling after a drop"), so the drop records where every reorderable
+// sibling sat, and the render that follows eases each one from there to where
+// it now is, at --dur-settle (parity row 49). Patterpad's commitWithFlip, on
+// this app's asynchronous render: the record is taken at the drop and spent by
+// the next render, or dropped if no render comes.
+let settleFrom: Map<string, DOMRect> | null = null;
+function armSettle(list: ParentNode): void {
+  const rects = new Map<string, DOMRect>();
+  list.querySelectorAll<HTMLElement>("[data-reorder-id]").forEach((n) => rects.set(n.dataset["reorderId"]!, n.getBoundingClientRect()));
+  settleFrom = rects;
+  window.setTimeout(() => { if (settleFrom === rects) settleFrom = null; }, 1000);
+}
+function playSettle(host: ParentNode): void {
+  const from = settleFrom;
+  if (!from) return;
+  settleFrom = null;
+  const moved: HTMLElement[] = [];
+  host.querySelectorAll<HTMLElement>("[data-reorder-id]").forEach((n) => {
+    const f = from.get(n.dataset["reorderId"]!);
+    if (!f) return;
+    const r = n.getBoundingClientRect();
+    const dx = f.left - r.left;
+    const dy = f.top - r.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    // INVERT: jump back to the old slot with no transition...
+    n.style.transition = "none";
+    n.style.transform = `translate(${Math.round(dx)}px, ${Math.round(dy)}px)`;
+    moved.push(n);
   });
-  el.addEventListener("dragend", () => { dragCardId = null; el.classList.remove("dragging"); clearDropMarks(host()); });
-  el.addEventListener("dragover", (e) => {
-    if (!dragCardId || dragCardId === cardId) return;
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-    const r = el.getBoundingClientRect();
-    const before = axis === "y" ? e.clientY < r.top + r.height / 2 : e.clientX < r.left + r.width / 2;
-    clearDropMarks(host());
-    el.classList.add(before ? "drop-before" : "drop-after");
-  });
-  el.addEventListener("dragleave", () => el.classList.remove("drop-before", "drop-after"));
-  el.addEventListener("drop", (e) => {
-    e.preventDefault();
-    const before = el.classList.contains("drop-before");
-    clearDropMarks(host());
-    if (dragCardId && dragCardId !== cardId) onMove(dragCardId, cardId, before);
-  });
+  if (moved.length === 0) return;
+  void moved[0]!.offsetHeight;   // commit the inverted transforms as the start frame
+  // ...and PLAY: release to the real position with the family's settle.
+  for (const n of moved) { n.style.transition = "transform var(--dur-settle) var(--ease-standard)"; n.style.transform = ""; }
+  const ms = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--dur-settle")) || 200;
+  window.setTimeout(() => { for (const n of moved) { n.style.transition = ""; n.style.transform = ""; } }, ms + 80);
+}
+/** Make `el` reorderable among its siblings; a drop arms the settle, then moves. */
+function wireDrop(el: HTMLElement, id: string, axis: "x" | "y", move: (from: string, to: string, before: boolean) => void): void {
+  wireReorder(el, id, axis, (from, before, to) => { armSettle(el.parentElement ?? el); move(from, to, before); });
 }
 const grip = (): HTMLElement => el("span", { className: "cardgrip", text: icon.grip, tip: "Drag to reorder" });
 
@@ -130,11 +146,11 @@ const grip = (): HTMLElement => el("span", { className: "cardgrip", text: icon.g
 function viewToggle(active: ViewMode, actions: ViewActions, withNode = false): HTMLElement {
   const shown: ViewMode = !withNode && active === "node" ? "cards" : active;
   const btn = (mode: ViewMode, glyph: string, title: string): HTMLElement => {
-    const b = el("button", { className: `viewbtn${shown === mode ? " on" : ""}`, text: glyph, tip: title });
+    const b = el("button", { className: `seg-opt viewbtn${shown === mode ? " on" : ""}`, text: glyph, tip: title });
     b.addEventListener("click", () => { if (shown !== mode) actions.setViewMode(mode); });
     return b;
   };
-  return el("div", { className: "viewtoggle" },
+  return el("div", { className: "seg viewtoggle" },
     // From the icon table (app-shell 0.17.0), named by what you get rather than
     // by the glyph, so a second app picks the same three without copying
     // somebody's taste in symbols.
@@ -212,7 +228,7 @@ export function crumbTrail(segments: { label: string; go: () => void }[], ...rig
   const up = segments[segments.length - 1];
   if (up) {
     bar.append(el("button", {
-      className: "crumb-back", text: `‹ ${up.label}`,
+      className: "btn crumb-back", text: `‹ ${up.label}`,
       tip: `Back to ${up.label} (Esc)`, onClick: up.go,
     }));
   }
@@ -223,7 +239,7 @@ export function crumbTrail(segments: { label: string; go: () => void }[], ...rig
   if (cameFrom) {
     const back = cameFrom;
     bar.append(el("button", {
-      className: "crumb-return", text: `↩ ${back.label}`,
+      className: "btn crumb-return", text: `↩ ${back.label}`,
       tip: `Back to ${back.label}`, onClick: back.go,
     }));
   }
@@ -239,7 +255,7 @@ export function chipDot(name: string): HTMLElement {
   dot.style.background = `var(--char-${colourIndex(name)})`;
   return dot;
 }
-export const chip = (name: string): HTMLElement => el("span", { className: "chip" }, chipDot(name), name);
+export const chip = (name: string): HTMLElement => el("span", { className: "pill" }, chipDot(name), name);
 
 // --- navigator ----------------------------------------------------------------
 
@@ -420,9 +436,14 @@ export function cardHasContent(card: CardDto): boolean {
 // Recorded in design/studio-editing-structure.md; it revises a decision that
 // predates the canvas.
 
+/** How a click changes the selection: the OS's three gestures. A plain click
+ *  replaces, shift fills the contiguous run from the anchor, cmd/ctrl toggles
+ *  the one card (parity row 46). */
+export type SelectHow = "replace" | "range" | "toggle";
+
 export interface CardGestures {
-  /** Replace or extend the selection. */
-  select(cardId: string, extend: boolean): void;
+  /** Change the selection by one of the three gestures. */
+  select(cardId: string, how: SelectHow): void;
   /** Commit: open the card. */
   open(cardId: string): void;
 }
@@ -448,12 +469,12 @@ function openChip(cardId: string, gestures: CardGestures): HTMLElement {
   return chip;
 }
 
-/** Wire an element to the grammar. `extend` is shift or cmd/ctrl. */
+/** Wire an element to the grammar: shift is a range, cmd/ctrl a toggle. */
 function wireCardGestures(el: HTMLElement, cardId: string, gestures: CardGestures): void {
   el.addEventListener("click", (e) => {
     // A double-click also fires two clicks; selecting on the way in is harmless
     // and keeps the card highlighted as it opens.
-    gestures.select(cardId, e.shiftKey || e.metaKey || e.ctrlKey);
+    gestures.select(cardId, e.shiftKey ? "range" : e.metaKey || e.ctrlKey ? "toggle" : "replace");
   });
   el.addEventListener("dblclick", (e) => {
     e.preventDefault();
@@ -548,7 +569,7 @@ export function renderDeckCentre(
   if (tab === "cards") {
     const move = (from: string, to: string, before: boolean): void => actions.moveCard(box.id, deck.id, from, to, before);
     const gestures: CardGestures = {
-      select: (card, extend) => actions.selectCard(card, extend),
+      select: (card, how) => actions.selectCard(card, how),
       open: (card) => actions.inspectCard(box.id, deck.id, card),
     };
     body = mode === "node"
@@ -561,7 +582,7 @@ export function renderDeckCentre(
           ...deck.cards.map((c) => {
             const face = cardFace(c, catalogue, selectedCards.has(c.id),
               gestures, cardMenu(box.id, deck.id, c.id, actions));
-            wireCardDrag(face, c.id, "x", move);
+            wireDrop(face, c.id, "x", move);
             return face;
           }),
           el("button", { className: "scard ghost", text: "+ New card", onClick: () => actions.newCard(box.id, deck.id) }),
@@ -575,6 +596,7 @@ export function renderDeckCentre(
   // pane would read as a bug rather than as typography.
   host.classList.toggle("measured", body.classList.contains("centre-editor"));
   host.replaceChildren(trail, heading, tabs, body);
+  playSettle(host);
 }
 
 /** The node view's container. views.ts draws DOM and never talks to main, so the
@@ -594,7 +616,7 @@ function deckTable(box: BoxDto, deck: DeckDto, catalogue: ConditionProperty[], s
   // placement is a tag). Where = the home group plus every spatial group,
   // the same rule the card's own Where sentence uses (where.ts).
   const cols = ["", "Title", "gameId", "When", "Where", "Tags", ""];
-  table.append(el("thead", {}, el("tr", {}, ...cols.map((c) => el("th", { text: c })))));
+  table.append(el("thead", {}, el("tr", {}, ...cols.map((c) => el("th", { className: "overline", text: c })))));
   const spatial = new Set(box.tagGroups.filter((g) => g.spatial).map((g) => g.gameId));
   const isPlace = (group: string): boolean => group === PLACE_GROUP || spatial.has(group);
   const body = el("tbody");
@@ -614,7 +636,7 @@ function deckTable(box: BoxDto, deck: DeckDto, catalogue: ConditionProperty[], s
     );
     wireCardGestures(row, c.id, gestures);
     row.addEventListener("contextmenu", cardMenu(box.id, deck.id, c.id, actions));
-    wireCardDrag(row, c.id, "y", move);
+    wireDrop(row, c.id, "y", move);
     body.append(row);
   }
   table.append(body);
@@ -840,7 +862,7 @@ export function renderDecksCentre(host: HTMLElement, box: BoxDto, mode: ViewMode
   let body: HTMLElement;
   if (mode === "table") {
     const table = el("table", { className: "ctable" });
-    table.append(el("thead", {}, el("tr", {}, ...["", "Deck", "gameId", "Cards", "Purpose"].map((c) => el("th", { text: c })))));
+    table.append(el("thead", {}, el("tr", {}, ...["", "Deck", "gameId", "Cards", "Purpose"].map((c) => el("th", { className: "overline", text: c })))));
     const tbody = el("tbody");
     for (const deck of box.decks) {
       const nameCell = el("td", { className: "ct-title", text: deck.title ?? deck.gameId });
@@ -854,7 +876,7 @@ export function renderDecksCentre(host: HTMLElement, box: BoxDto, mode: ViewMode
       );
       row.addEventListener("click", () => actions.focus({ kind: "deck", box: box.id, deck: deck.id }));
       row.addEventListener("contextmenu", itemMenu(() => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
-      wireCardDrag(row, deck.id, "y", move);
+      wireDrop(row, deck.id, "y", move);
       tbody.append(row);
     }
     table.append(tbody);
@@ -870,12 +892,13 @@ export function renderDecksCentre(host: HTMLElement, box: BoxDto, mode: ViewMode
       face.dataset["vc"] = vcKeys.deck(deck.id);
       face.addEventListener("contextmenu", itemMenu(() => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
       face.append(grip());
-      wireCardDrag(face, deck.id, "x", move);
+      wireDrop(face, deck.id, "x", move);
       body.append(face);
     }
     body.append(el("button", { className: "deck-card ghost", text: "+ New deck", onClick: () => actions.newDeck(box.id) }));
   }
   host.replaceChildren(head, body);
+  playSettle(host);
 }
 
 /** What the file manager is CALLED here, since "Show in Finder" on Windows
@@ -891,7 +914,7 @@ export function renderProjectCentre(host: HTMLElement, project: ProjectDto, acti
       el("div", { className: "doc-topline" },
         el("span", { className: "insp-label", text: "Project" }),
         (() => {
-          const more = el("button", { className: "doc-menu", text: "\u22ef", tip: "More" });
+          const more = el("button", { className: "btn ghost icon doc-menu", text: icon.more, tip: "More" });
           more.addEventListener("click", (e) => { e.preventDefault(); actions.openProjectSettings(); });
           more.title = "Project Settings\u2026";
           return more;
@@ -913,11 +936,12 @@ export function renderProjectCentre(host: HTMLElement, project: ProjectDto, acti
     row.dataset["vc"] = vcKeys.box(box.id);
     row.addEventListener("contextmenu", itemMenu(() => actions.duplicateBox(box.id), () => actions.deleteBox(box.id)));
     row.append(grip());
-    wireCardDrag(row, box.id, "y", move);
+    wireDrop(row, box.id, "y", move);
     list.append(row);
   }
   list.append(el("button", { className: "listrow ghost", text: "+ New box", onClick: () => actions.newBox() }));
   host.replaceChildren(head, list);
+  playSettle(host);
 }
 
 /** Hands: the places on the board; each holds the cards it is dealt. */
@@ -934,11 +958,12 @@ export function renderHandsCentre(host: HTMLElement, box: BoxDto, actions: ViewA
     row.dataset["vc"] = vcKeys.hands(box.id);
     row.addEventListener("contextmenu", itemMenu(() => actions.duplicateHand(box.id, hand.id), () => actions.deleteHand(box.id, hand.id)));
     row.append(grip());
-    wireCardDrag(row, hand.id, "y", (from, to, before) => actions.moveHand(box.id, from, to, before));
+    wireDrop(row, hand.id, "y", (from, to, before) => actions.moveHand(box.id, from, to, before));
     list.append(row);
   }
   list.append(el("button", { className: "listrow ghost", text: "+ New hand", onClick: () => actions.newHand(box.id) }));
   host.replaceChildren(head, list);
+  playSettle(host);
 }
 
 // --- problems bar -------------------------------------------------------------
@@ -1020,7 +1045,7 @@ function fixButton(
   onFix: (p: Problem, fix: NonNullable<Problem["fix"]>, anchor: HTMLElement) => void,
 ): HTMLElement {
   const button = el("button", {
-    className: "problembar-fix", text: fixLabel(fix),
+    className: "btn problembar-fix", text: fixLabel(fix),
     tip: fix.kind === "declare-property"
       ? "Declare it, then take me to it"
       : "Point this at a tag that exists",

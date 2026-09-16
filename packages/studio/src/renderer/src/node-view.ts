@@ -13,7 +13,7 @@
 
 import Konva from "konva";
 import { el } from "./dom.js";
-import { openContextMenu } from "./context-menu.js";
+import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface } from "./canvas-surface.js";
 import { nodeCameraKey, recallCamera, rememberCamera } from "./canvas-memory.js";
 import { readCanvasTokens, watchCanvasTokens } from "./canvas-tokens.js";
@@ -167,7 +167,7 @@ export function mountNodeView(
   // The label says which cards it will touch, because the answer changes with the
   // selection and "arrange" is not a command you want to guess the scope of.
   const tidy = el("button", {
-    className: "camerabtn", text: "Arrange all by links",
+    className: "btn camerabtn", text: "Arrange all by links",
     tip: "Arrange by what links the cards (L)",
     onClick: () => layOut(),
   });

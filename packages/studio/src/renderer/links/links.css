@@ -18,19 +18,12 @@ body {
 }
 #links { height: 100%; display: flex; flex-direction: column; }
 
-button {
-  font: inherit; color: var(--muted); background: none;
-  border: 0; border-radius: var(--radius-sm); cursor: pointer;
-}
-button:hover { color: var(--accent); }
+/* No element `button` rule: the follow control is the shell's `.btn`
+   (controls.css, via theme.css). */
 
 /* In the bar: the follow control, and the quiet statement of the same fact when
    there is nothing to do about it. */
-.swin-follow {
-  font-size: 0.72rem; padding: 2px 9px;
-  border: 1px solid var(--line);
-}
-.swin-follow:hover { border-color: var(--accent); }
+.swin-follow { padding: 2px 9px; }
 .swin-note { font-size: 0.72rem; color: var(--muted); }
 
 .lbody { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 10px 12px 0; }

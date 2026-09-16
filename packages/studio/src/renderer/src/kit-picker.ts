@@ -25,6 +25,7 @@
 // using in anger first.
 // ---------------------------------------------------------------------------
 
+import { dialogFrame } from "@wildwinter/app-shell/dialog";
 import { el } from "./dom.js";
 
 export interface KitChoice<T extends string> {
@@ -50,17 +51,15 @@ export interface KitPickerOptions<T extends string> {
 }
 
 export function openKitPicker<T extends string>(opts: KitPickerOptions<T>): void {
-  const dialog = el("dialog", { className: "kit-dialog" }) as HTMLDialogElement;
-  // Removed on the native CLOSE event, not only from our own close().
-  // `<dialog>` gives Escape for free, but Escape calls close() without removing
-  // the element - so every dismissal left a closed dialog in the document, and
-  // the next open would find the stale one first. Hooking the event catches
-  // every route out: Escape, close(), and the form-method-dialog path.
-  dialog.addEventListener("close", () => dialog.remove());
-  const close = (): void => { dialog.close(); };
+  // The shell's dialog frame: the panel, the scrim, Escape, the exit motion and
+  // the teardown on every route out are its, so nothing here has to remember
+  // that a closed <dialog> is still in the document.
+  const frame = dialogFrame({ title: opts.title, className: "kit-dialog" });
+  const { dialog } = frame;
+  const close = (): void => { frame.close(); };
 
   const placeholder = opts.namePlaceholder;
-  const nameInput = placeholder === undefined ? undefined : el("input", { className: "kit-name" }) as HTMLInputElement;
+  const nameInput = placeholder === undefined ? undefined : el("input", { className: "field kit-name" }) as HTMLInputElement;
   if (nameInput !== undefined && placeholder !== undefined) {
     nameInput.placeholder = placeholder;
     // Enter picks the first kit, which is the one an author who typed a name and
@@ -85,8 +84,7 @@ export function openKitPicker<T extends string>(opts: KitPickerOptions<T>): void
     opts.onPick(kit, name);
   };
 
-  dialog.append(
-    el("h2", { className: "kit-title", text: opts.title }),
+  frame.body.append(
     el("p", { className: "kit-what", text: opts.what }),
     ...(nameInput ? [nameInput] : []),
     el("p", { className: "kit-sub", text: opts.sub }),
@@ -94,13 +92,13 @@ export function openKitPicker<T extends string>(opts: KitPickerOptions<T>): void
       el("button", { className: "kit-card", onClick: () => pick(k.id) },
         el("h3", { text: k.name }),
         el("p", { text: k.blurb }))),
-    el("div", { className: "kit-actions" },
-      el("button", { className: "kit-cancel", text: "Cancel", onClick: close })),
   );
+  const cancel = el("button", { className: "btn", text: "Cancel", onClick: close });
+  cancel.type = "button";
+  frame.actions.append(cancel);
 
   // The backdrop closes, as it did before; `<dialog>` gives Escape for free.
   dialog.addEventListener("click", (e) => { if (e.target === dialog) close(); });
-  document.body.append(dialog);
-  dialog.showModal();
+  frame.open();
   if (nameInput) nameInput.focus();
 }

@@ -1615,6 +1615,10 @@ export interface StudioApi {
   setShowResolved(on: boolean): Promise<void>;
   /** Open a URL in the real browser. A renderer cannot, and must not try. */
   openExternal(url: string): Promise<void>;
+  /** The renderer's first view is mounted, so main may show the window. Sent
+   *  once, fire-and-forget; main reveals on a timer too, so a boot that errors
+   *  before signalling cannot leave the window hidden. */
+  appReady(): void;
   /**
    * Record a canvas's furniture: its frames, whole.
    *

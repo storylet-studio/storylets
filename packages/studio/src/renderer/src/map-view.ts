@@ -26,7 +26,7 @@
 
 import { el } from "./dom.js";
 import { colourIndex } from "../../shell/colour.js";
-import { openContextMenu } from "./context-menu.js";
+import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface, type DrawContext } from "./canvas-surface.js";
 import { mapCameraKey, recallCamera, rememberCamera } from "./canvas-memory.js";
 import { readCanvasTokens, watchCanvasTokens } from "./canvas-tokens.js";

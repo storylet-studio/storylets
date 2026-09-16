@@ -31,7 +31,7 @@
 .canvasbtn {
   flex: none; display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; padding: 0;
-  border: none; background: none; color: var(--muted);
+  border: none; background: none; color: var(--muted); font: inherit;
   border-radius: var(--radius-sm); cursor: pointer;
   transition: background var(--dur-quick) var(--ease-standard), color var(--dur-quick) var(--ease-standard);
 }

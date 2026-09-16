@@ -13,26 +13,12 @@ body {
 }
 #table { height: 100%; display: flex; flex-direction: column; }
 
-.overline {
-  font: 600 0.66rem/1 var(--font-ui);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--muted);
-}
-button {
-  font: inherit;
-  color: var(--muted);
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 4px 12px;
-  cursor: pointer;
-}
-button:hover { background: var(--accent-soft); color: var(--accent); }
-button.primary { background: var(--accent); color: var(--surface); border-color: transparent; font-weight: 500; }
-button.primary:hover { filter: brightness(1.06); transition: filter var(--dur-quick) var(--ease-standard); }
-button.disabled { opacity: 0.45; cursor: default; }
-button.disabled:hover { background: none; color: var(--muted); }
+/* Section captions are `.caption` (theme.css): words, not an overline. */
+/* No element `button` rule: actions wear the shell's `.btn`, the switches its
+   `.seg` (controls.css, via theme.css). A locked outcome keeps a CLASS rather
+   than the disabled attribute, so its rollover can still say why. */
+.btn.disabled { opacity: 0.45; cursor: default; }
+.btn.disabled:hover { border-color: var(--line); background: var(--surface); }
 input, select {
   font: inherit;
   background: var(--card);
@@ -117,7 +103,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 
 /* Follow: off is the resting state, so it looks like the quiet button it is
    until somebody turns it on. */
-.followbtn { flex: none; font-size: 0.78rem; }
+.followbtn { flex: none; }
 .followbtn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
 /* Live Link (design/live-link.md). The "A game is connected. Watch it?" banner,
@@ -130,33 +116,22 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
   color: var(--ink); font: 0.85rem var(--font-ui);
 }
 .livebanner-msg { flex: 1; }
-.livebanner-go {
-  flex: none; font: inherit; padding: 4px 12px;
-  border: 1px solid var(--accent); border-radius: var(--radius-sm);
-  background: var(--accent); color: var(--surface); cursor: pointer;
-}
-.livebanner-go:hover { background: color-mix(in oklab, var(--accent) 85%, var(--ink)); }
-.livebanner-no { flex: none; border: none; background: none; color: var(--muted); padding: 2px 6px; }
+.livebanner-go, .livebanner-no { flex: none; }
 /* The observe-only note in the session strip, where seed usually sits. */
 .livenote { font-size: 0.78rem; color: var(--muted); font-style: italic; }
 
-/* The view switch: quiet, and it sits with the filters because "how am I
-   looking at this" belongs beside "what am I looking at". */
-.viewswitch { display: inline-flex; gap: 2px; }
-.viewswitch.livemode { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 1px; }
-/* Which participant is being watched: a plain control beside the switch, and
+/* The view switch: the shell's `.seg`, and it sits with the filters because
+   "how am I looking at this" belongs beside "what am I looking at". */
+/* Which participant is being watched: a plain control inside the switch, and
    only when a run has more than one flow to choose between. */
-.viewswitch .liveflow { max-width: 12ch; border: 0; background: transparent; color: inherit; font: inherit; }
-.vbtn { padding: 3px 10px; font-size: 0.78rem; }
-.vbtn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.viewswitch .liveflow { max-width: 12ch; border: 0; background: transparent; color: inherit; font: inherit; padding: 0 6px; }
 .maphere { display: inline-flex; align-items: baseline; gap: 6px; }
-.maphere-of { font: 600 0.66rem/1 var(--font-ui); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.maphere-of { font: 600 0.72rem/1 var(--font-ui); color: var(--muted); }
 .maphere-name { font-family: var(--font-mono); font-size: 0.8rem; }
 
 .runner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .qselect { font-family: var(--font-mono); font-size: 0.85rem; }
 .runner .arg, .filters .arg { width: 150px; font-family: var(--font-mono); font-size: 0.8rem; }
-.empty { color: var(--muted); font-style: italic; font-size: 0.82rem; }
 
 /* --- the turn dial + filter bar ---------------------------------------------- */
 .boardbar { display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
@@ -174,7 +149,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .clockrow { display: inline-flex; align-items: center; gap: 8px; font-size: 0.78rem; }
 .clockbox { font-family: var(--font-mono); color: var(--muted); min-width: 90px; }
 .clockval { font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
-.mini { font-size: 0.72rem; padding: 1px 8px; border-radius: var(--radius-pill); }
+.mini { font-size: 0.72rem; padding: 1px 8px; border-radius: var(--radius-pill); }   /* a `.btn`, pill-shaped and small */
 /* A timed box's unit, said once on its row so the numbers beside it read as
    time (design/engine-server.md 4.8). */
 .clockunit { color: var(--muted); font-size: 0.72rem; }
@@ -201,7 +176,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
   padding: 10px 14px;
   width: 176px; min-height: 58px;
   text-align: left;
-  color: var(--ink);
+  color: var(--ink); font: inherit; cursor: pointer;
 }
 .hcard h4 { font-family: var(--font-read); font-size: 0.92rem; font-weight: 600; margin: 0; }
 .hcard.on { border-color: var(--accent); outline: 1px solid var(--accent); }
@@ -240,7 +215,6 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .pp-head { display: flex; align-items: baseline; gap: 10px; }
 .pp-head h3 { font-family: var(--font-read); font-size: 1.1rem; margin: 0; flex: 1; }
 .pp-hand { font-size: 0.74rem; color: var(--muted); font-family: var(--font-mono); }
-.pp-close { border: 0; font-size: 1rem; padding: 0 6px; }
 .playpanel .beat { font-family: var(--font-read); font-size: 0.9rem; line-height: 1.45; margin: 0; }
 .pp-outcome { border-top: 1px solid var(--line-soft); padding-top: 10px; display: flex; flex-direction: column; gap: 5px; }
 .pp-otitle { font-family: var(--font-read); font-weight: 600; margin: 0; }
@@ -260,8 +234,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 }
 .snapname { width: 220px; }
 .snaprow { display: inline-flex; align-items: center; gap: 4px; }
-.snappick { font-size: 0.8rem; }
-.snapdel { border: 0; color: var(--danger); padding: 0 4px; }
+.snapdel { color: var(--danger); }
 
 /* The out-of-date banner is the shell's now (app-shell/stale.css). */
 
@@ -292,26 +265,14 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .srlabel { font-family: var(--font-mono); font-size: 0.72rem; }
 .srval { width: 58px; font-family: var(--font-mono); font-size: 0.76rem; padding: 2px 6px; }
 .srval.ro { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface); }
-/* A quality's ladder: the rungs in order, current one marked. Joined pills so
-   the row reads as one ladder rather than a list of buttons. */
-.srladder { display: inline-flex; }
-.srrung {
-  font-family: var(--font-mono); font-size: 0.72rem; padding: 2px 7px;
-  border: 1px solid var(--line-soft); background: var(--surface);
-  color: var(--muted); cursor: pointer;
-}
-.srrung + .srrung { border-left: none; }
-.srrung:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
-.srrung:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
-.srrung.on { background: var(--accent-soft, var(--line-soft)); color: var(--ink); font-weight: 600; }
-.srrung:hover:not(.on) { color: var(--ink); }
+/* A quality's ladder: the rungs in order, current one marked. The shell's
+   `.seg`, so the row reads as one ladder rather than a list of buttons; the
+   rung names keep the mono voice values use everywhere in this app. */
+.srrung { font-family: var(--font-mono); font-weight: 400; padding: 2px 7px; }
+.srrung.on { font-weight: 600; }
 
-.chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 0.7rem; border: 1px solid var(--line); border-radius: var(--radius-pill);
-  padding: 2px 9px; color: var(--muted);
-}
-.chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--muted); }
+/* A hand's tags: the shell's `.pill`, with the identity dot. */
+.pill i { flex: none; width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--muted); }
 
 /* --- the rail: Journal and State as tabs (board-legibility.md piece 2) -------- */
 .rail {
@@ -324,12 +285,6 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
   padding: 10px 12px 8px 14px;
   border-bottom: 1px solid var(--line-soft);
 }
-.railtab {
-  border: 0; padding: 3px 9px; cursor: pointer;
-  font: 600 0.66rem/1 var(--font-ui); text-transform: uppercase; letter-spacing: 0.07em;
-  color: var(--muted); background: none; border-radius: var(--radius-pill);
-}
-.railtab.on { color: var(--ink); background: var(--accent-soft); }
 .railgap { flex: 1; }
 
 /* --- the journal: the story of the session ------------------------------------- */
@@ -362,7 +317,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .jflt {
   font-size: 0.66rem; font-weight: 600; padding: 1px 8px;
   border: 1px solid var(--line-soft); border-radius: var(--radius-pill);
-  background: transparent; color: var(--muted); opacity: 0.55; cursor: pointer;
+  background: transparent; color: var(--muted); opacity: 0.55; cursor: pointer; font-family: inherit;
   transition: opacity var(--dur-quick) var(--ease-standard), border-color var(--dur-quick) var(--ease-standard);
 }
 .jflt.on { opacity: 1; border-color: var(--line); color: var(--ink); }
@@ -399,7 +354,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .boardbox-head { display: flex; align-items: baseline; gap: 8px; margin: 10px 2px 2px; }
 .boardbox-head:first-child { margin-top: 0; }
 .bbname { font-family: var(--font-read); font-weight: 600; font-size: 0.92rem; color: var(--ink); }
-.bbadge { font-size: 0.72rem; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px; }
+.bbadge { font-size: 0.72rem; color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-pill); padding: 1px 8px; }
 .hcell.rippled { animation: ripple-pulse 1.1s ease-out 2; }
 @keyframes ripple-pulse {
   0% { box-shadow: 0 0 0 0 var(--accent-soft); }

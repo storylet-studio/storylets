@@ -18,11 +18,14 @@
 // has refused with things this change breaks, one tick per break in the far
 // end's own words. Nothing here paraphrases a refusal.
 //
-// The shell's `confirm-*` classes, like the updater's prompt, so both wear the
-// app's own typography rather than a second look invented for one dialog.
+// On the shell's dialog frame (dialogFrame), like the updater's prompt and the
+// shell's own confirm, so all of them wear one panel, one scrim, one actions
+// row and the app's own typography rather than a second look invented for one
+// dialog. The buttons are the family's `.btn` / `.btn.primary`.
 // ---------------------------------------------------------------------------
 
 import { labelled } from "@wildwinter/app-shell";
+import { dialogFrame } from "@wildwinter/app-shell/dialog";
 import { el } from "./dom.js";
 import { readPairingLink } from "../../shared/api.js";
 import type { LeavePromptDto, LeaveSettledDto } from "../../shared/api.js";
@@ -54,13 +57,22 @@ export interface ConnectOptions {
  *  or to null when the author backed out. */
 export function askServer(opts: ConnectOptions = {}): Promise<ConnectAnswer | { forget: string } | null> {
   return new Promise((resolve) => {
-    const dlg = el("dialog", "confirm-dialog server-dialog");
-    dlg.append(el("div", "confirm-title", "Connect to a server"));
+    let done = false;
+    const finish = (answer: ConnectAnswer | { forget: string } | null): void => {
+      if (done) return;
+      done = true;
+      resolve(answer);
+      frame.close();
+    };
+    const frame = dialogFrame({
+      title: "Connect to a server", className: "server-dialog",
+      onClose: () => finish(null),   // Esc, or closed by someone else
+    });
 
-    const address = el("input", "insp-input");
+    const address = el("input", "field insp-input");
     address.type = "text";
     address.value = opts.address ?? "";
-    const code = el("input", "insp-input");
+    const code = el("input", "field insp-input");
     code.type = "text";
 
     // Quiet, and hidden until a link says otherwise.
@@ -106,26 +118,19 @@ export function askServer(opts: ConnectOptions = {}): Promise<ConnectAnswer | { 
     address.addEventListener("input", fold);
 
     // The shell's captioned field, so this dialog has no look of its own.
-    dlg.append(el("div", "confirm-body", labelled("Address", address), pinned, labelled("Code", code)));
-
-    const actions = el("div", "confirm-actions");
-    let done = false;
-    const finish = (answer: ConnectAnswer | { forget: string } | null): void => {
-      if (done) return;
-      done = true;
-      dlg.close();
-      dlg.remove();
-      resolve(answer);
-    };
+    frame.body.append(labelled("Address", address), pinned, labelled("Code", code));
 
     if (opts.offerForget === true) {
-      const forget = el("button", "confirm-btn cancel", "Forget this server");
+      const forget = el("button", "btn", "Forget this server");
+      forget.type = "button";
       forget.addEventListener("click", () => finish({ forget: address.value.trim() }));
-      actions.append(forget);
+      frame.actions.append(forget);
     }
-    const cancel = el("button", "confirm-btn cancel", "Cancel");
+    const cancel = el("button", "btn", "Cancel");
+    cancel.type = "button";
     cancel.addEventListener("click", () => finish(null));
-    const connect = el("button", "confirm-btn", "Connect");
+    const connect = el("button", "btn primary", "Connect");
+    connect.type = "button";
     const submit = (): void => {
       const a = address.value.trim();
       const c = code.value.trim();
@@ -136,12 +141,9 @@ export function askServer(opts: ConnectOptions = {}): Promise<ConnectAnswer | { 
     for (const input of [address, code]) {
       input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
     }
-    actions.append(cancel, connect);
-    dlg.append(actions);
+    frame.actions.append(cancel, connect);
 
-    dlg.addEventListener("cancel", (e) => { e.preventDefault(); finish(null); });
-    document.body.append(dlg);
-    dlg.showModal();
+    frame.open();
     // The code is what an author has in their hand; the address is usually
     // already right when it is there at all.
     queueMicrotask(() => (opts.address ? code : address).focus());
@@ -180,14 +182,24 @@ export interface PushAnswer {
  *  backed out. */
 export function askPush(opts: PushOptions): Promise<PushAnswer | null> {
   return new Promise((resolve) => {
-    const dlg = el("dialog", "confirm-dialog server-dialog push-dialog");
-    dlg.append(el("div", "confirm-title", "Push"));
+    let done = false;
+    const finish = (answer: PushAnswer | null): void => {
+      if (done) return;
+      done = true;
+      resolve(answer);
+      frame.close();
+    };
+    const frame = dialogFrame({
+      title: "Push", className: "server-dialog push-dialog",
+      onClose: () => finish(null),
+    });
 
-    const note = el("input", "insp-input");
+    const note = el("input", "field insp-input");
     note.type = "text";
     note.value = opts.note ?? "";
 
-    const body = el("div", "confirm-body", labelled("Note", note));
+    const body = frame.body;
+    body.append(labelled("Note", note));
     const breaks = opts.breaks ?? [];
     const ticks: HTMLInputElement[] = [];
     if (breaks.length > 0) {
@@ -209,21 +221,12 @@ export function askPush(opts: PushOptions): Promise<PushAnswer | null> {
     // The status is a fact about the project, not a field: it sits under what
     // is being asked, in the same words the Server menu uses.
     body.append(el("p", "push-status", opts.status));
-    dlg.append(body);
 
-    const actions = el("div", "confirm-actions");
-    let done = false;
-    const finish = (answer: PushAnswer | null): void => {
-      if (done) return;
-      done = true;
-      dlg.close();
-      dlg.remove();
-      resolve(answer);
-    };
-
-    const cancel = el("button", "confirm-btn cancel", "Cancel");
+    const cancel = el("button", "btn", "Cancel");
+    cancel.type = "button";
     cancel.addEventListener("click", () => finish(null));
-    const push = el("button", "confirm-btn", "Push");
+    const push = el("button", "btn primary", "Push");
+    push.type = "button";
     const acknowledged = (): boolean => ticks.every((t) => t.checked);
     const reflect = (): void => { push.disabled = !acknowledged(); };
     for (const tick of ticks) tick.addEventListener("change", reflect);
@@ -237,12 +240,9 @@ export function askPush(opts: PushOptions): Promise<PushAnswer | null> {
     };
     push.addEventListener("click", submit);
     note.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
-    actions.append(cancel, push);
-    dlg.append(actions);
+    frame.actions.append(cancel, push);
 
-    dlg.addEventListener("cancel", (e) => { e.preventDefault(); finish(null); });
-    document.body.append(dlg);
-    dlg.showModal();
+    frame.open();
     queueMicrotask(() => (breaks.length > 0 ? ticks[0]! : note).focus());
   });
 }
@@ -265,24 +265,27 @@ export function askPush(opts: PushOptions): Promise<PushAnswer | null> {
  */
 export function askLeave(opts: LeavePromptDto): Promise<number> {
   return new Promise((resolve) => {
-    const dlg = el("dialog", "confirm-dialog server-dialog leave-dialog");
+    let done = false;
+    let guard: ReturnType<typeof setTimeout> | undefined;
+    const shut = (): void => {
+      if (live?.dlg === frame.dialog) live = undefined;
+      if (guard !== undefined) clearTimeout(guard);
+      frame.close();
+    };
     // The status line is the headline, as it is on the push dialog: where the
     // project stands is the whole reason the question is being asked, and it
     // NAMES the project, because the moment it is asked is the moment a second
     // one is arriving.
-    const title = el("div", "confirm-title", opts.message);
-    const body = el("div", "confirm-body", opts.detail);
-    dlg.append(title, body);
-
-    const actions = el("div", "confirm-actions");
-    let done = false;
-    let guard: ReturnType<typeof setTimeout> | undefined;
-    const shut = (): void => {
-      if (live?.dlg === dlg) live = undefined;
-      if (guard !== undefined) clearTimeout(guard);
-      dlg.close();
-      dlg.remove();
-    };
+    const frame = dialogFrame({
+      title: opts.message, className: "server-dialog leave-dialog",
+      // Esc is Cancel, not a fourth answer: main is waiting on an index. Any
+      // other way out (closed by someone else) reads the same.
+      onClose: () => { shut(); finish(opts.cancelId); },
+    });
+    const title = frame.dialog.querySelector(".shell-dialog-title")!;
+    const body = frame.body;
+    body.append(el("div", "confirm-body", opts.detail));
+    const actions = frame.actions;
     const finish = (index: number): void => {
       if (done) return;
       done = true;
@@ -301,25 +304,22 @@ export function askLeave(opts: LeavePromptDto): Promise<number> {
     opts.buttons.forEach((label, i) => {
       // The way out reads as the quiet one, the default as the affirmative:
       // the pairing every other confirm in the app uses.
-      const button = el("button", i === opts.cancelId ? "confirm-btn cancel" : "confirm-btn", label);
+      const button = el("button", i === opts.defaultId ? "btn primary" : "btn", label);
+      button.type = "button";
       button.addEventListener("click", () => finish(i));
       actions.append(button);
       if (i === opts.defaultId) queueMicrotask(() => button.focus());
     });
-    dlg.append(actions);
 
-    // Esc is Cancel, not a fourth answer: main is waiting on an index.
-    dlg.addEventListener("cancel", (e) => { e.preventDefault(); finish(opts.cancelId); });
     live = {
-      dlg,
+      dlg: frame.dialog,
       settle: (message) => {
         title.textContent = message;
         body.remove();
       },
       shut,
     };
-    document.body.append(dlg);
-    dlg.showModal();
+    frame.open();
   });
 }
 

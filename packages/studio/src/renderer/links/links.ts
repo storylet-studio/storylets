@@ -30,7 +30,7 @@ import { applyTheme } from "../src/theme.js";
 import { toolWindowHead } from "../src/tool-window-head.js";
 import { el } from "../src/dom.js";
 import { initTooltips } from "@wildwinter/app-shell";
-import { openContextMenu } from "../src/context-menu.js";
+import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasSurface } from "../src/canvas-surface.js";
 import { readCanvasTokens, watchCanvasTokens } from "../src/canvas-tokens.js";
 import { drawCardNode, paintCaptions, paintEdges, NODE_H, NODE_W, NODE_RADIUS, type CardNode, TITLE_FLOOR } from "../src/node-art.js";
@@ -307,7 +307,7 @@ function render(): void {
     // Walking away from the editor's selection is a state worth showing, with one
     // click back: otherwise the window looks stuck.
     trail: [walked !== undefined
-      ? el("button", { className: "swin-follow", text: "Follow the editor", onClick: () => void show(undefined) })
+      ? el("button", { className: "btn swin-follow", text: "Follow the editor", onClick: () => void show(undefined) })
       : el("span", { className: "swin-note", text: "Following the editor." })],
   });
 

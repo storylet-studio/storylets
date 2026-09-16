@@ -16,7 +16,7 @@
 
 import { el } from "./dom.js";
 import { bindPropertyName, dupGuard, expandableRow, firstIllegalPropertyName, focusNewRow, iconBtn,
-  labelled, moveItem, PROPERTY_NAME_HINT, tagChips } from "@wildwinter/app-shell";
+  labelled, moveItem, PROPERTY_NAME_HINT, stageChips, tagChips } from "@wildwinter/app-shell";
 import type { SettingsSectionHandle } from "@wildwinter/app-shell";
 import type { PropertyDeclDto } from "../../shared/api.js";
 import { shows } from "./play-ladder.js";
@@ -50,7 +50,7 @@ function defaultControl(p: PropertyDeclDto, onChange?: () => void): HTMLElement 
     sel.addEventListener("change", () => { p.default = sel.value; onChange?.(); });
     return sel;
   }
-  if (p.type === "flags") return el("span", { className: "set-dim", text: "starts empty" });
+  if (p.type === "flags") return el("span", { className: "set-dim", text: "Starts empty." });
   if (p.type === "quality") {
     // The default is a STAGE; blank means the first rung, which is what a
     // quality nearly always wants (design/quality.md).
@@ -192,11 +192,11 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
         })));
       }
       if (p.type === "quality") {
-        // The ladder, in order: the chips ARE the meaning here, so the same
-        // editor enum values use, over `stages`. Reorder matters and the chip
-        // editor preserves authored order.
-        const holder = { get values() { return (p as { stages?: string[] }).stages; }, set values(v) { (p as { stages?: string[] }).stages = v; } };
-        details.push(labelled("Stages", tagChips(holder as { values?: string[] }, () => {
+        // The ladder, in order: the chips ARE the meaning here, so the shell's
+        // ORDERED chip editor over `stages`, numbered, with move earlier / later
+        // on each. (A `tagChips` shim over a `values` holder kept the order but
+        // lost the controls to change it.)
+        details.push(labelled("Stages", stageChips(p as { stages?: string[] }, () => {
           const nd = defaultControl(p, changed); def.replaceWith(nd); def = nd; changed();
         })));
       }

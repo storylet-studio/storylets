@@ -20,11 +20,11 @@ export interface PlayChoice { gameId: string; title?: string; available: boolean
 export function playChoices(outcomes: readonly PlayChoice[], choose: (gameId: string) => void, done: () => void): HTMLElement {
   const row = el("div", { className: "pp-actions" });
   if (outcomes.length === 0) {
-    row.append(el("button", { className: "pp-done", text: "Done", onClick: done }));
+    row.append(el("button", { className: "btn pp-done", text: "Done", onClick: done }));
     return row;
   }
   for (const o of outcomes) {
-    const b = el("button", { className: o.available ? "" : "disabled", text: `${o.title ?? o.gameId}${o.available ? "" : " (locked)"}` });
+    const b = el("button", { className: o.available ? "btn" : "btn disabled", text: `${o.title ?? o.gameId}${o.available ? "" : " (locked)"}` });
     if (!o.available) b.title = "Unavailable. This outcome's condition isn't met in the current state.";
     else b.addEventListener("click", () => choose(o.gameId));
     row.append(b);

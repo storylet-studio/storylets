@@ -33,6 +33,9 @@
    --------------------------------------------------------------------------- */
 
 @import "@wildwinter/app-shell/tokens.css";
+@import "@wildwinter/app-shell/controls.css";
+@import "@wildwinter/app-shell/dialog.css";
+@import "@wildwinter/app-shell/context-menu.css";
 @import "@wildwinter/app-shell/pane-shell.css";
 @import "@wildwinter/app-shell/settings.css";
 @import "@wildwinter/app-shell/tool-window.css";
@@ -40,6 +43,12 @@
 @import "@wildwinter/app-shell/save.css";
 @import "@wildwinter/app-shell/stale.css";
 @import "@wildwinter/app-shell/stepper.css";
+
+/* The one section caption, for every window: sentence-case words in the UI
+   face, weight 600, muted. Not an overline: the tracked-caps eyebrow is
+   retired everywhere but table column heads, which wear the shell's
+   `.overline` ("Captions are words, not overlines", design-language.md). */
+.caption { font: 600 0.8rem/1.3 var(--font-ui); color: var(--muted); }
 
 :root {
   --bg: #e6eaef;

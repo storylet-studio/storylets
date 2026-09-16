@@ -170,6 +170,7 @@ const api: StudioApi = {
   setIdentity: (identity) => ipcRenderer.invoke("identity:set", identity),
   setShowResolved: (on) => ipcRenderer.invoke("comments:showResolved", on),
   openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
+  appReady: () => ipcRenderer.send("app:ready"),
   setCanvasFurniture: (boxId, ref, furniture, label, coalesce) =>
     ipcRenderer.invoke("canvas:setFurniture", boxId, ref, furniture, label, coalesce),
   moveCardsOnCanvas: (deckId: string, placements: { id: string; x: number; y: number }[]) =>

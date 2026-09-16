@@ -59,7 +59,7 @@ export function mountDriverList(host: HTMLElement, drivers: CoverageDriverDto[],
     list.replaceChildren();
     if (drivers.length === 0) {
       list.append(el("p", {
-        className: "set-empty",
+        className: "empty set-empty",
         text: "No drivers. Content gated on @world will read as never dealt.",
       }));
     }

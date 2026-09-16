@@ -14,7 +14,7 @@
 // views share it without either growing a mode for the other's sake.
 // ---------------------------------------------------------------------------
 
-import { openContextMenu } from "./context-menu.js";
+import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { FURNITURE_COLOURS } from "@storylet-studio/model";
 import type { CanvasFurnitureDto, FrameDto } from "../../shared/api.js";
 import type { CanvasItem, CanvasSurface } from "./canvas-surface.js";

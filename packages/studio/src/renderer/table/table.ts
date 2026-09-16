@@ -415,7 +415,7 @@ function peek(): void {
 const chip = (text: string): HTMLElement => {
   const dot = el("i");
   dot.style.background = `var(--char-${colourIndex(text)})`;
-  return el("span", { className: "chip" }, dot, text);
+  return el("span", { className: "pill" }, dot, text);
 };
 
 /** Union of tag groups across boxes, for the board filter bar. */
@@ -689,7 +689,7 @@ function playPanel(): HTMLElement | null {
     el("div", { className: "pp-head" },
       el("h3", { text: held.title ?? held.gameId }),
       el("span", { className: "pp-hand", text: `in ${open.hand}` }),
-      el("button", { className: "pp-close", text: icon.close, tip: "Put it back", onClick: () => { open = undefined; pending = undefined; render(); } })),
+      el("button", { className: "btn ghost icon pp-close", text: icon.close, tip: "Put it back", onClick: () => { open = undefined; pending = undefined; render(); } })),
     held.purpose ? el("p", { className: "beat", text: held.purpose }) : null,
   );
   const chosen = pending !== undefined ? outcomes.find((o) => o.gameId === pending) : undefined;
@@ -697,12 +697,12 @@ function playPanel(): HTMLElement | null {
     // Step two: what happens, then commit.
     panel.append(
       el("div", { className: "pp-outcome" },
-        el("span", { className: "overline", text: "Outcome" }),
+        el("span", { className: "caption", text: "Outcome" }),
         el("p", { className: "pp-otitle", text: chosen.title ?? chosen.gameId }),
         chosen.purpose ? el("p", { className: "beat", text: chosen.purpose }) : null),
       el("div", { className: "pp-actions" },
-        el("button", { text: "Back", onClick: () => { pending = undefined; render(); } }),
-        el("button", { className: "primary", text: "Continue", onClick: playPending })));
+        el("button", { className: "btn", text: "Back", onClick: () => { pending = undefined; render(); } }),
+        el("button", { className: "btn primary", text: "Continue", onClick: playPending })));
   } else {
     // A card with no outcomes gets one Done button that plays it with none.
     panel.append(playChoices(outcomes,
@@ -721,22 +721,22 @@ function turnDial(): HTMLElement {
   if (clocks.length === 1) {
     const one = clocks[0]!;
     return el("div", { className: "dial" },
-      el("span", { className: "overline", text: one.seconds !== undefined ? `Turn (${turnSpan(1, one.seconds)} each)` : "Turn" }),
+      el("span", { className: "caption", text: one.seconds !== undefined ? `Turn (${turnSpan(1, one.seconds)} each)` : "Turn" }),
       el("span", { className: "dialnum", text: String(one.turn) }),
-      el("button", { className: "primary", text: "Next turn", tip: "Advance the clock and refresh the hands", onClick: nextTurn }),
+      el("button", { className: "btn primary", text: "Next turn", tip: "Advance the clock and refresh the hands", onClick: nextTurn }),
       ...timeSteps(one));
   }
   return el("div", { className: "dial clocksdial" },
     el("div", { className: "clockshead" },
-      el("span", { className: "overline", text: "Clocks", tip: "Every box keeps its own clock. A play advances only its own box." }),
-      el("button", { className: "primary", text: "Next turn", tip: "Advance every box's clock and refresh the hands", onClick: nextTurn })),
+      el("span", { className: "caption", text: "Clocks", tip: "Every box keeps its own clock. A play advances only its own box." }),
+      el("button", { className: "btn primary", text: "Next turn", tip: "Advance every box's clock and refresh the hands", onClick: nextTurn })),
     el("div", { className: "clocks" },
       ...clocks.map((c) => el("span", { className: "clockrow" },
         el("span", { className: "clockbox", text: c.box }),
         el("span", { className: "clockval", text: String(c.turn) }),
         c.seconds !== undefined
           ? el("span", { className: "clockunit", text: `${turnSpan(1, c.seconds)} a turn` })
-          : el("button", { className: "mini", text: "+1", tip: `Advance only ${c.box} (clocks run forward only)`,
+          : el("button", { className: "btn mini", text: "+1", tip: `Advance only ${c.box} (clocks run forward only)`,
               onClick: () => { table!.session.advanceTurns(c.box, 1); refreshBoard(); render(); } }),
         ...timeSteps(c)))));
 }
@@ -751,7 +751,7 @@ function timeSteps(clock: { box: string; seconds?: number }): HTMLElement[] {
   if (clock.seconds === undefined) return [];
   const step = Math.max(1, Math.round(60 / clock.seconds));
   return [step, step * 10].map((n) => el("button", {
-    className: "mini", text: `+${turnSpan(n, clock.seconds!)}`,
+    className: "btn mini", text: `+${turnSpan(n, clock.seconds!)}`,
     tip: `Advance ${clock.box} by ${n} turn${n === 1 ? "" : "s"} (clocks run forward only)`,
     onClick: () => { table!.session.advanceTurns(clock.box, n); refreshBoard(); render(); },
   }));
@@ -763,12 +763,12 @@ function liveTurnDial(): HTMLElement {
   const turns = Object.entries(liveRun?.turns ?? {});
   if (turns.length <= 1) {
     return el("div", { className: "dial" },
-      el("span", { className: "overline", text: "Turn" }),
+      el("span", { className: "caption", text: "Turn" }),
       el("span", { className: "dialnum", text: String(turns[0]?.[1] ?? 0) }));
   }
   return el("div", { className: "dial clocksdial" },
     el("div", { className: "clockshead" },
-      el("span", { className: "overline", text: "Clocks", tip: "Every box keeps its own clock. The game advances them." })),
+      el("span", { className: "caption", text: "Clocks", tip: "Every box keeps its own clock. The game advances them." })),
     el("div", { className: "clocks" },
       ...turns.map(([box, turn]) => el("span", { className: "clockrow" },
         el("span", { className: "clockbox", text: box }),
@@ -811,7 +811,7 @@ function liveNotDealt(): HTMLElement | null {
   nd.append(el("summary", { text: "Not listed · why" }));
   for (const [hand, ns] of byHand) {
     const block = el("div", { className: "notdealt" });
-    block.append(el("span", { className: "overline", text: hand }));
+    block.append(el("span", { className: "caption", text: hand }));
     for (const n of ns) {
       block.append(el("div", { className: "ndrow" },
         el("span", { className: "ndname", text: n.title ?? n.gameId }),
@@ -830,14 +830,14 @@ function liveSwitch(): HTMLElement | null {
   // made two <select> elements with two change listeners on every render and
   // threw the first away; the `!` was there to paper over the second call.
   const follow = followPicker();
-  return el("div", { className: "viewswitch livemode" },
+  return el("div", { className: "seg viewswitch livemode" },
     el("button", {
-      className: `vbtn${liveMode ? " on" : ""}`, text: "Live",
+      className: `seg-opt vbtn${liveMode ? " on" : ""}`, text: "Live",
       tip: "Watch the connected game's run",
       onClick: () => { if (!liveMode) void enterLive(); },
     }),
     el("button", {
-      className: `vbtn${liveMode ? "" : " on"}`, text: "Local",
+      className: `seg-opt vbtn${liveMode ? "" : " on"}`, text: "Local",
       tip: "Play your own session on the Board",
       onClick: () => { if (liveMode) leaveLive(); },
     }),
@@ -878,8 +878,8 @@ function liveBanner(): HTMLElement | null {
   if (liveMode || liveBannerDismissed || liveStatus.state !== "connected") return null;
   return el("div", { className: "livebanner" },
     el("span", { className: "livebanner-msg", text: "A game is connected. Watch it?" }),
-    el("button", { className: "livebanner-go", text: "Watch it", onClick: () => void enterLive() }),
-    el("button", { className: "livebanner-no", text: icon.close, tip: "Dismiss", onClick: () => { liveBannerDismissed = true; render(); } }));
+    el("button", { className: "btn primary livebanner-go", text: "Watch it", onClick: () => void enterLive() }),
+    el("button", { className: "btn ghost icon livebanner-no", text: icon.close, tip: "Dismiss", onClick: () => { liveBannerDismissed = true; render(); } }));
 }
 
 function snapshotPanel(): HTMLElement | null {
@@ -893,8 +893,8 @@ function snapshotPanel(): HTMLElement | null {
       snapPanel = undefined; render();
     };
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { snapPanel = undefined; render(); } });
-    const panel = el("div", { className: "snappanel" }, input, el("button", { text: "Save", onClick: save }),
-      el("button", { text: "Export…", tip: "Write the current state to a .storyletsave file", onClick: () => {
+    const panel = el("div", { className: "snappanel" }, input, el("button", { className: "btn", text: "Save", onClick: save }),
+      el("button", { className: "btn", text: "Export…", tip: "Write the current state to a .storyletsave file", onClick: () => {
         void studio.exportSave(table!.saveFile(), name || "session").then((r) => {
           if (r === null) return;   // cancelled: the panel stays
           if ("error" in r) { loadError = r.error; } else { snapPanel = undefined; }
@@ -907,7 +907,7 @@ function snapshotPanel(): HTMLElement | null {
   const list = el("div", { className: "snappanel" });
   snapshots.forEach((s, i) => {
     list.append(el("div", { className: "snaprow" },
-      el("button", { className: "snappick", text: s.name, onClick: () => {
+      el("button", { className: "btn snappick", text: s.name, onClick: () => {
         try { table!.loadFile(s.file); } catch (e) { loadError = e instanceof Error ? e.message : String(e); }
         // A restored world is a different position; the trail that led to the
         // old one never led to this.
@@ -916,10 +916,10 @@ function snapshotPanel(): HTMLElement | null {
         board = table!.dealAll();
         render();
       } }),
-      el("button", { className: "snapdel", text: icon.close, tip: "Delete snapshot", onClick: () => { snapshots = snapshots.filter((_, j) => j !== i); render(); } })));
+      el("button", { className: "btn ghost icon snapdel", text: icon.close, tip: "Delete snapshot", onClick: () => { snapshots = snapshots.filter((_, j) => j !== i); render(); } })));
   });
   if (snapshots.length === 0) list.append(el("span", { className: "empty", text: "No snapshots yet." }));
-  list.append(el("button", { text: "Import…", tip: "Load a .storyletsave file (it also joins the snapshots)", onClick: () => {
+  list.append(el("button", { className: "btn", text: "Import…", tip: "Load a .storyletsave file (it also joins the snapshots)", onClick: () => {
     void studio.importSave().then((r) => {
       if (r === null) return;   // cancelled
       if ("error" in r) { loadError = r.error; render(); return; }
@@ -945,7 +945,7 @@ function statePanel(): HTMLElement {
   const details = el("div", { className: "statepanel" });
 
   // The raw state, editable (poking it simulates the game writing).
-  details.append(el("span", { className: "overline", text: "Story state" }));
+  details.append(el("span", { className: "caption", text: "Story state" }));
   const stateEl = el("div", { className: "statestrip" });
   for (const r of table!.stateRows()) {
     const wrap = el("span", { className: "sr" }, el("span", { className: "srlabel", text: r.label }));
@@ -955,10 +955,10 @@ function statePanel(): HTMLElement {
       // directly: a free-text input here would invite the exact stage typos
       // the compiler exists to refuse, and jumping an arc to "resolved" to
       // look at the late cards is the whole reason a tester wants this row.
-      const ladder = el("span", { className: "srladder" });
+      const ladder = el("span", { className: "seg srladder" });
       for (const stage of r.stages) {
         ladder.append(el("button", {
-          className: `srrung${r.value === stage ? " on" : ""}`, text: stage,
+          className: `seg-opt srrung${r.value === stage ? " on" : ""}`, text: stage,
           tip: r.value === stage ? "The current stage" : `Jump to "${stage}"`,
           onClick: () => {
             try { table!.meddle(r.path, stage, r.label); refreshBoard(); render(); }
@@ -993,7 +993,7 @@ function statePanel(): HTMLElement {
     select.append(opt);
   }
   select.addEventListener("change", () => { peekBox = select.value; render(); });
-  runner.append(el("span", { className: "overline", text: "Peek the stock" }), select);
+  runner.append(el("span", { className: "caption", text: "Peek the stock" }), select);
   for (const group of info?.groups ?? []) {
     const sel = el("select", { className: "arg" });
     const any = el("option", { text: `${group.gameId}: any` }); any.value = "";
@@ -1007,7 +1007,7 @@ function statePanel(): HTMLElement {
     sel.addEventListener("change", () => { criteria[group.gameId] = sel.value; });
     runner.append(sel);
   }
-  runner.append(el("button", { text: "Peek", onClick: peek }));
+  runner.append(el("button", { className: "btn", text: "Peek", onClick: peek }));
   details.append(runner);
 
   if (peekStamp !== undefined && (peeked.length > 0 || notDealt.length > 0)) {
@@ -1018,7 +1018,7 @@ function statePanel(): HTMLElement {
     const staleP = lastSeq !== peekStamp.lastSeq;
     const results = el("div", { className: `peekresults${staleP ? " stale" : ""}` });
     results.append(el("div", { className: "peeknote" },
-      el("span", { className: "overline", text: `Peeked ${peekStamp.box} at clock ${peekStamp.clock}` }),
+      el("span", { className: "caption", text: `Peeked ${peekStamp.box} at clock ${peekStamp.clock}` }),
       staleP ? el("span", { className: "empty", text: "The session has moved on. Peek again." }) : null));
     if (peeked.length > 0) {
       const list = el("div", { className: "peeked" });
@@ -1031,7 +1031,7 @@ function statePanel(): HTMLElement {
     }
     if (notDealt.length > 0) {
       const nd = el("div", { className: "notdealt" });
-      nd.append(el("span", { className: "overline", text: "Not listed · why" }));
+      nd.append(el("span", { className: "caption", text: "Not listed · why" }));
       for (const n of notDealt) {
         nd.append(el("div", { className: "ndrow" },
           el("span", { className: "ndname", text: n.title ?? n.gameId }),
@@ -1049,7 +1049,7 @@ function render(): void {
     root.replaceChildren(el("div", { className: "loaderr" },
       el("h2", { text: "The Board can't run yet" }),
       el("pre", { text: loadError }),
-      el("button", { className: "primary", text: "Try again", onClick: () => void build() }),
+      el("button", { className: "btn primary", text: "Try again", onClick: () => void build() }),
     ));
     return;
   }
@@ -1067,9 +1067,9 @@ function render(): void {
   // List | Map: the same board, two ways of looking at it. Offered only when the
   // project has a map, and never a mode with different RULES - the filters, the
   // selection and the reveal gesture are the same in both.
-  const viewSwitch = mapChoices().length === 0 ? null : el("div", { className: "viewswitch" },
+  const viewSwitch = mapChoices().length === 0 ? null : el("div", { className: "seg viewswitch" },
     ...(["list", "map"] as const).map((v) => el("button", {
-      className: `vbtn${view === v ? " on" : ""}`, text: v === "list" ? "List" : "Map",
+      className: `seg-opt vbtn${view === v ? " on" : ""}`, text: v === "list" ? "List" : "Map",
       tip: v === "list" ? "This box's hands as a list" : "This box seen from above",
       onClick: () => { view = v; void studio.setBoardView(v); if (v === "map") { void loadMap(); showMap(); } render(); },
     })));
@@ -1146,7 +1146,7 @@ function render(): void {
   const groups = filterGroups();
   const filterBar = el("div", { className: "filters" });
   if (groups.length > 0) {
-    filterBar.append(el("span", { className: "overline", text: "Showing" }));
+    filterBar.append(el("span", { className: "caption", text: "Showing" }));
     for (const group of groups) {
       const sel = el("select", { className: "arg" });
       const any = el("option", { text: `${group.gameId}: all` }); any.value = "";
@@ -1174,7 +1174,7 @@ function render(): void {
   const inScope = table.hands().filter((h) => boxSel === undefined || h.box === boxSel).length;
   const hiddenCount = inScope - declared.length;
   if (active.length > 0 && hiddenCount > 0) {
-    filterBar.append(el("span", { className: "empty", text: `${hiddenCount} hand${hiddenCount === 1 ? "" : "s"} hidden` }));
+    filterBar.append(el("span", { className: "empty", text: `${hiddenCount} hand${hiddenCount === 1 ? "" : "s"} hidden.` }));
   }
   const boxes = table.boxes();
   if (boxSel === undefined && boxes.length > 1) {
@@ -1276,13 +1276,14 @@ function render(): void {
   const showJournal = railTab === "journal" || !withState;
   const rail = el("aside", { className: "rail" },
     el("div", { className: "railtabs" },
-      el("button", { className: `railtab${showJournal ? " on" : ""}`, text: "Journal",
-        onClick: () => { railTab = "journal"; render(); } }),
-      withState ? el("button", { className: `railtab${railTab === "state" ? " on" : ""}`, text: "State",
-        tip: "The live story state, and the stock peek",
-        onClick: () => { railTab = "state"; render(); } }) : null,
+      el("div", { className: "seg" },
+        el("button", { className: `seg-opt railtab${showJournal ? " on" : ""}`, text: "Journal",
+          onClick: () => { railTab = "journal"; render(); } }),
+        withState ? el("button", { className: `seg-opt railtab${railTab === "state" ? " on" : ""}`, text: "State",
+          tip: "The live story state, and the stock peek",
+          onClick: () => { railTab = "state"; render(); } }) : null),
       el("span", { className: "railgap" }),
-      showJournal ? el("button", { className: "mini", text: "Copy", tip: "Copy the journal (as filtered)",
+      showJournal ? el("button", { className: "btn mini", text: "Copy", tip: "Copy the journal (as filtered)",
         onClick: () => void navigator.clipboard.writeText(journalText()) }) : null),
     // The filter chips stay put while the story scrolls beneath them.
     showJournal ? jfilters : null,
@@ -1300,7 +1301,7 @@ function render(): void {
       onClose: () => void studio.closeBoard(),
       lead: [el("span", { className: "tname", text: name })],
       trail: [el("button", {
-        className: `followbtn${follow ? " on" : ""}`, text: "Follow in the editor",
+        className: `btn followbtn${follow ? " on" : ""}`, text: "Follow in the editor",
         tip: follow
           ? "Opening each card in the editor as you play it (click to stop)"
           : "Open each card in the editor as you play it",
@@ -1325,8 +1326,8 @@ function render(): void {
             })()),
           el("span", { className: "tbargap" }),
           liveSwitch(),
-          el("button", { text: "Save state…", onClick: () => { snapPanel = snapPanel === "save" ? undefined : "save"; render(); } }),
-          el("button", { text: "Restore…",
+          el("button", { className: "btn", text: "Save state…", onClick: () => { snapPanel = snapPanel === "save" ? undefined : "save"; render(); } }),
+          el("button", { className: "btn", text: "Restore…",
             onClick: () => { snapPanel = snapPanel === "restore" ? undefined : "restore"; render(); } }),
           // The run boundary (design/engine-server.md 4.2), at the venue rung
           // only (4.10): New run keeps the pockets so a returning party can be
@@ -1335,14 +1336,14 @@ function render(): void {
           // would be two names for one act.
           ...(shows("runGestures")
             ? [
-              el("button", { text: "New run",
+              el("button", { className: "btn", text: "New run",
                 tip: "Restart the world, keeping everything durable, to play a party who have been here before",
                 onClick: newRun }),
-              el("button", { text: `${icon.restart} Forget everyone`,
+              el("button", { className: "btn", text: `${icon.restart} Forget everyone`,
                 tip: "Restart and forget the durable half too (the pockets and the installation's memory)",
                 onClick: forgetEveryone }),
             ]
-            : [el("button", { text: `${icon.restart} Restart`, onClick: restart })]),
+            : [el("button", { className: "btn", text: `${icon.restart} Restart`, onClick: restart })]),
         ),
     liveMode
       // Live mode: the game's run, always as a list (its board, its journal,

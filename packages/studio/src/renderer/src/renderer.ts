@@ -53,15 +53,16 @@ import {
 import type { Detail, Inspected, InspectorHost } from "./inspector.js";
 import { createProjectSettings } from "./project-settings.js";
 import { mountPropertyList } from "./prop-list.js";
-import { revealRow } from "@wildwinter/app-shell";
+import { revealRowWhenReady } from "@wildwinter/app-shell";
 import { setPlayRung } from "./play-ladder.js";
 import { setPropertyNavigator } from "./expr-panels.js";
 import { createNavHistory, historyNav, toast } from "@wildwinter/app-shell";
 import type { MountedNodeView } from "./node-view.js";
 import type { MountedMapView } from "./map-view.js";
 import type { SearchSelection } from "./search.js";
-import { openContextMenu } from "./context-menu.js";
+import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { openKitPicker } from "./kit-picker.js";
+import { STORYLETTER_WORDMARK } from "./wordmark.js";
 import { mountLiveLinkChip } from "./live-link.js";   // Live Link: the bottom-right connect chip
 import type { LiveLinkChip } from "./live-link.js";
 import { canvasId, MAP_CANVAS } from "../../shared/api.js";
@@ -278,7 +279,22 @@ async function setTheme(theme: ThemeChoice): Promise<void> {
 //     Create was the one New Project path that never saw the kit picker. With
 //     project kits arriving that would have been the path that silently offered
 //     none of them. Now both routes are openNewProject.
+// Tell main to reveal the window, ONCE, the moment the initial view is
+// mounted (the welcome screen, the restored project, or the first-run identity
+// question). The window is created hidden so nobody sees the pre-boot chrome
+// flash before boot() fills it. Signalled over IPC (a task), not
+// requestAnimationFrame, which is throttled while the window is hidden and
+// would never fire. A no-op after the first call, so later renders are free
+// to call it.
+let appRevealed = false;
+function signalReady(): void {
+  if (appRevealed) return;
+  appRevealed = true;
+  studio.appReady();
+}
+
 function renderWelcome(): void {
+  signalReady();   // the welcome screen is up: safe to reveal the window
   liveLinkChip?.setVisible(false);   // Live Link: no project, no control
   // THE WORKED EXAMPLES, which shipped in the repo and were never offered
   // (design review 2026-08, B10). For an app whose main obstacle is its
@@ -306,8 +322,8 @@ function renderWelcome(): void {
 
     group("Start",
       el("div", { className: "wel-actions" },
-        el("button", { className: "primary", text: "Open a project…", onClick: () => void adopt(studio.openProjectDialog()) }),
-        el("button", { text: "New project…", onClick: () => openNewProject() }))),
+        el("button", { className: "btn primary", text: "Open a project…", onClick: () => void adopt(studio.openProjectDialog()) }),
+        el("button", { className: "btn", text: "New project…", onClick: () => openNewProject() }))),
 
     // An example is never opened in place (it lives inside the installed app,
     // which is read-only and replaced by the next update), so clicking one asks
@@ -496,10 +512,24 @@ const actions: ViewActions = {
     })();
   },
   deleteTagGroup(box, group) { inspectorHost.deleteTagGroup(box, group); },
-  selectCard(card, extend) {
-    const next = extend
-      ? (cardSelection.includes(card) ? cardSelection.filter((id) => id !== card) : [...cardSelection, card])
-      : [card];
+  selectCard(card, how) {
+    // The OS's three gestures (parity row 46): a click replaces, cmd/ctrl
+    // toggles, and shift fills the contiguous run in deck order from the
+    // anchor (the first card selected) to this one, the clicked card ending up
+    // as the cursor.
+    let next: string[];
+    if (how === "toggle") {
+      next = cardSelection.includes(card) ? cardSelection.filter((id) => id !== card) : [...cardSelection, card];
+    } else if (how === "range" && cardSelection.length > 0) {
+      const here = focus;
+      const order = (here?.kind === "deck" ? currentBox()?.decks.find((d) => d.id === here.deck)?.cards : undefined)?.map((c) => c.id) ?? [];
+      const a = order.indexOf(cardSelection[0]!);
+      const b = order.indexOf(card);
+      next = a < 0 || b < 0 ? [card] : order.slice(Math.min(a, b), Math.max(a, b) + 1);
+      if (a > b) next.reverse();
+    } else {
+      next = [card];
+    }
     selectCards(next);
     renderCentre();
   },
@@ -1385,7 +1415,7 @@ function mountShell(): void {
     flash(`No problems in ${project?.name ?? "this project"}`, "ok");
   });
   // The primary loop's visible door (surface review F8): play what you wrote.
-  const play = el("button", { className: "topbtn", text: "▶ Play", tip: "Play this project on the Board (⌘T)" });
+  const play = el("button", { className: "btn topbtn", text: "▶ Play", tip: "Play this project on the Board (⌘T)" });
   play.addEventListener("click", () => { if (project) void (async () => { await flushSaves(); await studio.openTable(); })(); });
   shell.topbarTrail.append(play, vcEl, probEl, saveEl.el);
   // A locked document redraws itself in place on the controls that stay live
@@ -2024,9 +2054,9 @@ function renderCardPanes(): boolean {
     const next = deck.cards[at + delta];
     if (next) actions.inspectCard(box.id, deck.id, next.id);
   };
-  const prev = el("button", { className: "centre-step", text: icon.back, tip: "Previous card (↑)" });
+  const prev = el("button", { className: "btn icon centre-step", text: icon.back, tip: "Previous card (↑)" });
   prev.disabled = at <= 0; prev.addEventListener("click", () => step(-1));
-  const next = el("button", { className: "centre-step", text: icon.forward, tip: "Next card (↓)" });
+  const next = el("button", { className: "btn icon centre-step", text: icon.forward, tip: "Next card (↓)" });
   next.disabled = at >= deck.cards.length - 1; next.addEventListener("click", () => step(1));
   const editor = centreEditor([
     boxSeg(box),
@@ -2164,21 +2194,27 @@ const projectSettingsPanel = createProjectSettings(
 // tags, so the box's Tags tab is its home.
 /**
  * The jump's second half: the page is open, now the ROW, through app-shell's
- * revealRow. It used to stop at the page, and a declaration below the fold was
- * nowhere to be seen (reported 2026-09-14). A box's or a deck's tab can still be filling in from main when
- * the render returns, and the World tab lives in a dialog that opens on its
- * own time, so this asks again on the next frames rather than once, and gives
- * up quietly after a moment: a name no page shows as a row (a tag group's,
- * whose own page IS the definition) is not a fault.
+ * revealRowWhenReady. It used to stop at the page, and a declaration below the
+ * fold was nowhere to be seen (reported 2026-09-14). A box's or a deck's tab
+ * can still be filling in from main when the render returns, and the World tab
+ * lives in a dialog that opens on its own time, so the shell asks again on the
+ * next frames rather than once, and gives up quietly after a moment: a name no
+ * page shows as a row (a tag group's, whose own page IS the definition) is not
+ * a fault. SCOPED to the page that was opened (the settings dialog for World,
+ * the centre pane for the rest): one name can be declared at two scopes, and a
+ * search of the whole document could light a row on a page that is not showing.
  */
-function landOn(name: string, tries = 12): void {
-  if (revealRow(document, name) || tries <= 0) return;
-  requestAnimationFrame(() => landOn(name, tries - 1));
+function landOn(within: ParentNode, name: string): void {
+  void revealRowWhenReady(within, name);
 }
 
 setPropertyNavigator({
   goToDefinition(ref) {
-    if (ref.scope === "world") { projectSettingsPanel.open("world"); landOn(ref.name); return; }
+    if (ref.scope === "world") {
+      projectSettingsPanel.open("world");
+      landOn(document.querySelector(".settings-dialog") ?? document, ref.name);
+      return;
+    }
     // A jump, so it remembers the way back: the crumb bar's return control
     // (the Map's arriveFrom grammar) rather than leaving the author stranded
     // at the declaration (reported from use, 2026-08-26). World is exempt
@@ -2186,7 +2222,7 @@ setPropertyNavigator({
     const here = returnHere();
     const jump = (navigate: () => void): void => {
       if (here) arriveFrom(here.label, here.go, navigate); else { navigate(); renderWorkspace(); }
-      landOn(ref.name);
+      landOn(shell.centre, ref.name);
     };
     if (ref.scope === "story") { jump(() => actions.focus({ kind: "story" })); return; }
     const box = currentBox();
@@ -2275,6 +2311,7 @@ function renderWorkspace(): void {
   renderNavPane();
   if (!renderCardPanes() && !renderDetailPanes()) fillCentre();
   renderProblemsBar();
+  signalReady();   // the project is drawn: safe to reveal the window (no-op after the first)
   saveEl.set(saver.status);
   applyVc();
   // The walk's bar above the problems bar: a mode you entered outranks an
@@ -2757,6 +2794,7 @@ function onMenu(command: MenuCommand): void {
     case "identity": void saveIdentity(); break;
     case "about": void showAbout({
       appName: "Storyletter",
+      wordmark: STORYLETTER_WORDMARK,
       version: command.version,
       blurb: "A studio for storylets. Content that offers itself when the moment is right.",
       // Storylet Studio, not PatterKit. These two lines were scaffolded from
@@ -2970,7 +3008,8 @@ async function boot(): Promise<void> {
   // comment instead, on the grounds that somebody who never comments should
   // never be asked - which was a preference dressed up as a reason, and not
   // enough to make the two apps behave differently. The two apps are a family.
-  if (!(await studio.identity())) await saveIdentity();
+  // The question needs a window to be asked in: the frame is mounted, so show it.
+  if (!(await studio.identity())) { signalReady(); await saveIdentity(); }
 
   // A double-clicked project or pack wins over the last project: the author
   // just said which one they want.
