@@ -1,6 +1,6 @@
 ---
 title: Licensing
-description: What is MIT-licensed and open, what is not, and who owns your content and your saves.
+description: Learn what is MIT-licensed and open, what isn't, and who owns your content and your saves.
 sidebar:
   label: Licensing
 ---
@@ -9,11 +9,11 @@ sidebar:
 
 Everything you need to design storylets and ship them in a game:
 
-- the model, the compiler and the runtime;
-- the `storyletengine` CLI;
-- **Storyletter**, the desktop editor;
-- all four **Storylet Engine** runtimes, and the shared state kernel;
-- the shared [conformance test suite](/compatibility/).
+- the model, the compiler, and the runtime
+- the `storyletengine` CLI
+- **Storyletter**, the desktop editor
+- all four **Storylet Engine** runtimes, and the shared state kernel
+- the shared [conformance test suite](/compatibility/)
 
 The repo is MIT-licensed, and every runtime zip carries its LICENSE.
 
@@ -22,7 +22,7 @@ The repo is MIT-licensed, and every runtime zip carries its LICENSE.
 ### The runtimes
 
 The Unity runtime takes one dependency, `com.unity.nuget.newtonsoft-json`
-([Json.NET](https://www.newtonsoft.com/json), MIT). Unity's Package Manager delivers it; it
+([Json.NET](https://www.newtonsoft.com/json), MIT). Unity's Package Manager delivers it, so it
 isn't bundled inside the zip.
 
 The other runtimes have no third-party dependency. The Unreal plugin uses only Unreal's own
@@ -32,9 +32,9 @@ LICENSE.
 
 ### Storyletter and the CLI
 
-These resolve to 99 packages, all permissive: mostly MIT, with some ISC, Apache-2.0, BSD and
+These resolve to 99 packages, all permissive: mostly MIT, with some ISC, Apache-2.0, BSD, and
 one public-domain dedication. Nothing copyleft is redistributed. The ones you'd recognise are
-Electron, Konva, ExcelJS and JSZip.
+Electron, Konva, ExcelJS, and JSZip.
 
 Two are worth naming directly. **JSZip** is dual-licensed and is used here under its MIT
 option. **`buffers@0.1.1`**, four levels down under ExcelJS, declares no licence at all: no
@@ -42,14 +42,14 @@ field, no file, no README line. It's listed rather than hidden.
 
 ### The website
 
-Built with Astro, Starlight and Pagefind (MIT) and served as static files. Its build tools
-include MPL and LGPL components; none is redistributed, because a build tool doesn't end up in
-the HTML it produces.
+Built with Astro, Starlight, and Pagefind (MIT) and served as static files. Its build tools
+include MPL and LGPL components, but none is redistributed, because a build tool doesn't end up
+in the HTML it produces.
 
 ### Fonts
 
 The brand's typefaces are **Newsreader** and **IBM Plex Mono**, both under the SIL Open Font
-Licence. No font binary is in the repo and none ships in a build: all type in the marks, icons
+Licence. No font binary is in the repo and none ships in a build. All type in the marks, icons,
 and badges is converted to outlines, so nothing needs a font installed to render.
 
 The full audit, with every licence named and instructions for reproducing it, is in
@@ -58,17 +58,17 @@ The full audit, with every licence named and instructions for reproducing it, is
 ## Not open
 
 A hosted tier (accounts, a hosted project store, online editing, a server-side runtime) may
-come later, and it won't be MIT. It will never fork the core: every online piece would be a
-shell around the same MIT packages. Nothing of the kind exists today, and there's nothing to
+come later, and it won't be MIT. It will never fork the core, because every online piece would
+be a shell around the same MIT packages. Nothing of the kind exists today, and there's nothing to
 sign up for.
 
 ## A credit is a favour, never a requirement
 
 Nothing obliges you to credit anything. There's no attribution clause on a shipped game and
-nothing checks. This section is the part that's a favour, and it genuinely helps: every
-project using these tools is a set of real-world edge cases nobody would hit alone.
+nothing checks. This section is the part that's a favour, and it genuinely helps, because
+every project using these tools is a set of real-world edge cases nobody would hit alone.
 
-If a graphic doesn't fit, a line of text is plenty. Copy any of these; no approval needed.
+If a graphic doesn't fit, a line of text is plenty. Copy any of these, no approval needed.
 
 For in-game credits or a readme:
 
@@ -94,7 +94,7 @@ For a website or itch.io footer:
 
 Scale them freely. Please don't recolour or redraw them.
 
-**The badge** (360 × 112) suits credits screens, splash pages and press kits:
+**The badge** (360 × 112) suits credits screens, splash pages, and press kits.
 
 <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-start;margin:1rem 0;">
   <figure style="margin:0;">
@@ -111,7 +111,7 @@ Scale them freely. Please don't recolour or redraw them.
   </figure>
 </div>
 
-**The line** suits footers, itch.io pages and readmes:
+**The line** suits footers, itch.io pages, and readmes.
 
 <div style="display:flex;flex-direction:column;gap:0.8rem;align-items:flex-start;margin:1rem 0;">
   <figure style="margin:0;">
@@ -136,22 +136,22 @@ lines as a text file. **[Download the badge kit (zip)](/badges/storylet-studio-b
 
 ## The name and the mark
 
-The MIT licence covers the code. The Storylet Studio, Storyletter and Storylet Engine names,
+The MIT licence covers the code. The Storylet Studio, Storyletter, and Storylet Engine names,
 the thread mark and these badges aren't covered by it, so here is the plain-English version.
 
 ### Yes, please do
 
-- Say your game's story was shaped with Storylet Studio, in credits, marketing, a blog or a talk.
+- Say your game's story was shaped with Storylet Studio, in credits, marketing, a blog, or a talk.
 - Use these badges unmodified, at any size, in game, on your site, or in a press kit.
 - Name Storylet Studio in a list of tools and middleware alongside your engine.
-- Use the wordmark in an article, tutorial or video about the tools.
+- Use the wordmark in an article, tutorial, or video about the tools.
 
 ### Please don't
 
-- Recolour, redraw, stretch or rebuild the thread, or set the wordmark in another typeface.
-- Use the mark as your own product, studio or app icon.
-- Imply that Storylet Studio endorses, sponsors or has reviewed your project.
-- Put Storylet Studio, Storyletter or Storylet Engine in your product name, company name or domain.
+- Recolour, redraw, stretch, or rebuild the thread, or set the wordmark in another typeface.
+- Use the mark as your own product, studio, or app icon.
+- Imply that Storylet Studio endorses, sponsors, or has reviewed your project.
+- Put Storylet Studio, Storyletter, or Storylet Engine in your product name, company name, or domain.
 - Sell the badges, or the tools, as a product of your own.
 
 ## Your content

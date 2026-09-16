@@ -43,8 +43,8 @@ export const RUNG_LABEL: Record<PlayRung, string> = {
 
 export const RUNG_BLURB: Record<PlayRung, string> = {
   solo: "One player, one playthrough. Nothing about sharing appears.",
-  shared: "Several players over one world: cards, decks and state can be shared between playthroughs.",
-  venue: "The server this project came from set this rung. You can move down from it; it is not one you can set here.",
+  shared: "Several players over one world. Cards, decks, and state can be shared between playthroughs.",
+  venue: "The server this project came from set this rung. You can move down from it, but not set it here.",
 };
 
 /**

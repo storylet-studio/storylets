@@ -456,13 +456,13 @@ export function mountMapView(
       : ` Also inside ${listNames(others)}, which does not count.`;
     if (rule?.rebinds === true) {
       return site.zone === undefined
-        ? `${site.title}: ${where}. Drag it into one to bind it.${also}`
-        : `${site.title}: in ${where}. Drag it to another to move the hand.${also}`;
+        ? `${site.title} is in ${where}. Drag it into one to bind it.${also}`
+        : `${site.title} is in ${where}. Drag it to another to move the hand.${also}`;
     }
     if (rule?.fixedBy !== undefined) {
-      return `${site.title}: in ${where}, fixed by the template "${rule.fixedBy}" for every hand it makes.${also}`;
+      return `${site.title} is in ${where}, fixed by the template "${rule.fixedBy}" for every hand it makes.${also}`;
     }
-    return `${site.title}: this hand does not use this map's tags, so its pin only marks a spot.${also}`;
+    return `${site.title} doesn't use this map's tags, so its pin only marks a spot.${also}`;
   }
 
   /** "a", "a and b", "a, b and c" - a list an author reads, not a join. */
@@ -510,7 +510,7 @@ export function mountMapView(
 
     // A tool is armed: same rule as a trace, one instruction and a way out. The
     // comment tool shares that grammar rather than inventing a second one.
-    const furnitureHint = commentArmed ? "Comment: click where it goes" : furniture?.hint();
+    const furnitureHint = commentArmed ? "Click where the comment goes" : furniture?.hint();
     if (furnitureHint !== undefined) {
       strip.replaceChildren(
         el("span", { className: "hint", text: furnitureHint }),
@@ -529,11 +529,11 @@ export function mountMapView(
       strip.replaceChildren(
         el("span", { className: "hint", text: busy.drawing
           ? draft.length === 0
-            ? `${busy.label}: click to place the first corner`
+            ? `Click to place the first corner of ${busy.label}`
             : draft.length < 3
               ? `${busy.label}: ${draft.length} corner${draft.length === 1 ? "" : "s"} so far`
-              : `${busy.label}: click the first corner again, or press Enter, to close`
-          : `${busy.label}: click where the hand sits` }),
+              : `Click the first corner of ${busy.label} again, or press Enter, to close it`
+          : `Click where ${busy.label} sits` }),
         el("span", { className: "stripgap" }),
         el("button", { className: "stripbtn cancel", text: "Cancel", tip: "Abandon this (Esc)", onClick: () => stopTool() }),
       );
@@ -544,13 +544,13 @@ export function mountMapView(
     const said = refused ?? (what === undefined
       ? (chosen.length > 1 ? `${chosen.length} selected` : describe(map))
       : what.kind === "background"
-        ? `${what.title}: a picture behind the map. Drag it, or lock it once it is right.`
+        ? `${what.title} is a picture behind the map. Drag it, or lock it once it's right.`
         : what.kind === "frame"
-          ? `${what.title ?? "Frame"}: drag its bar to move it, double-click to rename it`
+          ? `${what.title ?? "Frame"} is a frame. Drag its bar to move it, or double-click to rename it.`
           : what.kind === "zone"
               ? pickedVertex !== undefined
-                ? `${what.title}: corner ${pickedVertex + 1} picked. Delete removes it.`
-                : `${what.title}: drag a corner to reshape, a mid-point to add one`
+                ? `Corner ${pickedVertex + 1} of ${what.title} is picked. Delete removes it.`
+                : `${what.title} is a zone. Drag a corner to reshape it, or a mid-point to add one.`
               : describeSite(what));
 
     const group = groupControl();
@@ -627,8 +627,8 @@ export function mountMapView(
       if (item.kind === "site" && item.alsoInside !== undefined && item.alsoInside.length > 0) {
         const own = item.zone === undefined ? undefined : zoneName(item.zone);
         return own === undefined
-          ? `${item.title} sits inside ${listNames(item.alsoInside)}. Zones do not nest: dropping it binds to the frontmost one only.`
-          : `${item.title} belongs to ${own}. It also sits inside ${listNames(item.alsoInside)}, which counts for nothing: zones are tags, so they do not nest, and a site belongs to the frontmost zone around it.`;
+          ? `${item.title} sits inside ${listNames(item.alsoInside)}. Zones don't nest, so dropping it binds to the frontmost one only.`
+          : `${item.title} belongs to ${own}. It also sits inside ${listNames(item.alsoInside)}, which counts for nothing. Zones are tags, so they don't nest, and a site belongs to the frontmost zone around it.`;
       }
       if (scale >= LABEL_FLOOR) return undefined;
       return item.title;
@@ -733,7 +733,7 @@ export function mountMapView(
         for (const site of dropped) {
           const rule = siteRule.get(site.id);
           if (rule?.fixedBy !== undefined) {
-            refused = `${site.title} goes where "${rule.fixedBy}" says: every hand from that template shares one zone.`;
+            refused = `${site.title} goes where "${rule.fixedBy}" says, because every hand from that template shares one zone.`;
           }
         }
         actions.movedSites(dropped.map((site) => ({ id: site.id, ...sitePoint(site) })));
@@ -983,7 +983,7 @@ export function mountMapView(
 
 /** What the strip says with nothing selected: the state of the map, quietly. */
 function describe(map: BoxMapDto): string {
-  if (map.zones.length === 0) return "No zones yet: add one and trace its outline.";
+  if (map.zones.length === 0) return "No zones yet. Add one and trace its outline.";
   const zones = `${map.zones.length} zone${map.zones.length === 1 ? "" : "s"}`;
   const sites = map.sites.length === 0 ? "no hands pinned" : `${map.sites.length} pinned`;
   return `${zones}, ${sites}.`;

@@ -393,8 +393,8 @@ function newRun(): void {
 function forgetEveryone(): void {
   void confirmDialog({
     title: "Forget everyone?",
-    body: "The session and its journal are discarded, and so is everything durable: "
-      + "every pocket and the installation's own memory. The next run is the first day again.",
+    body: "The session and its journal are discarded, and so is everything durable "
+      + "(every pocket and the installation's own memory). The next run is the first day again.",
     confirmLabel: "Forget everyone",
   }).then((ok) => { if (ok) void build(); });
 }
@@ -646,10 +646,10 @@ function handCell(hand: { gameId: string; title?: string; tags: Record<string, s
       here || been
         ? el("span", {
             className: `runmark${here ? " now" : ""}`,
-            tip: here ? "The last card was played from here" : "Played from earlier this run",
+            tip: here ? "The last card was played from here." : "Played from here earlier this run.",
           })
         : null,
-      el("span", { className: "hname", text: hand.title ?? hand.gameId, tip: "A hand: a place on the board cards are dealt into." }),
+      el("span", { className: "hname", text: hand.title ?? hand.gameId, tip: "A place on the board that cards are dealt into." }),
       el("span", { className: "htags" }, ...Object.values(hand.tags).map(chip))));
   const row = el("div", { className: "hcards" });
   for (const c of cards) {
@@ -669,7 +669,7 @@ function handCell(hand: { gameId: string; title?: string; tags: Record<string, s
       pending = undefined;
       render();
     } },
-      seen ? el("span", { className: "runmark", tip: "Played earlier this run" }) : null,
+      seen ? el("span", { className: "runmark", tip: "Played earlier this run." }) : null,
       el("h4", { text: c.title ?? c.gameId }));
     row.append(face);
   }
@@ -723,13 +723,13 @@ function turnDial(): HTMLElement {
     return el("div", { className: "dial" },
       el("span", { className: "overline", text: one.seconds !== undefined ? `Turn (${turnSpan(1, one.seconds)} each)` : "Turn" }),
       el("span", { className: "dialnum", text: String(one.turn) }),
-      el("button", { className: "primary", text: "Next turn", tip: "Time passes: the clock advances, hands refresh", onClick: nextTurn }),
+      el("button", { className: "primary", text: "Next turn", tip: "Advance the clock and refresh the hands", onClick: nextTurn }),
       ...timeSteps(one));
   }
   return el("div", { className: "dial clocksdial" },
     el("div", { className: "clockshead" },
-      el("span", { className: "overline", text: "Clocks", tip: "Every box keeps its own clock; a play advances only its box" }),
-      el("button", { className: "primary", text: "Next turn", tip: "Time passes: every box's clock advances, hands refresh", onClick: nextTurn })),
+      el("span", { className: "overline", text: "Clocks", tip: "Every box keeps its own clock. A play advances only its own box." }),
+      el("button", { className: "primary", text: "Next turn", tip: "Advance every box's clock and refresh the hands", onClick: nextTurn })),
     el("div", { className: "clocks" },
       ...clocks.map((c) => el("span", { className: "clockrow" },
         el("span", { className: "clockbox", text: c.box }),
@@ -768,7 +768,7 @@ function liveTurnDial(): HTMLElement {
   }
   return el("div", { className: "dial clocksdial" },
     el("div", { className: "clockshead" },
-      el("span", { className: "overline", text: "Clocks", tip: "Every box keeps its own clock; the game advances them" })),
+      el("span", { className: "overline", text: "Clocks", tip: "Every box keeps its own clock. The game advances them." })),
     el("div", { className: "clocks" },
       ...turns.map(([box, turn]) => el("span", { className: "clockrow" },
         el("span", { className: "clockbox", text: box }),
@@ -886,7 +886,7 @@ function snapshotPanel(): HTMLElement | null {
   if (!snapPanel || !table) return null;
   if (snapPanel === "save") {
     const input = el("input", { className: "snapname" });
-    input.placeholder = "<snapshot name>";
+    input.placeholder = "Snapshot name";
     const save = (): void => {
       const label = input.value.trim() || "snapshot";
       snapshots = [...snapshots, { name: label, file: table!.saveFile() }];
@@ -959,7 +959,7 @@ function statePanel(): HTMLElement {
       for (const stage of r.stages) {
         ladder.append(el("button", {
           className: `srrung${r.value === stage ? " on" : ""}`, text: stage,
-          tip: r.value === stage ? "the current stage" : `jump to "${stage}"`,
+          tip: r.value === stage ? "The current stage" : `Jump to "${stage}"`,
           onClick: () => {
             try { table!.meddle(r.path, stage, r.label); refreshBoard(); render(); }
             catch { /* ignore a bad poke */ }
@@ -1019,7 +1019,7 @@ function statePanel(): HTMLElement {
     const results = el("div", { className: `peekresults${staleP ? " stale" : ""}` });
     results.append(el("div", { className: "peeknote" },
       el("span", { className: "overline", text: `Peeked ${peekStamp.box} at clock ${peekStamp.clock}` }),
-      staleP ? el("span", { className: "empty", text: "The session has moved on - peek again." }) : null));
+      staleP ? el("span", { className: "empty", text: "The session has moved on. Peek again." }) : null));
     if (peeked.length > 0) {
       const list = el("div", { className: "peeked" });
       for (const c of peeked) {
@@ -1194,7 +1194,7 @@ function render(): void {
     for (const h of declared) cells.append(handCell(h, dealtBy.get(h.gameId) ?? []));
   }
   if (declared.length === 0) {
-    cells.append(el("span", { className: "empty", text: table.hands().length === 0 ? "No hands on this board yet - seat one in the editor." : "No hands match these filters." }));
+    cells.append(el("span", { className: "empty", text: table.hands().length === 0 ? "No hands on this board yet. Seat one in the editor." : "No hands match these filters." }));
   }
 
   // The journal (right): the story of the session so far. The filter chips
@@ -1302,7 +1302,7 @@ function render(): void {
       trail: [el("button", {
         className: `followbtn${follow ? " on" : ""}`, text: "Follow in the editor",
         tip: follow
-          ? "The editor is opening each card as you play it: click to stop"
+          ? "Opening each card in the editor as you play it (click to stop)"
           : "Open each card in the editor as you play it",
         onClick: () => { follow = !follow; void studio.setBoardFollow(follow); render(); },
       })],
@@ -1318,7 +1318,7 @@ function render(): void {
       : el("div", { className: "tbar" },
           el("label", { className: "seed" }, "seed ",
             (() => {
-              const s = el("input", { className: "seedin", tip: "The session's random seed - changing it restarts the run" });
+              const s = el("input", { className: "seedin", tip: "The session's random seed. Changing it restarts the run." });
               s.value = String(seed);
               s.addEventListener("change", () => { const n = Number(s.value); if (Number.isInteger(n)) { seed = n; void build(); } });
               return s;
@@ -1336,10 +1336,10 @@ function render(): void {
           ...(shows("runGestures")
             ? [
               el("button", { text: "New run",
-                tip: "Restart the world but keep everything durable: play a party who have been here before",
+                tip: "Restart the world, keeping everything durable, to play a party who have been here before",
                 onClick: newRun }),
               el("button", { text: `${icon.restart} Forget everyone`,
-                tip: "Restart, and forget the durable half too: the pockets and the installation's memory",
+                tip: "Restart and forget the durable half too (the pockets and the installation's memory)",
                 onClick: forgetEveryone }),
             ]
             : [el("button", { text: `${icon.restart} Restart`, onClick: restart })]),

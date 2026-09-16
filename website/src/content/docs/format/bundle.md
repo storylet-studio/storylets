@@ -1,11 +1,11 @@
 ---
 title: The bundle and the save
-description: The compiled .storyletsc bundle - what export does, what the bundle holds, the staleness check - and the .storyletsave envelope that snapshots a whole run.
+description: Learn what export writes into the compiled .storyletsc bundle, how the staleness check guards it, and what the .storyletsave envelope snapshots.
 sidebar:
   label: Bundle and save
 ---
 
-Your shards are the source. The **bundle** is what ships.
+Your shards are the source. The bundle is what ships.
 
 ## What export does
 
@@ -14,11 +14,11 @@ It:
 
 1. **Compiles every expression** from source text into a `{ src, ast }` envelope, so no
    runtime ever ships a parser.
-2. **Assembles the shards**: the project file plus every box folder and deck file, into one
+2. **Assembles the shards**, the project file plus every box folder and deck file, into one
    JSON document, all collections sorted by id.
-3. **Validates**: property references nothing declares, tag references that point nowhere,
-   hands that don't fill in every group their template asks for, field values against the
-   box's card template. It refuses to write anything on an error.
+3. **Validates**, refusing to write anything on an error. It checks for property references
+   nothing declares, tag references that point nowhere, hands that don't fill in every group
+   their template asks for, and field values against the box's card template.
 4. **Computes a content hash** over the canonical source shards and embeds it.
 5. **Carries author metadata through** by default. A `stripped` build omits every `title`
    and `purpose`.
@@ -56,8 +56,8 @@ Patterpad publishes to `../patter-dist/` in the same way.
 ```
 
 There's no text a player would read, no localisation and no captions. A card is its
-condition, its ranking inputs, its redraw policy, its tags, its outcomes and its box-shaped
-fields, and an outcome is its condition, its changes and its own box-shaped fields, which
+condition, its ranking inputs, its redraw policy, its tags, its outcomes, and its box-shaped
+fields, and an outcome is its condition, its changes, and its own box-shaped fields, which
 keeps a bundle small.
 
 Author metadata is kept. Titles and purposes ship by default because they make a trace
@@ -66,8 +66,8 @@ answer in words.
 
 ## Maps, when you ask for them
 
-Maps are off by default: geometry is authoring data, the engine deals in tag names, and a
-shipping build needn't carry anything it doesn't use. Turn on `export.map` in the project
+Maps are off by default, because geometry is authoring data, the engine deals in tag names,
+and a shipping build needn't carry anything it doesn't use. Turn on `export.map` in the project
 shard (or pass `--map` to one export) and the bundle gains a `maps` block, one entry per
 spatial tag group:
 
@@ -94,8 +94,8 @@ each entry names, ready for an engine to import.
 
 `sites` is where each placed hand stands on the map, sorted by hand gameId so the bytes
 don't move when a shard is reordered. A hand nobody has placed has no entry, and a map with
-no placed hand has no `sites` key at all. Which zone a hand belongs to isn't repeated here:
-the hand's own binding is what the engine deals from.
+no placed hand has no `sites` key at all. Which zone a hand belongs to isn't repeated here,
+because the hand's own binding is what the engine deals from.
 
 **The engine never reads any of it.** It's there for a host that wants to draw an in-game
 map without building its own export. `describeBundle` reports whether a bundle carries maps,
@@ -113,7 +113,7 @@ error: dist/the-hamlet.storyletsc: bundle is stale (content hash does not
 ```
 
 That's what makes committing the bundle safe. The default is to commit it, marked
-`merge=ours` in `.gitattributes`: you regenerate it, you never hand-merge it, and the hash
+`merge=ours` in `.gitattributes`. You regenerate it, you never hand-merge it, and the hash
 means a stale one can't land without `validate` saying so. Ignoring the bundle instead is a
 choice you can make in `.gitignore`.
 
@@ -124,16 +124,16 @@ against.
 
 The `schema` tag (`storylets/bundle@0`) versions the format, and runtimes refuse a major
 version they don't speak. Canonical source serialisation is versioned the same way, in each
-shard's own `schema` tag: a change to how shards serialise is a schema bump even if no field
+shard's own `schema` tag. A change to how shards serialise is a schema bump even if no field
 changed, because the bytes are part of the contract.
 
 ## The save envelope
 
-A running engine snapshots to a `storylets/save@1` envelope: the shared state once, then
-every flow's own blob, keyed by the flow's name. Every id in it is immutable, so renaming
-things in the project doesn't break a save.
+A running engine snapshots to a `storylets/save@1` envelope, which holds the shared state
+once, then every flow's own blob, keyed by the flow's name. Every id in it's immutable, so
+renaming things in the project doesn't break a save.
 
-Claims are not in it, deliberately: a claim is just "this card is on that hand right now", so
+Claims aren't in it, deliberately. A claim is just "this card is on that hand right now", so
 it is read back off the boards rather than stored twice. What a shared one-shot **spent** is
 durable, so that does ride the shared half.
 
@@ -166,12 +166,12 @@ durable, so that does ride the shared half.
 }
 ```
 
-**`@world` is never in the envelope.** It's your game's state - the engine only borrows it -
+**`@world` is never in the envelope.** It's your game's state (the engine only borrows it),
 so your game saves its world once, beside the envelope
 ([why](/play/world-state/#saving-it)). The `.storyletsave` FILE on disk is
-`storylets/savefile@1`: `{ schema, engine: <the envelope>, world?: <your values> }`, both
-halves in one file. Storyletter's Board writes them, every runtime reads and writes them,
-and a foreign, malformed or wrong-project file is refused at the boundary instead of
+`storylets/savefile@1`, which is `{ schema, engine: <the envelope>, world?: <your values> }`,
+both halves in one file. Storyletter's Board writes them, every runtime reads and writes
+them, and a foreign, malformed, or wrong-project file is refused at the boundary instead of
 corrupting a run.
 
 Loading a save against edited content is safe. Orphaned keys drop harmlessly: a deleted
@@ -182,9 +182,9 @@ never guessed at.
 ## Determinism
 
 The PRNG is **mulberry32**, bit for bit across every runtime, with its state a plain uint32
-in the save. The default seed is 0. There's one PRNG per flow: `random(a, b)` draws
+in the save. The default seed is 0. There's one PRNG per flow. `random(a, b)` draws
 advance it, tie shuffles advance it, and the hand-order shuffle in a multi-hand deal
 advances it.
 
 So a seeded coverage run reproduces exactly, and the same seed gives the same result in the
-editor, in CI and in every engine.
+editor, in CI, and in every engine.

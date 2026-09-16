@@ -7,8 +7,8 @@ sidebar:
 
 Everything Storyletter does, the command line does too, because both run the same code.
 This is [the getting-started walkthrough](/getting-started/) again with a terminal instead
-of the editor: what you want for a build server, for scripting, or simply if that's how you
-prefer to work.
+of the editor, which is what you want for a build server, for scripting, or when that's how
+you prefer to work.
 
 Setting a project up is a one-off. After that the work is a short loop:
 
@@ -21,9 +21,8 @@ This page walks all of it in one sitting. Every command and every output below i
 
 ## The tool
 
-`storyletengine` is the command line. Get it from the [Download page](/download/) as a
-standalone binary from the [Download page](/download/). Every command is on [the
-CLI page](/cli/).
+`storyletengine` is the command line. Get it as a standalone binary from the
+[Download page](/download/). Every command is on [the CLI page](/cli/).
 
 ## 1. Make a project
 
@@ -33,8 +32,8 @@ initialised "The Tavern" in .../tavern.storylets
 next: storyletengine export .../tavern.storylets
 ```
 
-You get a `tavern.storylets` folder: a macOS package, a plain folder everywhere else. Inside
-are plain text files, one per kind of thing, each with its own extension.
+You get a `tavern.storylets` folder (a package on macOS, a plain folder everywhere else).
+Inside are plain text files, one per kind of thing, each with its own extension.
 
 ```
 tavern.storylets/
@@ -75,13 +74,13 @@ $ storyletengine deal whats-next tavern.storylets --set story.started=true
 That's the whole loop in one command. Dealing a hand fills it with the cards that could
 happen right now, best first, and your game decides what to do with them.
 
-There's one other way to look: `peek <box>` lists what a box could deal without dealing
+There's one other way to look. `peek <box>` lists what a box could deal without dealing
 anything. A card you've only peeked at is still in the deck, so it isn't yours to play.
 
 ## 3. Design a card
 
 Open `main/decks/starter.storyletdeck` and add a card to the `cards` list. In the editor
-this is a button; by hand you pick the ids yourself. Keep them unique and never change them.
+this is a button. By hand you pick the ids yourself. Keep them unique and never change them.
 
 ```json5
 {
@@ -108,7 +107,7 @@ error: main/decks/starter.storyletdeck [market-rumours]: condition:
   unresolved world property reference '@world.market_day'
 ```
 
-The check caught it: a card can't read a property nothing has declared. Add the declaration
+The check caught it. A card can't read a property nothing has declared. Add the declaration
 to `the-tavern.storyletproj`:
 
 ```json5
@@ -197,16 +196,16 @@ cards dealt 3/3, played 3/3; outcomes played 3/3
 hand whats-next: held 3/3 cards over 24 deal(s)
 ```
 
-Full coverage. Notice the turn count dropping from 2000 to 21: once every card has been
+Full coverage. Notice the turn count dropping from 2000 to 21. Once every card has been
 dealt and every card that only plays once has been played, there's nothing left to do and
-the run stops early. `--fail-on-gap` exits 1 on any never-dealt card - and on any warning
-the runs raise, or any `@hand` read some asking hand never composes - which makes this a
-CI gate, and the same seed always reproduces the same run.
+the run stops early. `--fail-on-gap` exits 1 on any never-dealt card, on any warning the
+runs raise, and on any `@hand` read some asking hand never composes, which makes this a CI
+gate. The same seed always reproduces the same run.
 
 ## 6. Add a box from a kit
 
-A new box starts from a **kit**: a copied starting point that's yours the moment it lands.
-It's fully editable and leaves no kit reference behind. `blank` is the empty box; the others
+A new box starts from a **kit**, a copied starting point that's yours the moment it lands.
+It's fully editable and leaves no kit reference behind. `blank` is the empty box. The others
 are narrated starters where every piece carries a note explaining itself.
 
 ```
@@ -216,7 +215,7 @@ added box "new-box" (rpg kit) in .../tavern.storylets
 
 The RPG kit gives you an `area` tag group (tavern, market), a reusable `encounters-at` hand
 template that leaves the place for each hand to choose, one hand that chooses the tavern,
-and a sample deck. The market has no hand yet, and the template's own note says so: adding
+and a sample deck. The market has no hand yet, and the template's own note says so. Adding
 one is the first edit the kit invites you to make. It deals straight away:
 
 ```
@@ -225,7 +224,7 @@ $ storyletengine deal tavern-encounters tavern.storylets
 1. a-strangers-wager  "A stranger's wager"
 ```
 
-And `peek` is the looking half again: ask what the box could deal for a given tag, without
+And `peek` is the looking half again. Ask what the box could deal for a given tag, without
 dealing anything.
 
 ```
@@ -237,11 +236,11 @@ Storyletter's New Box picker offers the same kits and produces exactly the same 
 
 ## Where to go next
 
-- [Concepts](/concepts/) is the vocabulary: box, deck, card, hand, the board, peek and deal
+- [Concepts](/concepts/) is the vocabulary: box, deck, card, hand, the board, peek, and deal
   and play, turns, copies, the five scopes.
 - [The format](/format/overview/) is what all of that looks like on disk.
 - [Playing in your game](/play/overview/) is how the compiled bundle gets into Unity, Unreal,
-  Godot or the web.
+  Godot, or the web.
 - [The CLI](/cli/) is every command in full.
 - [Version control](/setup/version-control/) is how a team edits one project without
   colliding.

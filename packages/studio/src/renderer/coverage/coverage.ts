@@ -101,7 +101,7 @@ function render(): void {
         ? "No project open."
         : driverCount > 0
           ? `${driverCount} coverage driver${driverCount === 1 ? "" : "s"} feeding @world.`
-          : "No coverage drivers: content gated on @world will read as never dealt.",
+          : "No coverage drivers. Content gated on @world will read as never dealt.",
     }),
     el("button", { text: "Coverage drivers…", onClick: () => void studio.openProjectSettings("world") }),
   );
@@ -155,7 +155,7 @@ function gateRefs(refs: string[]): HTMLElement {
   });
   // "or drives" only when a driver could actually help: drivers feed @world,
   // where @story and @hand state is the content's own to write.
-  span.append(refs.some((r) => r.startsWith("@world.")) ? " - nothing writes or drives it" : " - nothing writes it");
+  span.append(refs.some((r) => r.startsWith("@world.")) ? ", which nothing writes or drives" : ", which nothing writes");
   return span;
 }
 
@@ -239,7 +239,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
     unplayed.length > 0
       ? el("section", { className: "block" },
           el("span", { className: "overline", text: `Dealt but never played (${unplayed.length})` }),
-          el("p", { className: "hint", text: "These reach the board; no outcome of theirs was ever taken. Check their outcome gates." }),
+          el("p", { className: "hint", text: "These reach the board, but no outcome of theirs was ever taken. Check their outcome gates." }),
           ...unplayed.map((c) => revealRow("gap", { kind: "card", box: c.box, deck: c.deck, card: c.id },
             el("span", { className: "gname", text: c.title ?? c.gameId }),
             el("span", { className: "hint", text: `dealt ${c.dealt}×` }),
@@ -247,7 +247,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
         )
       : null,
     dealtOnly > 0
-      ? el("p", { className: "hint", text: `${dealtOnly} card${dealtOnly === 1 ? " has" : "s have"} no outcomes - dealt is their whole job, so they are never counted as unplayed.` })
+      ? el("p", { className: "hint", text: `${dealtOnly} card${dealtOnly === 1 ? " has" : "s have"} no outcomes. Being dealt is their whole job, so they're never counted as unplayed.` })
       : null,
 
     deadOutcomes.length > 0

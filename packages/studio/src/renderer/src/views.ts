@@ -315,7 +315,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
   // other thing: a contract with the game, set by the principal designer.
   host.append(row({
     depth: 0, label: "Story", cls: "nav-storyrow", vc: vcKeys.project,
-    tip: "The story's own memory: state the cards read and write (@story).",
+    tip: "The story's own memory. Cards read and write it as @story.",
     count: project.storyPropertyCount,
     sel: focus?.kind === "story",
     onClick: () => actions.focus({ kind: "story" }),
@@ -326,7 +326,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
     const boxNode = navId.box(box.id);
     const boxRow = row({
       depth: 0, label: box.title ?? box.gameId, node: boxNode, cls: "nav-boxrow", vc: vcKeys.box(box.id),
-      tip: "A box: a self-contained set of decks, hands and tags.",
+      tip: "A box is a self-contained set of decks, hands, and tags.",
       sel: inBox && focus.kind === "box",
       path: inBox && focus.kind !== "box",
       onClick: () => actions.focus({ kind: "box", box: box.id }),
@@ -345,7 +345,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
         depth: 1, label, ...(fill ? { node } : {}), count,
         // The same sentence the Hands master and the box page use (B3): the
         // one line that unlocks the model, at the point of first contact.
-        ...(kind === "hands" ? { tip: "Hands: the places on the board; each holds the cards it is dealt." } : {}),
+        ...(kind === "hands" ? { tip: "The places on the board. Each hand holds the cards it's dealt." } : {}),
         // Hands all live in one shard, so the collection carries its badge;
         // decks are a shard each and badge on their own rows below.
         ...(kind === "hands" ? { vc: vcKeys.hands(box.id) } : {}),
@@ -485,7 +485,7 @@ function cardFace(card: CardDto, catalogue: ConditionProperty[], selected: boole
   // canvases for no gain a reader can see.
   face.append(card.purpose
     ? el("p", { className: "beat", text: card.purpose })
-    : el("p", { className: "beat muted", text: "no purpose yet" }));
+    : el("p", { className: "beat muted", text: "No purpose yet." }));
   // No outcome indicator here. Pips were tried and removed in July (b2ce77b);
   // a plain numeral was tried and removed on 2026-08-04, on both this face and
   // the node canvas, for the same reason: a number in a corner with nothing to
@@ -531,7 +531,7 @@ export function renderDeckCentre(
   const heading = documentHeading("Deck", {
     title: { get: () => titled, set: (v) => { titled = v; }, placeholder: deck.gameId, commitOn: "blur", commit: () => actions.saveDeck(deck.id, { title: titled }) },
     gameId: { get: () => pinned, set: (v) => { pinned = v; }, fallback: deck.gameId, deriveFrom: () => titled, commit: () => actions.saveDeck(deck.id, { gameId: pinned }) },
-    purpose: { get: () => purpose, set: (v) => { purpose = v; }, placeholder: "<what these cards are for>", commitOn: "blur", commit: () => actions.saveDeck(deck.id, { purpose }) },
+    purpose: { get: () => purpose, set: (v) => { purpose = v; }, placeholder: "What these cards are for", commitOn: "blur", commit: () => actions.saveDeck(deck.id, { purpose }) },
     menu: [{ label: "Delete deck", danger: true, onClick: () => actions.deleteDeck(box.id, deck.id) }],
     comments: { on: deck.id, count: actions.openThreads(deck.id), open: (a) => actions.showComments(deck.id, titled || deck.gameId, a) },
   });
@@ -656,7 +656,7 @@ export function renderBoxCentre(
   const heading = documentHeading("Box", {
     title: { get: () => titled, set: (v) => { titled = v; }, placeholder: box.gameId, commitOn: "blur", commit: () => actions.saveBox(box.id, { title: titled }) },
     gameId: { get: () => pinned, set: (v) => { pinned = v; }, fallback: box.gameId, deriveFrom: () => titled, commit: () => actions.saveBox(box.id, { gameId: pinned }) },
-    purpose: { get: () => purpose, set: (v) => { purpose = v; }, placeholder: "<what this box is for>", commitOn: "blur", commit: () => actions.saveBox(box.id, { purpose }) },
+    purpose: { get: () => purpose, set: (v) => { purpose = v; }, placeholder: "What this box is for", commitOn: "blur", commit: () => actions.saveBox(box.id, { purpose }) },
     comments: { on: box.id, count: actions.openThreads(box.id), open: (a) => actions.showComments(box.id, titled || box.gameId, a) },
     menu: [
       { label: "Duplicate box", onClick: () => actions.duplicateBox(box.id) },
@@ -718,7 +718,7 @@ export function renderBoxCentre(
     // pull that way and a reader who only has those words will assume it.
     body = el("div", { className: "doc-sect" },
       el("p", { className: "doc-tab-note", text: "A map is a tag group you can draw. Its tags become zones with outlines, and the hands bound to them stand inside as pins." }),
-      el("p", { className: "doc-tab-note", text: "It does not have to be geography. Anything you can lay out in two dimensions works: acts and their beats, a cast and who is close to whom, a tech tree. The drawing is for you and the reader, and never reaches the bundle." }),
+      el("p", { className: "doc-tab-note", text: "It doesn't have to be geography. Anything you can lay out in two dimensions works, such as acts and their beats, a cast and who is close to whom, or a tech tree. The drawing is for you and the reader. It never reaches the bundle." }),
       el("button", { className: "listrow ghost", text: "+ New map", onClick: () => actions.newMap(box.id) }));
   } else if (tab !== "contents") {
     body = el("div", { className: "centre-editor" });
@@ -735,7 +735,7 @@ export function renderBoxCentre(
     // row used to say hands "own cards", which is the misconception the model
     // most needs to avoid: a deck owns cards, a hand owns what it was DEALT.
     // Two definitions forty lines apart, and the wrong one came first.
-    row("Hands", box.hands.length, "The places on the board; each holds the cards it is dealt.", "hands");
+    row("Hands", box.hands.length, "The places on the board. Each hand holds the cards it's dealt.", "hands");
     // Named here so a box says what it HAS. Only when it has one: an author with
     // no maps is told about them on the Maps tab, which is the surface for that,
     // and a contents list that advertises what is absent is a different job.
@@ -769,7 +769,7 @@ function boxTemplatesBody(box: BoxDto, actions: ViewActions): HTMLElement {
     // hands" - six format terms in the one document a narrative designer has no
     // prior model for. The Copies row is the voice to match: a rule and a reason,
     // no jargon.
-    el("p", { className: "doc-tab-note", text: "A kind of place: write the rule once, and every hand of this kind follows it, filling in its own choices." }),
+    el("p", { className: "doc-tab-note", text: "A kind of place. Write the rule once and every hand of this kind follows it, filling in its own choices." }),
     list);
   // This tab of the box page writes the HANDS shard, not the box shard, so it
   // takes its read-only state from there (see applyVc in renderer.ts).
@@ -902,7 +902,7 @@ export function renderProjectCentre(host: HTMLElement, project: ProjectDto, acti
       // same place and with the same click-to-reveal; the topbar name's tooltip
       // is the other half, so the answer is one hover away from any page.
       el("button", { className: "pdir", text: project.dir, tip: revealTip(), onClick: () => actions.revealProject() }),
-      el("p", { className: "master-sub", text: "The boxes: each a self-contained set of decks, hands and tags." })));
+      el("p", { className: "master-sub", text: "Each box is a self-contained set of decks, hands, and tags." })));
   const list = el("div", { className: "rowlist" });
   const move = (from: string, to: string, before: boolean): void => actions.moveBox(from, to, before);
   for (const box of project.boxes) {
@@ -922,7 +922,7 @@ export function renderProjectCentre(host: HTMLElement, project: ProjectDto, acti
 
 /** Hands: the places on the board; each holds the cards it is dealt. */
 export function renderHandsCentre(host: HTMLElement, box: BoxDto, actions: ViewActions): void {
-  const head = masterHeading({ id: box.id, label: box.title ?? box.gameId }, "Hands", actions, "The places on the board; each holds the cards it is dealt.");
+  const head = masterHeading({ id: box.id, label: box.title ?? box.gameId }, "Hands", actions, "The places on the board. Each hand holds the cards it's dealt.");
   const list = el("div", { className: "rowlist" });
   for (const hand of box.hands) {
     const kind = hand.template !== undefined ? hand.template : "standalone rule";
@@ -990,7 +990,7 @@ export function renderProblems(
   renderStepperBar(host, {
     items: problems.map((p) => ({
       kind: p.severity, kindClass: `sev-${p.severity}`,
-      where: labelFor?.(p) ?? `${p.path}${p.where ? ` [${p.where}]` : ""}`,
+      where: labelFor?.(p) ?? p.where ?? p.path,
       text: p.message,
     })),
     at,

@@ -139,7 +139,7 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
 
   const hint = (): string | undefined => {
     if (armed === "frame") {
-      return corner ? "Frame: click the opposite corner" : "Frame: click one corner";
+      return corner ? "Click the opposite corner of the frame" : "Click one corner of the frame";
     }
     return undefined;
   };
@@ -238,7 +238,7 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
     const box = document.createElement("textarea");
     box.className = "furniture-edit";
     box.value = frame.title ?? "";
-    box.placeholder = "<frame name>";
+    box.placeholder = "Frame name";
     // A frame is named in its BAR, so the editor is one line tall and sits where
     // the bar is rather than over the whole area.
     box.style.left = `${rect.x}px`;

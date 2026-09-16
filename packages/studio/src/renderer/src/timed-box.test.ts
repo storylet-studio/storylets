@@ -56,7 +56,7 @@ describe("the box page's Turns section", () => {
     renderBoxTabBody(centre, timedBox, "dealing", host());
     expect([...centre.querySelectorAll("button.on")].map((b) => b.textContent))
       .toContain("every N seconds of play");
-    expect(centre.textContent).toContain("Plays in this box do not advance its turns");
+    expect(centre.textContent).toContain("Plays in this box don't advance its turns");
     expect(centre.textContent).toContain("a Redraw of 30 means 30 minutes");
     const field = centre.querySelector<HTMLInputElement>("input.insp-short")!;
     expect(field.disabled).toBe(false);

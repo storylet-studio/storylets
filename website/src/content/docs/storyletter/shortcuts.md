@@ -1,11 +1,11 @@
 ---
 title: Keyboard shortcuts
-description: "Every key Storyletter binds, in one place: the menus, the canvases, the tool windows, and how Escape backs out."
+description: Find every key Storyletter binds, across the menus, the canvases, and the tool windows, and how Escape backs out.
 sidebar:
   label: Keyboard shortcuts
 ---
 
-Shortcuts are shown for macOS (`Cmd`). On Windows and Linux, use **Ctrl** wherever you see
+Shortcuts are shown for macOS (`Cmd`). On Windows and Linux, use Ctrl wherever you see
 `Cmd`. Every menu key is also shown in the menu itself.
 
 ## Menu commands
@@ -60,14 +60,14 @@ letters, not chords.
 | `Enter` | Finish the shape you're drawing |
 | `Esc` | Back out (see below) |
 
-`Cmd+F` is not bound on a canvas: it's Find, app-wide.
+`Cmd+F` isn't bound on a canvas, because it's Find, app-wide.
 
 ## Escape is layered
 
 `Esc` does one thing at a time, and always undoes the most recent thing first. On a canvas
-mid-draw it abandons the drawing; with a marquee up it drops the marquee; with a selection
-it clears the selection. In a tool window it closes an open panel before it closes the
-window - on the Board that runs all the way through the play: a chosen outcome, then the
+mid-draw it abandons the drawing, with a marquee up it drops the marquee, and with a
+selection it clears the selection. In a tool window it closes an open panel before it closes
+the window. On the Board that runs all the way through the play: a chosen outcome, then the
 open card, then the snapshot panel, and only then the window.
 
 ## In the Find window
@@ -78,5 +78,5 @@ open card, then the snapshot panel, and only then the window.
 | `Enter` | Go to the selected hit |
 | `Esc` | Close |
 
-The Replace tab has no list keys: each row carries its own **Replace** button, and
+The Replace tab has no list keys. Each row carries its own **Replace** button, and
 **Replace all** asks you to confirm before it rewrites anything.

@@ -66,7 +66,7 @@ export function mountDriverList(host: HTMLElement, drivers: CoverageDriverDto[],
     drivers.forEach((d, i) => {
       const name = el("input", { className: "set-name" });
       name.value = refName(d.ref);
-      name.placeholder = "<property>";
+      name.placeholder = "Property name";
       name.spellcheck = false;
       guard.track(name);
       const ref = el("span", { className: "set-ref" }, el("span", { className: "set-scope", text: WORLD }), name);
@@ -88,7 +88,7 @@ export function mountDriverList(host: HTMLElement, drivers: CoverageDriverDto[],
 
       const values = el("input", { className: "set-values" });
       values.value = valuesText(d.values);
-      values.placeholder = "<values, comma separated>";
+      values.placeholder = "Values, comma separated";
       values.addEventListener("input", () => { d.values = parseValues(values.value); changed(); });
 
       const kind = el("select");

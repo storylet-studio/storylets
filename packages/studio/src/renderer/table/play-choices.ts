@@ -25,7 +25,7 @@ export function playChoices(outcomes: readonly PlayChoice[], choose: (gameId: st
   }
   for (const o of outcomes) {
     const b = el("button", { className: o.available ? "" : "disabled", text: `${o.title ?? o.gameId}${o.available ? "" : " (locked)"}` });
-    if (!o.available) b.title = "Unavailable: this outcome's condition is not met in the current state";
+    if (!o.available) b.title = "Unavailable. This outcome's condition isn't met in the current state.";
     else b.addEventListener("click", () => choose(o.gameId));
     row.append(b);
   }

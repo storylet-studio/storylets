@@ -1,6 +1,6 @@
 ---
 title: Compatibility & conformance
-description: How the same project plays identically on every runtime - one bundle schema as the contract, one shared test suite every runtime passes, and the handful of per-engine differences.
+description: One bundle schema and one shared test suite keep every runtime playing the same project identically, with the per-engine differences listed.
 sidebar:
   label: Compatibility & conformance
 ---
@@ -47,12 +47,12 @@ pass, so this is something you can check, not something you hope for.
 
 A compiled [bundle](/format/bundle/) declares a **schema version** (`storylets/bundle@N`). A
 runtime plays any bundle whose schema it supports. That version is the one thing that cuts
-across everything: bumping it is the one change that moves every runtime together. Each
-runtime, the editor and the CLI otherwise version on their own.
+across everything, because bumping it's the one change that moves every runtime together.
+Each runtime, the editor, and the CLI otherwise version on their own.
 
 | Runtime | Ships as | Get it |
 |---|---|---|
-| **Storylet Engine JS** | Release zip: `@storylet-studio/runtime`, `@storylet-studio/play-helpers` and a browser drop-in | [Download](/download/) |
+| **Storylet Engine JS** | Release zip: `@storylet-studio/runtime`, `@storylet-studio/play-helpers`, and a browser drop-in | [Download](/download/) |
 | **Storylet Engine Unity** | Release zip: the package folder and a demo project | [Download](/download/) |
 | **Storylet Engine Unreal** | Release zip: the plugin folder and a demo project | [Download](/download/) |
 | **Storylet Engine Godot** | Release zip: the addon folder | [Download](/download/) |
@@ -60,7 +60,7 @@ runtime, the editor and the CLI otherwise version on their own.
 
 ## The shared test suite
 
-Every runtime is checked against **one shared suite**: a single language-neutral set of cases
+Every runtime is checked against **one shared suite**, a single language-neutral set of cases
 that pins the exact behaviour a conforming engine must produce. It covers:
 
 - **Expressions**: the evaluator, the expression dialect, and the seeded random-number
@@ -68,38 +68,39 @@ that pins the exact behaviour a conforming engine must produce. It covers:
 - **Specificity**: the score that decides which of two matching cards asked for more.
 - **Peeks**: a peek returns an exact ordered list, and peeking twice returns the same list,
   because a peek changes nothing.
-- **Whole runs**: dealing, the board, playing outcomes, state writes, turns and cooldowns,
+- **Whole runs**: dealing, the board, playing outcomes, state writes, turns, and cooldowns,
   save and load round-trips, and reset.
 
 Each runtime ships a small test host that replays those cases in its own language and checks
 it gets the same answers, down to the random draws. Runs are seeded, so "the same seed deals
-the same cards" holds across JavaScript, C#, C++ and GDScript alike. The suite runs on every
+the same cards" holds across JavaScript, C#, C++, and GDScript alike. The suite runs on every
 release, and a release doesn't go out on a runtime that fails it.
 
-Saving is part of the contract too. Loading a save made against **edited** content is checked:
-state belonging to something that no longer exists drops harmlessly, never a crash.
+Saving is part of the contract too. Loading a save made against **edited** content is checked,
+so state belonging to something that no longer exists drops harmlessly, never a crash.
 
 ## Per-engine differences
 
 Every runtime carries the same API and the same [dev tools](/play/dev-tools/). A few places
-differ because the host language differs, and these are the only ones:
+differ because the host language differs, and these are the only ones.
 
-- **Godot has no exceptions.** Errors come back as values: `play()`, `load()` and
-  `set_property()` return an error string. The state kernel's accessors are `get_value` and
-  `set_value`, because `get` and `set` collide with Godot's own `Object` methods.
-- **Unbounded slots** are the string `"unbounded"` in JavaScript and positive infinity in the
-  native ports. Every engine has a label helper, so a view prints the same text either way.
-- **Unreal Blueprint** gets typed property accessors instead of one generic value pin, and
-  polls the flow's log instead of subscribing to a trace delegate. Both surfaces are
-  available in full from C++.
+**Godot** has no exceptions, so errors come back as values, and `play()`, `load()`, and
+`set_property()` return an error string. The state kernel's accessors are `get_value` and
+`set_value`, because `get` and `set` collide with Godot's own `Object` methods.
+
+**Unbounded slots** are the string `"unbounded"` in JavaScript and positive infinity in the
+native ports. Every engine has a label helper, so a view prints the same text either way.
+
+**Unreal Blueprint** gets typed property accessors instead of one generic value pin, and
+polls the flow's log instead of subscribing to a trace delegate. Both surfaces are available
+in full from C++.
 
 ## What this means for you
 
-You ship on one engine. That's why you can trust **that** engine: it plays your project
+You ship on one engine. That's why you can trust **that** engine. It plays your project
 exactly as Storyletter's [Board](/storyletter/board/) does, the same cards in the same order,
 the same conditions, the same saves, right down to the random draws. There's no "works in the
 editor, behaves differently in my game" gap to chase.
 
-It isn't "should match". It's checked, case by case, on every release.
-
-→ Back to [Playing in your game](/play/overview/).
+It isn't "should match". It's checked, case by case, on every release. The per-engine guides
+themselves start from [Playing in your game](/play/overview/).

@@ -29,14 +29,14 @@ const PLUG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
  *  for what it says about flows. */
 export function liveLinkTip(s: LiveLinkStatus): string {
   switch (s.state) {
-    case "off": return "Live link: off. Click to start listening.";
-    case "error": return `Live link error: ${s.message}. Click to retry.`;
-    case "listening": return "Live link: listening, waiting for a game. Click to stop.";
+    case "off": return "Live link off. Click to start listening.";
+    case "error": return `The live link failed (${s.message}). Click to retry.`;
+    case "listening": return "Live link listening, waiting for a game. Click to stop.";
     case "connected": {
       const who = s.project !== undefined ? ` to ${s.project}` : "";
-      const build = s.build === "stale" ? " (different build; save to re-sync)" : s.build === "match" ? " (in sync)" : "";
+      const build = s.build === "stale" ? " (different build, save to re-sync)" : s.build === "match" ? " (in sync)" : "";
       const boxes = s.boxes.length > 0 ? ` Boxes: ${s.boxes.join(", ")}.` : "";
-      return `Live link: connected${who}${build}.${boxes} Click to stop.`;
+      return `Live link connected${who}${build}.${boxes} Click to stop.`;
     }
   }
 }

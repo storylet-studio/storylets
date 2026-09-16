@@ -40,7 +40,7 @@ export function lockControls(host: HTMLElement, off: boolean): void {
  *  the far end's own sentence, said before the edit instead of after it. */
 export const shapeNotice = (): HTMLElement => el("div", { className: "vc-lock" },
   el("span", { className: "vc-lock-glyph", text: icon.readOnly }),
-  el("span", { text: "Read-only: pull as designer to change the shape." }));
+  el("span", { text: "Read-only. You can pull as designer to change the shape." }));
 
 // THE ARRANGING RULE MOVED, and left nothing behind here (2026-09-06,
 // design/engine-server.md 9.1 point 5).

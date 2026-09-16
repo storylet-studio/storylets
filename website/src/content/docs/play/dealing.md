@@ -1,21 +1,21 @@
 ---
 title: How a deal is decided
-description: What happens when your game deals a hand - the checks every card goes through, in order, how the survivors are ranked, how copies and claims work, turns and cooldowns, and what the @hand scope is made of.
+description: Follow what happens when your game deals a hand, from the checks every card goes through to ranking, claims, cooldowns, and the @hand scope.
 sidebar:
   label: How a deal is decided
 ---
 
 [Core concepts](/concepts/) gives you the words. This page is the mechanics behind `deal`
-and `peek`: exactly which cards are considered, in what order, and why a card that looks
-right sometimes doesn't come up. It's the page to read when the Board's **Not listed · why**
-fold names a reason and you want to know what that reason means.
+and `peek`. It says exactly which cards are considered, in what order, and why a card that
+looks right sometimes doesn't come up. It's the page to read when the Board's **Not listed ·
+why** fold names a reason and you want to know what that reason means.
 
 ## The stock
 
-At any moment, each box has a **stock**: every card that could be dealt right now, in ranking
-order. It isn't stored anywhere; the engine works it out whenever you ask, and it changes as
-state changes. A `peek` shows you the top of the stock; a `deal` takes cards from it into a
-hand.
+At any moment, each box has a **stock**, every card that could be dealt right now, in ranking
+order. It isn't stored anywhere. The engine works it out whenever you ask, and it changes as
+state changes. A `peek` shows you the top of the stock, and a `deal` takes cards from it into
+a hand.
 
 ## The checks, in order
 
@@ -33,7 +33,7 @@ first one it fails:
 5. **Claims**: every copy of the card is already sitting in some hand.
 
 <svg viewBox="0 0 720 210" role="img" aria-labelledby="sy-avail-title" style="width:100%;height:auto;font-family:var(--sl-font,sans-serif)">
-  <title id="sy-avail-title">A deal first checks the hand's condition once; if it passes, every card goes through five checks in order - deck gate, cooldown, tags, its own condition, and claims - and stops at the first one it fails. Whatever survives is ranked, and the top of that is the stock.</title>
+  <title id="sy-avail-title">A deal first checks the hand's condition once; if it passes, every card goes through five checks in order (deck gate, cooldown, tags, its own condition, and claims) and stops at the first one it fails. Whatever survives is ranked, and the top of that is the stock.</title>
   <defs>
     <marker id="sy-a-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="var(--sl-color-gray-3)"/></marker>
   </defs>
@@ -83,12 +83,12 @@ card is treated as unavailable and the reason is recorded. It never quietly pass
 
 The cards that pass every check are put in order by:
 
-1. **Priority**: a number you set on the card, or an expression that works one out. Higher
-   goes first.
-2. **Specificity**: a card whose condition asks for more beats one that asks for less, so
-   the special case wins over the general one. It's on by default and you can switch it off
-   per box, in which case priority decides outright.
-3. **Chance**, for anything still tied. The random numbers are seeded, so the same seed
+1. Priority comes first. It's a number you set on the card, or an expression that works one
+   out, and higher goes first.
+2. Specificity breaks ties. A card whose condition asks for more beats one that asks for
+   less, so the special case wins over the general one. It's on by default and you can switch
+   it off per box, in which case priority decides outright.
+3. Chance decides anything still tied. The random numbers are seeded, so the same seed
    gives the same order every time, in every runtime.
 
 A hand with a slot limit takes the top few. With no state change between two deals, you get
@@ -100,12 +100,12 @@ There's one copy of every card unless the card says `copies: N`. A dealt card is
 by the hand holding it, so a card sits in at most one hand at a time (and at most once in any
 one hand), exactly as a physical card can't be in two places at once.
 
-You don't configure this. `deal` claims; `peek` only respects the claims that exist. Playing a
-card removes it from its hand and releases its claim; the slot stays empty until that hand is
-next dealt.
+You don't configure this. `deal` claims, and `peek` only respects the claims that exist.
+Playing a card removes it from its hand and releases its claim. The slot stays empty until
+that hand is next dealt.
 
-This is what makes the "one rumour, offered wherever the player goes first" pattern free:
-write one card, and whichever hand deals it first has it.
+This is what makes the "one rumour, offered wherever the player goes first" pattern free.
+Write one card, and whichever hand deals it first has it.
 
 Claims live on the **flow**, so "at most one hand at a time" means at most one hand in that
 playthrough. Run [several flows](/play/world-state/#shared-or-per-flow) and a `copies: 1` card
@@ -113,20 +113,21 @@ is on two participants' boards at once, because each of them is playing their ow
 deck.
 
 **Unless you say otherwise.** Mark a deck (or a single card) **`shared`** and its claims count
-across every flow instead: one goblin in the whole world, held by whoever was dealt it first,
-and nobody else can be dealt it until they play it or it leaves their board. `sharedCopies`
-sets how many may be out anywhere, defaulting to `copies`, so `copies: 1, sharedCopies: 5` is
-five golden tickets with one to a customer. A card refused because somebody else holds it says
-so: the trace verdict is `claimed-elsewhere`, not `claimed`, because your own board has room.
+across every flow instead, so there's one goblin in the whole world, held by whoever was
+dealt it first, and nobody else can be dealt it until they play it or it leaves their board.
+`sharedCopies` sets how many may be out anywhere, defaulting to `copies`, so `copies: 1,
+sharedCopies: 5` is five golden tickets with one to a customer. A card refused because
+somebody else holds it says so. The trace verdict is `claimed-elsewhere`, not `claimed`,
+because your own board has room.
 
-A single-flow game never sees any of this: with one playthrough open, a shared claim and a
-per-flow one are the same thing.
+A single-flow game never sees any of this, because with one playthrough open a shared claim
+and a per-flow one are the same thing.
 
 ## Turns and cooldowns
 
-The clock is the **turn**, and each box has its own. Your game advances a box's turns; a
+The clock is the **turn**, and each box has its own. Your game advances a box's turns, and a
 `play` also advances the played card's box by the project's configured amount (one by default,
-and you can override it per call). Nothing here runs off a frame: a turn is whatever your
+and you can override it per call). Nothing here runs off a frame, and a turn is whatever your
 game says it is.
 
 A card's `redraw` policy is its cooldown, measured in its own box's turns: `always` (no
@@ -134,24 +135,24 @@ cooldown), `never` (a one-shot), or a number N (unavailable for N of that box's 
 it's played). Cooldowns start when a card is played, not when it's dealt, and a peek never
 touches any clock.
 
-Clocks and cooldowns are per flow as well: advancing a box in one flow moves nothing in
+Clocks and cooldowns are per flow as well, so advancing a box in one flow moves nothing in
 another, and a one-shot spent by one participant is still there for the next.
 
-On a **shared** card, `redraw: never` is the exception: the first participant to play it takes
+On a **shared** card, `redraw: never` is the exception. The first participant to play it takes
 it out of the world for everyone, permanently, and the others are told `taken` rather than
-`cooldown` (they have no cooldown; it simply is not there any more). A *finite* `redraw` stays
-personal even on a shared card, and that combination is a good rule rather than a gap: the
+`cooldown` (they have no cooldown, because it isn't there any more). A *finite* `redraw` stays
+personal even on a shared card, and that combination is a good rule rather than a gap. The
 goblin goes straight back in the pool for whoever is next, while the participant who just
 fought it waits their own three turns. There is no shared clock to count anything else
 against, so a world-wide timer belongs in `@world`, where your game already keeps the time
 (`@world.now >= @world.goblin_returns_at`).
 
 **And `never` is the one that can outlive the run.** Mark a deck or a card **`durable`** and
-its `never` spend is still spent tomorrow: for whoever played it, or for everyone if the card
+its `never` spend is still spent tomorrow, for whoever played it, or for everyone if the card
 is also shared. See
-[Durable state](/play/world-state/#durable-state-that-outlives-a-run). Nothing else can carry:
-a finite cooldown is a turn of a clock that resets with the run, so `durable` on one is a
-compile warning.
+[Durable state](/play/world-state/#durable-state-that-outlives-a-run). Nothing else can carry,
+because a finite cooldown is a turn of a clock that resets with the run, so `durable` on one
+is a compile warning.
 
 ### A box that counts in time
 
@@ -164,12 +165,12 @@ A box can declare that its turns are time rather than plays:
   ... }
 ```
 
-That makes it a **timed box**, and three things follow. Plays in it advance nothing: the
-project's play-advance setting does not apply, though a `play` that names `advanceTurns`
+That makes it a **timed box**, and three things follow. Plays in it advance nothing, because
+the project's play-advance setting doesn't apply, though a `play` that names `advanceTurns`
 still gets what it asks for. Your game ticks it, once every `seconds` of real time, for
-every open flow; the engine still has no clock of its own. And `redraw: N` on its cards
-reads as N minutes rather than N plays, which is the point of declaring it: `redraw: 30` in
-a sixty-second box is half an hour, and the editor, the bundle inspectors and the coverage
+every open flow, and the engine still has no clock of its own. And `redraw: N` on its cards
+reads as N minutes rather than N plays, which is the point of declaring it. `redraw: 30` in
+a sixty-second box is half an hour, and the editor, the bundle inspectors, and the coverage
 report all say so out loud.
 
 Nothing else changes. The unit is a convention the tools spell out, and the time is still
@@ -182,21 +183,21 @@ A hand template is a kind of hand you define once: "NPCs you can talk to" fixes 
 leaves others for each hand to choose, and carries one condition that's written once and
 evaluated for each hand against that hand's own `@hand`. Edit the template and every hand
 that uses it follows. A hand can override only its slot count. A hand can also stand alone,
-with its own tags, condition and slots written directly on it.
+with its own tags, condition, and slots written directly on it.
 
-Your game never names a template; it deals hands.
+Your game never names a template. It deals hands.
 
 ## The `@hand` scope
 
 `@hand` is put together fresh for each deal, from three sources, later ones overriding
 earlier ones where names collide:
 
-1. **The properties of every tag the hand binds.** These are usually declared on the tag
-   group, so every tag in it has them, and each tag sets only its own starting value; a
-   single tag can also declare its own. Either way, a hand bound to `zone = forest` sees
+1. The properties of every tag the hand binds. These are usually declared on the tag
+   group, so every tag in it has them, and each tag sets only its own starting value, though
+   a single tag can also declare its own. Either way, a hand bound to `zone = forest` sees
    `@hand.peril`.
-2. **The hand's own properties**, declared on the hand or its template.
-3. **What the deal or peek asked for**, by group name: `peek("village", { npc: "elder" })`
+2. The hand's own properties come next, declared on the hand or its template.
+3. What the deal or peek asked for, by group name. `peek("village", { npc: "elder" })`
    makes `@hand.npc` read `elder`. A hand that pins a group itself reads the same way.
 
 Every name remembers where it came from, so a write goes back to the right place:
@@ -205,12 +206,12 @@ how place-like state works without a separate scope for places. A [quality](/for
 works the same way, so each place can sit at its own stage of one shared ladder, and
 `advance(@hand.haunting)` moves only the place the hand belongs to.
 
-`@hand` names are checked when you publish, the same as any other scope: a misspelt
+`@hand` names are checked when you publish, the same as any other scope, so a misspelt
 `@hand.perl` is an error rather than a card that quietly never comes up, and a comparison
 against the wrong type or a stage that isn't on the ladder is caught too. What can't be
 worked out ahead of time is which hand will be asking, so the
 [Links window](/storyletter/links/) and `storyletengine links` still leave
-`@hand` relationships out rather than guess. One name is read-only: a group's own name is
+`@hand` relationships out rather than guess. One name is read-only. A group's own name is
 what the hand asked for, so writing `@hand.zone` is refused.
 
 ## Reading the trace
@@ -220,5 +221,5 @@ reason it was kept or dropped: `dealt`, `capped` (ranked but outside the hand's 
 `cooldown`, `deck-gate`, `tags`, `condition`, `priority`, `claimed`,
 `claimed-elsewhere` (another playthrough holds the world's copies) and `taken` (a shared
 one-shot spent, by anyone, for everyone). The Board's **Not
-listed · why** fold shows it; in your game, `subscribeTrace` streams it and a retained log
-keeps it. &rarr; [Dev tools](/play/dev-tools/)
+listed · why** fold shows it. In your game, `subscribeTrace` streams it and a retained log
+keeps it, as [Dev tools](/play/dev-tools/) describes.

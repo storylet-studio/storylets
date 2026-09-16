@@ -68,7 +68,7 @@ function playField(d: ProjectSettingsDto): HTMLElement[] {
     const above = next === "venue" ? [] : d.ladder[next];
     if (above.length > 0) {
       sel.value = d.play;   // the field goes on saying what the project IS
-      refusal.textContent = `Not while the project uses it: ${above.join(", ")}. `
+      refusal.textContent = `Not while the project uses it (${above.join(", ")}). `
         + "Take those out first, or leave Play where it is.";
       return;
     }
@@ -113,7 +113,7 @@ export function createProjectSettings(
             labelled("Version", textField(d.version, (v) => { d.version = v; })),
             ...playField(d),
             labelled("Warn about unread state", unread),
-            el("p", { className: "set-note", text: "Also flag state an outcome writes that no condition reads. Off by default: cards are often written ahead of the content that will read them. A gate on state nothing writes always warns, whatever this says." }),
+            el("p", { className: "set-note", text: "Also flag state an outcome writes that no condition reads. It's off by default, because cards are often written ahead of the content that will read them. A gate on state nothing writes always warns, whatever this says." }),
           );
           return {};
         } },
@@ -155,9 +155,9 @@ export function createProjectSettings(
             labelled("Bundle path", textField(d.bundlePath, (v) => { d.bundlePath = v; })),
             labelled("Metadata", meta),
             labelled("Include the maps", map),
-            el("p", { className: "set-note", text: "Zone shapes and background pictures ship with the bundle, and the pictures are written beside it. The engine ignores them: this is for a host that draws its own map." }),
+            el("p", { className: "set-note", text: "Zone shapes and background pictures ship with the bundle, and the pictures are written beside it. The engine ignores them. This is for a host that draws its own map." }),
             labelled("Play advances turns", turns),
-            el("p", { className: "set-note", text: "How far a play moves the clock of the box the card came from. It does not apply to a timed box: a box whose Turns setting counts seconds is advanced by the game's clock, and its plays advance nothing." }),
+            el("p", { className: "set-note", text: "How far a play moves the clock of the box the card came from. A timed box (one whose Turns setting counts seconds) is advanced by the game's clock instead, so its plays advance nothing." }),
           );
           return {};
         } },

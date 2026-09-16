@@ -1,17 +1,17 @@
 ---
 title: Running it with Patter
-description: One game, two engines. The Storylet Engine chooses which beat happens and Patter performs its dialogue, joined by a naming convention, one shared world and one save.
+description: Run the Storylet Engine and Patter in one game, joined by a naming convention, one shared world, and one save.
 sidebar:
   label: With Patter
 ---
 
 If your cards lead into conversations, [Patter](https://patterkit.dev) can perform them. The
-Storylet Engine decides which beat happens next; Patter plays the dialogue for it; your game owns
-the world both of them read. Nothing in either project knows about the other. The join is a
+Storylet Engine decides which beat happens next, Patter plays the dialogue for it, and your game
+owns the world both of them read. Nothing in either project knows about the other. The join is a
 naming convention your game follows, and a build-time check keeps it honest.
 
-**The Hamlet** is the worked example: seventeen cards, seventeen scenes, one save. It is playable
-in your browser and ships as source for JavaScript, Godot, Unity and Unreal, all from the
+**The Hamlet** is the worked example (seventeen cards, seventeen scenes, one save). It is playable
+in your browser and ships as source for JavaScript, Godot, Unity, and Unreal, all from the
 [download page](/download/#the-hamlet-two-engines-in-one-game) once its first release is out.
 
 ## The convention
@@ -35,14 +35,14 @@ options, one carrying each of those names. That is the whole link.
 
 Your host resolves it in four steps, and the last word wins:
 
-1. **A `gameEvent`** with `outcome` in its Game Data, wherever one fires, beats anything before
+1. A `gameEvent` with `outcome` in its Game Data, wherever one fires, beats anything before
    it. This is the scene deciding late, having played the dialogue.
-2. **Otherwise the outcome named on the option the player took.**
-3. **Otherwise the card's only outcome**, when it declares exactly one.
-4. **Otherwise no outcome**, when the card declares none: play it with `""`.
+2. Otherwise it's the outcome named on the option the player took.
+3. Otherwise it's the card's only outcome, when it declares exactly one.
+4. Otherwise there's no outcome, when the card declares none, and you play it with `""`.
 
 Most scenes never reach step one. A card with a single outcome needs no Game Data anywhere, so a
-scene of pure narration says nothing at all; a card with several is answered by labelling its
+scene of pure narration says nothing at all. A card with several is answered by labelling its
 options. Reserve the `gameEvent` for a branch that cannot know its outcome until it has played,
 and note that it overrules whatever the option promised.
 
@@ -80,21 +80,19 @@ storyFlow.dealMany();   // refresh every hand; a card still eligible keeps its p
 ```
 
 Keep that one flow for the whole run, and find it again with `getFlow` after a load. Do not
-open a new flow per card: a fresh flow starts Patter's random sequence over and forgets its
+open a new flow per card. A fresh flow starts Patter's random sequence over and forgets its
 visit counts, so a scene that shuffles its lines would show the same one every time. A `goto`
 moves the cursor and resets nothing, and a flow whose last scene ended resumes at the new
 address. A bigger project keeps one flow per box it performs. After a choice, call
 `flow.choose(optionId)` and run the loop again, remembering the outcome that option named
-before you do: by the end of the branch it is gone.
+before you do, because by the end of the branch it's gone.
 
 ### Two gates on one option
 
 An option can be shut by either engine, on state the other cannot see, so check both and let
-each own its own:
-
-- **Patter's `eligible`**, its own condition on the option.
-- **The Storylet Engine's `available`**, from `outcomes(cardId, handId)`, on the outcome that
-  option leads to. A condition on `@story` or `@deck` is invisible to Patter.
+each own its own. Patter's `eligible` is its own condition on the option. The Storylet Engine's
+`available`, from `outcomes(cardId, handId)`, is on the outcome that option leads to, and a
+condition on `@story` or `@deck` is invisible to Patter.
 
 Offer an option only when both agree. Show the rest greyed rather than hidden, as Patter's own
 runtime does with an ineligible option: a player who can see the door they cannot open is being
@@ -116,13 +114,12 @@ Declare the same properties in both projects, with the same names and types. A s
 `@world.knows_road` moves the value the cards' conditions read on the next deal; a card whose
 outcome sets it moves what the next scene sees.
 
-Two ways to make a value read-only, and they mean different things:
-
-- **`writable: false` on the declaration** is the story's own promise. Both compilers refuse a
-  write in that project, and both engines refuse one at run time.
-- **Your game's read-only list** (the second argument above) is your policy. A story that tries
-  to set such a value is refused with an error naming it. Your own writes always land. The
-  Hamlet leaves the list empty: a scene or a card may move time in it.
+There are two ways to make a value read-only, and they mean different things. `writable: false`
+on the declaration is the story's own promise. Both compilers refuse a write in that project,
+and both engines refuse one at run time. Your game's read-only list (the second argument above)
+is your policy. A story that tries to set such a value is refused with an error naming it. Your
+own writes always land. The Hamlet leaves the list empty, so a scene or a card may move time in
+it.
 
 Patter's side of the same four points is on its
 [world properties](https://patterkit.dev/play/world-properties/) page.
@@ -147,49 +144,52 @@ with `getFlow` rather than opening them again, so a conversation paused at a cho
 paused with its options ready. Patter restores the flow's position; the lines already spoken are
 yours to have kept, which is what `performing` is for.
 
-The envelope is the same on every host, so a game saved in the browser loads in the Godot, Unity
+The envelope is the same on every host, so a game saved in the browser loads in the Godot, Unity,
 or Unreal version of the Hamlet, mid-conversation, and the tests for each say so.
 
 ## The check
 
 Because nothing declares the link, the build checks it, on the two published bundles. The
-Hamlet's `scripts/pairing.mjs` runs before every build and fails it when:
+Hamlet's `scripts/pairing.mjs` runs before every build and fails it in any of these cases:
 
-- a card in a performed box has no scene of its name, or a scene belongs to no card;
-- a scene names an outcome its card does not declare;
-- a card with several outcomes has an option that names none and fires no `gameEvent`, so
-  taking that branch would leave the host guessing;
-- a card with several outcomes declares one that no option and no event can ever name;
-- a `@world` property is declared in one project and not the other, or with a different type,
-  values, default or `writable` flag, or an outcome writes a property Patter's project declares
+- A card in a performed box has no scene of its name, or a scene belongs to no card.
+- A scene names an outcome its card doesn't declare.
+- A card with several outcomes has an option that names none and fires no `gameEvent`, so
+  taking that branch would leave the host guessing.
+- A card with several outcomes declares one that no option and no event can ever name.
+- A `@world` property is declared in one project and not the other, or with a different type,
+  values, default, or `writable` flag, or an outcome writes a property Patter's project declares
   read-only.
 
 Run it whenever you rename a card or an outcome. A `gameId` derived from a card's title
-changes when the title does; pin it on the card to keep the scene name stable.
+changes when the title does, so pin it on the card to keep the scene name stable.
 
 ## The Hamlet on each engine
 
-The same game four times, each a project you open and read:
+The same game four times, each a project you open and read.
 
-- **JavaScript**: `packages/hamlet-client`, plain JavaScript with no build step: a page, two
-  script tags for the runtimes' browser files, three plain scripts. Read `src/world.js` (the
-  shared world) then `src/performance.js` (the handoff).
-- **Godot 4.7+**: `ports/godot/HamletDemo`. Open the project and press Play; `hamlet_game.gd`
-  is the whole integration.
-- **Unity 6000.4+**: `ports/unity/HamletDemo`. Press Play; `HamletGame.cs` and `HamletWorld.cs`
-  hold it, with Patterplay embedded in `Packages/`.
-- **Unreal 5.7+**: `ports/unreal/HamletDemo`. Open the `.uproject`, let it build, press Play.
-  `HamletGame.cpp` makes two `Create` calls with one world:
-  `UStoryletEngine::Create(Bundle, Seed, false, World)` and `UPatterEngine::Create(Bundle, World)`.
+The JavaScript version is `packages/hamlet-client`, plain JavaScript with no build step: a
+page, two script tags for the runtimes' browser files, three plain scripts. Read `src/world.js`
+(the shared world) then `src/performance.js` (the handoff).
+
+For Godot 4.7+, open `ports/godot/HamletDemo` and press Play. `hamlet_game.gd` is the whole
+integration.
+
+Unity 6000.4+ has `ports/unity/HamletDemo`. Press Play. `HamletGame.cs` and `HamletWorld.cs`
+hold it, with Patterplay embedded in `Packages/`.
+
+On Unreal 5.7+, open the `.uproject` in `ports/unreal/HamletDemo`, let it build, and press
+Play. `HamletGame.cpp` makes two `Create` calls with one world,
+`UStoryletEngine::Create(Bundle, Seed, false, World)` and `UPatterEngine::Create(Bundle, World)`.
 
 Each ships with Patter's plugin from its pinned release, so the zip runs as downloaded. All
 four read the same two published bundles, `storylet-dist/the-hamlet.storyletsc` from
 Storyletter and `patter-dist/the_hamlet.patterc` from Patterpad, each editor's default place
-beside its project, and committed: a game reads published bundles, and so does the demo.
+beside its project, and committed. A game reads published bundles, and so does the demo.
 
 ## Next
 
-- Your engine: [JavaScript](/play/javascript/), [Unity](/play/unity/),
-  [Unreal](/play/unreal/), [Godot](/play/godot/).
-- [Your game's state](/play/world-state/) for the `@world` rules on their own.
-- Patter's [save and Game Data reference](https://patterkit.dev/play/integration/).
+- Your engine's page is [JavaScript](/play/javascript/), [Unity](/play/unity/),
+  [Unreal](/play/unreal/), or [Godot](/play/godot/).
+- [Your game's state](/play/world-state/) has the `@world` rules on their own.
+- Patter's side is its [save and Game Data reference](https://patterkit.dev/play/integration/).

@@ -62,7 +62,7 @@ function defaultControl(p: PropertyDeclDto, onChange?: () => void): HTMLElement 
   }
   const input = el("input");
   input.type = p.type === "number" ? "number" : "text";
-  input.value = p.default; input.placeholder = "<starting value>";
+  input.value = p.default; input.placeholder = "Starting value";
   input.addEventListener("input", () => { p.default = input.value; onChange?.(); });
   return input;
 }
@@ -102,12 +102,16 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
   const changed = (): void => opts.onChange?.();
   const guard = dupGuard();
   const list = el("div", { className: "set-list" });
+  // The noun the add button names ("+ Add property", "+ Field"), pluralised for the empty sentence.
+  const noun = (opts.addLabel ?? "+ Add property").replace(/^\+\s*(Add\s+)?/i, "").toLowerCase();
+  const emptyNoun = noun.endsWith("y") ? `${noun.slice(0, -1)}ies` : `${noun}s`;
   function render(): void {
     guard.reset();
     list.replaceChildren();
+    if (decls.length === 0) list.append(el("p", { className: "set-note", text: `No ${emptyNoun} yet. Add one below.` }));
     decls.forEach((p, i) => {
       const name = el("input", { className: "set-name" });
-      name.value = p.name; name.placeholder = "<name>";
+      name.value = p.name; name.placeholder = "Name";
       name.title = PROPERTY_NAME_HINT;
       bindPropertyName(name, (v) => { p.name = v; changed(); }, { hint: PROPERTY_NAME_HINT });
       guard.track(name);
@@ -128,7 +132,7 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
       // and outcome editors, so writing one here teaches every reader of the
       // expression what the name means.
       const purpose = el("input");
-      purpose.value = p.purpose ?? ""; purpose.placeholder = "<what this property is for>";
+      purpose.value = p.purpose ?? ""; purpose.placeholder = "What this property is for";
       purpose.addEventListener("input", () => {
         if (purpose.value.trim()) p.purpose = purpose.value; else delete p.purpose;
         changed();
@@ -141,7 +145,7 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
         ro.type = "checkbox"; ro.checked = p.writable === false;
         ro.addEventListener("change", () => { if (ro.checked) p.writable = false; else delete p.writable; changed(); });
         const roLabel = labelled("Read-only", ro);
-        roLabel.dataset.tip = "Read-only: the story can read this value but not set it (the game owns it). Writing to it is then a validation error.";
+        roLabel.dataset.tip = "The story can read this value but not set it, because the game owns it. Writing to it's a validation error.";
         details.push(roLabel);
       }
       // The two axes (design/flows.md; design/engine-server.md 4.2), drawn only
@@ -159,8 +163,8 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
           });
           const shLabel = labelled("Shared", sh);
           shLabel.dataset.tip = shareDefault
-            ? "Shared: one value for everyone playing, rather than a copy each. On by default for story state; untick it for a value each playthrough keeps to itself."
-            : "Shared: one value for everyone playing, rather than a copy each. A single-player game is unaffected.";
+            ? "One value for everyone playing, rather than a copy each. It's on by default for story state. Untick it for a value each playthrough keeps to itself."
+            : "One value for everyone playing, rather than a copy each. A single-player game is unaffected.";
           details.push(shLabel);
         }
         // A declaration that is ALREADY durable keeps its switch at every
@@ -178,7 +182,7 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
             changed();
           });
           const duLabel = labelled("Durable", du);
-          duLabel.dataset.tip = "Durable: the value survives the end of a run. Shared and durable is the installation's memory; durable on its own is what one player carries back with them.";
+          duLabel.dataset.tip = "The value survives the end of a run. Shared and durable is the installation's memory. Durable on its own is what one player carries back with them.";
           details.push(duLabel);
         }
       }

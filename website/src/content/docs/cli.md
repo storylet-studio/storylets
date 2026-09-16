@@ -1,6 +1,6 @@
 ---
 title: The CLI
-description: storyletengine - init, new box, validate, format, export, export-html, export-xlsx, peek, deal, resolve, merge, links, coverage, pack and unpack. Everything the editor does, from a terminal.
+description: Run everything the editor does from a terminal, from init and validate through export, deal, and coverage to merge and pack.
 sidebar:
   label: The CLI
 ---
@@ -11,8 +11,8 @@ script a hand-off.
 
 ## Getting it
 
-Download a standalone binary for your platform from the [Download page](/download/): one
-file, no Node installation needed, and nothing else to install alongside it.
+Download a standalone binary for your platform from the [Download page](/download/). It is
+one file, with no Node installation needed and nothing else to install alongside it.
 
 ```sh
 chmod +x ./storyletengine-macos-arm64
@@ -22,7 +22,7 @@ chmod +x ./storyletengine-macos-arm64
 The binaries are the distribution. The packages are not published to npm, so put the binary
 somewhere on your `PATH` and call it `storyletengine` if you want the short form.
 
-The CLI package is public on npm. The runtimes aren't: they ship as zips on the Download
+The CLI package is public on npm. The runtimes aren't, and ship as zips on the Download
 page.
 
 Every command writes through your version control (checking a file out first, adding new
@@ -33,7 +33,7 @@ usage error. `fmt` is an alias for `format`.
 Most commands take a project path as their last positional argument, defaulting to the
 current directory. You can point at the `.storylets` folder or anywhere inside it.
 
-## Everything at a glance
+## Every command
 
 ```
 storyletengine init [dir] [--name X]
@@ -66,12 +66,12 @@ next: storyletengine export .../tavern.storylets
 
 It creates `<dir>.storylets` with a starter box (one hand, two cards that show the loop),
 plus the files that keep a project tidy in a repo: `.editorconfig`, `.gitattributes`,
-`.gitignore`, `.vscode/settings.json` and `vcs-setup.md`. See [the
+`.gitignore`, `.vscode/settings.json`, and `vcs-setup.md`. See [the
 walkthrough](/cli-walkthrough/#1-make-a-project).
 
 ## new box
 
-Add a box, scaffolded from a BOX KIT. A box kit is a starting point you own: fully
+Add a box, scaffolded from a BOX KIT. A box kit is a starting point you own, fully
 editable the moment it lands, with no kit reference left in the files. (The other scale
 is a GAME KIT, which starts a whole project; Storyletter's New Project picker offers
 those.)
@@ -81,7 +81,7 @@ $ storyletengine new box tavern.storylets --kit rpg
 added box "new-box" (rpg kit) in .../tavern.storylets
 ```
 
-`--kit` is `blank` (the default), `rpg` or `dialogue`. The two narrated box kits carry
+`--kit` is `blank` (the default), `rpg`, or `dialogue`. The two narrated box kits carry
 a purpose note on every piece, each teaching one part of the model. Storyletter's New Box
 picker offers the same three and scaffolds identically.
 
@@ -96,8 +96,8 @@ ok: .../tavern.storylets
 
 It checks for property references nothing declares, tag references that point nowhere, hands
 that don't fill in every group their template asks for, card field values against the box's
-card template, canonical form, a leftover merge conflict file, and **bundle staleness**: a
-committed `.storyletsc` whose content hash no longer matches the shards is an error.
+card template, canonical form, a leftover merge conflict file, and **bundle staleness** (a
+committed `.storyletsc` whose content hash no longer matches the shards is an error).
 
 Problems print as `severity: path [where]: message`. Any error exits 1, which makes this the
 natural pre-commit hook and CI gate.
@@ -131,15 +131,16 @@ exported .../storylet-dist/the-tavern.storyletsc
 It writes to the path the project shard declares. `-o file` overrides it; `-o -` writes to
 standard output. Export validates first and refuses to write anything on an error.
 
-`--map` carries the maps: the zone shapes and background pictures of every spatial tag
-group, with the pictures written to `assets/<box>/` beside the bundle. `--no-map` leaves
+`--map` carries the maps, meaning the zone shapes and background pictures of every spatial
+tag group, with the pictures written to `assets/<box>/` beside the bundle. `--no-map` leaves
 them out. Without either, the project's own `export.map` setting decides, and its default is
-off: geometry is authoring data, and a shipping build needn't carry anything it doesn't use.
+off, because geometry is authoring data and a shipping build needn't carry anything it
+doesn't use.
 The engine never reads a shipped map; it's there for a host that draws its own.
 
 ## export-html
 
-One self-contained, playable `.html`: the runtime, the Board and the compiled bundle
+One self-contained, playable `.html` with the runtime, the Board, and the compiled bundle
 inlined, so it plays offline in any browser with no server and no install. Hand one file to
 anyone.
 
@@ -152,10 +153,10 @@ wrote The Hamlet.html (78 KB)
 |---|---|
 | `-o FILE` | Where to write the page. Without it, the page lands beside the bundle under the bundle's name (`storylet-dist/the-hamlet.html` for the example). `-o -` writes it to standard output. |
 
-The page is the Board: every hand as a labelled group of cards, outcomes under the open
-card, **Deal all hands**, **Next turn**, **Restart**, and a transcript - and the project's
-maps, drawn above each box's hands with the background pictures inlined as data, a pin per
-placed hand carrying its live card count. The bundle inside it
+The page is the Board, with every hand as a labelled group of cards, outcomes under the open
+card, **Deal all hands**, **Next turn**, **Restart**, and a transcript. The project's maps
+are drawn above each box's hands with the background pictures inlined as data, and a pin per
+placed hand carries its live card count. The bundle inside it
 is compiled with full metadata whatever the project's setting, so titles and purposes show,
 and the player's place is saved in that browser. Storyletter's **Publish ▸ Publish Playable
 HTML…** writes the same page; there's more about what to do with it in
@@ -163,7 +164,7 @@ HTML…** writes the same page; there's more about what to do with it in
 
 ## export-xlsx
 
-The whole project as a readable Excel workbook: the thing to hand a lead for a review
+The whole project as a readable Excel workbook, the thing to hand a lead for a review
 meeting, or a producer who wants to sort and filter.
 
 ```
@@ -175,12 +176,12 @@ wrote The Hamlet.xlsx: 16 card(s) on 5 deck sheet(s), 24 outcome(s), 3 hand(s), 
 |---|---|
 | `-o FILE` | Where to write the workbook. Required. |
 
-The workbook opens on an **Overview** sheet (the project's name, version and content hash,
+The workbook opens on an **Overview** sheet (the project's name, version, and content hash,
 when it was generated, counts, and an index of the deck sheets), then **one sheet per deck**,
 named after the deck. Each row is a card: Title, gameId, When, Priority, Redraw, Copies, a
 column per tag group, a column per card field, Purpose, and the card's outcomes with their
 changes. After the decks come **Outcomes** (one row per outcome, for filtering), **Hands**
-(hand, template, When, tags, slots, purpose) and **Tag groups** (every tag with its
+(hand, template, When, tags, slots, purpose), and **Tag groups** (every tag with its
 properties). With more than one box, every sheet gains a Box column, and a deck title two
 boxes share gets the box in its sheet name.
 
@@ -222,7 +223,7 @@ right now, in ranking order, without dealing anything.
 name a tag the same way, say which box the tag is in:
 `--set value.harbour/docks.danger=3`.
 
-`--deal-all` is how you see exclusivity from the command line: with every other hand dealt
+`--deal-all` is how you see exclusivity from the command line. With every other hand dealt
 first, the cards they hold don't come up in yours.
 
 ## resolve
@@ -245,7 +246,7 @@ The query can be a **gameId** (the name your game code and the runtime's logs us
 gameId first, then an id, then a title, then a partial match of any of the three, and
 stops at the first of those that finds anything, so an exact match is never buried in
 partial ones. Each hit prints `id  [kind]  "title"  gameId  Box > Deck  (shard)`. Boxes,
-decks, cards, outcomes, hands, hand templates and tag groups are all findable.
+decks, cards, outcomes, hands, hand templates, and tag groups are all findable.
 
 It's the same lookup Storyletter's `--at` uses when you [open a project at a particular
 item](/storyletter/overview/#opening-at-a-particular-item), so what the terminal says
@@ -269,13 +270,13 @@ the-park  (Storylet Server 0.1.0, revision 12)  (contracts/the-park.storyletcont
   field     prompt   the crew and the bridges read it
 ```
 
-Name an installation to show only that one. There's no verb for the breaks: `validate`
-already reports them, as errors, each one naming the venue that cares. A project with no
+Name an installation to show only that one. There's no verb for the breaks, because
+`validate` already reports them, as errors, each one naming the venue that cares. A project with no
 contract prints nothing and exits 1.
 
 ## merge
 
-The structured merge driver: an id-keyed three-way merge of Storylet Studio source files.
+The structured merge driver, an id-keyed three-way merge of Storylet Studio source files.
 
 ```
 storyletengine merge BASE OURS THEIRS -o OUT --path REALFILE
@@ -332,8 +333,8 @@ unpacked: village/encounters/box.storyletbox
 | `--base SENT` | The pack you sent, used as the common ancestor. Required with `--merge`. |
 
 With `--merge`, each shard goes through the same id-keyed three-way merge as
-[`merge`](#merge): you and the other author can edit different fields of the same card and
-both edits survive. A conflict writes your version plus a `.storyletconflict` file and exits
+[`merge`](#merge), so you and the other author can edit different fields of the same card
+and both edits survive. A conflict writes your version plus a `.storyletconflict` file and exits
 1.
 
 ```
@@ -342,8 +343,8 @@ merged: encounters/decks/docks.storyletdeck
 9 shard(s) -> .; 0 conflict(s), 0 warning(s)
 ```
 
-`--merge` without `--base` is a usage error: with no ancestor there's no merge to do, only an
-overwrite.
+`--merge` without `--base` is a usage error, because with no ancestor there's no merge to do,
+only an overwrite.
 
 A pack may arrive from outside your team, so entry paths are checked before anything is
 written. An entry that would land outside `-o` is refused and nothing is written.
@@ -383,7 +384,7 @@ property in opposite directions, so the same pair of cards can legitimately get 
 `enable` and a `disable` edge: "enabled if you stand and fight, disabled if you flee".
 
 `@hand` isn't analysed. A hand's properties are put together at the deal, from its tags,
-its own properties and the criteria it was dealt with, so two cards reading `@hand.danger`
+its own properties, and the criteria it was dealt with, so two cards reading `@hand.danger`
 may not be talking about the same hand at all. The command says so in a warning and leaves
 those edges out.
 

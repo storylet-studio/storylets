@@ -1,17 +1,17 @@
 ---
 title: Storyletter
-description: A tour of Storyletter, the desktop editor for Storylet Studio projects, where you design cards and decks, set up the boxes they live in, and deal a real hand whenever you want one.
+description: Tour Storyletter, the desktop editor where you design cards and decks, set up the boxes they live in, and deal a real hand whenever you want one.
 sidebar:
   label: Overview
 ---
 
-**Storyletter** is the desktop app where you design Storylet Studio projects. You design cards, deck by
-deck, set up the box they live in, and declare the hands your game will deal. The
-real runtime, the same one your game ships with, runs inside the editor, so **"would this
-card come up here?"** is always one keystroke away, and "why did *Arrive at the Village
-Gate* get dealt?" has a line-by-line answer.
+You design a Storylet Studio project in Storyletter, card by card and deck by deck. You set
+up the box the cards live in and declare the hands your game will deal. The real runtime, the
+same one your game ships with, runs inside the editor, so "would this card come up here?" is
+always one keystroke away, and "why did *Arrive at the Village Gate* get dealt?" has a
+line-by-line answer.
 
-Storyletter runs on macOS, Windows and Linux. Get it from the [Download](/download/) page.
+Storyletter runs on macOS, Windows, and Linux. Get it from the [Download](/download/) page.
 
 This section is a full tour of the editor. If you only read one other page, make it
 [Designing cards](/storyletter/cards/).
@@ -23,29 +23,26 @@ signs your review comments, and you can skip the prompt. Change it at any time f
 **User Information…** (in the Storyletter app menu on macOS, or the File menu on Windows
 and Linux).
 
-From there you land on the **welcome screen**, where you can:
+From there you land on the **welcome screen**. Under **Start**, **Open a project…** opens one
+you already have, and **New project…** makes one (it asks for a name and a starting kit).
+Under **Learn from a finished project** are the three worked examples. *The Hamlet* is small,
+with places, hands, and a deck to deal. *The Village* is the full demo. *Port Meridian* is
+the engine beside an action game. Each is copied somewhere you choose, so you can take it
+apart. Your **Recent** projects are listed too.
 
-- under **Start**, **Open a project…** to open one you already have, or **New project…**
-  to make one (it asks for a name and a starting kit);
-- under **Learn from a finished project**, pick one of the three worked examples - *The
-  Hamlet* (small: places, hands and a deck to deal), *The Village* (the full demo) or *Port
-  Meridian* (the engine beside an action game). Each is copied somewhere you choose, so you
-  can take it apart;
-- pick from your **Recent** projects.
-
-The example project is the quickest way to learn the model: open it, press **▶ Play**, and
+The example project is the quickest way to learn the model. Open it, press **▶ Play**, and
 watch it deal.
 
 ### Creating a project
 
 **File ▸ New Project…** (`Cmd+N` / `Ctrl+N`) asks for a name, then where to put the folder.
-A new project isn't empty: it lands one box, one place to deal to, and two cards that
+A new project isn't empty. It lands one box, one place to deal to, and two cards that
 already work together, so it plays straight away. Add kits to it as you go (see
 [Setting up a box](/storyletter/box-setup/#starting-a-box-from-a-box-kit)).
 
-A Storylet Studio project is a real folder of files (see [the format](/format/overview/)). Keep
-it in whatever version control you use for your game, alongside your game files. You won't
-ship the project itself, only the `.storyletsc` bundle it publishes.
+A Storylet Studio project is a real folder of files (see [the format](/format/overview/)).
+Keep it in whatever version control you use for your game, alongside your game files. You
+won't ship the project itself, only the `.storyletsc` bundle it publishes.
 
 ## Opening a project
 
@@ -67,19 +64,19 @@ storyletter --at arrive-at-the-gate                     # no path: reopen the la
 ```
 
 `--at=<where>` works too. `<where>` takes the same query as
-[`storyletengine resolve`](/cli/#resolve): it tries an exact gameId first, then an id,
+[`storyletengine resolve`](/cli/#resolve). It tries an exact gameId first, then an id,
 then a title, then a partial match. So a gameId copied out of your game code or a
 runtime log pastes in and lands on the card it names, which is the quickest way to
 answer "a tester reported a problem with *this* card".
 
-It can name a box, a deck, a card, a hand, a hand template or a tag group, and opens
+It can name a box, a deck, a card, a hand, a hand template, or a tag group, and opens
 that item's document. An outcome opens its card with that outcome expanded. If nothing
 in the project matches, Storyletter prints that on the terminal and opens the project
 as it normally would, so a stale id in a bug report can't stop you getting in. If
 Storyletter is already running, the same command jumps the open window rather than
 starting a second copy.
 
-`storyletter` here is the app's own executable: on macOS that's
+`storyletter` here's the app's own executable. On macOS that's
 `Storyletter.app/Contents/MacOS/Storyletter`, on Windows `Storyletter.exe` in the
 install folder, and on Linux the AppImage.
 
@@ -99,56 +96,56 @@ and what doesn't.
 ## Publishing
 
 Everything under the **Publish** menu turns your project into something you hand to others.
-**Publish Bundle** (`Shift+Cmd+B`) is the everyday one: it compiles the `.storyletsc` your
-game loads, to the path in your project settings. The other two are for people: a page
-anyone can play, and a workbook anyone can read.
+**Publish Bundle** (`Shift+Cmd+B`) is the everyday one. It compiles the `.storyletsc` your
+game loads, to the path in your project settings. The other two are for people, a page
+anyone can play and a workbook anyone can read.
 
 ### A playable page: one file, plays anywhere
 
-You don't need a game, an engine or a programmer to put your project in front of people.
+You don't need a game, an engine, or a programmer to put your project in front of people.
 **Publish ▸ Publish Playable HTML…** writes a single `.html` file containing the whole
-project and the same engine a shipped game would use. It needs nothing else: no internet,
-no install, no server. Anyone you give it to double-clicks it and plays, on a laptop or a
-phone. It asks where to save, suggesting `<project name>.html` beside the project folder.
+project and the same engine a shipped game would use. It needs nothing else, no internet,
+no install, and no server. Anyone you give it to double-clicks it and plays, on a laptop or
+a phone. It asks where to save, suggesting `<project name>.html` beside the project folder.
 
-The page is the Board, the same one in the editor and in every runtime's demo: each hand
-is a labelled group of cards, clicking a card shows its outcomes, clicking an outcome plays
-it and the board moves. Three controls, **Deal all hands**, **Next turn** and **Restart**,
-and a transcript of what happened. Titles and purposes always show - the page is for
-people - and the player's place is saved in that browser, so closing the tab isn't
-losing the game. Restart clears it.
+The page is the Board, the same one in the editor and in every runtime's demo. Each hand
+is a labelled group of cards, clicking a card shows its outcomes, and clicking an outcome
+plays it and the board moves. There are three controls, **Deal all hands**, **Next turn**,
+and **Restart**, and a transcript of what happened. Titles and purposes always show (the
+page is for people), and the player's place is saved in that browser, so closing the tab
+isn't losing the game. Restart clears it.
 
 A project with [maps](/storyletter/maps/) carries them into the page, pictures included,
-and the map takes the left of the screen with the cards in a column beside it - the same
+and the map takes the left of the screen with the cards in a column beside it, the same
 arrangement as the Board's Map view. Zones are tinted, every placed hand is a pin wearing
 its live card count, and you can zoom with the wheel or the buttons and drag to pan. Tap
 a pin and the column jumps to that hand's cards. On a phone the map sits on top with the
-cards below. The pictures ride inside the file as data - the Village and its five
+cards below. The pictures ride inside the file as data. The Village and its five
 paintings publish to a single 5MB page that still opens from disk with no internet. A
 multi-box project gets a heading per box, so you can watch one box's play light another
 box's pin.
 
-Ways to get it to people:
+There are three ways to get it to people.
 
-- **Send it.** Email it, drop it in a shared folder, attach it to a message. It's one file.
-- **Put it on itch.io.** Name the file `index.html`, zip it, and upload the zip as an HTML
+- Email it, drop it in a shared folder, or attach it to a message. It's one file.
+- Put it on itch.io. Name the file `index.html`, zip it, and upload the zip as an HTML
   game.
-- **Host it anywhere that serves files.** Upload the file and share the link.
+- Host it anywhere that serves files. Upload the file and share the link.
 
 The same page from the command line is [`storyletengine export-html`](/cli/#export-html).
 
 ### A spreadsheet of the whole project
 
-**Publish ▸ Publish Spreadsheet…** writes the project as an Excel workbook (`.xlsx`): the
-thing a lead reads in a review meeting, and a producer sorts and filters. It asks where to
+**Publish ▸ Publish Spreadsheet…** writes the project as an Excel workbook (`.xlsx`), the
+thing a lead reads in a review meeting and a producer sorts and filters. It asks where to
 save, suggesting `<project name>.xlsx` beside the project folder.
 
 One sheet per deck, a row per card: title, gameId, When, priority, redraw, copies, a column
 per tag group, a column per card field, purpose, and the outcomes with their changes. After
 the decks come an **Outcomes** sheet (one row per outcome), **Hands** (template, When, tags,
-slots) and **Tag groups** (every tag with its properties), with an **Overview** sheet in front
-carrying the project's name, version, content hash and counts. It's read from the files, so
-any unsaved edit is saved first.
+slots), and **Tag groups** (every tag with its properties), with an **Overview** sheet in
+front carrying the project's name, version, content hash, and counts. It's read from the
+files, so any unsaved edit is saved first.
 
 The same workbook from the command line is
 [`storyletengine export-xlsx`](/cli/#export-xlsx).
@@ -169,13 +166,14 @@ the Board watches what it deals and plays.
 
 ## Not yet in the editor
 
-Two things you might go looking for aren't there yet:
+Two things you might go looking for aren't there yet.
 
-- **A merge conflict view.** Conflicts land as a `.storyletconflict` sidecar and
-  `validate` refuses to ignore them, but reading one and picking sides is a command-line
-  and text-editor job today.
-- **Writing status.** Comments and the review walk exist, but there's no per-card
-  "draft / needs review / final" state to filter or report on.
+There's no merge conflict view. Conflicts land as a `.storyletconflict` sidecar and
+`validate` refuses to ignore them, but reading one and picking sides is a command-line and
+text-editor job today.
+
+There's no writing status. Comments and the review walk exist, but there's no per-card
+"draft / needs review / final" state to filter or report on.
 
 ## Where to go next
 

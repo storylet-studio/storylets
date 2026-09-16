@@ -1,26 +1,26 @@
 ---
 title: JavaScript
-description: Play a .storyletsc bundle in a browser or Node app with the Storylet Engine reference runtime. Install from the release zip, load a bundle, build an engine, open a flow, deal, play, save, and mount the in-page dev tools.
+description: Play a .storyletsc bundle in a browser or Node app with the reference runtime, from install and load to deal, play, save, and the in-page dev tools.
 sidebar:
   label: JavaScript
 ---
 
 <div class="sy-badge">
   <img src="/plugin-javascript.svg" alt="" width="56" height="56" />
-  <p>The reference runtime, in pure TypeScript: no DOM, no filesystem, no engine. It runs in any browser or Node app, and every native port reproduces its results exactly.</p>
+  <p>The reference runtime, in pure TypeScript, with no DOM, no filesystem, and no engine. It runs in any browser or Node app, and every native port reproduces its results exactly.</p>
 </div>
 
 ## Install
 
 Download the JavaScript zip from the [download page](/download/). It carries three things:
 
-- **`@storylet-studio/runtime`**: the interpreter. Pure, so it embeds anywhere: a browser, a
-  server, a test harness.
-- **`@storylet-studio/play-helpers`**: everything that touches the browser or the host: the
-  save-file plumbing, the state logger, the in-page property examiner and the bundle
-  inspector.
-- **A browser drop-in**, `storyletengine.min.js`: the runtime and the helpers in one classic
-  script that defines a `StoryletEngine` global. Two script tags and no build step:
+- **`@storylet-studio/runtime`** is the interpreter. It's pure, so it embeds anywhere,
+  whether a browser, a server, or a test harness.
+- **`@storylet-studio/play-helpers`** is everything that touches the browser or the host,
+  meaning the save-file plumbing, the state logger, the in-page property examiner, and the
+  bundle inspector.
+- **A browser drop-in**, `storyletengine.min.js`, is the runtime and the helpers in one
+  classic script that defines a `StoryletEngine` global. Two script tags and no build step:
 
   ```html
   <script src="storyletengine.min.js"></script>
@@ -59,9 +59,9 @@ const engine = new Engine(bundle, { seed: 7, log: true });
 const flow = engine.openFlow("main");
 ```
 
-The engine is the world: it holds the bundle, the shared state and your game's `@world`
-binding. Every play call lives on a **flow** - one playthrough - opened by name. A
-single-player game opens `"main"` and never thinks about it again; an experience with many
+The engine is the world. It holds the bundle, the shared state, and your game's `@world`
+binding. Every play call lives on a **flow** (one playthrough) opened by name. A
+single-player game opens `"main"` and never thinks about it again. An experience with many
 participants opens one flow each, all over the same shared world
 ([the sharing rules](/play/world-state/)). Re-opening a name replaces that flow with a fresh
 one, and a closed flow's handle refuses every call.
@@ -93,7 +93,7 @@ const looks = flow.peek("village", { area: "forest" }, 3);
 A dealt card is `{ id, gameId, title?, purpose?, fields? }`. `fields` is your handoff: the
 scene id, the animation reference, whatever the box's card template declared.
 
-Ask for outcomes when you're about to show them; a dealt card doesn't carry them:
+Ask for outcomes when you're about to show them, because a dealt card doesn't carry them:
 
 ```js
 for (const o of flow.outcomes(card.id, "the-inn")) {
@@ -103,12 +103,12 @@ for (const o of flow.outcomes(card.id, "the-inn")) {
 ```
 
 A card with no outcomes gets an empty list. Play it with `""` once your game has shown it,
-`flow.play(card.id, "", "the-inn")`, and it counts as played: its cooldown starts and it
+`flow.play(card.id, "", "the-inn")`, and it counts as played, so its cooldown starts, it
 leaves the hand, and nothing is written.
 
 An outcome view is `{ id, gameId, title?, purpose?, fields?, available }`. Its `fields` are
-the outcome's own handoff, there when the box declares outcome fields: the line to show once
-the press lands, say.
+the outcome's own handoff, there when the box declares outcome fields, such as the line to
+show once the press lands.
 
 `play` throws before changing anything if the outcome is gated shut or the card isn't in that
 hand. You can only play a card that's on the board.
@@ -125,7 +125,7 @@ flow.turn("village");                              // read it
 flow.listBoxes();                                  // every box: id, gameId, title, turn
 ```
 
-The paths, and when to write them: [Your game's state](/play/world-state/).
+[Your game's state](/play/world-state/) has the paths, and when to write them.
 
 ## Save and load
 
@@ -137,7 +137,7 @@ const again = engine.getFlow("main"); // loadGame rebuilds every flow: re-take y
 
 ### Look before you load
 
-A load is forgiving: a card your edit deleted drops off the board, a property you added takes
+A load is forgiving. A card your edit deleted drops off the board, a property you added takes
 its default, and a save from an older build goes in without a word. `previewLoad` says what
 that would cost before you spend it, and changes nothing; `loadGame` returns the same report
 once it has.
@@ -155,9 +155,9 @@ A save for a different `project` is the one thing both calls refuse.
 
 ### Parking one flow
 
-`saveFlow(id)` takes one flow's state - not the whole engine - and `openFlow(id, { restore })`
+`saveFlow(id)` takes one flow's state (not the whole engine) and `openFlow(id, { restore })`
 puts it back. Closing the flow in between is what releases the cards it was holding, so
-another flow can be dealt them while it is away; on the way back, a shared card somebody else
+another flow can be dealt them while it's away. On the way back, a shared card somebody else
 now holds is dropped and reported.
 
 ```js
@@ -171,8 +171,8 @@ const flow = engine.openFlow("visitor-7", {
 });
 ```
 
-`@world` is deliberately not in the envelope - it's your game's state, and your game saves
-it ([why](/play/world-state/)). For files, `play-helpers` gives you the string boundary,
+`@world` is deliberately not in the envelope, because it's your game's state, and your game
+saves it ([why](/play/world-state/)). For files, `play-helpers` gives you the string boundary,
 which wraps the envelope together with your world values:
 
 ```js
@@ -186,13 +186,13 @@ flow = engine.getFlow("main");                         // and RE-TAKE your handl
 ```
 
 Two things about that last line. The `flow` you held before the load is now inert, so
-you must take a fresh one. And take it with `getFlow`, **not `openFlow`**: `openFlow` on
-an id that exists *replaces* it, which here discards the hand the file just restored, and
+you must take a fresh one. And take it with `getFlow`, **not `openFlow`**, because `openFlow`
+on an id that exists *replaces* it, which here discards the hand the file just restored, and
 you find out later when `play()` refuses the card as not dealt. The engine can tell you
-when that happens: pass `onReplacedFlow: (id, dealt) => console.warn(...)` in its
+when that happens. Pass `onReplacedFlow: (id, dealt) => console.warn(...)` in its
 options during development, and leave it unset in a shipped game.
 
-A foreign, malformed or wrong-project blob is refused, so a bad file can't corrupt a run.
+A foreign, malformed, or wrong-project blob is refused, so a bad file can't corrupt a run.
 
 ## The trace
 
@@ -200,24 +200,24 @@ A foreign, malformed or wrong-project blob is refused, so a bad file can't corru
 const unsubscribe = flow.subscribeTrace((event) => console.log(event));
 ```
 
-Events are `deal`, `peek`, `evict`, `play`, `write`, `turns` and `diagnostic`. A `deal` or
+Events are `deal`, `peek`, `evict`, `play`, `write`, `turns`, and `diagnostic`. A `deal` or
 `peek` event lists every card that was considered and why it was or wasn't dealt (`dealt`,
 `capped`, `cooldown`, `deck-gate`, `tags`, `condition`, `priority`, `claimed`,
 `claimed-elsewhere`, `taken`). A `write`
 carries the path and the previous value, so a log line reads "0 -> 1".
 
 Everything an event names, it names by **gameId**: the hand, the box, the played card, the
-evicted card and every card in an ask's verdicts. So a trace reads back against the shards you
-wrote, and a tool over it needs no translation table of its own.
+evicted card, and every card in an ask's verdicts. So a trace reads back against the shards
+you wrote, and a tool over it needs no translation table of its own.
 
 If you created the engine with `log: true`, `flow.log()` gives you the same events, each
 stamped with a sequence number and the turn of the box it happened in. The log lives for the
-flow and never rides a save; the durable play history is in the save's `playLog`.
+flow and never rides a save. The durable play history is in the save's `playLog`.
 
-When you run several flows, **`engine.log()` is the run's log**: every flow's events in one
+When you run several flows, **`engine.log()` is the run's log**, every flow's events in one
 order, each entry carrying the `flow` it happened in. You want it because a flow's own log
-cannot show a story action in *another* flow moving shared state - that participant's value
-simply changes, with nothing in their log to explain it. `engine.subscribeTrace((flowId,
+can't show a story action in *another* flow moving shared state. That participant's value
+changes, with nothing in their log to explain it. `engine.subscribeTrace((flowId,
 event) => ...)` is the same stream live, and `engine.clearLog()` drops the retained one.
 
 ## Dev tools
@@ -231,32 +231,32 @@ createPropertyInspector(engine, flow, { container: document.getElementById("stat
 createBundleInspector(bundle, { container: document.getElementById("bundle") });
 ```
 
-The property examiner shows and edits a running flow's state, turns and board, with
+The property examiner shows and edits a running flow's state, turns, and board, with
 **Save State… / Load State…** buttons. The bundle inspector shows what a bundle offers your
-code, with no flow running. Leave both out of a shipping build. What each one shows:
-[Dev tools](/play/dev-tools/).
+code, with no flow running. Leave both out of a shipping build. [Dev tools](/play/dev-tools/)
+describes what each one shows.
 
-The same package ships `createLiveLink` and `applyLiveBundle`: connect the running game to
-Storyletter, and saves reach the run without a restart while the Board shows the game's
-deals. Wiring and the protocol: [Live Link](/play/live-link/).
+The same package ships `createLiveLink` and `applyLiveBundle`, which connect the running game
+to Storyletter, so saves reach the run without a restart while the Board shows the game's
+deals. [Live Link](/play/live-link/) has the wiring and the protocol.
 
 ## The Board demo
 
-The helpers package carries a `demo` folder: the whole play loop as one clickable page, with
+The helpers package carries a `demo` folder, the whole play loop as one clickable page, with
 every hand a labelled group of card buttons, outcomes revealed beneath the open card, a
 transcript, and both examiners mounted beside the board. Its README has the two commands that
 build and serve it.
 
-The same Board demo ships with the Unity, Unreal and Godot runtimes: same content, same control
-labels, same transcript, one idiom each.
+The same Board demo ships with the Unity, Unreal, and Godot runtimes, with the same content,
+the same control labels, the same transcript, and one idiom each.
 
-**The Hamlet on the web** is the second demo: the same project with [Patter](https://patterkit.dev)
+**The Hamlet on the web** is the second demo, the same project with [Patter](https://patterkit.dev)
 performing each card's dialogue, two engines in one game. It ships as a project zip on the
 [download page](/download/#the-hamlet-two-engines-in-one-game); `src/performance.ts` is the whole
 integration, and [Running it with Patter](/play/with-patter/) explains the handoff.
 
 ## Next
 
-- What every runtime shares: [Dev tools](/play/dev-tools/).
-- Why it matches the other engines exactly:
-  [Compatibility & conformance](/compatibility/).
+- [Dev tools](/play/dev-tools/) covers what every runtime shares.
+- [Compatibility & conformance](/compatibility/) explains why it matches the other engines
+  exactly.

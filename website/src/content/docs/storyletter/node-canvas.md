@@ -1,15 +1,15 @@
 ---
 title: The node canvas
-description: "A deck's cards drawn as nodes, with the arrows between them worked out from their conditions and outcomes: what enables what, what shuts what. Arranged by you and remembered."
+description: See a deck's cards as nodes, with the arrows between them worked out from their conditions and outcomes, arranged by you and remembered.
 sidebar:
   label: The node canvas
 ---
 
-A deck has three views, on the switch at the top right of its page: **Cards**, **Table**
-and **Node**. Node is a deck's default view, and it answers the question the other two
-can't: **what does this card do to the others?**
+A deck has three views on the switch at the top right of its page, Cards, Table, and
+Node. Node is a deck's default view, and it answers the question the other two can't.
+What does this card do to the others?
 
-It's an ordinary view, not a mode. The same deck, the same cards, the same clicks: one
+It's an ordinary view, not a mode. The same deck, the same cards, the same clicks. One
 click selects a card, two clicks open it.
 
 <figure class="doc-shot">
@@ -39,24 +39,24 @@ You never draw an arrow yourself. Change a condition and the arrows change with 
 
 Drag a card and it stays where you put it. Nothing moves your arrangement on its own: not
 a save, not an undo, not switching to Cards and back. **Arrange all by links** (`L`) lays
-the cards out by their dependencies; with some cards selected, it arranges just those.
+the cards out by their dependencies. With some cards selected, it arranges just those.
 The story's flow reads left to right, following the enabling links first; cards nothing
 links to wrap into rows below it. Cards that enable each other in a loop share a column
 and the strip says so.
 
 Positions live in `view.storyletview`, the
 [arrangement shard](/format/shards/#the-two-arrangement-shards), which holds card
-positions and never content: delete it and you lose a layout, never a card. The map's
-sites are not in there; they have [their own shard](/storyletter/maps/#where-the-map-is-stored).
+positions and never content. Delete it and you lose a layout, never a card. The map's
+sites aren't in there. They have [their own shard](/storyletter/maps/#where-the-map-is-stored).
 
 Where you were looking is remembered per deck and restored when you come back.
 
 ## The rest of the canvas
 
-Everything a [map](/storyletter/maps/) offers on its canvas, this one offers too: right-click
-for **New card here**; **Frame** draws a titled frame behind a group of cards; **Comment**
+Everything a [map](/storyletter/maps/) offers on its canvas, this one offers too. Right-click
+for **New card here**. **Frame** draws a titled frame behind a group of cards, and **Comment**
 drops a [comment marker](/storyletter/reviewing/) on the canvas or on a card. The zoom
-control sits bottom right; `Home` fits everything and `F` fits the selection. The full key
+control sits bottom right. `Home` fits everything and `F` fits the selection. The full key
 list is on [Keyboard shortcuts](/storyletter/shortcuts/#on-a-canvas).
 
 If you've run a coverage test, **View ▸ Coverage Overlay** tints each card by how much play
@@ -64,9 +64,9 @@ reached it. See [Coverage testing](/production/coverage-testing/).
 
 ## When to use which view
 
-- **Node** to see structure: what leads to what, and what nothing leads to.
-- **Cards** to read and write: the faces, at a glance.
-- **Table** to compare: the same columns down a long deck, for tags, priorities and
-  redraw.
+- **Node** is for seeing structure, what leads to what and what nothing leads to.
+- **Cards** is for reading and writing the faces.
+- **Table** is for comparing, with the same columns down a long deck, for tags, priorities,
+  and redraw.
 
 The switch is remembered, so a deck opens the way you left it.

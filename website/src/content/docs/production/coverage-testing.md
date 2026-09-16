@@ -1,11 +1,11 @@
 ---
 title: Coverage testing
-description: Seeded playthroughs that report what your content can actually reach, per hand, in Storyletter and from the command line, with a one-click fix for content gated on your game's own state.
+description: Run seeded playthroughs that report what your content can actually reach, per hand, in Storyletter and from the command line.
 sidebar:
   label: Coverage testing
 ---
 
-Playing your project walks *one* route. **Coverage testing** walks hundreds: it plays the
+Playing your project walks *one* route. Coverage testing walks hundreds. It plays the
 project many times with seeded random runs and reports what actually came up, so you catch
 content a player can never reach before a player does.
 
@@ -16,7 +16,7 @@ is what a CI gate sees.
 
 **Review ▸ Coverage** (`Shift+Cmd+C`) opens the **Coverage** window.
 
-Three fields, **runs**, **max turns** and **seed**, and a **Run coverage** button. The same
+Three fields, **runs**, **max turns**, and **seed**, and a **Run coverage** button. The same
 seed always reproduces the same run.
 
 While a sweep is running, a strip across the top shows how far along it is, how long it has
@@ -42,56 +42,56 @@ will read as never dealt."* Beside it, **Coverage drivers…** takes you straigh
 they're edited.
 
 <figure class="doc-shot">
-  <img src="/doc-images/Coverage.png" alt="The Coverage window after a run on the Hamlet example: runs 200, max turns 100, seed 0 across the top, a line saying '1 coverage driver feeding @world', the headline 16/16 cards dealt with 200 runs and seed 0, the run shape (1114 turns, 1114 plays, 191 exhausted, 9 hit the cap, 0 stuck), three By hand fill bars for the-forge, the-inn and the-mystic-tree, and the line 'Every card gets dealt.'" />
+  <img src="/doc-images/Coverage.png" alt="The Coverage window after a run on the Hamlet example: runs 200, max turns 100, seed 0 across the top, a line saying '1 coverage driver feeding @world', the headline 16/16 cards dealt with 200 runs and seed 0, the run shape (1114 turns, 1114 plays, 191 exhausted, 9 hit the cap, 0 stuck), three By hand fill bars for the-forge, the-inn, and the-mystic-tree, and the line 'Every card gets dealt.'" />
   <figcaption>The Coverage window after a clean sweep of the Hamlet: the headline, how the runs ended, the per-hand fill bars, and the line every project wants to read.</figcaption>
 </figure>
 
 ### What it tells you
 
-**The headline** is one number: cards dealt out of cards total, with the run count and seed
-beneath it, then the shape of the runs themselves: turns, plays, and how the playthroughs
-ended, split between *exhausted* (everything was seen), *hit the cap* and *stuck*. Glance at
-that split before you trust the numbers above it: runs that mostly go **stuck** mean the
+**The headline** is one number, cards dealt out of cards total, with the run count and seed
+beneath it. Then comes the shape of the runs themselves: turns, plays, and how the playthroughs
+ended, split between *exhausted* (everything was seen), *hit the cap*, and *stuck*. Glance at
+that split before you trust the numbers above it. Runs that mostly go **stuck** mean the
 content jams rather than that it was measured.
 
 **By hand** is the lens that matters, because a hand is the contract between your designer
-and your programmer. One row per hand with a fill bar and a count: how many of the cards that
-hand could ever hold were actually held. A full hand highlights.
+and your programmer. One row per hand with a fill bar and a count of how many of the cards
+that hand could ever hold were actually held. A full hand highlights.
 
 **Never dealt** lists every card no run reached, with a reason where one is knowable:
 
-- *"gated on `@world.time_of_day`: nothing writes or drives it"*, when the card depends on
-  your game's state and nothing in the content sets it;
-- *"not reached in these runs"* otherwise.
+- *"gated on `@world.time_of_day`: nothing writes or drives it"* means the card depends on
+  your game's state and nothing in the content sets it.
+- Otherwise the reason is *"not reached in these runs"*.
 
 When every card gets dealt, the section is replaced by one line: "Every card gets dealt."
 
-**Dealt but never played** is the separate fault underneath it: these cards reach the board,
+**Dealt but never played** is the separate fault underneath it. These cards reach the board,
 and no outcome of theirs was ever taken. Usually an outcome's condition is the culprit. A card
 that's dealt a thousand times and never played is invisible if you only count deals. A card
-with **no outcomes at all** - a news headline, a codex entry, content whose whole job is to be
-dealt and read - is not listed here and doesn't block a run from counting as exhausted.
+with **no outcomes at all** (a news headline, a codex entry, content whose whole job is to be
+dealt and read) isn't listed here and doesn't block a run from counting as exhausted.
 Your game may play one, with no outcome, but a coverage run never does, so "never played"
 would be an accusation it can't answer.
 
-**Outcomes never played** finishes the sweep at the branch level: a card can be well covered
+**Outcomes never played** finishes the sweep at the branch level. A card can be well covered
 while one of its outcomes is unreachable.
 
 **Warnings** collects two things the counts alone would hide. Any diagnostic the runtime
 actually raised during the runs (a faulting condition, an undeclared name), deduplicated and
-counted by run. And the composed-name check, which needs no runs at all: a card or deck gate
-reading `@hand.something` that some hand able to ask it never composes - evaluation faults
-there, so the content silently never deals from that hand, and a plain gap count would have
-called it an ordinary miss.
+counted by run. And the composed-name check, which needs no runs at all. A card or deck gate
+reading `@hand.something` that some hand able to ask it never composes faults at evaluation,
+so the content silently never deals from that hand, and a plain gap count would have called
+it an ordinary miss.
 
-Every row is a way back into the work. Click a hand, a card or an outcome and the editor opens
-it. Click a property named in one of those reasons and Find opens on it, listing everywhere in
+Every row is a way back into the work. Click a hand, a card, or an outcome and the editor
+opens it. Click a property named in one of those reasons and Find opens on it, listing everywhere in
 the project that reads or writes it. That's usually the quickest way to tell a mistake from a
 missing driver.
 
 ### On the canvases
 
-With **View ▸ Coverage Overlay** on, the node canvas and the map wear the last run: a card
+With **View ▸ Coverage Overlay** on, the node canvas and the map wear the last run. A card
 face carries a band reading **never dealt** or **never played**, a map site is haloed by how
 much play reached it, and hovering a card shows how often it was dealt and played. A card
 that's fine shows nothing, so the overlay only ever points at a problem.
@@ -109,7 +109,7 @@ anything still never dealt after that is a real gap.
 
 ## Writing drivers by hand
 
-The quick fix gets you a starting point; **Project Settings ▸ World** is where you tune it.
+The quick fix gets you a starting point, and **Project Settings ▸ World** is where you tune it.
 The `@world` declarations and the drivers that feed them sit on one page, because they're two
 halves of one statement: the game owns this value, and here's how it moves.
 
@@ -120,9 +120,9 @@ Each driver is a property, a pool of values, and when it fires:
 | Property | The `@world` property to drive. Only `@world` is drivable: `@story` is written by your outcomes, so play already covers it. |
 | Values | The pool, comma separated. `true, false` drives a flag; `0, 50, 51` drives a number; anything else is text. A run picks from the pool at random. |
 | When | *Once, at the start* fixes the value for a whole playthrough (a difficulty setting, a chosen class). *Each turn* re-rolls it as the run goes (weather, time of day). |
-| How often | For *each turn* drivers: rarely, sometimes or often. |
+| How often | For *each turn* drivers: rarely, sometimes, or often. |
 
-**Propose from the cards** reads your conditions and fills the list in: for `@world.danger >= 2`
+**Propose from the cards** reads your conditions and fills the list in. For `@world.danger >= 2`
 it proposes the boundary and its neighbours, `1, 2, 3`, so the comparison is exercised from
 both sides. It replaces the list, so propose first and tune after. Nothing is written until
 you save the dialog.

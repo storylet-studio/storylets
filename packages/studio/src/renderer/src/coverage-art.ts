@@ -106,7 +106,7 @@ export function ageOf(at: string, now: number): string {
 
 /** The strip's line: what the overlay is showing and how old it is. */
 export function coverageLegend(cover: CoverageOverlayDto | undefined, now: number): string {
-  if (!cover) return "Coverage overlay: no run yet";
+  if (!cover) return "No coverage run yet.";
   const runs = `${cover.runs} run${cover.runs === 1 ? "" : "s"}`;
   return `Coverage from ${runs}, ${ageOf(cover.at, now)}`;
 }

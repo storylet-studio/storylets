@@ -412,7 +412,7 @@ const actions: ViewActions = {
     void (async () => {
       const ok = await confirmDialog({
         title: `Delete "${b.title ?? b.gameId}"?`,
-        body: `The box and its contents (${what}) are removed. Undo restores it.`,
+        body: `The box and its contents (${what}) are removed. You can undo this.`,
         confirmLabel: "Delete box",
       });
       if (!ok) return;
@@ -1296,8 +1296,8 @@ async function deleteCards(cardIds: string[]): Promise<void> {
         ? `Delete "${cards[0]!.title ?? cards[0]!.gameId}"?`
         : `Delete ${cards.length} cards?`,
       body: cards.length === 1
-        ? "This card has content. Undo restores it."
-        : `${worth.length} of them have content. Undo restores them.`,
+        ? "This card has content. You can undo this."
+        : `${worth.length} of them have content. You can undo this.`,
       confirmLabel: cards.length === 1 ? "Delete card" : "Delete cards",
     });
     if (!ok) return;
@@ -1748,7 +1748,7 @@ function renderProblemChip(): void {
   probEl.textContent = problems.length === 0 ? icon.tick : String(problems.length);
   probEl.dataset["tip"] = problems.length === 0
     ? "No problems"
-    : `${problems.length} problem${problems.length === 1 ? "" : "s"} - click to review`;
+    : `${problems.length} problem${problems.length === 1 ? "" : "s"} (click to review)`;
   probEl.setAttribute("aria-label", probEl.dataset["tip"]);
 }
 /**
@@ -1807,7 +1807,7 @@ function renderStoryCentre(host: HTMLElement): void {
       el("div", { className: "doc-head" },
         el("span", { className: "insp-label", text: "Project" }),
         el("h2", { className: "collection-title", text: "Story" }),
-        el("p", { className: "master-sub", text: "The story's own memory: state the cards read and write as a run unfolds (@story)." })));
+        el("p", { className: "master-sub", text: "The story's own memory. Cards read and write it as @story while a run unfolds." })));
     // Save as edits settle, the centre editors' usual rhythm. (The Settings
     // dialog saves on close because it is a dialog; this is a document.)
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -1847,7 +1847,7 @@ function renderStoryCentre(host: HTMLElement): void {
     })();
     const foot = el("p", { className: "set-note" },
       el("span", { text: "Your game\u2019s own state (@world) is a contract the principal designer keeps. It lives in " }),
-      el("button", { className: "linklike", text: "Project Settings \u203a World", onClick: () => projectSettingsPanel.open("world") }),
+      el("button", { className: "linklike", text: "Project settings \u25b8 World", onClick: () => projectSettingsPanel.open("world") }),
       el("span", { text: "." }));
     page.replaceChildren(trail, head, list, foot);
   })();
@@ -2221,12 +2221,12 @@ setPropertyNavigator({
 function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
   openKitPicker<BoxKit>({
     title: "New box",
-    what: "A box holds one self-contained set of cards, places and tags: one region, one chapter, one cast.",
-    sub: "A box kit is a starting point you own: fully editable the moment it lands.",
+    what: "A box holds one self-contained set of cards, places, and tags, such as one region, one chapter, or one cast.",
+    sub: "A box kit is a starting point you own. It's fully editable the moment it lands.",
     kits: [
       { id: "blank", name: "Blank", blurb: "An empty box. Add your own decks, tags, hand templates and hands." },
-      { id: "rpg", name: "RPG encounters", blurb: "The place-based starter: an area tag group, an encounters-at template with one place already on the board, and an encounter whose outcome raises the tension. Teaches boxes, tags, and what playing a card does." },
-      { id: "dialogue", name: "Dialogue topics", blurb: "One hand of topics per NPC, including a shared rumour with a single copy - whoever offers it first claims it. Teaches hands, exclusivity and copies." },
+      { id: "rpg", name: "RPG encounters", blurb: "The place-based starter. An area tag group, an encounters-at template with one place already on the board, and an encounter whose outcome raises the tension. It teaches boxes, tags, and what playing a card does." },
+      { id: "dialogue", name: "Dialogue topics", blurb: "One hand of topics per NPC, including a shared rumour with a single copy, which whoever offers it first claims. It teaches hands, exclusivity, and copies." },
     ],
     onPick: (kit) => onPick(kit),
   });
@@ -2244,9 +2244,9 @@ function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
 function openNewProject(): void {
   openKitPicker<"blank">({
     title: "New project",
-    what: "A project is one game's worth of storylets: boxes of cards, the places they are dealt to, and the bundle your game loads.",
-    sub: "A game kit is a starting point you own: fully editable the moment it lands.",
-    namePlaceholder: "<e.g. The Village>",
+    what: "A project is one game's worth of storylets. It holds boxes of cards, the places they're dealt to, and the bundle your game loads.",
+    sub: "A game kit is a starting point you own. It's fully editable the moment it lands.",
+    namePlaceholder: "The Village",
     // NOT "Empty project ... and nothing else", which was false: init lands a box,
     // a `whats-next` hand and two wired cards, so a new project plays immediately.
     // The old blurb undersold the one thing that gets a newcomer to press Play.
@@ -2579,9 +2579,9 @@ async function serverPull(): Promise<void> {
     // The ERROR voice, as the returned-pack merge uses: the merge landed, but
     // walking away from unresolved conflicts thinking you were done is exactly
     // what a quiet toast would let somebody do.
-    flashError(`Pulled revision ${done.revision}: ${counts}; ${done.conflicts} conflict(s) need a look - see the .storyletconflict files`);
+    flashError(`Pulled revision ${done.revision} (${counts}). ${done.conflicts} conflict${done.conflicts === 1 ? " needs" : "s need"} a look. See the .storyletconflict files.`);
   } else {
-    flash(`Pulled revision ${done.revision}: ${counts}`, "ok");
+    flash(`Pulled revision ${done.revision} (${counts})`, "ok");
   }
 }
 
@@ -2654,7 +2654,7 @@ async function mergePack(): Promise<void> {
     ...(keptAssets > 0 ? [`${keptAssets} of yours kept`] : []),
   ].join(", ");
   const conflictLine = conflicts > 0
-    ? ` ${conflicts} conflict${conflicts === 1 ? "" : "s"} will keep YOUR version, with a .storyletconflict file beside each.`
+    ? ` ${conflicts} conflict${conflicts === 1 ? "" : "s"} will keep your version, with a .storyletconflict file beside each.`
     : "";
   // The mismatch is the HEADLINE when there is one, because it is the thing most
   // likely to mean the author picked the wrong file. Cancel is the shell confirm's
@@ -2668,7 +2668,7 @@ async function mergePack(): Promise<void> {
     // that needs one it will not get.
     body: provenance !== undefined
       ? `${provenance} Merging anyway would give you ${counts}.${conflictLine}`
-      : `${counts}.${conflictLine} Undo restores the project as it was.`,
+      : `${counts}.${conflictLine} You can undo this.`,
     confirmLabel: "Merge",
   });
   if (!ok) { await studio.mergePackDrop(); return; }
@@ -2679,7 +2679,7 @@ async function mergePack(): Promise<void> {
   repaintReplacedProject();
   // A conflict is not a failure, but it is not a success either: the shard was
   // written provisionally with OURS and a sidecar sits beside it.
-  if (conflicts > 0) flashError(`${counts}; ${conflicts} conflict(s) need a look - see the .storyletconflict files`);
+  if (conflicts > 0) flashError(`Merged the returned pack (${counts}). ${conflicts} conflict${conflicts === 1 ? " needs" : "s need"} a look. See the .storyletconflict files.`);
   else flash(`Merged the returned pack (${counts})`, "ok");
 }
 
@@ -2758,7 +2758,7 @@ function onMenu(command: MenuCommand): void {
     case "about": void showAbout({
       appName: "Storyletter",
       version: command.version,
-      blurb: "A studio for storylets: content that offers itself when the moment is right.",
+      blurb: "A studio for storylets. Content that offers itself when the moment is right.",
       // Storylet Studio, not PatterKit. These two lines were scaffolded from
       // Patterpad's About and never changed, so the shipped app told anyone who
       // opened it that it belonged to the sibling project and sent them to the

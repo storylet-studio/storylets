@@ -268,17 +268,17 @@ function paintStrip(strip: HTMLElement, links: Explanation[] | undefined, v: Lin
   strip.replaceChildren(
     el("p", { className: "lead quiet", text: "Select a card to see why it is linked. Double-click to open it." }),
     ...(outside > 0
-      ? [el("p", { className: "caveat", text: `${outside} linked card(s) are outside the analysed set` })]
+      ? [el("p", { className: "caveat", text: `${outside} linked card${outside === 1 ? " sits" : "s sit"} outside the analysed set.` })]
       : []),
     // Quiet, and only when a run would add something: the view is complete
     // without one, so this is an offer rather than a warning (the 2026-08-03
     // ruling). With a run, it dates the evidence, because a stale sweep is a
     // different claim from a fresh one.
     el("p", { className: "caveat quiet", text: v.evidence === undefined
-      ? "Run a fresh coverage test for more info: which of these links actually happen."
+      ? "Run a fresh coverage test to see which of these links actually happen."
       : `Seen counts are from ${v.evidence.runs} runs, ${sinceWhen(v.evidence.at)}.` }),
     ...(flagged > 0
-      ? [el("p", { className: "caveat", text: `${flagged} link(s) were seen in a run but not predicted: the analysis may be missing something.` })]
+      ? [el("p", { className: "caveat", text: `${flagged} link${flagged === 1 ? " was" : "s were"} seen in a run but not predicted, so the analysis may be missing something.` })]
       : []),
     ...v.notes.map((note) => el("p", { className: "caveat", text: note })),
   );
@@ -308,7 +308,7 @@ function render(): void {
     // click back: otherwise the window looks stuck.
     trail: [walked !== undefined
       ? el("button", { className: "swin-follow", text: "Follow the editor", onClick: () => void show(undefined) })
-      : el("span", { className: "swin-note", text: "following the editor" })],
+      : el("span", { className: "swin-note", text: "Following the editor." })],
   });
 
   const body = el("main", { className: "lbody" });

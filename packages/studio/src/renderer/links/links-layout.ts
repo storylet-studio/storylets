@@ -109,7 +109,7 @@ export function linksLayout(
  *  saying what, and "this card reaches" could be read as either direction. */
 function captionFor(side: "reaching" | "reached", count: number): string {
   if (side === "reaching") {
-    return count === 0 ? "Nothing affects this card" : `Affects this card (${count})`;
+    return count === 0 ? "Nothing affects this card." : `Affects this card (${count})`;
   }
-  return count === 0 ? "This card affects nothing" : `Affected by this card (${count})`;
+  return count === 0 ? "This card affects nothing." : `Affected by this card (${count})`;
 }

@@ -1,10 +1,16 @@
 // The placeholder convention, enforced rather than remembered
-// (design/storyletter.md section 2, adopted from Patterpad 2026-08-29).
+// (design/storyletter.md section 2, adopted from Patterpad 2026-08-29; the
+// house style's rule 32 since the 2026-09 UI review).
 //
-//   <like this>   a placeholder PROMPTING for a value
+//   Like this     a placeholder PROMPTING for a value, in plain words
 //   Like this…    a placeholder naming an ACTION (search, replace, filter),
 //                 optionally followed by (parenthesised, examples)
-//   0 / 1 / N     a numeric field showing the default you get by leaving it
+//   0 / 1 / 3     a numeric field showing the default, or a real example value
+//   like-this     a placeholder DEMONSTRATING a format keeps the format
+//
+// Never an angle-bracketed stub: brackets are a developer's habit, not a
+// writer's, and "<what this outcome does>" told the author nothing that
+// "What this outcome does" does not.
 //
 // Written as a source scan because the alternative is a UI review that nobody
 // runs: a new placeholder is one line in one file, and it is exactly the kind
@@ -48,16 +54,17 @@ const placeholders = (): { file: string; text: string }[] => {
   return found;
 };
 
-const NUMERIC_DEFAULT = /^[0-9N]$/;
+const NUMERIC_DEFAULT = /^[0-9]+$/;
+const FORMAT_DEMO = /^[a-z]+(-[a-z]+)+$/;
 
 describe("placeholder style", () => {
   it("finds the placeholders at all (the scan is the test's own load-bearing part)", () => {
     expect(placeholders().length).toBeGreaterThan(15);
   });
 
-  it("prompts for a value in angle brackets, or names an action with an ellipsis", () => {
+  it("prompts for a value in plain words, or names an action with an ellipsis", () => {
     const wrong = placeholders().filter(({ text }) => {
-      if (text.startsWith("<") && text.endsWith(">")) return false;   // a value prompt
+      if (/^[A-Z@][^<>]*$/.test(text) && !text.endsWith("…")) return false;   // a value prompt, plain words
       if (text.endsWith("…")) return false;                          // an action
       // ...or an action followed by parenthesised EXAMPLES, which is
       // Patterpad's own shape ("Search… (text, title, Game ID, or paste an
@@ -67,15 +74,15 @@ describe("placeholder style", () => {
       // property placeholder. The examples are the useful half: they teach the
       // syntax of the thing being asked for.
       if (/…\s*\([^)]*\)$/.test(text)) return false;
-      if (NUMERIC_DEFAULT.test(text)) return false;                  // a shown default
+      if (NUMERIC_DEFAULT.test(text)) return false;                  // a shown default or example
+      if (FORMAT_DEMO.test(text)) return false;                      // a format, demonstrated
       return true;
     });
     expect(wrong.map((w) => `${w.file}: ${JSON.stringify(w.text)}`)).toEqual([]);
   });
 
-  it("keeps the brackets lower case, so an example value is the only capital", () => {
-    const shouty = placeholders().filter(({ text }) =>
-      text.startsWith("<") && /^<[A-Z]/.test(text) && !text.startsWith("<e.g."));
-    expect(shouty.map((w) => w.text)).toEqual([]);
+  it("never wraps a prompt in angle brackets", () => {
+    const stubs = placeholders().filter(({ text }) => text.includes("<") || text.includes(">"));
+    expect(stubs.map((w) => `${w.file}: ${JSON.stringify(w.text)}`)).toEqual([]);
   });
 });

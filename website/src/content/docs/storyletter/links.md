@@ -1,13 +1,13 @@
 ---
 title: The Links window
-description: One card's immediate neighbourhood, drawn. What can turn this card on or off, what this card turns on or off, across every deck and box, worked out from conditions and outcomes without playing anything.
+description: See one card's immediate neighbourhood, what can turn it on or off and what it turns on or off, worked out from conditions and outcomes.
 sidebar:
   label: Links
 ---
 
-**Review ▸ Links…** opens a lens on the card you are looking at: what can turn it on or off to
-the left, what it turns on or off to the right. It follows the editor's selection, so it is
-cheap to leave open in a corner and cheap to ignore.
+Review ▸ Links… opens a lens on the card you're looking at, with what can turn it on or off
+to the left and what it turns on or off to the right. It follows the editor's selection, so it
+is cheap to leave open in a corner and cheap to ignore.
 
 It answers the question you cannot answer by reading one card: **what breaks if I delete this?**
 
@@ -18,7 +18,7 @@ the links the same four inks as [the node canvas](/storyletter/node-canvas/), so
 teaches you the other.
 
 Neighbours are found **across every deck and box**, not just the current deck. That is
-deliberate: a card in one deck can perfectly well be the only thing that opens a card in
+deliberate. A card in one deck can perfectly well be the only thing that opens a card in
 another, and "what breaks if I delete this" does not respect deck boundaries.
 
 ## The four kinds of link
@@ -63,7 +63,7 @@ The window shows the focus card's **immediate** neighbours and stops there. It d
 the chain outward.
 
 A whole-project graph is a hairball. The previous generation of this tool drew one and learned
-that it looks impressive and tells you nothing; one hop across the project stays readable, and
+that it looks impressive and tells you nothing. One hop across the project stays readable, and
 you get the chain by walking it a card at a time with **Centre on this card**.
 
 ## What it cannot see
@@ -76,8 +76,9 @@ It tells you where it is blind rather than leaving you to assume it is complete:
 
 - **Links through `@hand`** are not included. A hand is composed at the deal, so what it
   contains is not knowable in advance. The window says so in as many words.
-- **Computed values.** A change it cannot read statically is reported rather than guessed at.
-- **Unrecognised functions**, likewise.
+- **Computed values**, where a change can't be read statically, are reported rather than
+  guessed at.
+- **Unrecognised functions** are reported the same way.
 
 Each of these appears as a warning against the card it was raised on, so a missing link has a
 reason attached to it rather than being silently absent.
@@ -91,13 +92,13 @@ storyletengine links the-hamlet.storylets
 links: 17 card(s), 19 edge(s) - 18 enable, 1 disable, 0 influence, 0 reference
 ```
 
-`--deck`, `--box` and `--card` narrow it, `--refs` includes reference edges, and `--json` gives
-the graph for something else to read. → [The CLI reference](/cli/#links)
+`--deck`, `--box`, and `--card` narrow it, `--refs` includes reference edges, and `--json`
+gives the graph for something else to read. Every flag is on [the CLI reference](/cli/#links).
 
 ## When to reach for it
 
-- **Before deleting or rewriting a card**, to see what depended on it.
-- **When a card never comes up** and you want to know what was supposed to open it. Coverage
-  tells you it was never dealt; Links tells you what the route in was meant to be.
-- **When a thread feels disconnected**, to see whether it actually joins the rest of the story
-  or merely sits next to it.
+- Before deleting or rewriting a card, it shows what depended on it.
+- When a card never comes up, it shows what was supposed to open it. Coverage tells you it was
+  never dealt, and Links tells you what the route in was meant to be.
+- When a thread feels disconnected, it shows whether the thread actually joins the rest of the
+  story or merely sits next to it.

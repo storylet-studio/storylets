@@ -1,6 +1,6 @@
 ---
 title: Unreal
-description: Play a .storyletsc bundle in Unreal Engine with the native C++ Storylet Engine plugin. Download the zip, drop it into Plugins/, import a bundle, drive a flow from C++ or Blueprint, save, and watch live state in the Runtime State panel.
+description: Play a .storyletsc bundle in Unreal Engine with the native C++ plugin, from installing it to driving a flow from C++ or Blueprint and saving.
 sidebar:
   label: Unreal
 ---
@@ -16,12 +16,12 @@ sidebar:
 ## Install
 
 Download the Unreal zip from the [download page](/download/). It holds two folders side by
-side: **`StoryletEngine/`**, the plugin, and **`StoryletEngineDemo/`**, a ready-to-open
+side. **`StoryletEngine/`** is the plugin, and **`StoryletEngineDemo/`** is a ready-to-open
 sample project that finds the plugin in the sibling folder.
 
 To try it first, open `StoryletEngineDemo/StoryletEngineDemo.uproject` where it sits and
-confirm the build prompt; there's nothing to copy. To use it in your game, copy
-`StoryletEngine/` into your project's `Plugins/` folder, restart the editor and enable it.
+confirm the build prompt. There's nothing to copy. To use it in your game, copy
+`StoryletEngine/` into your project's `Plugins/` folder, restart the editor, and enable it.
 The engine core is header-only standard C++, so it compiles inside your project with no extra
 dependencies.
 
@@ -43,16 +43,16 @@ UStoryletFlow*   Flow   = Engine->OpenFlow(TEXT("main"));
 Engine->RegisterForDebug(TEXT("main"));   // optional: lets the state panel watch it
 ```
 
-The **engine** owns the bundle, the shared state and `@world`. A **flow** is one playthrough
+The **engine** owns the bundle, the shared state, and `@world`. A **flow** is one playthrough
 across it, and all the dealing and playing happens on a flow, so a single-player game opens
 one, calls it what it likes, and never thinks about it again. The same seed always deals the
-same cards; `bRetainLog` keeps the event logs so the state panel, or a Blueprint polling
-`Log()`, can read them. There are two: `Flow->Log()` is that flow's own, and
+same cards. `bRetainLog` keeps the event logs so the state panel, or a Blueprint polling
+`Log()`, can read them. There are two. `Flow->Log()` is that flow's own, and
 `Engine->GetRunLog()` is the RUN's, every flow's events in one order with each entry naming
-its `Flow` - which is the only place a story action in another flow moving shared state is
-visible.
+its `Flow`. The run log is the only place a story action in another flow moving shared state
+is visible.
 
-Open as many flows as you have parallel plays: `OpenFlow` / `GetFlow` / `Flows` / `CloseFlow`
+Open as many flows as you have parallel plays. `OpenFlow` / `GetFlow` / `Flows` / `CloseFlow`
 are all Blueprint-callable, and re-opening a name replaces that flow with a fresh one. What
 each flow gets its own copy of, and what they all share, is
 [Your game's state](/play/world-state/). This is the same shape as Patterplay's
@@ -84,7 +84,7 @@ outcome's own `Fields` as `FStoryletDealtCard` carries the card's, when the box 
 outcome fields. `BoardForBox(BoxRef)` sits beside
 `Board()` and `PlayAdvancing` beside `Play` because Blueprint pins take no optional arguments.
 `Play` returns false and fills `Error` if the outcome is gated shut or the card isn't in that
-hand; nothing changes in that case. A card with no outcomes is played with an empty
+hand. Nothing changes in that case. A card with no outcomes is played with an empty
 `OutcomeGameId`.
 
 ## Your game's state
@@ -103,12 +103,12 @@ bool Known = World->GetBool(TEXT("knows_road"));   // what the story has told yo
 World->OnChanged.AddDynamic(this, &AMyGame::OnWorldChanged);   // (Name, Value, bFromStory)
 ```
 
-`SetReadOnly` is your policy: a story write to that name makes `Play` return false with
+`SetReadOnly` is your policy. A story write to that name makes `Play` return false with
 `@world.x is the game's alone`. It is distinct from `writable: false` on the property's
 declaration, which is the story's own promise, checked when the project compiles and refused
 by every runtime. Your own `Set*` calls and a load are never refused by either. Leave the
 world out and the engine self-backs `@world` from the declared defaults, written through the
-path accessors below; fine for a run that never leaves the engine.
+path accessors below, which is fine for a run that never leaves the engine.
 
 The other properties cross the Blueprint boundary through typed accessors, path-addressed:
 
@@ -122,8 +122,8 @@ double Turn = Flow->GetTurn(TEXT("village"));
 TArray<FStoryletBoxView> Boxes = Flow->ListBoxes();
 ```
 
-`ListProperties()` returns one row per declared property with its type, value, default and
-enum options. The paths, and when to write them: [Your game's state](/play/world-state/).
+`ListProperties()` returns one row per declared property with its type, value, default, and
+enum options. The paths, and when to write them, are on [Your game's state](/play/world-state/).
 
 ## Save and load
 
@@ -138,15 +138,15 @@ foreign or malformed blob returns false and leaves the engine untouched. Flow ob
 game is already holding survive the load: they re-bind by name, so a Blueprint variable
 pointing at a flow keeps working.
 
-A load is forgiving: a card your edit deleted drops off the board, a property you added takes
+A load is forgiving. A card your edit deleted drops off the board, a property you added takes
 its default, and a save from an older build goes in without a word.
 `UStoryletSave::PreviewLoadFromJson(Engine, Json)` says what that would cost before you spend
-it, and changes nothing. It hands back a report as a JSON string - `exact`, `evicted`,
-`droppedProperties`, `defaultedProperties`, `retypedProperties` and the `version` / `hash`
-pairs - because no report struct crosses a Blueprint pin.
+it, and changes nothing. It hands back a report as a JSON string (`exact`, `evicted`,
+`droppedProperties`, `defaultedProperties`, `retypedProperties`, and the `version` / `hash`
+pairs), because no report struct crosses a Blueprint pin.
 
 To park ONE playthrough rather than the whole run, `SaveFlowToJson(Id)` on the engine takes
-that flow's state and `OpenFlowFromJson(Id, Json)` puts it back; `CloseFlow` in between is
+that flow's state and `OpenFlowFromJson(Id, Json)` puts it back. `CloseFlow` in between is
 what releases the cards it was holding, and `PreviewFlowRestoreJson(Id, Json)` says what
 coming back would cost.
 
@@ -156,9 +156,8 @@ coming back would cost.
 `RegisterForDebug("label")` (or `FStoryletDebug::Register` from C++) and the panel shows it
 live: the shared properties with type-aware editors behind a search filter and per-row
 reset-to-default and the **run log** (every flow's events in one order), then each open flow
-with its own properties, per-box turns, board and retained log, each log behind per-kind
-filters,
-Autoscroll, Copy and Clear, and **Save State… / Load State…** buttons. It refreshes a few
+with its own properties, per-box turns, board, and retained log, each log behind per-kind
+filters, Autoscroll, Copy, and Clear, and **Save State… / Load State…** buttons. It refreshes a few
 times a second, attaches and detaches across PIE on its own, and lives in the plugin's editor
 module, so it never ships in a packaged game. The registry it reads compiles to no-ops in
 Shipping builds.
@@ -166,9 +165,10 @@ Shipping builds.
 ## Live Link
 
 `FStoryletLiveLink::Create(Bundle->GetBuildId(), TEXT("My Game"))` then `Link->Attach(Engine)`
-joins the running game to Storyletter: the editor's Board shows the game's run, and a save in
+joins the running game to Storyletter. The editor's Board shows the game's run, and a save in
 the editor pushes the new bundle into it, applied in place by `ApplyLiveBundle`. It compiles to
-no-ops in a Shipping build. The wiring, and what carries across: [Live Link](/play/live-link/).
+no-ops in a Shipping build. The wiring, and what carries across, are on
+[Live Link](/play/live-link/).
 
 ## The bundle inspector
 
@@ -179,32 +179,31 @@ is Blueprint-callable too. See [the bundle inspector](/play/dev-tools/#the-bundl
 ## The demo project
 
 Open `StoryletEngineDemo.uproject` and press **Play**. The project's game mode puts the
-**Board demo** on screen: it loads the Hamlet bundle from disk, deals every hand, and gives
+**Board demo** on screen. It loads the Hamlet bundle from disk, deals every hand, and gives
 you a board you can play with the mouse, with a transcript of every action. Open the Runtime
 State panel beside it to watch the run live. The smallest part to read first is
-`CreateBoardSession()` plus `OnDealAllHandsClicked()` in `UStoryletBoardDemoWidget`; the rest
-is UI.
+`CreateBoardSession()` plus `OnDealAllHandsClicked()` in `UStoryletBoardDemoWidget`, and the
+rest is UI.
 
-**The Hamlet on Unreal** is the second demo: the same project with [Patter](https://patterkit.dev)
+**The Hamlet on Unreal** is the second demo, the same project with [Patter](https://patterkit.dev)
 performing each card's dialogue, two engines in one game. It ships as a project zip on the
 [download page](/download/#the-hamlet-two-engines-in-one-game); `Source/HamletDemo/Private/HamletGame.cpp` is the whole
 integration, and [Running it with Patter](/play/with-patter/) explains the handoff.
 
 ## How it's built
 
-The plugin is two layers. `Source/StoryletEngineRuntime/Public/Storylets/` is the engine core:
+The plugin is two layers. `Source/StoryletEngineRuntime/Public/Storylets/` is the engine core,
 header-only standard C++17 with no Unreal types in it, keeping the structure of the JavaScript
 reference runtime. Everything else is the Unreal wrapper: `UStoryletBundle`, `UStoryletEngine`,
-`UStoryletFlow`, `UStoryletSave`,
-the Blueprint structs, the factory and the editor panel. Exceptions from the core are caught
+`UStoryletFlow`, `UStoryletSave`, the Blueprint structs, the factory, and the editor panel. Exceptions from the core are caught
 at that boundary and surfaced as error strings and logs, so Blueprint never sees one.
 
 Three things stay C++ only: `SubscribeTrace` (Blueprint polls `Log()` instead), the generic
-value type (Blueprint uses the typed accessors above) and `ListBags`. Numbers cross the
+value type (Blueprint uses the typed accessors above), and `ListBags`. Numbers cross the
 boundary as `double`.
 
 ## Next
 
-- What every runtime shares: [Dev tools](/play/dev-tools/).
-- Why it matches the other engines exactly:
-  [Compatibility & conformance](/compatibility/).
+- [Dev tools](/play/dev-tools/) covers what every runtime shares.
+- [Compatibility & conformance](/compatibility/) explains why it matches the other engines
+  exactly.

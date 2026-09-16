@@ -1,16 +1,16 @@
 ---
 title: Version control
-description: How a Storylet Studio project lives in git, Perforce, Plastic or SVN - why the everyday edits merge on their own, the structured merge driver for the rest, conflict files, and validate as the safety net.
+description: Keep a Storylet Studio project in git, Perforce, Plastic, or SVN, with everyday edits merging on their own and a structured driver for the rest.
 sidebar:
   label: Version control
 ---
 
-A Storylet Studio project is **plain text files** in a folder, so it lives in whatever version
+A Storylet Studio project is plain text files in a folder, so it lives in whatever version
 control your team already uses. Nothing needs a database or a server, and there's no export
 step to get your work back out.
 
-Both Storyletter and the CLI write through your version control: a file under Perforce,
-Plastic or SVN is checked out before it's written, and a new file is added. The system is
+Both Storyletter and the CLI write through your version control. A file under Perforce,
+Plastic, or SVN is checked out before it's written, and a new file is added. The system is
 detected from the folder, so there's nothing to configure.
 
 ## How merges work
@@ -21,12 +21,12 @@ those files are written](/format/overview/#the-rules-that-make-it-merge), the ev
 cases merge cleanly under any version control system's ordinary text merge, with nothing
 extra installed:
 
-- two designers in **different decks**: different files;
-- two designers on **different cards in one deck**: different regions of one file, kept apart
-  by full expansion and one field per line;
-- two designers on **different fields of one card**: the same, one line each;
-- two designers **each adding a card**: records are stored sorted by id, so the two adds land
-  at different places in the file instead of both at the end.
+- Two designers in **different decks** touch different files.
+- Two designers on **different cards in one deck** touch different regions of one file, kept
+  apart by full expansion and one field per line.
+- Two designers on **different fields of one card** touch one line each.
+- Two designers **each adding a card** land at different places in the file instead of both
+  at the end, because records are stored sorted by id.
 
 That last one is where most merge conflicts usually come from. Nothing in a Storylet Studio file
 depends on the order things appear in (a deck is a pool, and ranking happens when you deal),
@@ -66,7 +66,7 @@ file.
 ## Registering the driver
 
 `storyletengine init` writes the `.gitattributes` entries. The `git config` lines are per
-clone, so they can't be tracked in the repository; your new project's `vcs-setup.md` holds
+clone, so they can't be tracked in the repository. Your new project's `vcs-setup.md` holds
 them:
 
 ```sh
@@ -85,10 +85,10 @@ merge driver, and marks the compiled bundle `merge=ours`:
 ```
 
 Where the driver isn't registered, git falls back to a normal text merge. That's safe,
-because the everyday cases merge as plain text anyway; the driver is for the ones that
+because the everyday cases merge as plain text anyway. The driver is for the ones that
 don't.
 
-On Perforce, Plastic or SVN, point the system's merge tool at the same command for the shard
+On Perforce, Plastic, or SVN, point the system's merge tool at the same command for the shard
 extensions. It exits 2 on input it can't parse, so a tool can fall back to its own behaviour.
 
 ## The compiled bundle
@@ -96,7 +96,7 @@ extensions. It exits 2 on input it can't parse, so a tool can fall back to its o
 The default is to **commit the bundle**, marked `merge=ours`. Merging two compiled files is
 meaningless, so on a conflict git keeps yours and you rebuild.
 
-The safety net is the content hash: `validate` errors on a bundle that doesn't match the
+The safety net is the content hash. `validate` errors on a bundle that doesn't match the
 shards, so a stale one can't land without being noticed. If you'd rather not commit the
 bundle, add it to `.gitignore`.
 
@@ -105,12 +105,12 @@ bundle, add it to `.gitignore`.
 Some breakage is invisible to any merge, because both sides are individually valid and the
 problem is only in the combination:
 
-- a card using a field that the other branch renamed in the card template;
-- a reference to a tag the other branch deleted;
-- a deck gate referring to a property that no longer exists.
+- A card uses a field that the other branch renamed in the card template.
+- A reference points at a tag the other branch deleted.
+- A deck gate refers to a property that no longer exists.
 
 No three-way merge can see these, because they cross shard boundaries. `validate` catches
-them. Run it after every merge; a post-merge validation failure is a conflict you haven't
+them. Run it after every merge. A post-merge validation failure is a conflict you haven't
 finished resolving.
 
 ## Renames are API breaks
@@ -120,10 +120,10 @@ Hand names and tag names cross the boundary into your game code: `deal("the-inn"
 see.
 
 So a hand or tag rename gets its own warning. The merge driver flags it and `validate` flags
-it. It isn't an error, because renaming is legitimate; it's a warning, because someone needs
+it. It isn't an error, because renaming is legitimate. It's a warning, because someone needs
 to go and change the other side of the contract.
 
-The [bundle inspector](/play/dev-tools/#the-bundle-inspector) is the other half of this: it
+The [bundle inspector](/play/dev-tools/#the-bundle-inspector) is the other half of this. It
 shows an integrator every callable name in a shipped bundle, so "the name I typed isn't in
 the list" is something you can see.
 
@@ -134,12 +134,12 @@ the list" is something you can see.
 storyletengine validate || exit 1
 ```
 
-`vcs-setup.md` suggests it. It catches stale bundles, leftover conflict files and
+`vcs-setup.md` suggests it. It catches stale bundles, leftover conflict files, and
 cross-shard breakage before any of them reach the branch.
 
 ## Someone who isn't on your version control
 
-A freelance writer, an outside narrative designer, a friend giving you an afternoon: not
+A freelance writer, an outside narrative designer, a friend giving you an afternoon. Not
 everyone who touches the story is going to be on your Perforce server.
 
 For them, use the [send envelope](/format/overview/#the-send-envelope-storyletpack). Pack the

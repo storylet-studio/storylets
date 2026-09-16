@@ -1,13 +1,13 @@
 ---
 title: Godot
-description: Play a .storyletsc bundle in Godot with the pure GDScript Storylet Engine addon. Download the zip, drop it into addons/, load a bundle, build an engine, open a flow, deal, play, save, and watch live state with the in-game state panel.
+description: Play a .storyletsc bundle in Godot with the pure GDScript addon, from install and load to deal, play, save, and the in-game state panel.
 sidebar:
   label: Godot
 ---
 
 <div class="sy-badge">
   <img src="/plugin-godot.svg" alt="" width="56" height="56" />
-  <p>The pure GDScript runtime. No native extension to compile, no web view: it loads a <code>.storyletsc</code> bundle and deals from it directly, held to the same <a href="/compatibility/">shared test suite</a> as every other engine.</p>
+  <p>The pure GDScript runtime. No native extension to compile, no web view. It loads a <code>.storyletsc</code> bundle and deals from it directly, held to the same <a href="/compatibility/">shared test suite</a> as every other engine.</p>
 </div>
 
 > Needs Godot 4.7 or newer, which is the version the addon declares and the one every
@@ -16,7 +16,7 @@ sidebar:
 ## Install
 
 Download the Godot zip from the [download page](/download/), drop the **`storyletengine/`**
-folder into your project's `addons/` directory and enable the plugin in **Project ▸ Project
+folder into your project's `addons/` directory, and enable the plugin in **Project ▸ Project
 Settings ▸ Plugins**.
 
 The runtime works with or without the plugin enabled. Enabling it registers the `.storyletsc`
@@ -47,12 +47,12 @@ var flow := engine.open_flow("main")
 StoryletDebug.register(engine, "main")     # optional: lets the state panel find it
 ```
 
-The engine is the world; every play call lives on a **flow** - one playthrough - opened by
-name. A single-player game opens `"main"` and never thinks about it again; several flows run
+The engine is the world. Every play call lives on a **flow** (one playthrough) opened by
+name. A single-player game opens `"main"` and never thinks about it again. Several flows run
 parallel playthroughs over the same shared state ([the sharing rules](/play/world-state/)).
 
-The same seed always deals the same cards. `"log": true` keeps the event logs: `flow.log()`
-is that flow's own and `engine.log()` is the RUN's, every flow's events in one order with
+The same seed always deals the same cards. `"log": true` keeps the event logs. `flow.log()`
+is that flow's own, and `engine.log()` is the RUN's, every flow's events in one order with
 each entry naming its `flow`. That last one is the only place a story action in another flow
 moving shared state is visible, and the state panel shows both (capped at 1000; `{"cap": n}`
 sets your own). An unknown key in the options Dictionary is an error, so a typo tells you
@@ -74,9 +74,9 @@ for outcome in flow.outcomes(card_id, hand_id):            # ask when you show t
         var err := flow.play(card_id, outcome["gameId"], hand_id)
 ```
 
-Card views and outcome views are Dictionaries: `id`, `gameId`, `title`, `purpose` and
-`fields` on a card; `available` on an outcome, and `fields` too when the box declares
-outcome fields. `play()` returns an error String, empty on
+Card views and outcome views are Dictionaries. A card carries `id`, `gameId`, `title`,
+`purpose`, and `fields`. An outcome carries `available`, and `fields` too when the box
+declares outcome fields. `play()` returns an error String, empty on
 success, and changes nothing if the outcome is gated shut or the card isn't in that hand. A
 card with no outcomes is played with `""` as the outcome.
 
@@ -92,7 +92,7 @@ var turn := flow.turn("village")
 var boxes := flow.list_boxes()
 ```
 
-The paths, and when to write them: [Your game's state](/play/world-state/).
+[Your game's state](/play/world-state/) has the paths, and when to write them.
 
 ## Save and load
 
@@ -102,31 +102,31 @@ var report := engine.load_game(envelope)     # rebuilds every flow...
 flow = engine.get_flow("main")               # ...so re-take your handles
 ```
 
-A load is forgiving: a card your edit deleted drops off the board, a property you added takes
+A load is forgiving. A card your edit deleted drops off the board, a property you added takes
 its default, and a save from an older build goes in without a word. `preview_load(envelope)`
-says what that would cost before you spend it and changes nothing; `load_game` returns the
+says what that would cost before you spend it and changes nothing. `load_game` returns the
 same report Dictionary once it has, with `"exact"` true when the save goes back exactly as it
-was and `"evicted"`, `"droppedProperties"`, `"defaultedProperties"`, `"retypedProperties"` and
-the `"version"` / `"hash"` pairs naming what moved. A save for another project is refused: an
-empty Dictionary and a `push_error`.
+was and `"evicted"`, `"droppedProperties"`, `"defaultedProperties"`, `"retypedProperties"`, and
+the `"version"` / `"hash"` pairs naming what moved. A save for another project is refused, with
+an empty Dictionary and a `push_error`.
 
 `save_flow(id)` takes ONE flow's state, for a playthrough stepping away, and
 `open_flow(id, {"restore": saved})` puts it back. Closing the flow in between is what releases
-the cards it was holding; on the way back, a shared card another flow now holds is dropped and
+the cards it was holding. On the way back, a shared card another flow now holds is dropped and
 reported (`preview_flow_restore(id, saved)` asks in advance, and
 `{"on_restore_report": Callable}` hands you what the restore actually did).
 
 `StoryletSave.serialize_state(engine, world_values)` and
-`StoryletSave.deserialize_state(engine, text)` (which hands back the file's `@world` values
-for your game to apply - [why the engine never saves them](/play/world-state/#saving-it)) are
-the `.storyletsave` string boundary. A foreign, malformed or wrong-project blob is refused, so
-a bad file can't corrupt a run.
+`StoryletSave.deserialize_state(engine, text)` are the `.storyletsave` string boundary. The
+second hands back the file's `@world` values for your game to apply
+([why the engine never saves them](/play/world-state/#saving-it)). A foreign, malformed, or
+wrong-project blob is refused, so a bad file can't corrupt a run.
 
 ## Errors
 
 GDScript has no exceptions, so the addon reports errors as values:
 
-- `play()`, `load()` and `set_property()` return an error String, empty on success.
+- `play()`, `load()`, and `set_property()` return an error String, empty on success.
 - Bad references and bad option Dictionaries `push_error`.
 - An unknown box on `board(box_ref)` is refused with `push_error` and an empty Dictionary.
 - An evaluation error inside a deal or peek makes that card or deck unavailable and puts a
@@ -142,15 +142,15 @@ Add a `StoryletStatePanel` to your scene. It's an in-game overlay, `debug_only` 
 it builds nothing in a release export and is safe to leave in a scene that ships. With an
 engine registered through `StoryletDebug`, it saves and loads `.storyletsave` files with
 **Save State… / Load State…** and shows the **run log** (every flow's events in one order),
-then a section per open flow: that flow's declared properties (with a filter, editable), its
-per-box turns, its board and its own retained log, each log behind per-kind filters with
-Autoscroll, Copy and Clear. It reads the flows off the engine, so one
+then a section per open flow, with that flow's declared properties (with a filter, editable),
+its per-box turns, its board, and its own retained log, each log behind per-kind filters with
+Autoscroll, Copy, and Clear. It reads the flows off the engine, so one
 registration covers every flow, however many you open later.
 
 To watch the game from Storyletter instead, and to have saves reach the run without a
 restart, add a `StoryletLiveLink` node and attach your ENGINE (the link finds your flows
-itself); it opens only in a debug
-build. Wiring and the protocol: [Live Link](/play/live-link/).
+itself). It opens only in a debug
+build. [Live Link](/play/live-link/) has the wiring and the protocol.
 
 ## The bundle inspector
 
@@ -160,7 +160,7 @@ your code: hands, boxes, tags, declared properties. Nothing running needed. See
 
 ## Exporting your game
 
-With the plugin enabled there's nothing to configure: the addon's export hook puts the raw
+With the plugin enabled there's nothing to configure, because the addon's export hook puts the raw
 `.storyletsc` into the exported build at its original path, so
 `FileAccess.get_file_as_string("res://story.storyletsc")` reads the same bytes in the editor
 and in the export, on every platform.
@@ -171,20 +171,20 @@ leaves it out of the export. In that case add `*.storyletsc` to your export pres
 
 ## The demo
 
-`addons/storyletengine/demo/board_demo.tscn` is the **Board demo**: the Hamlet bundle dealt
-onto a board you can play, with the same hands, control labels and transcript as the other
+`addons/storyletengine/demo/board_demo.tscn` is the **Board demo**, the Hamlet bundle dealt
+onto a board you can play, with the same hands, control labels, and transcript as the other
 three runtimes. Open the scene and press Play. The smallest part to read first in
-`board_demo.gd` is building the engine, opening a flow, dealing and reading `board()`; the rest
-is UI. Delete
-the folder freely; nothing depends on it.
+`board_demo.gd` is building the engine, opening a flow, dealing, and reading `board()`. The
+rest is UI. Delete
+the folder freely, since nothing depends on it.
 
-**The Hamlet on Godot** is the second demo: the same project with [Patter](https://patterkit.dev)
+**The Hamlet on Godot** is the second demo, the same project with [Patter](https://patterkit.dev)
 performing each card's dialogue, two engines in one game. It ships as a project zip on the
 [download page](/download/#the-hamlet-two-engines-in-one-game); `hamlet_game.gd` is the whole
 integration, and [Running it with Patter](/play/with-patter/) explains the handoff.
 
 ## Next
 
-- What every runtime shares: [Dev tools](/play/dev-tools/).
-- Why it matches the other engines exactly:
-  [Compatibility & conformance](/compatibility/).
+- [Dev tools](/play/dev-tools/) covers what every runtime shares.
+- [Compatibility & conformance](/compatibility/) explains why it matches the other engines
+  exactly.

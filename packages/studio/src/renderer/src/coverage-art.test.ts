@@ -86,7 +86,7 @@ describe("a hand's heat", () => {
 
 describe("the legend", () => {
   it("says there is no run rather than drawing a project of zeroes", () => {
-    expect(coverageLegend(undefined, NOW)).toBe("Coverage overlay: no run yet");
+    expect(coverageLegend(undefined, NOW)).toBe("No coverage run yet.");
   });
 
   it("dates its evidence", () => {

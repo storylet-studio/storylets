@@ -1,12 +1,12 @@
 ---
 title: Your game's state
-description: How your game feeds its own state into the story - declaring @world, writing it before you deal, and the property paths every runtime shares.
+description: Feed your game's own state into the story by declaring @world, writing it before you deal, and using the property paths every runtime shares.
 sidebar:
   label: Your game's state
 ---
 
-The story asks questions about your game: is it night, does the player have the key, how
-much gold. **`@world`** is where those answers live. It's the set of properties your game
+The story asks questions about your game. Is it night, does the player have the key, how
+much gold? `@world` is where those answers live. It's the set of properties your game
 owns and the story's conditions read, and it's usually the first thing you wire up after
 loading a bundle.
 
@@ -14,8 +14,8 @@ Everything on this page is the same in all four runtimes. Only the spelling chan
 
 ## Declaring it
 
-`@world` properties are declared on the **project**, in Project Settings, with a name, a type
-and a default. Declaring is the designer's half: it tells the editor which names exist, so a
+`@world` properties are declared on the **project**, in Project Settings, with a name, a type,
+and a default. Declaring is the designer's half. It tells the editor which names exist, so a
 condition can be checked as it's written and a typo is caught when the bundle is published,
 not in your game.
 
@@ -40,27 +40,28 @@ engines sees one rule:
    refuses it with `'@world.chapter' is read-only` and nothing changes. Your resolver's `set`
    is never called for a read-only property.
 3. **A resolver with no `set` makes the whole of `@world` read-only to the story**, whatever
-   the declarations say. That is the game's policy rather than the story's promise; both apply.
+   the declarations say. That is the game's policy rather than the story's promise, and both
+   apply.
 4. **Your game is never bound by it, resolver or none.** The promise is the story's, not the
-   game's: `setProperty("world.chapter", ...)` writes, whether you bound a resolver or let the
+   game's. `setProperty("world.chapter", ...)` writes, whether you bound a resolver or let the
    engine keep its stand-in bag, and so do the coverage driver and the CLI's `--set`, which
    exist to move exactly these values. The examiner still shows the property as read-only,
    because that is what the flag means: read by the story, moved by the game. (Until 2026-09-05
    the stand-in bag refused the game as well, which locked the game's own tools out of its own
-   clock; that was a bug in the shared kernel, fixed in scoperegistry 0.6.0 and here.)
+   clock. That was a bug in the shared kernel, fixed in scoperegistry 0.6.0 and here.)
 
-There is no write-only: a declared property can always be read by the story. If the game holds
-a value the story should not see, do not declare it.
+There's no write-only, because a declared property can always be read by the story. If the
+game holds a value the story shouldn't see, don't declare it.
 
-A name that isn't declared can't be referenced: the compiler refuses `@world.isNight` if
+A name that isn't declared can't be referenced. The compiler refuses `@world.isNight` if
 nothing declares `isNight`. Property names are lower case (see [the format](/format/shards/)).
 
 ## Binding it
 
-`@world` lives on the **engine**, and every flow sees the same values - it's the game's own
+`@world` lives on the **engine**, and every flow sees the same values. It's the game's own
 state, and the game is one thing however many playthroughs run over it. You can hand the
 engine a resolver when you build it (`new Engine(bundle, { world: { get, set } })`), so
-conditions read your live game state directly; or hand it nothing, and the engine backs
+conditions read your live game state directly. Or hand it nothing, and the engine backs
 `@world` itself from the declared defaults, which is fine for most games.
 
 ## Writing it from your game
@@ -74,7 +75,7 @@ flow.setProperty("world.gold", 120);
 const dealt = flow.deal("tavern-encounters");
 ```
 
-Note the path form: **`world.is_night`, not `@world.is_night`.** The `@` belongs to the
+The path form is **`world.is_night`, not `@world.is_night`.** The `@` belongs to the
 expression language a designer writes in; the API takes a plain path. The paths are:
 
 | Path | Reaches |
@@ -86,15 +87,15 @@ expression language a designer writes in; the API takes a plain path. The paths 
 | `hand.<hand>.<name>` | a hand's properties |
 | `value.<tag>.<name>` | a tag's own properties (see below when two boxes share a tag name) |
 
-The owner is named by the name you gave it: a box, deck, hand or tag is addressed by the same
+The owner is named by the name you gave it. A box, deck, hand, or tag is addressed by the same
 gameId you write in a shard and read on a card. So the Elder's zone is
 `hand.the-elder.zone`, and the docks' danger is `value.docks.danger`.
 
-**Two boxes may name a tag the same way.** Box, deck and hand names are unique across a
+**Two boxes may name a tag the same way.** Box, deck, and hand names are unique across a
 project, but a tag's name only has to be unique within its group, and a group's within its
 box, so a harbour box and a cellar box can each have a `docks`. Where that happens, say which
 box: `value.harbour/docks.danger`. The slash sits inside the owner segment, so the address
-still has its three parts. You can always write the long form, whether or not you need it; the
+still has its three parts. You can always write the long form, whether or not you need it. The
 short one is refused where it would name two tags at once, and the refusal tells you both
 addresses to choose from. A project whose tag names happen to be unique sees none of this.
 
@@ -130,24 +131,24 @@ If you'd rather the story never touched a value, keep it in your own code and pu
 
 ## Shared or per flow
 
-Every property is either **shared** - one value across every flow - or a **copy per flow**,
+Every property is either **shared** (one value across every flow) or a **copy per flow**,
 set on the declaration with a `shared` flag, never by a different name. The defaults follow
 the scopes:
 
 | Scope | Default |
 |---|---|
-| `@world` | always shared - the game owns it, not the player |
+| `@world` | always shared (the game owns it, not the player) |
 | `@story` | shared |
-| box, deck, hand and tag properties | a copy per flow |
+| box, deck, hand, and tag properties | a copy per flow |
 
 A single-flow game never notices any of this. With several flows, the narrow scopes are where
-personal experience lives - *this* participant's danger in the docks - while `@story` and any
+personal experience lives (*this* participant's danger in the docks), while `@story` and any
 property flagged `shared` is the world every flow moves together. Flows meet only through
-shared state: there's no message-passing between them, and no flow can read another's copies.
+shared state. There's no message-passing between them, and no flow can read another's copies.
 
 **Cards can be shared too.** The same word on a deck (or a single card) makes the cards
-themselves scarce across flows rather than the state they read: one goblin in the whole world,
-to whoever finds it first. That's [How a deal is decided](/play/dealing/#copies-and-claims).
+themselves scarce across flows rather than the state they read, so there's one goblin in the
+whole world, to whoever finds it first. That's [How a deal is decided](/play/dealing/#copies-and-claims).
 
 ## Durable: state that outlives a run
 
@@ -164,34 +165,34 @@ whoever runs the engine does at a run boundary: read the declarations, lift the 
 out with `getProperty` before the world restarts, and write them back with `setProperty` into
 the fresh one. Everything that needs is already public.
 
-`durable` is a compile error on `@world`, for the reason `shared` is: `@world` is the game's
+`durable` is a compile error on `@world`, for the reason `shared` is. `@world` is the game's
 own state, and how long the game keeps it is the game's business.
 
-**A card can be durable too**, on the deck or on the card, and it means one thing: its
-`redraw: never` spend survives the run. Only `never` can - a finite cooldown is an absolute
-turn of a box's clock, and the clock resets with the run - so `durable` on any other redraw is
-a compile warning. A durable per-flow spend rides in that flow's cooldowns; a durable shared
+**A card can be durable too**, on the deck or on the card, and it means one thing. Its
+`redraw: never` spend survives the run. Only `never` can (a finite cooldown is an absolute
+turn of a box's clock, and the clock resets with the run), so `durable` on any other redraw is
+a compile warning. A durable per-flow spend rides in that flow's cooldowns. A durable shared
 one rides the engine's spent set, and both go back with `openFlow(id, { restore })` and
 `markTaken`.
 
 ## Saving it
 
 `saveGame()` returns the whole run: the shared state once (with anything a shared one-shot has
-taken out of the world), then every flow's own state, turn counters, cooldowns, board contents
+taken out of the world), then every flow's own state, turn counters, cooldowns, board contents,
 and random stream position. `loadGame(envelope)` restores it, rebuilding every flow, so
 re-take your handles with `getFlow`, never `openFlow`, which would replace the restored flow
 and its dealt hand (see [JavaScript, Save and load](/play/javascript/#save-and-load)).
 
 A load is deliberately forgiving about content that has moved underneath a save, which is what
-lets a save survive an edit - and is also what hides the cost of one. So it says: `loadGame`
-returns a report of everything it dropped, defaulted or reset, and `previewLoad(envelope)`
-computes the same report without applying anything. `saveFlow(id)` and
+lets a save survive an edit, and is also what hides the cost of one. So it tells you what it
+did. `loadGame` returns a report of everything it dropped, defaulted, or reset, and
+`previewLoad(envelope)` computes the same report without applying anything. `saveFlow(id)` and
 `openFlow(id, { restore })` do the same for ONE flow, for a playthrough that steps away and
 comes back.
 
-**`@world` is deliberately not in the envelope.** It's your game's state - the engine only
-borrows it - so your game saves it, next to the envelope. That's also what makes a game that
-runs Patter and the Storylet Engine side by side safe: both engines exclude `@world` from
+**`@world` is deliberately not in the envelope.** It's your game's state (the engine only
+borrows it), so your game saves it, next to the envelope. That's also what makes a game that
+runs Patter and the Storylet Engine side by side safe. Both engines exclude `@world` from
 their own saves, your game saves its one world once, and nothing is written twice. The
 `.storyletsave` file format already carries both halves, and `play-helpers` ships a
 ready-made container for games with no world state of their own (see
@@ -200,7 +201,7 @@ ready-made container for games with no world state of their own (see
 ## Next
 
 - [The API, in one table](/play/overview/#the-api-in-one-table): every call, in one place.
-- Your engine: [JavaScript](/play/javascript/), [Unity](/play/unity/),
-  [Unreal](/play/unreal/), [Godot](/play/godot/).
+- Your engine's page is [JavaScript](/play/javascript/), [Unity](/play/unity/),
+  [Unreal](/play/unreal/), or [Godot](/play/godot/).
 - [Dev tools](/play/dev-tools/): the examiner that shows you these properties live while the
-  game runs.
+  the game runs.

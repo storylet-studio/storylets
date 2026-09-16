@@ -116,7 +116,7 @@ export function refreshMenu(
         {
           label: "Open Recent",
           submenu: state.recents.length === 0
-            ? [{ label: "No recent projects", enabled: false }]
+            ? [{ label: "No Recent Projects", enabled: false }]
             // The project's OWN name where it is known, and the folder stem only
             // as a fallback: two projects can sit in folders called `draft`, and
             // renaming one never moved its folder (app-shell 0.25.0).
@@ -170,7 +170,7 @@ export function refreshMenu(
         // pack is shared between the two apps and so is this label. It goes to
         // from-storylets as a proposal, and the spine takes it if Patterpad
         // ever grows the other half.
-        { label: "Connect to a server\u2026", click: send({ cmd: "connect-server" }) },
+        { label: "Connect to a Server\u2026", click: send({ cmd: "connect-server" }) },
         { type: "separator" },
         // A12: on macOS there is NO File > Close Window, which is Patterpad's
         // written decision and was reversed here without a note. Quit in the app
@@ -226,7 +226,7 @@ export function refreshMenu(
         // navigate on each step where the ambient problems bar does not.
         {
           label: "Review Feedback", type: "checkbox", checked: state.reviewWalk ?? false,
-          accelerator: "Shift+CmdOrCtrl+R", click: send({ cmd: "review-walk", on: !(state.reviewWalk ?? false) }),
+          accelerator: "CmdOrCtrl+Shift+R", click: send({ cmd: "review-walk", on: !(state.reviewWalk ?? false) }),
         },
         { label: "Next Feedback", accelerator: "F8", click: send({ cmd: "review-next" }) },
         { label: "Previous Feedback", accelerator: "Shift+F8", click: send({ cmd: "review-prev" }) },

@@ -69,7 +69,7 @@ describe("the captions", () => {
     // The old table said this in a hint; a blank column would just look broken.
     const l = linksLayout("focus", [], [], SIZE);
     expect(l.captions.map((c) => c.text)).toEqual([
-      "Nothing affects this card", "This card", "This card affects nothing",
+      "Nothing affects this card.", "This card", "This card affects nothing.",
     ]);
   });
 

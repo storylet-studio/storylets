@@ -48,7 +48,7 @@ describe("the box's Card template tab", () => {
     renderBoxTabBody(centre, declaring([{ name: "after", type: "string", default: "" }]), "template", host());
     const labels = [...centre.querySelectorAll(".insp-label")].map((s) => s.textContent);
     expect(labels).toEqual(["Card fields", "Outcome fields"]);
-    expect(centre.textContent).toContain("the fields every outcome can carry");
+    expect(centre.textContent).toContain("The fields every outcome in this box can carry.");
   });
 
   it("offers a + Field for each list, and the outcome one saves outcomeFields", () => {

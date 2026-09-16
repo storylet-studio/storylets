@@ -1,16 +1,16 @@
 ---
 title: What are storylets?
-description: Storylets as a way of building interactive stories, before any tool or engine. A chunk of story with a condition on the front, dealt only when it fits, and what that buys you.
+description: Learn what a storylet is, a chunk of story with a condition on the front that is dealt only when it fits, and what building that way buys you.
 sidebar:
   label: What are storylets?
 ---
 
 New to the idea? Start here. This page is about storylets as a *way of building interactive
-stories*: no tool, no engine, just the idea. Once it clicks, [Core concepts](/concepts/) shows
-how Storylet Studio puts it to work.
+stories*, with no tool and no engine, just the idea. Once it clicks, [Core concepts](/concepts/)
+shows how Storylet Studio puts it to work.
 
-You have probably played storylet games without knowing the word. *Fallen London*, *King of
-Dragon Pass*, *Wildermyth*, *Reigns*, *80 Days*: none of them run off a single fixed script.
+You have probably played storylet games without knowing the word. None of *Fallen London*,
+*King of Dragon Pass*, *Wildermyth*, *Reigns*, or *80 Days* runs off a single fixed script.
 They tell their story in small, rearrangeable pieces, handed to the player when the moment is
 right.
 
@@ -21,7 +21,7 @@ with a rule stuck on the front saying when it is allowed to appear. The rule is 
 *if*: show this when such-and-such is true.
 
 Think of a deck of cards. Every storylet you write is a card in the deck. When the game wants
-some story, it does not shuffle the lot and hope: it deals a hand of only the cards that are
+some story, it doesn't shuffle the lot and hope. It deals a hand of only the cards that are
 valid right now. You play one, and the next hand might look completely different.
 
 <svg viewBox="0 0 640 280" role="img" aria-labelledby="sy-deal-title" style="width:100%;height:auto;font-family:var(--sl-font-sans,system-ui)">
@@ -70,7 +70,7 @@ That is the whole trick: a chunk of story with a condition on it, dealt only whe
 
 ## The world keeps score
 
-The conditions are checked against the *state of the world*: the facts your story keeps track
+The conditions are checked against the *state of the world*, the facts your story keeps track
 of. Has the player met the blacksmith? How much gold are they carrying? Is it winter? Is the
 gate open? You decide what is worth tracking, and you give each fact a name.
 
@@ -84,10 +84,10 @@ Because every storylet carries its own condition, the same pile of cards can mak
 different stories:
 
 - **Linear**: a straight chain, each beat unlocking the next.
-- **Parallel**: several threads at once, so the player nudges a romance, a feud and a
+- **Parallel**: several threads at once, so the player nudges a romance, a feud, and a
   missing-person case along a bit at a time.
-- **Interwoven**: those threads talking to each other, so a choice in one opens or closes a beat
-  in another.
+- **Interwoven**: those threads talking to each other, so a choice in one opens or closes a
+  beat in another.
 
 <svg viewBox="0 0 640 210" role="img" aria-labelledby="sy-shapes-title" style="width:100%;height:auto;font-family:var(--sl-font-sans,system-ui)">
   <title id="sy-shapes-title">Three story shapes built from the same storylets: a linear chain where each beat unlocks the next; parallel threads the player advances independently; and interwoven threads where a beat in one unlocks a beat in another.</title>
@@ -132,7 +132,7 @@ different stories:
   </g>
 </svg>
 
-The craft is in the conditions: write them so that however the player wanders through, it still
+The craft is in the conditions. Write them so that however the player wanders through, it still
 reads like a story and not a heap of scenes.
 
 ## Cards that stick around, or do not
@@ -140,10 +140,10 @@ reads like a story and not a heap of scenes.
 A beat should not always behave the same once it has been played. In Storylet Studio this is a
 card's **redraw** setting:
 
-- **One-shot** (`never`): plays once and it is gone. Your big plot turns.
-- **Repeating** (`always`): comes back whenever its condition holds again. Ambient flavour,
+- One-shot (`never`) plays once and it's gone. Your big plot turns.
+- Repeating (`always`) comes back whenever its condition holds again. Ambient flavour,
   recurring faces.
-- **Cooldown** (a number of turns): available again, but only after a while, so it can recur
+- Cooldown (a number of turns) is available again, but only after a while, so it can recur
   without hogging every hand.
 
 ## Priority
@@ -153,8 +153,8 @@ big moment, the dragon finally turning up, a high priority and it pushes to the 
 instant its condition is met, ahead of the everyday stuff.
 
 Storylet Studio also breaks ties by how *specific* a card is, so the special case wins over the
-general one without you having to number everything.
-&rarr; [How a deal is decided](/play/dealing/)
+general one without you having to number everything. The whole ranking is on
+[How a deal is decided](/play/dealing/).
 
 ## Content that fits the player
 
@@ -165,22 +165,26 @@ gets the version that fits.
 
 ## Why build it this way
 
-A few things come for free:
+A few things come for free.
 
-- **It grows cleanly.** New content is just new cards with the right condition on the front: a
-  seasonal event, a new character class, a whole new region, dropped in without disturbing what
-  is already there.
-- **You can test it in pieces.** Each thread stands on its own.
-- **It stays honest.** Eligibility is explicit, so the game only ever offers something that
-  makes sense right now.
+It grows cleanly. New content is just new cards with the right condition on the front, whether
+a seasonal event, a new character class, or a whole new region, dropped in without disturbing
+what is already there.
+
+You can test it in pieces, since each thread stands on its own.
+
+It stays honest. Eligibility is explicit, so the game only ever offers something that makes
+sense right now.
 
 Open, reactive, ever-growing stories that still hang together. That is the appeal.
 
 ## Where to next
 
 - [Core concepts](/concepts/): how Storylet Studio puts this to work, with the vocabulary the
-  rest of the documentation uses.
+  the rest of the documentation uses.
 - [Getting started](/getting-started/): install it and open a worked example.
+  example.
 - [The Village](/village/): a complete storylet project, playable in your browser.
 - [The Hamlet](/download/#the-hamlet-two-engines-in-one-game): the same idea with Patter performing the dialogue, two engines in one game.
+  performing the dialogue, two engines in one game.
 - [Why Storylet Studio](/why/): whether this is the right tool for what you are building.

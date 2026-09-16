@@ -23,7 +23,7 @@ const VERDICT_REASON: Record<TraceVerdict, string> = {
   tags: "its tags don't match this slice",
   condition: "condition not met",
   priority: "priority did not resolve to a number",
-  claimed: "no free copy - held elsewhere on the board",
+  claimed: "no free copy, held elsewhere on the board",
   // The two shared-scarcity reasons (design/shared-scarcity.md). They exist
   // BECAUSE "claimed" and "on cooldown" would point the reader at their own
   // board and their own clock, neither of which has anything to do with it.

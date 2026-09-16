@@ -1,13 +1,13 @@
 ---
 title: The shards
-description: What each file in a .storylets project holds - the project shard, the box shard, tags, hands, decks, the view and the map - with real examples.
+description: Read what each file in a .storylets project holds, from the project and box shards to tags, hands, decks, the view, and the map, with real examples.
 sidebar:
   label: The shards
 ---
 
 A project is made of eight kinds of file, one extension each. Every one is JSON5 with trailing
 commas, and every expression is stored as plain source text, never as a syntax tree. Seven of
-them are yours; the eighth, the installation contract, is written by a venue's server.
+them are yours. The eighth, the installation contract, is written by a venue's server.
 
 | File | Extension | Holds |
 |---|---|---|
@@ -57,28 +57,28 @@ them are yours; the eighth, the installation contract, is written by a venue's s
 </svg>
 
 A deck is one file and a box is one folder, so two people adding decks to the same box add
-different files and never meet. That's most of why everyday edits merge on their own; see
-[Version control](/setup/version-control/) for the rest.
+different files and never meet. That's most of why everyday edits merge on their own, and
+[Version control](/setup/version-control/) has the rest.
 
 ### The two arrangement shards
 
 Positions live apart from content, in two shards of their own, and neither holds anything
 about what a thing *is*.
 
-`view.storyletview` is the one shard you can ignore: it holds where a card sits on a deck's
+`view.storyletview` is the one shard you can ignore. It holds where a card sits on a deck's
 node canvas, and the frames drawn round them. Delete the file and you lose a layout, never
 content.
 
 `map.storyletmap` holds where a box's hands stand on its map. That one is not safe to lose,
-because a site leaves the project: it ships in the bundle's `maps` block when you export
+because a site leaves the project. It ships in the bundle's `maps` block when you export
 with the map, and it's where a screen or a kiosk stands. Which zone a site belongs to isn't
-recorded here either: that's the hand's own tag binding, in `hands.storylethands`.
+recorded here either, since that's the hand's own tag binding, in `hands.storylethands`.
 
 Because of that split, two people arranging the same canvas can only produce a position
 conflict, never a content conflict.
 
 The map lived inside `view.storyletview` until September 2026. It is still read from there,
-for one release: Storyletter moves it the first time you touch the map, and
+for one release. Storyletter moves it the first time you touch the map, and
 `storyletengine format` moves a whole project at once.
 
 The fixed basenames (`box`, `tags`, `hands`) are kept even though the extension already
@@ -147,22 +147,22 @@ One per project, at the root. It holds everything that isn't specific to a box.
 ```
 
 **`world`** declares your game's state surface and, in `registry`, who owns each part of
-it: whether the storylet engine holds `@world` itself (when it plays on its own) or your host does. **`story`**
+it, whether the storylet engine holds `@world` itself (when it plays on its own) or your host does. **`story`**
 declares the story's own globals.
 
-A declaration anywhere except `@world` may also carry **`shared`** - the sharing axis for
-projects that run [several flows](/play/world-state/#shared-or-per-flow): `true` is one value
-across every flow, `false` a copy per flow. Absent means the scope default (`@story` shared;
-box, deck, hand and tag properties per-flow). `@world` takes no flag: it is the game's own
-state and always shared, and the compiler refuses the flag there.
+A declaration anywhere except `@world` may also carry **`shared`**, the sharing axis for
+projects that run [several flows](/play/world-state/#shared-or-per-flow). `true` is one value
+across every flow, and `false` is a copy per flow. Absent means the scope default (`@story`
+shared; box, deck, hand, and tag properties per-flow). `@world` takes no flag, because it is
+the game's own state and always shared, and the compiler refuses the flag there.
 
 Beside it, and independent of it, **`durable`** says the value
-[outlives a run](/play/world-state/#durable-state-that-outlives-a-run): the installation's
-memory when it is also shared, one player's pocket when it is not. The engine never reads it;
-whoever runs the engine lifts and restores durable values at a run boundary. `@world` takes no
-flag here either, and for the same reason.
+[outlives a run](/play/world-state/#durable-state-that-outlives-a-run), meaning the
+installation's memory when it's also shared, and one player's pocket when it isn't. The
+engine never reads it. Whoever runs the engine lifts and restores durable values at a run
+boundary. `@world` takes no flag here either, and for the same reason.
 
-**`settings.play`** is `"solo"`, `"shared"` or `"venue"` (absent means `"solo"`): the
+**`settings.play`** is `"solo"`, `"shared"`, or `"venue"` (absent means `"solo"`). It sets the
 [play ladder](/storyletter/workspace/#play-how-much-of-the-app-you-see), which decides how much
 of itself Storyletter shows. It is authoring configuration and is never compiled into the
 bundle. A project that contains more than its rung shows is a validation warning naming the
@@ -218,9 +218,9 @@ the box.
 }
 ```
 
-`fields` is the **card template**: what every card in this box carries. Fields are data for
+`fields` is the **card template**, what every card in this box carries. Fields are data for
 your game (a scene id, an animation reference, a text key). The engine never interprets them
-and expressions can't read them. `outcomeFields` is the same again for **outcomes**: what an
+and expressions can't read them. `outcomeFields` is the same again for **outcomes**, what an
 outcome in this box may carry, declared the same way, for the line your game shows after a
 press without spending a card on it. Leave it out when you have none. `properties` is the
 `@box` scope. `ranking.specificity` is the one per-box ranking toggle.
@@ -232,8 +232,8 @@ An optional `turn` makes this a **timed box**:
 ```
 
 `seconds` is a whole number of seconds, one or more. Declaring it says that a turn in this
-box is a length of time: plays in it no longer advance its clock, your game ticks it instead,
-and a card's `redraw: 30` reads as thirty minutes. See
+box is a length of time, so plays in it no longer advance its clock, your game ticks it
+instead, and a card's `redraw: 30` reads as thirty minutes. See
 [Dealing](/play/dealing/#a-box-that-counts-in-time). Leave it out and a turn is a play, which
 is the ordinary box.
 
@@ -274,7 +274,7 @@ card that never deals. A tag may carry properties of its own.
 
 A group's name is unique **within its box**, not project-wide, so two boxes can each declare
 a `zone` group. Tag names are unique within their group, and unique **within their box** as
-well: a tag's properties are addressed as `value.<box>/<tag>.<name>`, which qualifies by box
+well, because a tag's properties are addressed as `value.<box>/<tag>.<name>`, which qualifies by box
 and no further, so two groups in one box that both name a tag `docks` leave the second one
 with no address of its own. Rename one of them, or pin a distinct `gameId` on one. Validation
 warns about it in this release and refuses it in the next. Ids are unique across the whole
@@ -316,7 +316,7 @@ Hand templates, and the hands made from them.
 
 A **template** sets `bindings` (tags fixed for every hand that uses it), `chooses` (the tag
 groups each hand fills in for itself), one shared `condition`, a default `slots`, and the
-`properties` every hand carries. Templates are author-side only: your game never names one.
+`properties` every hand carries. Templates are author-side only, and your game never names one.
 
 A **hand** is either made from a template (`template`, plus a `chosen` entry for every group
 the template lists in `chooses`) or written out in full (a `rule` object with its own
@@ -324,8 +324,8 @@ the template lists in `chooses`) or written out in full (a `rule` object with it
 override only `slots`; everything else comes from the template.
 
 A hand's `gameId` is the name `deal` is called with from game code, so renaming one is a
-breaking change beyond the project's own borders; `validate` and the merge driver both flag
-it. A hand with no `gameId` of its own gets one derived from its title.
+breaking change beyond the project's own borders, which `validate` and the merge driver both
+flag. A hand with no `gameId` of its own gets one derived from its title.
 
 The scaffolded starter hand shows the written-out form:
 
@@ -345,7 +345,7 @@ The scaffolded starter hand shows the written-out form:
 ### A hole filled from a property
 
 A `chosen` value is normally a tag id. It can instead be a **property reference**, and then
-the hole moves: the engine resolves the reference each time the hand is asked and binds the
+the hole moves. The engine resolves the reference each time the hand is asked and binds the
 hole to the tag the value names.
 
 ```json5
@@ -368,26 +368,26 @@ hole to the tag the value names.
 }
 ```
 
-Move the Elder with `setProperty("hand.the-elder.zone", "forest")` and the next deal follows:
-forest-tagged cards become available at his hand, and village-tagged ones leave it. There is
+Move the Elder with `setProperty("hand.the-elder.zone", "forest")` and the next deal follows,
+so forest-tagged cards become available at the Elder's hand, and village-tagged ones leave it. There is
 no other verb. A `shared: true` declaration like the one above makes the move a world fact, so
 every flow sees the Elder in the forest; leave the flag off and each flow moves its own copy,
 which is how a party gets a "what is around me" hand that follows them about.
 
 The reference may be `@hand.<name>` (a property this hand or its template declares),
-`@story.<name>` or `@world.<name>`. It has to be a string or an enum, because the value has to
+`@story.<name>`, or `@world.<name>`. It has to be a string or an enum, because the value has to
 be able to name a tag. A value that names no tag in the group leaves the hole unbound, which
 is a wildcard rather than an empty hand, and the deal says so on its
 [trace](/play/dev-tools/). A standalone hand does the same thing with a `rule` binding.
-`place` is the one group this never applies to: it is the hand's own name.
+`place` is the one group this never applies to, because it's the hand's own name.
 
 ## A deck shard
 
 One file per deck. It carries the deck's own identity, its optional gate condition, its
 `@deck` properties, and its cards. It may also carry **`shared`**, which makes every card in
 the pile scarce across [flows](/play/world-state/#shared-or-per-flow) unless a card says
-otherwise: one of each in the world, rather than one each per participant; and **`durable`**,
-which makes every `redraw: never` card in it
+otherwise (one of each in the world, rather than one each per participant). It may also carry
+**`durable`**, which makes every `redraw: never` card in it
 [stay played past the end of the run](/play/world-state/#durable-state-that-outlives-a-run).
 
 ```json5
@@ -445,27 +445,27 @@ Reading a card top to bottom:
   number.
 - **`copies`** (absent here, so 1) is how many hands may hold the card at once, counted
   within one playthrough.
-- **`shared`** makes the card scarce across [flows](/play/world-state/#shared-or-per-flow):
-  one goblin in the whole world, not one each. Absent, it takes its deck's flag, so the usual
-  place to write it is on a deck whose whole pile is scarce; on the card it is the override
-  for a single unique card sitting in an ordinary deck. **`sharedCopies`** is then how many
-  hands may hold it anywhere, defaulting to `copies` - so `copies: 1, sharedCopies: 5` is
-  five in the world, one to a customer.
+- **`shared`** makes the card scarce across [flows](/play/world-state/#shared-or-per-flow),
+  one goblin in the whole world rather than one each. Absent, it takes its deck's flag, so the
+  usual place to write it's on a deck whose whole pile is scarce. On the card it's the
+  override for a single unique card sitting in an ordinary deck. **`sharedCopies`** is then
+  how many hands may hold it anywhere, defaulting to `copies`, so `copies: 1, sharedCopies: 5`
+  is five in the world, one to a customer.
 - **`durable`** says this card's `redraw: never` spend
-  [survives the run](/play/world-state/#durable-state-that-outlives-a-run) - for whoever
+  [survives the run](/play/world-state/#durable-state-that-outlives-a-run), for whoever
   played it, or for everyone when the card is also shared. Absent, it takes its deck's flag,
   exactly as `shared` does. On any other redraw it means nothing past the run, and the
   compiler warns.
-- **`tags`** maps group ids to tag ids. **An absent group is a wildcard**: this card would
+- **`tags`** maps group ids to tag ids. **An absent group is a wildcard**, so this card would
   match any binding of any other group the box declares. Exclusions are written as conditions
   over `@hand`, not as negative tags.
 - **`outcomes`** are the choices. Each has a `changes` map from a fully-qualified
   `@scope.name` target to an expression, plus an optional `condition` that gates it. When the
   box declares `outcomeFields`, an outcome fills them in a `fields` map of its own, exactly
-  as the card fills the card template: here `after` is the line the game shows once the gate
+  as the card fills the card template. Here `after` is the line the game shows once the gate
   is stepped through. The engine hands it over with the outcome and never reads it.
-  A card may have **no outcomes at all**: a notice, a headline on a screen, a codex entry,
-  whose whole job is to be shown. Your game plays one with no outcome once it has shown it, so
+  A card may have **no outcomes at all**, such as a notice, a headline on a screen, or a codex
+  entry, whose whole job is to be shown. Your game plays one with no outcome once it has shown it, so
   it still counts as played, rests by its `redraw` and leaves its hand; nothing is written.
   Such a card may leave the `outcomes` key out altogether, which reads as an empty list.
 
@@ -473,7 +473,7 @@ Reading a card top to bottom:
 
 The same shape is used everywhere state is declared: `@world`, `@story`, `@box`, `@deck`,
 `@hand`, and on a tag. A **tag group** can declare properties too, and then every tag in the
-group has them: the group says what the property is, and each tag carries only its own
+group has them. The group says what the property is, and each tag carries only its own
 starting value in `values`. That's the shape to reach for when "every zone has a haunting
 level" is what you mean, and it's what keeps a zone added later from quietly arriving
 without one.
@@ -488,12 +488,12 @@ without one.
 | `writable` | `@world` only. `false` makes the property read-only to the story: a condition may read it, an outcome that writes it is a compile error. The game still moves it through its resolver. Default `true` |
 | `purpose` | author metadata |
 
-Card template fields use the same shape. The difference is what they're for: a property is
-state the expressions read and write; a field is data handed to your game.
+Card template fields use the same shape. The difference is what they're for. A property is
+state the expressions read and write, and a field is data handed to your game.
 
 ## The installation contract
 
-A project running at a venue - a museum floor, a park, a show - depends on names that live
+A project running at a venue (a museum floor, a park, a show) depends on names that live
 outside it. Stations are bound to particular hands, a scheduler ticks particular timed boxes,
 a clock drives particular properties, and the crew read particular card fields. Rename one of
 those and the venue breaks, quietly, after the change has shipped.
@@ -538,8 +538,8 @@ of these files; two files naming the same installation is an error.
 exists, a contracted box whose turn is no longer that many seconds, a contracted property that
 has gone or changed type, a contracted field no box declares any more. Each one names the
 venue, so the message says who cares. `storyletengine contract show` lists what each
-installation depends on. The contract itself never reaches the compiled bundle: the server
+installation depends on. The contract itself never reaches the compiled bundle. The server
 does not need its own contract back, it needs the bundle to still honour it.
 
 **The server that writes this does not exist yet.** Until it does, a project either has no
-contract at all - which is the normal state, and nothing changes - or one written by hand.
+contract at all (which is the normal state, and nothing changes) or one written by hand.

@@ -11,27 +11,28 @@ the latest version.
 
 ## Storyletter: the editor
 
-**Storyletter is the main app**: the desktop editor where you design cards, set up your
-boxes and play the result. It's self-contained; there's nothing else to install.
+Storyletter is the main app, the desktop editor where you design cards, set up your boxes,
+and play the result. It's self-contained, so there's nothing else to install.
 
 <Downloads kind="storyletter" />
 
 :::caution[Windows SmartScreen]
 The Windows installer isn't code-signed yet, so SmartScreen shows a warning on first run.
-Choose **More info → Run anyway**. (macOS builds are signed and notarised.)
+Choose **More info ▸ Run anyway**. (macOS builds are signed and notarised.)
 :::
 
 ### Something to open
 
 New here? Storyletter ships three worked examples, and the welcome screen offers all
-three; start with **The Hamlet**, the small one. It's copied somewhere you choose, so you can take it apart
-without worrying. Start there rather than with an empty project: the idea is much easier to
-read than to describe. [Getting started](/getting-started/) walks you through it.
+three. Start with **The Hamlet**, the small one. It's copied somewhere you choose, so you can
+take it apart without worrying. Start there rather than with an empty project, because the
+idea is much easier to read than to describe. [Getting started](/getting-started/) walks you
+through it.
 
 ## Storylet Engine: the runtimes
 
 The plugin that plays your project inside your game. Pick the engine you ship on. The four
-runtimes are the same version and [tested to match](/compatibility/):
+runtimes are the same version and [tested to match](/compatibility/).
 
 <Downloads kind="plugins" />
 
@@ -49,38 +50,40 @@ See [Playing in your game](/play/overview/) and the per-engine guides to get sta
 
 A complete storylet project you can play in a browser, and read. Five drawn regions, thirteen
 places, 86 cards, and a hand dealt wherever you stand. It runs the same runtime a shipped game
-would, over the same public API, with no engine-side special cases, which is the point of it:
-it is evidence the API is usable rather than a bespoke demo.
+would, over the same public API, with no engine-side special cases, which is the point of it.
+It's evidence the API is usable rather than a bespoke demo.
 
 <Downloads kind="village" />
 
-The zip carries `dist/` to open offline and `src/` to read: under 500 lines of framework-free
+The zip carries `dist/` to open offline and `src/` to read, under 500 lines of framework-free
 TypeScript. If you want to know what building on the engine actually looks like, this is the
 shortest honest answer.
 
 ## The Hamlet: two engines in one game
 
 The same idea with [Patter](https://patterkit.dev) in the room. The Storylet Engine decides which
-beat happens; Patter performs its dialogue; the game owns the world and hands one resolver to both.
-Seventeen cards, seventeen scenes, one save that restores both engines and a conversation paused
-mid-choice. The scenes are stubs, deliberately: the plumbing is real, the words are placeholders.
+beat happens, Patter performs its dialogue, and the game owns the world and hands one resolver to
+both. Seventeen cards, seventeen scenes, one save that restores both engines and a conversation
+paused mid-choice. The scenes are stubs, deliberately. The plumbing is real and the words are
+placeholders.
 
 <Downloads kind="hamlet" />
 
 One release, four zips: the JavaScript client (`src/` to read, `dist/` to open offline) and the
-same game as a Godot, Unity and Unreal project, each with Patter's plugin included. Read
-`src/world.js` first (the shared world), then `src/performance.js` (the handoff). How the two projects are joined, and what the build checks:
-[Running it with Patter](/play/with-patter/).
+same game as a Godot, Unity, and Unreal project, each with Patter's plugin included. Read
+`src/world.js` first (the shared world), then `src/performance.js` (the handoff).
+[Running it with Patter](/play/with-patter/) explains how the two projects are joined and what
+the build checks.
 
 ## The CLI
 
-`storyletengine` validates, compiles, deals and tests projects from the terminal, which is
-what you want for CI and automation. One self-contained file per platform, **no Node.js
-required**:
+`storyletengine` validates, compiles, deals, and tests projects from the terminal, which is
+what you want for CI and automation. One self-contained file per platform, with **no Node.js
+required**.
 
 <Downloads kind="cli" />
 
-The binaries are the distribution: the packages are not on npm.
+The binaries are the distribution, and the packages aren't on npm.
 
 ```sh
 chmod +x ./storyletengine-macos-arm64

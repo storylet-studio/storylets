@@ -259,8 +259,8 @@ function gameIdField(
     // said above the document, by the notice that shut it.
     const shut = (root as HTMLButtonElement).disabled;
     const usual = pinned
-      ? `Game id - fixed by hand${shut ? "" : " (click to edit)"}`
-      : `Game id - follows the title${shut ? "" : " (click to override)"}`;
+      ? `Game id, fixed by hand${shut ? "" : " (click to edit)"}`
+      : `Game id, following the title${shut ? "" : " (click to override)"}`;
     root.title = bound?.length ? [...bound, usual].join("\n") : usual;
     root.replaceChildren(
       el("span", { className: "gid-value", text: pinned || derived() || "(unnamed)" }),
@@ -334,9 +334,9 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     const tab = currentDocTab(tabKey, "dealing");
     const view = el("div", { className: "insp-card cardedit" });
     view.append(documentHeading("Card", {
-      title: { get: () => edit.title ?? "", set: (v) => { edit.title = v; }, placeholder: "<card title>", commit },
+      title: { get: () => edit.title ?? "", set: (v) => { edit.title = v; }, placeholder: "Card title", commit },
       gameId: { get: () => edit.gameId ?? "", set: (v) => { edit.gameId = v; }, fallback: card.gameId, deriveFrom: () => edit.title ?? "", commit },
-      purpose: { get: () => edit.purpose ?? "", set: (v) => { edit.purpose = v; }, placeholder: "<what happens when this card plays>", commit },
+      purpose: { get: () => edit.purpose ?? "", set: (v) => { edit.purpose = v; }, placeholder: "What happens when this card plays", commit },
       menu: [{ label: "Delete card", danger: true, onClick: () => h.deleteCard(deck.id, card.id) }],
       comments: { on: card.id, count: h.openThreads(card.id), open: (a) => h.showComments(card.id, edit.title ?? card.gameId, a) },
     }));
@@ -376,7 +376,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       seg.append(b);
     }
     const turns = el("input", { className: "insp-input insp-mono insp-short" });
-    turns.value = isNumber ? (edit.redraw ?? "") : ""; turns.placeholder = "N"; turns.disabled = !isNumber;
+    turns.value = isNumber ? (edit.redraw ?? "") : ""; turns.placeholder = "3"; turns.disabled = !isNumber;
     // In a TIMED box the number here is a length of time, not a count of plays
     // (design/engine-server.md 4.8), so the field says what it comes to as the
     // designer types rather than leaving the arithmetic to them. Nothing is
@@ -428,7 +428,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       // with, so none of this is drawn at all (design/engine-server.md 4.10).
       if (shows("sharing")) {
         rows.push(cfgRow("Shared across playthroughs",
-          "One in the world rather than one each: dealt to one participant, it cannot be dealt to another, "
+          "One in the world rather than one each. Dealt to one participant, it can't be dealt to another, "
           + "and a Redraw of never spends it for everyone. A single-player game is unaffected.",
           threeState(edit.shared, deck.shared === true, "shared", (v) => { edit.shared = v; })));
         // Only when it can do something: sharedCopies on an unshared card is a
@@ -439,7 +439,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
           world.placeholder = edit.copies.trim() || "1";
           rows.push(cfgRow("In the world",
             "How many hands may hold it anywhere, across every playthrough. Blank means the same as Copies, "
-            + "so leave it alone for one-in-the-world; set both for five in the world, one to a customer.",
+            + "which is right for one-in-the-world. Set both for five in the world and one to a customer.",
             world));
         }
       }
@@ -454,7 +454,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       // removes it with cannot be one the rung takes away.
       if ((shows("durable") || edit.durable === true) && edit.redraw === "never") {
         rows.push(cfgRow("Durable",
-          "The card stays played after the run ends: tomorrow it is still gone for whoever played it, "
+          "The card stays played after the run ends. Tomorrow it's still gone for whoever played it, "
           + "or for everyone if it is also shared. Only a Redraw of never can be durable.",
           threeState(edit.durable, deck.durable === true, "durable", (v) => { edit.durable = v; })));
       }
@@ -473,7 +473,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
         ? "Whether a played card can be dealt again."
         : `Whether a played card can be dealt again. A turn in this box is ${turnSpan(1, unit, true)} (its Turns setting), so the number here is a length of time.`,
         el("div", { className: "insp-segrow" }, seg, turns, asTime)),
-      cfgRow("Copies", "How many hands may hold this card at once, in one playthrough. One copy is the rule; more is for interchangeable filler.", copies),
+      cfgRow("Copies", "How many hands may hold this card at once, in one playthrough. One copy is the rule. More is for interchangeable filler.", copies),
       ...sharedRows(),
     ));
 
@@ -594,7 +594,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       // Both halves of the orientation the audit found missing: where fields
       // come from, AND what a card with none IS - the cold-start question a
       // narrative designer brings to every card page.
-      return [el("p", { className: "doc-tab-note", text: "No card fields declared. Define what every card can carry on the box's Card template tab. Cards with no fields are keys: your game looks them up by game id and supplies the text." })];
+      return [el("p", { className: "doc-tab-note", text: "No card fields declared. Define what every card can carry on the box's Card template tab. A card with no fields is a key. Your game looks it up by game id and supplies the text." })];
     }
     const setField = (name: string, value: string): void => {
       let f = edit.fields.find((x) => x.name === name);
@@ -752,7 +752,7 @@ export function documentHeading(label: string, opts: {
   if (opts.name) {
     const n = opts.name;
     const input = el("input", { className: "insp-input insp-mono doc-title doc-name" });
-    input.value = n.get(); input.placeholder = n.placeholder ?? "name";
+    input.value = n.get(); input.placeholder = n.placeholder ?? "Name";
     input.addEventListener("input", () => { n.set(input.value); n.commit(); opts.afterEdit?.(); });
     input.addEventListener("change", () => { n.commit(); opts.afterEdit?.(); });
     titleRow.append(input);
@@ -926,7 +926,7 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
     () => gameIdify(o.title ?? "") || o.id, save,
   );
   const title = textField(o.title ?? "", "insp-input outcome-title", (v) => { o.title = v; gameId.refresh(); }, save);
-  title.placeholder = "<outcome title>";
+  title.placeholder = "Outcome title";
   body.append(title);
   body.append(el("div", { className: "doc-gid outcome-gid" }, gameId.root,
     commentBubble(o.id, h.openThreads(o.id), (a) => h.showComments(o.id, o.title || o.gameId, a))));
@@ -938,7 +938,7 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
   const purpose = el("textarea", { className: "insp-input outcome-beat" });
   purpose.value = o.purpose ?? "";
   purpose.rows = 2;
-  purpose.placeholder = "<what this outcome does>";
+  purpose.placeholder = "What this outcome does";
   purpose.addEventListener("input", () => { o.purpose = purpose.value; commit(); });
   purpose.addEventListener("change", commit);
   body.append(purpose);
@@ -972,7 +972,7 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
   // wanted "add one to gold" learned the rule inside the expression editor -
   // while debugging, which is the worst place to meet it. The idiom is the
   // second half of the sentence the hint was already starting.
-  body.append(bare("Changes", "what it sets: a change replaces a value rather than adjusting it, so add one with @story.gold + 1", changeHost));
+  body.append(bare("Changes", "what it sets (a change replaces the value, so add one with @story.gold + 1)", changeHost));
 
   body.append(el("button", { className: "insp-del small outcome-remove", text: "Remove outcome", onClick: remove }));
   return body;
@@ -1056,9 +1056,9 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
     const templateNow = detail.templates.find((t) => t.gameId === edit.template);
     const view = el("div", { className: "insp-card cardedit" });
     view.append(documentHeading("Hand", {
-      title: { get: () => edit.title, set: (v) => { edit.title = v; }, placeholder: "<hand title>", commit },
+      title: { get: () => edit.title, set: (v) => { edit.title = v; }, placeholder: "Hand title", commit },
       gameId: { get: () => edit.gameId, set: (v) => { edit.gameId = v; }, fallback: detail.gameId, deriveFrom: () => edit.title, commit },
-      purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "<what sits here, and why>", commit },
+      purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "What sits here, and why", commit },
       menu: [{ label: "Delete hand", danger: true, onClick: () => h.deleteHand(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.title || detail.gameId, a) },
       // A venue binds a NAME, so the claim holds only while this hand still
@@ -1092,7 +1092,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
           seg.append(b);
         }
         const size = el("input", { className: "insp-input insp-mono insp-short" });
-        size.value = isBounded ? String(edit.rule!.slots) : ""; size.placeholder = "N"; size.disabled = !isBounded;
+        size.value = isBounded ? String(edit.rule!.slots) : ""; size.placeholder = "3"; size.disabled = !isBounded;
         size.addEventListener("input", () => { if (/^\d+$/.test(size.value) && edit.rule) edit.rule.slots = size.value; });
         size.addEventListener("change", commit);
         view.append(el("div", { className: "doc-panel cfg-panel" },
@@ -1113,7 +1113,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
     if (tab === "properties") {
       if (standalone()) {
         view.append(el("div", { className: `doc-panel${(edit.properties ?? []).length === 0 ? " empty" : ""}` }, propList(edit.properties ?? [], commit, "+ Property")),
-          el("p", { className: "doc-tab-note", text: "@hand state: properties this hand carries for its cards." }));
+          el("p", { className: "doc-tab-note", text: "Properties this hand carries for its cards, as @hand." }));
       } else {
         view.append(el("p", { className: "doc-tab-note", text: "These come from this hand's template. Edit them there and every hand of that kind follows." }));
       }
@@ -1124,7 +1124,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
     // Dealing: which kind of hand this is. An instance fills its template's
     // holes; a standalone hand carries its own rule inline.
     const pick = el("select", { className: "insp-input" });
-    const alone = el("option", { text: "(standalone: its own rule)" }); alone.value = ""; if (standalone()) alone.selected = true;
+    const alone = el("option", { text: "(standalone, its own rule)" }); alone.value = ""; if (standalone()) alone.selected = true;
     pick.append(alone);
     for (const t of detail.templates) {
       const o = el("option", { text: t.gameId });
@@ -1168,8 +1168,8 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
           return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label" }, chipDot(group), group), sel);
         });
         view.append(section("Chosen tags",
-          moves ? "filling the template's holes - one of them moves with a property"
-            : "filling the template's holes - a hand is fully concrete", ...rows));
+          moves ? "filling the template's holes (one of them moves with a property)"
+            : "filling the template's holes, so the hand is fully concrete", ...rows));
       } else {
         view.append(emptySection("Chosen tags", "this template has no holes"));
       }
@@ -1193,8 +1193,8 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
           return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label" }, chipDot(group.gameId), group.gameId), sel);
         });
         view.append(section("Pulls cards tagged",
-          moves ? "the rule's bindings; one of them moves with a property"
-            : "the rule's bindings; an unbound group is any", ...rows));
+          moves ? "the rule's bindings (one of them moves with a property)"
+            : "the rule's bindings (an unbound group means any)", ...rows));
       } else {
         view.append(emptySection("Pulls cards tagged", "no tag groups in this box"));
       }
@@ -1226,11 +1226,11 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     // because it is the only Dealing surface about POLICY rather than one card's
     // settings, and it held a single checkbox on an otherwise empty page.
     view.append(el("div", { className: "doc-panel doc-explainer" },
-      el("p", { text: "A deal fills a place with cards. Every card whose When conditions are true right now is eligible; the deal takes from those." }),
-      el("p", { text: "It happens when the game asks - arriving somewhere, starting a turn, opening a conversation - and never on its own." }),
+      el("p", { text: "A deal fills a place with cards. Every card whose When conditions are true right now is eligible, and the deal takes from those." }),
+      el("p", { text: "It happens when the game asks (arriving somewhere, starting a turn, opening a conversation) and never on its own." }),
       el("p", { text: "More cards are usually eligible than a place has room for, so they are ranked and the best ones go. The settings below decide that order." })));
     view.append(el("div", { className: "doc-panel cfg-panel" },
-      cfgRow("Rank by specificity", "More specific cards win ties; otherwise ties break by priority alone.",
+      cfgRow("Rank by specificity", "More specific cards win ties. Off, priority alone breaks them.",
         cfgCheck(specificity, (v) => { specificity = v; h.saveBox(box.id, { ranking: { specificity: v } }); }))));
 
     // WHAT A TURN IS in this box (design/engine-server.md 4.8). Two answers,
@@ -1260,10 +1260,10 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
       field.value = timed ? String(seconds) : "";
       // "N", as the Redraw field does: the placeholder convention is a shown
       // default of one character, and the label above already says what N is.
-      field.placeholder = "N"; field.disabled = !timed;
+      field.placeholder = "60"; field.disabled = !timed;
       const note = el("p", { className: "insp-note" });
       const say = (n: number | undefined): void => {
-        note.textContent = n === undefined ? "" : "Plays in this box do not advance its turns; the game's clock does. "
+        note.textContent = n === undefined ? "" : "Plays in this box don't advance its turns. The game's clock does. "
           + `Redraw times on its cards are read as time, so a Redraw of 30 means ${turnSpan(30, n, true)}.`;
       };
       const typed = (): number | undefined => {
@@ -1278,7 +1278,7 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
       say(seconds);
       turnsHost.replaceChildren(
         el("div", { className: "cfg-panel" },
-          cfgRow("A turn is", "A play, as everywhere else; or a length of time the game's clock counts out.",
+          cfgRow("A turn is", "A play, as everywhere else, or a length of time the game's clock counts out.",
             el("div", { className: "insp-segrow" }, seg, field))),
         note);
     };
@@ -1299,7 +1299,7 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     // above a labelled one reads as the labelled one's preamble.
     view.append(sectHead("Card fields"),
       el("div", { className: `doc-panel${fields.length === 0 ? " empty" : ""}` }, propList(fields, () => h.saveBox(box.id, { fields }), "+ Field", { sharingSwitches: false })),
-      el("p", { className: "doc-tab-note", text: "The template for this box's cards: the fields every card can carry." }));
+      el("p", { className: "doc-tab-note", text: "The fields every card in this box can carry." }));
     // The outcome half, on the SAME tab (2026-09-13). The tab vocabulary is
     // fixed (storyletter.md), and these are two halves of one template rather
     // than two subjects: what a card carries and what a press hands back. A
@@ -1309,11 +1309,11 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     const outcomeFields: FieldDeclDto[] = box.outcomeFields.map((f) => ({ ...f, values: f.values ? [...f.values] : undefined }));
     view.append(sectHead("Outcome fields"),
       el("div", { className: `doc-panel${outcomeFields.length === 0 ? " empty" : ""}` }, propList(outcomeFields, () => h.saveBox(box.id, { outcomeFields }), "+ Field", { sharingSwitches: false })),
-      el("p", { className: "doc-tab-note", text: "The same for this box's outcomes: the fields every outcome can carry, handed to the game with the press." }));
+      el("p", { className: "doc-tab-note", text: "The fields every outcome in this box can carry. They're handed to the game with the press." }));
   } else {
     const properties: PropertyDeclDto[] = box.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
     view.append(el("div", { className: `doc-panel${properties.length === 0 ? " empty" : ""}` }, propList(properties, () => h.saveBox(box.id, { properties }), "+ Property")),
-      el("p", { className: "doc-tab-note", text: "@box state: properties the whole box carries." }));
+      el("p", { className: "doc-tab-note", text: "Properties the whole box carries, as @box." }));
   }
   centre.replaceChildren(view);
 }
@@ -1329,7 +1329,7 @@ export function renderDeckTabBody(host: HTMLElement, box: BoxDto, deck: DeckDto,
     const gateHost = el("div", { className: "insp-exed" });
     mountCondition(gateHost, { src: gate, properties: catalogue, onChange: (src) => { gate = src; h.saveDeckConfig(deck.id, { gate }); } });
     view.append(section("When", "the condition for any card in this deck", gateHost,
-      el("p", { className: "insp-note", text: "Evaluated once per deal; when false, none of this deck's cards are dealt." })));
+      el("p", { className: "insp-note", text: "Evaluated once per deal. When false, none of this deck's cards are dealt." })));
 
     // Scarcity across playthroughs (design/shared-scarcity.md). The deck is
     // where this normally goes: a pile that is scarce AS A PILE says so once,
@@ -1337,7 +1337,7 @@ export function renderDeckTabBody(host: HTMLElement, box: BoxDto, deck: DeckDto,
     const deckRows: HTMLElement[] = [];
     if (shows("sharing")) {
       deckRows.push(cfgRow("Shared across playthroughs",
-        "One pile for everyone: a card dealt to one participant cannot be dealt to another, "
+        "One pile for everyone. A card dealt to one participant can't be dealt to another, "
         + "and a card whose Redraw is never is spent for the whole world the first time anyone plays it. "
         + "A single-player game is unaffected.",
         cfgCheck(deck.shared === true, (on) => h.saveDeckConfig(deck.id, { shared: on }))));
@@ -1349,7 +1349,7 @@ export function renderDeckTabBody(host: HTMLElement, box: BoxDto, deck: DeckDto,
     // below venue, and it needs a control to be removed with.
     if (shows("durable") || deck.durable === true) {
       deckRows.push(cfgRow("Durable",
-        "Cards in this pile stay played after the run ends: tomorrow they are still gone for whoever "
+        "Cards in this pile stay played after the run ends. Tomorrow they're still gone for whoever "
         + "played them. Only a card whose Redraw is never has anything to carry.",
         cfgCheck(deck.durable === true, (on) => h.saveDeckConfig(deck.id, { durable: on }))));
     }
@@ -1357,7 +1357,7 @@ export function renderDeckTabBody(host: HTMLElement, box: BoxDto, deck: DeckDto,
   } else {
     const properties: PropertyDeclDto[] = deck.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
     view.append(el("div", { className: `doc-panel${properties.length === 0 ? " empty" : ""}` }, propList(properties, () => h.saveDeckConfig(deck.id, { properties }), "+ Property")),
-      el("p", { className: "doc-tab-note", text: "@deck state: properties this deck carries for its cards." }));
+      el("p", { className: "doc-tab-note", text: "Properties this deck carries for its cards, as @deck." }));
   }
   host.replaceChildren(view);
 }
@@ -1384,8 +1384,8 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
     const tab = currentDocTab(tabKey, "dealing");
     const view = el("div", { className: "insp-card cardedit" });
     view.append(documentHeading("Hand template", {
-      name: { get: () => edit.gameId, set: (v) => { edit.gameId = v; }, placeholder: "<template-name>", commit },
-      purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "<what kind of place this is, and what it pulls>", commit },
+      name: { get: () => edit.gameId, set: (v) => { edit.gameId = v; }, placeholder: "template-name", commit },
+      purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "What kind of place this is", commit },
       menu: [{ label: "Delete hand template", danger: true, onClick: () => h.deleteTemplate(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.gameId, a) },
     }));
@@ -1402,7 +1402,7 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
       // against that instance's composed @hand (the reuse case).
       const condHost = el("div", { className: "insp-exed" });
       mountCondition(condHost, { src: edit.condition, properties: catalogue, onChange: (src) => { edit.condition = src; commit(); } });
-      view.append(section("When", "the condition a card must also satisfy - shared by every instance", condHost));
+      view.append(section("When", "the condition a card must also satisfy, shared by every instance", condHost));
 
       const isBounded = edit.slots !== "unbounded";
       const seg = el("div", { className: "insp-seg" });
@@ -1412,23 +1412,23 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
         seg.append(b);
       }
       const size = el("input", { className: "insp-input insp-mono insp-short" });
-      size.value = isBounded ? edit.slots : ""; size.placeholder = "N"; size.disabled = !isBounded;
+      size.value = isBounded ? edit.slots : ""; size.placeholder = "3"; size.disabled = !isBounded;
       size.addEventListener("input", () => { if (/^\d+$/.test(size.value)) edit.slots = size.value; });
       size.addEventListener("change", commit);
       view.append(el("div", { className: "doc-panel cfg-panel" },
-        cfgRow("Slots", "The default hand size; an instance may override it.", el("div", { className: "insp-segrow" }, seg, size)),
+        cfgRow("Slots", "The default hand size. An instance may override it.", el("div", { className: "insp-segrow" }, seg, size)),
       ));
 
       view.append(derivedFooter(detail.instances.length > 0
         ? `Instanced by ${detail.instances.join(", ")}.`
-        : "No hand instances this template yet."));
+        : "No hands of this kind yet."));
       centre.replaceChildren(view);
       return;
     }
 
     if (tab === "properties") {
       view.append(el("div", { className: `doc-panel${edit.properties.length === 0 ? " empty" : ""}` }, propList(edit.properties, commit, "+ Property")),
-        el("p", { className: "doc-tab-note", text: "@hand state every instance carries (each hand gets its own values)." }));
+        el("p", { className: "doc-tab-note", text: "Properties every hand of this kind carries as @hand, each with its own values." }));
       centre.replaceChildren(view);
       return;
     }
@@ -1464,7 +1464,7 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
     // B4: "hole" is taught HERE, where holes are made, or not used at all. It
     // was author-facing vocabulary in one place and internal in another, and
     // introduced nowhere.
-    view.append(el("p", { className: "doc-tab-note", text: "For each group: pin every place of this kind to one tag, leave it for each place to choose, or ignore the group entirely." }));
+    view.append(el("p", { className: "doc-tab-note", text: "For each group, pin every place of this kind to one tag, leave the choice to each place, or ignore the group." }));
     centre.replaceChildren(view);
   }
   draw();
@@ -1488,8 +1488,8 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
   function draw(): void {
     const view = el("div", { className: "insp-card cardedit" });
     view.append(documentHeading("Tag group", {
-      name: { get: () => edit.gameId, set: (v) => { edit.gameId = v; }, placeholder: "<group-name>", commit },
-      purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "<what this group classifies>", commit },
+      name: { get: () => edit.gameId, set: (v) => { edit.gameId = v; }, placeholder: "group-name", commit },
+      purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "What this group classifies", commit },
       menu: [{ label: "Delete tag group", danger: true, onClick: () => h.deleteTagGroup(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.gameId, a) },
     }));
@@ -1499,7 +1499,7 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
     const valBody: HTMLElement[] = edit.values.map((v, i) => {
       const block = el("div", { className: "doc-vblock" });
       const name = el("input", { className: "insp-input insp-mono" });
-      name.value = v.gameId; name.placeholder = "<tag name>";
+      name.value = v.gameId; name.placeholder = "Tag name";
       name.addEventListener("input", () => { v.gameId = name.value; });
       name.addEventListener("change", commit);
       const del = el("button", { className: "insp-del small", text: "Remove", onClick: () => { edit.values.splice(i, 1); commit(); redraw(); } });
@@ -1556,7 +1556,7 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
       el("div", { className: "insp-nudge" },
         el("span", { className: "set-dim" },
           el("span", { className: "insp-mono", text: name }),
-          el("span", { text: " is on every tag; declared here, a tag added later gets it too. " }),
+          el("span", { text: " is on every tag. Declared here, a tag added later gets it too. " }),
         ),
         el("button", { className: "insp-add small", text: "Move it here", onClick: () => {
           hoistProperty(edit, name); commit(); redraw();
@@ -1588,8 +1588,8 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
     view.append(section("Map", undefined, cfgRow(
       "A map",
       spatial
-        ? "Its tags are zones with outlines, drawn on the box's Map. Geography, or any other two-dimensional layout: acts, a cast, a tech tree."
-        : "Turn on to draw these tags as a map. It need not be geography: acts and their beats, a cast and who is close to whom, anything you can lay out.",
+        ? "Its tags are zones with outlines, drawn on the box's Map. It can be geography or any other two-dimensional layout, such as acts, a cast, or a tech tree."
+        : "Turn on to draw these tags as a map. It need not be geography. Acts and their beats, a cast and who is close to whom, or anything else you can lay out will do.",
       cfgCheck(spatial, (on) => h.setGroupSpatial(boxId, detail.id, on)),
     )));
 

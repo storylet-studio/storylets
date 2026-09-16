@@ -222,7 +222,7 @@ export function mountNodeView(
     // A tool is armed: one instruction and a way out, the same shape the map's
     // tracer uses. The comment tool joins the furniture's own hints here rather
     // than inventing a second armed-state grammar for the same strip.
-    const hint = commentArmed ? "Comment: click where it goes" : furniture?.hint();
+    const hint = commentArmed ? "Click where the comment goes" : furniture?.hint();
     if (hint !== undefined) {
       strip.replaceChildren(
         el("span", { className: "hint", text: hint }),
@@ -540,7 +540,7 @@ function describe(deck: DeckDto, graph: DeckGraph): Node[] {
   // map's voice names the next move ("add one and trace its outline"), so this
   // one does too.
   if (deck.cards.length === 0) {
-    out.push(el("span", { className: "hint", text: "No cards yet: right-click the canvas for \u201cNew card here\u201d." }));
+    out.push(el("span", { className: "hint", text: "No cards yet. Right-click the canvas for \u201cNew card here\u201d." }));
     return out;
   }
   if (graph.edges.length === 0) {
@@ -550,8 +550,8 @@ function describe(deck: DeckDto, graph: DeckGraph): Node[] {
       // yet know that a deck of independent cards is completely normal here.
       // Say the normal thing first, and only then the count.
       text: graph.outsideLinks > 0
-        ? `These cards stand on their own; ${graph.outsideLinks} outcome${graph.outsideLinks === 1 ? " leads" : "s lead"} to cards in other decks.`
-        : "These cards stand on their own: none of them leads to another here.",
+        ? `These cards stand on their own. ${graph.outsideLinks} outcome${graph.outsideLinks === 1 ? " leads" : "s lead"} to cards in other decks.`
+        : "These cards stand on their own. None of them leads to another here.",
     }));
   } else {
     out.push(el("span", {

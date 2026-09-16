@@ -272,7 +272,7 @@ describe("box page", () => {
     const notes = [...host.querySelectorAll(".doc-tab-note")].map((n) => n.textContent ?? "");
     expect(notes[0]).toContain("A map is a tag group you can draw");
     // And that it need not be geography, which the words around it all imply.
-    expect(notes[1]).toContain("does not have to be geography");
+    expect(notes[1]).toContain("doesn't have to be geography");
     expect([...host.querySelectorAll(".listrow")].map((r) => r.textContent)).toEqual(["+ New map"]);
     setDocTab("box:b_1", "contents");
   });
