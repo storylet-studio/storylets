@@ -42,7 +42,7 @@ will read as never dealt."* Beside it, **Coverage drivers…** takes you straigh
 they're edited.
 
 <figure class="doc-shot">
-  <img src="/doc-images/Coverage.png" alt="The Coverage window after a run on the Hamlet example: runs 200, max turns 100, seed 0 across the top, a line saying '1 coverage driver feeding @world', the headline 16/16 cards dealt with 200 runs and seed 0, the run shape (1114 turns, 1114 plays, 191 exhausted, 9 hit the cap, 0 stuck), three By hand fill bars for the-forge, the-inn, and the-mystic-tree, and the line 'Every card gets dealt.'" />
+  <img src="/doc-images/Coverage.png" alt="The Coverage window after a run on the Hamlet example: runs 200, max turns 100, seed 0 across the top, a line saying '2 coverage drivers feeding @world', the headline 17/17 cards dealt with 200 runs and seed 0, the run shape (19729 turns, 19729 plays, max 100 turns per run, 4 exhausted, 196 hit the cap, 0 stuck), three By hand fill bars for the-forge, the-inn, and the-mystic-tree, the line 'Every card gets dealt.', and one warning about a card condition" />
   <figcaption>The Coverage window after a clean sweep of the Hamlet: the headline, how the runs ended, the per-hand fill bars, and the line every project wants to read.</figcaption>
 </figure>
 
