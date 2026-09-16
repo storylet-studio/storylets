@@ -90,10 +90,10 @@ control](/setup/version-control/).
 
 ## What's generated
 
-- `.storyletsc` is the [compiled bundle](/format/bundle/), strict JSON and the only file
+- **`.storyletsc`** is the [compiled bundle](/format/bundle/), strict JSON and the only file
   your game loads. The default is to commit it, marked `merge=ours`. `validate` checks its
   content hash against the shards, so a stale bundle fails validation instead of shipping.
-- `.storyletsave` is a saved run, written by a game or by Storyletter's Board.
+- **`.storyletsave`** is a saved run, written by a game or by Storyletter's Board.
 
 Neither is hand-edited.
 

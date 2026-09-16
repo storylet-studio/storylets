@@ -68,7 +68,7 @@ Storyletter. It shows:
   may set, with the
   [durable](/play/world-state/#durable-state-that-outlives-a-run) ones marked, since those are
   the values somebody will expect back after a restart.
-- Counts of decks, cards, and templates, for orientation, plus how many of a box's cards are
+- **Counts** of decks, cards, and templates, for orientation, plus how many of a box's cards are
   durable. Not card lists, because cards are the engine's business.
 
 The runtime half is `describeBundle(bundle)`, a bundle-level function in all four languages.

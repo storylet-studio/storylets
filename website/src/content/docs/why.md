@@ -37,28 +37,28 @@ Different games need different features, and storylets can help in different pla
 these is the same call into the same engine, and a team usually ships several of them at once,
 one box each.
 
-- Which scene of your story should play now. The spine of a chaptered game: dramatic
+- **Which scene of your story should play now.** The spine of a chaptered game: dramatic
   scenes, interludes, pay-offs, each a card that says when the story's ready for it. A new
   scene is a new card with a rule, not a rewire of what's already there.
-- Which conversation topics an NPC should offer. A deck per character, a card per topic,
+- **Which conversation topics an NPC should offer.** A deck per character, a card per topic,
   each gated on what the player knows and has done. A topic that's been raised stays raised;
   a standing offer keeps coming back until the player takes it.
-- Which encounters should spawn in a particular location. Every place on your map deals
+- **Which encounters should spawn in a particular location.** Every place on your map deals
   its own hand from a shared pool, so the roadside ambush turns up on roads, once, and never
   in two places on the same night.
-- Which items should spawn to be picked up. There's one copy of a unique reward, so it
+- **Which items should spawn to be picked up.** There's one copy of a unique reward, so it
   can't be found twice; common pickups say how many of them exist. What's already been taken
   stays taken, without an inventory of flags.
-- Which quests or jobs should be offered to your player. The noticeboard, the guild
+- **Which quests or jobs should be offered to your player.** The noticeboard, the guild
   ledger, the stranger with a proposition. Each is an offer gated on reputation and progress,
   claimed once, and the ones that went untaken are still there next visit.
-- Which characters you can meet in the town. Who's around follows the state of the story.
+- **Which characters you can meet in the town.** Who's around follows the state of the story.
   The moneylender turns up once the debt's overdue, the ranger only after you've heard the
   rumour, and either can carry their own topics deck when they do.
-- What bark line should play right now. You can do this with storylets, but
+- **What bark line should play right now.** You can do this with storylets, but
   [Patter](https://patterkit.dev) is built for performed dialogue. If you run both, it's the
   better home for them, and the two share one picture of the world.
-- What lore should appear in your player's codex. Unlock rules are conditions, so the
+- **What lore should appear in your player's codex.** Unlock rules are conditions, so the
   codex fills itself in as the player earns each entry, and coverage testing tells you which
   entries nothing in the game can ever unlock.
 
@@ -66,10 +66,10 @@ And none of it assumes a screen. The runtime is a small library that runs wherev
 show runs, so an immersive or interactive event can ask the same question from a stage
 manager's laptop or an operator's tablet:
 
-- What topic your actor should raise with this visitor, right now. Each visitor is a
+- **What topic your actor should raise with this visitor, right now.** Each visitor is a
   run of their own, so what they've seen and done gates what an actor takes to them next,
   and a revelation that's been delivered stays delivered.
-- Where to send your visitor next. Rooms and stations are places, each dealing from the
+- **Where to send your visitor next.** Rooms and stations are places, each dealing from the
   pool of what's ready. Nobody's sent to a scene that's already claimed, and the quiet room
   gets the visitor the busy one can't take.
 

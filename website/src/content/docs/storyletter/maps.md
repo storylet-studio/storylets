@@ -58,14 +58,14 @@ Maps tab, which then holds an invitation rather than a canvas.
 
 The strip under the canvas carries the four things you can add:
 
-- Zone traces an outline for one of the group's tags. A tag with no outline yet is
+- **Zone** traces an outline for one of the group's tags. A tag with no outline yet is
   offered when you start drawing, and you can also draw a shape first and make the tag
   with it. Drag a corner to reshape, drag a mid-point to add one.
-- Background is a picture behind everything, to trace over. Move it, scale it, fade it,
+- **Background** is a picture behind everything, to trace over. Move it, scale it, fade it,
   lock it so clicks pass through, or hide it.
-- Frame is a labelled rectangle that describes the map to whoever reads it. It means
+- **Frame** is a labelled rectangle that describes the map to whoever reads it. It means
   nothing to the engine.
-- Comment drops a thread straight onto the canvas as a marker. See
+- **Comment** drops a thread straight onto the canvas as a marker. See
   [Reviewing](/storyletter/reviewing/).
 
 Hands are placed from the map's own side panel. A hand with no position yet is offered

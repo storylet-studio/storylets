@@ -74,11 +74,11 @@ run. For that, use [Coverage](/production/coverage-testing/), which really does 
 
 It tells you where it is blind rather than leaving you to assume it is complete:
 
-- Links through `@hand` are not included. A hand is composed at the deal, so what it
+- **Links through `@hand`** are not included. A hand is composed at the deal, so what it
   contains is not knowable in advance. The window says so in as many words.
 - Computed values, where a change can't be read statically, are reported rather than
   guessed at.
-- Unrecognised functions are reported the same way.
+- **Unrecognised functions** are reported the same way.
 
 Each of these appears as a warning against the card it was raised on, so a missing link has a
 reason attached to it rather than being silently absent.

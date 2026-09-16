@@ -209,15 +209,15 @@ See [Live Link](/play/live-link/).
 
 **File ▸ Project Settings…** (`Cmd+,`) opens a dialog with three sections.
 
-- General holds the project's name and version, the **Play** setting (below), and one
+- **General** holds the project's name and version, the **Play** setting (below), and one
   warning switch. **Warn about unread state** also flags state an outcome writes that no
   condition reads. It's off by default, because cards are often written ahead of the
   content that will read them; a gate on state nothing writes always warns, whatever
   this says.
-- World holds the `@world` property declarations (your game's state), and the
+- **World** holds the `@world` property declarations (your game's state), and the
   [coverage drivers](/production/coverage-testing/#writing-drivers-by-hand) that stand in
   for them during a test run.
-- Publish (under Project, as in Patterpad) holds the bundle path (by default a
+- **Publish** (under Project, as in Patterpad) holds the bundle path (by default a
   `storylet-dist/` folder beside the project, never inside it), whether metadata is `full`
   or `stripped`, and how many turns a play advances.
 

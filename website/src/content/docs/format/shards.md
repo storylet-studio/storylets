@@ -437,29 +437,29 @@ otherwise (one of each in the world, rather than one each per participant). It m
 
 Reading a card top to bottom:
 
-- `condition` gates whether the card is available at all. `@act` is short for
+- **`condition`** gates whether the card is available at all. `@act` is short for
   `@story.act`.
-- `fields` fills in the box's card template. Here the game reads `scene` and plays it.
-- `priority` is the first ranking key. It can be a number or an expression.
-- `redraw` is the cooldown policy in this box's own turns: `always`, `never`, or a
+- **`fields`** fills in the box's card template. Here the game reads `scene` and plays it.
+- **`priority`** is the first ranking key. It can be a number or an expression.
+- **`redraw`** is the cooldown policy in this box's own turns: `always`, `never`, or a
   number.
-- `copies` (absent here, so 1) is how many hands may hold the card at once, counted
+- **`copies`** (absent here, so 1) is how many hands may hold the card at once, counted
   within one playthrough.
-- `shared` makes the card scarce across [flows](/play/world-state/#shared-or-per-flow),
+- **`shared`** makes the card scarce across [flows](/play/world-state/#shared-or-per-flow),
   one goblin in the whole world rather than one each. Absent, it takes its deck's flag, so the
   usual place to write it's on a deck whose whole pile is scarce. On the card it's the
   override for a single unique card sitting in an ordinary deck. **`sharedCopies`** is then
   how many hands may hold it anywhere, defaulting to `copies`, so `copies: 1, sharedCopies: 5`
   is five in the world, one to a customer.
-- `durable` says this card's `redraw: never` spend
+- **`durable`** says this card's `redraw: never` spend
   [survives the run](/play/world-state/#durable-state-that-outlives-a-run), for whoever
   played it, or for everyone when the card is also shared. Absent, it takes its deck's flag,
   exactly as `shared` does. On any other redraw it means nothing past the run, and the
   compiler warns.
-- `tags` maps group ids to tag ids. **An absent group is a wildcard**, so this card would
+- **`tags`** maps group ids to tag ids. **An absent group is a wildcard**, so this card would
   match any binding of any other group the box declares. Exclusions are written as conditions
   over `@hand`, not as negative tags.
-- `outcomes` are the choices. Each has a `changes` map from a fully-qualified
+- **`outcomes`** are the choices. Each has a `changes` map from a fully-qualified
   `@scope.name` target to an expression, plus an optional `condition` that gates it. When the
   box declares `outcomeFields`, an outcome fills them in a `fields` map of its own, exactly
   as the card fills the card template. Here `after` is the line the game shows once the gate

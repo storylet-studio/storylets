@@ -18,10 +18,10 @@ in your browser and ships as source for JavaScript, Godot, Unity, and Unreal, al
 
 Two names, both of which you already write:
 
-- A card's `gameId` is the name of its Patter scene. `gameId` is the stable id the engine
+- **A card's `gameId` is the name of its Patter scene.** `gameId` is the stable id the engine
   reports a card by, shown as the chip beside the card's title in Storyletter. Give the scene
   the same name.
-- An outcome's `gameId` is what the scene names. Put it in the Game Data on a choice
+- **An outcome's `gameId` is what the scene names.** Put it in the Game Data on a choice
   option, and taking that option means reaching that outcome.
 
 Which boxes get performed by Patter is your game's decision, not the project's. A box of ambient

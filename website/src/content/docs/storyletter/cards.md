@@ -73,16 +73,16 @@ Everything about how this card gets dealt is on one page.
   declared and lands on it, opened and lit for a moment, and **Find usages**, which opens
   [Find](/storyletter/workspace/#find) on everything that reads or writes it. The same
   works on the pills in an outcome's changes.
-- Priority is what cards are ordered on, and **higher goes first**. The hint under it
+- **Priority** is what cards are ordered on, and **higher goes first**. The hint under it
   changes with your box. If the box has **Rank by specificity** on, priority only breaks
   ties between cards that ask for the same amount; if it's off, priority decides the order
   outright.
-- Redraw is whether a played card can be dealt again. It's a three-way switch,
+- **Redraw** is whether a played card can be dealt again. It's a three-way switch,
   `always` / `never` / `turns`, with a number field that wakes up when you pick turns. The
   number is counted in this box's own turns.
-- Copies is how many hands may hold this card at once. One copy is the rule; more is
+- **Copies** is how many hands may hold this card at once. One copy is the rule; more is
   for interchangeable filler.
-- Shared across playthroughs is whether this card is scarce in the WORLD rather than
+- **Shared across playthroughs** is whether this card is scarce in the WORLD rather than
   one each per playthrough, which is the difference between "everyone can find the goblin"
   and "only the first player to find it gets it". There are three settings, not two.
   **deck (shared)** or **deck (not shared)** takes whatever the deck says, and the label
@@ -92,7 +92,7 @@ Everything about how this card gets dealt is on one page.
   effectively shared. It's offered only then, because on an unshared card it does
   nothing. It defaults to **Copies**, so the common "one in the world, one to a customer"
   needs nothing set.
-- Durable appears on a project whose Play setting reads Venue, beside Shared and in the
+- **Durable** appears on a project whose Play setting reads Venue, beside Shared and in the
   same three settings. The value survives the run boundary the server it came from draws.
 - The Where row is the one you reach for most. It answers "where does this card come up?" in a
   sentence, such as **Anywhere**, or **The Inn**, or **anywhere in the forest**, or a

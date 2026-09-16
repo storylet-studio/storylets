@@ -47,7 +47,7 @@ a marker onto or off a card switches between the two.
 **Review ▸ Review Feedback** (`Shift+Cmd+R`) turns on a bar along the bottom that steps
 through every open thread in the project, one at a time:
 
-- F8 steps to the next thread and Shift+F8 to the previous. The walk loops.
+- **F8** steps to the next thread and Shift+F8 to the previous. The walk loops.
 - The bar names what the comment is about and who wrote it. Click **Go to this comment**
   and the editor opens the item and its thread.
 - If there's nothing open, the bar says "No open comments."

@@ -65,11 +65,11 @@ that pins the exact behaviour a conforming engine must produce. It covers:
 
 - The evaluator, the expression dialect, and the seeded random-number generator give
   identical results everywhere.
-- Specificity, the score that decides which of two matching cards asked for more, comes out
+- **Specificity**, the score that decides which of two matching cards asked for more, comes out
   the same.
 - A peek returns an exact ordered list, and peeking twice returns the same list, because a
   peek changes nothing.
-- Whole runs match, which covers dealing, the board, playing outcomes, state writes, turns,
+- **Whole runs** match, which covers dealing, the board, playing outcomes, state writes, turns,
   and cooldowns, save and load round-trips, and reset.
 
 Each runtime ships a small test host that replays those cases in its own language and checks
