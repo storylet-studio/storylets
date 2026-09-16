@@ -420,8 +420,6 @@ button.chip { cursor: pointer; }
 /* a titled item reads as a title (the mono voice is for name-like ids) */
 .listname.listtitle { font-family: var(--font-read); font-size: 15px; font-weight: 600; }
 /* a settings link in a rowlist: the gear costume (rule 10), never the add ghost */
-.listrow-settings .listname { font-family: var(--font-ui); color: var(--muted); }
-.listrow-settings .listname::before { content: "\2699\00a0 "; }
 .listmeta { font-size: 12px; color: var(--muted); }
 
 /* --- inspector -------------------------------------------------------------- */
