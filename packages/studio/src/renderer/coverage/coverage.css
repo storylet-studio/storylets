@@ -29,7 +29,6 @@ button {
   cursor: pointer;
 }
 button:hover { background: var(--accent-soft); color: var(--accent); }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button.primary { background: var(--accent); color: var(--surface); border-color: transparent; font-weight: 500; }
 button.primary:hover { filter: brightness(1.06); transition: filter var(--dur-quick) var(--ease-standard); }
 input {
@@ -37,7 +36,6 @@ input {
   border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 4px 8px;
   -webkit-user-select: text; user-select: text;
 }
-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
 
 /* The bar IS the shell's .swin-head (drag region, padding, border, the no-drag
    rule for its controls); .cbar only adds the gap this window's fields need.

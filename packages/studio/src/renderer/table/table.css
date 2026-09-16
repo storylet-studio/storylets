@@ -29,7 +29,6 @@ button {
   cursor: pointer;
 }
 button:hover { background: var(--accent-soft); color: var(--accent); }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button.primary { background: var(--accent); color: var(--surface); border-color: transparent; font-weight: 500; }
 button.primary:hover { filter: brightness(1.06); transition: filter var(--dur-quick) var(--ease-standard); }
 button.disabled { opacity: 0.45; cursor: default; }

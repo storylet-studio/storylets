@@ -50,6 +50,7 @@
   --line: #c6ceda;
   --line-soft: #d8dee7;
   --accent: #2d5c86;
+  --on-accent: #fff;
   --accent-soft: #2d5c861f;
   --danger: #b0402f;
   --warn: #a9772b;
@@ -74,6 +75,7 @@
   --line: #c9d2c8;
   --line-soft: #dbe1d9;
   --accent: #28654a;
+  --on-accent: #fff;
   --accent-soft: #28654a1f;
 }
 
@@ -87,6 +89,7 @@
   --line: #2a3444;
   --line-soft: #242d3b;
   --accent: #7cb0dd;
+  --on-accent: var(--bg); /* a light accent on a dark ground wants dark ink */
   --accent-soft: #7cb0dd24;
   --danger: #d97c66;
   --warn: #cfa25e;
@@ -106,6 +109,7 @@
   --line: #2c3934;
   --line-soft: #26312d;
   --accent: #6fbfa2;
+  --on-accent: var(--bg);
   --accent-soft: #6fbfa224;
   --danger: #d97c66;
   --warn: #cfa25e;
@@ -126,6 +130,7 @@
     --line: #2a3444;
     --line-soft: #242d3b;
     --accent: #7cb0dd;
+    --on-accent: var(--bg);
     --accent-soft: #7cb0dd24;
     --danger: #d97c66;
     --warn: #cfa25e;

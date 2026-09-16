@@ -23,7 +23,6 @@ button {
   border: 0; border-radius: var(--radius-sm); cursor: pointer;
 }
 button:hover { color: var(--accent); }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* In the bar: the follow control, and the quiet statement of the same fact when
    there is nothing to do about it. */

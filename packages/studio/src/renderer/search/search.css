@@ -16,7 +16,6 @@ body {
 
 button { font: inherit; color: var(--muted); background: none; border: 0; border-radius: var(--radius-sm); cursor: pointer; }
 button:hover { color: var(--accent); }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* The drag bar, pin and close are the shared .swin-* chrome (app-shell
    tool-window.css, arriving via theme.css); only content styles live here. */

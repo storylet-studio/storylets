@@ -43,7 +43,6 @@ button {
   cursor: pointer;
 }
 button:hover { background: var(--accent-soft); color: var(--accent); }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button.primary { background: var(--accent); color: var(--surface); font-weight: 500; }
 button.primary:hover { filter: brightness(1.06); transition: filter var(--dur-quick) var(--ease-standard); }
 kbd { font-family: var(--font-mono); font-size: 0.68rem; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; color: var(--muted); }
