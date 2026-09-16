@@ -139,7 +139,9 @@
 .sy-tools { border-top: 1px solid var(--l-hair); }
 .sy-tools-inner { padding-top: 56px; padding-bottom: 56px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; }
 .sy-tool p { margin: 12px 0 0; font-size: 15.5px; line-height: 1.6; color: var(--l-body); }
-.sy-engines img { display: inline-block; width: 22px; height: 22px; vertical-align: -5px; border-radius: 5px; margin-left: 2px; }
+.sy-engines { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px 28px; }
+.sy-engines li { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; color: var(--l-ink); }
+.sy-engines img { display: block; width: 30px; height: 30px; border-radius: 6px; }
 
 /* ---- Downloads -------------------------------------------------------------- */
 .sy-downloads { border-top: 1px solid var(--l-hair); background: var(--l-paper); }
