@@ -17,7 +17,7 @@ for you. Head to [Storyletter](/storyletter/overview/).
 ## What you'll set up
 
 - **[Version control](/setup/version-control/)**: how a project lives in git, Perforce,
-  Plastic or SVN. The short version is that the format is built so everyday edits merge
+  Plastic or SVN. The format is built so everyday edits merge
   on their own, and the structured merge driver handles the rest.
 
 Most of the remaining configuration happens inside the app, so it's documented where you meet
