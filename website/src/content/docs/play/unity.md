@@ -19,11 +19,11 @@ sibling folder.
 
 Install the package **as a package**, any of:
 
-- **From disk**: Use *Package Manager ▸ Install package from disk…* and pick
+- From disk, with *Package Manager ▸ Install package from disk…* and
   `StoryletEngine/package.json`.
-- **Embedded**: copy `StoryletEngine/` into your project's `Packages/` folder with your file
-  browser.
-- **By path**: point your `Packages/manifest.json` at the folder
+- Embedded, by copying `StoryletEngine/` into your project's `Packages/` folder with your
+  file browser.
+- By path, pointing your `Packages/manifest.json` at the folder
   (`"com.storylet-studio.storyletengine": "file:../path/to/StoryletEngine"`).
 
 Don't drag the folder into the Unity **Project window**. Unity imports it into `Assets/` as

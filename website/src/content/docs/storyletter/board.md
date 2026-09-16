@@ -160,21 +160,22 @@ as you left it.
 Beside the Journal on the rail, in List and Map alike, the **State** tab holds the
 diagnostics.
 
-- **The raw state.** Every declared property with its current value, editable in place.
-  Changing a value simulates your game writing it. The hands re-deal straight away, the
-  changed ones pulse, and the edit joins the journal as a **meddled** line, so you can
-  ask "what would happen at night?" without writing a line of game code, and the record
-  stays honest about the answer's cause.
-- **Peek the stock.** Choose a box, pick a tag per group, and press **Peek**. You see every
-  card that could come up, in the order it would come up, each showing the numbers it was
-  ranked on and labelled "looked at, put back". Peeking doesn't deal anything, so nothing
-  here's playable. You never play a card from inside the deck. The listing is stamped
-  with the clock it was taken at, and greys out the moment the session moves on.
-- **Not listed · why.** For every card the deal looked at and rejected, the reason:
-  cooldown, deck gate, tags, condition, priority, claimed, capped, and for shared piles
-  “another playthrough is holding it” and “taken out of the world by another
-  playthrough”. This is the trace the
-  runtime emits for exactly this purpose, and it's the answer to "why is this card not
-  here?". A card whose condition reads composed hand state that a box-wide peek doesn't
-  bind says "depends on the asking hand", because the peek asked without one, and that is
-  the peek's limitation, not a fault in your content.
+At the top is the raw state, which is every declared property with its current value,
+editable in place. Changing a value simulates your game writing it. The hands re-deal
+straight away, the changed ones pulse, and the edit joins the journal as a **meddled** line,
+so you can ask "what would happen at night?" without writing a line of game code, and the
+record stays honest about the answer's cause.
+
+Below it you can peek the stock. Choose a box, pick a tag per group, and press **Peek**. You
+see every card that could come up, in the order it would come up, each showing the numbers
+it was ranked on and labelled "looked at, put back". Peeking doesn't deal anything, so
+nothing here's playable. You never play a card from inside the deck. The listing is stamped
+with the clock it was taken at, and greys out the moment the session moves on.
+
+Last comes **Not listed · why**, which gives, for every card the deal looked at and
+rejected, the reason: cooldown, deck gate, tags, condition, priority, claimed, capped, and
+for shared piles “another playthrough is holding it” and “taken out of the world by another
+playthrough”. This is the trace the runtime emits for exactly this purpose, and it's the
+answer to "why is this card not here?". A card whose condition reads composed hand state
+that a box-wide peek doesn't bind says "depends on the asking hand", because the peek asked
+without one, and that is the peek's limitation, not a fault in your content.

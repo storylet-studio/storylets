@@ -63,13 +63,14 @@ Each runtime, the editor, and the CLI otherwise version on their own.
 Every runtime is checked against **one shared suite**, a single language-neutral set of cases
 that pins the exact behaviour a conforming engine must produce. It covers:
 
-- **Expressions**: the evaluator, the expression dialect, and the seeded random-number
-  generator, giving identical results everywhere.
-- **Specificity**: the score that decides which of two matching cards asked for more.
-- **Peeks**: a peek returns an exact ordered list, and peeking twice returns the same list,
-  because a peek changes nothing.
-- **Whole runs**: dealing, the board, playing outcomes, state writes, turns, and cooldowns,
-  save and load round-trips, and reset.
+- The evaluator, the expression dialect, and the seeded random-number generator give
+  identical results everywhere.
+- Specificity, the score that decides which of two matching cards asked for more, comes out
+  the same.
+- A peek returns an exact ordered list, and peeking twice returns the same list, because a
+  peek changes nothing.
+- Whole runs match, which covers dealing, the board, playing outcomes, state writes, turns,
+  and cooldowns, save and load round-trips, and reset.
 
 Each runtime ships a small test host that replays those cases in its own language and checks
 it gets the same answers, down to the random draws. Runs are seeded, so "the same seed deals

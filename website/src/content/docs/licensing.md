@@ -11,7 +11,7 @@ Everything you need to design storylets and ship them in a game:
 
 - the model, the compiler, and the runtime
 - the `storyletengine` CLI
-- **Storyletter**, the desktop editor
+- Storyletter, the desktop editor
 - all four **Storylet Engine** runtimes, and the shared state kernel
 - the shared [conformance test suite](/compatibility/)
 

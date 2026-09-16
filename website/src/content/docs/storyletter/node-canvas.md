@@ -64,9 +64,9 @@ reached it. See [Coverage testing](/production/coverage-testing/).
 
 ## When to use which view
 
-- **Node** is for seeing structure, what leads to what and what nothing leads to.
-- **Cards** is for reading and writing the faces.
-- **Table** is for comparing, with the same columns down a long deck, for tags, priorities,
+- Node is for seeing structure, what leads to what and what nothing leads to.
+- Cards is for reading and writing the faces.
+- Table is for comparing, with the same columns down a long deck, for tags, priorities,
   and redraw.
 
 The switch is remembered, so a deck opens the way you left it.

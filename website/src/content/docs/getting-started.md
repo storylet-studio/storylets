@@ -84,10 +84,10 @@ those words on screen is your game's job.)
 
 Then the **Dealing** tab, which is everything about when this card comes up.
 
-- **When** is the condition. Type it into the expression editor, which knows the properties
-  your project has declared, so you pick from a list rather than remembering names.
-- **Priority** is how it ranks against the other cards that also fit. Higher goes first.
-- **Redraw** is whether it can come back after it's been played. It can be always, never, or
+- The When row is the condition. Type it into the expression editor, which knows the
+  properties your project has declared, so you pick from a list rather than remembering names.
+- Priority is how it ranks against the other cards that also fit. Higher goes first.
+- Redraw is whether it can come back after it's been played. It can be always, never, or
   after a number of turns.
 
 If the property you want doesn't exist yet, click **Story** at the top of the navigator and

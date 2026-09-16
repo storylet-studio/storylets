@@ -11,12 +11,12 @@ sidebar:
 
 Download the JavaScript zip from the [download page](/download/). It carries three things:
 
-- **`@storylet-studio/runtime`** is the interpreter. It's pure, so it embeds anywhere,
+- `@storylet-studio/runtime` is the interpreter. It's pure, so it embeds anywhere,
   whether a browser, a server, or a test harness.
-- **`@storylet-studio/play-helpers`** is everything that touches the browser or the host,
+- `@storylet-studio/play-helpers` is everything that touches the browser or the host,
   meaning the save-file plumbing, the state logger, the in-page property examiner, and the
   bundle inspector.
-- **A browser drop-in**, `storyletengine.min.js`, is the runtime and the helpers in one
+- A browser drop-in, `storyletengine.min.js`, is the runtime and the helpers in one
   classic script that defines a `StoryletEngine` global. Two script tags and no build step:
 
   ```html

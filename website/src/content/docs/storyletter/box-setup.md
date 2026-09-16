@@ -12,12 +12,12 @@ cast). All of its setup lives on one page, so the navigator stays a tree of cont
 
 A box has six tabs, plus **Maps** when one of its tag groups is a place.
 
-- **Contents** lists the box's Decks and Hands, each with a count and a one-line
+- Contents lists the box's Decks and Hands, each with a count and a one-line
   description.
-- **Dealing** is how the box puts cards in order. There's one setting, **Rank by
+- Dealing is how the box puts cards in order. There's one setting, **Rank by
   specificity**, which decides whether a card that asks for more beats a card that asks
   for less. It's on by default, and while it's on, a card's priority is the tie-break.
-- **Card template** declares what every card in this box carries. A card's fields are its
+- Card template declares what every card in this box carries. A card's fields are its
   game data, and there's no other mechanism for attaching any. Each field has a name, a
   type (`boolean`, `number`, `string`, `enum`, `flags`, or `quality`, and
   [Property types](/format/property-types/) says which to use), a default, and optional
@@ -27,23 +27,23 @@ A box has six tabs, plus **Maps** when one of its tag groups is a place.
   The same tab declares the box's **Outcome fields** below its card fields, which is what
   an outcome in this box may carry, shaped exactly the same way and filled in each
   outcome's own editor. The tab's count is both lists together.
-- **Hand templates** lists the kinds of hand the box declares, each row showing its
+- Hand templates lists the kinds of hand the box declares, each row showing its
   bindings, its slot count and how many hands use it. Click one to open it.
-- **Tags** lists the tag groups, each row showing its name and its tags as colour chips.
+- Tags lists the tag groups, each row showing its name and its tags as colour chips.
   Click one to open it. A group can declare properties every one of its tags carries.
-- **Properties** declares the box's own `@box` state.
+- Properties declares the box's own `@box` state.
 
 ## Hand templates
 
 A **hand template** is a kind of hand: "NPCs you can talk to", "encounters at a place".
 Its document has three tabs.
 
-- **Dealing** holds the template's **bindings** (tag groups pinned to one tag for every
+- Dealing holds the template's **bindings** (tag groups pinned to one tag for every
   hand made from it), the groups each hand fills in for itself, and the shared **When**
   condition. That condition is written once and checked for each hand against that hand's
   own tags, so one condition covers every place it governs.
-- **Bindings** shows what's pinned and what's left for each hand to choose, with a count.
-- **Properties** declares the `@hand` state every hand made from this template carries.
+- Bindings shows what's pinned and what's left for each hand to choose, with a count.
+- Properties declares the `@hand` state every hand made from this template carries.
 
 Edit a template's condition and every hand that uses it follows straight away. A hand can
 override only its slot count. Everything else comes from the template.
@@ -58,14 +58,14 @@ slots.
 
 A hand's document has three tabs.
 
-- **Dealing** starts with a **Template** picker, where you choose a template or
+- Dealing starts with a **Template** picker, where you choose a template or
   "(standalone: its own rule)". Pick a template and you get one **Chosen tags** row per
   group the template leaves open, each a picker of that group's declared tags. Choose its
   own rule instead and you get the bindings and the condition inline.
-- **Slots** is how many cards the hand holds. A hand with its own rule switches between
+- Slots is how many cards the hand holds. A hand with its own rule switches between
   `unbounded` and a bounded count. A hand made from a template has a single override
   field; leave it blank and the template's value applies.
-- **Properties** is the hand's own `@hand` state. A hand made from a template inherits the
+- Properties is the hand's own `@hand` state. A hand made from a template inherits the
   template's properties, and the tab tells you to edit them on the template so every hand
   follows.
 

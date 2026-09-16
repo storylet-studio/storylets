@@ -36,10 +36,10 @@ The link is controlled by a small **connect icon** in the **bottom-right corner*
 
 The icon's **colour** tells you the state, and hovering it spells the status out:
 
-- **Grey** means the link is off.
-- **Amber** means listening, waiting for a game.
-- **Green** means connected and **in sync** (the game is running this exact build).
-- **Red** means connected, but to a **different build**. You've saved or edited since the game
+- Grey means the link is off.
+- Amber means listening, waiting for a game.
+- Green means connected and **in sync** (the game is running this exact build).
+- Red means connected, but to a **different build**. You've saved or edited since the game
   launched. A game wired for [live refresh](#live-refresh) re-syncs itself, because saving
   pushes the new bundle into it and the icon goes green again. Otherwise rebuild and relaunch
   to re-sync.

@@ -81,11 +81,11 @@ up?". Tagging it with a region instead says "anywhere in there".
 
 Your game makes three calls, and the difference between them matters.
 
-- **`deal(hand)`** refreshes a hand and returns its cards. A dealt card is claimed. The same
+- `deal(hand)` refreshes a hand and returns its cards. A dealt card is claimed. The same
   card can't sit in two hands at once, so a rumour can't be offered in two places.
-- **`peek(box, tags)`** looks at what a box could deal for some tags, without dealing anything.
+- `peek(box, tags)` looks at what a box could deal for some tags, without dealing anything.
   Asking twice changes nothing.
-- **`play(card, outcome, hand)`** applies an outcome. The card leaves its hand, the state is
+- `play(card, outcome, hand)` applies an outcome. The card leaves its hand, the state is
   written, the cooldown starts, and the clock advances.
 
 What you do with a dealt hand is your call. Show it as a menu, take the top card, or pick one

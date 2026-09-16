@@ -58,17 +58,18 @@ It answers the integrator's question: **"I dropped a `.storyletsc` into my proje
 my game code call?"** From the imported asset alone, without running the game or opening
 Storyletter. It shows:
 
-- **Identity.** Schema, project name, version, content hash, and whether metadata is full or
-  stripped.
-- **Hands.** gameId, title, box, slots, template. This is what you can `deal()`.
-- **Boxes, tag groups, and tags.** By gameId, plus each box's ranking policy. This is what
-  you can `peek()`.
-- **Declared properties.** Per scope with their types, what conditions read and what your
-  game may set, with the
+- The bundle's identity, which is its schema, project name, version, content hash, and
+  whether metadata is full or stripped.
+- The hands, each with its gameId, title, box, slots, and template. This is what you can
+  `deal()`.
+- The boxes, tag groups, and tags by gameId, plus each box's ranking policy. This is what you
+  can `peek()`.
+- The declared properties per scope with their types, what conditions read and what your game
+  may set, with the
   [durable](/play/world-state/#durable-state-that-outlives-a-run) ones marked, since those are
   the values somebody will expect back after a restart.
-- **Counts.** Decks, cards, and templates, for orientation, plus how many of a box's cards
-  are durable. Not card lists, because cards are the engine's business.
+- Counts of decks, cards, and templates, for orientation, plus how many of a box's cards are
+  durable. Not card lists, because cards are the engine's business.
 
 The runtime half is `describeBundle(bundle)`, a bundle-level function in all four languages.
 The view sits on the imported asset, read-only, where each engine makes it natural: Unity's

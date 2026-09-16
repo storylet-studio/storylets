@@ -34,8 +34,8 @@ copies aren't on the face; they're one click away, inside the card.
 Getting around and editing works like this.
 
 - Click a card to open its document. The deck stays highlighted in the navigator.
-- **+ New card** sits at the end of the deck (and on **File ▸ New Card**, `Shift+Cmd+N`).
-  On the node canvas, right-click for **New card here**.
+- Add a card with **+ New card** at the end of the deck, or **File ▸ New Card**
+  (`Shift+Cmd+N`). On the node canvas, right-click for **New card here**.
 - Drag to reorder. The order is only how the editor lists the cards; it has no effect on
   which card comes up. (Outcomes are the one place where the order you choose does reach
   the game. Right-click one for **Move up** and **Move down**.)
@@ -66,42 +66,42 @@ tabs.
 
 Everything about how this card gets dealt is on one page.
 
-- **When** is the condition to be dealt, in the expression editor. It knows your project's
+- The When row is the condition to be dealt, written in the expression editor. It knows your project's
   declared properties, so it offers the names that exist. A property pill answers for
   itself. Hover it for the property's purpose (and, for a quality, its ladder of stages),
   and right-click it for **Go to definition**, which opens the property where it's
   declared and lands on it, opened and lit for a moment, and **Find usages**, which opens
   [Find](/storyletter/workspace/#find) on everything that reads or writes it. The same
   works on the pills in an outcome's changes.
-- **Priority** is what cards are ordered on, and **higher goes first**. The hint under it
+- Priority is what cards are ordered on, and **higher goes first**. The hint under it
   changes with your box. If the box has **Rank by specificity** on, priority only breaks
   ties between cards that ask for the same amount; if it's off, priority decides the order
   outright.
-- **Redraw** is whether a played card can be dealt again. It's a three-way switch,
+- Redraw is whether a played card can be dealt again. It's a three-way switch,
   `always` / `never` / `turns`, with a number field that wakes up when you pick turns. The
   number is counted in this box's own turns.
-- **Copies** is how many hands may hold this card at once. One copy is the rule; more is
+- Copies is how many hands may hold this card at once. One copy is the rule; more is
   for interchangeable filler.
-- **Shared across playthroughs** is whether this card is scarce in the WORLD rather than
+- Shared across playthroughs is whether this card is scarce in the WORLD rather than
   one each per playthrough, which is the difference between "everyone can find the goblin"
   and "only the first player to find it gets it". There are three settings, not two.
   **deck (shared)** or **deck (not shared)** takes whatever the deck says, and the label
   tells you which so you can see why a card in a shared pile is scarce without opening the
   deck. **shared** and **not shared** override it for this card alone.
-- **In the world** is how many copies exist across every playthrough, when the card is
+- The In the world field is how many copies exist across every playthrough, when the card is
   effectively shared. It's offered only then, because on an unshared card it does
   nothing. It defaults to **Copies**, so the common "one in the world, one to a customer"
   needs nothing set.
-- **Durable** appears on a project whose Play setting reads Venue, beside Shared and in the
+- Durable appears on a project whose Play setting reads Venue, beside Shared and in the
   same three settings. The value survives the run boundary the server it came from draws.
-- **Where** is the one you reach for most. It answers "where does this card come up?" in a
+- The Where row is the one you reach for most. It answers "where does this card come up?" in a
   sentence, such as **Anywhere**, or **The Inn**, or **anywhere in the forest**, or a
   combination. **Change** opens a picker with two sections, **Places** (the box's hands,
   each showing the region it sits in) and the region groups. Choosing a place pins the card
   to exactly that place; choosing a region lets it come up anywhere inside one. Choosing
   both means BOTH must match, which is usually a mistake, so the row says so when the place
   you picked isn't in the region you picked.
-- **Tags** is one row per remaining tag group, each a strip of chips you toggle. Place and
+- The Tags section is one row per remaining tag group, each a strip of chips you toggle. Place and
   region groups aren't here, because the Where row above owns them. When a card has no
   tags the section collapses to one line reading "untagged", with a `+` to open it.
 
