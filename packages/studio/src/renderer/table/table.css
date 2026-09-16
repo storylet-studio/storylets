@@ -250,8 +250,11 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
   cursor: pointer; color: var(--muted); font-size: 0.78rem;
   list-style: none; user-select: none;
 }
-.curtain > summary::before { content: "▸ "; }
-.curtain[open] > summary::before { content: "▾ "; }
+/* The disclosure is the vocabulary's chevron, appended by the builder; the
+   open state rotates it. */
+.curtain > summary { display: flex; align-items: center; gap: 4px; }
+.curtain > summary [data-icon] { transition: transform var(--dur-quick) var(--ease-standard); }
+.curtain[open] > summary [data-icon] { transform: rotate(90deg); }
 .curtain > *:not(summary) { margin-top: 12px; }
 .peeked { display: flex; flex-direction: column; gap: 4px; }
 
@@ -315,6 +318,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
    Pinned in the rail under the tabs, not scrolling with the story. */
 .jfilters { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 16px 8px 14px; border-bottom: 1px solid var(--line-soft); }
 .jflt {
+  display: inline-flex; align-items: center; gap: 3px;
   font-size: 0.66rem; font-weight: 600; padding: 1px 8px;
   border: 1px solid var(--line-soft); border-radius: var(--radius-pill);
   background: transparent; color: var(--muted); opacity: 0.55; cursor: pointer; font-family: inherit;
@@ -334,6 +338,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .j-evict .jk, .j-evict .jp { color: var(--muted); }
 .j-turn .jk { color: var(--muted); }
 .j-warn .jk, .j-warn .jp { color: var(--danger); }
+.j-warn .jk { display: inline-flex; align-self: center; }
 
 .runerr { color: var(--danger); font-size: 0.82rem; }
 .loaderr { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; }

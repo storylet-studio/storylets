@@ -110,9 +110,9 @@ export function mountDriverList(host: HTMLElement, drivers: CoverageDriverDto[],
       });
       syncCadence();
 
-      const up = iconBtn("↑", "Move up", () => { if (moveItem(drivers, i, -1)) { render(); changed(); } }, i === 0);
-      const down = iconBtn("↓", "Move down", () => { if (moveItem(drivers, i, 1)) { render(); changed(); } }, i === drivers.length - 1);
-      const del = iconBtn("✕", "Remove", () => { drivers.splice(i, 1); render(); changed(); }, false, true);
+      const up = iconBtn("up", "Move up", () => { if (moveItem(drivers, i, -1)) { render(); changed(); } }, i === 0);
+      const down = iconBtn("down", "Move down", () => { if (moveItem(drivers, i, 1)) { render(); changed(); } }, i === drivers.length - 1);
+      const del = iconBtn("close", "Remove", () => { drivers.splice(i, 1); render(); changed(); }, false, true);
 
       list.append(expandableRow({ line: [ref, values, kind, up, down, del], details: [cadenceRow] }));
     });

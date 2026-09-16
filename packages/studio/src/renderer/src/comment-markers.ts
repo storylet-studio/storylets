@@ -24,6 +24,7 @@
 // ---------------------------------------------------------------------------
 
 import Konva from "konva";
+import { iconNode } from "@wildwinter/app-shell";
 import type { CanvasItem } from "./canvas-surface.js";
 import type { CanvasTokens } from "./canvas-tokens.js";
 import type { CommentMarkerDto } from "../../shared/api.js";
@@ -118,11 +119,17 @@ function drawMarker<T extends CanvasItem>(
   disc.setAttr("markerId", marker.id);
   group.add(disc);
 
-  group.add(new Konva.Text({
-    text: "❝",
-    fontSize: r * 1.1,
-    fill: done ? tokens.muted : tokens.surface,
-    x: -r * 0.55, y: -r * 0.62,
+  // The vocabulary's `comment` shape, traced from the same drawing the DOM
+  // bubbles use (one source), scaled so its 20-unit body sits inside the disc.
+  // The stroke scales with the path (Konva's default), so 2.571 on the 24 grid
+  // is the family's weight at this size, as it is everywhere else.
+  const k = (r * 1.25) / 24;
+  group.add(new Konva.Path({
+    data: commentPath(),
+    stroke: done ? tokens.muted : tokens.surface,
+    strokeWidth: 2.571,
+    lineCap: "round", lineJoin: "round",
+    x: -12 * k, y: -12 * k, scaleX: k, scaleY: k,
     listening: false,
   }));
 
@@ -260,4 +267,13 @@ function proxyAt(container: HTMLElement, group: Konva.Group): HTMLElement {
   proxy.style.top = `${Math.round(at.top)}px`;
   container.append(proxy);
   return proxy;
+}
+
+// The `d` of the vocabulary's comment drawing, read once from the shell's own
+// node so the canvas cannot drift from the DOM. Lazy: the module is imported by
+// tests that never draw, and where there is no document there is no canvas.
+let commentD: string | undefined;
+function commentPath(): string {
+  commentD ??= iconNode("comment").querySelector("path")?.getAttribute("d") ?? "";
+  return commentD;
 }

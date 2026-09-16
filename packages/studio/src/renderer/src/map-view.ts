@@ -25,6 +25,7 @@
 // ---------------------------------------------------------------------------
 
 import { el } from "./dom.js";
+import { iconNode } from "@wildwinter/app-shell";
 import { colourIndex } from "../../shell/colour.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface, type DrawContext } from "./canvas-surface.js";
@@ -516,9 +517,9 @@ export function mountMapView(
         el("span", { className: "hint", text: furnitureHint }),
         el("span", { className: "stripgap" }),
         el("button", {
-          className: "stripbtn cancel", text: "Cancel", tip: "Abandon this (Esc)",
+          className: "stripbtn cancel", tip: "Abandon this (Esc)",
           onClick: () => { if (commentArmed) disarmComment(); else furniture?.cancel(); },
-        }),
+        }, iconNode("close", 12), "Cancel"),
       );
       return;
     }
@@ -535,7 +536,7 @@ export function mountMapView(
               : `Click the first corner of ${busy.label} again, or press Enter, to close it`
           : `Click where ${busy.label} sits` }),
         el("span", { className: "stripgap" }),
-        el("button", { className: "stripbtn cancel", text: "Cancel", tip: "Abandon this (Esc)", onClick: () => stopTool() }),
+        el("button", { className: "stripbtn cancel", tip: "Abandon this (Esc)", onClick: () => stopTool() }, iconNode("close", 12), "Cancel"),
       );
       return;
     }
@@ -562,11 +563,11 @@ export function mountMapView(
       ...(group ? [group] : []),
       el("div", { className: "striptools" },
         el("button", {
-          className: "stripbtn", text: "Zone", tip: "Trace a new zone on the map",
+          className: "stripbtn", tip: "Trace a new zone on the map",
           onClick: () => trace(undefined, "New zone"),
-        }),
+        }, iconNode("add", 12), "Zone"),
         el("button", {
-          className: "stripbtn", text: "Background",
+          className: "stripbtn",
           tip: "Put a picture behind the map, to place the content on",
           onClick: () => {
             // The camera NOW: the picture is sized against what the author is
@@ -582,17 +583,17 @@ export function mountMapView(
               },
             });
           },
-        }),
+        }, iconNode("add", 12), "Background"),
         el("button", {
-          className: "stripbtn", text: "Frame",
+          className: "stripbtn",
           tip: "Draw a titled frame behind part of the map",
           onClick: () => furniture?.drawFrame(),
-        }),
+        }, iconNode("add", 12), "Frame"),
         el("button", {
-          className: "stripbtn", text: "Comment",
+          className: "stripbtn",
           tip: "Drop a comment on the map or on a site",
           onClick: () => armComment(),
-        }),
+        }, iconNode("add", 12), "Comment"),
       ),
       el("span", { className: "hint", text: said }),
       // The overlay names itself and DATES its evidence, as it does on the node

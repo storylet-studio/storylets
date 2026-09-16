@@ -13,7 +13,7 @@
 // (add/remove outcome, params, values) redraw the document in place.
 // ---------------------------------------------------------------------------
 
-import { icon, openGameIdEditor } from "@wildwinter/app-shell";
+import { iconNode, openGameIdEditor } from "@wildwinter/app-shell";
 import { currentDocTab, setDocTab } from "./doc-tab-memory.js";
 import { whereModel, whereWarning } from "./where.js";
 // The DERIVED address, computed for placeholders and previews. From the model
@@ -112,7 +112,7 @@ function emptySection(label: string, summary: string, expandTo?: () => Node[]): 
   const wrap = el("div", { className: "doc-sect" });
   const row = el(expandTo ? "button" : "div", { className: "doc-collapsed" },
     caption(label), el("span", { className: "doc-collapsed-sum", text: summary }),
-    expandTo ? el("span", { className: "doc-collapsed-plus", text: "+" }) : null);
+    expandTo ? el("span", { className: "doc-collapsed-plus" }, iconNode("add", 12)) : null);
   if (expandTo) row.addEventListener("click", () => wrap.replaceChildren(...expandTo()));
   wrap.append(row);
   return wrap;
@@ -707,7 +707,7 @@ export function documentHeading(label: string, opts: {
   contractHolds?: () => boolean;
   purpose?: IdentityField & { placeholder?: string; commit: () => void; commitOn?: "input" | "blur" };
   menu?: { label: string; danger?: boolean; onClick: () => void }[];
-  /** The comment-thread opener, in the TOPLINE beside the ⋯ menu: the row that
+  /** The comment-thread opener, in the TOPLINE beside the More menu: the row that
    *  means "about this whole document". Patterpad puts it in the inspector
    *  level's action row; we have no inspector, so this is the equivalent. */
   /** `on` is the id the thread is filed against. It is stamped on the bubble so a
@@ -722,16 +722,15 @@ export function documentHeading(label: string, opts: {
     const c = opts.comments;
     const bubble = el("button", {
       className: `btn ghost doc-thread${c.count > 0 ? " has" : ""}`,
-      text: c.count > 0 ? `${icon.comment} ${c.count}` : icon.comment,
       tip: c.count > 0 ? `${c.count} open comment${c.count === 1 ? "" : "s"}` : "Comment on this",
-    });
+    }, iconNode("comment", 12), c.count > 0 ? String(c.count) : null);
     bubble.dataset.threadFor = c.on;
     bubble.addEventListener("click", (e) => { e.preventDefault(); c.open(bubble); });
     topline.append(bubble);
   }
   if (opts.menu?.length) {
     const items = opts.menu;
-    const more = el("button", { className: "btn ghost icon doc-menu", text: icon.more, tip: "More" });
+    const more = el("button", { className: "btn ghost icon doc-menu", tip: "More" }, iconNode("more"));
     more.addEventListener("click", (e) => {
       const r = more.getBoundingClientRect();
       e.preventDefault();
@@ -826,9 +825,9 @@ function fillOutcomeHeader(row: HTMLElement, o: OutcomeEdit, open: boolean, cata
   row.dataset.outcome = o.id;
   const changes = `${o.changes.length} change${o.changes.length === 1 ? "" : "s"}`;
   const line = el("div", { className: "outcome-row-line" },
-    // Drawn in CSS (the Unicode small triangles stay tiny at any font size);
-    // the open state rotates it.
-    el("span", { className: "outcome-row-chev" }),
+    // The vocabulary's chevron (the Unicode small triangles stay tiny at any
+    // font size); the open state rotates it.
+    el("span", { className: "outcome-row-chev" }, iconNode("collapsed", 12)),
     el("span", { className: "outcome-row-title", text: o.title ?? o.gameId }),
     el("span", { className: "outcome-row-sum", text: changes }),
   );
@@ -851,9 +850,8 @@ function fillOutcomeHeader(row: HTMLElement, o: OutcomeEdit, open: boolean, cata
 function commentBubble(on: string, count: number, open: (anchor: HTMLElement) => void): HTMLElement {
   const bubble = el("button", {
     className: `btn ghost doc-thread${count > 0 ? " has" : ""}`,
-    text: count > 0 ? `${icon.comment} ${count}` : icon.comment,
     tip: count > 0 ? `${count} open comment${count === 1 ? "" : "s"}` : "Comment on this outcome",
-  });
+  }, iconNode("comment", 12), count > 0 ? String(count) : null);
   bubble.dataset.threadFor = on;
   bubble.addEventListener("click", (e) => { e.preventDefault(); open(bubble); });
   return bubble;
@@ -1541,8 +1539,8 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
         [edit.values[i], edit.values[j]] = [edit.values[j]!, edit.values[i]!];
         commit(); redraw();
       };
-      const up = el("button", { className: "btn ghost icon insp-move", text: icon.up, tip: "Move up", onClick: () => swap(i - 1) }) as HTMLButtonElement;
-      const down = el("button", { className: "btn ghost icon insp-move", text: icon.down, tip: "Move down", onClick: () => swap(i + 1) }) as HTMLButtonElement;
+      const up = el("button", { className: "btn ghost icon insp-move", tip: "Move up", onClick: () => swap(i - 1) }, iconNode("up")) as HTMLButtonElement;
+      const down = el("button", { className: "btn ghost icon insp-move", tip: "Move down", onClick: () => swap(i + 1) }, iconNode("down")) as HTMLButtonElement;
       up.disabled = i === 0;
       down.disabled = i === edit.values.length - 1;
       block.append(el("div", { className: "insp-ohead" }, el("span", { className: "insp-kv" }, chipDot(v.gameId), name),

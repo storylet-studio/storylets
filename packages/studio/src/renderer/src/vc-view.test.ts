@@ -104,16 +104,16 @@ describe("the read-only guard on a locked document", () => {
   const doc = (): HTMLElement => {
     const host = document.createElement("div");
     host.innerHTML = `
-      <button class="crumb-back">‹ Encounters</button>
+      <button class="crumb-back"><svg data-icon="back"></svg>Encounters</button>
       <input class="doc-title" />
       <textarea class="doc-purpose"></textarea>
       <button class="doc-tab on">Cards</button>
-      <button class="doc-menu">⋯</button>
+      <button class="doc-menu"><svg data-icon="more"></svg></button>
       <button class="chip">docks</button>
       <select class="insp-input"><option>a</option></select>
       <div class="scard">Ambush<div class="cardwhen"><button class="exed-pill">danger</button></div></div>
       <button class="scard ghost">+ New card</button>
-      <button class="centre-step" disabled>‹</button>`;
+      <button class="centre-step" disabled><svg data-icon="back"></svg></button>`;
     return host;
   };
   const off = (host: HTMLElement): string[] =>

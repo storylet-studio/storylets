@@ -13,6 +13,7 @@
 
 import Konva from "konva";
 import { el } from "./dom.js";
+import { iconNode } from "@wildwinter/app-shell";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface } from "./canvas-surface.js";
 import { nodeCameraKey, recallCamera, rememberCamera } from "./canvas-memory.js";
@@ -228,9 +229,9 @@ export function mountNodeView(
         el("span", { className: "hint", text: hint }),
         el("span", { className: "stripgap" }),
         el("button", {
-          className: "stripbtn cancel", text: "Cancel", tip: "Abandon this (Esc)",
+          className: "stripbtn cancel", tip: "Abandon this (Esc)",
           onClick: () => { if (commentArmed) disarmComment(); else furniture?.cancel(); },
-        }),
+        }, iconNode("close", 12), "Cancel"),
       );
       return;
     }
@@ -246,8 +247,8 @@ export function mountNodeView(
     // opposite readings of the same strip: the map put its verbs first as real
     // buttons and its status last, this one put status first and its verbs last
     // as quiet camera controls. Frame and Comment are the SAME two verbs on both
-    // canvases, so they now look and sit the same on both, and `.stripbtn` gives
-    // them the map's "+" affordance for free.
+    // canvases, so they now look and sit the same on both, and the strip's
+    // drawn plus gives them the map's add affordance.
     //
     // "Arrange" stays at the far right, and that is not an oversight: the left
     // group is things you ADD to the canvas, and rearranging what is already on
@@ -256,17 +257,17 @@ export function mountNodeView(
     // A frame is furniture on the canvas, so it is arranging; a comment lands in
     // the notes shard, which is the author's, so it is not.
     const frame = el("button", {
-      className: "stripbtn", text: "Frame", tip: "Draw a titled frame behind a group of cards",
+      className: "stripbtn", tip: "Draw a titled frame behind a group of cards",
       onClick: () => furniture?.drawFrame(),
-    });
+    }, iconNode("add", 12), "Frame");
     frame.disabled = readOnly;
     strip.replaceChildren(
       el("div", { className: "striptools" },
         frame,
         el("button", {
-          className: "stripbtn", text: "Comment", tip: "Drop a comment on the canvas or on a card",
+          className: "stripbtn", tip: "Drop a comment on the canvas or on a card",
           onClick: () => armComment(),
-        }),
+        }, iconNode("add", 12), "Comment"),
       ),
       ...describe(deck, graph), ...note, ...legend,
       el("span", { className: "stripgap" }),

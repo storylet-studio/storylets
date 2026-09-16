@@ -11,6 +11,7 @@
 
 import type { LiveLinkStatus } from "../../shared/api.js";
 import { el } from "./dom.js";
+import { iconNode } from "@wildwinter/app-shell";
 
 export interface LiveLinkChip {
   /** Show / hide the control (shown when a project is open). Re-queries the
@@ -21,9 +22,6 @@ export interface LiveLinkChip {
   toggle(): void;
 }
 
-// A plug glyph: two prongs up, the body, a cord down. Patterpad's markup, since
-// the shell's icon table has no connect glyph (yet): two apps, one shape.
-const PLUG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v6M15 2v6"/><path d="M7 8h10v3a5 5 0 0 1-10 0V8z"/><path d="M12 16v6"/></svg>`;
 
 /** The tooltip, spelling the state out. Patterpad's sentences, with "boxes"
  *  for what it says about flows. */
@@ -59,7 +57,9 @@ export function mountLiveLinkChip(studio: {
   // last undecodable element, and the word costs almost nothing.
   const word = el("span", "livelink-word"); word.textContent = "Live link";
   const url = el("button", "livelink-url"); url.type = "button"; url.hidden = true;
-  const toggle = el("button", "livelink-toggle off"); toggle.type = "button"; toggle.innerHTML = PLUG;
+  // The plug is the vocabulary's `connect` (two apps, one shape), no longer a
+  // local copy of Patterpad's markup.
+  const toggle = el("button", "livelink-toggle off"); toggle.type = "button"; toggle.append(iconNode("connect"));
   wrap.append(word, url, toggle);
   document.body.append(wrap);
 

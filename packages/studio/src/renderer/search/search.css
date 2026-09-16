@@ -61,7 +61,7 @@ body {
 .sr-rrow:hover { background: none; }
 .sr-diff { grid-column: 1; font-family: var(--font-read); font-size: 0.9rem; line-height: 1.35; }
 .sr-before { color: var(--muted); }
-.sr-arrow { color: var(--muted); }
+.sr-arrow { color: var(--muted); display: inline-flex; vertical-align: middle; margin: 0 5px; }
 .sr-after { color: var(--ink); }
 .sr-rrow .sr-sub { grid-column: 1; margin-left: 0; max-width: none; }
 .sr-rone { grid-column: 2; grid-row: 1 / span 2; padding: 2px 8px; font-size: 0.72rem; }

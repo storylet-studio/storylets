@@ -10,7 +10,8 @@
 // in the document itself (design review 2026-08, A17).
 // ---------------------------------------------------------------------------
 
-import { icon, renderStepperBar, wireReorder } from "@wildwinter/app-shell";
+import { iconNode, renderStepperBar, wireReorder } from "@wildwinter/app-shell";
+import type { IconName } from "@wildwinter/app-shell";
 import { gameIdify, PLACE_GROUP } from "@storylet-studio/model";
 import { el } from "./dom.js";
 import { colourIndex } from "../../shell/colour.js";
@@ -137,7 +138,7 @@ function playSettle(host: ParentNode): void {
 function wireDrop(el: HTMLElement, id: string, axis: "x" | "y", move: (from: string, to: string, before: boolean) => void): void {
   wireReorder(el, id, axis, (from, before, to) => { armSettle(el.parentElement ?? el); move(from, to, before); });
 }
-const grip = (): HTMLElement => el("span", { className: "cardgrip", text: icon.grip, tip: "Drag to reorder" });
+const grip = (): HTMLElement => el("span", { className: "cardgrip", tip: "Drag to reorder" }, iconNode("grip"));
 
 /** The view-mode switch, shown top-right of a centre head. Node is offered only
  *  where there is one (a deck): the mode is remembered across pages, so a page
@@ -145,18 +146,18 @@ const grip = (): HTMLElement => el("span", { className: "cardgrip", text: icon.g
  *  rather than lighting a button whose view is not there. */
 function viewToggle(active: ViewMode, actions: ViewActions, withNode = false): HTMLElement {
   const shown: ViewMode = !withNode && active === "node" ? "cards" : active;
-  const btn = (mode: ViewMode, glyph: string, title: string): HTMLElement => {
-    const b = el("button", { className: `seg-opt viewbtn${shown === mode ? " on" : ""}`, text: glyph, tip: title });
+  const btn = (mode: ViewMode, name: IconName, title: string): HTMLElement => {
+    const b = el("button", { className: `seg-opt viewbtn${shown === mode ? " on" : ""}`, tip: title }, iconNode(name));
     b.addEventListener("click", () => { if (shown !== mode) actions.setViewMode(mode); });
     return b;
   };
   return el("div", { className: "seg viewtoggle" },
-    // From the icon table (app-shell 0.17.0), named by what you get rather than
-    // by the glyph, so a second app picks the same three without copying
+    // From the shell's drawn vocabulary, named by what you get rather than by
+    // the picture, so a second app picks the same three without copying
     // somebody's taste in symbols.
-    btn("cards", icon.viewCards, "Card view"),
-    btn("table", icon.viewTable, "Table view"),
-    withNode ? btn("node", icon.viewNode, "Node view") : null);
+    btn("cards", "viewCards", "Card view"),
+    btn("table", "viewTable", "Table view"),
+    withNode ? btn("node", "viewNode", "Node view") : null);
 }
 
 /**
@@ -169,7 +170,7 @@ function viewToggle(active: ViewMode, actions: ViewActions, withNode = false): H
  * already offers every multi-level jump the segments did. What the trail could
  * not do was answer the reflex it looked like it should: a row of quiet grey
  * words reads as a statement of location, not as a way out. So one control does
- * that job and names its destination ("‹ Arrival").
+ * that job and names its destination (a drawn back chevron, then "Arrival").
  *
  * Callers still pass the whole ancestor path, because the LAST segment is the
  * back target, and because keeping the path here means the trail could come back
@@ -228,9 +229,9 @@ export function crumbTrail(segments: { label: string; go: () => void }[], ...rig
   const up = segments[segments.length - 1];
   if (up) {
     bar.append(el("button", {
-      className: "btn crumb-back", text: `‹ ${up.label}`,
+      className: "btn crumb-back",
       tip: `Back to ${up.label} (Esc)`, onClick: up.go,
-    }));
+    }, iconNode("back"), up.label));
   }
   // The way back to where you actually came from, when that is somewhere else. It
   // reads differently from the parent on purpose: two left chevrons side by side
@@ -307,7 +308,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
     if (opts.vc) b.dataset["vc"] = opts.vc;
     if (opts.node) {
       const id = opts.node;
-      const chev = el("span", { className: `nav-chev${expanded.has(id) ? " open" : ""}` });
+      const chev = el("span", { className: `nav-chev${expanded.has(id) ? " open" : ""}` }, iconNode("collapsed", 12));
       chev.addEventListener("click", (e) => { e.stopPropagation(); actions.toggleNav(id); });
       b.append(chev);
     } else {
@@ -914,7 +915,7 @@ export function renderProjectCentre(host: HTMLElement, project: ProjectDto, acti
       el("div", { className: "doc-topline" },
         el("span", { className: "insp-label", text: "Project" }),
         (() => {
-          const more = el("button", { className: "btn ghost icon doc-menu", text: icon.more, tip: "More" });
+          const more = el("button", { className: "btn ghost icon doc-menu", tip: "More" }, iconNode("more"));
           more.addEventListener("click", (e) => { e.preventDefault(); actions.openProjectSettings(); });
           more.title = "Project Settings\u2026";
           return more;

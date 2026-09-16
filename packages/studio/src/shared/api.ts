@@ -1654,9 +1654,9 @@ export interface StudioApi {
   setLinksPinned(on: boolean): Promise<void>;
   /** Links window: close itself (Esc), as Find does. */
   closeLinks(): Promise<void>;
-  /** Close the Board from its own chrome (Esc, or the ✕). */
+  /** Close the Board from its own chrome (Esc, or the close button). */
   closeBoard(): Promise<void>;
-  /** Close the Coverage window from its own chrome (Esc, or the ✕). */
+  /** Close the Coverage window from its own chrome (Esc, or the close button). */
   closeCoverage(): Promise<void>;
 
   /** Coverage window: float over the editor (Board + Find's pin). */

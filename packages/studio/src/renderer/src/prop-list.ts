@@ -124,9 +124,9 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
         render(); changed();
       });
       let def = defaultControl(p, changed);
-      const up = iconBtn("↑", "Move up", () => { if (moveItem(decls, i, -1)) { render(); changed(); } }, i === 0);
-      const down = iconBtn("↓", "Move down", () => { if (moveItem(decls, i, 1)) { render(); changed(); } }, i === decls.length - 1);
-      const del = iconBtn("✕", "Remove", () => { decls.splice(i, 1); render(); changed(); }, false, true);
+      const up = iconBtn("up", "Move up", () => { if (moveItem(decls, i, -1)) { render(); changed(); } }, i === 0);
+      const down = iconBtn("down", "Move down", () => { if (moveItem(decls, i, 1)) { render(); changed(); } }, i === decls.length - 1);
+      const del = iconBtn("close", "Remove", () => { decls.splice(i, 1); render(); changed(); }, false, true);
       const details: HTMLElement[] = [];
       // Every type gets a purpose: it is the pill's hover tip in the condition
       // and outcome editors, so writing one here teaches every reader of the

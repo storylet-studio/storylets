@@ -15,7 +15,7 @@ import "@wildwinter/app-shell/tooltip.css";
 import { applyTheme } from "../src/theme.js";
 import { toolWindowHead } from "../src/tool-window-head.js";
 import { el } from "../src/dom.js";
-import { confirmDialog, initTooltips, pinButton } from "@wildwinter/app-shell";
+import { confirmDialog, iconNode, initTooltips, pinButton } from "@wildwinter/app-shell";
 import { searchIndex, searchMatch } from "../src/search.js";
 import type { SearchHit } from "../src/search.js";
 import type { ProjectDto, PropertyUsage, ReplaceHit, ReplaceOptions, ReviewAt, SearchMode, SearchOpen, StudioApi } from "../../shared/api.js";
@@ -137,7 +137,7 @@ function renderReplace(): void {
     const row = el("div", { className: "sr-row sr-rrow" },
       el("span", { className: "sr-diff" },
         el("span", { className: "sr-before", text: h.before }),
-        el("span", { className: "sr-arrow", text: " → " }),
+        el("span", { className: "sr-arrow" }, iconNode("arrowRight", 12)),
         el("span", { className: "sr-after", text: h.after })),
       el("span", { className: "sr-sub", text: `${[...h.location, h.kind === "project" ? "project" : ""].filter((s) => s !== "").join(" › ")} · ${fieldLabel(h)}` }),
       el("button", { className: "btn sr-rone", text: "Replace", onClick: () => void applyReplace(h) }));

@@ -10,7 +10,7 @@
 // one tool window and we have four. If it grows more, this is the obvious
 // thing to move over.
 import { el } from "./dom.js";
-import { icon, pinButton } from "@wildwinter/app-shell";
+import { iconNode, pinButton } from "@wildwinter/app-shell";
 
 export interface ToolWindowHeadOptions {
   /** The window's own name. Constant: it says which window this is, so it must
@@ -49,8 +49,8 @@ export function toolWindowHead(opts: ToolWindowHeadOptions): HTMLElement {
     ...keep(opts.trail),
     pin.el,
     el("button", {
-      className: "swin-close", text: icon.close, tip: "Close (Esc)",
+      className: "swin-close", tip: "Close (Esc)",
       onClick: opts.onClose,
-    }),
+    }, iconNode("close")),
   );
 }

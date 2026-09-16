@@ -318,7 +318,7 @@ export class Table {
   }
 
   /** Diagnostics that fired during a peek. They belong to the peek's own
-   *  results, never the journal's ⚠ rows: a box-wide peek binds no hand, so a
+   *  results, never the journal's warning rows: a box-wide peek binds no hand, so a
    *  condition reading composed @hand state faults THERE without the content
    *  being wrong anywhere - the false alarm design/board-legibility.md
    *  records. The journal's warnings stay the ones a real deal or play made. */

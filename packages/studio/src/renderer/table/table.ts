@@ -15,7 +15,8 @@ import "@wildwinter/app-shell/tooltip.css";
 import { applyTheme } from "../src/theme.js";
 import { toolWindowHead } from "../src/tool-window-head.js";
 import { el } from "../src/dom.js";
-import { initTooltips, icon, staleBar } from "@wildwinter/app-shell";
+import { iconNode, initTooltips, staleBar } from "@wildwinter/app-shell";
+import type { IconName } from "@wildwinter/app-shell";
 import { confirmDialog } from "../src/confirm.js";
 import { colourIndex } from "../../shell/colour.js";
 import { Table, coerceStateInput, diffBoards, journalPlan } from "./model.js";
@@ -466,10 +467,10 @@ function stampOf(entry: BoardLogEntry): string {
 }
 
 function journalRow(entry: BoardLogEntry): HTMLElement | null {
-  const row = (kind: string, cls: string, ...payload: (Node | string)[]): HTMLElement =>
+  const row = (kind: string | Node, cls: string, ...payload: (Node | string)[]): HTMLElement =>
     el("div", { className: `jrow ${cls}` },
       el("span", { className: "jt", text: stampOf(entry) }),
-      el("span", { className: "jk", text: kind }),
+      el("span", { className: "jk" }, kind),
       el("span", { className: "jp" }, ...payload));
   switch (entry.type) {
     case "deal": {
@@ -488,7 +489,7 @@ function journalRow(entry: BoardLogEntry): HTMLElement | null {
     case "peek":
       return null;   // looking is not a story beat (the look/use rule)
     case "diagnostic":
-      return row("⚠", "j-warn", `${entry.where}: ${entry.message}`);
+      return row(iconNode("warning", 12), "j-warn", `${entry.where}: ${entry.message}`);
     case "meddle":
       return row("meddled", "j-meddle", `${entry.label} ${entry.prev !== undefined ? `${JSON.stringify(entry.prev)} → ` : ""}${JSON.stringify(entry.value)}`);
   }
@@ -689,7 +690,7 @@ function playPanel(): HTMLElement | null {
     el("div", { className: "pp-head" },
       el("h3", { text: held.title ?? held.gameId }),
       el("span", { className: "pp-hand", text: `in ${open.hand}` }),
-      el("button", { className: "btn ghost icon pp-close", text: icon.close, tip: "Put it back", onClick: () => { open = undefined; pending = undefined; render(); } })),
+      el("button", { className: "btn ghost icon pp-close", tip: "Put it back", onClick: () => { open = undefined; pending = undefined; render(); } }, iconNode("close"))),
     held.purpose ? el("p", { className: "beat", text: held.purpose }) : null,
   );
   const chosen = pending !== undefined ? outcomes.find((o) => o.gameId === pending) : undefined;
@@ -808,7 +809,7 @@ function liveNotDealt(): HTMLElement | null {
   const byHand = Object.entries(liveRun?.notDealt ?? {}).filter(([, ns]) => ns.length > 0);
   if (byHand.length === 0) return null;
   const nd = el("details", { className: "curtain" }) as HTMLDetailsElement;
-  nd.append(el("summary", { text: "Not listed · why" }));
+  nd.append(el("summary", {}, iconNode("collapsed", 12), "Not listed · why"));
   for (const [hand, ns] of byHand) {
     const block = el("div", { className: "notdealt" });
     block.append(el("span", { className: "caption", text: hand }));
@@ -879,7 +880,7 @@ function liveBanner(): HTMLElement | null {
   return el("div", { className: "livebanner" },
     el("span", { className: "livebanner-msg", text: "A game is connected. Watch it?" }),
     el("button", { className: "btn primary livebanner-go", text: "Watch it", onClick: () => void enterLive() }),
-    el("button", { className: "btn ghost icon livebanner-no", text: icon.close, tip: "Dismiss", onClick: () => { liveBannerDismissed = true; render(); } }));
+    el("button", { className: "btn ghost icon livebanner-no", tip: "Dismiss", onClick: () => { liveBannerDismissed = true; render(); } }, iconNode("close")));
 }
 
 function snapshotPanel(): HTMLElement | null {
@@ -916,7 +917,7 @@ function snapshotPanel(): HTMLElement | null {
         board = table!.dealAll();
         render();
       } }),
-      el("button", { className: "btn ghost icon snapdel", text: icon.close, tip: "Delete snapshot", onClick: () => { snapshots = snapshots.filter((_, j) => j !== i); render(); } })));
+      el("button", { className: "btn ghost icon snapdel", tip: "Delete snapshot", onClick: () => { snapshots = snapshots.filter((_, j) => j !== i); render(); } }, iconNode("close"))));
   });
   if (snapshots.length === 0) list.append(el("span", { className: "empty", text: "No snapshots yet." }));
   list.append(el("button", { className: "btn", text: "Import…", tip: "Load a .storyletsave file (it also joins the snapshots)", onClick: () => {
@@ -1201,20 +1202,23 @@ function render(): void {
   // mute kinds of beat (a muted chip greys out); Copy takes what you see.
   const warnCount = activeLog().filter((e) =>
     e.type === "diagnostic" && !(!liveMode && table?.isPeekDiagnostic(e.seq))).length;
-  const kinds: { type: LogEntry["type"]; label: string }[] = [
+  // A chip is its word, except the warning chip, which is the vocabulary's
+  // warning sign and the count: the count keeps a warning that scrolled away
+  // from being missed, and the word stays in its tooltip.
+  const kinds: { type: LogEntry["type"]; label: string; icon?: IconName; count?: number }[] = [
     { type: "deal", label: "dealt" }, { type: "play", label: "played" },
     { type: "write", label: "wrote" }, { type: "evict", label: "left" },
     { type: "turns", label: "turns" },
-    // The count keeps a warning that scrolled away from being missed.
-    { type: "diagnostic", label: warnCount > 0 ? `⚠ ${warnCount}` : "⚠" },
+    { type: "diagnostic", label: "warning", icon: "warning", count: warnCount },
   ];
-  const jfilters = el("div", { className: "jfilters" }, ...kinds.map(({ type, label }) =>
-    el("button", { className: `jflt${journalHidden.has(type) ? "" : " on"}`, text: label,
+  const jfilters = el("div", { className: "jfilters" }, ...kinds.map(({ type, label, icon, count }) =>
+    el("button", { className: `jflt${journalHidden.has(type) ? "" : " on"}`,
       tip: journalHidden.has(type) ? `Show ${label} entries` : `Hide ${label} entries`,
       onClick: () => {
         if (journalHidden.has(type)) journalHidden.delete(type); else journalHidden.add(type);
         render();
-      } })));
+      } },
+    ...(icon ? [iconNode(icon, 12), count !== undefined && count > 0 ? String(count) : null] : [label]))));
   const journal = el("div", { className: `journal${stampBoxes() ? " stamped" : ""}` });
   // The plan (journalPlan, model.ts): a play carries its writes and its
   // consequences; an attributed deal/evict never renders flat again; a full
@@ -1339,11 +1343,11 @@ function render(): void {
               el("button", { className: "btn", text: "New run",
                 tip: "Restart the world, keeping everything durable, to play a party who have been here before",
                 onClick: newRun }),
-              el("button", { className: "btn", text: `${icon.restart} Forget everyone`,
+              el("button", { className: "btn",
                 tip: "Restart and forget the durable half too (the pockets and the installation's memory)",
-                onClick: forgetEveryone }),
+                onClick: forgetEveryone }, iconNode("restart"), "Forget everyone"),
             ]
-            : [el("button", { className: "btn", text: `${icon.restart} Restart`, onClick: restart })]),
+            : [el("button", { className: "btn", onClick: restart }, iconNode("restart"), "Restart")]),
         ),
     liveMode
       // Live mode: the game's run, always as a list (its board, its journal,

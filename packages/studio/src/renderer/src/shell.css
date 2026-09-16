@@ -149,17 +149,12 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .nav-row.sel { background: var(--accent-soft); color: var(--accent); }
 .nav-row.on-path { color: var(--accent); }
 .nav-row.on-path .nav-n { color: var(--accent); opacity: 0.7; }
-/* disclosure: a drawn triangle (glyphs render hairline-thin), the user's to
-   toggle - clicking it never navigates. */
+/* disclosure: the vocabulary's chevron (glyphs render hairline-thin), the
+   user's to toggle - clicking it never navigates. Rotates when open. */
 .nav-chev, .nav-chev-space { flex: none; width: 12px; height: 12px; display: inline-flex; align-items: center; justify-content: center; }
-.nav-chev { cursor: pointer; }
-.nav-chev::before {
-  content: ""; width: 0; height: 0;
-  border-left: 6px solid var(--muted); border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent;
-  transform-origin: 35% 50%; transition: transform var(--dur-quick) var(--ease-standard);
-}
-.nav-chev:hover::before { border-left-color: var(--accent); }
-.nav-chev.open::before { transform: rotate(90deg); }
+.nav-chev { cursor: pointer; color: var(--muted); transition: transform var(--dur-quick) var(--ease-standard); }
+.nav-chev:hover { color: var(--accent); }
+.nav-chev.open { transform: rotate(90deg); }
 /* quick add rows */
 .nav-add { display: block; width: 100%; text-align: left; color: var(--muted); font-size: 0.8rem; padding-top: 2px; padding-bottom: 2px; }
 .nav-add.nav-d2 { padding-left: 46px; }
@@ -271,11 +266,12 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm);
   padding: 3px 10px 3px 8px;
 }
-.stripbtn::before { content: "+"; color: var(--muted); font-size: 0.9rem; line-height: 1; }
+/* Its leading mark is the vocabulary's `add` (or `close` on the cancel), a
+   node the builder appends, muted at rest and the button's colour on hover. */
+.stripbtn [data-icon] { color: var(--muted); }
 .stripbtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.stripbtn:hover::before { color: var(--accent); }
+.stripbtn:hover [data-icon] { color: inherit; }
 /* The one that gets you OUT of a gesture: the same shape, warned. */
-.stripbtn.cancel::before { content: "✕"; font-size: 0.72rem; }
 .stripbtn.cancel:hover { border-color: var(--danger); color: var(--danger); background: none; }
 
 .stripchip {
@@ -364,7 +360,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    faces reveal it TOP-RIGHT on rollover; wide table-like rows reveal it
    LEFT-MIDDLE. Same fade, same weight, everywhere, and on keyboard focus as
    well as the pointer, so quiet chrome stays reachable (parity row 47). */
-.cardgrip { color: var(--muted); font-size: 0.85rem; cursor: grab; line-height: 1; user-select: none; }
+.cardgrip { color: var(--muted); cursor: grab; display: inline-flex; user-select: none; }
 .cardgrip:active { cursor: grabbing; }
 .scard .cardgrip, .deck-card .cardgrip { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity var(--dur-quick) var(--ease-standard); }
 .scard:hover .cardgrip, .scard:focus-within .cardgrip, .deck-card:hover .cardgrip, .deck-card:focus-within .cardgrip { opacity: 0.5; }
@@ -538,7 +534,7 @@ button.doc-collapsed { cursor: pointer; }
 button.doc-collapsed:hover { background: none; }
 button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-collapsed-plus { color: var(--accent); border-color: var(--accent); }
 .doc-collapsed-sum { font-size: 0.78rem; color: var(--muted); }
-.doc-collapsed-plus { margin-left: auto; color: var(--muted); font-size: 0.85rem; line-height: 1.2; border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 0 8px; }
+.doc-collapsed-plus { margin-left: auto; color: var(--muted); display: inline-flex; align-items: center; border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 2px 6px; }
 .insp-head { display: flex; align-items: center; gap: 8px; }
 .insp-head .insp-label { flex: 1; }
 /* Remove: a `.btn` in the danger ink, filling on hover; it names its object. */
@@ -615,12 +611,11 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .outcome-item.open .outcome-row:hover { background: none; }
 .outcome-row.open { background: none; border-bottom: 1px solid var(--line-soft); }
 .outcome-row-line { display: flex; align-items: baseline; gap: 8px; }
-/* a CSS triangle, not a glyph: U+25B8/25BE are "small" triangles that stay
-   hairline-thin however large the font is set. */
+/* the vocabulary's chevron, not a glyph: U+25B8/25BE are "small" triangles
+   that stay hairline-thin however large the font is set. */
 .outcome-row-chev {
-  flex: none; align-self: center; width: 0; height: 0; margin: 0 4px 0 1px;
-  border-left: 7px solid var(--ink); border-top: 5px solid transparent; border-bottom: 5px solid transparent;
-  transform-origin: 35% 50%; transition: transform var(--dur-quick) var(--ease-standard);
+  flex: none; align-self: center; display: inline-flex; margin: 0 4px 0 1px; color: var(--ink);
+  transition: transform var(--dur-quick) var(--ease-standard);
 }
 .outcome-row.open .outcome-row-chev { transform: rotate(90deg); }
 .outcome-row-title { font-size: 0.88rem; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -664,7 +659,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .problembar-fix { flex: none; margin-left: 8px; border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .problembar-fix:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
 /* the topbar health chip */
-.probstat { flex: none; font-size: 0.72rem; font-variant-numeric: tabular-nums; border: 0; padding: 2px 8px; border-radius: var(--radius-pill); cursor: pointer; }
+.probstat { flex: none; display: inline-flex; align-items: center; justify-content: center; min-height: 18px; font-size: 0.72rem; font-variant-numeric: tabular-nums; border: 0; padding: 2px 8px; border-radius: var(--radius-pill); cursor: pointer; }
 .probstat.ok { color: var(--ok); cursor: default; }
 .probstat.err { color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, transparent); }
 .probstat.warn { color: var(--warn); background: color-mix(in oklab, var(--warn) 14%, transparent); }
@@ -687,7 +682,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .scard > .vc-badge, .deck-card > .vc-badge { position: absolute; right: 11px; bottom: 9px; }
 .ctable td > .vc-badge { margin-left: 6px; }
 /* the topbar chip: the OPEN document's state, beside the save indicator */
-.vcstat { flex: none; font-size: 0.72rem; color: var(--warn); white-space: nowrap; -webkit-app-region: no-drag; }
+.vcstat { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--warn); white-space: nowrap; -webkit-app-region: no-drag; }
 .vcstat.locked { color: var(--danger); }
 .vcstat[hidden] { display: none; }
 /* A document whose shard somebody else holds: a notice naming them, and the
@@ -695,13 +690,13 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
    only the writing stops). The save would be refused anyway; this says so
    before the author types into a doomed edit. */
 .vc-lock {
-  display: flex; align-items: baseline; gap: 8px; max-width: 760px;
+  display: flex; align-items: center; gap: 8px; max-width: 760px;
   padding: 7px 12px; border-radius: var(--radius-md);
   border: 1px solid color-mix(in oklab, var(--danger) 45%, var(--line));
   background: color-mix(in oklab, var(--danger) 8%, transparent);
   color: var(--ink); font-size: 0.8rem;
 }
-.vc-lock-glyph { color: var(--danger); flex: none; }
+.vc-lock-glyph { color: var(--danger); flex: none; display: inline-flex; }
 .vc-readonly .vc-off { opacity: 0.55; cursor: default; }
 .vc-readonly input.vc-off, .vc-readonly textarea.vc-off, .vc-readonly select.vc-off { color: var(--muted); background: var(--surface); }
 .vc-readonly .doc-panel:focus-within { background: var(--card); border-color: var(--line-soft); box-shadow: none; }
@@ -740,7 +735,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 /* The hierarchy trail is retired (2026-08-04): the navigator already shows where
    you are and jumps anywhere, and the trail could not answer the "get me out of
    here" reflex it looked like it should. Back is the one control left. */
-.crumb-back { flex: none; gap: 2px; padding: 1px 9px 1px 6px; }
+.crumb-back { flex: none; gap: 3px; padding: 1px 9px 1px 5px; }
 /* The way back to where you actually came from, beside the way UP. Same size and
    the same border as its neighbour so the two read as one pair of controls, but
    accent-tinted from rest: it is the transient one, it is what the author is
@@ -895,7 +890,6 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .livelink-url:hover { border-color: var(--accent); color: var(--accent); }
 .livelink-url.copied { color: var(--accent); border-color: var(--accent); }
 .livelink-toggle { flex: none; width: 1.4rem; height: 1.4rem; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); cursor: pointer; transition: color var(--dur-quick) var(--ease-standard), border-color var(--dur-quick) var(--ease-standard); }
-.livelink-toggle svg { width: 0.85rem; height: 0.85rem; display: block; }
 .livelink-toggle:hover { border-color: var(--accent); }
 .livelink-toggle.listening { color: var(--warn); border-color: var(--warn); background: color-mix(in oklab, var(--warn) 12%, var(--surface)); }
 .livelink-toggle.live { color: var(--ok); border-color: var(--ok); background: color-mix(in oklab, var(--ok) 14%, var(--surface)); }

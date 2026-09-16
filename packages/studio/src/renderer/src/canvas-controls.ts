@@ -19,26 +19,24 @@
 import "./canvas-controls.css";
 import { el } from "./dom.js";
 
-/** 24-box, 1.8 stroke, currentColor: the family's icon grammar (app-shell's pin
- *  button set it). Corner brackets read as "frame this", which is what a fit
- *  does; the selection variant frames a shape rather than the whole board. */
-const ICON_FIT_ALL =
-  `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"`
-  + ` stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">`
-  + `<path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9"/><path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9"/>`
-  + `<path d="M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></svg>`;
-const ICON_FIT_SELECTION =
-  `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"`
-  + ` stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">`
-  + `<path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8"/><path d="M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8"/>`
-  + `<path d="M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16"/><path d="M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/>`
-  + `<rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>`;
-const ICON_ZOOM_IN =
-  `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"`
-  + ` stroke-linecap="round" aria-hidden="true"><path d="M12 6v12"/><path d="M6 12h12"/></svg>`;
-const ICON_ZOOM_OUT =
-  `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"`
-  + ` stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg>`;
+/** The four the cluster draws, on the shell's grammar: the 24 grid, the
+ *  2.571 stroke (1.5px at 14px), round caps and joins, currentColor, and the
+ *  same `data-icon` stamp the vocabulary's nodes carry so one stylesheet rule
+ *  governs them. Local because the vocabulary has no word for a fit or a zoom
+ *  yet; the geometry is Lucide's (maximize, plus, minus), so when the shell
+ *  grows the words these can be deleted with no visible change. Corner
+ *  brackets read as "frame this", which is what a fit does; the selection
+ *  variant frames a card rather than the whole board. */
+const ROOT =
+  `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.571"`
+  + ` stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
+const FRAME =
+  `<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/>`
+  + `<path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>`;
+const ICON_FIT_ALL = `${ROOT} data-icon="fitAll">${FRAME}</svg>`;
+const ICON_FIT_SELECTION = `${ROOT} data-icon="fitSelection">${FRAME}<rect x="9" y="9" width="6" height="6" rx="1"/></svg>`;
+const ICON_ZOOM_IN = `${ROOT} data-icon="zoomIn"><path d="M5 12h14"/><path d="M12 5v14"/></svg>`;
+const ICON_ZOOM_OUT = `${ROOT} data-icon="zoomOut"><path d="M5 12h14"/></svg>`;
 
 export interface CanvasControlActions {
   fitAll: () => void;

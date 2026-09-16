@@ -37,8 +37,9 @@ import { hydrateCameras } from "./canvas-memory.js";
 import { confirmDialog } from "./confirm.js";
 
 import {
-  askIdentity, closeAnchoredPanel, createSaveController, initTooltips, mountPaneShell, icon, openComments, saveIndicator, showAbout,
+  askIdentity, closeAnchoredPanel, createSaveController, iconNode, initTooltips, mountPaneShell, openComments, saveIndicator, showAbout,
 } from "@wildwinter/app-shell";
+import type { IconName } from "@wildwinter/app-shell";
 import type { PaneShell } from "@wildwinter/app-shell";
 import {
   renderBoxCentre, renderDeckCentre, renderDecksCentre, renderHandsCentre, renderNav, renderProblems, renderProjectCentre, renderReviewBar,
@@ -1357,7 +1358,7 @@ const reviewbar = el("div", { className: "stepbar reviewbar" });
 // the bottom of a project nobody is reviewing: the bar carries the problems
 // bar's padding and border, so "no children" still draws a band.
 reviewbar.hidden = true;
-const probEl = el("button", { className: "probstat ok", text: icon.tick });
+const probEl = el("button", { className: "probstat ok" }, iconNode("tick", 12));
 // The save indicator is the shell's now (app-shell 0.18.0): the controller that
 // computes the three states already lived there, and the six lines that DREW
 // them were the half each app kept - so both apps hand-rendered one machine's
@@ -1415,7 +1416,7 @@ function mountShell(): void {
     flash(`No problems in ${project?.name ?? "this project"}`, "ok");
   });
   // The primary loop's visible door (surface review F8): play what you wrote.
-  const play = el("button", { className: "btn topbtn", text: "▶ Play", tip: "Play this project on the Board (⌘T)" });
+  const play = el("button", { className: "btn topbtn", tip: "Play this project on the Board (⌘T)" }, iconNode("play", 16), "Play");
   play.addEventListener("click", () => { if (project) void (async () => { await flushSaves(); await studio.openTable(); })(); });
   shell.topbarTrail.append(play, vcEl, probEl, saveEl.el);
   // A locked document redraws itself in place on the controls that stay live
@@ -1511,14 +1512,16 @@ function applyDocVc(): void {
  *  the notice (so a locked SETUP TAB of an otherwise-writable box says so too). */
 function renderVcChip(): void {
   const s = vcOf(docVcKeys());
-  // From the table, all three. The glyphs are identical to what was typed here,
-  // which is the point: identical today, and one edit away from not being.
-  const text = docHolders.length ? `${icon.locked} Locked by ${docHolders.join(", ")}`
-    : s?.outOfDate ? `${icon.down} Out of date`
-    : s && !s.writable ? `${icon.readOnly} Read-only` : "";
-  vcEl.textContent = text;
-  vcEl.hidden = text === "";
-  vcEl.title = text === "" ? "" : `${text} (${vcSystem})`;
+  // From the vocabulary, all three: the same words the badge and the notice
+  // draw, so the chip cannot drift from them.
+  const state: { name: IconName; text: string } | undefined = docHolders.length ? { name: "locked", text: `Locked by ${docHolders.join(", ")}` }
+    : s?.outOfDate ? { name: "down", text: "Out of date" }
+    : s && !s.writable ? { name: "readOnly", text: "Read-only" } : undefined;
+  vcEl.replaceChildren(...(state ? [iconNode(state.name, 12), state.text] : []));
+  vcEl.hidden = state === undefined;
+  const tip = state ? `${state.text} (${vcSystem})` : "";
+  if (tip === "") { delete vcEl.dataset["tip"]; vcEl.removeAttribute("aria-label"); }
+  else { vcEl.dataset["tip"] = tip; vcEl.setAttribute("aria-label", tip); }
   vcEl.classList.toggle("locked", docHolders.length > 0);
 }
 
@@ -1771,11 +1774,12 @@ function renderProblemsBar(): void {
 function renderProblemChip(): void {
   const errs = problems.filter((p) => p.severity === "error").length;
   probEl.className = `probstat ${problems.length === 0 ? "ok" : errs > 0 ? "err" : "warn"}`;
-  // icon.tick, not a hand-typed one. This chip was BUILT with icon.tick four
-  // hundred lines up and then overwritten with a literal on every update, which
-  // is the icon table being bypassed in the file that imports it (design review
-  // 2026-08, A9).
-  probEl.textContent = problems.length === 0 ? icon.tick : String(problems.length);
+  // The vocabulary's tick, not a hand-typed one. This chip was BUILT with the
+  // table's tick four hundred lines up and then overwritten with a literal on
+  // every update, which is the icon table being bypassed in the file that
+  // imports it (design review 2026-08, A9).
+  if (problems.length === 0) probEl.replaceChildren(iconNode("tick", 12));
+  else probEl.textContent = String(problems.length);
   probEl.dataset["tip"] = problems.length === 0
     ? "No problems"
     : `${problems.length} problem${problems.length === 1 ? "" : "s"} (click to review)`;
@@ -2054,9 +2058,9 @@ function renderCardPanes(): boolean {
     const next = deck.cards[at + delta];
     if (next) actions.inspectCard(box.id, deck.id, next.id);
   };
-  const prev = el("button", { className: "btn icon centre-step", text: icon.back, tip: "Previous card (↑)" });
+  const prev = el("button", { className: "btn icon centre-step", tip: "Previous card (↑)" }, iconNode("back"));
   prev.disabled = at <= 0; prev.addEventListener("click", () => step(-1));
-  const next = el("button", { className: "btn icon centre-step", text: icon.forward, tip: "Next card (↓)" });
+  const next = el("button", { className: "btn icon centre-step", tip: "Next card (↓)" }, iconNode("forward"));
   next.disabled = at >= deck.cards.length - 1; next.addEventListener("click", () => step(1));
   const editor = centreEditor([
     boxSeg(box),
