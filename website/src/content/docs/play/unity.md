@@ -5,10 +5,7 @@ sidebar:
   label: Unity
 ---
 
-<div class="sy-badge">
-  <img src="/plugin-unity.svg" alt="" width="56" height="56" />
-  <p>The native C# runtime. No web view, no JavaScript, no IPC. It loads a <code>.storyletsc</code> bundle and deals from it directly, held to the same <a href="/compatibility/">shared test suite</a> as every other engine.</p>
-</div>
+<p><img class="sy-engine" src="/plugin-unity.svg" alt="" width="48" height="48" />The native C# runtime. No web view, no JavaScript, no IPC. It loads a <code>.storyletsc</code> bundle and deals from it directly, held to the same <a href="/compatibility/">shared test suite</a> as every other engine.</p>
 
 > Needs Unity 2021.3 or later, and `com.unity.nuget.newtonsoft-json` (MIT), which the
 > package declares as a dependency. Some C# is expected, because this is the game-developer side.

@@ -2,7 +2,7 @@
 title: Why Storylet Studio
 description: Decide whether Storylet Studio fits your game, what it gives you over rolling your own, and how it sits beside Ink, Yarn Spinner, and Patter.
 sidebar:
-  label: Why Storylet Studio (and how it compares)
+  label: Why Storylet Studio
 ---
 
 This page is for the person deciding whether to bring Storylet Studio to their team. It says

@@ -51,7 +51,7 @@ export default defineConfig({
           tag: "link",
           attrs: {
             rel: "stylesheet",
-            href: "https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap",
+            href: "https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap",
           },
         },
         // Favicon fallbacks beside the SVG above: Safari doesn't do SVG favicons at
@@ -67,24 +67,15 @@ export default defineConfig({
         { tag: "meta", attrs: { name: "twitter:image", content: "https://storylet.studio/social-card.png" } },
       ],
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/storylet-studio/storylets" }],
-      // Audience-routed: everyone starts at the top, then the three products get a track each
-      // (write it, ship it in your game, run the project), with the file format between them
-      // because it is the thing all three share. Setting up a project, the CLI and the
-      // reference pages sit at the end, the way the sibling Patter site orders them.
+      // The family's agreed order, shared with the Patter site: everyone starts at the top,
+      // then the editor, running the project, setting it up, the format, the runtimes, the
+      // CLI, and the reference pages. Equivalent pages are labelled "Overview" in every group.
       sidebar: [
         {
           label: "Start here",
-          // `what-are-storylets` leads, which is a departure from Patter's order
-          // (theirs opens on getting-started) and a deliberate one: everybody
-          // already knows what dialogue is, and almost nobody knows what a
-          // storylet is. A reader who does not have the idea yet is lost inside
-          // getting-started, and lost again in concepts, which is our vocabulary
-          // rather than the concept.
-          items: ["what-are-storylets", "getting-started", "download", "concepts", "why"],
-        },
-        {
-          label: "The format",
-          items: ["format/overview", "format/property-types", "format/shards", "format/bundle"],
+          // `what-are-storylets` sits where Patter's "How it fits together" page sits: it is
+          // this site's conceptual page, and it has no equivalent over there.
+          items: ["getting-started", "download", "concepts", "what-are-storylets", "why"],
         },
         {
           label: "Designing in Storyletter",
@@ -102,6 +93,18 @@ export default defineConfig({
           ],
         },
         {
+          label: "Running the project",
+          items: ["production/overview", "production/coverage-testing"],
+        },
+        {
+          label: "Setting up a project",
+          items: ["setup/overview", "setup/version-control"],
+        },
+        {
+          label: "The storylets format",
+          items: ["format/overview", "format/property-types", "format/shards", "format/bundle"],
+        },
+        {
           label: "Playing in your game",
           items: [
             "play/overview",
@@ -117,15 +120,7 @@ export default defineConfig({
             "compatibility",
           ],
         },
-        {
-          label: "Running the project",
-          items: ["production/overview", "production/coverage-testing"],
-        },
-        {
-          label: "Setting up a project",
-          items: ["setup/overview", "setup/version-control"],
-        },
-        { label: "Automation: the CLI", items: ["cli-walkthrough", "cli"] },
+        { label: "The CLI", items: ["cli", "cli-walkthrough"] },
         { label: "Reference", items: ["licensing"] },
       ],
     }),

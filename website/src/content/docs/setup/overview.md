@@ -2,7 +2,7 @@
 title: Setting up a project
 description: Set up a Storylet Studio project so designers can work in it, from the properties the story reads to how the team shares the files.
 sidebar:
-  label: Setting up a project
+  label: Overview
 ---
 
 This track is for the person who sets a project up so that designers can work in it, usually

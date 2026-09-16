@@ -2,7 +2,7 @@
 title: Compatibility & conformance
 description: One bundle schema and one shared test suite keep every runtime playing the same project identically, with the per-engine differences listed.
 sidebar:
-  label: Compatibility & conformance
+  label: Compatibility and conformance
 ---
 
 "What your designers saw is what your players get" is only worth something if it's actually

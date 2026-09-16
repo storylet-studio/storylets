@@ -2,7 +2,7 @@
 title: Running the project
 description: Find out whether your content is reachable and ready to ship, with coverage testing and the reports that turn the answer into evidence.
 sidebar:
-  label: Running the project
+  label: Overview
 ---
 
 This track is for the person who has to answer "is this content reachable, and is it ready to

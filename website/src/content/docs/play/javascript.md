@@ -5,10 +5,7 @@ sidebar:
   label: JavaScript
 ---
 
-<div class="sy-badge">
-  <img src="/plugin-javascript.svg" alt="" width="56" height="56" />
-  <p>The reference runtime, in pure TypeScript, with no DOM, no filesystem, and no engine. It runs in any browser or Node app, and every native port reproduces its results exactly.</p>
-</div>
+<p><img class="sy-engine" src="/plugin-javascript.svg" alt="" width="48" height="48" />The reference runtime, in pure TypeScript, with no DOM, no filesystem, and no engine. It runs in any browser or Node app, and every native port reproduces its results exactly.</p>
 
 ## Install
 

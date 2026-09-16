@@ -97,7 +97,8 @@
   --sl-color-bg-sidebar: #2b2040;
   --sl-color-bg-inline-code: #33264a;
 
-  --sy-cta: #d09a3c;
+  --sy-cta: #c3b4dd;
+  --sy-cta-ink: #241a33;
 }
 
 /* ------------------------------------------------------------------ */
@@ -132,7 +133,8 @@
   --sl-color-bg-sidebar: #f4f6f9; /* = Chambray --surface */
   --sl-color-bg-inline-code: #e7e0ef;  /* plum tint: inline code is accent, not ground */
 
-  --sy-cta: #c8902f;
+  --sy-cta: #36284a;
+  --sy-cta-ink: #ffffff;
 }
 
 /* Keep running prose to a comfortable measure inside the wider column; tables, figures and
@@ -160,16 +162,6 @@ h1#_top,
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-
-/* Mono eyebrow utility for section labels. */
-.sy-eyebrow {
-  font-family: var(--sl-font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  font-size: 0.75rem;
-  color: var(--sy-plum-mid);
-}
-:root[data-theme="dark"] .sy-eyebrow { color: var(--sy-plum-tint); }
 
 /* ------------------------------------------------------------------ */
 /* Asides: off the default lilac, onto the brand                       */
@@ -206,7 +198,9 @@ h1#_top,
 }
 
 /* ------------------------------------------------------------------ */
-/* Sidebar: plum active page with a beat marker, mono group labels     */
+/* Sidebar: plum active page with a beat marker; group labels are     */
+/* words in the text face, sentence case, 600, the way a group box     */
+/* heading reads on the platform. Never an overline.                   */
 /* ------------------------------------------------------------------ */
 #starlight__sidebar a[aria-current="page"] {
   background: var(--sy-plum);
@@ -226,27 +220,32 @@ h1#_top,
 }
 #starlight__sidebar .sidebar-content summary span,
 #starlight__sidebar .group-label > span {
-  font-family: var(--sl-font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.72rem;
+  font-family: var(--sl-font);
+  font-weight: 600;
+  font-size: 13px;
   color: var(--sl-color-gray-3);
 }
 
 /* ------------------------------------------------------------------ */
-/* Buttons: amber primary (the beats are the action colour), plum      */
-/* outline secondary.                                                  */
+/* Buttons: plum primary with white ink, plum outline secondary. Amber  */
+/* stays where it means something (the beat marker, a caution aside),  */
+/* and is not the call-to-action colour.                               */
 /* ------------------------------------------------------------------ */
 .sl-link-button.primary,
 a.action.primary {
   background: var(--sy-cta);
   border-color: var(--sy-cta);
-  color: #241a33;
+  color: var(--sy-cta-ink);
 }
 .sl-link-button.primary:hover,
 a.action.primary:hover {
-  background: #b07d24;
-  border-color: #b07d24;
+  background: var(--sy-plum-mid);
+  border-color: var(--sy-plum-mid);
+}
+:root[data-theme="dark"] .sl-link-button.primary:hover,
+:root[data-theme="dark"] a.action.primary:hover {
+  background: #d4c8e8;
+  border-color: #d4c8e8;
 }
 .sl-link-button.secondary,
 a.action.secondary {
@@ -260,39 +259,14 @@ a.action.secondary {
   border-color: var(--sy-plum-tint);
 }
 
-/* ------------------------------------------------------------------ */
-/* Cards: hairline plus a product-colour top border. Used on the docs  */
-/* overview pages; the grid is declared here, not in each page.        */
-/* ------------------------------------------------------------------ */
-.sy-cards {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  grid-auto-rows: 1fr; align-items: stretch; gap: 1rem; margin-top: 1.5rem;
+/* The engine icon at the top of each runtime page sits inline beside the first paragraph,
+   floated so the prose runs past it. No wrapper, no card. */
+.sl-markdown-content img.sy-engine {
+  float: left;
+  margin: 0.15rem 0.9rem 0.4rem 0;
+  border-radius: 10px;
 }
-.sy-card {
-  height: 100%; box-sizing: border-box; margin: 0;
-  background: var(--sl-color-bg-sidebar);
-  border: 1px solid var(--sl-color-gray-5);
-  border-top: 2px solid var(--sy-plum);
-  border-radius: 0.6rem;
-  padding: 1.1rem 1.25rem;
-  transition: border-color 0.15s ease, transform 0.15s ease;
-}
-.sy-card:hover { border-color: var(--sy-plum-tint); transform: translateY(-1px); }
-.sy-card h3 { margin: 0 0 0.45rem; font-size: 1.02rem; font-family: var(--sy-read); }
-.sy-card p { margin: 0; font-size: 0.9rem; color: var(--sl-color-gray-2); }
-.sy-card.is-author { border-top-color: var(--sy-plum); }
-.sy-card.is-play { border-top-color: var(--sy-amber); }
-.sy-card.is-cli { border-top-color: var(--sy-ink); }
-:root[data-theme="dark"] .sy-card.is-cli { border-top-color: var(--sl-color-gray-3); }
-:root[data-theme="dark"] .sy-card.is-author { border-top-color: var(--sy-plum-tint); }
-
-/* The engine badge row used at the top of each runtime page. */
-.sy-badge {
-  display: flex; align-items: center; gap: 0.9rem;
-  margin: 0 0 1.6rem;
-}
-.sy-badge img { border-radius: 12px; flex: 0 0 auto; }
-.sy-badge p { margin: 0; font-size: 0.95rem; color: var(--sl-color-gray-2); max-width: 34em; }
+.sl-markdown-content img.sy-engine + * { clear: none; }
 
 /* ------------------------------------------------------------------ */
 /* Inline code: pale plum chip                                         */

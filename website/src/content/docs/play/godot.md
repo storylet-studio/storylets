@@ -5,10 +5,7 @@ sidebar:
   label: Godot
 ---
 
-<div class="sy-badge">
-  <img src="/plugin-godot.svg" alt="" width="56" height="56" />
-  <p>The pure GDScript runtime. No native extension to compile, no web view. It loads a <code>.storyletsc</code> bundle and deals from it directly, held to the same <a href="/compatibility/">shared test suite</a> as every other engine.</p>
-</div>
+<p><img class="sy-engine" src="/plugin-godot.svg" alt="" width="48" height="48" />The pure GDScript runtime. No native extension to compile, no web view. It loads a <code>.storyletsc</code> bundle and deals from it directly, held to the same <a href="/compatibility/">shared test suite</a> as every other engine.</p>
 
 > Needs Godot 4.7 or newer, which is the version the addon declares and the one every
 > release is tested against. The runtime uses only plain GDScript, so it also runs headless.

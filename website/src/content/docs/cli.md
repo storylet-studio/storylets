@@ -2,7 +2,7 @@
 title: The CLI
 description: Run everything the editor does from a terminal, from init and validate through export, deal, and coverage to merge and pack.
 sidebar:
-  label: The CLI
+  label: Overview
 ---
 
 `storyletengine` is the command line. It runs the same operations the editor does, so a CI

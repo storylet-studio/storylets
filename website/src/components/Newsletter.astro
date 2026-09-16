@@ -1,7 +1,7 @@
 ---
 /* Storytools mailing-list sign-up: one quiet line of copy and an inline email field.
- * A straight copy of the Patter site's component (same list, same endpoint, same markup);
- * only the copy line and the landing palette differ. Shared by the landing page footer and
+ * The same list and endpoint as the Patter site's sign-up; only the copy line and the landing
+ * palette are this site's own. Shared by the landing page footer and
  * the Starlight docs footer (registered in astro.config.mjs via Footer.astro), so every page
  * on the site feeds the same MailerLite group as storytools.co.uk.
  *
@@ -31,10 +31,7 @@ const action = `https://assets.mailerlite.com/jsonp/${ACCOUNT_ID}/forms/${FORM_I
     never fires in practice, but if the script fails the post still works and the raw JSON reply
     lands in a new tab instead of replacing the page. */}
 <form class:list={["nl", `nl-${variant}`]} method="post" action={action} target="_blank">
-  <p class="nl-copy">
-    <strong>Tool updates by email.</strong> Emails when I add new features or new tools
-    across Storytools, including Storylet Studio.
-  </p>
+  <p class="nl-copy">Tool updates by email, when I add features or new tools across Storytools, including Storylet Studio.</p>
   <div class="nl-controls">
     <label class="nl-hidden" for={`nl-email-${variant}`}>Email address</label>
     <input
@@ -79,10 +76,6 @@ const action = `https://assets.mailerlite.com/jsonp/${ACCOUNT_ID}/forms/${FORM_I
     margin: 0;
     flex: 1 1 20rem;
     line-height: 1.5;
-  }
-  .nl-copy strong {
-    color: var(--nl-strong);
-    font-weight: 600;
   }
 
   .nl-controls {
@@ -146,7 +139,7 @@ const action = `https://assets.mailerlite.com/jsonp/${ACCOUNT_ID}/forms/${FORM_I
   /* The landing page footer is deep plum regardless of theme, so it pins its own values
      rather than following the Starlight tokens (the landing page is light-only). */
   .nl-landing {
-    --nl-text: #8878a3;
+    --nl-text: #9d8fb8;
     --nl-strong: #f3ede2;
     --nl-field-bg: #251b35;
     --nl-field-ink: #f3ede2;

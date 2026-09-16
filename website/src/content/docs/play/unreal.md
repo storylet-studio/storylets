@@ -5,10 +5,7 @@ sidebar:
   label: Unreal
 ---
 
-<div class="sy-badge">
-  <img src="/plugin-unreal.svg" alt="" width="56" height="56" />
-  <p>The native C++ runtime, wrapped in a Blueprint- and C++-friendly plugin. It loads a <code>.storyletsc</code> bundle and deals from it directly, held to the same <a href="/compatibility/">shared test suite</a> as every other engine.</p>
-</div>
+<p><img class="sy-engine" src="/plugin-unreal.svg" alt="" width="48" height="48" />The native C++ runtime, wrapped in a Blueprint- and C++-friendly plugin. It loads a <code>.storyletsc</code> bundle and deals from it directly, held to the same <a href="/compatibility/">shared test suite</a> as every other engine.</p>
 
 > Built and verified against Unreal Engine 5.7, for editor and game targets. The plugin ships
 > source-only, so your project needs a C++ toolchain even if you drive it from Blueprint.
