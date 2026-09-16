@@ -69,9 +69,10 @@ const description =
             <span class="sy-wordmark">Storylet Studio</span>
           </a>
           <nav class="sy-navlinks" aria-label="Site">
-            <a class="sy-navlink" href="#tools">The tools</a>
+            <a class="sy-navlink" href={`${base}storyletter/overview/`}>Storyletter</a>
+            <a class="sy-navlink" href={`${base}play/overview/`}>Runtimes</a>
             <a class="sy-navlink" href={`${base}why/`}>Why Storylet Studio</a>
-            <a class="sy-navlink" href="#download">Download</a>
+            <a class="sy-navlink" href={`${base}download/`}>Download</a>
             <a class="sy-navlink" href={repo}>GitHub</a>
             <a class="sy-btn sy-btn-outline" href={`${base}getting-started/`}>Get started</a>
           </nav>
@@ -88,7 +89,7 @@ const description =
               game needs to pick something, it asks the engine for a hand and gets the cards that fit the moment.</p>
             <div class="sy-actions">
               <a class="sy-btn sy-btn-primary" href={`${base}getting-started/`}>Get started</a>
-              <a class="sy-link" href="#download">Download Storyletter</a>
+              <a class="sy-link" href={`${base}download/`}>Download</a>
             </div>
             <p class="sy-note">It's free and MIT-licensed, and there's no server to run.</p>
           </div>
@@ -267,7 +268,7 @@ const description =
           </nav>
           {/* One line, no internal newlines: Astro collapses a newline between text and an
               adjacent inline element to nothing, which ran "made by" into the author link. */}
-          <p class="sy-foot-credit">Storylet Studio is <a href={`${base}licensing/`}>MIT-licensed</a> open source, made by <a href="https://ian.wildwinter.net" rel="author">Ian Thomas</a>.</p>
+          <p class="sy-foot-credit">Open source under the <a href={`${base}licensing/`}>MIT licence</a>, made by <a href="https://ian.wildwinter.net" rel="author">Ian Thomas</a>.</p>
         </div>
       </footer>
     </div>

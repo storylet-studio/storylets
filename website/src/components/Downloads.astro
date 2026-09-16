@@ -68,7 +68,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, "/"); // for the engine ic
     a ? `<a class="sy-dl-btn" href="${esc(a.browser_download_url)}">${esc(label)}</a>` : `<span class="sy-dl-soon">coming soon</span>`;
   const link = (href: string, label: string): string => `<a class="sy-dl-btn" href="${esc(href)}">${esc(label)}</a>`;
   const meta = (r: Release, ver: string): string => {
-    const date = r.published_at ? new Date(r.published_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
+    const date = r.published_at ? new Date(r.published_at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "";
     return `<p class="sy-dl-meta">Version ${esc(ver)}${date ? ", released " + esc(date) : ""}. <a href="${esc(r.html_url)}">Release notes</a>.</p>`;
   };
 
