@@ -13,7 +13,7 @@
 // (add/remove outcome, params, values) redraw the document in place.
 // ---------------------------------------------------------------------------
 
-import { iconNode, openGameIdEditor } from "@wildwinter/app-shell";
+import { iconNode, openGameIdEditor, plural } from "@wildwinter/app-shell";
 import { currentDocTab, setDocTab } from "./doc-tab-memory.js";
 import { whereModel, whereWarning } from "./where.js";
 // The DERIVED address, computed for placeholders and previews. From the model
@@ -722,7 +722,7 @@ export function documentHeading(label: string, opts: {
     const c = opts.comments;
     const bubble = el("button", {
       className: `btn ghost doc-thread${c.count > 0 ? " has" : ""}`,
-      tip: c.count > 0 ? `${c.count} open comment${c.count === 1 ? "" : "s"}` : "Comment on this",
+      tip: c.count > 0 ? `${plural(c.count, "open comment")}` : "Comment on this",
     }, iconNode("comment", 12), c.count > 0 ? String(c.count) : null);
     bubble.dataset.threadFor = c.on;
     bubble.addEventListener("click", (e) => { e.preventDefault(); c.open(bubble); });
@@ -823,7 +823,7 @@ export function derivedFooter(...lines: (string | Node | null)[]): HTMLElement {
 function fillOutcomeHeader(row: HTMLElement, o: OutcomeEdit, open: boolean, catalogue: ConditionProperty[]): void {
   row.className = `outcome-row${open ? " open" : ""}`;
   row.dataset.outcome = o.id;
-  const changes = `${o.changes.length} change${o.changes.length === 1 ? "" : "s"}`;
+  const changes = `${plural(o.changes.length, "change")}`;
   const line = el("div", { className: "outcome-row-line" },
     // The vocabulary's chevron (the Unicode small triangles stay tiny at any
     // font size); the open state rotates it.
@@ -850,7 +850,7 @@ function fillOutcomeHeader(row: HTMLElement, o: OutcomeEdit, open: boolean, cata
 function commentBubble(on: string, count: number, open: (anchor: HTMLElement) => void): HTMLElement {
   const bubble = el("button", {
     className: `btn ghost doc-thread${count > 0 ? " has" : ""}`,
-    tip: count > 0 ? `${count} open comment${count === 1 ? "" : "s"}` : "Comment on this outcome",
+    tip: count > 0 ? `${plural(count, "open comment")}` : "Comment on this outcome",
   }, iconNode("comment", 12), count > 0 ? String(count) : null);
   bubble.dataset.threadFor = on;
   bubble.addEventListener("click", (e) => { e.preventDefault(); open(bubble); });
@@ -1622,7 +1622,7 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
     const cardsN = box.decks.flatMap((d) => d.cards).filter((c) => c.tags.some((m) => m.group === detail.gameId)).length;
     const templates = box.templates.filter((t) => t.bindings.some((b) => b.startsWith(`${detail.gameId} =`))).map((t) => t.gameId);
     view.append(derivedFooter(
-      `${cardsN} card${cardsN === 1 ? "" : "s"} tagged · ${templates.length > 0 ? `bound by ${templates.join(", ")}` : "not bound by any hand template"}.`));
+      `${plural(cardsN, "card")} tagged · ${templates.length > 0 ? `bound by ${templates.join(", ")}` : "not bound by any hand template"}.`));
     centre.replaceChildren(view);
   }
   draw();

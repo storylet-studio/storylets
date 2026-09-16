@@ -21,6 +21,7 @@ const api: StudioApi = {
   createProject: (name: string) => ipcRenderer.invoke("project:create", name),
   openExample: (name: string) => ipcRenderer.invoke("example:open", name),
   closeProject: () => ipcRenderer.invoke("project:close"),
+  clearRecents: () => ipcRenderer.invoke("state:clearRecents"),
   revalidate: () => ipcRenderer.invoke("project:revalidate"),
   vcStatus: () => ipcRenderer.invoke("project:vcStatus"),
   setTheme: (theme: ThemeChoice) => ipcRenderer.invoke("state:setTheme", theme),

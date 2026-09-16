@@ -101,11 +101,6 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .tside .hcell { border: none; border-radius: 0; }
 .sidehint { padding: 14px 16px; }
 
-/* Follow: off is the resting state, so it looks like the quiet button it is
-   until somebody turns it on. */
-.followbtn { flex: none; }
-.followbtn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
-
 /* Live Link (design/live-link.md). The "A game is connected. Watch it?" banner,
    the same weight as the out-of-date bar, offering the switch. */
 .livebanner {

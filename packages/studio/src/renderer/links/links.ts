@@ -26,10 +26,12 @@ import "../src/theme.css";
 import "../src/card-open.css";
 import "./links.css";
 import "@wildwinter/app-shell/tooltip.css";
+// The shell's toast is mounted here as in every tool window (parity row 19);
+// nothing in this lens fails today, so there is no call yet, only the home.
+import "@wildwinter/app-shell/toast.css";
 import { applyTheme } from "../src/theme.js";
-import { toolWindowHead } from "../src/tool-window-head.js";
 import { el } from "../src/dom.js";
-import { initTooltips } from "@wildwinter/app-shell";
+import { initTooltips, plural, relativeTime, toolWindowHead } from "@wildwinter/app-shell";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasSurface } from "../src/canvas-surface.js";
 import { readCanvasTokens, watchCanvasTokens } from "../src/canvas-tokens.js";
@@ -268,7 +270,7 @@ function paintStrip(strip: HTMLElement, links: Explanation[] | undefined, v: Lin
   strip.replaceChildren(
     el("p", { className: "lead quiet", text: "Select a card to see why it is linked. Double-click to open it." }),
     ...(outside > 0
-      ? [el("p", { className: "caveat", text: `${outside} linked card${outside === 1 ? " sits" : "s sit"} outside the analysed set.` })]
+      ? [el("p", { className: "caveat", text: `${plural(outside, "linked card")} ${outside === 1 ? "sits" : "sit"} outside the analysed set.` })]
       : []),
     // Quiet, and only when a run would add something: the view is complete
     // without one, so this is an offer rather than a warning (the 2026-08-03
@@ -276,22 +278,12 @@ function paintStrip(strip: HTMLElement, links: Explanation[] | undefined, v: Lin
     // different claim from a fresh one.
     el("p", { className: "caveat quiet", text: v.evidence === undefined
       ? "Run a fresh coverage test to see which of these links actually happen."
-      : `Seen counts are from ${v.evidence.runs} runs, ${sinceWhen(v.evidence.at)}.` }),
+      : `Seen counts are from ${v.evidence.runs} runs, ${relativeTime(v.evidence.at)}.` }),
     ...(flagged > 0
-      ? [el("p", { className: "caveat", text: `${flagged} link${flagged === 1 ? " was" : "s were"} seen in a run but not predicted, so the analysis may be missing something.` })]
+      ? [el("p", { className: "caveat", text: `${plural(flagged, "link")} ${flagged === 1 ? "was" : "were"} seen in a run but not predicted, so the analysis may be missing something.` })]
       : []),
     ...v.notes.map((note) => el("p", { className: "caveat", text: note })),
   );
-}
-
-/** "just now" / "6 minutes ago" / "at 14:02". Coarse on purpose: the question a
- *  reader has is whether the evidence is from THIS sitting, not how many
- *  seconds ago it was. */
-function sinceWhen(iso: string): string {
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (!Number.isFinite(mins) || mins < 1) return "just now";
-  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
-  return `at ${new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function render(): void {
@@ -304,6 +296,9 @@ function render(): void {
     pinned,
     onPin: (on) => { pinned = on; void studio.setLinksPinned(on); },
     onClose: () => void studio.closeLinks(),
+    // Escape is layered here (the canvas's selection goes first; see the
+    // window listener below), so the head's own Escape stays off.
+    esc: false,
     // Walking away from the editor's selection is a state worth showing, with one
     // click back: otherwise the window looks stuck.
     trail: [walked !== undefined

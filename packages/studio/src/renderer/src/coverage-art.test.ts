@@ -3,7 +3,7 @@
 // and getting "not in the run" confused with "never dealt" would turn missing
 // evidence into an accusation.
 import { describe, expect, it } from "vitest";
-import { ageOf, cardHeat, cardHeatTip, coverageLegend, handHeat, handHeatTip, heatInk } from "./coverage-art.js";
+import { cardHeat, cardHeatTip, coverageLegend, handHeat, handHeatTip, heatInk } from "./coverage-art.js";
 import type { CoverageOverlayDto } from "../../shared/api.js";
 
 const AT = "2026-08-15T12:00:00.000Z";
@@ -94,12 +94,11 @@ describe("the legend", () => {
     expect(coverageLegend(cover(), NOW + 5 * 60000)).toBe("Coverage from 20 runs, 5 minutes ago");
   });
 
-  it("reads its ages the way a person would say them", () => {
-    expect(ageOf(AT, NOW)).toBe("just now");
-    expect(ageOf(AT, NOW + 60000)).toBe("a minute ago");
-    expect(ageOf(AT, NOW + 42 * 60000)).toBe("42 minutes ago");
-    expect(ageOf(AT, NOW + 60 * 60000)).toBe("an hour ago");
-    expect(ageOf(AT, NOW + 5 * 3600000)).toBe("5 hours ago");
-    expect(ageOf(AT, NOW + 40 * 3600000)).toBe("earlier today");
+  it("reads its ages in the family's one wording (the shell's relativeTime)", () => {
+    expect(coverageLegend(cover(), NOW + 60000)).toBe("Coverage from 20 runs, 1 minute ago");
+    expect(coverageLegend(cover(), NOW + 42 * 60000)).toBe("Coverage from 20 runs, 42 minutes ago");
+    expect(coverageLegend(cover(), NOW + 60 * 60000)).toBe("Coverage from 20 runs, an hour ago");
+    expect(coverageLegend(cover(), NOW + 5 * 3600000)).toBe("Coverage from 20 runs, 5 hours ago");
+    expect(coverageLegend(cover(), NOW + 40 * 3600000)).toBe("Coverage from 20 runs, yesterday");
   });
 });

@@ -12,10 +12,10 @@
 import "../src/theme.css";
 import "./search.css";
 import "@wildwinter/app-shell/tooltip.css";
+import "@wildwinter/app-shell/toast.css";
 import { applyTheme } from "../src/theme.js";
-import { toolWindowHead } from "../src/tool-window-head.js";
 import { el } from "../src/dom.js";
-import { confirmDialog, iconNode, initTooltips, pinButton } from "@wildwinter/app-shell";
+import { confirmDialog, debounce, iconNode, initTooltips, pinButton, plural, toast, toolWindowHead } from "@wildwinter/app-shell";
 import { searchIndex, searchMatch } from "../src/search.js";
 import type { SearchHit } from "../src/search.js";
 import type { ProjectDto, PropertyUsage, ReplaceHit, ReplaceOptions, ReviewAt, SearchMode, SearchOpen, StudioApi } from "../../shared/api.js";
@@ -88,6 +88,18 @@ function rowCount(): number {
 function choose(i: number): void {
   if (mode === "find") { const hit = hits[i]; if (hit) void studio.searchReveal(hit.selection); }
   else if (mode === "property") { const u = usages[i]; if (u) void studio.searchReveal(placeOf(u)); }
+  // Back to the field after a jump (Patterpad's manners, parity row 35): a
+  // click on a row leaves the focus on that row, and the next thing an author
+  // does is type or step, both of which the field owns.
+  inputEl?.focus();
+}
+
+/** Keep the keyboard's selection on screen: a list longer than the window
+ *  used to let the arrow keys walk the highlight off the bottom. Instant under
+ *  reduced motion, as Patterpad's is. */
+function scrollActiveIntoView(): void {
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  listEl.querySelector(".sr-row.active")?.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
 }
 
 // --- rendering ----------------------------------------------------------------
@@ -190,12 +202,12 @@ async function run(): Promise<void> {
   render();
 }
 
-let debounce: ReturnType<typeof setTimeout> | undefined;
+const runLater = debounce(() => void run(), 110);
 /** Find filters as you type; the other two ask main, so they wait a beat. */
 function runSoon(): void {
-  clearTimeout(debounce);
+  runLater.cancel();
   if (mode === "find") { void run(); return; }
-  debounce = setTimeout(() => void run(), 110);
+  runLater();
 }
 
 /** Apply the replacement: one hit, or every previewed one. A bulk replace is
@@ -206,14 +218,16 @@ async function applyReplace(only?: ReplaceHit): Promise<void> {
   if (!only) {
     const items = new Set(replaceHits.map((h) => h.id)).size;
     const ok = await confirmDialog({
-      title: `Replace ${n} occurrence${n === 1 ? "" : "s"} across ${items} item${items === 1 ? "" : "s"}?`,
+      title: `Replace ${plural(n, "occurrence")} across ${plural(items, "item")}?`,
       body: `“${query}” → “${replacement}”`,
       confirmLabel: "Replace",
     });
     if (!ok) return;
   }
   const res = await studio.replaceApply(only ? { ...replaceOpts(), onlyId: only.id, onlyField: only.field } : replaceOpts());
-  if ("error" in res) { listEl.replaceChildren(none(`Replace failed: ${res.error}`)); return; }
+  // Said twice on purpose: the list explains, the toast is the family's voice
+  // for a failure in a tool window (parity row 19).
+  if ("error" in res) { toast(`Replace failed: ${res.error}`, "error"); listEl.replaceChildren(none(`Replace failed: ${res.error}`)); return; }
   await refreshProject();   // the applied hits are gone; the preview says so
 }
 
@@ -261,6 +275,9 @@ function mount(): void {
   const head = toolWindowHead({
     pin,
     onClose: () => void studio.closeSearch(),
+    // Off: the head's Escape stands aside for a field, and this window's focus
+    // LIVES in a field. Escape closes from the query box (below), as it always has.
+    esc: false,
     lead: [modes],
   });
 
@@ -269,8 +286,8 @@ function mount(): void {
   inputEl.addEventListener("input", () => { query = inputEl.value; active = 0; runSoon(); });
   inputEl.addEventListener("keydown", (event) => {
     if (mode === "replace") return;   // its rows carry their own buttons
-    if (event.key === "ArrowDown") { active = Math.min(active + 1, rowCount() - 1); render(); event.preventDefault(); }
-    else if (event.key === "ArrowUp") { active = Math.max(active - 1, 0); render(); event.preventDefault(); }
+    if (event.key === "ArrowDown") { active = Math.min(active + 1, rowCount() - 1); render(); scrollActiveIntoView(); event.preventDefault(); }
+    else if (event.key === "ArrowUp") { active = Math.max(active - 1, 0); render(); scrollActiveIntoView(); event.preventDefault(); }
     else if (event.key === "Enter") { choose(active); event.preventDefault(); }
   });
 

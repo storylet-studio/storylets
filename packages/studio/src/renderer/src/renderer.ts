@@ -29,6 +29,10 @@ import "@wildwinter/app-shell/identity.css";
 import "@wildwinter/app-shell/notes-editor.css";
 import "@wildwinter/app-shell/comments.css";
 import "@wildwinter/app-shell/toast.css";
+import "@wildwinter/app-shell/updater.css";
+import "@wildwinter/app-shell/welcome.css";
+import "@wildwinter/app-shell/link-status.css";
+import "@wildwinter/app-shell/job.css";
 import "@wildwinter/expr-editor/styles.css";
 import { applyTheme } from "./theme.js";
 import { baseName } from "./paths.js";
@@ -58,22 +62,30 @@ import { revealRowWhenReady } from "@wildwinter/app-shell";
 import { setPlayRung } from "./play-ladder.js";
 import { setPropertyNavigator } from "./expr-panels.js";
 import { createNavHistory, historyNav, toast } from "@wildwinter/app-shell";
+// The small idioms (util.ts): one plural, one debounce, one "is the focus in a field".
+import { debounce, isEditableTarget, plural } from "@wildwinter/app-shell";
+// The updater's view is the shell's (updater-view.ts): the renderer half its
+// main-process updater cannot run without, on the family's dialog frame.
+import { showUpdaterDialog, feedUpdaterDownloadProgress } from "@wildwinter/app-shell";
+import { mountWelcome } from "@wildwinter/app-shell";
+import { mountJobProgress } from "@wildwinter/app-shell";
 import type { MountedNodeView } from "./node-view.js";
 import type { MountedMapView } from "./map-view.js";
 import type { SearchSelection } from "./search.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { openKitPicker } from "./kit-picker.js";
 import { STORYLETTER_WORDMARK } from "./wordmark.js";
-import { mountLiveLinkChip } from "./live-link.js";   // Live Link: the bottom-right connect chip
-import type { LiveLinkChip } from "./live-link.js";
+// Live Link: the bottom-right connect chip is the shell's (link-status.ts);
+// what the game sends stays the Board's business.
+import { mountLinkStatus } from "@wildwinter/app-shell";
+import type { LinkStatus, LinkStatusChip } from "@wildwinter/app-shell";
 import { canvasId, MAP_CANVAS } from "../../shared/api.js";
-import { showUpdaterDialog, feedUpdaterDownloadProgress } from "./updater-dialog.js";
 import { askLeave, askPush, askServer, settleLeave } from "./server-dialog.js";
 import type { PushOptions } from "./server-dialog.js";
 import type {
   BoxEdit, BoxKit, CardDto, CardEdit, ConditionProperty, ContractBreakDto, TagGroupEdit, MenuCommand, OpenResult, PackOffer, Problem, ProjectDto,
   RemoteDto, ShardVcDto, TemplateEdit, StudioApi, StudioState, ThemeChoice,
-  BoxDto, CommentDto, CommentMarkerDto, CoverageOverlayDto, ReviewAt, ReviewItemDto } from "../../shared/api.js";
+  BoxDto, CommentDto, CommentMarkerDto, CoverageOverlayDto, LiveLinkStatus, ReviewAt, ReviewItemDto } from "../../shared/api.js";
 
 declare global { interface Window { studio: StudioApi; } }
 const studio = window.studio;
@@ -87,7 +99,25 @@ let project: ProjectDto | undefined;
  *  this file quiet by default. */
 let remote: RemoteDto | undefined;
 /** Live Link's bottom-right chip; mounted at boot, shown while a project is open. */
-let liveLinkChip: LiveLinkChip | undefined;
+let liveLinkChip: LinkStatusChip | undefined;
+
+/** Main's Live Link status in the chip's shape: the same fields, with the
+ *  boxes the game's hello named as the tip's extra sentence. */
+function linkStatusOf(s: LiveLinkStatus): LinkStatus {
+  if (s.state !== "connected") return s;
+  return {
+    state: "connected", port: s.port, build: s.build,
+    ...(s.project !== undefined ? { project: s.project } : {}),
+    ...(s.boxes.length > 0 ? { note: `Boxes: ${s.boxes.join(", ")}.` } : {}),
+  };
+}
+
+/** Show the chip telling the truth: one hidden while the server kept running
+ *  has to come back saying so, so the status is re-read as it appears. */
+function showLiveLinkChip(): void {
+  liveLinkChip?.setVisible(true);
+  void studio.liveLinkStatus().then((s) => liveLinkChip?.apply(linkStatusOf(s)));
+}
 let problems: Problem[] = [];
 /** Which problem the bar is showing, Patterpad's one-at-a-time model. */
 let problemAt = 0;
@@ -266,11 +296,10 @@ async function setTheme(theme: ThemeChoice): Promise<void> {
 // and before this pass they were one centred column of eleven stacked things
 // with a theme picker on the end.
 //
-// Patterpad-first, read before designing: its welcome is a CARD of min(34rem)
-// centred in the space the panes would take, a title, one italic sub, two
-// dialog-opening buttons, and recents as two-line items. We take the card, the
-// geometry and the recents shape; we are wider because we have examples to lay
-// out, and we caption the three groups because we have three where it has two.
+// The drawing is the shell's `mountWelcome` since the 2026-09 review: a CARD
+// centred in the space the panes would take, a title, one sub, two
+// dialog-opening buttons, captioned groups of rows, and recents as two-line
+// items. What stays here is the words and the three shipped examples.
 //
 // Two things came OFF, both duplicates rather than losses:
 //   - the theme row: five buttons of app settings, on the first screen, and
@@ -301,59 +330,46 @@ function renderWelcome(): void {
   // (design review 2026-08, B10). For an app whose main obstacle is its
   // concepts, a finished project is the cheapest teaching surface there is. A
   // kit gives you a starting shape; an example shows you a finished one, and
-  // the concepts are learned from the finished one.
-  //
-  // Three sizes of teaching, side by side rather than stacked so they read as
-  // three choices at one glance instead of a list to work down.
+  // the concepts are learned from the finished one. Three sizes of teaching,
+  // as rows in the shell's captioned group, the size said first in each hint.
   const examples = [
-    { file: "the-hamlet.storylets", name: "The Hamlet", size: "Small",
-      hint: "Places, hands and a deck to deal. Start here." },
-    { file: "the-village.storylets", name: "The Village", size: "Full",
-      hint: "Thirteen decks, a drawn map, qualities at work." },
-    { file: "port-meridian.storylets", name: "Port Meridian", size: "With a game",
-      hint: "Five boxes driving contracts, encounters, items, codex and news." },
+    { file: "the-hamlet.storylets", name: "The Hamlet",
+      hint: "Small. Places, hands and a deck to deal. Start here." },
+    { file: "the-village.storylets", name: "The Village",
+      hint: "Full size. Thirteen decks, a drawn map, qualities at work." },
+    { file: "port-meridian.storylets", name: "Port Meridian",
+      hint: "With a game attached. Five boxes driving contracts, encounters, items, codex and news." },
   ];
-  const group = (label: string, ...body: (Node | null)[]): HTMLElement =>
-    el("section", { className: "wel-group" },
-      el("h2", { className: "wel-label", text: label }), ...body);
-
-  app.replaceChildren(el("div", { className: "welcome" }, el("div", { className: "welcome-card" },
-    el("h1", { className: "wel-title", text: "Storyletter" }),
-    el("p", { className: "wel-sub", text: "Which story beat happens next? Open a project and deal a hand." }),
-
-    group("Start",
-      el("div", { className: "wel-actions" },
-        el("button", { className: "btn primary", text: "Open a project…", onClick: () => void adopt(studio.openProjectDialog()) }),
-        el("button", { className: "btn", text: "New project…", onClick: () => openNewProject() }))),
-
+  // The screen is the shell's (welcome.ts): the card, the drag region, the
+  // actions, the captioned groups and the recents are one drawing for the
+  // family. What is ours is the words and what each click does.
+  mountWelcome(app, {
+    title: "Storyletter",
+    sub: "Which story beat happens next? Open a project and deal a hand.",
+    actions: [
+      { label: "Open a project…", primary: true, onClick: () => void adopt(studio.openProjectDialog()) },
+      { label: "New project…", onClick: () => openNewProject() },
+    ],
     // An example is never opened in place (it lives inside the installed app,
     // which is read-only and replaced by the next update), so clicking one asks
     // for a folder. Say so BEFORE the click: the folder chooser arriving
     // unannounced reads as the wrong dialog rather than the second half of Open.
-    group("Learn from a finished project",
-      el("p", { className: "wel-note", text: "Each opens as your own copy, in a folder you choose." }),
-      el("div", { className: "wel-examples" },
-        ...examples.map((x) => el("button", { className: "wel-example", onClick: () => void adopt(studio.openExample(x.file)) },
-          el("span", { className: "wel-example-size", text: x.size }),
-          el("span", { className: "wel-example-name", text: x.name }),
-          el("span", { className: "wel-example-hint", text: x.hint }))))),
-
-    state.recents.length > 0
-      // What the project CALLS itself, with the folder stem as the fallback for
-      // an entry recorded before names were stored (app-shell 0.25.0). The path
-      // stays beside it: two projects may legitimately share a name, and the
-      // folder is how you tell them apart.
-      ? group("Recent", el("div", { className: "wel-recents" },
-        ...state.recents.slice(0, 5).map((recent) => {
-          const stem = baseName(recent.path).replace(/\.storylets$/, "");
-          return el("button", { className: "wel-recent", onClick: () => void adopt(studio.openProjectPath(recent.path)) },
-            el("span", { className: "wel-recent-name", text: recent.name ?? stem }),
-            el("span", { className: "wel-recent-path", text: recent.path }));
-        })))
-      : null,
-
-    welcomeError ? el("p", { className: "error", text: welcomeError }) : null,
-  )));
+    groups: [{
+      caption: "Learn from a finished project",
+      note: "Each opens as your own copy, in a folder you choose.",
+      items: examples.map((x) => ({ name: x.name, hint: x.hint, onOpen: () => void adopt(studio.openExample(x.file)) })),
+    }],
+    // What the project CALLS itself, with the folder stem as the fallback for
+    // an entry recorded before names were stored (app-shell 0.25.0). The path
+    // stays beside it: two projects may legitimately share a name, and the
+    // folder is how you tell them apart.
+    recents: state.recents.map((recent) => ({
+      name: recent.name ?? baseName(recent.path).replace(/\.storylets$/, ""),
+      path: recent.path,
+      onOpen: () => void adopt(studio.openProjectPath(recent.path)),
+    })),
+    ...(welcomeError ? { error: welcomeError } : {}),
+  });
 }
 
 // --- navigation + selection ---------------------------------------------------
@@ -425,7 +441,7 @@ const actions: ViewActions = {
     const b = project?.boxes.find((x) => x.id === box);
     if (!b) return;
     const cards = b.decks.reduce((n, d) => n + d.cards.length, 0);
-    const what = `${b.decks.length} deck${b.decks.length === 1 ? "" : "s"}, ${cards} card${cards === 1 ? "" : "s"}, ${b.hands.length} hand${b.hands.length === 1 ? "" : "s"}`;
+    const what = `${plural(b.decks.length, "deck")}, ${plural(cards, "card")}, ${plural(b.hands.length, "hand")}`;
     void (async () => {
       const ok = await confirmDialog({
         title: `Delete "${b.title ?? b.gameId}"?`,
@@ -1299,14 +1315,11 @@ function queueStruct(run: () => Promise<OpenResult | { error: string }>): void {
 // Auto Rebuild: when on, re-export the bundle shortly after edits settle so the
 // committed .storyletsc never goes stale. Quiet (no toast); the manual Publish
 // Bundle keeps its confirmation.
-let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
+const rebuildSoon = debounce(() => {
+  void (async () => { const r = await studio.exportBundle(); if (!("error" in r)) void revalidate(); })();
+}, 600);
 function scheduleAutoRebuild(): void {
-  if (!state.autoRebuild) return;
-  if (rebuildTimer) clearTimeout(rebuildTimer);
-  rebuildTimer = setTimeout(() => {
-    rebuildTimer = undefined;
-    void (async () => { const r = await studio.exportBundle(); if (!("error" in r)) void revalidate(); })();
-  }, 600);
+  if (state.autoRebuild) rebuildSoon();
 }
 /**
  * Delete cards from the focused deck: the one path for the Delete key, the
@@ -1353,6 +1366,22 @@ async function removeCard(deckId: string, cardId: string): Promise<void> {
 // bodies refilled per render so any pane can repaint independently - e.g. a
 // save repaints nav + centre while leaving the mid-edit inspector untouched.
 const problembar = el("div", { className: "stepbar problembar" });
+/**
+ * The job strip for the blocking acts main runs as jobs (publish, pack, pull,
+ * push, merge): the wait is SAID rather than felt (parity row 20). The strip
+ * appears when main reports the work has started (so a Save dialog in front
+ * of it is not "publishing" yet) and goes when the call returns. These jobs
+ * report no count and cannot be cancelled mid-write, so the strip wears
+ * `job-plain`, which hides both: what the shell's strip wants is an
+ * indeterminate mode of its own.
+ */
+const jobStrip = mountJobProgress(el("div"), { onCancel: () => {}, units: "" });
+jobStrip.element.classList.add("job-plain");
+let jobRunning: { kind: string; label: string } | undefined;
+async function withJob<T>(kind: string, label: string, work: () => Promise<T>): Promise<T> {
+  jobRunning = { kind, label };
+  try { return await work(); } finally { jobRunning = undefined; jobStrip.end(); }
+}
 const reviewbar = el("div", { className: "stepbar reviewbar" });
 // Hidden until the walk says otherwise. Without this it is an empty strip along
 // the bottom of a project nobody is reviewing: the bar carries the problems
@@ -1740,10 +1769,7 @@ function stepReview(delta: number): void {
  */
 function mayStepAway(): boolean {
   if (document.querySelector("dialog[open]")) return false;
-  const t = document.activeElement;
-  const editing = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement
-    || (t instanceof HTMLElement && t.isContentEditable);
-  if (!editing) return true;
+  if (!isEditableTarget(document.activeElement)) return true;
   return pendingCards.size === 0 && pendingStructs.length === 0;
 }
 
@@ -1782,7 +1808,7 @@ function renderProblemChip(): void {
   else probEl.textContent = String(problems.length);
   probEl.dataset["tip"] = problems.length === 0
     ? "No problems"
-    : `${problems.length} problem${problems.length === 1 ? "" : "s"} (click to review)`;
+    : `${plural(problems.length, "problem")} (click to review)`;
   probEl.setAttribute("aria-label", probEl.dataset["tip"]);
 }
 /**
@@ -1844,14 +1870,10 @@ function renderStoryCentre(host: HTMLElement): void {
         el("p", { className: "master-sub", text: "The story's own memory. Cards read and write it as @story while a run unfolds." })));
     // Save as edits settle, the centre editors' usual rhythm. (The Settings
     // dialog saves on close because it is a dialog; this is a document.)
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const save = (): void => {
-      if (timer !== undefined) clearTimeout(timer);
-      timer = setTimeout(() => void (async () => {
-        const result = await studio.saveProjectSettings(dto);
-        if (!applied(result)) return;
-      })(), 400);
-    };
+    const save = debounce(() => void (async () => {
+      const result = await studio.saveProjectSettings(dto);
+      if (!applied(result)) return;
+    })(), 400);
     const list = el("div");
     // "Where do I see everything that reads or writes this?" - answered at
     // the property itself: a quiet uses chip per row, opening Find's property
@@ -1876,7 +1898,7 @@ function renderStoryCentre(host: HTMLElement): void {
       props.forEach((prop, i) => {
         const b = useBtns.get(prop);
         const n = found[i]?.length ?? 0;
-        if (b?.isConnected) b.textContent = `${n} use${n === 1 ? "" : "s"}`;
+        if (b?.isConnected) b.textContent = `${plural(n, "use")}`;
       });
     })();
     const foot = el("p", { className: "set-note" },
@@ -2320,7 +2342,7 @@ function renderWorkspace(): void {
   applyVc();
   // The walk's bar above the problems bar: a mode you entered outranks an
   // ambient one, and the pair keeps a stable order however they come and go.
-  app.replaceChildren(shell.root, reviewbar, problembar);
+  app.replaceChildren(shell.root, jobStrip.element, reviewbar, problembar);
   histPair?.set(history.canBack(), history.canForward());
   // A freshly created thing asks to be named: the title focused, the
   // placeholder text selected so typing replaces it. Generalised here so
@@ -2431,6 +2453,14 @@ async function closeProject(): Promise<void> {
   renderWelcome();
 }
 
+/** File ▸ Open Recent ▸ Clear Recents: the list empties in the store and the
+ *  menu (main), and on the welcome screen if that is what is showing. */
+async function clearRecents(): Promise<void> {
+  await studio.clearRecents();
+  state = await studio.getState();
+  if (!project) renderWelcome();
+}
+
 async function adopt(pending: Promise<OpenResult | { error: string } | null>): Promise<void> {
   const result = await pending;
   if (result === null) return;
@@ -2450,7 +2480,7 @@ async function adopt(pending: Promise<OpenResult | { error: string } | null>): P
   setPlayRung(result.project.play);
   problems = result.problems;
   problemAt = 0;
-  liveLinkChip?.setVisible(true);   // Live Link: the control is available once a project is open
+  showLiveLinkChip();   // Live Link: the control is available once a project is open
   state = await studio.getState();
   navExpanded = new Set(state.navExpanded ?? []);
   // A remembered walk comes back with the project, not with the app: its list is
@@ -2502,7 +2532,7 @@ function repaintReplacedProject(): void {
 }
 
 async function exportBundle(): Promise<void> {
-  const result = await studio.exportBundle();
+  const result = await withJob("bundle", "Publishing the bundle…", () => studio.exportBundle());
   if ("error" in result) { flashError(result.error); return; }
   flash(`Exported ${baseName(result.path)}`, "ok");
   void revalidate();
@@ -2513,7 +2543,7 @@ async function exportBundle(): Promise<void> {
  *  pending edits land first. */
 async function exportSpreadsheet(): Promise<void> {
   await flushSaves();
-  const result = await studio.exportXlsx();
+  const result = await withJob("spreadsheet", "Publishing the spreadsheet…", () => studio.exportXlsx());
   if (result === null) return;
   if ("error" in result) { flashError(result.error); return; }
   flash(`Published ${baseName(result.path)}`, "ok");
@@ -2524,7 +2554,7 @@ async function exportSpreadsheet(): Promise<void> {
  *  from the FILES, so pending edits land first. */
 async function exportPlayable(): Promise<void> {
   await flushSaves();
-  const result = await studio.exportHtml();
+  const result = await withJob("playable", "Publishing the playable page…", () => studio.exportHtml());
   if (result === null) return;
   if ("error" in result) { flashError(result.error); return; }
   flash(`Published ${baseName(result.path)}`, "ok");
@@ -2535,7 +2565,7 @@ async function exportPlayable(): Promise<void> {
 /** Export the project as a pack, to hand to someone with no shared VCS. */
 async function exportPack(): Promise<void> {
   await flushSaves();   // a pack is a snapshot of the FILES, so land edits first
-  const result = await studio.exportPack();
+  const result = await withJob("pack", "Packing the project…", () => studio.exportPack());
   if (result === null) return;
   if ("error" in result) { flashError(result.error); return; }
   flash(`Packed ${baseName(result.path)}`, "ok");
@@ -2571,7 +2601,7 @@ async function offerPack(picked: { path: string; address?: string }): Promise<vo
     const answered = await connect({ address: picked.address, offerForget: true });
     if (answered === "connected" || answered === "busy") return;
   }
-  await adopt(studio.openPackAt(picked.path));
+  await adopt(withJob("unpack", "Unpacking…", () => studio.openPackAt(picked.path)));
 }
 
 /** What the OS handed us, whichever of the three it is. */
@@ -2604,7 +2634,7 @@ async function connect(opts: { address?: string; offerForget?: boolean } = {}): 
 /** Take the server's latest revision into the open project. */
 async function serverPull(): Promise<void> {
   await flushSaves();
-  const done = await studio.serverPull();
+  const done = await withJob("pull", "Pulling from the server…", () => studio.serverPull());
   if (done === null) return;
   if ("error" in done) { flashError(done.error); return; }
   applyResult(done.result);
@@ -2614,13 +2644,13 @@ async function serverPull(): Promise<void> {
   // account for, and the one it left out was the contract.
   const counts = [
     `${done.merged} merged`, `${done.added} added`,
-    ...(done.replaced > 0 ? [`${done.replaced} contract${done.replaced === 1 ? "" : "s"} taken`] : []),
+    ...(done.replaced > 0 ? [`${plural(done.replaced, "contract")} taken`] : []),
   ].join(", ");
   if (done.conflicts > 0) {
     // The ERROR voice, as the returned-pack merge uses: the merge landed, but
     // walking away from unresolved conflicts thinking you were done is exactly
     // what a quiet toast would let somebody do.
-    flashError(`Pulled revision ${done.revision} (${counts}). ${done.conflicts} conflict${done.conflicts === 1 ? " needs" : "s need"} a look. See the .storyletconflict files.`);
+    flashError(`Pulled revision ${done.revision} (${counts}). ${plural(done.conflicts, "conflict")} ${done.conflicts === 1 ? "needs" : "need"} a look. See the .storyletconflict files.`);
   } else {
     flash(`Pulled revision ${done.revision} (${counts})`, "ok");
   }
@@ -2648,7 +2678,7 @@ async function serverPush(breaks: ContractBreakDto[] = []): Promise<void> {
   for (;;) {
     const answer = await askPush(asking);
     if (answer === null) return;
-    const done = await studio.serverPush(answer.note, answer.acknowledge);
+    const done = await withJob("push", "Pushing to the server…", () => studio.serverPush(answer.note, answer.acknowledge));
     if (done === null) return;
     if ("error" in done) { flashError(done.error); return; }
     applyResult(done.result);
@@ -2665,7 +2695,7 @@ async function serverPush(breaks: ContractBreakDto[] = []): Promise<void> {
       };
       continue;
     }
-    flash(`Pushed as revision ${done.revision} (${done.changed} shard${done.changed === 1 ? "" : "s"})`, "ok");
+    flash(`Pushed as revision ${done.revision} (${plural(done.changed, "shard")})`, "ok");
     return;
   }
 }
@@ -2681,7 +2711,7 @@ async function serverPush(breaks: ContractBreakDto[] = []): Promise<void> {
  */
 async function mergePack(): Promise<void> {
   await flushSaves();
-  const planned = await studio.mergePackPlan();
+  const planned = await withJob("merge", "Merging the returned pack…", () => studio.mergePackPlan());
   if (planned === null) return;                       // a picker was cancelled
   if ("error" in planned) { flashError(planned.error); return; }
   const { shards, conflicts, assets, keptAssets, provenance } = planned.summary;
@@ -2691,11 +2721,11 @@ async function mergePack(): Promise<void> {
   const counts = [
     `${merged} merged`,
     ...(added > 0 ? [`${added} added`] : []),
-    ...(assets > 0 ? [`${assets} picture${assets === 1 ? "" : "s"} added`] : []),
+    ...(assets > 0 ? [`${plural(assets, "picture")} added`] : []),
     ...(keptAssets > 0 ? [`${keptAssets} of yours kept`] : []),
   ].join(", ");
   const conflictLine = conflicts > 0
-    ? ` ${conflicts} conflict${conflicts === 1 ? "" : "s"} will keep your version, with a .storyletconflict file beside each.`
+    ? ` ${plural(conflicts, "conflict")} will keep your version, with a .storyletconflict file beside each.`
     : "";
   // The mismatch is the HEADLINE when there is one, because it is the thing most
   // likely to mean the author picked the wrong file. Cancel is the shell confirm's
@@ -2720,7 +2750,7 @@ async function mergePack(): Promise<void> {
   repaintReplacedProject();
   // A conflict is not a failure, but it is not a success either: the shard was
   // written provisionally with OURS and a sidecar sits beside it.
-  if (conflicts > 0) flashError(`Merged the returned pack (${counts}). ${conflicts} conflict${conflicts === 1 ? " needs" : "s need"} a look. See the .storyletconflict files.`);
+  if (conflicts > 0) flashError(`Merged the returned pack (${counts}). ${plural(conflicts, "conflict")} ${conflicts === 1 ? "needs" : "need"} a look. See the .storyletconflict files.`);
   else flash(`Merged the returned pack (${counts})`, "ok");
 }
 
@@ -2771,6 +2801,7 @@ function onMenu(command: MenuCommand): void {
   switch (command.cmd) {
     case "open": void adopt(studio.openProjectDialog()); break;
     case "open-recent": void adopt(studio.openProjectPath(command.path)); break;
+    case "clear-recents": void clearRecents(); break;
     case "search": if (project) void studio.openSearch(); break;
     // Find's other tabs: Edit > Replace… and Review > Find Property Usage…
     case "replace": if (project) void studio.openSearch({ mode: "replace" }); break;
@@ -2882,7 +2913,14 @@ async function boot(): Promise<void> {
   applyTheme(state.theme);
   studio.onTheme(applyTheme);
   mountShell();   // build the pane frame once, seeded from the persisted pane state
-  liveLinkChip = mountLiveLinkChip(studio);   // Live Link: hidden until a project is open
+  // Live Link: hidden until a project is open. Off or failed starts the
+  // server; anything else stops it. The chip applies whatever comes back.
+  liveLinkChip = mountLinkStatus(document.body, {
+    label: "Live link",
+    onToggle: async (current) => linkStatusOf(await (
+      current.state === "off" || current.state === "error" ? studio.liveLinkStart() : studio.liveLinkStop())),
+  });
+  studio.onLiveLinkStatus((s) => liveLinkChip?.apply(linkStatusOf(s)));
   studio.onMenu(onMenu);
   // The updater's four channels. Registered at boot, not lazily: main starts its
   // first background check 10 seconds after ready, and a prompt that arrives with
@@ -2900,6 +2938,13 @@ async function boot(): Promise<void> {
   // either turns it into the revision the push landed as or takes it down.
   studio.onLeaveSettled((opts) => settleLeave(opts));
   studio.onSearchNavigate(goTo);   // Find hits, and the `--at` jump of a running app
+  // The job strip: only the job this window is waiting on, so a quiet
+  // auto-rebuild (the same bundle job, unasked) never raises it.
+  studio.onJobProgress((p) => {
+    if (jobRunning === undefined || p.kind !== jobRunning.kind) return;
+    if (!jobStrip.visible) jobStrip.begin(jobRunning.label);
+    jobStrip.update(p.done, p.total, p.elapsedMs);
+  });
   // Find's Replace tab: main asks for pending edits on disk before it rewrites,
   // and says when it has, so the open document shows the new text.
   studio.onEditorFlush(() => void (async () => { await flushSaves(); await studio.editorFlushed(); })());
@@ -2923,8 +2968,7 @@ async function boot(): Promise<void> {
     // Both are OS-standard text keys, and the sibling app is keyboard-first by
     // charter, so an app in this family breaking one breaks the promise that a
     // hand trained on the other works here (design review 2026-08, A1).
-    const t = event.target as HTMLElement | null;
-    const editable = !!t && (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || t.isContentEditable);
+    const editable = isEditableTarget(event.target);
     // Up a level: Cmd+Up as before, plus the platform's own back gesture
     // (Cmd+[ and Cmd+Left), because that is what a hand trained on a browser or
     // the Finder reaches for. Never while a field has the cursor: the field's
@@ -2942,7 +2986,7 @@ async function boot(): Promise<void> {
     if (!project || mod) return;
     // Esc first blurs a field; from the card editor it returns to the deck.
     if (event.key === "Escape") {
-      if (editable) { t.blur(); return; }
+      if (editable) { (event.target as HTMLElement).blur(); return; }
       if (inspected?.kind === "card" && focus?.kind === "deck") {
         event.preventDefault();
         selectCards([inspected.card]);

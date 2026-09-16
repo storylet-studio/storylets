@@ -15,8 +15,8 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createAppStore } from "@wildwinter/app-shell/app-store";
-import type { AppStore } from "@wildwinter/app-shell/app-store";
+import { createAppStore, resetWindows, windowSlice } from "@wildwinter/app-shell/app-store";
+import type { AppStore, WindowSlice } from "@wildwinter/app-shell/app-store";
 import type { LastPlace, PaneState, StudioState, ThemeChoice, ViewMode, WindowBounds } from "../shared/api.js";
 
 /** The settings that are OURS rather than the family's: everything the shell
@@ -225,13 +225,18 @@ export class StudioStore {
   /**
    * The flat shape the renderer has always been sent.
    *
-   * The pins read `?? true` rather than being stored eagerly: a helper window
-   * floats over the editor until somebody says otherwise, and a default that
-   * lives in the reader cannot drift from a default that lives in the file.
+   * The pins default to true in the shell's slice rather than being stored
+   * eagerly: a helper window floats over the editor until somebody says
+   * otherwise, and a default that lives in the reader cannot drift from a
+   * default that lives in the file.
    */
   get(): StudioState {
     const s = this.store.get();
-    const windowBounds = (key: string): WindowBounds | undefined => s.windows[key]?.bounds;
+    const win = (key: string): WindowSlice => this.window(key);
+    const bounds = (key: string, as: string): Record<string, WindowBounds> => {
+      const b = win(key).bounds();
+      return b !== undefined ? { [as]: b } : {};
+    };
     // The renderer's flat shape keeps its `boardView` field: computed for the
     // CURRENT project, "map" when it never chose (the Board falls back to List
     // when there is no map to show). The keyed record stays main-side.
@@ -259,14 +264,14 @@ export class StudioStore {
       // renderer has always been sent.
       ...((): { lastPlace?: LastPlace } => { const place = this.store.placeOf(); return place !== undefined ? { lastPlace: place } : {}; })(),
       ...(s.identity !== undefined ? { identity: s.identity } : {}),
-      boardPinned: s.windows[BOARD]?.pinned ?? true,
-      searchPinned: s.windows[SEARCH]?.pinned ?? true,
-      linksPinned: s.windows[LINKS]?.pinned ?? true,
-      coveragePinned: s.windows[COVERAGE]?.pinned ?? true,
-      ...(windowBounds(BOARD) !== undefined ? { boardBounds: windowBounds(BOARD) } : {}),
-      ...(windowBounds(SEARCH) !== undefined ? { searchBounds: windowBounds(SEARCH) } : {}),
-      ...(windowBounds(LINKS) !== undefined ? { linksBounds: windowBounds(LINKS) } : {}),
-      ...(windowBounds(COVERAGE) !== undefined ? { coverageBounds: windowBounds(COVERAGE) } : {}),
+      boardPinned: win(BOARD).pinned(),
+      searchPinned: win(SEARCH).pinned(),
+      linksPinned: win(LINKS).pinned(),
+      coveragePinned: win(COVERAGE).pinned(),
+      ...bounds(BOARD, "boardBounds"),
+      ...bounds(SEARCH, "searchBounds"),
+      ...bounds(LINKS, "linksBounds"),
+      ...bounds(COVERAGE, "coverageBounds"),
     };
   }
 
@@ -382,19 +387,14 @@ export class StudioStore {
     this.store.patchApp({ servers });
   }
 
-  setBoardPinned(on: boolean): void { this.store.setWindow(BOARD, { pinned: on }); }
-  setSearchPinned(on: boolean): void { this.store.setWindow(SEARCH, { pinned: on }); }
-  setLinksPinned(on: boolean): void { this.store.setWindow(LINKS, { pinned: on }); }
-  setCoveragePinned(on: boolean): void { this.store.setWindow(COVERAGE, { pinned: on }); }
-  setBoardBounds(bounds: WindowBounds): void { this.store.setWindow(BOARD, { bounds }); }
-  setSearchBounds(bounds: WindowBounds): void { this.store.setWindow(SEARCH, { bounds }); }
-  setLinksBounds(bounds: WindowBounds): void { this.store.setWindow(LINKS, { bounds }); }
-  setCoverageBounds(bounds: WindowBounds): void { this.store.setWindow(COVERAGE, { bounds }); }
+  /** One helper window's slice of the record, in the shape a tool-window row
+   *  reads (bounds / remember / pinned / setPinned): the shell's `windowSlice`,
+   *  which replaced the eight named setters this class used to flatten it into. */
+  window(key: string): WindowSlice { return windowSlice(this.store, key); }
 
   /** Reset View's window half: forget every remembered rectangle so a window
    *  lost off a disconnected display comes back centred at its default size,
-   *  and re-pin them all (the resting state a helper window starts in). */
-  resetWindows(): void {
-    for (const key of WINDOWS) this.store.setWindow(key, { bounds: undefined, pinned: true });
-  }
+   *  and re-pin them all (the resting state a helper window starts in). Named
+   *  so a window with no entry yet is reset too. */
+  resetWindows(): void { resetWindows(this.store, WINDOWS); }
 }

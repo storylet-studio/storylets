@@ -40,17 +40,17 @@ describe("the problems bar's fix slot", () => {
 
   it("is absent when the problem has no canonical repair", () => {
     const { host } = render(problem());
-    expect(host.querySelector(".problembar-fix")).toBeNull();
+    expect(host.querySelector(".stepbar-action")).toBeNull();
   });
 
   it("appears, labelled, when one is offered", () => {
     const { host } = render(problem({ fix: declare }));
-    expect(host.querySelector(".problembar-fix")?.textContent).toBe("Set up “@story.mood”");
+    expect(host.querySelector(".stepbar-action")?.textContent).toBe("Set up “@story.mood”");
   });
 
   it("hands back the problem, its fix and the button to anchor a picker on", () => {
     const { host, onFix } = render(problem({ fix: repoint }));
-    const button = host.querySelector<HTMLButtonElement>(".problembar-fix")!;
+    const button = host.querySelector<HTMLButtonElement>(".stepbar-action")!;
     button.click();
     expect(onFix).toHaveBeenCalledWith(expect.objectContaining({ fix: repoint }), repoint, button);
   });

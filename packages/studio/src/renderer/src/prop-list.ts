@@ -5,9 +5,14 @@
 // state, and a dimension value's properties (rules 6 of
 // design/studio-editing-structure.md).
 //
-// Type-driven defaults (boolean / enum pickers, not free text), enum/flags
-// values as tag chips, reorder, and a duplicate-name guard. Built on the
-// shared shell's list core so it matches Patterpad's settings lists.
+// The list itself is the shell's since the 2026-09 review (property-list.ts:
+// type-driven defaults, values as tag chips, a quality's stages in order,
+// reorder, add-then-focus, the duplicate and illegal-name gates), so it is the
+// same list Patterpad's settings draw. What stays here is what the shell must
+// not know: this DTO stores the default as the string the field showed ("" for
+// none, the shell's `typed: false`), and the three switches a declaration can
+// carry in this app (Read-only, Shared, Durable) plus the Story page's "uses"
+// affordance, which arrive through `extraLine` / `extraDetails`.
 //
 // The dialog host passes no onChange (it saves whole on Save and reads
 // firstInvalid for the gate); centre editors pass onChange to feed the
@@ -15,56 +20,19 @@
 // ---------------------------------------------------------------------------
 
 import { el } from "./dom.js";
-import { bindPropertyName, dupGuard, expandableRow, firstIllegalPropertyName, focusNewRow, iconBtn,
-  labelled, moveItem, PROPERTY_NAME_HINT, stageChips, tagChips } from "@wildwinter/app-shell";
-import type { SettingsSectionHandle } from "@wildwinter/app-shell";
+import { defaultControl, labelled, mountPropertyList as mountShellPropertyList } from "@wildwinter/app-shell";
+import type { PropertyListHandle } from "@wildwinter/app-shell";
 import type { PropertyDeclDto } from "../../shared/api.js";
 import { shows } from "./play-ladder.js";
 
-export const PROP_TYPES = ["string", "number", "boolean", "enum", "flags", "quality"];
-
-/** A type-driven default control for one declaration (string/number/boolean/
- *  enum; flags hold a set, so no single default). */
 /** The type-appropriate control for a property's VALUE: a stage picker for a
- *  quality, the value list for an enum, a checkbox-ish select for a boolean, a
+ *  quality, the value list for an enum, a true / false picker for a boolean, a
  *  number or text field otherwise. Exported because a tag's own starting value
  *  wants exactly the same control as its group declaration's default
- *  (design/hand-typing.md step B) and there should be one of these, not two. */
+ *  (design/hand-typing.md step B) and there should be one of these, not two.
+ *  It is the shell's `defaultControl`, in this DTO's string encoding. */
 export function valueControl(p: PropertyDeclDto, onChange?: () => void): HTMLElement {
   return defaultControl(p, onChange);
-}
-
-function defaultControl(p: PropertyDeclDto, onChange?: () => void): HTMLElement {
-  if (p.type === "boolean") {
-    const sel = el("select");
-    for (const [v, lbl] of [["", "(unset)"], ["true", "true"], ["false", "false"]] as [string, string][]) {
-      const o = el("option", { text: lbl }); o.value = v; if (p.default === v) o.selected = true; sel.append(o);
-    }
-    sel.addEventListener("change", () => { p.default = sel.value; onChange?.(); });
-    return sel;
-  }
-  if (p.type === "enum") {
-    const sel = el("select");
-    const none = el("option", { text: "(none)" }); none.value = ""; sel.append(none);
-    for (const v of p.values ?? []) { const o = el("option", { text: v }); o.value = v; if (p.default === v) o.selected = true; sel.append(o); }
-    sel.addEventListener("change", () => { p.default = sel.value; onChange?.(); });
-    return sel;
-  }
-  if (p.type === "flags") return el("span", { className: "set-dim", text: "Starts empty." });
-  if (p.type === "quality") {
-    // The default is a STAGE; blank means the first rung, which is what a
-    // quality nearly always wants (design/quality.md).
-    const sel = el("select");
-    const first = el("option", { text: "(first stage)" }); first.value = ""; sel.append(first);
-    for (const v of p.stages ?? []) { const o = el("option", { text: v }); o.value = v; if (p.default === v) o.selected = true; sel.append(o); }
-    sel.addEventListener("change", () => { p.default = sel.value; onChange?.(); });
-    return sel;
-  }
-  const input = el("input");
-  input.type = p.type === "number" ? "number" : "text";
-  input.value = p.default; input.placeholder = "Starting value";
-  input.addEventListener("input", () => { p.default = input.value; onChange?.(); });
-  return input;
 }
 
 export interface PropListOptions {
@@ -97,123 +65,71 @@ export interface PropListOptions {
   sharedByDefault?: boolean;
 }
 
+/** A labelled checkbox row for one of the declaration's flags. */
+function flagRow(label: string, tip: string, checked: boolean, onChange: (on: boolean) => void): HTMLElement {
+  const box = el("input") as HTMLInputElement;
+  box.type = "checkbox"; box.checked = checked;
+  box.addEventListener("change", () => onChange(box.checked));
+  const row = labelled(label, box);
+  row.dataset["tip"] = tip;
+  return row;
+}
+
+/** The switches this app's declarations carry, behind the row's disclosure. */
+function switches(p: PropertyDeclDto, opts: PropListOptions, changed: () => void): (HTMLElement | null)[] {
+  const details: (HTMLElement | null)[] = [];
+  if (opts.readOnlySwitch) {
+    // Checked means writable: false. Unticking DELETES the key rather than
+    // writing true, so a shard that never had the flag is not rewritten.
+    details.push(flagRow("Read-only",
+      "The story can read this value but not set it, because the game owns it. Writing to it's a validation error.",
+      p.writable === false,
+      (on) => { if (on) p.writable = false; else delete p.writable; changed(); }));
+  }
+  // The two axes (design/flows.md; design/engine-server.md 4.2), drawn only
+  // where the project's rung shows them - absent, never greyed, since the
+  // answer in a solo project is "not in this kind of project" and the Play
+  // field in Project Settings is where that is said.
+  if (opts.sharingSwitches !== false) {
+    const shareDefault = opts.sharedByDefault === true;
+    if (shows("sharing")) {
+      details.push(flagRow("Shared",
+        shareDefault
+          ? "One value for everyone playing, rather than a copy each. It's on by default for story state. Untick it for a value each playthrough keeps to itself."
+          : "One value for everyone playing, rather than a copy each. A single-player game is unaffected.",
+        p.shared ?? shareDefault,
+        (on) => { if (on === shareDefault) delete p.shared; else p.shared = on; changed(); }));
+    }
+    // A declaration that is ALREADY durable keeps its switch at every
+    // rung. Hiding must not swallow content in use, and here it would
+    // strand it: venue is the Storylet Server's rung to set, so the only
+    // way out the compiler can name is "remove the flag", and a control
+    // that is not drawn is one an author cannot use to remove it. Sharing
+    // needs no such escape: moving up a rung is a move Storyletter offers.
+    if (shows("durable") || p.durable === true) {
+      // Durable is never a scope default: absent means run-scoped everywhere.
+      details.push(flagRow("Durable",
+        "The value survives the end of a run. Shared and durable is the installation's memory. Durable on its own is what one player carries back with them.",
+        p.durable === true,
+        (on) => { if (on) p.durable = true; else delete p.durable; changed(); }));
+    }
+  }
+  return details;
+}
+
 /** Mount the declaration list into `host`. Mutates `decls` in place. */
-export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], opts: PropListOptions = {}): SettingsSectionHandle {
+export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], opts: PropListOptions = {}): PropertyListHandle {
   const changed = (): void => opts.onChange?.();
-  const guard = dupGuard();
-  const list = el("div", { className: "set-list" });
   // The noun the add button names ("+ Add property", "+ Field"), pluralised for the empty sentence.
   const noun = (opts.addLabel ?? "+ Add property").replace(/^\+\s*(Add\s+)?/i, "").toLowerCase();
   const emptyNoun = noun.endsWith("y") ? `${noun.slice(0, -1)}ies` : `${noun}s`;
-  function render(): void {
-    guard.reset();
-    list.replaceChildren();
-    if (decls.length === 0) list.append(el("p", { className: "set-note", text: `No ${emptyNoun} yet. Add one below.` }));
-    decls.forEach((p, i) => {
-      const name = el("input", { className: "set-name" });
-      name.value = p.name; name.placeholder = "Name";
-      name.title = PROPERTY_NAME_HINT;
-      bindPropertyName(name, (v) => { p.name = v; changed(); }, { hint: PROPERTY_NAME_HINT });
-      guard.track(name);
-      const type = el("select");
-      for (const t of PROP_TYPES) { const o = el("option", { text: t }); o.value = t; if (t === p.type) o.selected = true; type.append(o); }
-      type.addEventListener("change", () => {
-        p.type = type.value; p.default = "";
-        if (p.type === "enum" || p.type === "flags") p.values ??= []; else delete p.values;
-        if (p.type === "quality") p.stages ??= []; else delete p.stages;
-        render(); changed();
-      });
-      let def = defaultControl(p, changed);
-      const up = iconBtn("up", "Move up", () => { if (moveItem(decls, i, -1)) { render(); changed(); } }, i === 0);
-      const down = iconBtn("down", "Move down", () => { if (moveItem(decls, i, 1)) { render(); changed(); } }, i === decls.length - 1);
-      const del = iconBtn("close", "Remove", () => { decls.splice(i, 1); render(); changed(); }, false, true);
-      const details: HTMLElement[] = [];
-      // Every type gets a purpose: it is the pill's hover tip in the condition
-      // and outcome editors, so writing one here teaches every reader of the
-      // expression what the name means.
-      const purpose = el("input");
-      purpose.value = p.purpose ?? ""; purpose.placeholder = "What this property is for";
-      purpose.addEventListener("input", () => {
-        if (purpose.value.trim()) p.purpose = purpose.value; else delete p.purpose;
-        changed();
-      });
-      details.push(labelled("Purpose", purpose));
-      if (opts.readOnlySwitch) {
-        // Checked means writable: false. Unticking DELETES the key rather than
-        // writing true, so a shard that never had the flag is not rewritten.
-        const ro = el("input") as HTMLInputElement;
-        ro.type = "checkbox"; ro.checked = p.writable === false;
-        ro.addEventListener("change", () => { if (ro.checked) p.writable = false; else delete p.writable; changed(); });
-        const roLabel = labelled("Read-only", ro);
-        roLabel.dataset.tip = "The story can read this value but not set it, because the game owns it. Writing to it's a validation error.";
-        details.push(roLabel);
-      }
-      // The two axes (design/flows.md; design/engine-server.md 4.2), drawn only
-      // where the project's rung shows them - absent, never greyed, since the
-      // answer in a solo project is "not in this kind of project" and the Play
-      // field in Project Settings is where that is said.
-      if (opts.sharingSwitches !== false) {
-        const shareDefault = opts.sharedByDefault === true;
-        if (shows("sharing")) {
-          const sh = el("input") as HTMLInputElement;
-          sh.type = "checkbox"; sh.checked = p.shared ?? shareDefault;
-          sh.addEventListener("change", () => {
-            if (sh.checked === shareDefault) delete p.shared; else p.shared = sh.checked;
-            changed();
-          });
-          const shLabel = labelled("Shared", sh);
-          shLabel.dataset.tip = shareDefault
-            ? "One value for everyone playing, rather than a copy each. It's on by default for story state. Untick it for a value each playthrough keeps to itself."
-            : "One value for everyone playing, rather than a copy each. A single-player game is unaffected.";
-          details.push(shLabel);
-        }
-        // A declaration that is ALREADY durable keeps its switch at every
-        // rung. Hiding must not swallow content in use, and here it would
-        // strand it: venue is the Storylet Server's rung to set, so the only
-        // way out the compiler can name is "remove the flag", and a control
-        // that is not drawn is one an author cannot use to remove it. Sharing
-        // needs no such escape: moving up a rung is a move Storyletter offers.
-        if (shows("durable") || p.durable === true) {
-          // Durable is never a scope default: absent means run-scoped everywhere.
-          const du = el("input") as HTMLInputElement;
-          du.type = "checkbox"; du.checked = p.durable === true;
-          du.addEventListener("change", () => {
-            if (du.checked) p.durable = true; else delete p.durable;
-            changed();
-          });
-          const duLabel = labelled("Durable", du);
-          duLabel.dataset.tip = "The value survives the end of a run. Shared and durable is the installation's memory. Durable on its own is what one player carries back with them.";
-          details.push(duLabel);
-        }
-      }
-      if (p.type === "enum" || p.type === "flags") {
-        details.push(labelled("Values", tagChips(p as { values?: string[] }, () => {
-          const nd = defaultControl(p, changed); def.replaceWith(nd); def = nd; changed();
-        })));
-      }
-      if (p.type === "quality") {
-        // The ladder, in order: the chips ARE the meaning here, so the shell's
-        // ORDERED chip editor over `stages`, numbered, with move earlier / later
-        // on each. (A `tagChips` shim over a `values` holder kept the order but
-        // lost the controls to change it.)
-        details.push(labelled("Stages", stageChips(p as { stages?: string[] }, () => {
-          const nd = defaultControl(p, changed); def.replaceWith(nd); def = nd; changed();
-        })));
-      }
-      const extra = opts.rowExtras?.(p);
-      // `name` is stamped on the row for app-shell's revealRow to land on:
-      // "Go to definition" used to open the page and stop there, with the
-      // declaration below the fold (reported 2026-09-14).
-      list.append(expandableRow({ line: [name, type, def, ...(extra ? [extra] : []), up, down, del], details, name: p.name }));
-    });
-    guard.check();
-  }
-  render();
-  const add = el("button", { className: "settings-add", text: opts.addLabel ?? "+ Add property" });
-  add.addEventListener("click", () => { decls.push({ name: "", type: "string", default: "" }); render(); changed(); focusNewRow(list); });
-  host.append(list, add);
-  // The Save gate takes both faults: a name that clashes with another, and a name no
-  // expression could reach. The field's own rollover says which it is.
-  return { firstInvalid: () => guard.firstDuplicate() ?? firstIllegalPropertyName(host) };
+  return mountShellPropertyList(host, decls, {
+    onChange: changed,
+    ...(opts.addLabel !== undefined ? { addLabel: opts.addLabel } : {}),
+    emptyText: `No ${emptyNoun} yet. Add one below.`,
+    // A new row starts as text, with the DTO's blank default already there.
+    newDecl: () => ({ name: "", type: "string", default: "" }),
+    extraLine: (decl) => [opts.rowExtras?.(decl) ?? null],
+    extraDetails: (decl) => switches(decl, opts, changed),
+  });
 }
-

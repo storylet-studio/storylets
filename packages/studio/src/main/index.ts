@@ -11,8 +11,9 @@ import { readFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { hostname } from "node:os";
 import { currentUserAsync, writeBinaryFile, writeTextFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
-import { openToolWindow, pinToolWindow, rescueToolWindow, savedWindowRect } from "@wildwinter/app-shell/tool-window";
-import type { ToolWindowBounds } from "@wildwinter/app-shell/tool-window";
+import { defineToolWindows, pinToolWindow } from "@wildwinter/app-shell/tool-window";
+import type { ToolWindows } from "@wildwinter/app-shell/tool-window";
+import { plural } from "@wildwinter/app-shell/util";
 import { StudioStore } from "./store.js";
 import type { SecretCodec } from "./store.js";
 import { refreshMenu } from "./menu.js";
@@ -115,10 +116,11 @@ function osSecret(): SecretCodec {
   };
 }
 
-let tableWindow: BrowserWindow | undefined;
-let coverageWindow: BrowserWindow | undefined;
-let searchWindow: BrowserWindow | undefined;
-let linksWindow: BrowserWindow | undefined;
+/** The four tool windows, as rows of the shell's table (defineToolWindows).
+ *  Built at whenReady, once the store exists to read their remembered bounds
+ *  from; read through `windows.get(name)` rather than held by name. */
+type ToolName = "board" | "find" | "links" | "coverage";
+let windows: ToolWindows<ToolName>;
 let store: StudioStore;
 /** The last coverage report of this session, so the window reopens showing it. */
 let lastCoverage: CoverageReport | undefined;
@@ -164,6 +166,27 @@ const jobs = createJobHost({
 });
 
 type CoverageRunOpts = { runs?: number; maxTurns?: number; seed?: number };
+
+/**
+ * Run one of the blocking acts (publish, pack, unpack, pull, push, merge) as a
+ * job of the same kit, so the window that asked can show its strip and the
+ * editor keeps painting (parity row 20: nothing waits on the hot path without
+ * saying so). The ops layer reports no progress for these, so the bar is
+ * indeterminate: one step at the start, one at the end. Not cancellable
+ * mid-write; a job cancelled from the strip still returns what it wrote, so
+ * the author is never told a file does not exist when it does.
+ */
+async function runJob<T>(kind: string, work: () => Promise<T>): Promise<T | { error: string }> {
+  const outcome = await jobs.start(kind, async (ctx) => {
+    await ctx.step(0, 0);
+    const value = await work();
+    await ctx.step(1, 1);
+    return value;
+  });
+  if ("error" in outcome) return { error: outcome.error };
+  if ("cancelled" in outcome) return outcome.value !== undefined ? outcome.value : { error: "cancelled" };
+  return outcome.value;
+}
 
 /** One coverage sweep as a cancellable job. A cancelled sweep still yields the
  *  runs it managed: a partial answer beats none, and the report says how many
@@ -245,9 +268,9 @@ function ensureLiveLink(): LiveLinkServer {
   if (!liveLink) {
     liveLink = createLiveLinkServer({
       currentBuildHash: () => (session ? currentProjectHash(session) : null),
-      onFrame: (frame) => { if (tableWindow && !tableWindow.isDestroyed()) tableWindow.webContents.send("liveLink:frame", frame); },
+      onFrame: (frame) => { windows.get("board")?.webContents.send("liveLink:frame", frame); },
       onStatus: (status) => {
-        for (const w of [window, tableWindow]) if (w && !w.isDestroyed()) w.webContents.send("liveLink:status", status);
+        for (const w of [window, windows.get("board")]) if (w && !w.isDestroyed()) w.webContents.send("liveLink:status", status);
         menu();   // keep the Play > Live Link tick in step
       },
     });
@@ -582,13 +605,14 @@ function sweepOrphanAssets(ending: ProjectSession | undefined): void {
     try { rmSync(path); } catch { /* gone already, or read-only: not worth a word */ }
   }
   if (orphans.length > 0) {
-    console.log(`swept ${orphans.length} unused asset${orphans.length === 1 ? "" : "s"}`);
+    console.log(`swept ${plural(orphans.length, "unused asset")}`);
   }
 }
 
 /**
- * Opening a project: the shell's sequence, with our four windows registered as
- * satellites so none of them can be forgotten.
+ * Opening a project: the shell's sequence. The four tool windows register
+ * themselves as satellites when their table is built (defineToolWindows), so
+ * none of them can be forgotten.
  *
  * The shell (0.14.0) owns the order - open, forget on failure, close the
  * outgoing one, record the root, invalidate the satellites, rebuild the menu -
@@ -628,16 +652,6 @@ const projects = createProjectSession<ProjectSession, OpenResult>({
   // guard against the WRONG project after a switch).
   close: (ending) => { sweepOrphanAssets(ending); pendingMerge = undefined; searchSeed = undefined; },
   refreshMenu: () => menu(),
-  satellites: [
-    // A cached report describes the project that produced it; a new project
-    // underneath the Coverage window makes it a lie.
-    { window: () => coverageWindow, channel: PROJECT_CHANGED, clear: () => { lastCoverage = undefined; lastCoverageAt = undefined; } },
-    { window: () => linksWindow, channel: "links:focus", clear: () => { linkFocus = undefined; } },
-    { window: () => searchWindow, channel: PROJECT_CHANGED },
-    // The Table is the runtime's board: it holds a running simulation of the
-    // project that was open when it started.
-    { window: () => tableWindow, channel: PROJECT_CHANGED },
-  ],
 });
 
 /** A mirror of `projects.current()`, refreshed at the one moment it can change.
@@ -729,6 +743,13 @@ function notEmpty(dir: string): string | undefined {
 
 /** The other half of landing a pack, once the folder is settled. */
 async function landPackAt(
+  target: string, bytes: Buffer, remote: RemoteRecord | undefined,
+): Promise<OpenResult | { error: string } | null> {
+  return runJob("unpack", async () => landPackNow(target, bytes, remote));
+}
+
+/** The unpack itself, as the job above runs it. */
+async function landPackNow(
   target: string, bytes: Buffer, remote: RemoteRecord | undefined,
 ): Promise<OpenResult | { error: string } | null> {
   try {
@@ -1146,14 +1167,19 @@ function wireIpc(): void {
   // while keeping recents); the tool windows then close outright, because a
   // Board or a Find over no project is not a stale view, it is a view of
   // nothing.
+  // Clear Recents: every entry forgotten through the store's own forget, so a
+  // per-project memory keyed on the path (the Board's view choice) goes with it.
+  ipcMain.handle("state:clearRecents", (): void => {
+    for (const r of store.get().recents) store.forgetProject(r.path);
+    menu();
+  });
+
   ipcMain.handle("project:close", async (): Promise<boolean> => {
     if (!(await mayLeaveProject("close"))) return false;
     projects.closeCurrent();
     session = undefined;
     dropShardCaches();
-    for (const w of [searchWindow, linksWindow, coverageWindow, tableWindow]) {
-      if (w && !w.isDestroyed()) w.close();
-    }
+    for (const w of windows.all()) w.close();
     // Live Link is a project facility: with no project there is nothing to
     // serve, so the server stops (a project SWITCH deliberately keeps it - the
     // running game follows the editor across builds via the re-hello). The
@@ -1185,7 +1211,9 @@ function wireIpc(): void {
     // Every open window, not just the one that asked. A tool window read the
     // theme once at boot and then kept it, so switching palette left the Find,
     // Links, Board and Coverage windows in the old one beside a re-themed editor.
-    for (const w of [window, searchWindow, linksWindow, coverageWindow, tableWindow]) {
+    // Over the TABLE, not a hand-kept list: a fifth tool window is themed the
+    // day it is added (ui-review-2026-09, finding 17).
+    for (const w of [window, ...windows.all()]) {
       if (w && !w.isDestroyed()) w.webContents.send("state:theme", theme);
     }
   });
@@ -1279,10 +1307,10 @@ function wireIpc(): void {
   ipcMain.handle("edit:undo", (): OpenResult | null => (session ? undo(session) : null));
   ipcMain.handle("edit:redo", (): OpenResult | null => (session ? redo(session) : null));
 
-  ipcMain.handle("table:open", () => openTable());
+  ipcMain.handle("table:open", () => windows.open("board"));
   ipcMain.handle("board:setPin", (_e, on: boolean) => {
-    store.setBoardPinned(on);
-    pinToolWindow(tableWindow, window, on);
+    store.window("board").setPinned(on);
+    pinToolWindow(windows.get("board"), window, on);
   });
 
   // The Find window (Patterpad's detached search tool): it queries the
@@ -1290,10 +1318,10 @@ function wireIpc(): void {
   // A seeded open: the window may not exist yet, so the query waits here for
   // the new window to ask for it at boot; an open window is told directly.
   ipcMain.handle("search:open", (_event, open?: SearchOpen) => {
-    const already = searchWindow !== undefined && !searchWindow.isDestroyed();
+    const already = windows.get("find") !== undefined;
     searchSeed = open;
-    openSearch();
-    if (already && open !== undefined) searchWindow!.webContents.send("search:seed", open);
+    const find = windows.open("find");
+    if (already && open !== undefined) find.webContents.send("search:seed", open);
   });
   ipcMain.handle("search:pendingQuery", (): SearchOpen | undefined => {
     const seed = searchSeed;
@@ -1301,8 +1329,8 @@ function wireIpc(): void {
     return seed;
   });
   ipcMain.handle("search:setPin", (_e, on: boolean) => {
-    store.setSearchPinned(on);
-    pinToolWindow(searchWindow, window, on);
+    store.window("search").setPinned(on);
+    pinToolWindow(windows.get("find"), window, on);
   });
   ipcMain.handle("search:reveal", (_e, selection: ReviewAt) => {
     if (window && !window.isDestroyed()) {
@@ -1329,8 +1357,8 @@ function wireIpc(): void {
   ipcMain.handle("state:setBoardFollow", (_e, on: boolean) => store.setBoardFollow(on));
   ipcMain.handle("state:setBoardView", (_e, view: "list" | "map") => store.setBoardView(view));
   ipcMain.handle("state:setBoardBox", (_e, box: string) => store.setBoardBox(box));
-  ipcMain.handle("search:close", () => searchWindow?.close());
-  ipcMain.handle("view:resetWindows", () => rescueWindows());
+  ipcMain.handle("search:close", () => windows.get("find")?.close());
+  ipcMain.handle("view:resetWindows", () => windows.rescue());
   ipcMain.handle("table:bundle", (): { bundle: Bundle; name: string } | { error: string } =>
     (session ? compileBundle(session) : { error: "no project open" }));
   ipcMain.handle("project:hash", (): string | null => (session ? currentProjectHash(session) : null));
@@ -1350,7 +1378,7 @@ function wireIpc(): void {
   // Session saves on disk: the .storyletsave round trip. File pickers are the
   // one legitimately native seam (design-language: dialogs themed, pickers OS).
   ipcMain.handle("table:exportSave", async (_e, file: SaveFile, suggestedName: string) => {
-    const picked = await dialog.showSaveDialog(tableWindow ?? window!, {
+    const picked = await dialog.showSaveDialog(windows.get("board") ?? window!, {
       title: "Export the session state",
       defaultPath: `${suggestedName || "session"}.storyletsave`,
       filters: [{ name: "Storylets save", extensions: ["storyletsave"] }],
@@ -1367,7 +1395,7 @@ function wireIpc(): void {
     }
   });
   ipcMain.handle("table:importSave", async () => {
-    const picked = await dialog.showOpenDialog(tableWindow ?? window!, {
+    const picked = await dialog.showOpenDialog(windows.get("board") ?? window!, {
       title: "Import a session state",
       message: "Choose a .storyletsave to load into the Board.",
       buttonLabel: "Import",
@@ -1413,7 +1441,7 @@ function wireIpc(): void {
     };
   });
   ipcMain.handle("coverage:setOverlay", (_event, on: boolean) => { store.setCoverageOverlay(on); menu(); });
-  ipcMain.handle("coverage:open", () => openCoverage());
+  ipcMain.handle("coverage:open", () => windows.open("coverage"));
   // The window is a tool window: it stays open while you edit, so the last
   // report is cached here and shown again on reopen (Patterpad's coverage
   // window). Opening a different project clears it, in openAt.
@@ -1435,8 +1463,8 @@ function wireIpc(): void {
   });
   ipcMain.handle("coverage:propose", (): CoverageDriverDto[] => (session ? proposeDrivers(session) : []));
   ipcMain.handle("coverage:setPin", (_event, on: boolean) => {
-    store.setCoveragePinned(on);
-    pinToolWindow(coverageWindow, window, on);
+    store.window("coverage").setPinned(on);
+    pinToolWindow(windows.get("coverage"), window, on);
   });
   // The Coverage window's "Coverage drivers..." button: bring the editor
   // forward with the settings dialog open where the drivers are edited.
@@ -1448,14 +1476,18 @@ function wireIpc(): void {
     }
   });
 
-  ipcMain.handle("bundle:export", () => (session ? exportBundle(session) : { error: "no project open" }));
+  ipcMain.handle("bundle:export", () => {
+    const s = session;
+    return s ? runJob("bundle", async () => exportBundle(s)) : { error: "no project open" };
+  });
 
   // Publish Spreadsheet: the readable workbook through a Save dialog (Patterpad's
   // exportReport shape: the op hands back bytes, main picks the path and lands
   // them through the VC layer, so a locked target is checked out, not choked on).
   ipcMain.handle("xlsx:export", async (): Promise<{ path: string } | { error: string } | null> => {
-    if (!session) return { error: "no project open" };
-    const out = await spreadsheetExport(session);
+    const s = session;
+    if (!s) return { error: "no project open" };
+    const out = await runJob("spreadsheet", () => spreadsheetExport(s));
     if ("error" in out) return out;
     const picked = await dialog.showSaveDialog(window!, {
       title: "Publish Spreadsheet",
@@ -1474,8 +1506,9 @@ function wireIpc(): void {
   // Publish Playable HTML: one self-contained page through a Save dialog
   // (Patterpad's exportPlayableHtml shape, the spreadsheet's write path).
   ipcMain.handle("html:export", async (): Promise<{ path: string } | { error: string } | null> => {
-    if (!session) return { error: "no project open" };
-    const out = playableExport(session);
+    const s = session;
+    if (!s) return { error: "no project open" };
+    const out = await runJob("playable", async () => playableExport(s));
     if ("error" in out) return out;
     const picked = await dialog.showSaveDialog(window!, {
       title: "Publish Playable HTML",
@@ -1498,29 +1531,23 @@ function wireIpc(): void {
   // card rather than showing the old one for a frame.
   ipcMain.handle("links:open", (_event, cardId?: string) => {
     if (cardId !== undefined) linkFocus = cardId;
-    const already = linksWindow !== undefined && !linksWindow.isDestroyed();
-    openLinks();
-    if (cardId !== undefined && already) linksWindow!.webContents.send("links:focus", cardId);
+    const already = windows.get("links") !== undefined;
+    const links = windows.open("links");
+    if (cardId !== undefined && already) links.webContents.send("links:focus", cardId);
     // A lens the author has just asked for should be in front of the editor even
     // when it is not pinned.
-    if (already) linksWindow!.show();
+    if (already) links.show();
   });
-  ipcMain.handle("board:close", () => {
-    if (tableWindow && !tableWindow.isDestroyed()) tableWindow.close();
-  });
-  ipcMain.handle("coverage:close", () => {
-    if (coverageWindow && !coverageWindow.isDestroyed()) coverageWindow.close();
-  });
-  ipcMain.handle("links:close", () => {
-    if (linksWindow && !linksWindow.isDestroyed()) linksWindow.close();
-  });
+  ipcMain.handle("board:close", () => windows.get("board")?.close());
+  ipcMain.handle("coverage:close", () => windows.get("coverage")?.close());
+  ipcMain.handle("links:close", () => windows.get("links")?.close());
   ipcMain.handle("links:setPin", (_event, on: boolean) => {
-    store.setLinksPinned(on);
-    pinToolWindow(linksWindow, window, on);
+    store.window("links").setPinned(on);
+    pinToolWindow(windows.get("links"), window, on);
   });
   ipcMain.handle("links:setFocus", (_event, cardId: string | undefined) => {
     linkFocus = cardId;
-    if (linksWindow && !linksWindow.isDestroyed()) linksWindow.webContents.send("links:focus", cardId);
+    windows.get("links")?.webContents.send("links:focus", cardId);
   });
   ipcMain.handle("links:for", (_event, cardId?: string): LinksView => {
     const which = cardId ?? linkFocus;
@@ -2045,13 +2072,16 @@ function wireIpc(): void {
       filters: [{ name: "Storyletpack", extensions: ["storyletpack"] }],
     });
     if (picked.canceled || !picked.filePath) return null;
-    try {
-      const bytes = await runPack(session.loaded.dir);
-      const res = writeBinaryFile(picked.filePath, bytes);
-      return res.success ? { path: picked.filePath } : { error: res.message || res.status };
-    } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) };
-    }
+    const dir = session.loaded.dir, path = picked.filePath;
+    return runJob("pack", async () => {
+      try {
+        const bytes = await runPack(dir);
+        const res = writeBinaryFile(path, bytes);
+        return res.success ? { path } : { error: res.message || res.status };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    });
   });
 
   /**
@@ -2155,13 +2185,17 @@ function wireIpc(): void {
     menu();
   });
 
-  ipcMain.handle("server:pull", (): Promise<ServerPullResult> => serverPull());
+  // Both as jobs: a pull or a push is a round trip to a server plus a merge
+  // or a pack, and the editor says so while it waits (parity row 20). The way
+  // OUT of a project pushes through serverPush directly, with the leaving
+  // dialog in front of it instead.
+  ipcMain.handle("server:pull", (): Promise<ServerPullResult> => runJob("pull", serverPull));
   ipcMain.handle("server:push", (
     _event, note?: string, acknowledge?: string[],
-  ): Promise<ServerPushResult> => serverPush({
+  ): Promise<ServerPushResult> => runJob("push", () => serverPush({
     ...(note !== undefined ? { note } : {}),
     ...(acknowledge !== undefined ? { acknowledge } : {}),
-  }));
+  })));
 
   // Whatever the OS handed us at launch (a double-clicked project or pack), if
   // anything. The renderer asks first and falls back to the last project, so
@@ -2212,8 +2246,10 @@ function wireIpc(): void {
     const base = basePick.filePaths[0];
     if (basePick.canceled || base === undefined) return null;
 
+    const dir = session.loaded.dir;
     try {
-      const merged = await runUnpackMerge(readFileSync(returned), readFileSync(base), session.loaded.dir);
+      const merged = await runJob("merge", () => runUnpackMerge(readFileSync(returned), readFileSync(base), dir));
+      if ("error" in merged) { pendingMerge = undefined; return merged; }
       pendingMerge = merged;
       const summary: PackMergeSummary = {
         shards: merged.shards.map((s) => ({ path: s.path, added: s.added, conflicts: s.result?.conflicts.length ?? 0 })),
@@ -2277,119 +2313,50 @@ const COVERAGE_DEFAULT = { width: 1080, height: 760 };
 const COVERAGE_MIN = { width: 640, height: 420 };
 
 /**
- * The four tool windows, as data.
+ * The four tool windows, as data, on the shell's table (defineToolWindows).
  *
  * They were four near-identical `openX()` functions, and the differences
  * between them were all mistakes: only the Board forwarded its console to a dev
  * terminal, and Reset View rescued two of the four because it kept its own
- * list. Both of those are structurally impossible now - a window is a row, and
- * everything that walks the windows walks the rows.
+ * list. The table made both structurally impossible, and the shell now owns the
+ * table: every row is a project-changed satellite the moment it is defined,
+ * Reset View walks the rows (store reset, restore, centre, re-pin, then tell the
+ * window), and `onOpened` runs for every window created.
  *
- * `get`/`set` close over the module variables rather than replacing them,
- * because the rest of the file reads `tableWindow` and friends by name.
+ * Frameless throughout (the shell's default): each draws its own slim drag bar
+ * (toolWindowHead), remembers its bounds through its store slice, and has a
+ * minimum size. Built once the store exists, since a row reads its remembered
+ * rect from it.
  */
-interface ToolWindowSpec {
-  /** For the dev console prefix, and any future log line. */
-  name: string;
-  title: string;
-  page: string;
-  def: { width: number; height: number };
-  min: { width: number; height: number };
-  get: () => BrowserWindow | undefined;
-  set: (w: BrowserWindow | undefined) => void;
-  bounds: () => Parameters<typeof savedWindowRect>[0];
-  remember: (b: ToolWindowBounds) => void;
-  pinned: () => boolean;
-}
-
 const LINKS_DEFAULT = { width: 900, height: 560 };
 const LINKS_MIN = { width: 520, height: 360 };
 
-const TOOL_WINDOWS: ToolWindowSpec[] = [
-  { name: "board", title: "The Board", page: "table.html",
-    def: BOARD_DEFAULT, min: BOARD_MIN,
-    get: () => tableWindow, set: (w) => { tableWindow = w; },
-    bounds: () => store.get().boardBounds, remember: (b) => store.setBoardBounds(b),
-    pinned: () => store.get().boardPinned },
-  // A small, FRAMELESS, always-on-top helper (Patterpad's search tool window):
-  // the editor stays live underneath while you step through hits.
-  { name: "find", title: "Find", page: "search.html",
-    def: SEARCH_DEFAULT, min: SEARCH_MIN,
-    get: () => searchWindow, set: (w) => { searchWindow = w; },
-    bounds: () => store.get().searchBounds, remember: (b) => store.setSearchBounds(b),
-    pinned: () => store.get().searchPinned },
-  // A lens, so it opens beside the editor and follows the selection rather
-  // than holding a place of its own.
-  { name: "links", title: "Links", page: "links.html",
-    def: LINKS_DEFAULT, min: LINKS_MIN,
-    get: () => linksWindow, set: (w) => { linksWindow = w; },
-    bounds: () => store.get().linksBounds, remember: (b) => store.setLinksBounds(b),
-    pinned: () => store.get().linksPinned },
-  { name: "coverage", title: "Coverage", page: "coverage.html",
-    def: COVERAGE_DEFAULT, min: COVERAGE_MIN,
-    get: () => coverageWindow, set: (w) => { coverageWindow = w; },
-    bounds: () => store.get().coverageBounds, remember: (b) => store.setCoverageBounds(b),
-    pinned: () => store.get().coveragePinned },
-];
-
-/** Open (or focus) one tool window. Frameless throughout: each draws its own
- *  slim drag bar, remembers its bounds, and has a minimum size, which is the
- *  convention Find set and the other three were brought onto. */
-function openToolWindowFor(spec: ToolWindowSpec): void {
-  const opened = openToolWindow(spec.get(), {
-    title: spec.title, page: spec.page, frame: false,
-    rendererDir: rendererDir(), preload: preloadPath(),
-    rect: savedWindowRect(spec.bounds(), spec.def, spec.min),
-    min: spec.min,
+function defineWindows(): ToolWindows<ToolName> {
+  return defineToolWindows<ToolName>([
+    { name: "board", title: "The Board", page: "table.html", def: BOARD_DEFAULT, min: BOARD_MIN, ...store.window("board") },
+    // A small, always-on-top helper (Patterpad's search tool window): the
+    // editor stays live underneath while you step through hits.
+    { name: "find", title: "Find", page: "search.html", def: SEARCH_DEFAULT, min: SEARCH_MIN, ...store.window("search") },
+    // A lens, so it opens beside the editor and follows the selection rather
+    // than holding a place of its own. Its project-changed nudge is the same
+    // channel its focus rides on: a new project means "look at nothing yet".
+    { name: "links", title: "Links", page: "links.html", def: LINKS_DEFAULT, min: LINKS_MIN, ...store.window("links"),
+      channel: "links:focus", clear: () => { linkFocus = undefined; } },
+    // A cached report describes the project that produced it; a new project
+    // underneath the Coverage window makes it a lie.
+    { name: "coverage", title: "Coverage", page: "coverage.html", def: COVERAGE_DEFAULT, min: COVERAGE_MIN, ...store.window("coverage"),
+      clear: () => { lastCoverage = undefined; lastCoverageAt = undefined; } },
+  ], {
+    rendererDir: join(import.meta.dirname, "../renderer"),
+    preload: join(import.meta.dirname, "../preload/index.cjs"),
     pinTo: () => window,
-    pinned: spec.pinned(),
-    remember: spec.remember,
+    session: { addSatellite: projects.addSatellite, channel: PROJECT_CHANGED },
+    resetStore: () => store.resetWindows(),
+    // EVERY tool window, not just the Board: a renderer fault is invisible to a
+    // scripted verifier otherwise, which is the whole reason watchInDev exists.
+    onOpened: watchInDev,
   });
-  spec.set(opened);
-  opened.on("closed", () => { if (spec.get() === opened) spec.set(undefined); });
-  // EVERY tool window, not just the Board: a renderer fault is invisible to a
-  // scripted verifier otherwise, which is the whole reason watchInDev exists.
-  watchInDev(opened, spec.name);
 }
-
-const byName = (name: string): ToolWindowSpec => {
-  const found = TOOL_WINDOWS.find((s) => s.name === name);
-  if (!found) throw new Error(`no tool window "${name}"`);
-  return found;
-};
-
-
-const rendererDir = (): string => join(import.meta.dirname, "../renderer");
-const preloadPath = (): string => join(import.meta.dirname, "../preload/index.cjs");
-
-/** Reset View's window half: every tool window back to floating (re-pinned),
- *  default size, centred; remembered bounds cleared - so a window lost on a
- *  now-disconnected monitor comes back. */
-function rescueWindows(): void {
-  store.resetWindows();
-  // Over the TABLE, so this cannot fall behind the window list again. It kept
-  // its own copy and rescued two of the four, leaving Links and Coverage as the
-  // only windows Reset View could not bring back from a dead monitor - which is
-  // the one thing the command exists for.
-  for (const spec of TOOL_WINDOWS) rescueToolWindow(spec.get(), spec.def);
-  // ACTUALLY pin them, then tell them. Both halves were missing, in opposite
-  // directions. `rescueToolWindow` restores, resizes, centres and raises, but it
-  // never calls setAlwaysOnTop - `pinToolWindow` is the one that does - so the
-  // store said pinned, the buttons were told pinned, and any window the author
-  // had unpinned went on sitting behind the editor. Reset View has to make the
-  // claim true before it makes it.
-  for (const spec of TOOL_WINDOWS) {
-    const w = spec.get();
-    if (!w || w.isDestroyed()) continue;
-    pinToolWindow(w, window, true);
-    w.webContents.send("state:pinned", true);
-  }
-}
-
-function openTable(): void { openToolWindowFor(byName("board")); }
-function openSearch(): void { openToolWindowFor(byName("find")); }
-function openLinks(): void { openToolWindowFor(byName("links")); }
-function openCoverage(): void { openToolWindowFor(byName("coverage")); }
 
 /**
  * In dev, put a window's console on the terminal.
@@ -2534,6 +2501,7 @@ function contentTypeFor(file: string): string {
 
 void app.whenReady().then(() => {
   store = new StudioStore(app.getPath("userData"), osSecret());
+  windows = defineWindows();
   serveAssets();
   wireIpc();
   // Live Link: every saved edit reaches a connected game. And the unpushed

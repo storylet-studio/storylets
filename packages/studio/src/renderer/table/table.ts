@@ -12,10 +12,10 @@
 import "../src/theme.css";
 import "./table.css";
 import "@wildwinter/app-shell/tooltip.css";
+import "@wildwinter/app-shell/toast.css";
 import { applyTheme } from "../src/theme.js";
-import { toolWindowHead } from "../src/tool-window-head.js";
 import { el } from "../src/dom.js";
-import { iconNode, initTooltips, staleBar } from "@wildwinter/app-shell";
+import { followButton, iconNode, initTooltips, plural, staleBar, toast, toolWindowHead } from "@wildwinter/app-shell";
 import type { IconName } from "@wildwinter/app-shell";
 import { confirmDialog } from "../src/confirm.js";
 import { colourIndex } from "../../shell/colour.js";
@@ -165,7 +165,9 @@ let liveBannerDismissed = false;
 
 async function build(): Promise<void> {
   const result = await studio.tableBundle();
-  if ("error" in result) { loadError = result.error; table = undefined; render(); return; }
+  // The Board shows the error where the table would be; the toast is the
+  // family's voice for a failure in a tool window (parity row 19).
+  if ("error" in result) { loadError = result.error; table = undefined; toast(`The Board could not build the project: ${result.error}`, "error"); render(); return; }
   loadError = "";
   name = result.name;
   // The play ladder's rung (design/engine-server.md 4.10). It comes beside the
@@ -753,7 +755,7 @@ function timeSteps(clock: { box: string; seconds?: number }): HTMLElement[] {
   const step = Math.max(1, Math.round(60 / clock.seconds));
   return [step, step * 10].map((n) => el("button", {
     className: "btn mini", text: `+${turnSpan(n, clock.seconds!)}`,
-    tip: `Advance ${clock.box} by ${n} turn${n === 1 ? "" : "s"} (clocks run forward only)`,
+    tip: `Advance ${clock.box} by ${plural(n, "turn")} (clocks run forward only)`,
     onClick: () => { table!.session.advanceTurns(clock.box, n); refreshBoard(); render(); },
   }));
 }
@@ -898,7 +900,7 @@ function snapshotPanel(): HTMLElement | null {
       el("button", { className: "btn", text: "Export…", tip: "Write the current state to a .storyletsave file", onClick: () => {
         void studio.exportSave(table!.saveFile(), name || "session").then((r) => {
           if (r === null) return;   // cancelled: the panel stays
-          if ("error" in r) { loadError = r.error; } else { snapPanel = undefined; }
+          if ("error" in r) { loadError = r.error; toast(`Export failed: ${r.error}`, "error"); } else { snapPanel = undefined; }
           render();
         });
       } }));
@@ -923,7 +925,7 @@ function snapshotPanel(): HTMLElement | null {
   list.append(el("button", { className: "btn", text: "Import…", tip: "Load a .storyletsave file (it also joins the snapshots)", onClick: () => {
     void studio.importSave().then((r) => {
       if (r === null) return;   // cancelled
-      if ("error" in r) { loadError = r.error; render(); return; }
+      if ("error" in r) { loadError = r.error; toast(`Import failed: ${r.error}`, "error"); render(); return; }
       try { table!.loadFile(r.file); } catch (e) {
         loadError = e instanceof Error ? e.message : String(e); render(); return;
       }
@@ -1136,7 +1138,7 @@ function render(): void {
       const changed = changedIn(b.gameId);
       const held = heldIn(b.gameId);
       return el("button", { className: `bnav-row${boxSel === b.gameId ? " sel" : ""}`,
-        tip: `${held} card${held === 1 ? "" : "s"} held${changed > 0 ? ` · ${changed} changed by the last action` : ""}`,
+        tip: `${plural(held, "card")} held${changed > 0 ? ` · ${changed} changed by the last action` : ""}`,
         onClick: () => pickBox(b.gameId) },
         el("span", { className: "bnav-name", text: b.title ?? b.gameId }),
         changed > 0 ? el("span", { className: "bbadge", text: String(changed) }) : null,
@@ -1175,7 +1177,7 @@ function render(): void {
   const inScope = table.hands().filter((h) => boxSel === undefined || h.box === boxSel).length;
   const hiddenCount = inScope - declared.length;
   if (active.length > 0 && hiddenCount > 0) {
-    filterBar.append(el("span", { className: "empty", text: `${hiddenCount} hand${hiddenCount === 1 ? "" : "s"} hidden.` }));
+    filterBar.append(el("span", { className: "empty", text: `${plural(hiddenCount, "hand")} hidden.` }));
   }
   const boxes = table.boxes();
   if (boxSel === undefined && boxes.length > 1) {
@@ -1303,14 +1305,13 @@ function render(): void {
       pinned,
       onPin: (on) => { pinned = on; void studio.setBoardPinned(on); },
       onClose: () => void studio.closeBoard(),
+      // Escape is LAYERED here (see boot), so the head's own Escape stays off.
+      esc: false,
       lead: [el("span", { className: "tname", text: name })],
-      trail: [el("button", {
-        className: `btn followbtn${follow ? " on" : ""}`, text: "Follow in the editor",
-        tip: follow
-          ? "Opening each card in the editor as you play it (click to stop)"
-          : "Open each card in the editor as you play it",
-        onClick: () => { follow = !follow; void studio.setBoardFollow(follow); render(); },
-      })],
+      // The shell's toggle, worded once for the family ("card" is what this
+      // editor opens as the run goes; Patterpad's is "line").
+      trail: [followButton({ on: follow, what: "card",
+        onToggle: (on) => { follow = on; void studio.setBoardFollow(on); render(); } }).el],
     }),
     // The session strip. In Live mode the game is in control, so its own
     // controls (seed, Save state, Restore, Restart) are hidden and only the

@@ -17,10 +17,10 @@ import "../src/theme.css";
 import "@wildwinter/app-shell/job.css";
 import "./coverage.css";
 import "@wildwinter/app-shell/tooltip.css";
+import "@wildwinter/app-shell/toast.css";
 import { applyTheme } from "../src/theme.js";
-import { toolWindowHead } from "../src/tool-window-head.js";
 import { el } from "../src/dom.js";
-import { initTooltips, mountJobProgress } from "@wildwinter/app-shell";
+import { initTooltips, mountJobProgress, plural, toast, toolWindowHead } from "@wildwinter/app-shell";
 import type { JobProgressView } from "@wildwinter/app-shell";
 import type { CoverageReport, SearchSelection, StudioApi } from "../../shared/api.js";
 import { turnSpan } from "@storylet-studio/model";
@@ -49,11 +49,13 @@ let progress: JobProgressView | undefined;
  *  not to the report underneath it. */
 async function sweep(start: () => Promise<{ report: CoverageReport; name?: string; cancelled?: boolean } | { error: string }>): Promise<void> {
   busy = true; error = ""; render();
-  progress?.begin(`Running ${runs} playthrough${runs === 1 ? "" : "s"}…`);
+  progress?.begin(`Running ${plural(runs, "playthrough")}…`);
   const result = await start();
   busy = false;
   progress?.end();
-  if ("error" in result) { error = result.error; report = undefined; partial = false; }
+  // The window keeps the error in view; the toast is the family's voice for a
+  // failure in a tool window (parity row 19).
+  if ("error" in result) { error = result.error; report = undefined; partial = false; toast(`Coverage failed: ${result.error}`, "error"); }
   else {
     report = result.report;
     if (result.name !== undefined) name = result.name;
@@ -79,6 +81,8 @@ function render(): void {
     pinned,
     onPin: (on) => { pinned = on; void studio.setCoveragePinned(on); },
     onClose: () => void studio.closeCoverage(),
+    // Off: Escape must not close the window under a running sweep (see mount).
+    esc: false,
     // The project is named beside the title rather than folded into it: the
     // title says which window this is, and that should not change as projects
     // open.
@@ -100,7 +104,7 @@ function render(): void {
       text: !hasProject
         ? "No project open."
         : driverCount > 0
-          ? `${driverCount} coverage driver${driverCount === 1 ? "" : "s"} feeding @world.`
+          ? `${plural(driverCount, "coverage driver")} feeding @world.`
           : "No coverage drivers. Content gated on @world will read as never dealt.",
     }),
     el("button", { className: "btn", text: "Coverage drivers…", onClick: () => void studio.openProjectSettings("world") }),
@@ -134,10 +138,11 @@ function numberInput(value: number, onChange: (n: number) => void): HTMLInputEle
   return input;
 }
 
-/** A row that opens the thing it names in the editor. */
-function revealRow(className: string, selection: SearchSelection, ...children: (HTMLElement | string | null)[]): HTMLElement {
-  const row = el("button", { className: `${className} reveal` }, ...children);
-  row.title = "Open in the editor";
+/** A row that opens the thing it names in the editor. (Not `revealRow`: that
+ *  name is the shell's settings-row export, and a local twin of it read as
+ *  the same thing.) */
+function openRow(className: string, selection: SearchSelection, ...children: (HTMLElement | string | null)[]): HTMLElement {
+  const row = el("button", { className: `${className} reveal`, tip: "Open in the editor" }, ...children);
   row.addEventListener("click", () => reveal(selection));
   return row;
 }
@@ -204,7 +209,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
       ...r.hands.map((h) => {
         const total = h.cardsDealt.length + h.cardsNeverDealt.length;
         const full = h.cardsNeverDealt.length === 0;
-        const row = revealRow(`qrow${full ? " full" : ""}`, { kind: "hand", box: h.box, hand: h.id },
+        const row = openRow(`qrow${full ? " full" : ""}`, { kind: "hand", box: h.box, hand: h.id },
           el("span", { className: "qname", text: h.gameId }),
           el("span", { className: "bar" }, el("i", { className: "fill" })),
           el("span", { className: "count", text: `${h.cardsDealt.length}/${total}` }),
@@ -219,7 +224,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
     gaps.length > 0
       ? el("section", { className: "block" },
           el("span", { className: "caption", text: `Never dealt (${gaps.length})` }),
-          ...gaps.map((c) => revealRow("gap", { kind: "card", box: c.box, deck: c.deck, card: c.id },
+          ...gaps.map((c) => openRow("gap", { kind: "card", box: c.box, deck: c.deck, card: c.id },
             el("span", { className: "gname", text: c.title ?? c.gameId }),
             c.unwrittenRefs && c.unwrittenRefs.length > 0
               ? gateRefs(c.unwrittenRefs)
@@ -240,14 +245,14 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
       ? el("section", { className: "block" },
           el("span", { className: "caption", text: `Dealt but never played (${unplayed.length})` }),
           el("p", { className: "hint", text: "These reach the board, but no outcome of theirs was ever taken. Check their outcome gates." }),
-          ...unplayed.map((c) => revealRow("gap", { kind: "card", box: c.box, deck: c.deck, card: c.id },
+          ...unplayed.map((c) => openRow("gap", { kind: "card", box: c.box, deck: c.deck, card: c.id },
             el("span", { className: "gname", text: c.title ?? c.gameId }),
             el("span", { className: "hint", text: `dealt ${c.dealt}×` }),
           )),
         )
       : null,
     dealtOnly > 0
-      ? el("p", { className: "hint", text: `${dealtOnly} card${dealtOnly === 1 ? " has" : "s have"} no outcomes. Being dealt is their whole job, so they're never counted as unplayed.` })
+      ? el("p", { className: "hint", text: `${plural(dealtOnly, "card")} ${dealtOnly === 1 ? "has" : "have"} no outcomes. Being dealt is their whole job, so they're never counted as unplayed.` })
       : null,
 
     deadOutcomes.length > 0
@@ -257,7 +262,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
             const card = cardById.get(o.card);
             const label = card ? `${card.title ?? card.gameId} · ${o.gameId}` : o.gameId;
             return card
-              ? revealRow("gap", { kind: "card", box: card.box, deck: card.deck, card: card.id },
+              ? openRow("gap", { kind: "card", box: card.box, deck: card.deck, card: card.id },
                   el("span", { className: "gname", text: label }))
               : el("div", { className: "gap" }, el("span", { className: "gname", text: label }));
           }),

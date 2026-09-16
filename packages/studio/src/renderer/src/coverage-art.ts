@@ -11,6 +11,7 @@
 // without a canvas.
 // ---------------------------------------------------------------------------
 
+import { plural, relativeTime } from "@wildwinter/app-shell";
 import type { CoverageOverlayDto } from "../../shared/api.js";
 import type { CanvasTokens } from "./canvas-tokens.js";
 
@@ -47,7 +48,7 @@ export function cardHeatTip(id: string, cover: CoverageOverlayDto | undefined): 
   const seen = cover?.cards[id];
   if (!cover) return undefined;
   if (!seen) return "Not in the last coverage run";
-  const runs = `${cover.runs} run${cover.runs === 1 ? "" : "s"}`;
+  const runs = `${plural(cover.runs, "run")}`;
   if (seen.dealt === 0) return `Never dealt in ${runs}`;
   if (seen.played === 0) return `Dealt ${seen.dealt}×, never played (${runs})`;
   return `Dealt ${seen.dealt}×, played ${seen.played}× (${runs})`;
@@ -72,7 +73,7 @@ export function handHeatTip(id: string, cover: CoverageOverlayDto | undefined): 
   if (!cover) return undefined;
   const deals = cover.hands[id];
   if (deals === undefined) return "Not in the last coverage run";
-  const runs = `${cover.runs} run${cover.runs === 1 ? "" : "s"}`;
+  const runs = `${plural(cover.runs, "run")}`;
   return deals === 0 ? `Never dealt into in ${runs}` : `Dealt into ${deals}× in ${runs}`;
 }
 
@@ -90,23 +91,11 @@ export function heatInk(heat: CardHeat, tokens: CanvasTokens): string | undefine
   return undefined;
 }
 
-/** How old the evidence is, in the words a person would use. The overlay dates
- *  itself because a canvas that looks live while showing a run from an hour ago
- *  is the one way this feature can mislead. */
-export function ageOf(at: string, now: number): string {
-  const mins = Math.floor((now - Date.parse(at)) / 60000);
-  if (!Number.isFinite(mins) || mins < 1) return "just now";
-  if (mins === 1) return "a minute ago";
-  if (mins < 60) return `${mins} minutes ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours === 1) return "an hour ago";
-  if (hours < 24) return `${hours} hours ago`;
-  return "earlier today";
-}
-
-/** The strip's line: what the overlay is showing and how old it is. */
+/** The strip's line: what the overlay is showing and how old it is. The
+ *  overlay dates itself because a canvas that looks live while showing a run
+ *  from an hour ago is the one way this feature can mislead; the wording is
+ *  the shell's `relativeTime`, the same one the Links window uses. */
 export function coverageLegend(cover: CoverageOverlayDto | undefined, now: number): string {
   if (!cover) return "No coverage run yet.";
-  const runs = `${cover.runs} run${cover.runs === 1 ? "" : "s"}`;
-  return `Coverage from ${runs}, ${ageOf(cover.at, now)}`;
+  return `Coverage from ${plural(cover.runs, "run")}, ${relativeTime(cover.at, now)}`;
 }

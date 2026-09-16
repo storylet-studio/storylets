@@ -43,7 +43,7 @@ body {
    defined; this only gives them the typography and the pointer the element
    rule used to hand them, in the same place in the cascade. */
 .nav-project, .nav-row, .nav-add, .listrow, .scard, .deck-card, .ctable-new, .doc-tab, .doc-collapsed,
-.outcome-row, .gid, .kit-card, .wel-example, .wel-recent, .chip, .probstat, .stripbtn, .stripchip, .bgchip,
+.outcome-row, .gid, .kit-card, .chip, .probstat, .stripbtn, .stripchip, .bgchip,
 .insp-add, .settings-add, .mapside-row {
   font: inherit; cursor: pointer;
 }
@@ -58,54 +58,6 @@ input, textarea, select {
   -webkit-user-select: text; user-select: text;
 }
 input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
-
-/* --- welcome ---------------------------------------------------------------- */
-/* The entrypoint (no project open): a centred CARD, as Patterpad's is, rather
-   than a full-width column - which is what made it read as a sea of text. Wider
-   than Patterpad's 34rem because the examples lay out in a row. */
-.welcome { flex: 1; min-height: 0; display: grid; place-items: center; padding: 2rem; overflow: auto; -webkit-app-region: drag; }
-.welcome button, .welcome input { -webkit-app-region: no-drag; }
-.welcome-card { width: min(48rem, 100%); }
-.wel-title { font-family: var(--font-read); font-size: 2.2rem; font-weight: 600; margin: 0 0 4px; text-align: center; }
-.wel-sub { color: var(--muted); margin: 0 0 32px; text-align: center; }
-/* One group per job (start / learn / return), captioned. The caption is what
-   makes them read as three things rather than one list. */
-.wel-group { margin-bottom: 26px; }
-.wel-label { color: var(--muted); font: 600 0.82rem/1.3 var(--font-ui); margin: 0 0 8px; }
-.wel-actions { display: flex; gap: 10px; align-items: center; }
-/* Three across, wrapping to one column when the window is too narrow to keep
-   them legible rather than squeezing them. */
-/* The consequence of a click, said before the click. Sits under the group
-   label, which already carries the 8px gap, so this one closes it up. */
-.wel-note { color: var(--muted); font-size: 0.78rem; line-height: 1.45; margin: -4px 0 8px; }
-.wel-examples { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 10px; }
-/* A real edge: these are three things you choose BETWEEN, so they have to
-   read as three objects at rest, not as text that turns out to be clickable. */
-.wel-example {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left;
-  padding: 12px 14px; height: 100%; cursor: pointer;
-  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface);
-}
-.wel-example:hover { border-color: var(--accent); background: var(--accent-soft); }
-.wel-example:hover .wel-example-name { color: var(--accent); }
-.wel-example-size { color: var(--muted); font: 600 0.72rem var(--font-ui); }
-.wel-example-name { color: var(--ink); font: 600 0.95rem var(--font-ui); }
-.wel-example-hint { color: var(--muted); font-size: 0.78rem; line-height: 1.45; }
-.wel-recents { display: flex; flex-direction: column; gap: 2px; }
-.wel-recent {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%;
-  background: none; border: 1px solid transparent; padding: 7px 10px; cursor: pointer;
-  /* A button's UA default is CENTRED text, which nothing here overrode. The
-     name never wraps so the row looked left-aligned; a long enough path does
-     wrap, and its second line sat in the middle. (`.wel-example` had already
-     set this, for the same reason.) `anywhere` because a path has no spaces to
-     break at, so without it a deep one widens the card instead of wrapping. */
-  text-align: left; overflow-wrap: anywhere;
-}
-.wel-recent:hover { background: color-mix(in oklab, var(--accent) 8%, transparent); border-color: var(--line); }
-.wel-recent-name { color: var(--ink); font: 600 0.9rem var(--font-ui); }
-.wel-recent-path { color: var(--muted); font: 0.7rem var(--font-mono); }
-.welcome .error { color: var(--danger); font-size: 0.85rem; max-width: 60ch; text-align: center; }
 
 /* --- topbar ----------------------------------------------------------------- */
 /* The pane frame (top bar, grid, toggles, resizers) is the shared shell
@@ -653,11 +605,8 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
    coloured with, both of which are this app's business and not a third app's. */
 .problembar .sev-error { color: var(--danger); }
 .problembar .sev-warning { color: var(--warn); }
-/* The quick-fix slot at the right end (Patterpad's problem-fix). An accent
-   button, because it is the one thing in that bar that ACTS rather than
-   describes. */
-.problembar-fix { flex: none; margin-left: 8px; border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.problembar-fix:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
+/* The quick-fix chip at the right end is the shell's `.stepbar-action`
+   (app-shell stepper.css). */
 /* the topbar health chip */
 .probstat { flex: none; display: inline-flex; align-items: center; justify-content: center; min-height: 18px; font-size: 0.72rem; font-variant-numeric: tabular-nums; border: 0; padding: 2px 8px; border-radius: var(--radius-pill); cursor: pointer; }
 .probstat.ok { color: var(--ok); cursor: default; }
@@ -877,51 +826,16 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 
 /* --- toast: the shell's now (@wildwinter/app-shell/toast.css) ---------------- */
 
-/* --- Live Link chip (design/live-link.md; Patterpad's .debuglink, lifted) ------
-   Bottom-right, fixed: one coloured connect icon, the copiable address beside
-   it while the server is up. Grey off, amber listening, green in sync, red on a
-   different build. */
-.livelink { position: fixed; right: 0.9rem; bottom: 0.32rem; z-index: 40; display: inline-flex; align-items: center; gap: 0.4rem; }
-.livelink[hidden] { display: none; }
-.livelink-word { font: 0.7rem var(--font-ui); color: var(--muted); user-select: none; }
+/* The Live Link chip is the shell's (@wildwinter/app-shell/link-status.css). */
+
+/* --- the job strip, plain ------------------------------------------------------
+   The publish / pack / pull / push / merge jobs report no count and cannot be
+   cancelled mid-write, so the strip says what is running and for how long,
+   and nothing it cannot honour. */
+.job-strip.job-plain .job-count, .job-strip.job-plain .job-cancel { display: none; }
 .set-uses { font: 0.72rem var(--font-mono); color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: var(--radius-pill); padding: 0.1rem 0.55rem; cursor: pointer; white-space: nowrap; }
 .set-uses:hover { color: var(--accent); border-color: var(--accent); }
-.livelink-url { font: 0.72rem var(--font-mono); color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.14rem 0.45rem; cursor: pointer; }
-.livelink-url:hover { border-color: var(--accent); color: var(--accent); }
-.livelink-url.copied { color: var(--accent); border-color: var(--accent); }
-.livelink-toggle { flex: none; width: 1.4rem; height: 1.4rem; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); cursor: pointer; transition: color var(--dur-quick) var(--ease-standard), border-color var(--dur-quick) var(--ease-standard); }
-.livelink-toggle:hover { border-color: var(--accent); }
-.livelink-toggle.listening { color: var(--warn); border-color: var(--warn); background: color-mix(in oklab, var(--warn) 12%, var(--surface)); }
-.livelink-toggle.live { color: var(--ok); border-color: var(--ok); background: color-mix(in oklab, var(--ok) 14%, var(--surface)); }
-.livelink-toggle.stale { color: var(--danger); border-color: var(--danger); background: color-mix(in oklab, var(--danger) 12%, var(--surface)); }
 
-
-/* --- The updater's download progress ------------------------------------- */
-/* The dialog itself is the shell's dialog frame (app-shell dialog.css), so it
-   inherits the themed confirm's panel, type and buttons. Only the progress row
-   is ours: a confirm has nothing to show while it waits, and an update
-   download does. */
-.updater-progress-track {
-  height: 6px;
-  margin: 0.75rem 0 0.4rem;
-  border-radius: var(--radius-pill);
-  background: var(--line);
-  overflow: hidden;
-}
-.updater-progress-bar {
-  height: 100%;
-  width: 0%;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  /* Width is set from a progress event, which can arrive many times a second;
-     the transition keeps that from reading as a flicker. */
-  transition: width var(--dur-base) linear;
-}
-.updater-progress-label {
-  font-size: 0.85rem;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;   /* the percentage must not jitter as it counts */
-}
 
 /* --- The push dialog's breaks ---------------------------------------------- */
 /* The dialog is the shell's dialog frame, like the connect one, so the panel,

@@ -27,7 +27,7 @@
 // ---------------------------------------------------------------------------
 
 import Konva from "konva";
-import { hideTip, tipAt } from "@wildwinter/app-shell";
+import { hideTip, isEditableTarget, tipAt } from "@wildwinter/app-shell";
 import { mountCanvasControls, type CanvasControls } from "./canvas-controls.js";
 import type { CanvasTokens } from "./canvas-tokens.js";
 
@@ -1184,11 +1184,9 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
   }
 
   // --- keys -------------------------------------------------------------------
-  // Guarded so nothing fires while the author is typing in a field somewhere.
-  function typing(target: EventTarget | null): boolean {
-    const t = target as HTMLElement | null;
-    return !!t && (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t.isContentEditable);
-  }
+  // Guarded so nothing fires while the author is typing in a field somewhere
+  // (the shell's one answer, which counts a <select> too).
+  const typing = (target: EventTarget | null): boolean => isEditableTarget(target);
 
   const onKeyDown = (e: KeyboardEvent): void => {
     if (typing(e.target)) return;

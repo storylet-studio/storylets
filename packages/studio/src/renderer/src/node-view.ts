@@ -13,7 +13,7 @@
 
 import Konva from "konva";
 import { el } from "./dom.js";
-import { iconNode } from "@wildwinter/app-shell";
+import { iconNode, plural } from "@wildwinter/app-shell";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface } from "./canvas-surface.js";
 import { nodeCameraKey, recallCamera, rememberCamera } from "./canvas-memory.js";
@@ -551,7 +551,7 @@ function describe(deck: DeckDto, graph: DeckGraph): Node[] {
       // yet know that a deck of independent cards is completely normal here.
       // Say the normal thing first, and only then the count.
       text: graph.outsideLinks > 0
-        ? `These cards stand on their own. ${graph.outsideLinks} outcome${graph.outsideLinks === 1 ? " leads" : "s lead"} to cards in other decks.`
+        ? `These cards stand on their own. ${plural(graph.outsideLinks, "outcome")} ${graph.outsideLinks === 1 ? "leads" : "lead"} to cards in other decks.`
         : "These cards stand on their own. None of them leads to another here.",
     }));
   } else {
@@ -559,7 +559,7 @@ function describe(deck: DeckDto, graph: DeckGraph): Node[] {
       className: "hint",
       // "Link" was the jargon: an arrow here is an OUTCOME leading somewhere, and
       // that is the word the rest of the app uses for it.
-      text: `${graph.edges.length} outcome${graph.edges.length === 1 ? "" : "s"} lead${graph.edges.length === 1 ? "s" : ""} between these cards`
+      text: `${plural(graph.edges.length, "outcome")} ${graph.edges.length === 1 ? "leads" : "lead"} between these cards`
         + (graph.outsideLinks > 0 ? `, and ${graph.outsideLinks} to cards in other decks.` : "."),
     }));
   }

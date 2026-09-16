@@ -1253,6 +1253,7 @@ export interface LiveLinkSnapshot {
 export type MenuCommand =
   | { cmd: "open" }
   | { cmd: "open-recent"; path: string }
+  | { cmd: "clear-recents" }
   | { cmd: "search" }
   // Find's other tabs: Edit > Replace… and Review > Find Property Usage…
   | { cmd: "replace" }
@@ -1311,6 +1312,9 @@ export interface StudioApi {
   /** Close the open project and return to the welcome screen. False when the
    *  author was asked about unpushed edits and said no. */
   closeProject(): Promise<boolean>;
+  /** File ▸ Open Recent ▸ Clear Recents: forget every recent project (the
+   *  menu and the welcome screen empty; nothing on disk is touched). */
+  clearRecents(): Promise<void>;
   /** Scaffold a new project (runInit) under a chosen parent dir; null = cancelled. */
   createProject(name: string): Promise<OpenResult | { error: string } | null>;
   /** Copy a shipped worked example somewhere the author owns, and open it. Null

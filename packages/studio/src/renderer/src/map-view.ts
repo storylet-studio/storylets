@@ -25,7 +25,7 @@
 // ---------------------------------------------------------------------------
 
 import { el } from "./dom.js";
-import { iconNode } from "@wildwinter/app-shell";
+import { iconNode, plural } from "@wildwinter/app-shell";
 import { colourIndex } from "../../shell/colour.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface, type DrawContext } from "./canvas-surface.js";
@@ -532,7 +532,7 @@ export function mountMapView(
           ? draft.length === 0
             ? `Click to place the first corner of ${busy.label}`
             : draft.length < 3
-              ? `${busy.label}: ${draft.length} corner${draft.length === 1 ? "" : "s"} so far`
+              ? `${busy.label}: ${plural(draft.length, "corner")} so far`
               : `Click the first corner of ${busy.label} again, or press Enter, to close it`
           : `Click where ${busy.label} sits` }),
         el("span", { className: "stripgap" }),
@@ -985,7 +985,7 @@ export function mountMapView(
 /** What the strip says with nothing selected: the state of the map, quietly. */
 function describe(map: BoxMapDto): string {
   if (map.zones.length === 0) return "No zones yet. Add one and trace its outline.";
-  const zones = `${map.zones.length} zone${map.zones.length === 1 ? "" : "s"}`;
+  const zones = `${plural(map.zones.length, "zone")}`;
   const sites = map.sites.length === 0 ? "no hands pinned" : `${map.sites.length} pinned`;
   return `${zones}, ${sites}.`;
 }

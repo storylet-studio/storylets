@@ -10,7 +10,7 @@
 // in the document itself (design review 2026-08, A17).
 // ---------------------------------------------------------------------------
 
-import { iconNode, renderStepperBar, wireReorder } from "@wildwinter/app-shell";
+import { iconNode, plural, renderStepperBar, wireReorder } from "@wildwinter/app-shell";
 import type { IconName } from "@wildwinter/app-shell";
 import { gameIdify, PLACE_GROUP } from "@storylet-studio/model";
 import { el } from "./dom.js";
@@ -781,7 +781,7 @@ function boxTemplatesBody(box: BoxDto, actions: ViewActions): HTMLElement {
     const row = el("button", { className: "listrow", onClick: () => actions.inspectTemplate(box.id, t.id) },
       el("span", { className: "listname", text: t.gameId }),
       el("span", { className: "listmeta", text: `${t.bindings.join(", ") || "pulls the whole stock"} · ${t.slots} slot${t.slots === "1" ? "" : "s"}` }),
-      el("span", { className: "listmeta", text: `${t.instances} instance${t.instances === 1 ? "" : "s"}` }));
+      el("span", { className: "listmeta", text: `${plural(t.instances, "instance")}` }));
     row.dataset["vc"] = vcKeys.hands(box.id);
     row.addEventListener("contextmenu", itemMenu(() => actions.duplicateTemplate(box.id, t.id), () => actions.deleteTemplate(box.id, t.id)));
     list.append(row);
@@ -933,7 +933,7 @@ export function renderProjectCentre(host: HTMLElement, project: ProjectDto, acti
     const cards = box.decks.reduce((n, d) => n + d.cards.length, 0);
     const row = el("button", { className: "listrow draggable", onClick: () => actions.focus({ kind: "box", box: box.id }) },
       el("span", { className: "listname listtitle", text: box.title ?? box.gameId }),
-      el("span", { className: "listmeta", text: `${box.decks.length} deck${box.decks.length === 1 ? "" : "s"} \u00b7 ${cards} card${cards === 1 ? "" : "s"} \u00b7 ${box.hands.length} hand${box.hands.length === 1 ? "" : "s"}` }));
+      el("span", { className: "listmeta", text: `${plural(box.decks.length, "deck")} \u00b7 ${plural(cards, "card")} \u00b7 ${plural(box.hands.length, "hand")}` }));
     row.dataset["vc"] = vcKeys.box(box.id);
     row.addEventListener("contextmenu", itemMenu(() => actions.duplicateBox(box.id), () => actions.deleteBox(box.id)));
     row.append(grip());
@@ -954,7 +954,7 @@ export function renderHandsCentre(host: HTMLElement, box: BoxDto, actions: ViewA
     // A titled hand reads as a title; only a bare gameId reads as a name.
     const row = el("button", { className: "listrow draggable", onClick: () => actions.inspectHand(box.id, hand.id) },
       el("span", { className: `listname${hand.title !== undefined ? " listtitle" : ""}`, text: hand.title ?? hand.gameId }),
-      el("span", { className: "listmeta", text: `${kind}${hand.slots !== undefined ? ` · ${hand.slots} slot${hand.slots === 1 ? "" : "s"}` : ""}` }));
+      el("span", { className: "listmeta", text: `${kind}${hand.slots !== undefined ? ` · ${plural(hand.slots, "slot")}` : ""}` }));
     // Every hand lives in the one hands shard, so they badge together.
     row.dataset["vc"] = vcKeys.hands(box.id);
     row.addEventListener("contextmenu", itemMenu(() => actions.duplicateHand(box.id, hand.id), () => actions.deleteHand(box.id, hand.id)));
@@ -1045,8 +1045,10 @@ function fixButton(
   problem: Problem, fix: NonNullable<Problem["fix"]>,
   onFix: (p: Problem, fix: NonNullable<Problem["fix"]>, anchor: HTMLElement) => void,
 ): HTMLElement {
+  // The shell's chip (stepper.css `.stepbar-action`): Patterpad's `.problem-fix`
+  // and this bar's `.problembar-fix` were one rule twice.
   const button = el("button", {
-    className: "btn problembar-fix", text: fixLabel(fix),
+    className: "stepbar-action", text: fixLabel(fix),
     tip: fix.kind === "declare-property"
       ? "Declare it, then take me to it"
       : "Point this at a tag that exists",
