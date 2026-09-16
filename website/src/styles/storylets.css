@@ -1,7 +1,13 @@
-/* Storylet Studio documentation - brand pass.
+/* Storylet Studio documentation: the brand palette, and nothing else.
+ *
+ * This file is the site's tokens. It maps the brand onto Starlight's own tokens and then
+ * declares the --chrome-* properties the shared chrome reads. The RULES that use them are in
+ * src/chrome/chrome.css, which is generated from patterkit/site-chrome and identical on every
+ * site in the family; nothing here is a rule, and nothing there is a colour.
+ *
  * BRAND (theme independent, branding/README.md's table): plum (the primary ink and the default
  * accent), plum deep (the compiled / dark ground and every code block), plum mid, plum tint
- * (accents on dark), amber (the beats: reserved for action - primary calls to action and runtime
+ * (accents on dark), amber (the beats: reserved for action, primary calls to action and runtime
  * contexts). Fonts load from the Google Fonts <link> in astro.config.mjs.
  *
  * LIGHT SURFACES are Storyletter's OWN default light theme, Chambray, rather than the brand's
@@ -18,38 +24,15 @@
  * Only the LIGHT neutrals follow the app.
  */
 
-/* Screenshots of the real Storyletter UI, framed to read as a capture rather than a
-   diagram. Patter's .doc-shot, same rules. */
-.doc-shot { margin: 1.5rem 0; }
-.doc-shot img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border: 1px solid var(--sl-color-gray-5);
-  border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(36, 26, 51, 0.08), 0 8px 24px rgba(36, 26, 51, 0.06);
-}
-:root[data-theme="dark"] .doc-shot img {
-  border-color: var(--sl-color-gray-4);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
-}
-.doc-shot figcaption {
-  margin-top: 0.55rem;
-  font-size: 0.82rem;
-  line-height: 1.45;
-  color: var(--sl-color-gray-2);
-}
-
 :root {
   --sy-read: "Newsreader", Georgia, "Iowan Old Style", serif;
   --sl-font: "Inter", ui-sans-serif, system-ui, sans-serif;
   --sl-font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   /* Widen the central reading column (Starlight default 45rem) so the schema tables get room.
-   * Running prose is capped back to a comfortable measure below, so only tables, figures,
-   * code and diagrams use the extra width. */
+   * Running prose is capped back to a comfortable measure by the chrome, so only tables,
+   * figures, code and diagrams use the extra width. */
   --sl-content-width: 54rem;
-  --sy-prose-measure: 46rem;
 
   /* Brand reference tokens (theme independent), from branding/README.md. */
   --sy-plum: #36284a;
@@ -71,6 +54,22 @@
   --sy-cham-ink: #161e28;
   --sy-cham-muted: #4d5b6b;
   --sy-cham-line: #c6ceda;
+
+  /* The chrome, where this site's answer is the same in both themes. The marker on the open
+     page is the beat: an amber dot, drawn as a mask like every other site's. */
+  --chrome-display: var(--sy-read);
+  --chrome-measure: 46rem;
+  --chrome-current-bg: var(--sy-plum);
+  --chrome-current-ink: var(--sy-cream);
+  --chrome-marker-width: 7px;
+  --chrome-marker-height: 7px;
+  --chrome-marker-gap: 9px;
+  --chrome-marker-shift: 1px;
+  --chrome-marker-ink: var(--sy-amber-light);
+  --chrome-marker-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50'/%3E%3C/svg%3E");
+  /* Code blocks sit on plum deep in BOTH themes (the compiled surface). The syntax theme is
+     forced dark in astro.config so the tokens suit this ground. */
+  --chrome-code-bg: #241a33;
 }
 
 /* ------------------------------------------------------------------ */
@@ -97,8 +96,21 @@
   --sl-color-bg-sidebar: #2b2040;
   --sl-color-bg-inline-code: #33264a;
 
-  --sy-cta: #c3b4dd;
-  --sy-cta-ink: #241a33;
+  --chrome-aside-ink: var(--sy-plum-tint);
+  --chrome-aside-edge: var(--sy-plum-tint);
+  --chrome-caution-ink: var(--sy-amber-light);
+  --chrome-caution-edge: var(--sy-amber);
+  --chrome-danger-ink: #e0866f;
+  --chrome-danger-edge: #b8452f;
+  /* Primary button: plum tint with the dark ground as its ink (8.6:1). Amber stays where it
+     means something, the beat marker and a caution aside, and is not the call to action. */
+  --chrome-cta: #c3b4dd;
+  --chrome-cta-ink: #241a33;
+  --chrome-cta-hover: #d4c8e8;
+  --chrome-secondary-ink: var(--sy-plum-tint);
+  --chrome-code-ink: #c3b4dd;
+  --chrome-shot-edge: var(--sl-color-gray-4);
+  --chrome-shot-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 /* ------------------------------------------------------------------ */
@@ -133,157 +145,28 @@
   --sl-color-bg-sidebar: #f4f6f9; /* = Chambray --surface */
   --sl-color-bg-inline-code: #e7e0ef;  /* plum tint: inline code is accent, not ground */
 
-  --sy-cta: #36284a;
-  --sy-cta-ink: #ffffff;
-}
-
-/* Keep running prose to a comfortable measure inside the wider column; tables, figures and
- * code blocks are left to use the full --sl-content-width. */
-.sl-markdown-content > p,
-.sl-markdown-content > ul,
-.sl-markdown-content > ol,
-.sl-markdown-content > blockquote,
-.sl-markdown-content > h1,
-.sl-markdown-content > h2,
-.sl-markdown-content > h3,
-.sl-markdown-content > h4,
-.sl-markdown-content > h5,
-.sl-markdown-content > h6 { max-width: var(--sy-prose-measure); }
-
-/* ------------------------------------------------------------------ */
-/* Headings and the wordmark: the brand reading face                   */
-/* ------------------------------------------------------------------ */
-.sl-markdown-content h1,
-.sl-markdown-content h2,
-.sl-markdown-content h3,
-h1#_top,
-.site-title {
-  font-family: var(--sy-read);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-/* ------------------------------------------------------------------ */
-/* Asides: off the default lilac, onto the brand                       */
-/* This Starlight version does not derive the aside fill from the      */
-/* border, so tint the fill explicitly from the (brand-mapped) border  */
-/* var - one rule covers every variant and both themes.                */
-/* ------------------------------------------------------------------ */
-.sl-markdown-content .starlight-aside {
-  background-color: color-mix(in oklab, var(--sl-color-asides-border) 12%, var(--sl-color-bg));
-}
-.starlight-aside {
-  --sl-color-asides-text-accent: var(--sy-plum);
-  --sl-color-asides-border: var(--sy-plum);
-}
-:root[data-theme="dark"] .starlight-aside {
-  --sl-color-asides-text-accent: var(--sy-plum-tint);
-  --sl-color-asides-border: var(--sy-plum-tint);
-}
-.starlight-aside--caution {
-  --sl-color-asides-text-accent: #8e6413;
-  --sl-color-asides-border: var(--sy-amber);
-}
-:root[data-theme="dark"] .starlight-aside--caution {
-  --sl-color-asides-text-accent: var(--sy-amber-light);
-  --sl-color-asides-border: var(--sy-amber);
-}
-.starlight-aside--danger {
-  --sl-color-asides-text-accent: #9c3b2f;
-  --sl-color-asides-border: #b8452f;
-}
-:root[data-theme="dark"] .starlight-aside--danger {
-  --sl-color-asides-text-accent: #e0866f;
-  --sl-color-asides-border: #b8452f;
-}
-
-/* ------------------------------------------------------------------ */
-/* Sidebar: plum active page with a beat marker; group labels are     */
-/* words in the text face, sentence case, 600, the way a group box     */
-/* heading reads on the platform. Never an overline.                   */
-/* ------------------------------------------------------------------ */
-#starlight__sidebar a[aria-current="page"] {
-  background: var(--sy-plum);
-  color: var(--sy-cream);
-  border-radius: 6px;
-  font-weight: 500;
-}
-#starlight__sidebar a[aria-current="page"]::before {
-  content: "";
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 9px;
-  vertical-align: 1px;
-  border-radius: 50%;
-  background: var(--sy-amber-light);
-}
-#starlight__sidebar .sidebar-content summary span,
-#starlight__sidebar .group-label > span {
-  font-family: var(--sl-font);
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--sl-color-gray-3);
-}
-
-/* ------------------------------------------------------------------ */
-/* Buttons: plum primary with white ink, plum outline secondary. Amber  */
-/* stays where it means something (the beat marker, a caution aside),  */
-/* and is not the call-to-action colour.                               */
-/* ------------------------------------------------------------------ */
-.sl-link-button.primary,
-a.action.primary {
-  background: var(--sy-cta);
-  border-color: var(--sy-cta);
-  color: var(--sy-cta-ink);
-}
-.sl-link-button.primary:hover,
-a.action.primary:hover {
-  background: var(--sy-plum-mid);
-  border-color: var(--sy-plum-mid);
-}
-:root[data-theme="dark"] .sl-link-button.primary:hover,
-:root[data-theme="dark"] a.action.primary:hover {
-  background: #d4c8e8;
-  border-color: #d4c8e8;
-}
-.sl-link-button.secondary,
-a.action.secondary {
-  background: transparent;
-  color: var(--sy-plum);
-  border: 1.5px solid var(--sy-plum);
-}
-:root[data-theme="dark"] .sl-link-button.secondary,
-:root[data-theme="dark"] a.action.secondary {
-  color: var(--sy-plum-tint);
-  border-color: var(--sy-plum-tint);
+  --chrome-aside-ink: var(--sy-plum);
+  --chrome-aside-edge: var(--sy-plum);
+  --chrome-caution-ink: #8e6413;
+  --chrome-caution-edge: var(--sy-amber);
+  --chrome-danger-ink: #9c3b2f;
+  --chrome-danger-edge: #b8452f;
+  /* Primary button: plum with white ink (13.5:1). */
+  --chrome-cta: #36284a;
+  --chrome-cta-ink: #ffffff;
+  --chrome-cta-hover: var(--sy-plum-mid);
+  --chrome-secondary-ink: var(--sy-plum);
+  --chrome-code-ink: var(--sy-plum);
+  --chrome-shot-edge: var(--sl-color-gray-5);
+  --chrome-shot-shadow: 0 1px 3px rgba(36, 26, 51, 0.08), 0 8px 24px rgba(36, 26, 51, 0.06);
 }
 
 /* The engine icon at the top of each runtime page sits inline beside the first paragraph,
-   floated so the prose runs past it. No wrapper, no card. */
+   floated so the prose runs past it. No wrapper, no card. This one is the site's own: the
+   Patter side puts its runtime icons in a row on the landing instead. */
 .sl-markdown-content img.sy-engine {
   float: left;
   margin: 0.15rem 0.9rem 0.4rem 0;
   border-radius: 10px;
 }
 .sl-markdown-content img.sy-engine + * { clear: none; }
-
-/* ------------------------------------------------------------------ */
-/* Inline code: pale plum chip                                         */
-/* ------------------------------------------------------------------ */
-.sl-markdown-content :not(pre) > code {
-  background: var(--sl-color-bg-inline-code);
-  color: var(--sy-plum);
-}
-:root[data-theme="dark"] .sl-markdown-content :not(pre) > code {
-  color: #c3b4dd;
-}
-
-/* Code blocks sit on plum deep in BOTH themes (the compiled surface). The syntax theme is
-   forced dark in astro.config (expressiveCode) so the tokens suit this ground; this is the
-   belt-and-braces background pin. */
-.expressive-code .frame pre,
-.expressive-code .frame .copy + pre {
-  --ec-codeBg: #241a33;
-  background: #241a33;
-}

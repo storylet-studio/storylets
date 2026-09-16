@@ -4,6 +4,10 @@
 // Astro reports neither of these, which is the reason this file exists: a green
 // build is what both of them look like.
 //
+// 0. AN EDITED COPY OF THE SHARED CHROME. src/chrome/ is generated from
+//    patterkit/site-chrome and hashed in its own manifest, so a change made
+//    here is a change the next sync silently throws away.
+//
 // 1. A BLANK LINE INSIDE A RAW <svg>. Markdown ends an HTML block at the first
 //    blank line, so the rest of the diagram is re-parsed as prose. The page
 //    renders half a picture followed by a paragraph of loose SVG label text, and
@@ -38,6 +42,7 @@
 // separate to remember.
 // ---------------------------------------------------------------------------
 
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join, relative, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,6 +59,31 @@ function walk(dir, exts) {
     else if (exts.some((x) => e.name.endsWith(x))) out.push(p);
   }
   return out;
+}
+
+// --- 0. the shared chrome is generated, not written here ---------------------
+// src/chrome/ is rendered into this repository by patterkit/site-chrome, which keeps one source
+// for the footer, the sign-up, the downloads list and the shared rules across this site, the
+// Patter site and the server's set. Every file it writes is hashed in manifest.json, so an edit
+// made here, in the copy, fails this check in the commit that makes it. Staleness against the
+// SOURCE is the other half, and only patterkit can see it: `node sync.mjs --check` there.
+{
+  const dir = join(root, "src/chrome");
+  const EDITED = "src/chrome is generated from patterkit/site-chrome; do not edit it here";
+  const manifestFile = join(dir, "manifest.json");
+  if (!existsSync(manifestFile)) {
+    problems.push(`src/chrome/manifest.json  missing: ${EDITED}`);
+  } else {
+    const listed = JSON.parse(readFileSync(manifestFile, "utf8")).files;
+    for (const [name, digest] of Object.entries(listed)) {
+      const file = join(dir, name);
+      const found = existsSync(file) ? createHash("sha256").update(readFileSync(file)).digest("hex") : null;
+      if (found !== digest) problems.push(`src/chrome/${name}  ${found ? "edited" : "missing"}: ${EDITED}`);
+    }
+    for (const name of readdirSync(dir)) {
+      if (name !== "manifest.json" && !(name in listed)) problems.push(`src/chrome/${name}  not in the manifest: ${EDITED}`);
+    }
+  }
 }
 
 // --- 1. blank lines inside a raw <svg> -------------------------------------

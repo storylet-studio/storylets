@@ -23,10 +23,10 @@ export default defineConfig({
     starlight({
       title: "Storylet Studio",
       tagline: "Design playable stories.",
-      customCss: ["./src/styles/storylets.css"],
+      customCss: ["./src/styles/storylets.css", "./src/chrome/chrome.css"],
       // Every docs page ends with the licence / author / home credit line. The landing page
       // carries the same credit separately, because it does not use Starlight chrome.
-      components: { Footer: "./src/components/Footer.astro" },
+      components: { Footer: "./src/chrome/Footer.astro" },
       // Code blocks sit on the plum-deep ground in BOTH site themes (the "compiled" surface in
       // the brand palette). Force one dark syntax theme so the tokens always suit that ground,
       // and pin the exact fill + hairline.

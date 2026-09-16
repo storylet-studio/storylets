@@ -9,17 +9,20 @@ const engines = [
 // deliberately outside the Starlight docs chrome. Brand tokens come from
 // src/styles/storylets.css; the landing's own classes live in src/styles/landing.css.
 //
-// Shape, top to bottom: header, a two-column opening (one sentence, one paragraph, one button,
-// the split-deck picture), the list of situations, the Board screenshot, the three tools as
-// paragraphs, the downloads as a list, the footer. The Patter site is a script; this page is a
-// hand of cards. They share a footer and nothing else in structure.
+// Shape, top to bottom: the shared header, a two-column opening (one sentence, one paragraph,
+// one button, the split-deck picture), the list of situations, the Board screenshot, the three
+// tools as paragraphs, the downloads as a list, the shared footer. The header, the footer and
+// the downloads list come from src/chrome, which is generated from patterkit/site-chrome and is
+// never edited here. The Patter site is a script; this page is a hand of cards. They share
+// those three and nothing else in structure.
 import "../styles/storylets.css";
+import "../chrome/chrome.css";
 import "../styles/landing.css";
-import Newsletter from "../components/Newsletter.astro";
-import Downloads from "../components/Downloads.astro";
+import LandingHeader from "../chrome/LandingHeader.astro";
+import LandingFooter from "../chrome/LandingFooter.astro";
+import Downloads from "../chrome/Downloads.astro";
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/"); // normalise to a trailing slash
-const repo = "https://github.com/storylet-studio/storylets";
 const title = "Storylet Studio";
 const description =
   "An open toolkit for storylets. Your designers write small pieces of story as cards, each with a rule for when it fits, and your game deals the ones that fit the moment, on Unity, Unreal, Godot, or the web.";
@@ -54,30 +57,7 @@ const description =
   </head>
   <body>
     <div class="sy-landing">
-      <!-- HEADER -->
-      <header class="sy-head">
-        <div class="sy-wrap sy-head-inner">
-          <a class="sy-brand" href={base} aria-label="Storylet Studio home">
-            <svg viewBox="0 0 100 100" width="28" height="28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <g fill="none">
-                <path d="M88 12 C5 12 5 50 50 50 C95 50 95 88 12 88" stroke="#36284a" stroke-width="12" stroke-linecap="round"></path>
-                <circle cx="88" cy="12" r="9.5" fill="#c8902f"></circle>
-                <circle cx="12" cy="88" r="9.5" fill="#c8902f"></circle>
-                <circle cx="50" cy="50" r="9.5" fill="#c8902f"></circle>
-              </g>
-            </svg>
-            <span class="sy-wordmark">Storylet Studio</span>
-          </a>
-          <nav class="sy-navlinks" aria-label="Site">
-            <a class="sy-navlink" href={`${base}storyletter/overview/`}>Storyletter</a>
-            <a class="sy-navlink" href={`${base}play/overview/`}>Runtimes</a>
-            <a class="sy-navlink" href={`${base}why/`}>Why Storylet Studio</a>
-            <a class="sy-navlink" href={`${base}download/`}>Download</a>
-            <a class="sy-navlink" href={repo}>GitHub</a>
-            <a class="sy-btn sy-btn-outline" href={`${base}getting-started/`}>Get started</a>
-          </nav>
-        </div>
-      </header>
+      <LandingHeader />
 
       <!-- OPENING -->
       <section class="sy-open">
@@ -88,7 +68,7 @@ const description =
               them as cards in Storyletter, you drop one file into Unity, Unreal, Godot, or the web, and whenever your
               game needs to pick something, it asks the engine for a hand and gets the cards that fit the moment.</p>
             <div class="sy-actions">
-              <a class="sy-btn sy-btn-primary" href={`${base}getting-started/`}>Get started</a>
+              <a class="chrome-btn sy-btn-primary" href={`${base}getting-started/`}>Get started</a>
               <a class="sy-link" href={`${base}download/`}>Download</a>
             </div>
             <p class="sy-note">It's free and MIT-licensed, and there's no server to run.</p>
@@ -244,33 +224,7 @@ const description =
         </div>
       </section>
 
-      <!-- FOOTER -->
-      <footer class="sy-foot">
-        <div class="sy-wrap sy-foot-signup"><Newsletter variant="landing" /></div>
-        <div class="sy-wrap sy-foot-inner">
-          <div class="sy-foot-brand">
-            <svg viewBox="0 0 100 100" width="22" height="22" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <g fill="none">
-                <path d="M88 12 C5 12 5 50 50 50 C95 50 95 88 12 88" stroke="#9a89b5" stroke-width="12" stroke-linecap="round"></path>
-                <circle cx="88" cy="12" r="9.5" fill="#e0b463"></circle>
-                <circle cx="12" cy="88" r="9.5" fill="#e0b463"></circle>
-                <circle cx="50" cy="50" r="9.5" fill="#e0b463"></circle>
-              </g>
-            </svg>
-            <span>Storylet Studio</span>
-          </div>
-          <nav class="sy-foot-links" aria-label="Footer">
-            <a href={`${base}why/`}>Why Storylet Studio</a>
-            <a href={`${base}storyletter/overview/`}>Storyletter</a>
-            <a href={`${base}play/overview/`}>Runtimes</a>
-            <a href={`${base}download/`}>Download</a>
-            <a href={repo}>GitHub</a>
-          </nav>
-          {/* One line, no internal newlines: Astro collapses a newline between text and an
-              adjacent inline element to nothing, which ran "made by" into the author link. */}
-          <p class="sy-foot-credit">Open source under the <a href={`${base}licensing/`}>MIT licence</a>, made by <a href="https://ian.wildwinter.net" rel="author">Ian Thomas</a>.</p>
-        </div>
-      </footer>
+      <LandingFooter />
     </div>
   </body>
 </html>

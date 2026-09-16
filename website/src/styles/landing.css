@@ -23,6 +23,32 @@
   --l-hair-3: #c6ceda;        /* Chambray --line: a stronger hairline */
   --l-cta-ink: #ffffff;       /* on plum, 13.5:1 */
 
+  /* The header and the footer are the shared chrome (src/chrome/chrome.css, generated from
+     patterkit/site-chrome). These are the values it reads: the page's hairline and inks for the
+     header, the plum-deep ground and its four inks for the footer, and the seven the sign-up
+     field needs on that ground. */
+  --chrome-land-rule: var(--l-hair);
+  --chrome-land-wordmark-ink: var(--l-ink);
+  --chrome-land-nav-ink: var(--l-body);
+  --chrome-land-nav-hover: var(--sy-plum);
+  --chrome-land-btn-ink: var(--sy-plum);
+  --chrome-land-btn-hover: #e7e0ef;
+
+  --chrome-foot-bg: #1c1429;
+  --chrome-foot-ink: #b3a5c9;
+  --chrome-foot-rule: #2e2340;
+  --chrome-foot-brand-ink: #f3ede2;
+  --chrome-foot-link: #d9d0e8;
+  --chrome-foot-link-hover: #ffffff;
+
+  --chrome-nl-text: #9d8fb8;
+  --chrome-nl-strong: #f3ede2;
+  --chrome-nl-field: #251b35;
+  --chrome-nl-field-ink: #f3ede2;
+  --chrome-nl-hair: #392b4f;
+  --chrome-nl-hair-strong: #574372;
+  --chrome-nl-accent: #e0b463;
+
   color: var(--l-ink-2);
   background: var(--l-page);
   font-family: var(--sl-font, "Inter", ui-sans-serif, system-ui, sans-serif);
@@ -45,42 +71,23 @@
   font-size: 1.7rem; line-height: 1.2; letter-spacing: -0.01em; color: var(--l-ink); margin: 0;
 }
 .sy-landing p { margin: 0; }
-.sy-landing p a { color: var(--sy-plum); text-decoration: underline; text-underline-offset: 0.15em; }
-.sy-landing p a:hover { color: var(--sy-plum-mid); }
+.sy-landing section p a { color: var(--sy-plum); text-decoration: underline; text-underline-offset: 0.15em; }
+.sy-landing section p a:hover { color: var(--sy-plum-mid); }
 .sy-landing code {
   font-family: var(--sl-font-mono); font-size: 0.92em; color: var(--sy-plum);
   background: #e7e0ef; padding: 1px 5px; border-radius: 4px;
 }
 
 /* ---- Buttons and links ----------------------------------------------------- */
-/* Controls have edges: a fill or a border at rest. The primary is plum with white ink; the
-   secondary is a plum border. Hover changes colour and nothing else. */
-.sy-btn {
-  display: inline-flex; align-items: center; text-decoration: none;
-  font-weight: 600; font-size: 15px; padding: 10px 20px; border-radius: 8px;
-  border: 1.5px solid var(--sy-plum);
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-.sy-btn-primary { background: var(--sy-plum); color: var(--l-cta-ink); }
+/* Controls have edges: the bordered shape is `.chrome-btn` from the shared chrome, and the
+   primary is that shape with plum filled in. Hover changes colour and nothing else. */
+.sy-btn-primary { background: var(--sy-plum); color: var(--l-cta-ink); border-color: var(--sy-plum); }
 .sy-btn-primary:hover { background: var(--sy-plum-mid); border-color: var(--sy-plum-mid); color: var(--l-cta-ink); }
-.sy-btn-outline { background: transparent; color: var(--sy-plum); }
-.sy-btn-outline:hover { background: #e7e0ef; color: var(--sy-plum); }
 .sy-link {
   color: var(--sy-plum); font-weight: 500; font-size: 15px;
   text-decoration: underline; text-underline-offset: 0.2em; text-decoration-thickness: 1px;
 }
 .sy-link:hover { color: var(--sy-plum-mid); }
-
-/* ---- Header ----------------------------------------------------------------- */
-.sy-head { border-bottom: 1px solid var(--l-hair); background: var(--l-page); }
-.sy-head-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-top: 16px; padding-bottom: 16px; }
-.sy-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-.sy-brand svg { display: block; }
-.sy-wordmark { font-family: var(--sy-read, "Newsreader", Georgia, serif); font-weight: 600; font-size: 20px; letter-spacing: -0.01em; color: var(--l-ink); }
-.sy-navlinks { display: flex; align-items: center; gap: 4px; }
-.sy-navlink { text-decoration: none; color: var(--l-body); font-size: 14.5px; font-weight: 500; padding: 8px 10px; transition: color 0.15s ease; }
-.sy-navlink:hover { color: var(--sy-plum); text-decoration: underline; text-underline-offset: 0.2em; }
-.sy-navlinks .sy-btn { margin-left: 10px; font-size: 14.5px; padding: 8px 16px; }
 
 /* ---- Opening ---------------------------------------------------------------- */
 .sy-open-grid { display: grid; grid-template-columns: 1fr 1.05fr; gap: 56px; align-items: center; padding-top: 72px; padding-bottom: 72px; }
@@ -148,26 +155,8 @@
 .sy-downloads-inner { padding-top: 56px; padding-bottom: 64px; max-width: 760px; margin-left: auto; margin-right: auto; }
 .sy-downloads-inner > p { margin: 14px 0 0; font-size: 16px; line-height: 1.6; color: var(--l-body); }
 /* The Downloads component sits on Starlight's light tokens, which storylets.css provides on
-   this page too. Its list is its own; only the top margin is set here. */
-.sy-downloads .sy-dl { margin-top: 24px; }
-
-/* ---- Footer ----------------------------------------------------------------- */
-/* Cream ink on plum-deep is brand, and stays. Every text colour is at AA on #1c1429. */
-/* The footer follows the Patter site's shape: the sign-up band, a rule, then brand and links on one
-   row and the credit on its own line. Link colours are set here at full specificity so no global
-   link rule can drop them to plum on plum. */
-.sy-foot { margin-top: 88px; background: #1c1429; color: #b3a5c9; }
-.sy-foot-signup { padding-top: 32px; padding-bottom: 24px; }
-.sy-foot-signup + .sy-foot-inner { border-top: 1px solid #2e2340; }
-.sy-foot-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; padding-top: 32px; padding-bottom: 36px; }
-.sy-foot-brand { display: flex; align-items: center; gap: 11px; }
-.sy-foot-brand span { font-family: var(--sy-read, "Newsreader", Georgia, serif); font-weight: 600; font-size: 17px; color: #f3ede2; }
-.sy-foot-links { display: flex; flex-wrap: wrap; gap: 12px 22px; font-size: 14px; }
-.sy-foot .sy-foot-links a { color: #d9d0e8; text-decoration: none; }
-.sy-foot .sy-foot-links a:hover { color: #ffffff; text-decoration: underline; text-underline-offset: 3px; }
-.sy-foot-credit { flex-basis: 100%; font-size: 13px; color: #b3a5c9; margin: 0; }
-.sy-foot .sy-foot-credit a { color: #d9d0e8; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
-.sy-foot .sy-foot-credit a:hover { color: #ffffff; }
+   this page too. The list is the shared chrome's; only the top margin is set here. */
+.sy-downloads .chrome-dl { margin-top: 24px; }
 
 /* ---- Responsive ------------------------------------------------------------- */
 @media (max-width: 1000px) {
@@ -179,6 +168,5 @@
 }
 @media (max-width: 640px) {
   .sy-wrap { padding-left: 20px; padding-right: 20px; }
-  .sy-navlinks .sy-navlink { display: none; }
   .sy-open-grid { padding-top: 44px; padding-bottom: 48px; }
 }
