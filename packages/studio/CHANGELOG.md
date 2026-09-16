@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-16
+
 ### Changed
 
 - **Every icon is drawn.** The editor, the Board, Links, Coverage, Find, and the settings dialog draw
