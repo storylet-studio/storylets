@@ -39,3 +39,6 @@ packages/studio/build/*.icns
 # The Hamlet client's fetched copy of Patter's browser file (pinned release; see its build.mjs)
 packages/hamlet-client/vendor/
 .build.lock/
+
+# a symlink named node_modules is a file to git; the trailing-slash rule above misses it
+node_modules
