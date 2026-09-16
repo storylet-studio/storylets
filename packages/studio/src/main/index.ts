@@ -1944,35 +1944,35 @@ function wireIpc(): void {
       for (const deck of box.decks) {
         const deckName = effectiveGameId(deck.shard.deck);
         for (const t of byAnchor(deck.shard.deck.id)) {
-          add(t, { kind: "deck", box: box.box.box.id, deck: deck.shard.deck.id }, `${boxName} · ${deckName}`);
+          add(t, { kind: "deck", box: box.box.box.id, deck: deck.shard.deck.id }, `${boxName} / ${deckName}`);
         }
         for (const card of deck.shard.cards) {
           const cardName = card.title ?? effectiveGameId(card);
           const at: ReviewAt = { kind: "card", box: box.box.box.id, deck: deck.shard.deck.id, card: card.id };
-          for (const t of byAnchor(card.id)) add(t, at, `${boxName} · ${deckName} · ${cardName}`);
+          for (const t of byAnchor(card.id)) add(t, at, `${boxName} / ${deckName} / ${cardName}`);
           for (const outcome of byDisplayOrder(card.outcomes)) {
             const name = outcome.title ?? effectiveGameId(outcome);
             for (const t of byAnchor(outcome.id)) {
               add(t, {
                 kind: "outcome", box: box.box.box.id, deck: deck.shard.deck.id, card: card.id, outcome: outcome.id,
-              }, `${boxName} · ${deckName} · ${cardName} · ${name}`);
+              }, `${boxName} / ${deckName} / ${cardName} / ${name}`);
             }
           }
         }
       }
       for (const hand of box.hands.hands) {
         for (const t of byAnchor(hand.id)) {
-          add(t, { kind: "hand", box: box.box.box.id, hand: hand.id }, `${boxName} · ${effectiveGameId(hand)}`);
+          add(t, { kind: "hand", box: box.box.box.id, hand: hand.id }, `${boxName} / ${effectiveGameId(hand)}`);
         }
       }
       for (const template of box.hands.templates) {
         for (const t of byAnchor(template.id)) {
-          add(t, { kind: "template", box: box.box.box.id, template: template.id }, `${boxName} · ${effectiveGameId(template)}`);
+          add(t, { kind: "template", box: box.box.box.id, template: template.id }, `${boxName} / ${effectiveGameId(template)}`);
         }
       }
       for (const group of box.tags.groups) {
         for (const t of byAnchor(group.id)) {
-          add(t, { kind: "tagGroup", box: box.box.box.id, group: group.id }, `${boxName} · ${effectiveGameId(group)}`);
+          add(t, { kind: "tagGroup", box: box.box.box.id, group: group.id }, `${boxName} / ${effectiveGameId(group)}`);
         }
       }
       // Threads anchored to a CANVAS rather than to a thing on it. They have no
@@ -1982,8 +1982,8 @@ function wireIpc(): void {
         const canvas = t.mark?.canvas;
         if (canvas === undefined || t.anchor !== canvas) continue;
         const deck = box.decks.find((d) => d.shard.deck.id === canvas);
-        if (deck) add(t, { kind: "deck", box: box.box.box.id, deck: deck.shard.deck.id }, `${boxName} · ${effectiveGameId(deck.shard.deck)} · canvas`);
-        else if (canvas === `${MAP_CANVAS}${box.box.box.id}`) add(t, { kind: "box", box: box.box.box.id }, `${boxName} · map`);
+        if (deck) add(t, { kind: "deck", box: box.box.box.id, deck: deck.shard.deck.id }, `${boxName} / ${effectiveGameId(deck.shard.deck)} / canvas`);
+        else if (canvas === `${MAP_CANVAS}${box.box.box.id}`) add(t, { kind: "box", box: box.box.box.id }, `${boxName} / map`);
       }
     }
     return out;

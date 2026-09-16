@@ -15,7 +15,7 @@ import "@wildwinter/app-shell/tooltip.css";
 import "@wildwinter/app-shell/toast.css";
 import { applyTheme } from "../src/theme.js";
 import { el } from "../src/dom.js";
-import { confirmDialog, debounce, iconNode, initTooltips, pinButton, plural, toast, toolWindowHead } from "@wildwinter/app-shell";
+import { breadcrumb, confirmDialog, debounce, iconNode, initTooltips, metaLine, pinButton, plural, toast, toolWindowHead } from "@wildwinter/app-shell";
 import { searchIndex, searchMatch } from "../src/search.js";
 import type { SearchHit } from "../src/search.js";
 import type { ProjectDto, PropertyUsage, ReplaceHit, ReplaceOptions, ReviewAt, SearchMode, SearchOpen, StudioApi } from "../../shared/api.js";
@@ -113,22 +113,23 @@ function renderFind(): void {
     el("button", { className: `sr-row${i === active ? " active" : ""}`, onClick: () => choose(i) },
       el("span", { className: "sr-kind", text: kindWord(hit.kind) }),
       el("span", { className: "sr-label", text: hit.label }),
-      el("span", { className: "sr-sub", text: hit.sublabel }))));
+      el("span", { className: "sr-sub" }, metaLine(hit.sublabel)))));
   if (hits.length === 0) listEl.replaceChildren(none(project ? "nothing matches" : "no project open"));
 }
 
 function renderProperty(): void {
   listEl.replaceChildren(...usages.map((u, i) => {
     const item = u.item;
-    // An outcome is named with its card, the way the editor shows it.
+    // An outcome is named with its card, the way the editor shows it: a
+    // two-crumb trail with the chevron drawn, not typed.
     const label = item.kind === "outcome"
-      ? `${item.location[item.location.length - 1] ?? ""} › ${item.title ?? item.gameId}`
+      ? breadcrumb([item.location[item.location.length - 1] ?? "", item.title ?? item.gameId])
       : item.title ?? item.gameId;
     return el("button", { className: `sr-row${i === active ? " active" : ""}`, onClick: () => choose(i) },
       el("span", { className: "sr-kind", text: kindWord(item.kind) }),
-      el("span", { className: "sr-label", text: label }),
+      el("span", { className: "sr-label" }, label),
       el("span", { className: `sr-use ${u.use}`, text: u.use === "read" ? "reads" : "writes" }),
-      el("span", { className: "sr-sub", text: `${u.where} · ${u.text}` }));
+      el("span", { className: "sr-sub" }, metaLine([u.where, u.text])));
   }));
   if (usages.length === 0) {
     listEl.replaceChildren(none(!project ? "no project open" : query.trim() ? "nothing reads or writes that" : "type a property: @gold, @story.act, @world.time_of_day"));
@@ -151,7 +152,11 @@ function renderReplace(): void {
         el("span", { className: "sr-before", text: h.before }),
         el("span", { className: "sr-arrow" }, iconNode("arrowRight", 12)),
         el("span", { className: "sr-after", text: h.after })),
-      el("span", { className: "sr-sub", text: `${[...h.location, h.kind === "project" ? "project" : ""].filter((s) => s !== "").join(" › ")} · ${fieldLabel(h)}` }),
+      // Where it is (a drawn trail) and which text, as one metadata line.
+      el("span", { className: "sr-sub" }, metaLine([
+        breadcrumb([...h.location, h.kind === "project" ? "project" : ""].filter((s) => s !== "")),
+        fieldLabel(h),
+      ])),
       el("button", { className: "btn sr-rone", text: "Replace", onClick: () => void applyReplace(h) }));
     return row;
   }));
@@ -219,7 +224,7 @@ async function applyReplace(only?: ReplaceHit): Promise<void> {
     const items = new Set(replaceHits.map((h) => h.id)).size;
     const ok = await confirmDialog({
       title: `Replace ${plural(n, "occurrence")} across ${plural(items, "item")}?`,
-      body: `“${query}” → “${replacement}”`,
+      body: `Every “${query}” becomes “${replacement}”. One undo step puts them all back.`,
       confirmLabel: "Replace",
     });
     if (!ok) return;

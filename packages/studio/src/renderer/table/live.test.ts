@@ -1,5 +1,5 @@
 // The Board's Live mode, fed a fixed set of Live Link frames: the hands and
-// clocks come from `board` snapshots, the journal and "Not listed · why" from
+// clocks come from `board` snapshots, the journal and "Not listed, and why" from
 // the game's own trace events, a hello clears the table for a new run, and the
 // frame a deal or play names is reported so Follow in the editor can open it.
 
@@ -63,7 +63,7 @@ describe("the Board's Live mode", () => {
     ]);
   });
 
-  it("answers Not listed · why for each hand from its latest deal", () => {
+  it("answers Not listed, and why for each hand from its latest deal", () => {
     const { run, table } = villageRun();
     const [a, b] = twoCards(table);
     const hand = table.hands()[0]!.gameId;

@@ -20,7 +20,7 @@ import "@wildwinter/app-shell/tooltip.css";
 import "@wildwinter/app-shell/toast.css";
 import { applyTheme } from "../src/theme.js";
 import { el } from "../src/dom.js";
-import { initTooltips, mountJobProgress, plural, toast, toolWindowHead } from "@wildwinter/app-shell";
+import { initTooltips, metaLine, mountJobProgress, plural, toast, toolWindowHead } from "@wildwinter/app-shell";
 import type { JobProgressView } from "@wildwinter/app-shell";
 import type { CoverageReport, SearchSelection, StudioApi } from "../../shared/api.js";
 import { turnSpan } from "@storylet-studio/model";
@@ -191,18 +191,19 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
   return [
     el("div", { className: "summary" },
       el("span", { className: "big", text: `${cardsDealt}/${r.cards.length}` }),
-      el("span", { className: "sublabel", text: `cards dealt · ${r.runs} runs · seed ${r.seed}` }),
+      el("span", { className: "sublabel" }, metaLine(["cards dealt", `${r.runs} runs`, `seed ${r.seed}`])),
       partial ? el("span", { className: "partial", text: "stopped early" }) : null,
     ),
     // The run's own shape: how the playthroughs ended says whether the
     // numbers above are worth trusting. All "stuck" means the content jams.
+    // Two drawn metadata lines, the run's size and how it ended, spaced by
+    // the paragraph's gap rather than by anything typed between them.
     el("p", { className: "meta" },
       // A project whose every box is timed can have its turns read as time
       // (design/engine-server.md 4.8); a mixed project cannot, and says
       // nothing rather than something misleading.
-      `${r.turns} turns${asTime(r, r.turns)} · ${r.plays} plays · max ${r.maxTurns} turns per run${asTime(r, r.maxTurns)}`,
-      el("span", { className: "sep", text: "·" }),
-      `${t.exhausted} exhausted · ${t.maxTurns} hit the cap · ${t.stuck} stuck`,
+      metaLine([`${r.turns} turns${asTime(r, r.turns)}`, `${r.plays} plays`, `max ${r.maxTurns} turns per run${asTime(r, r.maxTurns)}`]),
+      metaLine([`${t.exhausted} exhausted`, `${t.maxTurns} hit the cap`, `${t.stuck} stuck`]),
     ),
 
     // The per-hand lens - the writer/programmer contract, front and centre.
@@ -262,11 +263,10 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
           el("span", { className: "caption", text: `Outcomes never played (${deadOutcomes.length})` }),
           ...deadOutcomes.map((o) => {
             const card = cardById.get(o.card);
-            const label = card ? `${card.title ?? card.gameId} · ${o.gameId}` : o.gameId;
             return card
               ? openRow("gap", { kind: "card", box: card.box, deck: card.deck, card: card.id },
-                  el("span", { className: "gname", text: label }))
-              : el("div", { className: "gap" }, el("span", { className: "gname", text: label }));
+                  el("span", { className: "gname" }, metaLine([card.title ?? card.gameId, o.gameId])))
+              : el("div", { className: "gap" }, el("span", { className: "gname", text: o.gameId }));
           }),
         )
       : null,

@@ -59,7 +59,7 @@ describe("the Where model", () => {
     // be dealt there. This is the combination a multi-select picker misleads
     // about (a reader expects union; the runtime intersects).
     const m = model([{ group: PLACE_GROUP, values: ["the-inn"] }, { group: "zone", values: ["forest"] }]);
-    expect(whereSentence(m)).toBe("The Inn · anywhere in forest");
+    expect(whereSentence(m)).toBe("The Inn; anywhere in forest");
     expect(whereWarning(m)).toBe("The Inn is in village, not the selected region, so this card can never come up there.");
   });
 

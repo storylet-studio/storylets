@@ -62,7 +62,7 @@ export function whereSentence(m: WhereModel): string {
   const parts: string[] = [];
   if (m.places.length > 0) parts.push(m.places.map((p) => p.title).join(", "));
   for (const r of m.regions) parts.push(`anywhere in ${r.values.join(" or ")}`);
-  const joined = parts.join(" · ");
+  const joined = parts.join("; ");
   return joined.charAt(0).toUpperCase() + joined.slice(1);
 }
 

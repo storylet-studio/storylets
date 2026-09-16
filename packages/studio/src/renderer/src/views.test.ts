@@ -220,6 +220,34 @@ describe("box page", () => {
     expect(rows).toEqual(["Decks", "Hands"]);
   });
 
+  it("draws a row's metadata as parts, with the disc from CSS and nothing typed between them", () => {
+    // "Icons are drawn, and so are separators": `${count} · ${sub}` used to be
+    // one span; now it is the shell's metaLine wearing .listmeta.
+    const host = document.createElement("div");
+    setDocTab("box:b_1", "contents");
+    renderBoxCentre(host, box, () => {}, stubActions());
+    const metas = [...host.querySelectorAll(".listrow .listmeta")];
+    expect(metas.length).toBe(2);
+    for (const m of metas) {
+      expect(m.classList.contains("shell-meta")).toBe(true);
+      expect(m.querySelectorAll(".shell-meta-part").length).toBe(2);
+      expect(m.textContent).not.toContain("·");
+    }
+    expect(metas[0]!.querySelector(".shell-meta-part")!.textContent).toBe("1");
+    // The hands master: an optional part (slots) is a part, not a suffix.
+    const hands = document.createElement("div");
+    renderHandsCentre(hands, box, stubActions());
+    const parts = [...hands.querySelectorAll(".listrow .listmeta .shell-meta-part")].map((e) => e.textContent);
+    expect(parts).toEqual(["street-hands", "2 slots"]);
+    expect(hands.textContent).not.toContain("·");
+    // The templates tab: the same shape, and the row's second meta is plain.
+    setDocTab("box:b_1", "templates");
+    renderBoxCentre(host, box, () => {}, stubActions());
+    const tpl = host.querySelector(".listrow .listmeta.shell-meta")!;
+    expect([...tpl.querySelectorAll(".shell-meta-part")].map((e) => e.textContent)).toEqual(["zone = ?", "3 slots"]);
+    setDocTab("box:b_1", "contents");
+  });
+
   it("the Hand templates tab lists templates and opens their editors", () => {
     const host = document.createElement("div");
     const inspectTemplate = vi.fn();
@@ -430,7 +458,7 @@ describe("deck centre", () => {
 
 describe("problems bar", () => {
   const problems = [
-    { severity: "error" as const, path: "encounters/decks/docks.storyletdeck", message: "unknown property @story.gone" },
+    { severity: "error" as const, path: "encounters/decks/docks.storyletdeck", message: "condition: unresolved story property reference '@story.gone'" },
     { severity: "warning" as const, path: "x", message: "not in canonical form" },
   ];
 
@@ -447,19 +475,26 @@ describe("problems bar", () => {
     expect(host.querySelector(".stepbar-count")!.textContent).toBe("2");
     expect(host.querySelector(".stepbar-of")!.textContent).toBe("1/2");
     expect(host.querySelectorAll(".stepbar-msg").length).toBe(1);
-    expect(host.querySelector(".stepbar-msg")!.textContent).toBe(problems[0]!.message);
+    // The message is the table's sentence for the compiler's shape, not the
+    // compiler's string; a shape the table has never seen comes back raw.
+    expect(host.querySelector(".stepbar-msg")!.textContent).toBe("Its condition uses @story.gone, which isn’t set up yet. Declare it in the project settings, or fix the name.");
+    renderProblems(host, problems, 1, () => {}, () => {}, vi.fn());
+    expect(host.querySelector(".stepbar-msg")!.textContent).toBe("not in canonical form");
   });
 
   it("speaks names when the caller can resolve them, paths only as the fallback", () => {
     // The audit read `items/decks/street-tech.storyletdeck [burner-rig/continue]`
-    // where a person thinks "Burner Rig › Continue": storage paths are the
-    // fallback, never the voice.
+    // where a person thinks "Ambush at the ford": storage paths are the
+    // fallback, never the voice. The title goes into the sentence; the
+    // container goes into the where segment; nothing is joined with a glyph.
     const host = document.createElement("div");
-    renderProblems(host, problems, 0, () => {}, () => {}, vi.fn(),
-      (p) => (p.path.includes("docks") ? "Ambush at the ford › Flee" : undefined));
-    expect(host.querySelector(".stepbar-where")!.textContent).toBe("Ambush at the ford › Flee");
-    renderProblems(host, problems, 1, () => {}, () => {}, vi.fn(),
-      (p) => (p.path.includes("docks") ? "Ambush at the ford › Flee" : undefined));
+    const names = (p: { path: string }) => (p.path.includes("docks") ? { title: "Flee", where: "Ambush at the ford" } : undefined);
+    renderProblems(host, problems, 0, () => {}, () => {}, vi.fn(), names);
+    expect(host.querySelector(".stepbar-where")!.textContent).toBe("Ambush at the ford");
+    expect(host.querySelector(".stepbar-msg")!.textContent).toContain("“Flee”’s condition uses @story.gone");
+    expect(host.textContent).not.toContain("›");
+    expect(host.textContent).not.toContain("[");
+    renderProblems(host, problems, 1, () => {}, () => {}, vi.fn(), names);
     expect(host.querySelector(".stepbar-where")!.textContent).toBe("x");
   });
 
@@ -499,7 +534,7 @@ describe("problems bar", () => {
   it("clamps an index the list has outgrown rather than drawing nothing", () => {
     const host = document.createElement("div");
     renderProblems(host, [problems[0]!], 5, () => {}, () => {}, vi.fn());
-    expect(host.querySelector(".stepbar-msg")!.textContent).toBe(problems[0]!.message);
+    expect(host.querySelector(".stepbar-msg")!.textContent).toContain("uses @story.gone");
   });
 });
 

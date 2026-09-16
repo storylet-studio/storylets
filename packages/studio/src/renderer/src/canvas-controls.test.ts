@@ -3,8 +3,12 @@
 // Its whole job is to make invisible gestures reachable, so what is actually
 // worth testing is that a control never sits there enabled and doing nothing.
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { setKeyPlatform } from "@wildwinter/app-shell";
 import { mountCanvasControls, zoomLabel } from "./canvas-controls.js";
+
+// jsdom reports no platform, so the key hints are pinned per assertion.
+afterEach(() => setKeyPlatform(undefined));
 
 const state = (over: Partial<Parameters<ReturnType<typeof mountCanvasControls>["update"]>[0]> = {}) => ({
   scale: 1, hasItems: true, hasSelection: false, min: 0.1, max: 3, ...over,
@@ -24,13 +28,24 @@ describe("zoomLabel", () => {
 
 describe("the cluster", () => {
   it("offers fit, fit-selection and zoom, each with a rollover naming its key", () => {
+    // Platform-true, from the shell's one key helper: Apple's glyphs on a
+    // Mac, words elsewhere, never a glyph typed into the string.
+    setKeyPlatform("mac");
     const host = document.createElement("div");
     mountCanvasControls(host, {
       fitAll: vi.fn(), fitSelection: vi.fn(), zoomIn: vi.fn(), zoomOut: vi.fn(), actualSize: vi.fn(),
     });
     const tips = buttons(host).map((b) => b.dataset["tip"]);
     expect(tips).toEqual([
-      "Fit everything (Home)", "Fit the selection (F)", "Zoom out (⌘−)", "Back to 100% (⌘0)", "Zoom in (⌘+)",
+      "Fit everything (↖)", "Fit the selection (F)", "Zoom out (⌘-)", "Back to 100% (⌘0)", "Zoom in (⌘+)",
+    ]);
+    setKeyPlatform("win");
+    const winHost = document.createElement("div");
+    mountCanvasControls(winHost, {
+      fitAll: vi.fn(), fitSelection: vi.fn(), zoomIn: vi.fn(), zoomOut: vi.fn(), actualSize: vi.fn(),
+    });
+    expect(buttons(winHost).map((b) => b.dataset["tip"])).toEqual([
+      "Fit everything (Home)", "Fit the selection (F)", "Zoom out (Ctrl+-)", "Back to 100% (Ctrl+0)", "Zoom in (Ctrl++)",
     ]);
     // The rollover is the accessible name too: four of the five have no text.
     expect(buttons(host).every((b) => (b.getAttribute("aria-label") ?? "") !== "")).toBe(true);

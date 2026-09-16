@@ -13,7 +13,7 @@
 
 import Konva from "konva";
 import { el } from "./dom.js";
-import { iconNode, plural } from "@wildwinter/app-shell";
+import { iconNode, plural, tipWithKey } from "@wildwinter/app-shell";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface } from "./canvas-surface.js";
 import { nodeCameraKey, recallCamera, rememberCamera } from "./canvas-memory.js";
@@ -169,7 +169,7 @@ export function mountNodeView(
   // selection and "arrange" is not a command you want to guess the scope of.
   const tidy = el("button", {
     className: "btn camerabtn", text: "Arrange all by links",
-    tip: "Arrange by what links the cards (L)",
+    tip: tipWithKey("Arrange by what links the cards", "L"),
     onClick: () => layOut(),
   });
   // Greyed, never removed: a control that vanishes leaves an author wondering
@@ -229,7 +229,7 @@ export function mountNodeView(
         el("span", { className: "hint", text: hint }),
         el("span", { className: "stripgap" }),
         el("button", {
-          className: "stripbtn cancel", tip: "Abandon this (Esc)",
+          className: "stripbtn cancel", tip: tipWithKey("Abandon this", "Esc"),
           onClick: () => { if (commentArmed) disarmComment(); else furniture?.cancel(); },
         }, iconNode("close", 12), "Cancel"),
       );

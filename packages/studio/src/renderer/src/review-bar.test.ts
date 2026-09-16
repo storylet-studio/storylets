@@ -10,7 +10,7 @@ import type { ReviewItemDto } from "../../shared/api.js";
 const item = (over: Partial<ReviewItemDto> = {}): ReviewItemDto => ({
   thread: "cmt_1", anchor: "c_gate",
   at: { kind: "card", box: "b_1", deck: "k_1", card: "c_gate" },
-  where: "Village · Arrival · Arrive at the Gate",
+  where: "Village / Arrival / Arrive at the Gate",
   author: "Ada", text: "Lands too early.",
   ...over,
 });
@@ -38,7 +38,7 @@ describe("the review bar", () => {
     renderReviewBar(host, [item(), item({ thread: "cmt_2" })], 0, true, vi.fn(), vi.fn(), vi.fn());
     expect(host.querySelector(".stepbar-count")?.textContent).toBe("2");
     expect(host.querySelector(".stepbar-of")?.textContent).toBe("1/2");
-    expect(text()).toContain("Village · Arrival · Arrive at the Gate");
+    expect(text()).toContain("Village / Arrival / Arrive at the Gate");
     expect(text()).toContain("Ada: Lands too early.");
   });
 

@@ -63,7 +63,7 @@ import { setPlayRung } from "./play-ladder.js";
 import { setPropertyNavigator } from "./expr-panels.js";
 import { createNavHistory, historyNav, toast } from "@wildwinter/app-shell";
 // The small idioms (util.ts): one plural, one debounce, one "is the focus in a field".
-import { debounce, isEditableTarget, plural } from "@wildwinter/app-shell";
+import { debounce, isEditableTarget, keyLabel, plural, tipWithKey } from "@wildwinter/app-shell";
 // The updater's view is the shell's (updater-view.ts): the renderer half its
 // main-process updater cannot run without, on the family's dialog frame.
 import { showUpdaterDialog, feedUpdaterDownloadProgress } from "@wildwinter/app-shell";
@@ -75,6 +75,7 @@ import type { SearchSelection } from "./search.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { openKitPicker } from "./kit-picker.js";
 import { STORYLETTER_WORDMARK } from "./wordmark.js";
+import type { ProblemNames } from "./problem-copy.js";
 // Live Link: the bottom-right connect chip is the shell's (link-status.ts);
 // what the game sends stays the Board's business.
 import { mountLinkStatus } from "@wildwinter/app-shell";
@@ -1400,11 +1401,11 @@ vcEl.hidden = true;
 let shell!: PaneShell;
 function mountShell(): void {
   shell = mountPaneShell(el("div"), {
-    nav: { defaultWidth: "224px", label: "navigator", shortcutHint: "Cmd+1" },
+    nav: { defaultWidth: "224px", label: "navigator", shortcutHint: keyLabel("Mod+1") },
     // NOT OFFERED (app-shell 0.36.0): the slot is retired and its toggle
     // opened 384px of nothing - the audit's blank-pane find. The config
     // stays so the future reference pane inherits the width and label.
-    inspector: { defaultWidth: "384px", label: "inspector", shortcutHint: "Cmd+2", offered: false },
+    inspector: { defaultWidth: "384px", label: "inspector", shortcutHint: keyLabel("Mod+2"), offered: false },
     initial: {
       // The inspector pane is retired (ux-changes v3): mounted dormant + closed,
       // its slot reserved for a future genuinely-optional reference pane.
@@ -1444,7 +1445,7 @@ function mountShell(): void {
     flash(`No problems in ${project?.name ?? "this project"}`, "ok");
   });
   // The primary loop's visible door (surface review F8): play what you wrote.
-  const play = el("button", { className: "btn topbtn", tip: "Play this project on the Board (⌘T)" }, iconNode("play", 16), "Play");
+  const play = el("button", { className: "btn topbtn", tip: tipWithKey("Play this project on the Board", "Mod+T") }, iconNode("play", 16), "Play");
   play.addEventListener("click", () => { if (project) void (async () => { await flushSaves(); await studio.openTable(); })(); });
   shell.topbarTrail.append(play, vcEl, probEl, saveEl.el);
   // A locked document redraws itself in place on the controls that stay live
@@ -1792,7 +1793,7 @@ function renderProblemsBar(): void {
     },
     (p) => jumpToProblem(p),
     (p, fix, anchor) => applyFix(p, fix, anchor),
-    (p) => problemLabel(p));
+    (p) => problemNames(p));
   renderProblemChip();
 }
 // The topbar's quiet health chip: a tick when clean, the count when not.
@@ -1940,21 +1941,35 @@ function resolveDeckProblem(p: Problem, box: BoxDto) {
   return { deck, card, outcome };
 }
 
-/** The problem bar's voice: titles ("Burner Rig › Continue"), never storage
- *  paths, wherever the project can resolve them. */
-function problemLabel(p: Problem): string | undefined {
+/** The problem bar's voice: titles, never storage paths, wherever the project
+ *  can resolve them. `title` is the thing the problem is about, which the
+ *  sentence names; `where` is the container it sits in (the deck for a card,
+ *  the card for an outcome, the box for the rest), which the bar's mono
+ *  segment shows. One name each, so nothing here joins a trail. */
+function problemNames(p: Problem): ProblemNames | undefined {
   const box = project?.boxes.find((b) => p.path.includes(`${b.gameId}/`));
-  if (!box) return p.path.endsWith(".storyletproj") ? "Project settings" : undefined;
+  if (!box) return p.path.endsWith(".storyletproj") ? { where: "Project settings" } : undefined;
+  const boxName = box.title ?? box.gameId;
   const named = resolveDeckProblem(p, box);
   if (named?.card) {
-    const parts = [named.card.title ?? named.card.gameId];
-    if (named.outcome) parts.push(named.outcome.gameId);
-    return parts.join(" › ");
+    const cardName = named.card.title ?? named.card.gameId;
+    if (named.outcome) return { title: named.outcome.title ?? named.outcome.gameId, where: cardName };
+    return { title: cardName, where: named.deck.title ?? named.deck.gameId };
   }
-  if (named) return named.deck.title ?? named.deck.gameId;
-  if (p.path.endsWith(".storylethands")) return p.where ?? "Hands";
-  if (p.path.endsWith(".storylettags")) return p.where ?? "Tags";
-  if (p.path.endsWith(".storyletbox")) return box.title ?? box.gameId;
+  if (named) return { title: named.deck.title ?? named.deck.gameId, where: boxName };
+  if (p.path.endsWith(".storylethands")) {
+    const hand = box.hands.find((h) => h.gameId === p.where);
+    const template = box.templates.find((t) => t.gameId === p.where);
+    return { where: boxName, ...(hand ? { title: hand.title ?? hand.gameId } : template ? { title: template.gameId } : p.where ? { title: p.where } : {}) };
+  }
+  if (p.path.endsWith(".storylettags")) {
+    // `where` is the group, or "group/tag" for a problem on one of its tags.
+    const [groupRef, tagRef] = (p.where ?? "").split("/");
+    const group = box.tagGroups.find((g) => g.gameId === groupRef);
+    if (group && tagRef) return { title: tagRef, where: group.gameId };
+    return { where: boxName, ...(group ? { title: group.gameId } : p.where ? { title: p.where } : {}) };
+  }
+  if (p.path.endsWith(".storyletbox")) return { title: boxName };
   return undefined;
 }
 
@@ -2079,9 +2094,9 @@ function renderCardPanes(): boolean {
     const next = deck.cards[at + delta];
     if (next) actions.inspectCard(box.id, deck.id, next.id);
   };
-  const prev = el("button", { className: "btn icon centre-step", tip: "Previous card (↑)" }, iconNode("back"));
+  const prev = el("button", { className: "btn icon centre-step", tip: tipWithKey("Previous card", "Up") }, iconNode("back"));
   prev.disabled = at <= 0; prev.addEventListener("click", () => step(-1));
-  const next = el("button", { className: "btn icon centre-step", tip: "Next card (↓)" }, iconNode("forward"));
+  const next = el("button", { className: "btn icon centre-step", tip: tipWithKey("Next card", "Down") }, iconNode("forward"));
   next.disabled = at >= deck.cards.length - 1; next.addEventListener("click", () => step(1));
   const editor = centreEditor([
     boxSeg(box),

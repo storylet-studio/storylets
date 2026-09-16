@@ -43,6 +43,7 @@
 @import "@wildwinter/app-shell/save.css";
 @import "@wildwinter/app-shell/stale.css";
 @import "@wildwinter/app-shell/stepper.css";
+@import "@wildwinter/app-shell/keys.css";
 
 /* The one section caption, for every window: sentence-case words in the UI
    face, weight 600, muted. Not an overline: the tracked-caps eyebrow is

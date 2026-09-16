@@ -13,7 +13,9 @@ export type { SearchSelection } from "../../shared/api.js";
 export interface SearchHit {
   kind: "deck" | "card" | "template" | "hand" | "tagGroup";
   label: string;
-  sublabel: string;
+  /** The row's metadata, as parts: the window draws them with the shell's
+   *  `metaLine` (a disc between parts), so nothing here types a separator. */
+  sublabel: string[];
   selection: SearchSelection;
   /** Every expression this item carries, as one blob: the haystack for a
    *  property-usage query ("@world.raining" -> who reads or writes it).
@@ -27,7 +29,7 @@ export function searchIndex(project: ProjectDto): SearchHit[] {
   for (const box of project.boxes) {
     for (const deck of box.decks) {
       hits.push({
-        kind: "deck", label: deck.title ?? deck.gameId, sublabel: `deck · ${box.gameId}`,
+        kind: "deck", label: deck.title ?? deck.gameId, sublabel: ["deck", box.gameId],
         selection: { kind: "deck", box: box.id, deck: deck.id },
         ...(deck.gate !== undefined ? { uses: deck.gate } : {}),
       });
@@ -39,7 +41,7 @@ export function searchIndex(project: ProjectDto): SearchHit[] {
         ].filter((x) => x !== "").join(" ");
         hits.push({
           kind: "card", label: card.title ?? card.gameId,
-          sublabel: `card · ${deck.title ?? deck.gameId}${card.purpose ? ` · ${card.purpose}` : ""}`,
+          sublabel: ["card", deck.title ?? deck.gameId, ...(card.purpose ? [card.purpose] : [])],
           selection: { kind: "card", box: box.id, deck: deck.id, card: card.id },
           ...(uses !== "" ? { uses } : {}),
         });
@@ -47,20 +49,20 @@ export function searchIndex(project: ProjectDto): SearchHit[] {
     }
     for (const template of box.templates) {
       hits.push({
-        kind: "template", label: template.gameId, sublabel: `hand template · ${box.gameId}`,
+        kind: "template", label: template.gameId, sublabel: ["hand template", box.gameId],
         selection: { kind: "template", box: box.id, template: template.id },
       });
     }
     for (const hand of box.hands) {
       hits.push({
-        kind: "hand", label: hand.title ?? hand.gameId, sublabel: `hand · ${hand.template ?? "standalone"}`,
+        kind: "hand", label: hand.title ?? hand.gameId, sublabel: ["hand", hand.template ?? "standalone"],
         selection: { kind: "hand", box: box.id, hand: hand.id },
       });
     }
     for (const group of box.tagGroups) {
       hits.push({
         kind: "tagGroup", label: group.gameId,
-        sublabel: `tag group · ${group.values.join(", ")}`,
+        sublabel: ["tag group", group.values.join(", ")],
         selection: { kind: "tagGroup", box: box.id, group: group.id },
       });
     }
@@ -88,7 +90,7 @@ export function searchMatch(index: SearchHit[], query: string): SearchHit[] {
       scored.push({ hit, score: hit.kind === "card" ? 1 : 0 });
       continue;
     }
-    const hay = `${label} ${hit.sublabel.toLowerCase()}`;
+    const hay = `${label} ${hit.sublabel.join(" ").toLowerCase()}`;
     if (!subsequence(hay, q)) continue;
     let score = 0;
     if (label.includes(q)) score += 10;

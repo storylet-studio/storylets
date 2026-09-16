@@ -25,7 +25,7 @@
 // ---------------------------------------------------------------------------
 
 import { el } from "./dom.js";
-import { iconNode, plural } from "@wildwinter/app-shell";
+import { iconNode, plural, tipWithKey } from "@wildwinter/app-shell";
 import { colourIndex } from "../../shell/colour.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface, type DrawContext } from "./canvas-surface.js";
@@ -517,7 +517,7 @@ export function mountMapView(
         el("span", { className: "hint", text: furnitureHint }),
         el("span", { className: "stripgap" }),
         el("button", {
-          className: "stripbtn cancel", tip: "Abandon this (Esc)",
+          className: "stripbtn cancel", tip: tipWithKey("Abandon this", "Esc"),
           onClick: () => { if (commentArmed) disarmComment(); else furniture?.cancel(); },
         }, iconNode("close", 12), "Cancel"),
       );
@@ -536,7 +536,7 @@ export function mountMapView(
               : `Click the first corner of ${busy.label} again, or press Enter, to close it`
           : `Click where ${busy.label} sits` }),
         el("span", { className: "stripgap" }),
-        el("button", { className: "stripbtn cancel", tip: "Abandon this (Esc)", onClick: () => stopTool() }, iconNode("close", 12), "Cancel"),
+        el("button", { className: "stripbtn cancel", tip: tipWithKey("Abandon this", "Esc"), onClick: () => stopTool() }, iconNode("close", 12), "Cancel"),
       );
       return;
     }

@@ -10,7 +10,7 @@
 // in the document itself (design review 2026-08, A17).
 // ---------------------------------------------------------------------------
 
-import { iconNode, plural, renderStepperBar, wireReorder } from "@wildwinter/app-shell";
+import { iconNode, metaLine, plural, renderStepperBar, tipWithKey, wireReorder } from "@wildwinter/app-shell";
 import type { IconName } from "@wildwinter/app-shell";
 import { gameIdify, PLACE_GROUP } from "@storylet-studio/model";
 import { el } from "./dom.js";
@@ -18,6 +18,8 @@ import { colourIndex } from "../../shell/colour.js";
 import { previewCondition } from "./expr-panels.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { currentDocTab, docTabs, documentHeading, setDocTab } from "./inspector.js";
+import { problemText } from "./problem-copy.js";
+import type { ProblemNames } from "./problem-copy.js";
 import type { BoxDto, BoxEdit, CardDto, ConditionProperty, DeckDto, Problem, ProjectDto, ReviewItemDto, ViewMode } from "../../shared/api.js";
 
 /** What the centre shows + the nav highlight. Which tab a document is on is
@@ -224,13 +226,22 @@ export function projectLead(
   return button;
 }
 
+/** A row's metadata, drawn: the shell's `metaLine` (a disc between parts,
+ *  from CSS) wearing `.listmeta` for the row's size and colour. What used to
+ *  be `${count} · ${sub}` typed into one span. */
+function listMeta(parts: (string | undefined)[]): HTMLElement {
+  const m = metaLine(parts);
+  m.classList.add("listmeta");
+  return m;
+}
+
 export function crumbTrail(segments: { label: string; go: () => void }[], ...right: (Node | null)[]): HTMLElement {
   const bar = el("div", { className: "crumbs" });
   const up = segments[segments.length - 1];
   if (up) {
     bar.append(el("button", {
       className: "btn crumb-back",
-      tip: `Back to ${up.label} (Esc)`, onClick: up.go,
+      tip: tipWithKey(`Back to ${up.label}`, "Esc"), onClick: up.go,
     }, iconNode("back"), up.label));
   }
   // The way back to where you actually came from, when that is somewhere else. It
@@ -751,7 +762,7 @@ export function renderBoxCentre(
     const row = (label: string, count: number, sub: string, kind: "decks" | "hands"): void => {
       list.append(el("button", { className: "listrow", onClick: () => actions.focus({ kind, box: box.id }) },
         el("span", { className: "listname", text: label }),
-        el("span", { className: "listmeta", text: `${count} · ${sub}` })));
+        listMeta([String(count), sub])));
     };
     row("Decks", box.decks.length, "The box's cards, deck by deck.", "decks");
     // B3: the SAME sentence the Hands master uses, and the accurate one. This
@@ -765,7 +776,7 @@ export function renderBoxCentre(
     if (mapped.length > 0) {
       list.append(el("button", { className: "listrow", onClick: () => { setDocTab(tabKey, "map"); actions.focus({ kind: "box", box: box.id }); } },
         el("span", { className: "listname", text: "Maps" }),
-        el("span", { className: "listmeta", text: `${mapped.length} · ${mapped.map((g) => g.gameId).join(", ")}` })));
+        listMeta([String(mapped.length), mapped.map((g) => g.gameId).join(", ")])));
     }
     body = list;
   }
@@ -780,7 +791,7 @@ function boxTemplatesBody(box: BoxDto, actions: ViewActions): HTMLElement {
   for (const t of box.templates) {
     const row = el("button", { className: "listrow", onClick: () => actions.inspectTemplate(box.id, t.id) },
       el("span", { className: "listname", text: t.gameId }),
-      el("span", { className: "listmeta", text: `${t.bindings.join(", ") || "pulls the whole stock"} · ${t.slots} slot${t.slots === "1" ? "" : "s"}` }),
+      listMeta([t.bindings.join(", ") || "pulls the whole stock", `${t.slots} slot${t.slots === "1" ? "" : "s"}`]),
       el("span", { className: "listmeta", text: `${plural(t.instances, "instance")}` }));
     row.dataset["vc"] = vcKeys.hands(box.id);
     row.addEventListener("contextmenu", itemMenu(() => actions.duplicateTemplate(box.id, t.id), () => actions.deleteTemplate(box.id, t.id)));
@@ -954,7 +965,7 @@ export function renderHandsCentre(host: HTMLElement, box: BoxDto, actions: ViewA
     // A titled hand reads as a title; only a bare gameId reads as a name.
     const row = el("button", { className: "listrow draggable", onClick: () => actions.inspectHand(box.id, hand.id) },
       el("span", { className: `listname${hand.title !== undefined ? " listtitle" : ""}`, text: hand.title ?? hand.gameId }),
-      el("span", { className: "listmeta", text: `${kind}${hand.slots !== undefined ? ` · ${plural(hand.slots, "slot")}` : ""}` }));
+      listMeta([kind, hand.slots !== undefined ? plural(hand.slots, "slot") : undefined]));
     // Every hand lives in the one hands shard, so they badge together.
     row.dataset["vc"] = vcKeys.hands(box.id);
     row.addEventListener("contextmenu", itemMenu(() => actions.duplicateHand(box.id, hand.id), () => actions.deleteHand(box.id, hand.id)));
@@ -976,10 +987,11 @@ export function renderProblems(
   onStep: (next: number) => void,
   onJump: (p: Problem) => void,
   onFix: (p: Problem, fix: NonNullable<Problem["fix"]>, anchor: HTMLElement) => void,
-  /** Titles for the where segment ("Burner Rig › Continue"), when the caller
-   *  can resolve them: the audit read storage paths where a person thinks in
-   *  names. Undefined falls back to the path form. */
-  labelFor?: (p: Problem) => string | undefined,
+  /** The names the caller can resolve for a problem: the `title` of the thing
+   *  it is about (the sentence names it) and the `where` it sits in (the bar's
+   *  mono segment): the audit read storage paths where a person thinks in
+   *  names. Undefined falls back to the compiler's own `where`, then the path. */
+  namesFor?: (p: Problem) => ProblemNames | undefined,
 ): void {
   // On demand only (ux-changes v3): no bar when the project is clean.
   //
@@ -1013,12 +1025,18 @@ export function renderProblems(
   // The bar clamps `at` itself; the quick fix has to be built from the same
   // entry the bar is about to show, so it clamps to the same place.
   const current = problems[Math.min(Math.max(at, 0), problems.length - 1)];
+  // THE SENTENCE IS THE TABLE'S (problem-copy.ts): the compiler's message is
+  // written for the shard, and the bar speaks for the author, naming the thing
+  // by its title and saying what to do next.
   renderStepperBar(host, {
-    items: problems.map((p) => ({
-      kind: p.severity, kindClass: `sev-${p.severity}`,
-      where: labelFor?.(p) ?? p.where ?? p.path,
-      text: p.message,
-    })),
+    items: problems.map((p) => {
+      const names = namesFor?.(p);
+      return {
+        kind: p.severity, kindClass: `sev-${p.severity}`,
+        where: names?.where ?? p.where ?? p.path,
+        text: problemText(p, names),
+      };
+    }),
     at,
     tone: errors > 0 ? "danger" : "warn",
     tips: { prev: "Previous problem", next: "Next problem", go: "Go to what this is about" },
@@ -1093,7 +1111,7 @@ export function renderReviewBar(
     })),
     at,
     tone: "accent",
-    tips: { prev: "Previous comment (Shift+F8)", next: "Next comment (F8)", go: "Go to this comment" },
+    tips: { prev: tipWithKey("Previous comment", "Shift+F8"), next: tipWithKey("Next comment", "F8"), go: "Go to this comment" },
     onStep,
     onGo: (i) => onGo(items[i]!),
     // An EMPTY walk still shows its bar. Entering the mode and seeing nothing at

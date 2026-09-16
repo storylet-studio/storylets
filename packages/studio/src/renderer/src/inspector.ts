@@ -1622,7 +1622,7 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
     const cardsN = box.decks.flatMap((d) => d.cards).filter((c) => c.tags.some((m) => m.group === detail.gameId)).length;
     const templates = box.templates.filter((t) => t.bindings.some((b) => b.startsWith(`${detail.gameId} =`))).map((t) => t.gameId);
     view.append(derivedFooter(
-      `${plural(cardsN, "card")} tagged · ${templates.length > 0 ? `bound by ${templates.join(", ")}` : "not bound by any hand template"}.`));
+      `${plural(cardsN, "card")} tagged. ${templates.length > 0 ? `Bound by ${templates.join(", ")}` : "Not bound by any hand template"}.`));
     centre.replaceChildren(view);
   }
   draw();

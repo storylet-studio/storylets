@@ -15,7 +15,7 @@ import "@wildwinter/app-shell/tooltip.css";
 import "@wildwinter/app-shell/toast.css";
 import { applyTheme } from "../src/theme.js";
 import { el } from "../src/dom.js";
-import { followButton, iconNode, initTooltips, plural, staleBar, toast, toolWindowHead } from "@wildwinter/app-shell";
+import { followButton, iconNode, initTooltips, metaLine, plural, staleBar, toast, toolWindowHead } from "@wildwinter/app-shell";
 import type { IconName } from "@wildwinter/app-shell";
 import { confirmDialog } from "../src/confirm.js";
 import { colourIndex } from "../../shell/colour.js";
@@ -468,6 +468,13 @@ function stampOf(entry: BoardLogEntry): string {
   return box !== undefined ? `${box} ${turn}` : `T${turn}`;
 }
 
+/** The journal's "becomes" arrow between a before and an after (a card and
+ *  the hand it went to, a value and its new one): the vocabulary's drawing,
+ *  not a typed "→". */
+function becomes(): HTMLElement {
+  return el("span", { className: "jarrow" }, iconNode("arrowRight", 12));
+}
+
 function journalRow(entry: BoardLogEntry): HTMLElement | null {
   const row = (kind: string | Node, cls: string, ...payload: (Node | string)[]): HTMLElement =>
     el("div", { className: `jrow ${cls}` },
@@ -478,12 +485,12 @@ function journalRow(entry: BoardLogEntry): HTMLElement | null {
     case "deal": {
       const dealt = entry.cards.filter((c) => c.verdict === "dealt");
       if (dealt.length === 0) return null;   // a quiet refresh is not a story beat
-      return row("dealt", "j-deal", `${dealt.map((c) => `“${quote(table!.label(c.id))}”`).join(", ")} → ${entry.hand}`);
+      return row("dealt", "j-deal", dealt.map((c) => `“${quote(table!.label(c.id))}”`).join(", "), becomes(), entry.hand);
     }
     case "play":
-      return row("played", "j-play", `“${quote(table!.label(entry.card))}”${playedTail(entry.outcome, "→")}`);
+      return row("played", "j-play", `“${quote(table!.label(entry.card))}”`, ...(entry.outcome === "" ? [] : [becomes(), entry.outcome]));
     case "write":
-      return row("wrote", "j-write", `${entry.target} ${entry.prev !== undefined ? `${JSON.stringify(entry.prev)} → ` : ""}${JSON.stringify(entry.value)}`);
+      return row("wrote", "j-write", `${entry.target} `, ...(entry.prev !== undefined ? [JSON.stringify(entry.prev), becomes()] : []), JSON.stringify(entry.value));
     case "evict":
       return row("left", "j-evict", `“${quote(table!.label(entry.card))}” (${entry.reason})`);
     case "turns":
@@ -493,7 +500,7 @@ function journalRow(entry: BoardLogEntry): HTMLElement | null {
     case "diagnostic":
       return row(iconNode("warning", 12), "j-warn", `${entry.where}: ${entry.message}`);
     case "meddle":
-      return row("meddled", "j-meddle", `${entry.label} ${entry.prev !== undefined ? `${JSON.stringify(entry.prev)} → ` : ""}${JSON.stringify(entry.value)}`);
+      return row("meddled", "j-meddle", `${entry.label} `, ...(entry.prev !== undefined ? [JSON.stringify(entry.prev), becomes()] : []), JSON.stringify(entry.value));
   }
 }
 
@@ -804,14 +811,14 @@ function liveCells(): HTMLElement {
   return cells;
 }
 
-/** "Not listed · why" in Live mode: every hand's latest deal, and the cards it
+/** "Not listed, and why" in Live mode: every hand's latest deal, and the cards it
  *  looked at and rejected. The Board's own version lives behind the curtain; in
  *  Live mode the curtain is closed, so this stands on its own. */
 function liveNotDealt(): HTMLElement | null {
   const byHand = Object.entries(liveRun?.notDealt ?? {}).filter(([, ns]) => ns.length > 0);
   if (byHand.length === 0) return null;
   const nd = el("details", { className: "curtain" }) as HTMLDetailsElement;
-  nd.append(el("summary", {}, iconNode("collapsed", 12), "Not listed · why"));
+  nd.append(el("summary", {}, iconNode("collapsed", 12), "Not listed, and why"));
   for (const [hand, ns] of byHand) {
     const block = el("div", { className: "notdealt" });
     block.append(el("span", { className: "caption", text: hand }));
@@ -1028,13 +1035,13 @@ function statePanel(): HTMLElement {
       for (const c of peeked) {
         list.append(el("div", { className: "ndrow" },
           el("span", { className: "ndname", text: c.title ?? c.gameId }),
-          el("span", { className: "ndreason", text: `priority ${c.priority ?? 0}${c.specificity !== undefined ? ` · specificity ${c.specificity}` : ""} · looked at, put back` })));
+          el("span", { className: "ndreason" }, metaLine([`priority ${c.priority ?? 0}`, c.specificity !== undefined ? `specificity ${c.specificity}` : undefined, "looked at, put back"]))));
       }
       results.append(list);
     }
     if (notDealt.length > 0) {
       const nd = el("div", { className: "notdealt" });
-      nd.append(el("span", { className: "caption", text: "Not listed · why" }));
+      nd.append(el("span", { className: "caption", text: "Not listed, and why" }));
       for (const n of notDealt) {
         nd.append(el("div", { className: "ndrow" },
           el("span", { className: "ndname", text: n.title ?? n.gameId }),
@@ -1138,7 +1145,7 @@ function render(): void {
       const changed = changedIn(b.gameId);
       const held = heldIn(b.gameId);
       return el("button", { className: `bnav-row${boxSel === b.gameId ? " sel" : ""}`,
-        tip: `${plural(held, "card")} held${changed > 0 ? ` · ${changed} changed by the last action` : ""}`,
+        tip: `${plural(held, "card")} held.${changed > 0 ? ` ${changed} changed by the last action.` : ""}`,
         onClick: () => pickBox(b.gameId) },
         el("span", { className: "bnav-name", text: b.title ?? b.gameId }),
         changed > 0 ? el("span", { className: "bbadge", text: String(changed) }) : null,
@@ -1245,23 +1252,25 @@ function render(): void {
           rows.push(el("div", { className: "jrow j-write j-in" },
             el("span", { className: "jt" }),
             el("span", { className: "jk", text: "wrote" }),
-            el("span", { className: "jp", text: `${w.target} ${w.prev !== undefined ? `${JSON.stringify(w.prev)} → ` : ""}${JSON.stringify(w.value)}` })));
+            el("span", { className: "jp" }, `${w.target} `, ...(w.prev !== undefined ? [JSON.stringify(w.prev), becomes()] : []), JSON.stringify(w.value))));
         }
       }
       for (const r of item.ripple) {
         rows.push(el("div", { className: "jrow j-ripple" },
           el("span", { className: "jt" }),
           el("span", { className: "jk", text: "and so" }),
-          el("span", { className: "jp", text: r.kind === "dealt"
-            ? `“${quote(table!.label(r.card))}” → ${handName(r.hand)}${r.why === "slot" ? " (took the freed slot)" : ""}`
-            : `“${quote(table!.label(r.card))}” left ${handName(r.hand)}` })));
+          r.kind === "dealt"
+            ? el("span", { className: "jp" }, `“${quote(table!.label(r.card))}”`, becomes(), `${handName(r.hand)}${r.why === "slot" ? " (took the freed slot)" : ""}`)
+            : el("span", { className: "jp", text: `“${quote(table!.label(r.card))}” left ${handName(r.hand)}` })));
       }
     } else if (item.kind === "turns") {
       if (journalHidden.has("turns")) continue;
       rows.push(el("div", { className: "jrow j-turn" },
         el("span", { className: "jt", text: item.uniform !== undefined ? `T${item.uniform}` : "" }),
         el("span", { className: "jk", text: "turn" }),
-        el("span", { className: "jp", text: item.uniform !== undefined ? `every box → ${item.uniform}` : "every box +1" })));
+        item.uniform !== undefined
+          ? el("span", { className: "jp" }, "every box", becomes(), String(item.uniform))
+          : el("span", { className: "jp", text: "every box +1" })));
     } else {
       // A diagnostic the peek produced belongs to the peek's results, not the
       // journal (live mode's seqs are the game's own, never peek-marked).
@@ -1361,7 +1370,7 @@ function render(): void {
         ),
     liveMode
       // Live mode: the game's run, always as a list (its board, its journal,
-      // its "Not listed · why"). The List/Map switch, the box navigator and
+      // its "Not listed, and why"). The List/Map switch, the box navigator and
       // the local controls step aside; the turn dial is read-only.
       ? el("div", { className: "tbody nonav" },
           el("main", { className: "tmain" },

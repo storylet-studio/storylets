@@ -2,7 +2,7 @@
 // The Board's Live mode (design/live-link.md): a session the Board did not
 // create, rebuilt from the game's frames. `board` snapshots say what each hand
 // holds and where every clock is; `trace` events are the story, and they are
-// the runtime's own TraceEvents, so the journal and "Not listed · why" read
+// the runtime's own TraceEvents, so the journal and "Not listed, and why" read
 // them with the code they already have. Pure over the frames, so it tests
 // headlessly; the DOM layer in table.ts renders what this holds.
 // ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ export interface LiveRun {
    *  a sequence and the turn its box was on. */
   readonly log: readonly LogEntry[];
   /** For each hand the game has dealt, the cards its LATEST deal looked at and
-   *  rejected, with why: the Board's "Not listed · why", for the game's deals. */
+   *  rejected, with why: the Board's "Not listed, and why", for the game's deals. */
   readonly notDealt: Readonly<Record<string, NotDealt[]>>;
   /** The project the game named in its hello, if it did. */
   readonly project: string | undefined;

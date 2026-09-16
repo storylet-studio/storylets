@@ -47,8 +47,9 @@ input {
 .cbody { flex: 1; overflow-y: auto; padding: 24px 28px; display: flex; flex-direction: column; gap: 24px; max-width: 720px; }
 .hint { color: var(--muted); font-size: 13.5px; }
 
-.meta { margin: -16px 0 0; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.meta .sep { margin: 0 8px; opacity: 0.5; }
+/* Two shell `metaLine`s (the run's size, how it ended), a wider gap between
+   the two than the disc inside each, and nothing typed between them. */
+.meta { margin: -16px 0 0; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; gap: 2px 20px; }
 
 /* The pin is the kit's .swin-pin now; nothing local left to say about it. */
 

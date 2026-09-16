@@ -46,6 +46,7 @@ describe("Cmd+K search", () => {
   it("a hand's sublabel names its template (or standalone)", () => {
     const hand = index.find((h) => h.kind === "hand")!;
     expect(hand.sublabel).toContain("street-hands");
+    expect(hand.sublabel.join(" ")).not.toContain("·");
   });
 
   it("ranks a label hit above an only-sublabel hit", () => {

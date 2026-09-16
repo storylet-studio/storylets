@@ -766,8 +766,11 @@ export interface ReviewItemDto {
    *  that canvas rather than the anchor's editor, because a marker's whole point
    *  is where it sits. */
   canvas?: string;
-  /** A trail an author reads at a glance: "Village · Arrival · Arrive at the
-   *  Gate". Built in main, which is the side that knows the containment. */
+  /** A trail an author reads at a glance, as an ADDRESS with slashes
+   *  ("Village / Arrival / Arrive at the Gate"): the bar's `where` segment is a
+   *  string set in the mono face, so it is a path rather than a drawn
+   *  breadcrumb until the shell's stepper takes a Node there. Built in main,
+   *  which is the side that knows the containment. */
   where: string;
   author: string;
   /** The first message: what the bar shows. */

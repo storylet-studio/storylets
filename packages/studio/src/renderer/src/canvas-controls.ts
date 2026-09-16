@@ -17,6 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import "./canvas-controls.css";
+import { tipWithKey } from "@wildwinter/app-shell";
 import { el } from "./dom.js";
 
 /** The four the cluster draws, on the shell's grammar: the 24 grid, the
@@ -97,13 +98,13 @@ export function mountCanvasControls(host: HTMLElement, actions: CanvasControlAct
     return b;
   };
 
-  const fitAll = button(ICON_FIT_ALL, "Fit everything (Home)", actions.fitAll);
-  const fitSel = button(ICON_FIT_SELECTION, "Fit the selection (F)", actions.fitSelection);
-  const out = button(ICON_ZOOM_OUT, "Zoom out (⌘−)", actions.zoomOut);
-  const inn = button(ICON_ZOOM_IN, "Zoom in (⌘+)", actions.zoomIn);
+  const fitAll = button(ICON_FIT_ALL, tipWithKey("Fit everything", "Home"), actions.fitAll);
+  const fitSel = button(ICON_FIT_SELECTION, tipWithKey("Fit the selection", "F"), actions.fitSelection);
+  const out = button(ICON_ZOOM_OUT, tipWithKey("Zoom out", "Mod+-"), actions.zoomOut);
+  const inn = button(ICON_ZOOM_IN, tipWithKey("Zoom in", "Mod++"), actions.zoomIn);
   // The readout is a control too: the zoom is the one number on a canvas anybody
   // wants to reset, and clicking the thing that displays it is where they try.
-  const readout = button(undefined, "Back to 100% (⌘0)", actions.actualSize);
+  const readout = button(undefined, tipWithKey("Back to 100%", "Mod+0"), actions.actualSize);
   readout.classList.add("canvaszoom");
   readout.textContent = zoomLabel(1);
 
