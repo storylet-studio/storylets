@@ -828,11 +828,6 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 
 /* The Live Link chip is the shell's (@wildwinter/app-shell/link-status.css). */
 
-/* --- the job strip, plain ------------------------------------------------------
-   The publish / pack / pull / push / merge jobs report no count and cannot be
-   cancelled mid-write, so the strip says what is running and for how long,
-   and nothing it cannot honour. */
-.job-strip.job-plain .job-count, .job-strip.job-plain .job-cancel { display: none; }
 .set-uses { font: 0.72rem var(--font-mono); color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: var(--radius-pill); padding: 0.1rem 0.55rem; cursor: pointer; white-space: nowrap; }
 .set-uses:hover { color: var(--accent); border-color: var(--accent); }
 

@@ -81,8 +81,10 @@ function render(): void {
     pinned,
     onPin: (on) => { pinned = on; void studio.setCoveragePinned(on); },
     onClose: () => void studio.closeCoverage(),
-    // Off: Escape must not close the window under a running sweep (see mount).
-    esc: false,
+    // Escape closes, as it does in Find and Links. NOT while a sweep is running:
+    // the window is the only place the progress and the Cancel button live, and
+    // closing it out from under a job would leave the job with nowhere to report.
+    onEscape: () => busy,
     // The project is named beside the title rather than folded into it: the
     // title says which window this is, and that should not change as projects
     // open.
@@ -300,18 +302,11 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
  *
  *  Split from `refresh` below on 2026-08-29. `boot()` did both jobs and the
  *  project-changed handler called it, so every project switch added another
- *  keydown listener, another theme handler, another pin handler and another
- *  job-progress handler. After n switches one Escape fired n closes and one
- *  pin change caused n renders. Find and the Board already answered
+ *  theme handler, another pin handler and another job-progress handler. After
+ *  n switches one pin change caused n renders. Find and the Board already answered
  *  onProjectChanged with a targeted refresh; this window was the exception. */
 function mount(): void {
   initTooltips();
-  // Escape closes, as it does in Find and Links. NOT while a sweep is running:
-  // the window is the only place the progress and the Cancel button live, and
-  // closing it out from under a job would leave the job with nowhere to report.
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !busy) void studio.closeCoverage();
-  });
   studio.onTheme(applyTheme);
   // Reset View re-pins every helper window in main and tells the window after
   // the fact (app-shell 0.23.0). Re-rendering is the whole fix here: this head

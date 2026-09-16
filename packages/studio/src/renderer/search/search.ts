@@ -275,9 +275,9 @@ function mount(): void {
   const head = toolWindowHead({
     pin,
     onClose: () => void studio.closeSearch(),
-    // Off: the head's Escape stands aside for a field, and this window's focus
-    // LIVES in a field. Escape closes from the query box (below), as it always has.
-    esc: false,
+    // This window's focus LIVES in a field, so Escape closes from the query box
+    // too, as it always has.
+    esc: "always",
     lead: [modes],
   });
 
@@ -306,9 +306,6 @@ function mount(): void {
   setMode(mode);
 }
 
-window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") void studio.closeSearch();
-});
 // The editor may have changed while Find was open; refresh on return.
 window.addEventListener("focus", () => void refreshProject());
 

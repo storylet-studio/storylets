@@ -296,9 +296,9 @@ function render(): void {
     pinned,
     onPin: (on) => { pinned = on; void studio.setLinksPinned(on); },
     onClose: () => void studio.closeLinks(),
-    // Escape is layered here (the canvas's selection goes first; see the
-    // window listener below), so the head's own Escape stays off.
-    esc: false,
+    // Escape does the smallest useful thing first: the canvas takes it to clear
+    // its selection, and the window only closes when there is none to drop.
+    onEscape: () => canvas?.hasSelection() ?? false,
     // Walking away from the editor's selection is a state worth showing, with one
     // click back: otherwise the window looks stuck.
     trail: [walked !== undefined
@@ -331,13 +331,6 @@ function render(): void {
 
 // The editor's selection moved: follow it, unless the author has walked away.
 studio.onLinkFocus(() => { if (walked === undefined) void show(undefined); });
-
-window.addEventListener("keydown", (e) => {
-  // Escape does the smallest useful thing first. The canvas also takes Escape to
-  // clear its selection, and this listener runs before it (it was registered
-  // first), so it has to stand aside rather than close the window under it.
-  if (e.key === "Escape" && !canvas?.hasSelection()) void studio.closeLinks();
-});
 
 async function boot(): Promise<void> {
   initTooltips();

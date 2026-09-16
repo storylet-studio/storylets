@@ -1371,12 +1371,11 @@ const problembar = el("div", { className: "stepbar problembar" });
  * push, merge): the wait is SAID rather than felt (parity row 20). The strip
  * appears when main reports the work has started (so a Save dialog in front
  * of it is not "publishing" yet) and goes when the call returns. These jobs
- * report no count and cannot be cancelled mid-write, so the strip wears
- * `job-plain`, which hides both: what the shell's strip wants is an
- * indeterminate mode of its own.
+ * report no count and cannot be cancelled mid-write, so the strip is pinned
+ * to the shell's indeterminate mode (the band and the elapsed time, no count)
+ * and, with no `onCancel`, draws no Cancel.
  */
-const jobStrip = mountJobProgress(el("div"), { onCancel: () => {}, units: "" });
-jobStrip.element.classList.add("job-plain");
+const jobStrip = mountJobProgress(el("div"), { indeterminate: true });
 let jobRunning: { kind: string; label: string } | undefined;
 async function withJob<T>(kind: string, label: string, work: () => Promise<T>): Promise<T> {
   jobRunning = { kind, label };

@@ -1305,8 +1305,17 @@ function render(): void {
       pinned,
       onPin: (on) => { pinned = on; void studio.setBoardPinned(on); },
       onClose: () => void studio.closeBoard(),
-      // Escape is LAYERED here (see boot), so the head's own Escape stays off.
-      esc: false,
+      // Escape is LAYERED, the way it is everywhere else in this app: innermost
+      // first, the pending outcome, then the open card, then the snapshot
+      // panel, and the window only when nothing smaller is left. A play session
+      // is a thing an author is in the middle of, so the window is the last
+      // thing Escape should take.
+      onEscape: () => {
+        if (pending !== undefined) { pending = undefined; render(); return true; }
+        if (open !== undefined) { open = undefined; render(); return true; }
+        if (snapPanel !== undefined) { snapPanel = undefined; render(); return true; }
+        return false;
+      },
       lead: [el("span", { className: "tname", text: name })],
       // The shell's toggle, worded once for the family ("card" is what this
       // editor opens as the run goes; Patterpad's is "line").
@@ -1405,22 +1414,6 @@ function render(): void {
 
 async function boot(): Promise<void> {
   initTooltips();
-  // Escape closes, as it does in Find, Links and Coverage - but LAYERED, the way
-  // Escape is layered everywhere else in this app: it dismisses the snapshot
-  // panel first if one is up, and only closes the window when there is nothing
-  // smaller to close. A play session is a thing an author is in the middle of,
-  // so the window is the last thing Escape should take.
-  window.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
-    const t = e.target;
-    if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
-    // Innermost first: the pending outcome, then the open card, then the
-    // snapshot panel, and the window only when nothing smaller is left.
-    if (pending !== undefined) { pending = undefined; render(); return; }
-    if (open !== undefined) { open = undefined; render(); return; }
-    if (snapPanel !== undefined) { snapPanel = undefined; render(); return; }
-    void studio.closeBoard();
-  });
   const state = await studio.getState();
   applyTheme(state.theme);
   studio.onTheme(applyTheme);
