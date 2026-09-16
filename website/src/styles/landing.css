@@ -86,7 +86,7 @@
 .sy-open-grid { display: grid; grid-template-columns: 1fr 1.05fr; gap: 56px; align-items: center; padding-top: 72px; padding-bottom: 72px; }
 .sy-lead { font-size: 17.5px; line-height: 1.6; color: var(--l-body); max-width: 34em; margin: 22px 0 0; }
 .sy-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 22px; margin-top: 28px; }
-.sy-note { font-size: 14.5px; color: var(--l-muted); margin: 32px 0 0; }
+.sy-open-copy p.sy-note { font-size: 14.5px; color: var(--l-muted); margin: 32px 0 0; } /* outranks the copy column's paragraph reset */
 
 /* The split deck picture: one deck cut on the diagonal, its cards top-left and the flow the
    tool derived bottom-right. Two <g> elements clipped to complementary triangles, so the seam
