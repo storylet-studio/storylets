@@ -15,7 +15,7 @@
 // and a second copy is how the two would drift.
 //
 // It:
-//   1. writes the version into the app's package.json
+//   1. writes the version into the app's package.json and package-lock.json
 //   2. stamps today's date into its CHANGELOG.md: an existing
 //        "## [<version>] - Unreleased" heading is dated in place; otherwise the
 //        "## [Unreleased]" section (which must have content) becomes
@@ -73,6 +73,21 @@ edit(`${target.dir}/package.json`, (s, rel) => {
   return s.replace(/^  "version": "[^"]+",$/m, `  "version": "${version}",`);
 });
 
+// --- 1b. the lockfile ------------------------------------------------------------
+
+// package-lock.json carries its own copy of every workspace package's version. npm only
+// rewrites it on install, so a bump that stops at package.json leaves the lock one release
+// behind until the next unrelated `npm install` drags the correction into somebody else's
+// commit. npm writes the lock as two-space JSON with a trailing newline, so a parse and
+// stringify round-trip changes nothing but the field we set.
+edit("package-lock.json", (s, rel) => {
+  const lock = JSON.parse(s);
+  const entry = lock.packages?.[target.dir];
+  if (!entry) throw new Error(`${rel}: no workspace entry for ${target.dir}`);
+  entry.version = version;
+  return JSON.stringify(lock, null, 2) + "\n";
+});
+
 // --- 2. the changelog --------------------------------------------------------
 
 edit(`${target.dir}/CHANGELOG.md`, (s, rel) => {
@@ -106,7 +121,7 @@ for (const { path, rel, after } of pending) {
 // forbidding the delete that would let them be pushed again.
 console.log(`
 Next steps (review the diffs first):
-  git add ${target.dir}/package.json ${target.dir}/CHANGELOG.md
+  git add ${target.dir}/package.json ${target.dir}/CHANGELOG.md package-lock.json
   git commit -m "${target.label} ${version}"
   git push
   git tag ${target.tag(version)} && git push origin ${target.tag(version)}

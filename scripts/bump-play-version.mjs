@@ -85,6 +85,30 @@ bumpJsonVersion("ports/unity/StoryletEngine/package.json");
   }
 }
 
+// package-lock.json carries its own copy of the two workspace versions and of the exact
+// pins the siblings hold on the runtime. npm only rewrites it on install, so a bump that
+// stops at the manifests leaves the lock one release behind until the next unrelated
+// `npm install` drags the correction into somebody else's commit. npm writes the lock as
+// two-space JSON with a trailing newline, so a parse and stringify round-trip changes
+// nothing but the fields we set. Idempotent like the rest: a lock already at the version
+// is left alone.
+{
+  const p = "package-lock.json";
+  const s = read(p);
+  const lock = JSON.parse(s);
+  const name = JSON.parse(read("packages/runtime/package.json")).name;
+  for (const dir of ["packages/runtime", "packages/play-helpers"]) {
+    if (lock.packages?.[dir]) lock.packages[dir].version = version;
+  }
+  for (const dir of ["packages/ops", "packages/play-helpers", "packages/studio"]) {
+    const deps = lock.packages?.[dir]?.dependencies;
+    if (deps && name in deps) deps[name] = version;
+  }
+  const out = JSON.stringify(lock, null, 2) + "\n";
+  if (out === s) console.log("  skip ", p, `(already ${version})`);
+  else write(p, out);
+}
+
 // Unreal carries two: VersionName is the human one the tag is checked against,
 // Version is an integer Epic wants incremented on every release.
 {
