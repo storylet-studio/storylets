@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-23
+
 ### Added
 
 - **A key for the arrows, on the node canvas and in Links.** The green, red, amber and grey arrows between cards were explained only in the documentation. A quiet **Key** beside each canvas's status line now opens a panel of the arrows themselves, each drawn exactly as the canvas draws it, with the words the Links window uses: opens, shuts, changes what is true for, shares state with. After a coverage run it also shows what the run saw: seen, possible but never seen, and seen but not predicted. Both canvases draw the key from the same rule the arrows are painted by, so the two cannot disagree.
