@@ -3,7 +3,7 @@
 // which way round, and which part of the reason is the property.
 
 import { describe, expect, it } from "vitest";
-import { explainLink } from "./links-explain.js";
+import { explainEdges, explainLink } from "./links-explain.js";
 
 const VIA = [{ property: "@story.world_events", flag: "tree_bloomed", outcome: "touch-the-bark" }];
 
@@ -68,5 +68,41 @@ describe("the rows", () => {
       { property: "@world.season" },
     ]).rows;
     expect(rows.map((r) => r.property)).toEqual(["@story.gold", "@story.mood", "@world.season"]);
+  });
+});
+
+describe("a hovered arrow", () => {
+  const names: Record<string, string> = { c_tree: "The Glowing Tree", c_bloom: "The Tree Blooms" };
+  const nameOf = (id: string): string => names[id] ?? id;
+
+  it("says what selecting its card in the Links window says, a line each", () => {
+    const tip = explainEdges([{ from: "c_tree", to: "c_bloom", cls: "enable", via: [
+      ...VIA, { property: "@box.tension", note: "through the deck gate" },
+    ] }], nameOf);
+    const same = explainLink("The Glowing Tree", "The Tree Blooms", "out of", "enable", VIA);
+    expect(tip.split("\n")).toEqual([
+      same.lead,
+      `@story.world_events ${same.rows[0]!.detail}`,
+      "@box.tension read on both sides (through the deck gate)",
+    ]);
+    expect(tip.split("\n")[0]).toBe("The Glowing Tree opens The Tree Blooms");
+  });
+
+  it("explains every edge on the line, in turn", () => {
+    const tip = explainEdges([
+      { from: "c_tree", to: "c_bloom", cls: "enable", via: [{ property: "@story.gold", outcome: "pay" }] },
+      { from: "c_tree", to: "c_bloom", cls: "disable", via: [{ property: "@story.gold", outcome: "steal" }] },
+    ], nameOf);
+    expect(tip.split("\n")).toEqual([
+      "The Glowing Tree opens The Tree Blooms",
+      "@story.gold written by the outcome pay",
+      "The Glowing Tree shuts The Tree Blooms",
+      "@story.gold written by the outcome steal",
+    ]);
+  });
+
+  it("says a flagged edge was seen but not predicted, having no reason to give", () => {
+    const tip = explainEdges([{ from: "c_tree", to: "c_bloom", cls: "enable", via: [], evidence: "flagged" }], nameOf);
+    expect(tip).toBe("A coverage run saw The Glowing Tree lead to The Tree Blooms, but the analysis did not predict it.");
   });
 });

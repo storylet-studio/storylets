@@ -12,7 +12,7 @@
 // out) so the phrasing is testable without a canvas.
 // ---------------------------------------------------------------------------
 
-import type { LinkReason } from "../../shared/api.js";
+import type { GraphEdge, LinkReason } from "../../shared/api.js";
 
 export type LinkClass = "enable" | "disable" | "influence" | "reference";
 
@@ -73,4 +73,28 @@ function row(reason: LinkReason): ExplanationRow {
   // so rather than leaving the row as a bare name with no verb anywhere in it.
   const detail = parts.length > 0 ? parts.join(", ") : "read on both sides";
   return { property: reason.property, detail, ...(reason.note ? { note: reason.note } : {}) };
+}
+
+/**
+ * What a hovered arrow says: the same lead and rows the Links window shows for a
+ * selected link, one line each, so the two cannot come to disagree. Several
+ * edges when several lie on the same line (a card that both opens and shuts
+ * another, a mutual pair), each explained in turn.
+ *
+ * A `flagged` edge has no reasons to give, because the analysis never derived
+ * it, and says so instead: that disagreement is the whole of its news.
+ */
+export function explainEdges(edges: readonly GraphEdge[], nameOf: (id: string) => string): string {
+  const lines: string[] = [];
+  for (const edge of edges) {
+    const from = nameOf(edge.from);
+    const to = nameOf(edge.to);
+    if (edge.evidence === "flagged") {
+      lines.push(`A coverage run saw ${from} lead to ${to}, but the analysis did not predict it.`);
+      continue;
+    }
+    const e = explainLink(from, to, "out of", edge.cls, edge.via);
+    lines.push(e.lead, ...e.rows.map((r) => `${r.property} ${r.detail}${r.note !== undefined ? ` (${r.note})` : ""}`));
+  }
+  return lines.join("\n");
 }

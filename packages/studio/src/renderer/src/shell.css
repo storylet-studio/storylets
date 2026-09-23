@@ -185,6 +185,12 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    say (notably that a deck's cards link to cards elsewhere, so an empty canvas
    is not mistaken for a broken one). */
 .nodestrip { flex: none; display: flex; align-items: center; gap: 14px; min-height: 26px; }
+/* The deck canvas's strip runs to the centre's right edge, where the shell's
+   Live link control is fixed to the window corner, and it ends with Arrange.
+   The shell publishes the control's footprint (0px when hidden), so the last
+   button stops short of it. The map's strip does not need this: its side panel
+   takes the right-hand column, so the strip never reaches the corner. */
+.nodestrip.deckstrip { padding-right: var(--linkstatus-reserve, 0px); }
 .nodestrip .hint { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Pushes the camera controls to the right end, so the summary reads left to
    right and the buttons sit where a toolbar would. */

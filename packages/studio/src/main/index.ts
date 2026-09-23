@@ -53,6 +53,7 @@ import { createJobHost } from "@wildwinter/app-shell/job";
 import { createProjectSession } from "@wildwinter/app-shell/session";
 import type { JobProgress } from "@wildwinter/app-shell/job";
 import type { InfluenceEdge } from "@storylet-studio/ops";
+import { deckEdges, linkReasons } from "./link-graph.js";
 import type { SourceBox } from "@storylet-studio/compiler";
 import type { ProjectSession } from "./project.js";
 import { SAVEFILE_SCHEMA, SAVE_SCHEMA, commentsOf, effectiveGameId, isSpatial, polygonOf, handBinding, markOf, marksOn, stacked, threadsFor, zOf, backgroundsOf, byDisplayOrder } from "@storylet-studio/model";
@@ -60,7 +61,7 @@ import type { Bundle, Comment, Frame, PropertyDecl, SaveFile, ScalarValue, Stack
 import type { BackgroundEdit } from "./mutate.js";
 import { ASSET_SCHEME, assetUrl } from "../shared/api.js";
 import type {
-  BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOverlayDto, CoverageReport, DeckGraph, GraphEdge, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, PackOffer, ContractBreakDto, LeavePromptDto, LeaveSettledDto, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
+  BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOverlayDto, CoverageReport, DeckGraph, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, PackOffer, ContractBreakDto, LeavePromptDto, LeaveSettledDto, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
 } from "../shared/api.js";
 import { JOB_PROGRESS_CHANNEL, MAP_CANVAS, PROJECT_CHANGED } from "../shared/api.js";
 import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
@@ -1575,13 +1576,7 @@ function wireIpc(): void {
     const asNeighbour = (x: { edge: InfluenceEdge; node: { id: string; gameId: string; title?: string; deck: string; box: string } | undefined }): LinksView["predecessors"][number] => ({
       card: withDeck(x.node),
       cls: x.edge.cls as LinksView["predecessors"][number]["cls"],
-      // The analyser's own fields, passed straight through: the window phrases
-      // and typesets them. It does not reason about them, and a joined sentence
-      // would take away the only thing it can add.
-      via: x.edge.via.map((v) => ({
-        property: v.property, ...(v.flag ? { flag: v.flag } : {}),
-        ...(v.outcome ? { outcome: v.outcome } : {}), ...(v.note ? { note: v.note } : {}),
-      })),
+      via: linkReasons(x.edge.via),
     });
     // Evidence over inference, when a run exists (design/graphical-views.md 4).
     // Keyed on the PAIR: the report attributes each edge to an outcome too, and
@@ -1663,14 +1658,8 @@ function wireIpc(): void {
     if (!box || !deck) return base;
     const mine = new Set(deck.shard.cards.map((c) => c.id));
     const graph = analyseInfluence(source);
-    const edges: GraphEdge[] = [];
-    let outside = 0;
-    for (const edge of graph.edges) {
-      const from = mine.has(edge.from);
-      const to = mine.has(edge.to);
-      if (from && to) edges.push({ from: edge.from, to: edge.to, cls: edge.cls as GraphEdge["cls"] });
-      else if (from || to) outside++;
-    }
+    // With their reasons: a hovered arrow says why it is there.
+    const { edges, outside } = deckEdges(graph.edges, mine);
     return {
       ...base,
       // Where the author has put things. Sparse: the view lays out the rest.

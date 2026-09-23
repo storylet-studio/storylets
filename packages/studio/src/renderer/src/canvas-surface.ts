@@ -149,6 +149,34 @@ export interface CanvasSurfaceOptions<T extends CanvasItem> {
    *  Handed the scale so a caller can answer only when the face has actually
    *  given the label up, rather than shadowing text that is right there. */
   hoverTip?: (item: T, scale: number) => string | undefined;
+  /**
+   * What to say about the BACKDROP under the pointer, where nothing is drawn
+   * above it: the node canvas's edges, which live beneath the items and so are
+   * invisible to the hit graph. `key` names the subject (the same key keeps a
+   * showing tip rather than restarting its delay), `text` is the tip.
+   *
+   * Asked only when no item, handle or marker is under the pointer, so a card
+   * always wins over an arrow that runs beneath it. Handed the world point, the
+   * zoom (for a tolerance held constant on screen) and the live lookup the
+   * backdrop painter gets, so a test answers for the line as it is drawn now.
+   */
+  backdropTip?: (
+    world: { x: number; y: number }, scale: number, at: (id: string) => T | undefined,
+  ) => { key: string; text: string } | undefined;
+}
+
+/**
+ * Whether the backdrop gets to speak, and what it says. Pure, so the precedence
+ * is pinned without a canvas: an item under the pointer wins, then anything else
+ * drawn above the backdrop (a handle, a marker), and only then is the backdrop
+ * asked. An empty answer is no answer.
+ */
+export function backdropTipAt<R extends { text: string }>(
+  overItem: boolean, overDrawn: boolean, ask: () => R | undefined,
+): R | undefined {
+  if (overItem || overDrawn) return undefined;
+  const said = ask();
+  return said === undefined || said.text === "" ? undefined : said;
 }
 
 /** Draws behind the items. `at` returns an item with its live coordinates: the
@@ -788,13 +816,46 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
   let hovered: string | undefined;
   function trackHover(): void {
     const found = itemAtPointer();
-    if (found === hovered) return;
-    hovered = found;
-    opts.onHover?.(hovered);
-    paintHoverTip();
+    if (found !== hovered) {
+      hovered = found;
+      // Onto an item: the arrow's tip goes before the item's own can arrive.
+      if (found !== undefined) clearBackdropTip();
+      opts.onHover?.(hovered);
+      paintHoverTip();
+    }
+    trackBackdropTip();
+  }
+
+  /** The key of the backdrop tip showing, if one is. Kept apart from `hovered`
+   *  because the backdrop is not an item: nothing else hears about it. */
+  let backdropKey: string | undefined;
+  function trackBackdropTip(): void {
+    if (opts.backdropTip === undefined) return;
+    // Anything drawn above the backdrop wins: an item, a handle, a marker. An
+    // item's own tip is `paintHoverTip`'s, and `trackHover` has already taken
+    // this one down on the way onto it, so the clear below cannot touch it.
+    const pos = stage.getPointerPosition();
+    const ask = opts.backdropTip;
+    const said = pos
+      ? backdropTipAt(hovered !== undefined, mainLayer.getIntersection(pos) !== null,
+        () => ask(worldPointer(), stage.scaleX(), liveItem))
+      : undefined;
+    if (!pos || said === undefined) { clearBackdropTip(); return; }
+    backdropKey = said.key;
+    // A small box at the pointer, in viewport coordinates: a line has no
+    // rectangle of its own worth anchoring to.
+    const origin = stage.container().getBoundingClientRect();
+    tipAt(said.key, { left: origin.left + pos.x - 6, top: origin.top + pos.y - 6, width: 12, height: 12 }, said.text);
+  }
+
+  function clearBackdropTip(): void {
+    if (backdropKey === undefined) return;
+    backdropKey = undefined;
+    hideTip();
   }
 
   function clearHover(): void {
+    clearBackdropTip();
     if (hovered === undefined) return;
     hovered = undefined;
     opts.onHover?.(undefined);
@@ -1000,6 +1061,9 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
       repaintMarkers();
       if (withItems) paintItems(); else paintOverlay();
       refreshControls();
+      // A backdrop tip is about a line that has just moved out from under the
+      // pointer: it goes, and the next move asks again.
+      clearBackdropTip();
       paintHoverTip();
       opts.onCamera?.(stage.scaleX());
     });

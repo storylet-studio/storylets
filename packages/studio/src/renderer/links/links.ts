@@ -26,6 +26,8 @@ import "../src/theme.css";
 import "../src/card-open.css";
 import "./links.css";
 import "@wildwinter/app-shell/tooltip.css";
+// The arrows' key opens in the shell's anchored panel.
+import "@wildwinter/app-shell/anchored.css";
 // The shell's toast is mounted here as in every tool window (parity row 19);
 // nothing in this lens fails today, so there is no call yet, only the home.
 import "@wildwinter/app-shell/toast.css";
@@ -37,6 +39,7 @@ import { mountCanvasSurface, type CanvasSurface } from "../src/canvas-surface.js
 import { readCanvasTokens, watchCanvasTokens } from "../src/canvas-tokens.js";
 import { drawCardNode, paintCaptions, paintEdges, NODE_H, NODE_W, NODE_RADIUS, type CardNode, TITLE_FLOOR } from "../src/node-art.js";
 import { mountOpenChip } from "../src/card-open.js";
+import { edgeKeyButton, edgeTip } from "../src/edge-key.js";
 import { linksLayout } from "./links-layout.js";
 import { explainLink, type Explanation } from "./links-explain.js";
 import { edgeEvidence } from "./links-evidence.js";
@@ -148,8 +151,8 @@ function mountCanvas(host: HTMLElement, strip: HTMLElement, v: LinksView & { car
   // ARE the feature, and evidence only sharpens them.
   const evidenceOf = (n: Neighbour): GraphEdge["evidence"] => edgeEvidence(n, v.evidence);
   const edges: GraphEdge[] = [
-    ...allIn.map((r) => ({ from: r.card.id, to: v.card.id, cls: r.cls, ...(evidenceOf(r) ? { evidence: evidenceOf(r) } : {}) })),
-    ...allOut.map((r) => ({ from: v.card.id, to: r.card.id, cls: r.cls, ...(evidenceOf(r) ? { evidence: evidenceOf(r) } : {}) })),
+    ...allIn.map((r) => ({ from: r.card.id, to: v.card.id, cls: r.cls, via: r.via, ...(evidenceOf(r) ? { evidence: evidenceOf(r) } : {}) })),
+    ...allOut.map((r) => ({ from: v.card.id, to: r.card.id, cls: r.cls, via: r.via, ...(evidenceOf(r) ? { evidence: evidenceOf(r) } : {}) })),
   ];
 
   // What the strip says when a neighbour is selected. Keyed by card and holding a
@@ -179,6 +182,11 @@ function mountCanvas(host: HTMLElement, strip: HTMLElement, v: LinksView & { car
     // Same faces as the node canvas, so the same rule: once the title has gone,
     // the rollover is the only way to tell one neighbour from another.
     hoverTip: (node, scale) => (scale < TITLE_FLOOR ? node.title : undefined),
+    // Hovering an arrow says what selecting its card would, in the same words.
+    backdropTip: edgeTip<CardNode>(() => edges, (id) => {
+      const card = cardsById.get(id);
+      return card ? nameOf(card) : id;
+    }, (at) => at),
     onActivate: (id) => reveal(cardsById.get(id)),
     onHover: (id) => {
       const rect = id === undefined || surface.scale() < 0.6 ? undefined : surface.screenRect(id);
@@ -276,9 +284,20 @@ function paintStrip(strip: HTMLElement, links: Explanation[] | undefined, v: Lin
     // without one, so this is an offer rather than a warning (the 2026-08-03
     // ruling). With a run, it dates the evidence, because a stale sweep is a
     // different claim from a fresh one.
-    el("p", { className: "caveat quiet", text: v.evidence === undefined
-      ? "Run a fresh coverage test to see which of these links actually happen."
-      : `Seen counts are from ${v.evidence.runs} runs, ${relativeTime(v.evidence.at)}.` }),
+    el("p", { className: "caveat quiet" },
+      v.evidence === undefined
+        ? "Run a fresh coverage test to see which of these links actually happen."
+        : `Seen counts are from ${v.evidence.runs} runs, ${relativeTime(v.evidence.at)}.`,
+      // The arrows' key, beside the line that talks about them. With a run it
+      // also keys the three evidence strokes, which every arrow then wears.
+      ...(v.card !== undefined && [...v.predecessors, ...v.dependents].some((n) => n.card)
+        ? [edgeKeyButton({
+            className: "edgekey-inline",
+            tokens: () => readCanvasTokens(),
+            evidence: () => v.evidence !== undefined,
+          })]
+        : []),
+    ),
     ...(flagged > 0
       ? [el("p", { className: "caveat", text: `${plural(flagged, "link")} ${flagged === 1 ? "was" : "were"} seen in a run but not predicted, so the analysis may be missing something.` })]
       : []),

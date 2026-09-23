@@ -52,17 +52,17 @@ const nodes: CardNode[] = gridLayout([
 /** One of each class, so the four inks are judged together rather than one at a
  *  time in whatever project happens to be open. */
 const edges: GraphEdge[] = [
-  { from: "arrive-at-the-inn", to: "the-landlord-remembers-your-last-visit-and-is-not-at-all-pleased-about-it", cls: "enable" },
-  { from: "arrive-at-the-inn", to: "a-room-for-the-night", cls: "enable" },
-  { from: "a-room-for-the-night", to: "last-orders", cls: "influence" },
-  { from: "the-forge-is-cold", to: "bellows-and-patience", cls: "enable" },
-  { from: "bellows-and-patience", to: "a-blade-reforged", cls: "enable" },
-  { from: "market-rumours", to: "a-purse-cut", cls: "disable" },
-  { from: "the-mystic-tree", to: "leaves-in-the-wind", cls: "reference" },
+  { from: "arrive-at-the-inn", to: "the-landlord-remembers-your-last-visit-and-is-not-at-all-pleased-about-it", cls: "enable", via: [{ property: "@story.at_inn", outcome: "arrive" }] },
+  { from: "arrive-at-the-inn", to: "a-room-for-the-night", cls: "enable", via: [{ property: "@story.at_inn", outcome: "arrive" }] },
+  { from: "a-room-for-the-night", to: "last-orders", cls: "influence", via: [{ property: "@story.hour", outcome: "sleep" }] },
+  { from: "the-forge-is-cold", to: "bellows-and-patience", cls: "enable", via: [{ property: "@box.forge", flag: "cold", outcome: "look" }] },
+  { from: "bellows-and-patience", to: "a-blade-reforged", cls: "enable", via: [{ property: "@box.forge", flag: "lit", outcome: "work" }] },
+  { from: "market-rumours", to: "a-purse-cut", cls: "disable", via: [{ property: "@story.wary", outcome: "listen" }] },
+  { from: "the-mystic-tree", to: "leaves-in-the-wind", cls: "reference", via: [{ property: "@world.season" }] },
   // A LOOP, because cycles are normal in storylets and the layout has to be
   // judged on one: these two enable each other.
-  { from: "the-turnip-seller", to: "a-purse-cut", cls: "enable" },
-  { from: "a-purse-cut", to: "the-turnip-seller", cls: "enable" },
+  { from: "the-turnip-seller", to: "a-purse-cut", cls: "enable", via: [{ property: "@story.purse", outcome: "buy" }] },
+  { from: "a-purse-cut", to: "the-turnip-seller", cls: "enable", via: [{ property: "@story.coins", outcome: "run" }] },
 ];
 
 const host = document.getElementById("stage")!;

@@ -913,14 +913,19 @@ export interface LinkNeighbour {
   flagged?: true;
 }
 
-/** One edge on a canvas, in the Links window's four classes. Class and direction
- *  only: a drawn edge is a line and an arrowhead, and WHY it exists is the Links
- *  window's question, answered there from `LinkNeighbour.via`. It carried a
- *  display-ready `why` for a while that no canvas ever read. */
+/** One edge on a canvas, in the Links window's four classes. It carried a
+ *  display-ready `why` for a while that no canvas ever read, and lost it. The
+ *  reasons are back as FIELDS now, because both canvases read them: hovering an
+ *  arrow names the properties that join its two cards, worded by the same
+ *  `explainLink` the Links window uses for a selected link. */
 export interface GraphEdge {
   from: string;
   to: string;
   cls: LinkNeighbour["cls"];
+  /** Why this edge exists: one entry per contributing property, as
+   *  `LinkNeighbour.via`. Empty only for a `flagged` edge, which a run saw and
+   *  the analysis did not derive, so there is no static reason to give. */
+  via: LinkReason[];
   /** What a coverage run had to say about this edge, when one has been run
    *  (design/graphical-views.md 4). Absent = no run, and every edge is drawn as
    *  it always was: static edges ARE the feature, evidence only sharpens them.

@@ -26,6 +26,7 @@ import { createFurniture, type FurnitureController } from "./furniture-edit.js";
 import { mountOpenChip } from "./card-open.js";
 import { markerPainter, markerPoint } from "./comment-markers.js";
 import { cardHeat, coverageLegend } from "./coverage-art.js";
+import { edgeKeyButton, edgeTip } from "./edge-key.js";
 import type { DeckDto, DeckGraph, CanvasFurnitureDto, CommentMarkerDto, CoverageOverlayDto } from "../../shared/api.js";
 
 export interface NodeViewActions {
@@ -113,7 +114,9 @@ export function mountNodeView(
 ): MountedNodeView {
   const readOnly = opts.readOnly === true;
   const stage = el("div", { className: "nodestage" });
-  const strip = el("div", { className: "nodestrip" });
+  // `deckstrip`: this strip, unlike the map's, runs to the right edge of the
+  // centre and so can end under the shell's Live link control (shell.css).
+  const strip = el("div", { className: "nodestrip deckstrip" });
   host.replaceChildren(stage, strip);
 
   // The cards come from the DeckDto: one truth for a card's face, and the deck's
@@ -125,6 +128,10 @@ export function mountNodeView(
   type NodeItem = CardNode | FrameShape;
   const isCard = (item: NodeItem): item is CardNode => !("kind" in item);
 
+  const titleOf = (id: string): string => {
+    const card = deck.cards.find((c) => c.id === id);
+    return card?.title ?? card?.gameId ?? id;
+  };
   const cards = gridLayout(deck.cards.map((c) => ({
     id: c.id,
     title: c.title ?? c.gameId,
@@ -177,6 +184,16 @@ export function mountNodeView(
   tidy.disabled = readOnly;
   /** What the last layout had to say, if anything. Cleared by the next one. */
   let layoutNote: string | undefined;
+  // What the arrows mean. Built once, like `tidy`, so a strip repaint does not
+  // pull the anchor out from under an open key. Evidence rows only when the
+  // arrows here actually wear evidence: the overlay is on AND the graph carries
+  // it, since a key describing strokes nothing on this canvas draws would teach
+  // the wrong thing.
+  const key = edgeKeyButton({
+    className: "stripbtn",
+    tokens: () => tokens,
+    evidence: () => actions.coverageOn() && graph.edges.some((e) => e.evidence !== undefined),
+  });
 
   /**
    * Arrange by dependency. The SELECTION when there is one, everything
@@ -270,6 +287,8 @@ export function mountNodeView(
         }, iconNode("add", 12), "Comment"),
       ),
       ...describe(deck, graph), ...note, ...legend,
+      // Beside the status it explains, and only when there are arrows to key.
+      ...(graph.edges.length > 0 ? [key] : []),
       el("span", { className: "stripgap" }),
       tidy,
     );
@@ -302,6 +321,9 @@ export function mountNodeView(
       if (isCard(node)) return node.title;
       return node.title;
     },
+    // An arrow says why it is there. Cards win: the surface only asks when none
+    // is under the pointer.
+    backdropTip: edgeTip<NodeItem>(() => graph.edges, titleOf, (at) => cardAt(at)),
     onHover: (id) => {
       // Too small to hold a chip legibly: below this the face is abbreviated to a
       // title, and the affordance would cover most of it.

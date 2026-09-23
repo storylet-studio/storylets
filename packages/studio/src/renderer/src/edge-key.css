@@ -1,0 +1,22 @@
+/* The arrows' key (edge-key.ts): the shell's anchored panel, with one row per
+   kind of arrow. Three columns so the words line up whatever the sample. */
+.edgekey .shell-anchored-body { gap: 5px; }
+.edgekey-row {
+  display: grid; grid-template-columns: 40px max-content 1fr; align-items: center;
+  column-gap: 10px; font-size: 12.5px; line-height: 1.35;
+}
+.edgekey-sample { display: block; }
+.edgekey-word { color: var(--ink); white-space: nowrap; }
+/* Wraps rather than trimming: "writes state the other reads, either way" lost its
+   last two words at the panel's width, and those were the ones that carried it. */
+.edgekey-gloss { color: var(--muted); }
+.edgekey-cap { margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+
+/* The Links window's control: it sits at the end of a quiet caveat line, so it
+   is a word in that line's voice rather than a toolbar button. */
+.edgekey-inline {
+  margin-left: 6px; padding: 0 6px; font: inherit; color: var(--muted);
+  background: none; border: 1px solid var(--line-soft); border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.edgekey-inline:hover { color: var(--accent); border-color: var(--accent); }

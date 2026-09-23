@@ -189,6 +189,48 @@ function edgeInk(tokens: CanvasTokens, cls: GraphEdge["cls"]): string {
     : tokens.muted;
 }
 
+/** How one edge is stroked, in SCREEN pixels: the painter divides by the zoom,
+ *  and the key draws it at one to one. */
+export interface EdgeStroke {
+  ink: string;
+  width: number;
+  /** Dash and gap, when the line is dashed. */
+  dash?: [number, number];
+  opacity: number;
+}
+
+/** The arrowhead, in screen pixels. Exported for the key, which draws its own. */
+export const ARROW_LENGTH = 9;
+export const ARROW_WIDTH = 7;
+
+/**
+ * THE rule for what an edge looks like: its class and what a coverage run said
+ * about it, in, a stroke out. One function because two readers need it, the
+ * painter and the key (edge-key.ts), and a key that kept its own copy would be
+ * wrong the first time either changed.
+ */
+export function edgeStroke(
+  tokens: CanvasTokens, cls: GraphEdge["cls"], evidence?: GraphEdge["evidence"],
+): EdgeStroke {
+  // Evidence rides on TOP of the class ink rather than replacing it: an edge
+  // is still an enable or an influence, and what a coverage run saw about it
+  // is a second axis (design/graphical-views.md 4). Weight for observed,
+  // fade for possible-but-never-seen, and a heavier stroke for flagged, which
+  // is the one that wants a second look. With no run every edge is `possible`
+  // in the data sense but arrives here undefined, and draws exactly as before.
+  const faded = evidence === "possible";
+  const flagged = evidence === "flagged";
+  return {
+    ink: edgeInk(tokens, cls),
+    width: flagged ? 3 : 1.75,
+    // A reference is the weakest of the four classes and says so without
+    // needing a legend. A flagged edge borrows the same dash for the opposite
+    // reason: it is not a settled fact, it is a disagreement.
+    ...(cls === "reference" || flagged ? { dash: [6, 4] as [number, number] } : {}),
+    opacity: faded ? 0.35 : cls === "reference" ? 0.8 : 1,
+  };
+}
+
 /** Where a ray leaving a box's centre crosses its edge, so a line stops at the
  *  border and its arrowhead lands on the card rather than under it. */
 function borderPoint(cx: number, cy: number, hw: number, hh: number, dx: number, dy: number): [number, number] {
@@ -198,6 +240,25 @@ function borderPoint(cx: number, cy: number, hw: number, hh: number, dx: number,
   return [cx + dx * t, cy + dy * t];
 }
 
+/** The line an edge is drawn along, border to border, or undefined when it is
+ *  not drawn at all. Shared by the painter and the hover test, so a tip answers
+ *  for exactly the line on screen. */
+export function edgeSegment(
+  edge: GraphEdge, at: (id: string) => CardNode | undefined,
+): [number, number, number, number] | undefined {
+  const a = at(edge.from);
+  const b = at(edge.to);
+  if (!a || !b) return undefined;
+  const [ax, ay] = [a.x + a.width / 2, a.y + a.height / 2];
+  const [bx, by] = [b.x + b.width / 2, b.y + b.height / 2];
+  // Two cards at the same spot have no direction to draw.
+  if (ax === bx && ay === by) return undefined;
+  return [
+    ...borderPoint(ax, ay, a.width / 2, a.height / 2, bx - ax, by - ay),
+    ...borderPoint(bx, by, b.width / 2, b.height / 2, ax - bx, ay - by),
+  ];
+}
+
 /** Draw the edges into a backdrop layer. Arrowheads always: direction is the
  *  whole claim of an influence graph. Widths hold constant on screen. */
 export function paintEdges(
@@ -205,37 +266,59 @@ export function paintEdges(
   edges: GraphEdge[], at: (id: string) => CardNode | undefined,
 ): void {
   for (const edge of edges) {
-    const a = at(edge.from);
-    const b = at(edge.to);
-    if (!a || !b) continue;
-    const [ax, ay] = [a.x + a.width / 2, a.y + a.height / 2];
-    const [bx, by] = [b.x + b.width / 2, b.y + b.height / 2];
-    // Two cards at the same spot have no direction to draw.
-    if (ax === bx && ay === by) continue;
-    const ink = edgeInk(tokens, edge.cls);
-    // Evidence rides on TOP of the class ink rather than replacing it: an edge
-    // is still an enable or an influence, and what a coverage run saw about it
-    // is a second axis (design/graphical-views.md 4). Weight for observed,
-    // fade for possible-but-never-seen, and a heavier stroke for flagged, which
-    // is the one that wants a second look. With no run every edge is `possible`
-    // in the data sense but arrives here undefined, and draws exactly as before.
-    const faded = edge.evidence === "possible";
-    const flagged = edge.evidence === "flagged";
+    const points = edgeSegment(edge, at);
+    if (!points) continue;
+    const stroke = edgeStroke(tokens, edge.cls, edge.evidence);
     layer.add(new Konva.Arrow({
-      points: [
-        ...borderPoint(ax, ay, a.width / 2, a.height / 2, bx - ax, by - ay),
-        ...borderPoint(bx, by, b.width / 2, b.height / 2, ax - bx, ay - by),
-      ],
-      stroke: ink,
-      fill: ink,
-      strokeWidth: (flagged ? 3 : 1.75) / scale,
-      pointerLength: 9 / scale,
-      pointerWidth: 7 / scale,
-      // A reference is the weakest of the four classes and says so without
-      // needing a legend. A flagged edge borrows the same dash for the opposite
-      // reason: it is not a settled fact, it is a disagreement.
-      dash: edge.cls === "reference" || flagged ? [6 / scale, 4 / scale] : undefined,
-      opacity: faded ? 0.35 : edge.cls === "reference" ? 0.8 : 1,
+      points,
+      stroke: stroke.ink,
+      fill: stroke.ink,
+      strokeWidth: stroke.width / scale,
+      pointerLength: ARROW_LENGTH / scale,
+      pointerWidth: ARROW_WIDTH / scale,
+      dash: stroke.dash?.map((d) => d / scale),
+      opacity: stroke.opacity,
     }));
   }
+}
+
+/** How far from a line, in screen pixels, the pointer still counts as on it. A
+ *  line is under two pixels wide, so an exact hit would be a test of hand
+ *  steadiness rather than a way to ask about an edge. */
+export const EDGE_HOVER_PX = 6;
+
+/**
+ * The edges under a world point, nearest first, within a tolerance held
+ * constant on SCREEN (so it shrinks in world units as the camera zooms in).
+ *
+ * Every edge at the nearest distance comes back, not just the first: two cards
+ * can be joined by more than one edge (an outcome that opens and another that
+ * shuts, or a mutual pair), and those lines lie exactly on top of each other, so
+ * picking one would hide the other behind it. Cards are not this function's
+ * business: the surface only asks when no card is under the pointer.
+ */
+export function edgesAt(
+  edges: GraphEdge[], at: (id: string) => CardNode | undefined,
+  world: { x: number; y: number }, scale: number, tolerancePx = EDGE_HOVER_PX,
+): GraphEdge[] {
+  const reach = tolerancePx / scale;
+  const near: { edge: GraphEdge; d: number }[] = [];
+  for (const edge of edges) {
+    const seg = edgeSegment(edge, at);
+    if (!seg) continue;
+    const d = distanceToSegment(world.x, world.y, seg);
+    if (d <= reach) near.push({ edge, d });
+  }
+  if (near.length === 0) return [];
+  const best = Math.min(...near.map((n) => n.d));
+  // Within half a screen pixel of the nearest counts as the same line.
+  return near.filter((n) => n.d - best <= 0.5 / scale).map((n) => n.edge);
+}
+
+function distanceToSegment(px: number, py: number, [ax, ay, bx, by]: [number, number, number, number]): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }

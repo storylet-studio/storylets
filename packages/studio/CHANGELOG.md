@@ -10,6 +10,16 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **A key for the arrows, on the node canvas and in Links.** The green, red, amber and grey arrows between cards were explained only in the documentation. A quiet **Key** beside each canvas's status line now opens a panel of the arrows themselves, each drawn exactly as the canvas draws it, with the words the Links window uses: opens, shuts, changes what is true for, shares state with. After a coverage run it also shows what the run saw: seen, possible but never seen, and seen but not predicted. Both canvases draw the key from the same rule the arrows are painted by, so the two cannot disagree.
+
+- **Hovering an arrow says why it is there.** "The Moneylender's Men opens Gareth's Gratitude", and under it the property that joins them and the outcome that writes it. The same words a selected link gets in the Links window, on both canvases. A card under the pointer still wins, and the tip goes as soon as you move, drag or zoom.
+
+### Fixed
+
+- **The Live link control no longer sits on top of the canvas strip or the problems bar.** It floats in the window's bottom-right corner, where **Arrange by links** ends and where a problem's message and its fix button end. Everything in that corner now leaves room for it, and the same fix reaches Patterpad, since the control and the bar are shared.
+
 ## [0.9.0] - 2026-09-16
 
 ### Changed
