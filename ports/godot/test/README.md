@@ -24,8 +24,16 @@ godot --headless --path ports/godot --import
   corpora vendored from `../expr` beside it: `expr-corpus.json` (the
   evaluator's) and `registry-corpus.json` (the ScopeRegistry's, through the
   shared runner `registry_corpus.gd`, vendored here too; a missing file is a
-  failure). Prints per-family counts, `registry corpus: N/N`, then `ALL PASS`
-  (exit 0) or `N FAILED` (exit 1).
+  failure). Last it runs `one_registry_checks.gd`: the engine and the game's
+  one registry from the game's side (the keys and owner label it registers
+  under, `save_game` with and without a game registry, loading in either
+  order, `storylets/save@1` envelopes and files, parking a flow, a fresh flow
+  not claiming a load's values, `reset` dropping only this engine's waiting
+  values, a token clash leaving the registry as it was, and another engine's
+  scope read by path and by a condition), the JS runtime's
+  `one-registry.test.ts` case for case. Prints per-family counts,
+  `registry corpus: N/N`, `one registry: N/N`, then `ALL PASS` (exit 0) or
+  `N FAILED` (exit 1).
 
 - `test_smoke.gd` - loads the bundled Hamlet demo, deals, plays one outcome
   and round-trips the run through the `.storyletsave` string boundary:

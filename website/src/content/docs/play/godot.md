@@ -99,6 +99,12 @@ var report := engine.load_game(envelope)     # rebuilds every flow...
 flow = engine.get_flow("main")               # ...so re-take your handles
 ```
 
+An engine built on its own carries every property value in its envelope, a self-backed
+`@world` included, so those two calls are the whole run. The envelope is `storylets/save@2`,
+and a `storylets/save@1` envelope or file from an earlier release still loads. A game that
+hands the engine its own registry saves that registry once, beside the envelope
+([below](#one-registry-for-the-game)).
+
 A load is forgiving. A card your edit deleted drops off the board, a property you added takes
 its default, and a save from an older build goes in without a word. `preview_load(envelope)`
 says what that would cost before you spend it and changes nothing. `load_game` returns the
@@ -115,9 +121,46 @@ reported (`preview_flow_restore(id, saved)` asks in advance, and
 
 `StoryletSave.serialize_state(engine, world_values)` and
 `StoryletSave.deserialize_state(engine, text)` are the `.storyletsave` string boundary. The
-second hands back the file's `@world` values for your game to apply
-([why the engine never saves them](/play/world-state/#saving-it)). A foreign, malformed, or
+second hands back the file's `@world` values for your game to apply, which matters when your
+game binds `@world` to a resolver of its own: those values are your game's, and the engine
+never saves them ([why](/play/world-state/#saving-it)). A foreign, malformed, or
 wrong-project blob is refused, so a bad file can't corrupt a run.
+
+### One registry for the game
+
+Every property value lives in a registry, a `StoryletScopeRegistry`. Without the `"registry"`
+option the engine makes its own and acts as its own game, which is all a game with one engine
+needs. A game running Patterplay beside the Storylet Engine makes one registry, registers
+`@world` in it, and hands it to both:
+
+```gdscript
+var registry := StoryletScopeRegistry.new()
+registry.define_owned("world", world_declarations, {"owner": "Game"})   # stored and saved
+var engine := StoryletEngine.create(bundle, {"seed": 7, "registry": registry})
+```
+
+The engine registers `@story` under `story` and every other bag under a key starting
+`storylets/`, each carrying the owner label "Storylet Engine". Either addon's registry class
+will do, since both wrap the same shared source. Every scope in the registry reaches your
+cards' conditions, and `get_property("patter.gold")` or `set_property("patter.gold", 5)` reads
+or writes another engine's value by its path.
+
+Given your registry, the engine leaves every property value out of `save_game()`, and your
+game saves the registry once:
+
+```gdscript
+var save := {"registry": registry.save(), "storylets": engine.save_game()}
+# ...and later, in either order:
+registry.load(save["registry"])
+engine.load_game(save["storylets"])
+```
+
+`@world` is then your game's to register. `define_owned` keeps it in the registry, saved with
+the rest; `define_foreign("world", {"get": getter, "set": setter}, world_declarations)` leaves
+it in your game's own state, and nothing saves it but you. Pass the engine a `"world"`
+resolver instead and it registers that foreign scope for you. A token is taken once: a second
+engine that wants a token another already holds is refused, `create` returns null, the error
+names the holder, and the registry is left as it was.
 
 ## Errors
 

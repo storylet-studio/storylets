@@ -10,7 +10,15 @@
 class_name StoryletBundle
 
 const BUNDLE_SCHEMA := "storylets/bundle@0"
-const SAVE_SCHEMA := "storylets/save@1"
+## The engine's save envelope. Version 2 is the one-registry model: property
+## values are the registry's, so the envelope holds what is NOT a property, plus
+## the engine's own registry's values under "registry" when it made that
+## registry itself. Version 1 envelopes still load: their property partitions
+## move into the registry under the keys StoryletEngine.shared_key and
+## flow_key write.
+const SAVE_SCHEMA := "storylets/save@2"
+## The version 1 envelope's schema tag, still read.
+const SAVE_SCHEMA_V1 := "storylets/save@1"
 const SAVEFILE_SCHEMA := "storylets/savefile@1"
 
 ## The reserved tag group (schema 2.4): present in every box without

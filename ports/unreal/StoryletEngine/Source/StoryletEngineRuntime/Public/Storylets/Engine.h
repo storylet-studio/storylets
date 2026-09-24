@@ -2,13 +2,22 @@
 // (design/flows.md; the shape is Patter's), transliterated from the
 // reference runtime (packages/runtime/src/engine.ts) and held to the
 // conformance corpus. An Engine owns the bundle, the lookups, the SHARED
-// property partitions and the @world resolver (never in saveGame() - the
-// host saves its container); a Flow owns its own PRNG, clocks, cooldowns,
-// board, claims, play history and per-flow partitions. Every name is
-// shared XOR per-flow by declaration, so a read is a union of two bags and
+// property partitions and the @world seam; a Flow owns its own PRNG, clocks,
+// cooldowns, board, claims, play history and per-flow partitions. Every name
+// is shared XOR per-flow by declaration, so a read is a union of two bags and
 // a write routes by name. No default flow, no ambient flow: openFlow(id)
 // is the only way in, an existing id is REPLACED, closed handles are
 // INERT, and engine-level reads of per-flow refs throw the teaching error.
+//
+// One registry per game (patterkit design/one-registry-handover.md): every
+// property bag that declares something lives in ONE ScopeRegistry, the game's
+// (EngineOptions::registry) or, without one, the engine's own. The shared
+// @story registers under `story`, every other bag under a key starting
+// `storylets/`, which no expression can name. saveGame() carries what is NOT
+// a property, plus the registry's values only when the engine made the
+// registry itself. @world is the game's: a resolver it binds (never saved), a
+// scope it registers in its registry, or, for a standalone engine, a
+// self-backed bag the registry stores and saves.
 //
 // Key dealing contracts, per flow, in one place:
 //   - two verbs: deal(hand) claims, peek(box, criteria) just looks; you can
@@ -64,6 +73,7 @@
 #include "Storylets/Mulberry32.h"
 #include "Storylets/Expr/OrderedMap.h"
 #include "Storylets/Expr/PropertyBag.h"
+#include "Storylets/Expr/ScopeRegistry.h"
 #include "Storylets/Specificity.h"
 #include "Storylets/StoryletValue.h"
 
@@ -87,9 +97,26 @@ namespace storylets
         bool log = false;
         /** Retained log cap (oldest dropped first) when log is on. */
         int logCap = 1000;
-        /** The host's @world binding; absent = self-backed from the declared
-         *  defaults. Engine-level, shared by all flows, never in saveGame(). */
+        /** The host's @world binding: the values the game owns and the story
+         *  reads (and, where `set` is given, writes). Engine-level, shared by
+         *  all flows, never saved: the game keeps these values. Absent, a
+         *  standalone engine self-backs @world from the declared defaults, as a
+         *  property its registry stores and saves. A game running several
+         *  engines registers @world in its registry itself instead. */
         std::optional<WorldResolver> world;
+        /** The game's registry: ONE per game, holding every engine's
+         *  properties except those the game keeps itself, saved once. Given
+         *  one, the engine registers its own scopes in it (@story under
+         *  `story`, every other bag under a key starting `storylets/`, and
+         *  @world if `world` is set), reads every other scope from it, and
+         *  saveGame() leaves the property values to the game. @world is then
+         *  the game's to register: owned if the registry should store it,
+         *  foreign if the game keeps it. Null, the engine makes its own
+         *  registry and acts as its own game: it self-backs @world, and
+         *  saveGame() carries the registry's values too. Held shared, so a
+         *  game and each engine it runs keep the one registry alive between
+         *  them. */
+        std::shared_ptr<ScopeRegistry> registry;
         /** Diagnostics hook (opt-in, dev only): fired when openFlow REPLACES a
          *  flow that still had cards dealt (flow id, count). Behaviour is
          *  unchanged; this makes observable the host that calls openFlow straight
@@ -635,6 +662,191 @@ namespace storylets
             report.retypedProperties = std::move(draft.retypedProperties);
             return report;
         }
+
+        // --- the registry keys (patterkit design/one-registry-handover.md) -----
+
+        /** The owner label on everything this engine registers: named in a
+         *  clash error and carried on the registry's examiner rows. */
+        inline const char* const RegistryOwner = "Storylet Engine";
+
+        /** Identity: storylets property names are case-significant as authored. */
+        inline std::string IdentityName(const std::string& n) { return n; }
+
+        inline std::string ReplaceAll(std::string text, const std::string& from, const std::string& to)
+        {
+            size_t at = 0;
+            while ((at = text.find(from, at)) != std::string::npos)
+            {
+                text.replace(at, from.size(), to);
+                at += to.size();
+            }
+            return text;
+        }
+
+        /** An id as it sits in a registry key: `%` then `/` escaped, so no two
+         *  keys can meet. Every runtime writes the same keys: they are in the
+         *  save. Owners are keyed by INTERNAL id, as the save always was, so a
+         *  save survives a rename. */
+        inline std::string EscapeKeyPart(const std::string& id)
+        {
+            return ReplaceAll(ReplaceAll(id, "%", "%25"), "/", "%2F");
+        }
+
+        inline std::string UnescapeKeyPart(const std::string& id)
+        {
+            return ReplaceAll(ReplaceAll(id, "%2F", "/"), "%25", "%");
+        }
+
+        /** A shared box, deck, hand, or value bag's key. */
+        inline std::string SharedKey(const std::string& kind, const std::string& id)
+        {
+            return "storylets/" + kind + "/" + EscapeKeyPart(id);
+        }
+
+        /** Every key a flow's bags register under starts with this. */
+        inline std::string FlowPrefix(const std::string& flowId)
+        {
+            return "storylets/flow/" + EscapeKeyPart(flowId) + "/";
+        }
+
+        /** A flow's own bag's key: its @story, or a box, deck, hand, or value bag. */
+        inline std::string FlowKey(const std::string& flowId, const std::string& kind, const std::string& id = std::string())
+        {
+            return kind == "story" ? FlowPrefix(flowId) + "story" : FlowPrefix(flowId) + kind + "/" + EscapeKeyPart(id);
+        }
+
+        /** A registry section's values: registry key -> name -> value. */
+        using Sections = OrderedMap<std::string, OrderedMap<std::string, StoryletValue>>;
+
+        inline OrderedMap<std::string, OrderedMap<std::string, StoryletValue>>& PartitionKind(PropsPartition& p, const std::string& kind)
+        {
+            if (kind == "box") return p.box;
+            if (kind == "deck") return p.deck;
+            if (kind == "hand") return p.hand;
+            return p.value;
+        }
+
+        inline const OrderedMap<std::string, OrderedMap<std::string, StoryletValue>>& PartitionKind(const PropsPartition& p, const std::string& kind)
+        {
+            if (kind == "box") return p.box;
+            if (kind == "deck") return p.deck;
+            if (kind == "hand") return p.hand;
+            return p.value;
+        }
+
+        inline std::vector<std::string> SplitKey(const std::string& key)
+        {
+            std::vector<std::string> parts;
+            size_t start = 0;
+            while (true)
+            {
+                const size_t slash = key.find('/', start);
+                if (slash == std::string::npos)
+                {
+                    parts.push_back(key.substr(start));
+                    return parts;
+                }
+                parts.push_back(key.substr(start, slash - start));
+                start = slash + 1;
+            }
+        }
+
+        /** A registry save's sections sorted back into partitions, for the load
+         *  walk: the shared ones, each flow's (only the flows the save restores;
+         *  the rest are dropped), and everything that is not this engine's,
+         *  passed through. The TypeScript reference's four patterns, matched
+         *  without <regex>, which the std core deliberately avoids. */
+        struct MovedValues
+        {
+            PropsPartition shared;
+            OrderedMap<std::string, PropsPartition> flows;
+            Sections rest;
+        };
+
+        inline MovedValues PartitionsFromSections(const Sections& sections, const std::unordered_set<std::string>& flowIds)
+        {
+            MovedValues moved;
+            auto flowOf = [&moved, &flowIds](const std::string& escaped) -> PropsPartition*
+            {
+                const std::string id = UnescapeKeyPart(escaped);
+                if (flowIds.count(id) == 0) return nullptr;
+                if (!moved.flows.contains(id)) moved.flows.set(id, PropsPartition());
+                return moved.flows.get(id);
+            };
+            auto isKind = [](const std::string& k) { return IsOwnedScope(k); };
+            for (const auto& pair : sections)
+            {
+                const std::string& key = pair.first;
+                if (key == "story")
+                {
+                    moved.shared.story = pair.second;
+                    continue;
+                }
+                if (key.compare(0, 10, "storylets/") != 0)
+                {
+                    moved.rest.set(key, pair.second);
+                    continue;
+                }
+                const std::vector<std::string> parts = SplitKey(key);
+                bool wellFormed = true;   // every segment is [^/]+
+                for (const auto& part : parts) if (part.empty()) wellFormed = false;
+                if (!wellFormed) continue;
+                if (parts.size() == 3 && isKind(parts[1]))
+                {
+                    PartitionKind(moved.shared, parts[1]).set(UnescapeKeyPart(parts[2]), pair.second);
+                }
+                else if (parts.size() == 4 && parts[1] == "flow" && parts[3] == "story")
+                {
+                    if (PropsPartition* p = flowOf(parts[2])) p->story = pair.second;
+                }
+                else if (parts.size() == 5 && parts[1] == "flow" && isKind(parts[3]))
+                {
+                    if (PropsPartition* p = flowOf(parts[2])) PartitionKind(*p, parts[3]).set(UnescapeKeyPart(parts[4]), pair.second);
+                }
+                // Anything else under `storylets/` is this engine's and no
+                // bag's any more: dropped.
+            }
+            return moved;
+        }
+
+        /** A cleaned partition as registry sections, keyed the way its bags
+         *  register. Empty sections are left out: they would load nothing, and a
+         *  section for a bag that never registers would wait in the registry for
+         *  ever. */
+        inline void SectionsOf(const PropsPartition& p,
+            const std::function<std::string(const std::string&, const std::string&)>& keyOf, Sections& out)
+        {
+            if (p.story.size() > 0) out.set(keyOf("story", std::string()), p.story);
+            for (const char* kind : {"box", "deck", "hand", "value"})
+            {
+                for (const auto& pair : PartitionKind(p, kind))
+                {
+                    if (pair.second.size() > 0) out.set(keyOf(kind, pair.first), pair.second);
+                }
+            }
+        }
+
+        /** @world through the host's resolver, as the registry takes a foreign
+         *  scope. `set` left empty is a read-only binding. */
+        class WorldResolverScope : public IScopeResolver
+        {
+        public:
+            explicit WorldResolverScope(WorldResolver resolver) : resolver_(std::move(resolver)) {}
+            std::optional<StoryletValue> get(const std::string& name) const override
+            {
+                return resolver_.get ? resolver_.get(name) : std::nullopt;
+            }
+            bool canSet() const override { return static_cast<bool>(resolver_.set); }
+            void set(const std::string& name, const StoryletValue& value) override { resolver_.set(name, value); }
+        private:
+            WorldResolver resolver_;
+        };
+
+        /** A declaration list as the registry and the bag take it. */
+        inline std::vector<ScopeDeclaration> PlainDecls(const std::vector<PropertyDecl>& decls)
+        {
+            return std::vector<ScopeDeclaration>(decls.begin(), decls.end());
+        }
     }
 
     class Flow;
@@ -642,16 +854,31 @@ namespace storylets
 
     /** The world + flow manager (design/flows.md; the shape is Patter's):
      *  owns the bundle, every lookup built from it, the SHARED property
-     *  partitions and the @world resolver; ALL play happens on a Flow from
-     *  openFlow(id). @world is never in saveGame() - the host saves its
-     *  container, each engine saves its own envelope. */
+     *  partitions and the @world seam; ALL play happens on a Flow from
+     *  openFlow(id). Every bag that declares something is registered in the
+     *  game's one ScopeRegistry (EngineOptions::registry) or the engine's own. */
     class Engine
     {
     public:
+        /** Throws, leaving the game's registry as it was, when a token this
+         *  engine registers (`story`, or `world` with a resolver) is already
+         *  another's: the error names who holds it. */
         explicit Engine(BundlePtr bundle, const EngineOptions& opts = {});
+
+        /** Closes every flow and takes this engine's bags out of the registry
+         *  (an engine goes away: its bags go with it). */
+        ~Engine();
 
         Engine(const Engine&) = delete;
         Engine& operator=(const Engine&) = delete;
+
+        /** The registry this engine's bags live in: the game's, or the one it
+         *  made because it was given none. */
+        const std::shared_ptr<ScopeRegistry>& registry() const { return registry_; }
+
+        /** True when the engine made its registry itself (no registry option):
+         *  it is then its own game, and saveGame() carries the values. */
+        bool ownsRegistry() const { return ownsRegistry_; }
 
         /** Open (or REPLACE) the named flow. An existing id's flow is closed
          *  first - re-opening a name is a reset of that name's whole
@@ -677,8 +904,11 @@ namespace storylets
          *  Unknown ids are a quiet no-op. */
         void closeFlow(const std::string& id);
 
-        /** Close every flow and reseed the shared state to its defaults (the
-         *  self-backed @world included; a host-bound @world is the host's). */
+        /** Close every flow (their bags leave the registry), forget spent cards
+         *  and the run's log, and reseed the shared state to its defaults in
+         *  place (the self-backed @world included; a host-bound @world is the
+         *  host's). Values loaded into the registry for this engine's bags and
+         *  not yet claimed are dropped; every other engine's stay. */
         void reset();
 
         // --- shared scarcity (design/shared-scarcity.md) ----------------------
@@ -714,7 +944,8 @@ namespace storylets
          *  (design/engine-server.md 4.4), and its internal id is accepted for
          *  this release with a diagnostic naming the address to move to. A ref
          *  that resolves PER-FLOW throws, naming the fix (Patter's teaching
-         *  rule). */
+         *  rule). Another engine's game-wide scope in the registry reads by its
+         *  path too ("patter.gold"): every engine reads every scope. */
         StoryletValue getProperty(const std::string& path) const;
 
         void setProperty(const std::string& path, const StoryletValue& value);
@@ -751,16 +982,23 @@ namespace storylets
             };
         }
 
-        /** The whole engine, one envelope: the shared partitions once, then
-         *  every live flow keyed by its id. @world is NEVER here. */
+        /** The whole engine's NON-property state, one envelope
+         *  (storylets/save@2): the spent cards once, then every live flow
+         *  (board, clocks, cooldowns, PRNG, play log) keyed by its id. The
+         *  property values are the registry's: a standalone engine (one that
+         *  made its own registry) carries them here under `registry`,
+         *  self-backed @world included; a game that passed a registry saves it
+         *  once itself, beside each engine's envelope. */
         SaveEnvelope saveGame() const;
 
-        /** ONE flow's blob, to park a visit that is walking away: the same
-         *  shape the envelope carries per flow, and the same shape openFlow's
-         *  `restore` option takes back (design/engine-server.md 4.1). Saving the
-         *  whole envelope to park one of four hundred players is wrong in cost
-         *  and in meaning. Throws for a name that is not open - a closed flow
-         *  has nothing left to save. */
+        /** ONE flow's blob, to park a visit that is walking away: the shape
+         *  the envelope carries per flow, plus the flow's properties, and the
+         *  same shape openFlow's `restore` option takes back
+         *  (design/engine-server.md 4.1). Parked whole, properties included: a
+         *  parked flow's bags leave the registry when it closes, so its values
+         *  have to travel with it. Saving the whole envelope to park one of
+         *  four hundred players is wrong in cost and in meaning. Throws for a
+         *  name that is not open - a closed flow has nothing left to save. */
         FlowSave saveFlow(const std::string& id) const;
 
         /** What loadGame(envelope) would do that is not a plain restore, without
@@ -777,7 +1015,17 @@ namespace storylets
 
         /** Restore: shared state once, then every flow REBUILT from its
          *  blob. Handles held from before the load are closed and inert;
-         *  take fresh ones from getFlow()/flows().
+         *  take fresh ones from getFlow()/flows(). Takes storylets/save@2 and
+         *  storylets/save@1 alike.
+         *
+         *  Property values come from the registry. An envelope that carries
+         *  them (a standalone engine's, or a version 1 envelope) has them
+         *  walked, cleaned, and moved into the registry here, over fresh
+         *  defaults. Otherwise the game loads its registry itself, before or
+         *  after this call: each flow's bags are handed back to the registry
+         *  with their values, and the restored flows claim them. The report then
+         *  covers only what this envelope holds; the registry's own load rule
+         *  applies to the values.
          *
          *  Returns the report previewLoad would have given for this envelope:
          *  the drift tolerance that makes a load forgiving is what hides its
@@ -787,10 +1035,13 @@ namespace storylets
 
         // --- the @world seam (used by flows and hosts alike) -----------------
 
+        /** @world, read through the registry by name (the scope's own
+         *  normalisation), so a @world the game registered folded to lower case
+         *  still answers the names as authored. Nothing registered under
+         *  `world` reads as unset. */
         std::optional<StoryletValue> worldGet(const std::string& name) const
         {
-            if (hostWorld_.has_value()) return hostWorld_->get(name);
-            return selfWorld_->get(name);
+            return registry_->get("world", name);
         }
 
         /** The story's promise about a @world value (writable == false on its declaration),
@@ -808,18 +1059,31 @@ namespace storylets
             return hostWorld_.has_value() ? static_cast<bool>(hostWorld_->set) : true;
         }
 
-        /** The @world WRITE seam. `host` says the caller is the GAME's own surface -
-         *  setProperty and the tooling built on it - which the shared kernel lets past
-         *  a `writable: false` (scoperegistry 0.6.0): that flag is the story's promise,
-         *  not the game's. The story's refusal is worldReadOnly, asked before this seam
-         *  is reached. A BOUND resolver is opaque - it takes a name and a value and
-         *  keeps whatever rule the game has - so the flag only ever reaches the
-         *  self-backed bag. */
+        /** The @world WRITE seam, through the registry. `host` says the caller is
+         *  the GAME's own surface - setProperty and the tooling built on it - which
+         *  the shared kernel lets past a `writable: false` (scoperegistry 0.6.0):
+         *  that flag is the story's promise, not the game's. The story's refusal is
+         *  worldReadOnly, asked before this seam is reached. A BOUND resolver is
+         *  opaque - it takes a name and a value and keeps whatever rule the game
+         *  has - so it is always written as the host, and the flag only reaches a
+         *  @world the registry stores. */
         void worldSet(const std::string& name, const StoryletValue& value, bool host = false)
         {
-            if (hostWorld_.has_value()) hostWorld_->set(name, value);
-            else selfWorld_->set(name, value, /*silent=*/false, "", host);
+            registry_->set("world", name, value, hostWorld_.has_value() ? true : host);
         }
+
+        /** @internal - the live swap's hand-over (UStoryletEngine::ApplyLiveBundle
+         *  with the game's registry): take every bag this engine and its flows
+         *  registered, and @world if it registered it, out of the registry.
+         *  With `keep`, their values wait there for the replacement engine, which
+         *  claims them as it registers the same keys. The engine is unusable
+         *  until restoreRegistrations. Idempotent. */
+        void releaseRegistrations(bool keep);
+
+        /** @internal - undo releaseRegistrations: register everything again,
+         *  each bag claiming the values waiting for its key (a swap that failed
+         *  after the release). */
+        void restoreRegistrations();
 
     private:
         friend class Flow;
@@ -1022,7 +1286,9 @@ namespace storylets
         StoryletValue readShared(const std::string& path, const std::vector<std::string>& parts,
             const std::optional<OwnedAddress>& owned) const;
 
-        /** Build the shared stores and the @world seam. */
+        /** Build the shared stores, once, for the engine's life: reset and
+         *  loads reseed the bags in place, so the registry never sees them come
+         *  and go. */
         void initShared()
         {
             detail::Partition shared;
@@ -1047,17 +1313,144 @@ namespace storylets
                 }
             }
             shared_ = std::move(shared);
-            if (!hostWorld_.has_value())
+            registerShared();
+        }
+
+        /** Register the shared bags and @world. On a throw (a token another
+         *  engine or the game already holds), whatever this registered comes
+         *  out again, keeping its values, so a clash leaves the game's registry
+         *  as it was; then the error goes on. */
+        void registerShared()
+        {
+            ScopeRegistry& reg = *registry_;
+            std::vector<std::string> registered;
+            try
             {
-                // Standalone: self-backed from the declared defaults,
-                // DECLARATIONS AND ALL. Still FOREIGN in spirit - never in
-                // saveGame(); a host that wants @world to persist saves the
-                // container itself. The bag keeps `writable: false` so an
-                // examiner still reads it there, and the kernel lets a host
-                // write past it, which is what the game's own surface passes.
-                selfWorld_ = bagFromDecls(bundle_->world.properties, "world.");
+                // `story` is this engine's token whether or not the bundle
+                // declares a shared @story property: registering it is what makes
+                // a clash show at once. Claims values the game loaded first.
+                reg.mountOwned("story", shared_.story, std::string(detail::RegistryOwner));
+                registered.push_back("story");
+                for (const char* kind : {"box", "deck", "hand", "value"})
+                {
+                    for (const auto& pair : partitionKind(shared_, kind))
+                    {
+                        if (pair.second->declarations().empty()) continue;   // holds nothing: not registered
+                        const std::string key = detail::SharedKey(kind, pair.first);
+                        reg.mountOwned(key, pair.second, std::string(detail::RegistryOwner));
+                        registered.push_back(key);
+                    }
+                }
+                const std::vector<ScopeDeclaration> worldDecls = detail::PlainDecls(bundle_->world.properties);
+                if (hostWorld_.has_value())
+                {
+                    // The game keeps these values: an external scope, never saved.
+                    ForeignScopeOptions options;
+                    options.normalise = &detail::IdentityName;
+                    options.owner = std::string(detail::RegistryOwner);
+                    reg.defineForeign("world", std::make_shared<detail::WorldResolverScope>(*hostWorld_), &worldDecls, options);
+                    registered.push_back("world");
+                }
+                else if (ownsRegistry_ && (selfWorld_ || !reg.has("world")))
+                {
+                    // Standalone: self-backed from the declared defaults,
+                    // DECLARATIONS AND ALL, as a property the registry stores and
+                    // SAVES (only a resolver the game binds is external). The bag
+                    // keeps `writable: false` so an examiner still reads it there,
+                    // and the kernel lets a host write past it, which is what the
+                    // game's own surface passes.
+                    OwnedScopeOptions options;
+                    options.normalise = &detail::IdentityName;
+                    options.pathPrefix = std::string("world.");
+                    options.owner = std::string(detail::RegistryOwner);
+                    reg.defineOwned("world", worldDecls, options);
+                    registered.push_back("world");
+                    selfWorld_ = true;
+                }
+                // Given the game's registry and no resolver, @world is the game's
+                // to register: this engine registers nothing for it.
+            }
+            catch (...)
+            {
+                for (const auto& key : registered) reg.remove(key, /*keep=*/true);
+                throw;
+            }
+            registered_ = std::move(registered);
+        }
+
+        /** Every shared bag back to its declared defaults, in place (the
+         *  registry keeps them registered), the self-backed @world included. */
+        void reseedShared()
+        {
+            const std::vector<ScopeDeclaration> story = detail::PlainDecls(sharedDecls_.story);
+            shared_.story->reseed(&story);
+            for (const char* kind : {"box", "deck", "hand", "value"})
+            {
+                const OrderedMap<std::string, std::vector<PropertyDecl>>& decls =
+                    std::string(kind) == "box" ? sharedDecls_.box
+                    : std::string(kind) == "deck" ? sharedDecls_.deck
+                    : std::string(kind) == "hand" ? sharedDecls_.hand
+                    : sharedDecls_.value;
+                for (const auto& pair : partitionKind(shared_, kind))
+                {
+                    const std::vector<PropertyDecl>* found = decls.get(pair.first);
+                    const std::vector<ScopeDeclaration> plain = found ? detail::PlainDecls(*found) : std::vector<ScopeDeclaration>();
+                    pair.second->reseed(&plain);
+                }
+            }
+            if (selfWorld_)
+            {
+                registry_->reseedOwned("world", detail::PlainDecls(bundle_->world.properties));
             }
         }
+
+        /** One kind of a partition's bags (Flow::kindOf, which is not complete here). */
+        static const OrderedMap<std::string, std::shared_ptr<PropertyBag>>& partitionKind(const detail::Partition& p, const std::string& kind)
+        {
+            if (kind == "box") return p.box;
+            if (kind == "deck") return p.deck;
+            if (kind == "hand") return p.hand;
+            return p.value;
+        }
+
+        /** Every OTHER scope in the registry, as an eval context sees it (instance
+         *  keys left out: `storylets/deck/x`, another engine's, is no expression
+         *  token), rebuilt only when the registry's set of scopes moves. The
+         *  values stay live: a context holds the bags, not copies. */
+        struct RegistryView
+        {
+            std::unordered_map<std::string, std::shared_ptr<const IScopeSource>> scopes;
+            std::function<const std::vector<std::string>*(const std::string&, const std::string&)> qualities;
+        };
+
+        const RegistryView& registryView() const
+        {
+            if (registry_->revision() != viewRevision_)
+            {
+                EvalContext ctx = registry_->toEvalContext();
+                RegistryView view;
+                for (const auto& pair : ctx.scopes)
+                {
+                    if (pair.first.find('/') == std::string::npos) view.scopes.emplace(pair.first, pair.second);
+                }
+                view.qualities = ctx.qualities;
+                view_ = std::move(view);
+                viewRevision_ = registry_->revision();
+            }
+            return view_;
+        }
+
+        /** openFlow, and loadGame's rebuild. `claim` says the new flow's bags
+         *  take the values the registry holds for them (a load); a fresh open
+         *  is a reset of that name, so anything waiting for it is discarded
+         *  first. */
+        FlowPtr open(const std::string& id, const OpenFlowOptions& opts, bool claim);
+
+        /** End the run: clear the log, close every flow, forget spent cards.
+         *  Each flow's bags leave the registry; `keepFlows` names the flows
+         *  whose values are kept there for the flow that replaces them (a load
+         *  into the game's registry). */
+        void dropRun(const std::unordered_set<std::string>* keepFlows);
 
         void initLadders();
 
@@ -1101,12 +1494,23 @@ namespace storylets
         std::function<void(const std::string&, int)> onReplacedFlow_;
         std::optional<int> logCap_;
         std::optional<WorldResolver> hostWorld_;
-        std::shared_ptr<PropertyBag> selfWorld_;
+        /** The game's one registry (or the engine's own, when it is standalone). */
+        std::shared_ptr<ScopeRegistry> registry_;
+        /** True when the engine made the registry: saveGame() then carries its values. */
+        bool ownsRegistry_ = false;
+        /** True when the engine self-backed @world (standalone, no resolver bound). */
+        bool selfWorld_ = false;
+        /** The keys the engine itself registered (flows keep their own), in order. */
+        std::vector<std::string> registered_;
+        mutable int viewRevision_ = -1;
+        mutable RegistryView view_;
         /** The walk both entry points share, and what the apply half writes. */
         struct LoadPlan
         {
             LoadReport report;
-            PropsPartition shared;
+            /** The cleaned property values to move into the registry, when the
+             *  envelope carries any. */
+            std::optional<detail::Sections> sections;
             std::vector<std::string> spent;
             OrderedMap<std::string, FlowSave> flows;
         };
@@ -1190,6 +1594,9 @@ namespace storylets
             for (const auto& pair : fd.deck) stores_.deck.set(pair.first, Engine::bagFromDecls(pair.second, engine_->addressOf("deck", pair.first) + "."));
             for (const auto& pair : fd.hand) stores_.hand.set(pair.first, Engine::bagFromDecls(pair.second, engine_->addressOf("hand", pair.first) + "."));
             for (const auto& pair : fd.value) stores_.value.set(pair.first, Engine::bagFromDecls(pair.second, engine_->addressOf("value", pair.first) + "."));
+            // Register the bags: each claims whatever the registry holds for its
+            // key (a load); openFlow discarded that first for a fresh flow.
+            registerBags();
             for (const auto& box : engine_->bundle_->boxes)
             {
                 turnCounts_.set(box.id, 0);
@@ -1215,7 +1622,55 @@ namespace storylets
             markClosed();
         }
 
-        void markClosed() { closed_ = true; }
+        /** @internal - the handle goes inert and the flow's bags leave the
+         *  registry, their values with them. */
+        void markClosed()
+        {
+            releaseBags(false);
+            closed_ = true;
+        }
+
+        /** @internal - take this flow's bags out of the registry; with `keep`,
+         *  their values wait there for the flow that replaces this one (a load
+         *  into the game's registry, a live swap). Idempotent. */
+        void releaseBags(bool keep)
+        {
+            for (const auto& key : registered_)
+            {
+                if (engine_->registry_->has(key)) engine_->registry_->remove(key, keep);
+            }
+            registered_.clear();
+        }
+
+        /** @internal - register every bag that declares something under this
+         *  flow's keys (`storylets/flow/<id>/...`), each claiming the values the
+         *  registry holds for it. A throw takes back what this registered,
+         *  keeping its values, and goes on. */
+        void registerBags()
+        {
+            ScopeRegistry& reg = *engine_->registry_;
+            std::vector<std::string> registered;
+            auto put = [&reg, &registered](const std::string& key, const std::shared_ptr<PropertyBag>& bag)
+            {
+                if (bag->declarations().empty()) return;   // holds nothing: not registered
+                reg.mountOwned(key, bag, std::string(detail::RegistryOwner));
+                registered.push_back(key);
+            };
+            try
+            {
+                put(detail::FlowKey(id_, "story"), stores_.story);
+                for (const char* kind : {"box", "deck", "hand", "value"})
+                {
+                    for (const auto& pair : kindOf(stores_, kind)) put(detail::FlowKey(id_, kind, pair.first), pair.second);
+                }
+            }
+            catch (...)
+            {
+                for (const auto& key : registered) reg.remove(key, /*keep=*/true);
+                throw;
+            }
+            registered_ = std::move(registered);
+        }
 
         /** A box's current turn (schema 3.4), on THIS flow's clock. */
         double turn(const std::string& boxRef) const
@@ -2027,21 +2482,30 @@ namespace storylets
          *  the engine's resolver. */
         EvalContext evalCtx(const Box& box, const Deck* deck, const HandEnv& handEnv) const
         {
+            const Engine::RegistryView& others = engine_->registryView();
             EvalContext ctx;
-            if (engine_->hasQualities_)
+            if (engine_->hasQualities_ || others.qualities)
             {
                 // The quality channel, answering for THIS ask's box and deck.
+                // Only wired when a quality exists, so a bundle without one
+                // evaluates byte-identically to before the feature; another
+                // engine's ladders answer for its own scopes.
                 const std::string boxId = box.id;
                 const std::string deckId = deck ? deck->id : std::string();
                 const HandEnv* env = &handEnv;
-                ctx.qualities = [this, boxId, deckId, env](const std::string& scope, const std::string& name) -> const std::vector<std::string>*
+                auto otherLadders = others.qualities;
+                ctx.qualities = [this, boxId, deckId, env, otherLadders](const std::string& scope, const std::string& name) -> const std::vector<std::string>*
                 {
                     auto find = [&name](const std::unordered_map<std::string, std::vector<std::string>>& m) -> const std::vector<std::string>*
                     {
                         auto it = m.find(name);
                         return it == m.end() ? nullptr : &it->second;
                     };
-                    if (scope == "world") return find(engine_->worldLadders_);
+                    if (scope == "world")
+                    {
+                        const std::vector<std::string>* own = find(engine_->worldLadders_);
+                        return own || !otherLadders ? own : otherLadders(scope, name);
+                    }
                     if (scope == "story") return find(engine_->storyLadders_);
                     if (scope == "box")
                     {
@@ -2054,12 +2518,15 @@ namespace storylets
                         return it == engine_->deckLadders_.end() ? nullptr : find(it->second);
                     }
                     if (scope == "hand") return handLadder(*env, name);
-                    return nullptr;
+                    return otherLadders ? otherLadders(scope, name) : nullptr;
                 };
             }
             const StoryletsHost* host = hostsByBox_.get(box.id);
             if (!host) throw StoryletError("unknown box \"" + box.id + "\"");
             ctx.host = host;
+            // Every other engine's game-wide scope first (every engine reads every
+            // scope); this engine's own tokens are its merged views, over the top.
+            ctx.scopes = others.scopes;
             ctx.scopes["world"] = std::make_shared<WorldScope>(engine_);
             ctx.scopes["story"] = std::make_shared<PairScope>(stores_.story.get(), engine_->shared_.story.get());
             ctx.scopes["box"] = std::make_shared<PairScope>(bagOf(stores_.box, box.id), bagOf(engine_->shared_.box, box.id));
@@ -2952,8 +3419,10 @@ namespace storylets
         std::unordered_map<std::string, double> tagPlayCount_;
         std::unordered_map<std::string, PlayRecord> lastPlayInTag_;
 
-        /** The per-flow property partitions (the not-shared halves). */
+        /** The per-flow property partitions (the not-shared halves), each bag
+         *  that declares something registered under this flow's keys. */
         detail::Partition stores_;
+        std::vector<std::string> registered_;
 
         std::vector<TraceHandler> traceHandlers_;
         uint64_t nextTraceId_ = 1;
@@ -3061,6 +3530,12 @@ namespace storylets
             {
                 value = engine_->worldGet(parts[1]);
             }
+            else if (parts.size() == 2 && parts[0] != "story" && engine_->registry_->has(parts[0]))
+            {
+                // Another engine's game-wide scope (`patter.gold`): every engine
+                // reads every scope.
+                value = engine_->registry_->get(parts[0], parts[1]);
+            }
             else if (parts.size() == 2 && parts[0] == "story")
             {
                 value = stores_.story->get(parts[1]);
@@ -3094,6 +3569,12 @@ namespace storylets
                     throw StoryletError("@world is read-only here: the host bound no write");
                 }
                 engine_->worldSet(parts[1], value, /*host=*/true);
+                return;
+            }
+            if (parts.size() == 2 && parts[0] != "story" && engine_->registry_->has(parts[0]))
+            {
+                // Another engine's game-wide scope, written as the host.
+                engine_->registry_->set(parts[0], parts[1], value, /*host=*/true);
                 return;
             }
             PropertyBag* own = nullptr;
@@ -3153,17 +3634,24 @@ namespace storylets
 
         // --- persistence (schema 4) ------------------------------------------------
 
-        /** This flow's blob inside the engine's envelope (StoryletValue is a
-         *  value type, so a container-deep copy is the TS structuredClone). */
-        FlowSave snapshot() const
+        /** This flow's blob: inside the engine's envelope without its
+         *  properties (the registry has them), or parked whole by saveFlow
+         *  (StoryletValue is a value type, so a container-deep copy is the TS
+         *  structuredClone). */
+        FlowSave snapshot(bool withProps) const
         {
             FlowSave save;
             save.prng = prng_.state();
-            save.props.story = stores_.story->save();
-            for (const auto& pair : stores_.box) save.props.box.set(pair.first, pair.second->save());
-            for (const auto& pair : stores_.deck) save.props.deck.set(pair.first, pair.second->save());
-            for (const auto& pair : stores_.hand) save.props.hand.set(pair.first, pair.second->save());
-            for (const auto& pair : stores_.value) save.props.value.set(pair.first, pair.second->save());
+            if (withProps)
+            {
+                PropsPartition props;
+                props.story = stores_.story->save();
+                for (const auto& pair : stores_.box) props.box.set(pair.first, pair.second->save());
+                for (const auto& pair : stores_.deck) props.deck.set(pair.first, pair.second->save());
+                for (const auto& pair : stores_.hand) props.hand.set(pair.first, pair.second->save());
+                for (const auto& pair : stores_.value) props.value.set(pair.first, pair.second->save());
+                save.props = std::move(props);
+            }
             for (const auto& pair : turnCounts_) save.turns.set(pair.first, pair.second);
             for (const auto& pair : cooldowns_) save.cooldowns.set(pair.first, pair.second);
             for (const auto& pair : boardContents_) save.board.set(pair.first, pair.second);
@@ -3175,11 +3663,14 @@ namespace storylets
          *  keys (deleted entities) drop; new declarations keep defaults. */
         void restore(const FlowSave& saved)
         {
-            stores_.story->load(saved.props.story);
-            loadKind(stores_.box, saved.props.box);
-            loadKind(stores_.deck, saved.props.deck);
-            loadKind(stores_.hand, saved.props.hand);
-            loadKind(stores_.value, saved.props.value);
+            if (saved.props.has_value())
+            {
+                stores_.story->load(saved.props->story);
+                loadKind(stores_.box, saved.props->box);
+                loadKind(stores_.deck, saved.props->deck);
+                loadKind(stores_.hand, saved.props->hand);
+                loadKind(stores_.value, saved.props->value);
+            }
             turnCounts_.clear();
             for (const auto& box : engine_->bundle_->boxes) turnCounts_.set(box.id, 0);
             for (const auto& pair : saved.turns)
@@ -3216,6 +3707,8 @@ namespace storylets
     {
         if (opts.log) logCap_ = opts.logCap;
         if (opts.world.has_value()) hostWorld_ = opts.world;
+        registry_ = opts.registry ? opts.registry : std::make_shared<ScopeRegistry>();
+        ownsRegistry_ = !opts.registry;
         // The value scope's segments come off the whole bundle at once (a tag
         // gameId is only unique within its group), so they are built before the
         // walk rather than tag by tag inside it.
@@ -3309,7 +3802,46 @@ namespace storylets
         }
     }
 
+    inline Engine::~Engine()
+    {
+        // An engine goes away: its bags go with it, so the game's registry never
+        // holds a scope nobody answers for, and a flow handle still held reads
+        // as closed rather than reaching into a dead engine.
+        for (const auto& pair : flows_) pair.second->markClosed();
+        flows_.clear();
+        for (const auto& key : registered_)
+        {
+            if (registry_->has(key)) registry_->remove(key);
+        }
+        registered_.clear();
+    }
+
+    inline void Engine::releaseRegistrations(bool keep)
+    {
+        for (const auto& pair : flows_) pair.second->releaseBags(keep);
+        for (const auto& key : registered_)
+        {
+            if (registry_->has(key)) registry_->remove(key, keep);
+        }
+        registered_.clear();
+    }
+
+    inline void Engine::restoreRegistrations()
+    {
+        if (!registered_.empty()) return;
+        registerShared();
+        for (const auto& pair : flows_)
+        {
+            if (pair.second->registered_.empty()) pair.second->registerBags();
+        }
+    }
+
     inline FlowPtr Engine::openFlow(const std::string& id, const OpenFlowOptions& opts)
+    {
+        return open(id, opts, false);
+    }
+
+    inline FlowPtr Engine::open(const std::string& id, const OpenFlowOptions& opts, bool claim)
     {
         // The world's claims as they stand WITHOUT this name, taken before the
         // replace: a resume competes with the other flows, never with the flow
@@ -3324,6 +3856,9 @@ namespace storylets
             if (dealt > 0 && onReplacedFlow_) onReplacedFlow_(id, dealt);
             (*existing)->markClosed();
         }
+        // A fresh open is a reset of that name: values a load left waiting for
+        // it are not this flow's.
+        if (!claim) registry_->discardParked(detail::FlowPrefix(id));
         FlowPtr flow = std::make_shared<Flow>(this, id, opts.seed.has_value() ? *opts.seed : seed_);
         flows_.set(id, flow);
         if (opts.restore.has_value())
@@ -3350,12 +3885,24 @@ namespace storylets
 
     inline void Engine::reset()
     {
-        for (const auto& pair : flows_) pair.second->markClosed();
-        flows_.clear();
-        spent_.clear();
+        dropRun(nullptr);
+        reseedShared();
+        // Values loaded for bags nobody has claimed yet are the old run's too: a
+        // flow opened after the reset must not pick them up. Other engines' stay.
+        registry_->discardParked(std::string("storylets/"));
+    }
+
+    inline void Engine::dropRun(const std::unordered_set<std::string>* keepFlows)
+    {
         // The log is a run-lifetime utility and is not saved; a reset is a new run.
         engineLog_.clear();
-        initShared();
+        for (const auto& pair : flows_)
+        {
+            pair.second->releaseBags(keepFlows != nullptr && keepFlows->count(pair.first) > 0);
+            pair.second->markClosed();
+        }
+        flows_.clear();
+        spent_.clear();
     }
 
     inline std::vector<std::string> Engine::spentIds() const
@@ -3406,6 +3953,13 @@ namespace storylets
             std::optional<StoryletValue> wv = worldGet(parts[1]);
             if (!wv.has_value()) throw StoryletError("no property at \"" + path + "\"");
             return *wv;
+        }
+        // Another engine's game-wide scope (`patter.gold`): every engine reads every scope.
+        if (parts.size() == 2 && parts[0] != "story" && registry_->has(parts[0]))
+        {
+            std::optional<StoryletValue> v = registry_->get(parts[0], parts[1]);
+            if (!v.has_value()) throw StoryletError("no property at \"" + path + "\"");
+            return *v;
         }
         if (parts.size() == 2 && parts[0] == "story")
         {
@@ -3461,6 +4015,12 @@ namespace storylets
         {
             if (!worldCanSet()) throw StoryletError("@world is read-only here: the host bound no write");
             worldSet(parts[1], value, /*host=*/true);
+            return;
+        }
+        if (parts.size() == 2 && parts[0] != "story" && registry_->has(parts[0]))
+        {
+            // Another engine's game-wide scope, written as the host.
+            registry_->set(parts[0], parts[1], value, /*host=*/true);
             return;
         }
         // Resolved once, then reused for both halves (4.4). The write used to
@@ -3521,13 +4081,9 @@ namespace storylets
         SaveEnvelope envelope;
         envelope.schema = SAVE_SCHEMA;
         envelope.content = bundle_->content;
-        envelope.shared.props.story = shared_.story->save();
-        for (const auto& pair : shared_.box) envelope.shared.props.box.set(pair.first, pair.second->save());
-        for (const auto& pair : shared_.deck) envelope.shared.props.deck.set(pair.first, pair.second->save());
-        for (const auto& pair : shared_.hand) envelope.shared.props.hand.set(pair.first, pair.second->save());
-        for (const auto& pair : shared_.value) envelope.shared.props.value.set(pair.first, pair.second->save());
+        if (ownsRegistry_) envelope.registry = registry_->save();
         envelope.shared.spent = spentIds();
-        for (const auto& pair : flows_) envelope.flows.set(pair.first, pair.second->snapshot());
+        for (const auto& pair : flows_) envelope.flows.set(pair.first, pair.second->snapshot(false));
         return envelope;
     }
 
@@ -3535,7 +4091,9 @@ namespace storylets
     {
         const FlowPtr* found = flows_.get(id);
         if (!found) throw StoryletError("unknown flow \"" + id + "\"");
-        return (*found)->snapshot();
+        // Parked whole, properties included: a parked flow's bags leave the
+        // registry when it closes, so its values have to travel with it.
+        return (*found)->snapshot(true);
     }
 
     inline void Engine::assertSameProject(const SaveEnvelope& envelope) const
@@ -3565,16 +4123,26 @@ namespace storylets
     {
         assertSameProject(envelope);
         LoadPlan plan = planLoad(envelope);
-        reset();
-        shared_.story->load(plan.shared.story);
-        Flow::loadKind(shared_.box, plan.shared.box);
-        Flow::loadKind(shared_.deck, plan.shared.deck);
-        Flow::loadKind(shared_.hand, plan.shared.hand);
-        Flow::loadKind(shared_.value, plan.shared.value);
+        if (plan.sections.has_value())
+        {
+            // The envelope carries the values: every bag of this engine back to
+            // its defaults, then the cleaned values over them.
+            reset();
+            // The engine's own registry takes the save wholesale. A game's
+            // registry may hold values the game loaded for other engines, still
+            // waiting: add to those, never replace them.
+            registry_->load(*plan.sections, /*keepParked=*/!ownsRegistry_);
+        }
+        else
+        {
+            std::unordered_set<std::string> keep;
+            for (const auto& pair : plan.flows) keep.insert(pair.first);
+            dropRun(&keep);
+        }
         for (const auto& id : plan.spent) spent_.insert(id);
         for (const auto& pair : plan.flows)
         {
-            openFlow(pair.first)->restore(pair.second);
+            open(pair.first, OpenFlowOptions(), /*claim=*/true)->restore(pair.second);
         }
         return plan.report;
     }
@@ -3627,19 +4195,69 @@ namespace storylets
 
     inline Engine::LoadPlan Engine::planLoad(const SaveEnvelope& envelope) const
     {
+        if (envelope.schema != SAVE_SCHEMA && envelope.schema != SAVE_SCHEMA_V1)
+        {
+            throw StoryletError("unsupported save schema: " + envelope.schema);
+        }
         detail::ReportDraft draft;
         LoadPlan plan;
-        plan.shared = walkPartition(sharedDecls_, &envelope.shared.props, std::string(), draft);
+        // Where the property values are, if this envelope has them: a version 1
+        // envelope's partitions, or a standalone engine's registry sections.
+        std::unordered_set<std::string> flowIds;
+        for (const auto& pair : envelope.flows) flowIds.insert(pair.first);
+        std::optional<detail::MovedValues> moved;
+        if (envelope.schema == SAVE_SCHEMA_V1)
+        {
+            detail::MovedValues v1;
+            if (envelope.shared.props.has_value()) v1.shared = *envelope.shared.props;
+            for (const auto& pair : envelope.flows)
+            {
+                v1.flows.set(pair.first, pair.second.props.has_value() ? *pair.second.props : PropsPartition());
+            }
+            moved = std::move(v1);
+        }
+        else if (envelope.registry.has_value())
+        {
+            moved = detail::PartitionsFromSections(*envelope.registry, flowIds);
+        }
+        std::optional<PropsPartition> shared;
+        if (moved.has_value()) shared = walkPartition(sharedDecls_, &moved->shared, std::string(), draft);
         for (const auto& cardId : envelope.shared.spent)
         {
             if (cardsById_.contains(cardId)) plan.spent.push_back(cardId);
             else draft.droppedSpent.push_back(cardId);
         }
+        if (moved.has_value())
+        {
+            plan.sections = moved->rest;
+            detail::SectionsOf(*shared, [](const std::string& kind, const std::string& id)
+            {
+                return kind == "story" ? std::string("story") : detail::SharedKey(kind, id);
+            }, *plan.sections);
+        }
         std::vector<std::string> ids;
         for (const auto& pair : envelope.flows)
         {
             ids.push_back(pair.first);
-            plan.flows.set(pair.first, planFlowRestore(pair.first, pair.second, nullptr, draft));
+            FlowSave withProps = pair.second;
+            if (moved.has_value())
+            {
+                const PropsPartition* values = moved->flows.get(pair.first);
+                withProps.props = values ? *values : PropsPartition();
+            }
+            FlowSave clean = planFlowRestore(pair.first, withProps, nullptr, draft);
+            if (plan.sections.has_value() && clean.props.has_value())
+            {
+                // The flow's values go into the registry, where its bags claim
+                // them; the restored flow itself carries none.
+                const std::string flowId = pair.first;
+                detail::SectionsOf(*clean.props, [&flowId](const std::string& kind, const std::string& id)
+                {
+                    return detail::FlowKey(flowId, kind, id);
+                }, *plan.sections);
+                clean.props.reset();
+            }
+            plan.flows.set(pair.first, std::move(clean));
         }
         plan.report = detail::FinishReport(bundle_->content, envelope.content, ids, draft);
         return plan;
@@ -3649,7 +4267,9 @@ namespace storylets
         const std::unordered_map<std::string, int>* otherClaims, detail::ReportDraft& draft) const
     {
         FlowSave clean;
-        clean.props = walkPartition(flowDecls_, &saved.props, id, draft);
+        // A flow blob without properties (a version 2 envelope's: the registry
+        // has them) has nothing to walk.
+        if (saved.props.has_value()) clean.props = walkPartition(flowDecls_, &*saved.props, id, draft);
         clean.turns = saved.turns;
         clean.prng = saved.prng;
         clean.playLog = saved.playLog;

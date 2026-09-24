@@ -54,8 +54,11 @@ var _last_play_of: Dictionary = {}
 var _tag_play_count: Dictionary = {}
 var _last_play_in_tag: Dictionary = {}
 
-# The per-flow partitions: {"story": bag, "box"/"deck"/"hand"/"value": {id: bag}}.
+# The per-flow partitions: {"story": bag, "box"/"deck"/"hand"/"value": {id: bag}},
+# each bag that declares something registered under this flow's keys.
 var _stores: Dictionary = {}
+# The registry keys this flow's bags are registered under, until released.
+var _registered: Array[String] = []
 
 var _trace_handlers: Array[Callable] = []
 var _log_entries: Array = []
@@ -74,6 +77,12 @@ func _init(engine: StoryletEngine, flow_id: String, seed_value: int) -> void:
 		for owner_id in fd[kind]:
 			stores[kind][owner_id] = StoryletEngine._bag_from_decls(fd[kind][owner_id], engine.address_of(kind, owner_id) + ".")
 	_stores = stores
+	# Register the bags: each claims whatever the registry holds for its key (a
+	# load); open_flow discarded that first for a fresh flow.
+	_put(StoryletEngine.flow_key(flow_id, "story"), stores["story"])
+	for kind in StoryletEngine.OWNED_KINDS:
+		for owner_id in stores[kind]:
+			_put(StoryletEngine.flow_key(flow_id, kind, owner_id), stores[kind][owner_id])
 	for box in engine._bundle["boxes"]:
 		_turn_counts[box["id"]] = 0.0
 		for hand in box["hands"]:
@@ -92,9 +101,26 @@ func close() -> void:
 	mark_closed()
 
 
+func _put(key: String, bag: StoryletPropertyBag) -> void:
+	if bag.declarations().is_empty():
+		return   # holds nothing: not registered
+	if _engine._registry.mount_owned(key, bag, {"owner": StoryletEngine.OWNER}) == "":
+		_registered.append(key)
+
+
 ## @internal
 func mark_closed() -> void:
+	release_bags(false)
 	_closed = true
+
+
+## @internal - take this flow's bags out of the registry; with `keep`, their
+## values wait there for the flow that replaces this one (a load into the
+## game's registry). Idempotent.
+func release_bags(keep: bool) -> void:
+	for key in _registered:
+		_engine._registry.remove(key, {"keep": keep})
+	_registered.clear()
 
 
 # A store's merged read for one owner: the flow's own bag first, the shared
@@ -318,8 +344,10 @@ func _since(record: Dictionary) -> float:
 # under evaluation; in hand-condition contexts @deck is an empty bag, so any
 # reference is an eval error (missing-policy throw). Every scope is the
 # flow's MERGED view - its own copies over the shared values, names
-# disjoint - and @world reads through the engine's resolver. Quality
-# ladders live on the engine (declaration-level, partition-blind).
+# disjoint - and @world reads through the engine's resolver. Every OTHER
+# scope in the registry (another engine's `patter`, a game's own) reaches the
+# context too, under the five own tokens. Quality ladders live on the engine
+# (declaration-level, partition-blind), falling back to the registry's.
 
 # The ladder behind one composed @hand name, or null when the name is not a
 # quality (or came from criteria, which are tag names, never state).
@@ -338,33 +366,40 @@ func _hand_ladder(hand_env: Dictionary, name: String) -> Variant:
 func _eval_ctx(box: Dictionary, deck, hand_env: Dictionary) -> Dictionary:
 	var box_id: String = box["id"]
 	var deck_id = deck["id"] if deck != null else null
-	var ctx := {
-		"scopes": {
-			"world": _engine._world["get"],
-			"story": func(n: String) -> Variant: return _read_story(n),
-			"box": func(n: String) -> Variant: return _read_pair("box", box_id, n),
-			"deck": (func(n: String) -> Variant: return _read_pair("deck", deck_id, n)) if deck_id != null else {},
-			"hand": hand_env["bag"],
-		},
-		"host": _host(box),
-	}
-	if _engine._has_qualities:
+	var others: Dictionary = _engine.registry_view()
+	# Every other engine's game-wide scope first (every engine reads every scope);
+	# this engine's own tokens are its merged views, over the top.
+	var scopes: Dictionary = (others["scopes"] as Dictionary).duplicate()
+	scopes["world"] = _engine.world_get
+	scopes["story"] = func(n: String) -> Variant: return _read_story(n)
+	scopes["box"] = func(n: String) -> Variant: return _read_pair("box", box_id, n)
+	scopes["deck"] = (func(n: String) -> Variant: return _read_pair("deck", deck_id, n)) if deck_id != null else {}
+	scopes["hand"] = hand_env["bag"]
+	var ctx := {"scopes": scopes, "host": _host(box)}
+	var other_qualities = others["qualities"]
+	if _engine._has_qualities or other_qualities != null:
 		# The quality channel, answering for THIS ask's box and deck.
 		var env := hand_env
 		ctx["qualities"] = func(scope: String, name: String) -> Variant:
 			match scope:
 				"world":
-					return _engine._world_ladders.get(name)
+					var ladder = _engine._world_ladders.get(name)
+					if ladder == null and other_qualities != null:
+						return (other_qualities as Callable).call(scope, name)
+					return ladder
 				"story":
 					return _engine._story_ladders.get(name)
 				"box":
 					return (_engine._box_ladders.get(box_id, {}) as Dictionary).get(name)
 				"deck":
-					if deck_id == null:
-						return null
-					return (_engine._deck_ladders.get(deck_id, {}) as Dictionary).get(name)
+					# No deck in this ask (a hand condition): the registry's answer, as
+					# for any token this engine does not own.
+					if deck_id != null:
+						return (_engine._deck_ladders.get(deck_id, {}) as Dictionary).get(name)
 				"hand":
 					return _hand_ladder(env, name)
+			if other_qualities != null:
+				return (other_qualities as Callable).call(scope, name)
 			return null
 	return ctx
 
@@ -1308,8 +1343,10 @@ func _apply_write(target: String, value, entry: Dictionary, hand_env: Dictionary
 			# the JS runtime and Patterplay.
 			if _engine.world_read_only(name):
 				return {"error": "'@world.%s' is read-only (writable: false)" % name}
-			var prev = (_engine._world["get"] as Callable).call(name)
-			_engine.world_set(name, value)
+			var prev = _engine.world_get(name)
+			var refused := _engine.world_set(name, value)
+			if refused != "":
+				return {"error": refused}
 			var out := {"path": "world.%s" % name}
 			if prev != null:
 				out["prev"] = prev
@@ -1396,7 +1433,7 @@ func list_bags() -> Array:
 func list_properties() -> Array:
 	var out: Array = []
 	for d in _engine._bundle["world"].get("properties", []):
-		var value = (_engine._world["get"] as Callable).call(d["name"])
+		var value = _engine.world_get(d["name"])
 		var row := {"path": "world.%s" % d["name"], "name": d["name"], "type": d.get("type", "string"),
 			"value": value if value != null else d.get("default"), "default": d.get("default"),
 			# The bag rows carry this from PropertyBag.rows(); the @world rows are built
@@ -1444,7 +1481,10 @@ func get_property(path: String) -> Variant:
 	var parts := path.split(".")
 	var value = null
 	if parts.size() == 2 and parts[0] == "world":
-		value = (_engine._world["get"] as Callable).call(parts[1])
+		value = _engine.world_get(parts[1])
+	elif parts.size() == 2 and parts[0] != "story" and _engine._registry.has(parts[0]):
+		# Another engine's game-wide scope (`patter.gold`): every engine reads every scope.
+		value = _engine._registry.get_value(parts[0], parts[1])
 	elif parts.size() == 2 and parts[0] == "story":
 		value = _read_story(parts[1])
 	elif parts.size() == 3 and ["box", "deck", "hand", "value"].has(parts[0]):
@@ -1482,8 +1522,9 @@ func set_property(path: String, value) -> String:
 			var msg := "@world is read-only here: the host bound no write"
 			push_error("StoryletFlow.set_property: " + msg)
 			return msg
-		_engine.world_set(parts[1], value, true)
-		return ""
+		return _engine.world_set(parts[1], value, true)
+	if parts.size() == 2 and parts[0] != "story" and _engine._registry.has(parts[0]):
+		return _engine._registry.set_value(parts[0], parts[1], value, {"host": true})
 	var kind := ""
 	var owner_id = null
 	var name := ""
@@ -1554,7 +1595,7 @@ func _resolve_owner(kind: String, segment: String, name: String) -> Dictionary:
 func _resolve_path(path: String) -> Dictionary:
 	var parts := path.split(".")
 	if parts.size() == 2 and parts[0] == "world":
-		var wv = (_engine._world["get"] as Callable).call(parts[1])
+		var wv = _engine.world_get(parts[1])
 		if wv == null:
 			return {"error": 'no property at "%s"' % path}
 		return {"value": wv}
@@ -1568,34 +1609,37 @@ func _resolve_path(path: String) -> Dictionary:
 
 # --- persistence (schema 4) ---------------------------------------------------------
 
-## @internal - this flow's blob inside the engine's envelope, deep-copied.
-func snapshot() -> Dictionary:
-	var props := {"story": (_stores["story"] as StoryletPropertyBag).save(),
-		"box": {}, "deck": {}, "hand": {}, "value": {}}
-	for kind in ["box", "deck", "hand", "value"]:
-		for owner_id in _stores[kind]:
-			props[kind][owner_id] = (_stores[kind][owner_id] as StoryletPropertyBag).save()
-	return {
-		"props": props,
+## @internal - this flow's blob, deep-copied: inside the engine's envelope
+## without its properties (the registry has them), or parked whole by
+## save_flow, properties included.
+func snapshot(with_props: bool) -> Dictionary:
+	var out := {}
+	if with_props:
+		out["props"] = _engine._partition_values(_stores)
+	out.merge({
 		"turns": _turn_counts.duplicate(true),
 		"prng": _prng.state(),
 		"cooldowns": _cooldowns.duplicate(true),
 		"board": _board_contents.duplicate(true),
 		"playLog": _play_log.duplicate(true),
-	}
+	})
+	return out
 
 
 ## @internal - restore a freshly opened flow from its blob (load_game).
-## Orphaned keys (deleted entities) drop; new declarations keep defaults.
+## Orphaned keys (deleted entities) drop; new declarations keep defaults. A
+## blob without "props" (a version 2 envelope's) leaves the values the bags
+## claimed from the registry alone.
 func restore(saved: Dictionary) -> void:
-	var props: Dictionary = saved.get("props", {})
-	(_stores["story"] as StoryletPropertyBag).load(props.get("story", {}))
-	for kind in ["box", "deck", "hand", "value"]:
-		var kept: Dictionary = props.get(kind, {})
-		for owner_id in kept:
-			var bag = _stores[kind].get(owner_id)
-			if bag != null:
-				(bag as StoryletPropertyBag).load(kept[owner_id])
+	if saved.has("props"):
+		var props: Dictionary = saved["props"]
+		(_stores["story"] as StoryletPropertyBag).load(props.get("story", {}))
+		for kind in ["box", "deck", "hand", "value"]:
+			var kept: Dictionary = props.get(kind, {})
+			for owner_id in kept:
+				var bag = _stores[kind].get(owner_id)
+				if bag != null:
+					(bag as StoryletPropertyBag).load(kept[owner_id])
 	_turn_counts = {}
 	for b in _engine._bundle["boxes"]:
 		_turn_counts[b["id"]] = 0.0

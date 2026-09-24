@@ -228,13 +228,16 @@ func close() -> void:
 ## ("log" and "world" matter - neither rides the envelope; "seed" only
 ## shapes fresh flows, the save carries each flow's PRNG state). load_game
 ## rebuilt every flow, so re-take your handles from the returned engine.
+## A game that passed the old engine its registry cannot swap this way yet:
+## the new engine's tokens clash with the old one's in that registry, and the
+## swap is refused with the old engine untouched, as in the JS runtime.
 static func apply_live_bundle(engine: StoryletEngine, data: String, opts: Dictionary = {}) -> Dictionary:
 	var loaded := StoryletBundle.load_from_string(data)
 	if not loaded["ok"]:
 		return {"ok": false, "error": "pushed bundle: " + str(loaded["error"])}
 	var next := StoryletEngine.create(loaded["bundle"], opts)
 	if next == null:
-		return {"ok": false, "error": "pushed bundle: could not create an engine (bad options)"}
+		return {"ok": false, "error": "pushed bundle: could not create an engine (bad options, or a token clash in the game's registry)"}
 	var envelope := engine.save_game()
 	# The refusal is asked for by name: load_game answers with a LoadReport now,
 	# and a pushed bundle for another project has to come back as an error the

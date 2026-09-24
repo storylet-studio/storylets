@@ -106,6 +106,41 @@ List<BoxView> boxes = _flow.ListBoxes();      // id, gameId, title, turn
 
 The paths, and when to write them, are on [Your game's state](/play/world-state/).
 
+`@world` is your game's. Hand the engine a resolver, an `IScopeResolver` with `Get`, `CanSet`,
+and `Set`, and conditions read your live game state directly:
+
+```csharp
+_engine = new Engine(Bundle.Bundle, new EngineOptions { Seed = 7, World = new MyWorld() });
+```
+
+Your game keeps those values, so the engine never saves them. Hand it nothing, and the engine
+backs `@world` itself from the declared defaults, as a property it saves with the rest.
+
+## One registry per game
+
+Every property value lives in a **registry**, a `ScopeRegistry`, one per game. An engine you
+build on its own makes its own registry and acts as its own game, so a game with one engine
+never has to think about it. A game running more than one engine, [Patter](/play/with-patter/)
+say, makes one registry, registers `@world` in it, and hands it to each engine:
+
+```csharp
+var registry = new ScopeRegistry()
+    .DefineOwned("world", Bundle.Bundle.World.Properties,
+        new OwnedScopeOptions { Owner = "Game" });              // stored and saved with the rest
+_engine = new Engine(Bundle.Bundle, new EngineOptions { Seed = 7, Registry = registry });
+```
+
+The engine registers `@story` under `story`, and every other bag that declares something under
+a key starting `storylets/`, which no expression can name. Given your registry, it registers
+nothing for `@world`: that's yours. `DefineOwned` has the registry store and save it;
+`DefineForeign("world", resolver, declarations)` keeps it in your game, and nothing saves it.
+Passing both `Registry` and `World` registers your resolver in your registry for you.
+
+Every expression reads every scope in the registry, so a card's condition can read
+`@patter.gold`, and `GetProperty("patter.gold")` and `SetProperty("patter.gold", value)` reach
+another engine's values from your code. A token is taken once: building an engine that wants a
+token another already holds throws at once, naming the holder, and leaves the registry as it was.
+
 ## Save and load
 
 ```csharp
@@ -114,6 +149,28 @@ LoadReport report = _engine.LoadGame(env);   // rebuilds every flow...
 _flow = _engine.GetFlow("main");             // ...so re-take your handles
 ```
 
+The envelope is `storylets/save@2`. It holds what isn't a property: boards, clocks, cooldowns,
+random streams, play logs, and spent cards. An engine built on its own also carries its
+registry's values on `env.Registry`, a self-backed `@world` included, so those two lines are the
+whole run. A game that passed its own registry saves that once, beside each engine's envelope,
+and `env.Registry` is null:
+
+```csharp
+JObject registryJson = StoryletSave.SaveRegistry(registry);            // every property, once
+JObject storyletsJson = StoryletSave.ToJson(_engine.SaveGame());      // everything else
+
+// Loading, into a freshly built registry and engine, in either order:
+StoryletSave.LoadRegistry(registry, registryJson);
+_engine.LoadGame(StoryletSave.FromJson(storyletsJson));
+_flow = _engine.GetFlow("main");
+```
+
+A value for a flow that hasn't been restored yet waits in the registry until the flow claims it.
+A flow you open fresh with `OpenFlow` never picks up a value a load left for its name, and
+`Reset()` drops only the Storylet Engine's waiting values, never another engine's. Envelopes
+saved as `storylets/save@1`, before the registry held the values, still load: their values move
+into the registry as they do.
+
 A load is forgiving. A card your edit deleted drops off the board, a property you added takes
 its default, and a save from an older build goes in without a word. `PreviewLoad(env)` says
 what that would cost before you spend it and changes nothing. `LoadGame` returns the same
@@ -121,15 +178,16 @@ what that would cost before you spend it and changes nothing. `LoadGame` returns
 otherwise `Evicted`, `DroppedProperties`, `DefaultedProperties`, `RetypedProperties`, and the
 `Version` / `Hash` pairs say what moved.
 
-`SaveFlow(id)` takes ONE flow's state, for a playthrough stepping away, and
-`OpenFlow(id, new OpenFlowOptions { Restore = saved })` puts it back. Closing the flow in
-between is what releases the cards it was holding. On the way back, a shared card another flow
+`SaveFlow(id)` takes ONE flow's state, its property values included, for a playthrough
+stepping away, and `OpenFlow(id, new OpenFlowOptions { Restore = saved })` puts it back. Closing
+the flow in between is what releases the cards it was holding, and takes its values out of the
+registry. On the way back, a shared card another flow
 now holds is dropped and reported (`PreviewFlowRestore(id, saved)` asks in advance).
 
 For files, `StoryletSave` is the string boundary. `SerializeState(engine, worldValues)` gives
-you the `.storyletsave` text, and `LoadState(engine, text)` reads one back and hands you the
-file's `@world` values to apply
-([why the engine never saves them](/play/world-state/#saving-it)). A foreign or malformed
+you the `.storyletsave` text, and `DeserializeState(engine, text)` reads one back, either
+envelope version, and hands you the file's values for a `@world` you bind to apply
+([why the engine never saves those](/play/world-state/#saving-it)). A foreign or malformed
 blob throws, so a bad file can't corrupt a run.
 
 ## The Runtime State window

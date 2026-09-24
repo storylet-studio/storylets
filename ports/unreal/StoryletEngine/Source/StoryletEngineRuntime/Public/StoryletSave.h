@@ -4,9 +4,13 @@
 // Patterplay's UPatterSave, Unity's StoryletSave, Godot's StoryletSave and
 // play-helpers' save.ts.
 //
-// The file is the HOST's (storylets/savefile@1): the engine's envelope plus
-// its @world values, because @world is the game's own state and never rides
-// the envelope (design/flows.md). Every live flow is in there, keyed by name.
+// The file is the HOST's (storylets/savefile@1): the engine's envelope
+// (storylets/save@2; @1 still loads) plus its @world values, because a bound
+// @world is the game's own state and never rides the envelope (design/flows.md).
+// Every live flow is in there, keyed by name. An engine on its own registry
+// carries every property value in the envelope; an engine on the game's
+// registry (UStoryletEngine::CreateWithRegistry) leaves them to the game,
+// which saves that registry once, beside this file.
 #pragma once
 
 #include "CoreMinimal.h"

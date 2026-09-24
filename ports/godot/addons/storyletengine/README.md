@@ -79,10 +79,25 @@ diagnostic; never a silent pass, never a crash.
   everyone the moment anyone plays it. `sharedCopies` is the world cap and
   defaults to `copies`.
 - **Save / load**: `engine.save_game()` / `engine.load_game(envelope)`
-  snapshot and restore the whole run, every open flow included.
+  snapshot and restore the whole run, every open flow included. The envelope
+  is `storylets/save@2`; `storylets/save@1` envelopes and files still load.
   `StoryletSave.serialize_state` / `deserialize_state` are the
   `.storyletsave` string boundary: a foreign, malformed or wrong-project blob
   is refused instead of corrupting a run.
+- **One registry per game**: every property value lives in a
+  `StoryletScopeRegistry`. Pass the game's own as
+  `StoryletEngine.create(bundle, {"registry": registry})` to share it with
+  any other engine (Patterplay, say): the engine registers `@story` under
+  `story` and every other bag under a key starting `storylets/`, `@world` is
+  the game's to register, and `save_game()` leaves the values to the game,
+  which saves `registry.save()` once and loads it with `registry.load()`,
+  before or after `load_game`. Without one the engine makes its own registry,
+  self-backs `@world` from its declared defaults, and `save_game()` carries
+  every value, that `@world` included, so one call is still the whole run. A
+  `"world"` resolver you bind is your game's state and never saved. A token
+  another engine already holds refuses the engine: `create` returns null and
+  the error names the holder. See
+  [Running it with Patter](https://storylet.studio/play/with-patter/#one-registry).
 - **What a load would cost**: `load_game` returns a report of everything it
   dropped, defaulted or reset, and `preview_load(envelope)` computes the same
   report without applying anything. `save_flow(id)` and
@@ -113,8 +128,8 @@ diagnostic; never a silent pass, never a crash.
   shared properties implementer (the owned / foreign scope split for a host
   `@world`). Both are thin shims over sources shared with Patterplay
   (`runtime/expr/`), so a game running both engines can hand them one
-  registry. A refused registry call returns its error String ("" on
-  success).
+  registry: either addon's registry class will do. A refused registry call
+  returns its error String ("" on success).
 
 ## Exporting your game
 

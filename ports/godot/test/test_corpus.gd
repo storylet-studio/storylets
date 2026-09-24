@@ -14,7 +14,8 @@
 # scripted (deals, plays, turns, save/load incl. into the edited bundle B). Then
 # the two corpora vendored from ../expr beside it: expr-corpus.json (the
 # evaluator's) and registry-corpus.json (the ScopeRegistry's, run by the shared
-# runner in registry_corpus.gd).
+# runner in registry_corpus.gd). Last, the one-registry checks
+# (one_registry_checks.gd): the engine and the game's registry, from the game's side.
 # Prints per-family counts then ALL PASS (exit 0) or N FAILED (exit 1).
 extends SceneTree
 
@@ -52,6 +53,8 @@ var _dialect: Dictionary = StoryletDialect.dialect()
 ## class_name) and the shared evaluator it evaluates `eval` steps with.
 const RegistryCorpus := preload("res://test/registry_corpus.gd")
 const ExprEval := preload("res://addons/storyletengine/runtime/expr/expr_eval.gd")
+## The one-registry checks, beside this file.
+const OneRegistryChecks := preload("res://test/one_registry_checks.gd")
 
 
 func _initialize() -> void:
@@ -144,6 +147,18 @@ func _run_all() -> void:
 	_runner_finished = true
 	_check_runner("registry")
 	print("registry corpus: %d/%d" % [int(reg["passed"]), int(reg["cases"])])
+
+	# One registry per game, from the game's side: the JS runtime's
+	# one-registry.test.ts, case for case (one_registry_checks.gd).
+	_runner_finished = false
+	var one := OneRegistryChecks.new().run() as Dictionary
+	for f in one["failures"]:
+		_fail("one-registry", "(checks)", str(f))
+	if int(one["cases"]) == 0:
+		_fail("one-registry", "(checks)", "no checks ran")
+	_runner_finished = true
+	_check_runner("one-registry")
+	print("one registry: %d/%d" % [int(one["passed"]), int(one["cases"])])
 
 	print("ALL PASS" if _fails == 0 else "%d FAILED" % _fails)
 	_finish(0 if _fails == 0 else 1)

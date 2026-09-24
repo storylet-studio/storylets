@@ -334,7 +334,7 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 	const FString SaveJson = UStoryletSave::SaveStateToJson(Engine);
 	if (!TestFalse(TEXT("save produced text"), SaveJson.IsEmpty())) return false;
 	TestTrue(TEXT("save is the host's file"), SaveJson.Contains(TEXT("storylets/savefile@1")));
-	TestTrue(TEXT("with the engine envelope inside"), SaveJson.Contains(TEXT("storylets/save@1")));
+	TestTrue(TEXT("with the engine envelope inside"), SaveJson.Contains(TEXT("storylets/save@2")));
 
 	UStoryletEngine* RestoredEngine = UStoryletEngine::Create(Bundle, 0);
 	if (!TestNotNull(TEXT("second engine creates"), RestoredEngine)) return false;

@@ -19,6 +19,8 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="LiveLinkFixture.cs" />
+    <!-- One registry per game: packages/runtime/test/one-registry.test.ts, ported. -->
+    <Compile Include="OneRegistry.cs" />
     <!-- The registry corpus runner, vendored from expr/ports/unity/testing. -->
     <Compile Include="RegistryCorpus.cs" />
     <Compile Include="../StoryletEngine/Runtime/**/*.cs" />

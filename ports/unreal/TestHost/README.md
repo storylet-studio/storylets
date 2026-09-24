@@ -23,8 +23,12 @@ It prints a per-family summary (expressions / specificity / peek / scripted),
 the Live Link fixture result (`live-link/script.json` beside the corpus,
 replayed through the std-only client in `Storylets/LiveLink.h` against a
 recording sink and compared with `frames.json` byte for byte, compact JSON;
-`LiveLinkFixture.h`) and `ALL PASS`, exiting non-zero on any divergence
-from the reference expectations. A second argument writes the frames the
+`LiveLinkFixture.h`), the one-registry checks (`OneRegistry.h`: the JS
+runtime's `packages/runtime/test/one-registry.test.ts` ported case for case,
+plus the registry leaving with a destroyed engine and the live swap's
+hand-over), the expr parity corpus and the registry corpus beside ours, and
+`ALL PASS`, exiting non-zero on any divergence from the reference
+expectations. A second argument writes the frames the
 client sent, one per line, to that path (for pairing them with a running
 Storyletter over a real socket).
 

@@ -233,7 +233,11 @@ const API = [
   { on: "Engine", member: "worldSeam",
     js: { re: "world\\?: ScopeResolver" }, unity: { re: "IScopeResolver World" },
     godot: { re: '"world"' }, unreal: { re: "WorldResolver" }, bp: null,
-    why: "the host's @world binding (EngineOptions) is a std::function/interface, which does not cross a BP pin; the UE wrapper self-backs @world and round-trips it through UStoryletSave" },
+    why: "the host's @world binding (EngineOptions) is a std::function/interface, which does not cross a BP pin; Blueprint binds @world through a UStoryletWorld instead, which the engine registers as a foreign scope" },
+  { on: "Engine", member: "registryOption",
+    js: { re: "registry\\?: ScopeRegistry" }, unity: { re: "ScopeRegistry Registry" },
+    godot: { re: '"registry"' }, unreal: { re: "std::shared_ptr<ScopeRegistry> registry;" }, bp: null,
+    why: "the game's one registry (one-registry programme, gate 5). A std object shared by pointer crosses no Blueprint pin; C++ games use UStoryletEngine::CreateWithRegistry" },
   { on: "Engine", member: "createWorldContainer", js: "createWorldContainer", unity: null, godot: null, unreal: null, bp: null,
     why: "the ready-made host container is a JS play-helpers convenience; native hosts bind their own resolver, and the UE wrapper self-backs and round-trips @world through its save file" },
 
@@ -366,6 +370,12 @@ const API = [
   // not restore, loadState took text), so one name meant two things across the
   // four runtimes AND neither pair matched Patter. The reference was brought to
   // the ports, not the other way round. `takes` pins the shapes.
+  { on: "Save", member: "saveRegistry",
+    js: null, unity: "SaveRegistry", godot: null, unreal: "saveRegistry", bp: null,
+    why: "the game's half of a combined save: a registry's values as save text. JS writes JSON.stringify(registry.save()) and GDScript JSON.stringify(registry.save()) directly, since their values are already plain JSON; C# and C++ need a door because their values are a family type. Named as Patterplay names it" },
+  { on: "Save", member: "loadRegistry",
+    js: null, unity: "LoadRegistry", godot: null, unreal: "loadRegistry", bp: null,
+    why: "as saveRegistry" },
   { on: "Save", member: "saveState",
     js: "saveState", unity: "SaveState", godot: "save_state", unreal: null, bp: null,
     takes: { js: "engine", unity: "Engine engine", godot: "engine: StoryletEngine" },

@@ -1,6 +1,6 @@
 // Save-file plumbing over the .storyletsave file (storylets/savefile@1): the
-// HOST's file - the engine's envelope (storylets/save@1, shared partitions +
-// every flow) plus, when the host keeps one, its @world container. Mirrors
+// HOST's file - the engine's envelope (storylets/save@2; storylets/save@1 still
+// read) plus, when the host keeps one, its @world container. Mirrors
 // @storylet-studio/play-helpers' save.ts: "host saves its container once,
 // each engine saves its own envelope" (design/flows.md) folded into one file
 // for the single-host case. These helpers are the string boundary - a
@@ -80,8 +80,10 @@ namespace StoryletStudio.StoryletEngine
                 throw new StoryletError("not valid JSON");
             }
             var engineToken = parsed["engine"] as JObject;
+            var engineSchema = engineToken?["schema"]?.Type == JTokenType.String ? engineToken.Value<string>("schema") : null;
             if (parsed.Value<string>("schema") != Model.SAVEFILE_SCHEMA
-                || engineToken == null || engineToken.Value<string>("schema") != Model.SAVE_SCHEMA)
+                || engineToken == null
+                || (engineSchema != Model.SAVE_SCHEMA && engineSchema != Model.SAVE_SCHEMA_V1))
             {
                 throw new StoryletError($"not a storylets save (expected schema \"{Model.SAVEFILE_SCHEMA}\")");
             }
@@ -178,15 +180,35 @@ namespace StoryletStudio.StoryletEngine
                     ["turn"] = NumToken(record.Turn),
                 });
             }
-            return new JObject
-            {
-                ["props"] = PartitionToken(f.Props),
-                ["turns"] = turns,
-                ["prng"] = f.Prng,
-                ["cooldowns"] = cooldowns,
-                ["board"] = board,
-                ["playLog"] = playLog,
-            };
+            // `props` only when the blob carries them: a version 2 envelope's
+            // flows do not (the registry has them), a parked flow and a version 1
+            // envelope's flows do.
+            var o = new JObject();
+            if (f.Props != null) o["props"] = PartitionToken(f.Props);
+            o["turns"] = turns;
+            o["prng"] = f.Prng;
+            o["cooldowns"] = cooldowns;
+            o["board"] = board;
+            o["playLog"] = playLog;
+            return o;
+        }
+
+        /// <summary>A registry's values as JSON, keyed by registry key: for a game
+        /// that passed its own registry, which saves it once beside each engine's
+        /// envelope. The same shape as an envelope's `registry`, and the same call
+        /// Patterplay's PatterSave has, so a game running both writes its registry
+        /// through either.</summary>
+        public static JObject SaveRegistry(ScopeRegistry registry)
+        {
+            return KindToken(registry.Save());
+        }
+
+        /// <summary>Lay a <see cref="SaveRegistry"/> object over a registry, before or
+        /// after each engine's LoadGame: values for a key nobody has registered yet
+        /// wait in the registry and are handed over when it registers.</summary>
+        public static void LoadRegistry(ScopeRegistry registry, JObject values)
+        {
+            registry.Load(ParseKind(values));
         }
 
         public static JObject ToJson(SaveEnvelope env)
@@ -197,13 +219,17 @@ namespace StoryletStudio.StoryletEngine
             if (env.Content.Hash != null) content["hash"] = env.Content.Hash;
             var flows = new JObject();
             foreach (var pair in env.Flows) flows[pair.Key] = FlowToken(pair.Value);
-            return new JObject
+            var o = new JObject
             {
                 ["schema"] = env.Schema,
                 ["content"] = content,
-                ["shared"] = SharedToken(env.Shared),
-                ["flows"] = flows,
             };
+            // A standalone engine's registry values, keyed by registry key
+            // (`story`, `world`, `storylets/...`): the JS envelope's `registry`.
+            if (env.Registry != null) o["registry"] = KindToken(env.Registry);
+            o["shared"] = SharedToken(env.Shared);
+            o["flows"] = flows;
+            return o;
         }
 
         private static OrderedMap<string, StoryletValue> ParseBag(JToken token)
@@ -228,11 +254,12 @@ namespace StoryletStudio.StoryletEngine
         {
             var spent = new JArray();
             foreach (var id in shared.Spent ?? new List<string>()) spent.Add(id);
-            return new JObject
-            {
-                ["props"] = PartitionToken(shared.Props),
-                ["spent"] = spent,
-            };
+            var o = new JObject();
+            // Version 1 only: a version 2 envelope's shared properties are the
+            // registry's.
+            if (shared.Props != null) o["props"] = PartitionToken(shared.Props);
+            o["spent"] = spent;
+            return o;
         }
 
         private static SharedSave ParseShared(JToken token)
@@ -240,7 +267,7 @@ namespace StoryletStudio.StoryletEngine
             var shared = new SharedSave();
             var o = token as JObject;
             if (o == null) return shared;
-            shared.Props = ParsePartition(o["props"]);
+            shared.Props = o["props"] is JObject ? ParsePartition(o["props"]) : null;
             if (o["spent"] is JArray spent)
             {
                 foreach (var id in spent) shared.Spent.Add(id.Value<string>());
@@ -262,7 +289,7 @@ namespace StoryletStudio.StoryletEngine
 
         private static FlowSave ParseFlow(JObject o)
         {
-            var f = new FlowSave { Props = ParsePartition(o["props"]) };
+            var f = new FlowSave { Props = o["props"] is JObject ? ParsePartition(o["props"]) : null };
             if (o["turns"] is JObject turns)
             {
                 foreach (var pair in turns) f.Turns.Set(pair.Key, pair.Value.Value<double>());
@@ -299,7 +326,12 @@ namespace StoryletStudio.StoryletEngine
 
         public static SaveEnvelope FromJson(JObject o)
         {
-            var env = new SaveEnvelope();
+            // The schema as the JSON carries it, so LoadGame can read either
+            // version and refuse anything else.
+            var env = new SaveEnvelope
+            {
+                Schema = o["schema"]?.Type == JTokenType.String ? o.Value<string>("schema") : null,
+            };
             var content = o["content"] as JObject;
             if (content != null)
             {
@@ -307,6 +339,7 @@ namespace StoryletStudio.StoryletEngine
                 env.Content.Version = content.Value<string>("version");
                 env.Content.Hash = content.Value<string>("hash");
             }
+            if (o["registry"] is JObject registry) env.Registry = ParseKind(registry);
             env.Shared = ParseShared(o["shared"]);
             if (o["flows"] is JObject flows)
             {

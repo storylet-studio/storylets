@@ -65,7 +65,10 @@ namespace StoryletStudio.StoryletEngine
         /// World do - neither rides the envelope), and load the old engine's
         /// save into it. Never throws; a failure (bad JSON, a bundle the
         /// runtime rejects, another project) comes back with Ok false and
-        /// <paramref name="engine"/> is untouched.</summary>
+        /// <paramref name="engine"/> is untouched. An engine built with the
+        /// game's own EngineOptions.Registry cannot be swapped this way: the new
+        /// engine's `story` clashes with the old engine's in that registry, so
+        /// Apply returns Ok false and the registry is left as it was.</summary>
         public static StoryletLiveBundleResult Apply(Engine engine, string data, EngineOptions opts = null)
         {
             Bundle bundle;

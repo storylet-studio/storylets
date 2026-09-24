@@ -100,6 +100,13 @@ namespace StoryletStudio.StoryletEngine.TestHost
             foreach (var f in registry.Failures) { _fails++; Console.Error.WriteLine($"  FAIL [registry corpus] {f}"); }
             Console.WriteLine($"registry corpus: {registry.Passed}/{registry.Total}");
 
+            // One registry per game, from the game's side: the port of the JS
+            // runtime's one-registry.test.ts (keys, owner label, what SaveGame
+            // leaves to the game, loading in either order, save@1 still read).
+            var oneRegistry = OneRegistry.Run();
+            foreach (var f in oneRegistry.Failures) { _fails++; Console.Error.WriteLine($"  FAIL [one registry] {f}"); }
+            Console.WriteLine($"one registry: {oneRegistry.Passed}/{oneRegistry.Total}");
+
             Console.WriteLine(_fails == 0 ? "ALL PASS" : $"{_fails} FAILED");
             return _fails == 0 ? 0 : 1;
         }
@@ -1229,8 +1236,11 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         // fresh one (semantic parity, not byte parity). into: "B"
                         // restores into the case's EDITED bundle: the
                         // drifted-content contract. LoadGame rebuilds every flow,
-                        // so the script's handles are re-taken.
-                        var envelope = engine.SaveGame();
+                        // so the script's handles are re-taken. The envelope
+                        // crosses the JSON layer on the way, as a game's save
+                        // does, so every scripted save also holds the wire
+                        // shape (storylets/save@2) to the engine's own.
+                        var envelope = StoryletSave.FromJson(JObject.Parse(StoryletSave.ToJson(engine.SaveGame()).ToString()));
                         var into = op.Value<string>("into") == "B" ? bundleB : bundle;
                         var target = new StoryletStudio.StoryletEngine.Engine(into, new EngineOptions { Seed = seed });
                         if (op.Value<bool?>("previewOnly") == true)

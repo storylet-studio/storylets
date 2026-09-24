@@ -28,7 +28,7 @@
 
 class UStoryletBundle;
 class UStoryletEngine;
-namespace storylets { class Engine; class Flow; struct TraceEvent; }
+namespace storylets { class Engine; class Flow; class ScopeRegistry; struct TraceEvent; }
 
 /** Pimpl holders (defined in StoryletEngine.cpp). */
 class UStoryletWorld;
@@ -251,12 +251,34 @@ public:
 	 *  entries, read back through a flow's Log(). World, when given, is the
 	 *  game's @world container (StoryletWorld.h): the engine reads and writes
 	 *  @world through it, shared by every flow and by whatever else the game
-	 *  binds to the same object (Patterplay's host scope in the Hamlet demo).
-	 *  Absent, @world is self-backed from the declared defaults. The binding
-	 *  survives ApplyLiveBundle. Returns nullptr (and logs) on a null or
+	 *  binds to the same object (Patterplay's host scope in the Hamlet demo),
+	 *  and never saves it. Absent, @world is self-backed from the declared
+	 *  defaults and saved with everything else. The binding survives
+	 *  ApplyLiveBundle. The engine keeps its properties in a registry of its
+	 *  own; a C++ game running several engines passes its one registry through
+	 *  CreateWithRegistry instead. Returns nullptr (and logs) on a null or
 	 *  uncompiled bundle. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	static UStoryletEngine* Create(UStoryletBundle* Bundle, int32 Seed = 0, bool bRetainLog = false, UStoryletWorld* World = nullptr);
+
+	/** Create, on the GAME's registry: one storylets::ScopeRegistry per game,
+	 *  holding every engine's properties except those the game keeps itself
+	 *  (patterkit design/one-registry-handover.md). The engine registers its
+	 *  bags in it (@story under `story`, every other bag under a key starting
+	 *  `storylets/`, and @world when World is given), reads every other scope
+	 *  from it, and a save leaves the property values to the game, which saves
+	 *  the registry once, beside the engine's file. Without World, @world is
+	 *  the game's to register in the registry. C++ only: the registry is a
+	 *  std object shared by pointer, which no Blueprint pin carries. Returns
+	 *  nullptr (and logs) on a null or uncompiled bundle or a null registry,
+	 *  and when a token the engine registers is already another's (the log
+	 *  names who holds it; the registry is left as it was). */
+	static UStoryletEngine* CreateWithRegistry(UStoryletBundle* Bundle, std::shared_ptr<storylets::ScopeRegistry> Registry,
+		int32 Seed = 0, bool bRetainLog = false, UStoryletWorld* World = nullptr);
+
+	/** The registry this engine's properties live in: the game's, from
+	 *  CreateWithRegistry, or the engine's own. C++ only; null when invalid. */
+	std::shared_ptr<storylets::ScopeRegistry> GetRegistry() const;
 
 	/** The @world container given to Create, or null when self-backed. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
@@ -313,7 +335,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
 	FString PreviewFlowRestoreJson(const FString& Id, const FString& Json) const;
 
-	/** Close every flow and reseed the shared state to its defaults. */
+	/** Close every flow and reseed the shared state to its defaults. Values
+	 *  loaded into the registry for this engine and not yet claimed are
+	 *  dropped; another engine's are not. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	void Reset();
 
@@ -325,7 +349,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Debug")
 	TArray<FStoryletPropertyView> ListProperties() const;
 
-	/** Shared and @world paths only. A path that resolves PER-FLOW is refused
+	/** Shared and @world paths only, and another engine's game-wide scope in
+	 *  the registry ("patter.gold"). A path that resolves PER-FLOW is refused
 	 *  (0 / "" / false and a log naming the fix): read it on a flow, where
 	 *  the answer is that playthrough's. */
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
@@ -362,8 +387,11 @@ public:
 	 *  bundle here, then SetBuild). Edited content is tolerated the way a load
 	 *  is: orphaned hand contents and cooldowns drop, new properties take
 	 *  their defaults, and a flow whose name is gone reads as closed. The
-	 *  retained logs start again. False (with OutError, engine untouched) on a
-	 *  null or uncompiled bundle, or a save the new bundle refuses. */
+	 *  retained logs start again. On the game's registry (CreateWithRegistry)
+	 *  the old core hands its bags over: each leaves the registry keeping its
+	 *  values, and the new core claims them as it registers the same keys.
+	 *  False (with OutError, engine untouched) on a null or uncompiled bundle,
+	 *  or a save the new bundle refuses. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Live Link")
 	bool ApplyLiveBundle(UStoryletBundle* NewBundle, FString& OutError);
 
@@ -429,6 +457,10 @@ public:
 	virtual void BeginDestroy() override;
 
 private:
+	/** Create and CreateWithRegistry, on a registry or (null) the engine's own. */
+	static UStoryletEngine* CreateOn(UStoryletBundle* Bundle, std::shared_ptr<storylets::ScopeRegistry> Registry,
+		int32 Seed, bool bRetainLog, UStoryletWorld* World);
+
 	UPROPERTY()
 	TObjectPtr<UStoryletBundle> BundleRef = nullptr;
 

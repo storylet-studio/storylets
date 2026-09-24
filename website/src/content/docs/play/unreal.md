@@ -103,9 +103,10 @@ World->OnChanged.AddDynamic(this, &AMyGame::OnWorldChanged);   // (Name, Value, 
 `SetReadOnly` is your policy. A story write to that name makes `Play` return false with
 `@world.x is the game's alone`. It is distinct from `writable: false` on the property's
 declaration, which is the story's own promise, checked when the project compiles and refused
-by every runtime. Your own `Set*` calls and a load are never refused by either. Leave the
-world out and the engine self-backs `@world` from the declared defaults, written through the
-path accessors below, which is fine for a run that never leaves the engine.
+by every runtime. Your own `Set*` calls and a load are never refused by either. Your game keeps
+a bound world's values, so the engine never saves them. Leave the world out and the engine
+self-backs `@world` from the declared defaults, written through the path accessors below, and
+saves it with everything else.
 
 The other properties cross the Blueprint boundary through typed accessors, path-addressed:
 
@@ -122,18 +123,78 @@ TArray<FStoryletBoxView> Boxes = Flow->ListBoxes();
 `ListProperties()` returns one row per declared property with its type, value, default, and
 enum options. The paths, and when to write them, are on [Your game's state](/play/world-state/).
 
+## One registry per game
+
+Every property value lives in a **registry**, a `storylets::ScopeRegistry`, one per game. An
+engine you build with `Create` makes its own registry and acts as its own game, so a game with
+one engine never has to think about it. A game running more than one engine,
+[Patter](/play/with-patter/) say, makes one registry, registers `@world` in it, and hands it to
+each engine. From C++:
+
+```cpp
+#include "Storylets/Expr/ScopeRegistry.h"
+
+// Your @world declarations: a std::vector<storylets::ScopeDeclaration>.
+auto Registry = std::make_shared<storylets::ScopeRegistry>();
+storylets::OwnedScopeOptions Options;
+Options.owner = std::string("Game");
+Registry->defineOwned("world", WorldDeclarations, Options);   // stored and saved with the rest
+
+UStoryletEngine* Engine = UStoryletEngine::CreateWithRegistry(Bundle, Registry, /*Seed=*/7);
+```
+
+`CreateWithRegistry` is C++ only: the registry is a standard C++ object shared by pointer, and
+no Blueprint pin carries one. On the engine core, the same option is `EngineOptions::registry`.
+
+The engine registers `@story` under `story`, and every other bag that declares something under
+a key starting `storylets/`, which no expression can name. Given your registry, it registers
+nothing for `@world`: that's yours. `defineOwned` has the registry store and save it, and
+`defineForeign("world", Resolver, &Declarations, Options)` keeps it in your game, where nothing
+saves it. Passing a `UStoryletWorld` to `CreateWithRegistry` registers that world in your
+registry for you.
+
+Every expression reads every scope in the registry, so a card's condition can read
+`@patter.gold`, and `GetPropertyNumber(TEXT("patter.gold"))` and its setters reach another
+engine's values from your code. A token is taken once: an engine that wants a token another
+already holds is refused as it is built, `CreateWithRegistry` returns null and logs who holds
+it, and the registry is left as it was. When a `UStoryletEngine` goes away, its values leave the
+registry with it, and `ApplyLiveBundle` hands them from the old engine core to the new one.
+
 ## Save and load
 
 `UStoryletSave::SaveStateToJson(Engine)` and `LoadStateFromJson(Engine, Json)` are the
 `.storyletsave` string boundary, in the runtime module and Blueprint-callable (the shape of
-Patterplay's `UPatterSave`). The file carries the engine's envelope, every live flow inside
-it, plus the current `@world` values, and a load applies all of it, so a round trip preserves
-the whole run ([why `@world` rides beside the envelope](/play/world-state/#saving-it)). With
-a `UStoryletWorld` bound, the load restores its values as you would, so your read-only names
-are restored too. A
+Patterplay's `UPatterSave`). The file carries the engine's envelope, `storylets/save@2`, with
+every live flow inside it, plus the current `@world` values, and a load applies all of it. The
+envelope holds what isn't a property: boards, clocks, cooldowns, random streams, play logs, and
+spent cards. An engine made with `Create` also carries its registry's values in the envelope, a
+self-backed `@world` included, so a round trip preserves the whole run. With a `UStoryletWorld`
+bound, the load restores its values as you would, so your read-only names are restored too
+([why a world you keep rides beside the envelope](/play/world-state/#saving-it)). A
 foreign or malformed blob returns false and leaves the engine untouched. Flow objects your
 game is already holding survive the load: they re-bind by name, so a Blueprint variable
-pointing at a flow keeps working.
+pointing at a flow keeps working. Files saved as `storylets/save@1`, before the registry held
+the values, still load: their values move into the registry as they do.
+
+An engine on your registry leaves the property values out of its envelope. Your game saves the
+registry once, beside each engine's file, and loads it before or after the engines, in either
+order:
+
+```cpp
+#include "Storylets/Save.h"
+
+const std::string RegistryText = storylets::saveRegistry(*Registry);   // every property, once
+const FString StoryletsText = UStoryletSave::SaveStateToJson(Engine);  // everything else
+
+// Loading, into a freshly made registry and engine:
+storylets::loadRegistry(*Registry, RegistryText);
+UStoryletSave::LoadStateFromJson(Engine, StoryletsText);
+UStoryletFlow* Flow = Engine->GetFlow(TEXT("main"));
+```
+
+A value for a flow that hasn't been restored yet waits in the registry until the flow claims
+it. A flow you open fresh with `OpenFlow` never picks up a value a load left for its name, and
+`Reset()` drops only the Storylet Engine's waiting values, never another engine's.
 
 A load is forgiving. A card your edit deleted drops off the board, a property you added takes
 its default, and a save from an older build goes in without a word.
@@ -143,9 +204,9 @@ it, and changes nothing. It hands back a report as a JSON string (`exact`, `evic
 pairs), because no report struct crosses a Blueprint pin.
 
 To park ONE playthrough rather than the whole run, `SaveFlowToJson(Id)` on the engine takes
-that flow's state and `OpenFlowFromJson(Id, Json)` puts it back. `CloseFlow` in between is
-what releases the cards it was holding, and `PreviewFlowRestoreJson(Id, Json)` says what
-coming back would cost.
+that flow's state, its property values included, and `OpenFlowFromJson(Id, Json)` puts it
+back. `CloseFlow` in between is what releases the cards it was holding and takes its values out
+of the registry, and `PreviewFlowRestoreJson(Id, Json)` says what coming back would cost.
 
 ## The Runtime State panel
 
@@ -195,9 +256,9 @@ reference runtime. Everything else is the Unreal wrapper: `UStoryletBundle`, `US
 `UStoryletFlow`, `UStoryletSave`, the Blueprint structs, the factory, and the editor panel. Exceptions from the core are caught
 at that boundary and surfaced as error strings and logs, so Blueprint never sees one.
 
-Three things stay C++ only: `SubscribeTrace` (Blueprint polls `Log()` instead), the generic
-value type (Blueprint uses the typed accessors above), and `ListBags`. Numbers cross the
-boundary as `double`.
+Four things stay C++ only: `SubscribeTrace` (Blueprint polls `Log()` instead), the generic
+value type (Blueprint uses the typed accessors above), `ListBags`, and the registry
+(`CreateWithRegistry` and `GetRegistry`). Numbers cross the boundary as `double`.
 
 ## Next
 

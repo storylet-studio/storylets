@@ -61,10 +61,23 @@ transliteration in C#; the three stay in lockstep.
   enum options, `bIsDefault` for reset buttons).
 - **Save/load**: `UStoryletSave::SaveStateToJson` / `LoadStateFromJson` -
   the `.storyletsave` string boundary (schema `storylets/savefile@1`: the
-  engine's envelope with every live flow in it, plus the `@world` values) in
-  the runtime module, never editor-only. A foreign or malformed blob returns
+  engine's `storylets/save@2` envelope with every live flow in it, plus the
+  `@world` values) in the runtime module, never editor-only. A
+  `storylets/save@1` file still loads. A foreign or malformed blob returns
   false and leaves the engine untouched. Flow objects the game is holding
   re-bind by name across the load.
+- **One registry per game**: every property value lives in a
+  `storylets::ScopeRegistry`. Without one, the engine makes its own, self-backs
+  `@world` when no `UStoryletWorld` is bound, and a save carries every value.
+  A C++ game running several engines (Patterplay, say) passes its one registry
+  through `UStoryletEngine::CreateWithRegistry(Bundle, Registry)`, or
+  `EngineOptions::registry` on the core: the engine registers `@story` under
+  `story` and every other bag under a key starting `storylets/`, reads every
+  other scope in the registry, and leaves the values out of its save, so the
+  game saves the registry once, beside it (`storylets::saveRegistry(registry)` /
+  `loadRegistry(registry, json)` in `Storylets/Save.h` are its text door), and loads it
+  before or after the engine. `@world` is then the game's to register, unless a `UStoryletWorld` is
+  bound. See [Unreal](https://storylet.studio/play/unreal/#one-registry-per-game).
 - **Live Link**: `FStoryletLiveLink` connects a running game to Storyletter
   (`ws://127.0.0.1:4472`): `Create(Bundle->GetBuildId(), Project)` then
   `Attach(Engine)` streams every flow's trace and board snapshots, each
@@ -109,8 +122,10 @@ specificity, peek, scripted) exactly as documented in
 `packages/conformance/src/runner.ts`, replays the Live Link fixture beside
 the corpus (`live-link/script.json` through the std-only client against a
 recording sink, every frame compared byte for byte with `frames.json`),
-prints a per-family summary and exits non-zero on any divergence from the
-reference expectations.
+runs the one-registry checks (`TestHost/OneRegistry.h`, the JS runtime's
+`one-registry.test.ts` ported case for case), the expr parity corpus and the
+registry corpus, prints a per-family summary and exits non-zero on any
+divergence from the reference expectations.
 
 ## Licence
 

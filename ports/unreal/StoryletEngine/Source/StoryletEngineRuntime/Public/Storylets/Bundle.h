@@ -2,7 +2,7 @@
 // @storylet-studio/model (packages/model/src/index.ts): the bundle schema
 // "storylets/bundle@0" (world/story property decls, boxes with decks/cards/
 // outcomes/tag groups/hands/hand templates, ranking, fields, redraw, copies,
-// the home group), SaveEnvelope ("storylets/save@1"), and the gameId
+// the home group), SaveEnvelope ("storylets/save@2"; @1 still read), and the gameId
 // derivation rules (GameIdify / EffectiveGameId). The loader consumes the
 // core's neutral JsonValue tree (the Unity port's BundleLoader, minus the
 // JSON library), so hosts feed it from any parser. No behaviour lives here.
@@ -25,7 +25,25 @@
 namespace storylets
 {
     inline const char* const BUNDLE_SCHEMA = "storylets/bundle@0";
-    inline const char* const SAVE_SCHEMA = "storylets/save@1";
+    /** The engine's save envelope, version 2 (the one-registry model):
+     *  property values are the game's ScopeRegistry's, not the engine's. The
+     *  envelope holds what is NOT a property (boards, clocks, cooldowns, PRNGs,
+     *  play logs, spent cards), plus, when the engine made its own registry (a
+     *  standalone game), that registry's values under `registry`. A game that
+     *  passed a registry saves it once itself.
+     *
+     *  Registry keys (identical on every runtime, since they are in the save):
+     *  `story` for the shared @story; `storylets/<kind>/<id>` for a shared box,
+     *  deck, hand, or value bag (kind is `box`, `deck`, `hand`, or `value`, id
+     *  the internal id); `storylets/flow/<flowId>/story` and
+     *  `storylets/flow/<flowId>/<kind>/<id>` for a flow's own. Ids escape `%`
+     *  as `%25` and `/` as `%2F`. A bag with no declared properties is not
+     *  registered. A self-backed @world (no resolver bound) is a stored
+     *  property too, under `world`. */
+    inline const char* const SAVE_SCHEMA = "storylets/save@2";
+    /** The version 1 envelope's schema tag, still read: its property
+     *  partitions move into the registry as it loads. */
+    inline const char* const SAVE_SCHEMA_V1 = "storylets/save@1";
     /** The .storyletsave FILE's schema: the HOST's wrapper (the engine's
      *  envelope plus, when the host keeps one, its @world container -
      *  design/flows.md). The engine never reads or writes the world half. */
@@ -507,10 +525,15 @@ namespace storylets
         OrderedMap<std::string, OrderedMap<std::string, StoryletValue>> value;
     };
 
-    /** One flow's blob inside the envelope (schema 4). */
+    /** One flow's blob inside the envelope (schema 4), and the blob saveFlow
+     *  parks. */
     struct FlowSave
     {
-        PropsPartition props;
+        /** The per-flow property partitions. Carried by saveFlow, which parks
+         *  one flow whole; absent from a version 2 envelope's flows, whose
+         *  properties are the registry's. Present in every flow of a version 1
+         *  envelope. */
+        std::optional<PropsPartition> props;
         /** Per-box turn counters, keyed by box id (schema 3.4) - per flow:
          *  there is deliberately no global turn. */
         OrderedMap<std::string, double> turns;
@@ -534,15 +557,22 @@ namespace storylets
      *  the live boards, and each flow's board rides its own blob. */
     struct SharedSave
     {
-        PropsPartition props;
+        /** The shared property partitions: version 1 only. */
+        std::optional<PropsPartition> props;
         /** Card ids, sorted, so a save is byte-stable for a diff. */
         std::vector<std::string> spent;
     };
 
     struct SaveEnvelope
     {
+        /** SAVE_SCHEMA when written today; SAVE_SCHEMA_V1 still read. */
         std::string schema = SAVE_SCHEMA;
         BundleContent content;
+        /** The engine's own registry's values, keyed by registry key: present
+         *  only when the engine made the registry itself (a standalone game).
+         *  A game that passed a registry saves it once, beside this envelope.
+         *  The same shape as ScopeRegistry::SaveBlob. */
+        std::optional<OrderedMap<std::string, OrderedMap<std::string, StoryletValue>>> registry;
         SharedSave shared;
         OrderedMap<std::string, FlowSave> flows;
     };

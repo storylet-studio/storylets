@@ -164,8 +164,11 @@ namespace StoryletStudio.StoryletEngine
         private Dictionary<string, int> _tagPlayCount = new Dictionary<string, int>();
         private Dictionary<string, PlayRecord> _lastPlayInTag = new Dictionary<string, PlayRecord>();
 
-        /// <summary>The per-flow property partitions (the not-shared halves).</summary>
+        /// <summary>The per-flow property partitions (the not-shared halves),
+        /// each bag that declares something registered under this flow's
+        /// keys.</summary>
         private Partition _stores;
+        private readonly List<string> _registered = new List<string>();
 
         private readonly List<Action<TraceEvent>> _traceHandlers = new List<Action<TraceEvent>>();
         private List<LogEntry> _logEntries = new List<LogEntry>();
@@ -177,6 +180,20 @@ namespace StoryletStudio.StoryletEngine
             Id = id;
             _prng = new Mulberry32(seed);
             _stores = engine.BuildFlowPartition();
+            // Register the bags: each claims whatever the registry holds for its
+            // key (a load); OpenFlow discarded that first for a fresh flow.
+            var reg = engine._registry;
+            void Put(string key, PropertyBag bag)
+            {
+                if (bag.Declarations().Count == 0) return; // holds nothing: not registered
+                reg.MountOwned(key, bag, Engine.OwnerLabel);
+                _registered.Add(key);
+            }
+            Put(Engine.FlowKey(id, "story"), _stores.Story);
+            foreach (var kind in Engine.OwnedScopes)
+            {
+                foreach (var pair in KindOf(_stores, kind)) Put(Engine.FlowKey(id, kind, pair.Key), pair.Value);
+            }
             foreach (var box in engine._bundle.Boxes)
             {
                 _turnCounts.Set(box.Id, 0);
@@ -196,7 +213,17 @@ namespace StoryletStudio.StoryletEngine
 
         internal void MarkClosed()
         {
+            ReleaseBags(false);
             _closed = true;
+        }
+
+        /// <summary>Take this flow's bags out of the registry; with keep, their
+        /// values wait there for the flow that replaces this one (a load into
+        /// the game's registry). Idempotent.</summary>
+        internal void ReleaseBags(bool keep)
+        {
+            foreach (var key in _registered) _engine._registry.Remove(key, keep);
+            _registered.Clear();
         }
 
         private void AssertOpen()
@@ -403,23 +430,46 @@ namespace StoryletStudio.StoryletEngine
         private EvalContext EvalCtx(Box box, Deck deck, HandEnv handEnv)
         {
             var ctx = new EvalContext { Host = Host(box) };
-            if (_engine._hasQualities)
+            var others = _engine.RegistryView();
+            if (_engine._hasQualities || others.Qualities != null)
             {
-                // The quality channel, answering for THIS ask's box and deck.
+                // The quality channel, answering for THIS ask's box and deck, and
+                // for every other registered scope through the registry's own.
+                var otherLadders = others.Qualities;
                 ctx.Qualities = (scope, name) =>
                 {
                     List<string> ladder = null;
-                    if (scope == "world") _engine._worldLadders.TryGetValue(name, out ladder);
-                    else if (scope == "story") _engine._storyLadders.TryGetValue(name, out ladder);
-                    else if (scope == "box" && _engine._boxLadders.TryGetValue(box.Id, out var bm)) bm.TryGetValue(name, out ladder);
-                    else if (scope == "deck" && deck != null && _engine._deckLadders.TryGetValue(deck.Id, out var dm)) dm.TryGetValue(name, out ladder);
-                    else if (scope == "hand") ladder = HandLadder(handEnv, name);
-                    return ladder;
+                    if (scope == "world")
+                    {
+                        _engine._worldLadders.TryGetValue(name, out ladder);
+                        return ladder ?? otherLadders?.Invoke(scope, name);
+                    }
+                    if (scope == "story")
+                    {
+                        _engine._storyLadders.TryGetValue(name, out ladder);
+                        return ladder;
+                    }
+                    if (scope == "box")
+                    {
+                        if (_engine._boxLadders.TryGetValue(box.Id, out var bm)) bm.TryGetValue(name, out ladder);
+                        return ladder;
+                    }
+                    if (scope == "deck" && deck != null)
+                    {
+                        if (_engine._deckLadders.TryGetValue(deck.Id, out var dm)) dm.TryGetValue(name, out ladder);
+                        return ladder;
+                    }
+                    if (scope == "hand") return HandLadder(handEnv, name);
+                    return otherLadders?.Invoke(scope, name);
                 };
             }
-            // Every scope is the flow's MERGED view - its own copies over the
+            // Every other engine's game-wide scope first (every engine reads
+            // every scope); this engine's own tokens are its merged views, over
+            // the top.
+            foreach (var pair in others.Scopes) ctx.Scopes[pair.Key] = pair.Value;
+            // Every own scope is the flow's MERGED view - its own copies over the
             // shared values, names disjoint - and @world reads through the
-            // engine's resolver.
+            // registry.
             ctx.Scopes["world"] = _engine.WorldScope;
             ctx.Scopes["story"] = new PairScope { Own = _stores.Story, Shared = _engine._shared.Story };
             ctx.Scopes["box"] = new PairScope { Own = _stores.Box.GetOrDefault(box.Id), Shared = _engine._shared.Box.GetOrDefault(box.Id) };
@@ -1553,6 +1603,11 @@ namespace StoryletStudio.StoryletEngine
             {
                 value = _engine.WorldGet(parts[1]);
             }
+            else if (_engine.IsOtherScope(parts))
+            {
+                // Another engine's game-wide scope (`patter.gold`).
+                value = _engine._registry.Get(parts[0], parts[1]);
+            }
             else if (parts.Length == 2 && parts[0] == "story")
             {
                 value = _stores.Story.Get(parts[1]) ?? _engine._shared.Story.Get(parts[1]);
@@ -1581,6 +1636,11 @@ namespace StoryletStudio.StoryletEngine
             {
                 if (!_engine.WorldCanSet) throw new StoryletError("@world is read-only here: the host bound no write");
                 _engine.WorldSet(parts[1], value, host: true);
+                return;
+            }
+            if (_engine.IsOtherScope(parts))
+            {
+                _engine._registry.Set(parts[0], parts[1], value, host: true);
                 return;
             }
             PropertyBag own, shared;
@@ -1615,16 +1675,22 @@ namespace StoryletStudio.StoryletEngine
 
         // --- persistence (schema 4) ----------------------------------------------------
 
-        /// <summary>This flow's blob inside the engine's envelope. StoryletValue
-        /// is immutable, so a container-deep copy is the TS structuredClone.</summary>
-        internal FlowSave Snapshot()
+        /// <summary>This flow's blob: inside the engine's envelope without its
+        /// properties (the registry has them), or parked whole by SaveFlow.
+        /// StoryletValue is immutable, so a container-deep copy is the TS
+        /// structuredClone.</summary>
+        internal FlowSave Snapshot(bool withProps)
         {
             var save = new FlowSave { Prng = _prng.State };
-            save.Props.Story = _stores.Story.Save();
-            foreach (var pair in _stores.Box) save.Props.Box.Set(pair.Key, pair.Value.Save());
-            foreach (var pair in _stores.Deck) save.Props.Deck.Set(pair.Key, pair.Value.Save());
-            foreach (var pair in _stores.Hand) save.Props.Hand.Set(pair.Key, pair.Value.Save());
-            foreach (var pair in _stores.Value) save.Props.Value.Set(pair.Key, pair.Value.Save());
+            if (withProps)
+            {
+                var props = new PropsPartition { Story = _stores.Story.Save() };
+                foreach (var pair in _stores.Box) props.Box.Set(pair.Key, pair.Value.Save());
+                foreach (var pair in _stores.Deck) props.Deck.Set(pair.Key, pair.Value.Save());
+                foreach (var pair in _stores.Hand) props.Hand.Set(pair.Key, pair.Value.Save());
+                foreach (var pair in _stores.Value) props.Value.Set(pair.Key, pair.Value.Save());
+                save.Props = props;
+            }
             foreach (var pair in _turnCounts) save.Turns.Set(pair.Key, pair.Value);
             foreach (var pair in _cooldowns) save.Cooldowns.Set(pair.Key, pair.Value);
             foreach (var pair in _boardContents) save.Board.Set(pair.Key, new List<string>(pair.Value));
@@ -1640,11 +1706,14 @@ namespace StoryletStudio.StoryletEngine
         /// defaults.</summary>
         internal void Restore(FlowSave saved)
         {
-            _stores.Story.Load(saved.Props.Story);
-            LoadKind(_stores.Box, saved.Props.Box);
-            LoadKind(_stores.Deck, saved.Props.Deck);
-            LoadKind(_stores.Hand, saved.Props.Hand);
-            LoadKind(_stores.Value, saved.Props.Value);
+            if (saved.Props != null)
+            {
+                _stores.Story.Load(saved.Props.Story);
+                LoadKind(_stores.Box, saved.Props.Box);
+                LoadKind(_stores.Deck, saved.Props.Deck);
+                LoadKind(_stores.Hand, saved.Props.Hand);
+                LoadKind(_stores.Value, saved.Props.Value);
+            }
             _turnCounts = new OrderedMap<string, double>();
             foreach (var box in _engine._bundle.Boxes) _turnCounts.Set(box.Id, 0);
             foreach (var pair in saved.Turns)

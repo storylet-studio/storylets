@@ -21,8 +21,8 @@ Four assemblies, the Patterplay split applied verbatim:
   Newtonsoft-touching layer: `BundleLoader` parses a compiled bundle's JSON
   into the pure model, and `StoryletSave` is the save-file string boundary
   (`SerializeState` / `DeserializeState` / `LoadState` over the runtime's
-  own `storylets/save@1` envelope inside the host's `storylets/savefile@1`
-  file, the `.storyletsave` format; a foreign or
+  own `storylets/save@2` envelope, `storylets/save@1` still read, inside the
+  host's `storylets/savefile@1` file, the `.storyletsave` format; a foreign or
   malformed blob throws), and `StoryletLiveBundle` applies a bundle the
   editor pushed over the Live Link (`TryParsePush` / `Apply`). In Unity it
   rides `com.unity.nuget.newtonsoft-json`.
@@ -38,6 +38,19 @@ Four assemblies, the Patterplay split applied verbatim:
   a ScriptedImporter for `.storyletsc` (a broken bundle still imports, the
   error logged at import time and readable on the asset), and the state
   window.
+
+## One registry per game
+
+Every property value lives in a `ScopeRegistry`, one per game. Pass the game's as
+`new Engine(bundle, new EngineOptions { Registry = registry })` to share it with any other
+engine (Patter, say): the engine registers `@story` under `story` and every other bag under
+a key starting `storylets/`, `@world` is the game's to register (`DefineOwned` to have the
+registry store and save it, `DefineForeign` with a resolver to keep it yourself), and
+`SaveGame()` leaves the values to the game, which saves `registry.Save()` once and loads it
+before or after `LoadGame`. Without one the engine makes its own registry, self-backs
+`@world`, and `SaveGame()` carries every value, so one call is still the whole run.
+`storylets/save@1` envelopes still load. See
+[Unity](https://storylet.studio/play/unity/#one-registry-per-game) on the site.
 
 ## The state window
 

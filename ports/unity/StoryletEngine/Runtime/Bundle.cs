@@ -22,7 +22,15 @@ namespace StoryletStudio.StoryletEngine
     public static class Model
     {
         public const string BUNDLE_SCHEMA = "storylets/bundle@0";
-        public const string SAVE_SCHEMA = "storylets/save@1";
+        /// <summary>The engine's save envelope, version 2 (the one-registry
+        /// model): property values are the game's ScopeRegistry's, so the
+        /// envelope holds what is NOT a property, plus the registry's values
+        /// under Registry when the engine made its own registry. See
+        /// SaveEnvelope for the registry keys.</summary>
+        public const string SAVE_SCHEMA = "storylets/save@2";
+        /// <summary>The version 1 envelope's schema tag, still read: its
+        /// property partitions move into the registry as it loads.</summary>
+        public const string SAVE_SCHEMA_V1 = "storylets/save@1";
         /// <summary>The .storyletsave FILE's schema: the HOST's wrapper (the
         /// engine's envelope plus, when the host keeps one, its @world
         /// container - design/flows.md). The engine never reads or writes the
@@ -461,10 +469,15 @@ namespace StoryletStudio.StoryletEngine
         public OrderedMap<string, OrderedMap<string, StoryletValue>> Value = new OrderedMap<string, OrderedMap<string, StoryletValue>>();
     }
 
-    /// <summary>One flow's blob inside the envelope (schema 4).</summary>
+    /// <summary>One flow's blob inside the envelope (schema 4), and the blob
+    /// SaveFlow parks.</summary>
     public sealed class FlowSave
     {
-        public PropsPartition Props = new PropsPartition();
+        /// <summary>The per-flow property partitions. Carried by SaveFlow, which
+        /// parks one flow whole; null in a version 2 envelope's flows, whose
+        /// properties are the registry's. Present in every flow of a version 1
+        /// envelope.</summary>
+        public PropsPartition Props;
         /// <summary>Per-box turn counters, keyed by box id (schema 3.4) - per
         /// flow: there is deliberately no global turn.</summary>
         public OrderedMap<string, double> Turns = new OrderedMap<string, double>();
@@ -479,24 +492,48 @@ namespace StoryletStudio.StoryletEngine
         public List<PlayRecord> PlayLog = new List<PlayRecord>();
     }
 
-    /// <summary>The whole engine, one envelope: the shared partitions once,
-    /// then every live flow keyed by its id - Patter's shape (one shared blob
-    /// + N flow blobs; multi-flow and save/load are the same feature).</summary>
-    /// <summary>The engine's half of a save: what every flow shares. Properties,
-    /// and the cards a shared redraw:never has taken out of the world for good
-    /// (design/shared-scarcity.md). Claims are NOT here: they are derived from
+    /// <summary>The engine's half of a save: what every flow shares. The cards a
+    /// shared redraw:never has taken out of the world for good
+    /// (design/shared-scarcity.md), and, in a version 1 envelope only, the
+    /// shared property partitions. Claims are NOT here: they are derived from
     /// the live boards, and each flow's board rides its own blob.</summary>
     public sealed class SharedSave
     {
-        public PropsPartition Props = new PropsPartition();
+        /// <summary>The shared property partitions: version 1 only (null in a
+        /// version 2 envelope, whose properties are the registry's).</summary>
+        public PropsPartition Props;
         /// <summary>Card ids, sorted, so a save is byte-stable for a diff.</summary>
         public List<string> Spent = new List<string>();
     }
 
+    /// <summary>The whole engine, one envelope: the shared blob once, then
+    /// every live flow keyed by its id - Patter's shape (one shared blob + N
+    /// flow blobs; multi-flow and save/load are the same feature).
+    ///
+    /// Version 2 (storylets/save@2, the one-registry model) holds what is NOT a
+    /// property (boards, clocks, cooldowns, PRNGs, play logs, spent cards),
+    /// plus, when the engine made its own registry (a standalone game), that
+    /// registry's values under Registry. A game that passed a registry saves it
+    /// once itself. Version 1 envelopes (storylets/save@1) still load: their
+    /// property partitions move into the registry.
+    ///
+    /// Registry keys, identical on every runtime since they are in the save:
+    /// `story` for the shared @story; `storylets/&lt;kind&gt;/&lt;id&gt;` for a
+    /// shared box, deck, hand, or value bag (kind is box, deck, hand, or value,
+    /// id the internal id); `storylets/flow/&lt;flowId&gt;/story` and
+    /// `storylets/flow/&lt;flowId&gt;/&lt;kind&gt;/&lt;id&gt;` for a flow's own.
+    /// Ids escape `%` as `%25` and `/` as `%2F`. A bag with no declared
+    /// properties is not registered. A self-backed @world (no resolver bound)
+    /// is a stored property too, under `world`.</summary>
     public sealed class SaveEnvelope
     {
         public string Schema = Model.SAVE_SCHEMA;
         public BundleContent Content = new BundleContent();
+        /// <summary>The engine's own registry's values, keyed by registry key:
+        /// present only when the engine made the registry itself (a standalone
+        /// game). Null when the game passed a registry: the game saves that
+        /// once, beside this envelope.</summary>
+        public OrderedMap<string, OrderedMap<string, StoryletValue>> Registry;
         public SharedSave Shared = new SharedSave();
         public OrderedMap<string, FlowSave> Flows = new OrderedMap<string, FlowSave>();
     }

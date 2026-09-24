@@ -2,13 +2,23 @@
 // (design/flows.md; the shape is Patter's), transliterated from the
 // reference runtime (packages/runtime/src/engine.ts) and held to the
 // conformance corpus. An Engine owns the bundle, the lookups, the SHARED
-// property partitions and the @world resolver (never in SaveGame() - the
-// host saves its container); a Flow owns its own PRNG, clocks, cooldowns,
-// board, claims, play history and per-flow partitions. Every name is
-// shared XOR per-flow by declaration, so a read is a union of two bags and
+// property partitions and the @world seam; a Flow owns its own PRNG, clocks,
+// cooldowns, board, claims, play history and per-flow partitions. Every name
+// is shared XOR per-flow by declaration, so a read is a union of two bags and
 // a write routes by name. No default flow, no ambient flow: OpenFlow(id)
 // is the only way in, an existing id is REPLACED, closed handles are
 // INERT, and engine-level reads of per-flow refs throw the teaching error.
+//
+// One registry per game (patterkit design/one-registry-handover.md): every
+// property bag lives in ONE ScopeRegistry, the game's (EngineOptions.Registry)
+// or, when the game passes none, the engine's own, and the engine then acts
+// as its own game. The shared @story registers under `story`, every other bag
+// that declares something under a key starting `storylets/`, which no
+// expression can name. SaveGame() carries what is NOT a property, plus the
+// registry's values only when the engine made the registry itself. @world is
+// the game's: a resolver it binds (EngineOptions.World, never saved), a scope
+// it registers in its registry, or, for a standalone engine, a self-backed
+// bag the registry stores and saves.
 //
 // Key dealing contracts, per flow, in one place:
 //   - two verbs: deal(hand) claims, peek(box, criteria) just looks; you can
@@ -137,10 +147,25 @@ namespace StoryletStudio.StoryletEngine
         public bool Log = false;
         /// <summary>Retained log cap (oldest dropped first) when Log is on.</summary>
         public int LogCap = 1000;
-        /// <summary>The host's @world resolver - the values the game owns.
-        /// Null = self-backed from the declared defaults. Engine-level, shared
-        /// by all flows, never in SaveGame().</summary>
+        /// <summary>The host's @world resolver - the values the game owns and
+        /// the story reads (and, where CanSet, writes). Engine-level, shared by
+        /// all flows, never saved: the game keeps these values. Null and no
+        /// Registry = a standalone engine self-backs @world from the declared
+        /// defaults, as a property its registry stores and saves. A game
+        /// running several engines registers @world in its registry itself
+        /// instead.</summary>
         public IScopeResolver World = null;
+        /// <summary>The game's registry: ONE per game, holding every engine's
+        /// properties except those the game keeps itself, saved once. Given
+        /// one, the engine registers its own scopes in it (@story under
+        /// `story`, every other bag under a key starting `storylets/`, and
+        /// @world if World is set), reads every other scope from it, and
+        /// SaveGame() leaves the property values to the game. @world is then
+        /// the game's to register: owned if the registry should store it,
+        /// foreign if the game keeps it. Null = the engine makes its own
+        /// registry and acts as its own game: it self-backs @world, and
+        /// SaveGame() carries the registry's values too.</summary>
+        public ScopeRegistry Registry = null;
         /// <summary>Diagnostics hook (opt-in, dev only): fired when OpenFlow
         /// REPLACES a flow that still had cards dealt (flow id, count). The
         /// behaviour is unchanged; this makes observable the host that calls
@@ -371,9 +396,9 @@ namespace StoryletStudio.StoryletEngine
     /// Flow handle from OpenFlow(id). There is no default flow and no ambient
     /// current flow; re-opening an id REPLACES it; closed handles are inert;
     /// GetProperty serves world.* and shared refs only, and a ref that
-    /// resolves per-flow throws, naming the fix. @world is never in
-    /// SaveGame() - the host saves its container, each engine saves its own
-    /// envelope.</summary>
+    /// resolves per-flow throws, naming the fix. Every property bag lives in
+    /// the game's one ScopeRegistry (EngineOptions.Registry), or in the
+    /// engine's own when it is standalone.</summary>
     public sealed class Engine
     {
         internal readonly Bundle _bundle;
@@ -580,13 +605,81 @@ namespace StoryletStudio.StoryletEngine
         /// which is what makes PreviewLoad pure.</summary>
         private readonly DeclSet _sharedDecls = new DeclSet();
 
-        /// <summary>The shared stores. Reassigned wholesale by LoadGame/Reset.</summary>
+        /// <summary>The shared stores, registered in the registry for the
+        /// engine's life. Reseeded in place by Reset and by a load that carries
+        /// values.</summary>
         internal Partition _shared;
         // @world: the host's resolver (it outlives Reset/LoadGame - the
-        // container is the host's), or a self-backed bag.
+        // container is the host's), a scope the game registered, or a
+        // self-backed scope in the engine's own registry. Read and written
+        // through the registry in every case.
         private readonly IScopeResolver _hostWorld;
-        private PropertyBag _selfWorld;
+        /// <summary>True when the engine self-backed @world (standalone, no
+        /// resolver bound).</summary>
+        private bool _selfWorld;
         internal IScopeSource WorldScope;
+
+        /// <summary>The owner label on everything this engine registers: named
+        /// in a clash error and carried on the registry's examiner rows.</summary>
+        internal const string OwnerLabel = "Storylet Engine";
+
+        /// <summary>Identity: storylets property names are case-significant as
+        /// authored.</summary>
+        private static readonly Func<string, string> Identity = n => n;
+
+        /// <summary>The game's one registry (or the engine's own, when it is
+        /// standalone).</summary>
+        internal readonly ScopeRegistry _registry;
+        /// <summary>True when the engine made the registry: SaveGame() then
+        /// carries its values.</summary>
+        private readonly bool _ownsRegistry;
+
+        // --- registry keys ------------------------------------------------------
+        //
+        // The keys this engine's bags live under. An id is escaped (`%` and `/`)
+        // so no two keys can meet. Every runtime writes the same keys: they are
+        // in the save. Owners are keyed by INTERNAL id, as the save always was,
+        // so a save survives a rename.
+
+        internal static string Esc(string id) => id.Replace("%", "%25").Replace("/", "%2F");
+        internal static string Unesc(string id) => id.Replace("%2F", "/").Replace("%25", "%");
+        internal static string SharedKey(string kind, string id) => $"storylets/{kind}/{Esc(id)}";
+        internal static string FlowPrefix(string flowId) => $"storylets/flow/{Esc(flowId)}/";
+        internal static string FlowKey(string flowId, string kind, string id = null)
+        {
+            return kind == "story" ? FlowPrefix(flowId) + "story" : $"{FlowPrefix(flowId)}{kind}/{Esc(id)}";
+        }
+
+        /// <summary>Every OTHER scope in the registry, as an eval context sees it
+        /// (instance keys left out), and the registry's quality channel. Rebuilt
+        /// only when the registry's set of scopes moves (its Revision): the
+        /// values the sources read stay live.</summary>
+        internal sealed class RegistryScopes
+        {
+            public readonly Dictionary<string, IScopeSource> Scopes = new Dictionary<string, IScopeSource>();
+            public Func<string, string, List<string>> Qualities;
+        }
+
+        private int _viewRevision = -1;
+        private RegistryScopes _view = new RegistryScopes();
+
+        internal RegistryScopes RegistryView()
+        {
+            if (_registry.Revision != _viewRevision)
+            {
+                var ctx = _registry.ToEvalContext();
+                var view = new RegistryScopes { Qualities = ctx.Qualities };
+                // An instance key (`storylets/deck/x`, another engine's) is no
+                // expression token.
+                foreach (var pair in ctx.Scopes)
+                {
+                    if (!pair.Key.Contains("/")) view.Scopes[pair.Key] = pair.Value;
+                }
+                _view = view;
+                _viewRevision = _registry.Revision;
+            }
+            return _view;
+        }
 
         private readonly OrderedMap<string, Flow> _flows = new OrderedMap<string, Flow>();
         private readonly List<Action<string, TraceEvent>> _engineTraceHandlers = new List<Action<string, TraceEvent>>();
@@ -617,7 +710,9 @@ namespace StoryletStudio.StoryletEngine
             return new PropertyBag(decls, n => n, pathPrefix);
         }
 
-        private sealed class SelfWorldScope : IScopeSource
+        /// <summary>@world as an expression reads it: through the registry, by
+        /// the names as authored.</summary>
+        private sealed class WorldSource : IScopeSource
         {
             public Engine Owner;
             public StoryletValue Get(string name) => Owner.WorldGet(name);
@@ -631,6 +726,8 @@ namespace StoryletStudio.StoryletEngine
             _onReplacedFlow = opts.OnReplacedFlow;
             if (opts.Log) _logCap = opts.LogCap;
             _hostWorld = opts.World;
+            _registry = opts.Registry ?? new ScopeRegistry();
+            _ownsRegistry = opts.Registry == null;
             // The value scope's segments come off the whole bundle at once (a
             // tag gameId is only unique within its group), so they are built
             // before the walk rather than tag by tag inside it.
@@ -696,8 +793,8 @@ namespace StoryletStudio.StoryletEngine
                     }
                 }
             }
+            WorldScope = new WorldSource { Owner = this };
             InitShared();
-            WorldScope = new SelfWorldScope { Owner = this };
         }
 
         internal List<PropertyDecl> HandDecls(Hand hand)
@@ -714,32 +811,85 @@ namespace StoryletStudio.StoryletEngine
             return hand.Properties ?? new List<PropertyDecl>();
         }
 
-        /// <summary>Build the shared stores and the @world seam. The bags are
-        /// KEYED by internal id and ADDRESSED by gameId; see AddressOf.</summary>
+        /// <summary>Build the shared stores and register them and @world. Once,
+        /// for the engine's life: Reset and loads reseed the bags in place, so
+        /// the registry never sees them come and go. The bags are KEYED by
+        /// internal id and ADDRESSED by gameId; see AddressOf.</summary>
         private void InitShared()
         {
-            var shared = new Partition { Story = BagFromDecls(Half("story", _bundle.Story.Properties, true), "story.") };
+            var shared = new Partition { Story = BagFromDecls(_sharedDecls.Story, "story.") };
             string At(string kind, string id) => AddressOf(kind, id) + ".";
-            foreach (var box in _bundle.Boxes)
-            {
-                shared.Box.Set(box.Id, BagFromDecls(Half("box", box.Properties, true), At("box", box.Id)));
-                foreach (var deck in box.Decks) shared.Deck.Set(deck.Id, BagFromDecls(Half("deck", deck.Properties, true), At("deck", deck.Id)));
-                foreach (var hand in box.Hands) shared.Hand.Set(hand.Id, BagFromDecls(Half("hand", HandDecls(hand), true), At("hand", hand.Id)));
-                foreach (var group in box.TagGroups)
-                    foreach (var tag in group.Tags)
-                        shared.Value.Set(tag.Id, BagFromDecls(Half("value", tag.Properties ?? new List<PropertyDecl>(), true), At("value", tag.Id)));
-            }
+            foreach (var pair in _sharedDecls.Box) shared.Box.Set(pair.Key, BagFromDecls(pair.Value, At("box", pair.Key)));
+            foreach (var pair in _sharedDecls.Deck) shared.Deck.Set(pair.Key, BagFromDecls(pair.Value, At("deck", pair.Key)));
+            foreach (var pair in _sharedDecls.Hand) shared.Hand.Set(pair.Key, BagFromDecls(pair.Value, At("hand", pair.Key)));
+            foreach (var pair in _sharedDecls.Value) shared.Value.Set(pair.Key, BagFromDecls(pair.Value, At("value", pair.Key)));
             _shared = shared;
-            if (_hostWorld == null)
+
+            var reg = _registry;
+            var registered = new List<string>();
+            try
             {
-                // Standalone: self-backed from the declared defaults,
-                // DECLARATIONS AND ALL. Still FOREIGN in spirit - never in
-                // SaveGame(); a host that wants @world to persist saves the
-                // container itself. The bag keeps Writable == false so an
-                // examiner still reads it there, and the kernel lets a host
-                // write past it, which is what the game's own surface passes.
-                _selfWorld = BagFromDecls(_bundle.World.Properties, "world.");
+                // `story` is this engine's token whether or not the bundle
+                // declares a shared @story property: registering it is what
+                // makes a clash show at once. Claims values the game loaded
+                // first.
+                reg.MountOwned("story", shared.Story, OwnerLabel);
+                registered.Add("story");
+                foreach (var kind in OwnedScopes)
+                {
+                    foreach (var pair in KindOf(shared, kind))
+                    {
+                        if (pair.Value.Declarations().Count == 0) continue; // holds nothing: not registered
+                        reg.MountOwned(SharedKey(kind, pair.Key), pair.Value, OwnerLabel);
+                        registered.Add(SharedKey(kind, pair.Key));
+                    }
+                }
+                if (_hostWorld != null)
+                {
+                    // The game keeps these values: an external scope, never saved.
+                    reg.DefineForeign("world", _hostWorld, _bundle.World.Properties,
+                        new ForeignScopeOptions { Normalise = Identity, Owner = OwnerLabel });
+                    registered.Add("world");
+                }
+                else if (_ownsRegistry && !reg.Has("world"))
+                {
+                    // Standalone: self-backed from the declared defaults,
+                    // DECLARATIONS AND ALL, as a property the registry stores and
+                    // SAVES (only a resolver the game binds is external). The bag
+                    // keeps Writable == false so an examiner still reads it there,
+                    // and the kernel lets a host write past it, which is what the
+                    // game's own surface passes.
+                    reg.DefineOwned("world", _bundle.World.Properties,
+                        new OwnedScopeOptions { Normalise = Identity, PathPrefix = "world.", Owner = OwnerLabel });
+                    registered.Add("world");
+                    _selfWorld = true;
+                }
+                // Given the game's registry and no resolver, @world is the game's
+                // to register: this engine registers nothing for it.
             }
+            catch (Exception)
+            {
+                // A clash leaves the game's registry as it was.
+                foreach (var key in registered) reg.Remove(key, keep: true);
+                throw;
+            }
+        }
+
+        /// <summary>Every shared bag back to its declared defaults, in place (the
+        /// registry keeps them registered), the self-backed @world
+        /// included.</summary>
+        private void ReseedShared()
+        {
+            _shared.Story.Reseed(_sharedDecls.Story);
+            foreach (var kind in OwnedScopes)
+            {
+                var decls = _sharedDecls.Kind(kind);
+                foreach (var pair in KindOf(_shared, kind))
+                {
+                    pair.Value.Reseed(decls.GetOrDefault(pair.Key) ?? new List<PropertyDecl>());
+                }
+            }
+            if (_selfWorld) _registry.ReseedOwned("world", _bundle.World.Properties ?? new List<PropertyDecl>());
         }
 
         private void InitLadders()
@@ -783,9 +933,13 @@ namespace StoryletStudio.StoryletEngine
 
         // --- the @world seam ---------------------------------------------------
 
+        /// <summary>@world, read through the registry by name (the scope's own
+        /// normalisation), so a @world the game registered folded to lower case
+        /// still answers the names as authored. Null when nothing answers,
+        /// including a game's registry with no @world registered.</summary>
         internal StoryletValue WorldGet(string name)
         {
-            return _hostWorld != null ? _hostWorld.Get(name) : _selfWorld.Get(name);
+            return _registry.Get("world", name);
         }
 
         /// <summary>The story's promise about a @world value (Writable == false on its
@@ -800,17 +954,17 @@ namespace StoryletStudio.StoryletEngine
 
         internal bool WorldCanSet => _hostWorld != null ? _hostWorld.CanSet : true;
 
-        /// <summary>The @world WRITE seam. host: true says the caller is the GAME's
-        /// own surface - SetProperty and the tooling built on it - which the shared
-        /// kernel lets past a Writable == false (scoperegistry 0.6.0): that flag is
-        /// the story's promise, not the game's. The story's refusal is WorldReadOnly,
-        /// asked before this seam is reached. A BOUND resolver is opaque - it takes a
-        /// name and a value and keeps whatever rule the game has - so the flag only
-        /// ever reaches the self-backed bag.</summary>
+        /// <summary>The @world WRITE seam, through the registry. host: true says the
+        /// caller is the GAME's own surface - SetProperty and the tooling built on
+        /// it - which the shared kernel lets past a Writable == false (scoperegistry
+        /// 0.6.0): that flag is the story's promise, not the game's. The story's
+        /// refusal is WorldReadOnly, asked before this seam is reached. A BOUND
+        /// resolver is opaque - it takes a name and a value and keeps whatever rule
+        /// the game has - so a write to it always passes host, and the flag only
+        /// ever matters to a stored @world (self-backed, or the game's own).</summary>
         internal void WorldSet(string name, StoryletValue value, bool host = false)
         {
-            if (_hostWorld != null) _hostWorld.Set(name, value);
-            else _selfWorld.Set(name, value, host: host);
+            _registry.Set("world", name, value, host: _hostWorld != null || host);
         }
 
         // --- flow management (Patter's surface, name for name) ------------------
@@ -821,7 +975,15 @@ namespace StoryletStudio.StoryletEngine
         /// "main" is a caller convention, not an engine rule.</summary>
         public Flow OpenFlow(string id, OpenFlowOptions opts = null)
         {
-            opts = opts ?? new OpenFlowOptions();
+            return Open(id, opts ?? new OpenFlowOptions(), false);
+        }
+
+        /// <summary>OpenFlow, and LoadGame's rebuild. `claim` says the new flow's
+        /// bags take the values the registry holds for them (a load); a fresh
+        /// open is a reset of that name, so anything waiting for it is discarded
+        /// first.</summary>
+        private Flow Open(string id, OpenFlowOptions opts, bool claim)
+        {
             // The world's claims as they stand WITHOUT this name, taken before
             // the replace: a resume competes with the other flows, never with
             // the flow it is replacing (which is about to release everything).
@@ -835,6 +997,7 @@ namespace StoryletStudio.StoryletEngine
                 if (dealt > 0) _onReplacedFlow?.Invoke(id, dealt);
                 existing.MarkClosed();
             }
+            if (!claim) _registry.DiscardParked(FlowPrefix(id));
             var flow = new Flow(this, id, opts.Seed ?? _seed);
             _flows.Set(id, flow);
             if (opts.Restore != null)
@@ -881,16 +1044,33 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>Close every flow and reseed the shared state to its defaults
         /// (the self-backed @world included; a host-bound @world is the host's
-        /// and is not touched).</summary>
+        /// and is not touched, and so is one the game registered).</summary>
         public void Reset()
         {
-            foreach (var pair in _flows) pair.Value.MarkClosed();
-            _flows.Clear();
-            _spent.Clear();
+            DropRun(null);
+            ReseedShared();
+            // Values loaded for bags nobody has claimed yet are the old run's
+            // too: a flow opened after the reset must not pick them up. Other
+            // engines' stay.
+            _registry.DiscardParked("storylets/");
+        }
+
+        /// <summary>End the run: clear the log, close every flow, forget spent
+        /// cards. Each flow's bags leave the registry; `keepFlows` names the
+        /// flows whose values are kept there for the flow that replaces them (a
+        /// load into the game's registry).</summary>
+        private void DropRun(HashSet<string> keepFlows)
+        {
             // The log is a run-lifetime utility and is not saved; a reset is a
             // new run.
             _engineLog.Clear();
-            InitShared();
+            foreach (var pair in _flows)
+            {
+                pair.Value.ReleaseBags(keepFlows != null && keepFlows.Contains(pair.Key));
+                pair.Value.MarkClosed();
+            }
+            _flows.Clear();
+            _spent.Clear();
         }
 
         // --- shared scarcity (design/shared-scarcity.md) --------------------------
@@ -978,6 +1158,14 @@ namespace StoryletStudio.StoryletEngine
                 if (wv == null) throw new StoryletError($"no property at \"{path}\"");
                 return wv;
             }
+            // Another engine's game-wide scope (`patter.gold`): every engine
+            // reads every scope.
+            if (IsOtherScope(parts))
+            {
+                var ov = _registry.Get(parts[0], parts[1]);
+                if (ov == null) throw new StoryletError($"no property at \"{path}\"");
+                return ov;
+            }
             if (parts.Length == 2 && parts[0] == "story")
             {
                 var sv = _shared.Story.Get(parts[1]);
@@ -1036,6 +1224,11 @@ namespace StoryletStudio.StoryletEngine
                 WorldSet(parts[1], value, host: true);
                 return;
             }
+            if (IsOtherScope(parts))
+            {
+                _registry.Set(parts[0], parts[1], value, host: true);
+                return;
+            }
             // Reuse the read-side routing: a per-flow or unknown ref throws the
             // same message before anything is written, and a legacy address says
             // so exactly once - the read did the diagnosing, so this second
@@ -1057,7 +1250,15 @@ namespace StoryletStudio.StoryletEngine
             bag.Set(parts[parts.Length - 1], value, silent: true, reason: "host setProperty", host: true);
         }
 
-        private static OrderedMap<string, PropertyBag> KindOf(Partition p, string kind)
+        /// <summary>A two-part path whose token is a scope another engine (or the
+        /// game) registered: `patter.gold`. @world and @story are this engine's
+        /// own and route as they always did.</summary>
+        internal bool IsOtherScope(string[] parts)
+        {
+            return parts.Length == 2 && parts[0] != "world" && parts[0] != "story" && _registry.Has(parts[0]);
+        }
+
+        internal static OrderedMap<string, PropertyBag> KindOf(Partition p, string kind)
         {
             switch (kind)
             {
@@ -1167,8 +1368,13 @@ namespace StoryletStudio.StoryletEngine
 
         // --- persistence (schema 4) ----------------------------------------------
 
-        /// <summary>The whole engine, one envelope: the shared partitions once,
-        /// then every live flow keyed by its id. @world is NEVER here.</summary>
+        /// <summary>The whole engine's NON-property state, one envelope: the
+        /// spent cards once, then every live flow (board, clocks, cooldowns,
+        /// PRNG, play log) keyed by its id. The property values are the
+        /// registry's: a standalone engine (one that made its own registry)
+        /// carries them here under Registry, self-backed @world included; a game
+        /// that passed a registry saves it once itself, beside each engine's
+        /// envelope.</summary>
         public SaveEnvelope SaveGame()
         {
             var envelope = new SaveEnvelope
@@ -1181,13 +1387,9 @@ namespace StoryletStudio.StoryletEngine
                     Hash = _bundle.Content.Hash,
                 },
             };
-            envelope.Shared.Props.Story = _shared.Story.Save();
-            foreach (var pair in _shared.Box) envelope.Shared.Props.Box.Set(pair.Key, pair.Value.Save());
-            foreach (var pair in _shared.Deck) envelope.Shared.Props.Deck.Set(pair.Key, pair.Value.Save());
-            foreach (var pair in _shared.Hand) envelope.Shared.Props.Hand.Set(pair.Key, pair.Value.Save());
-            foreach (var pair in _shared.Value) envelope.Shared.Props.Value.Set(pair.Key, pair.Value.Save());
+            if (_ownsRegistry) envelope.Registry = _registry.Save();
             envelope.Shared.Spent = SpentIds();
-            foreach (var pair in _flows) envelope.Flows.Set(pair.Key, pair.Value.Snapshot());
+            foreach (var pair in _flows) envelope.Flows.Set(pair.Key, pair.Value.Snapshot(false));
             return envelope;
         }
 
@@ -1196,12 +1398,15 @@ namespace StoryletStudio.StoryletEngine
         /// OpenFlow's Restore option takes back (design/engine-server.md 4.1).
         /// Saving the whole envelope to park one of four hundred players is
         /// wrong in cost and in meaning. Throws for a name that is not open - a
-        /// closed flow has nothing left to save.</summary>
+        /// closed flow has nothing left to save.
+        ///
+        /// Parked whole, properties included: a parked flow's bags leave the
+        /// registry when it closes, so its values have to travel with it.</summary>
         public FlowSave SaveFlow(string id)
         {
             var flow = _flows.GetOrDefault(id);
             if (flow == null) throw new StoryletError($"unknown flow \"{id}\"");
-            return flow.Snapshot();
+            return flow.Snapshot(true);
         }
 
         /// <summary>What LoadGame(envelope) would do that is not a plain
@@ -1230,6 +1435,16 @@ namespace StoryletStudio.StoryletEngine
         /// its blob. Handles held from before the load are closed and inert
         /// (Patter's rule); take fresh ones from GetFlow()/Flows().
         ///
+        /// Takes storylets/save@2 and storylets/save@1 envelopes. Property
+        /// values come from the registry. An envelope that carries them (a
+        /// standalone engine's, or a version 1 envelope) has them walked,
+        /// cleaned, and moved into the registry here, over fresh defaults.
+        /// Otherwise the game loads its registry itself, before or after this
+        /// call: each flow's bags are handed back to the registry with their
+        /// values, and the restored flows claim them. The report then covers
+        /// only what this envelope holds; the registry's own load rule applies
+        /// to the values.
+        ///
         /// Returns the report PreviewLoad would have given for this envelope:
         /// the drift tolerance that makes a load forgiving is what hides its
         /// cost, so the cost comes back with the load whether or not anybody
@@ -1238,14 +1453,24 @@ namespace StoryletStudio.StoryletEngine
         {
             AssertSameProject(envelope);
             var plan = PlanLoad(envelope);
-            Reset();
-            _shared.Story.Load(plan.Shared.Story);
-            LoadKind(_shared.Box, plan.Shared.Box);
-            LoadKind(_shared.Deck, plan.Shared.Deck);
-            LoadKind(_shared.Hand, plan.Shared.Hand);
-            LoadKind(_shared.Value, plan.Shared.Value);
+            if (plan.Sections != null)
+            {
+                // The envelope carries the values: every bag of this engine back
+                // to its defaults, then the cleaned values over them.
+                Reset();
+                // The engine's own registry takes the save wholesale. A game's
+                // registry may hold values the game loaded for other engines,
+                // still waiting: add to those, never replace them.
+                _registry.Load(plan.Sections, keepParked: !_ownsRegistry);
+            }
+            else
+            {
+                var keep = new HashSet<string>();
+                foreach (var pair in plan.Flows) keep.Add(pair.Key);
+                DropRun(keep);
+            }
             foreach (var id in plan.Spent) _spent.Add(id);
-            foreach (var pair in plan.Flows) OpenFlow(pair.Key).Restore(pair.Value);
+            foreach (var pair in plan.Flows) Open(pair.Key, new OpenFlowOptions(), true).Restore(pair.Value);
             return plan.Report;
         }
 
@@ -1255,16 +1480,6 @@ namespace StoryletStudio.StoryletEngine
             {
                 throw new StoryletError(
                     $"save is for project \"{envelope.Content.Project}\", bundle is \"{_bundle.Content.Project}\"");
-            }
-        }
-
-        private static void LoadKind(
-            OrderedMap<string, PropertyBag> stores,
-            OrderedMap<string, OrderedMap<string, StoryletValue>> saved)
-        {
-            foreach (var pair in saved)
-            {
-                stores.GetOrDefault(pair.Key)?.Load(pair.Value);
             }
         }
 
@@ -1292,9 +1507,97 @@ namespace StoryletStudio.StoryletEngine
         private sealed class LoadPlan
         {
             public LoadReport Report;
-            public PropsPartition Shared = new PropsPartition();
+            /// <summary>The cleaned property values to move into the registry,
+            /// when the envelope carries any; null when it does not.</summary>
+            public OrderedMap<string, OrderedMap<string, StoryletValue>> Sections;
             public List<string> Spent = new List<string>();
             public OrderedMap<string, FlowSave> Flows = new OrderedMap<string, FlowSave>();
+        }
+
+        /// <summary>A registry save's sections sorted back into partitions, for
+        /// the load walk: the shared ones, each flow's (only the flows the save
+        /// restores; the rest are dropped), and everything that is not this
+        /// engine's, passed through.</summary>
+        private sealed class MovedValues
+        {
+            public PropsPartition Shared = new PropsPartition();
+            public Dictionary<string, PropsPartition> Flows = new Dictionary<string, PropsPartition>();
+            public OrderedMap<string, OrderedMap<string, StoryletValue>> Rest =
+                new OrderedMap<string, OrderedMap<string, StoryletValue>>();
+        }
+
+        private static bool IsOwnedKind(string kind)
+        {
+            return kind == "box" || kind == "deck" || kind == "hand" || kind == "value";
+        }
+
+        private static MovedValues PartitionsFromSections(
+            OrderedMap<string, OrderedMap<string, StoryletValue>> sections, HashSet<string> flowIds)
+        {
+            var moved = new MovedValues();
+            PropsPartition FlowOf(string escaped)
+            {
+                var id = Unesc(escaped);
+                if (!flowIds.Contains(id)) return null;
+                if (!moved.Flows.TryGetValue(id, out var p))
+                {
+                    p = new PropsPartition();
+                    moved.Flows[id] = p;
+                }
+                return p;
+            }
+            foreach (var pair in sections)
+            {
+                var key = pair.Key;
+                if (key == "story")
+                {
+                    moved.Shared.Story = pair.Value;
+                    continue;
+                }
+                if (!key.StartsWith("storylets/", StringComparison.Ordinal))
+                {
+                    moved.Rest.Set(key, pair.Value);
+                    continue;
+                }
+                // Split on "/" exactly as the JS reference's anchored patterns
+                // match: no segment may be empty or hold a "/" (an id's own "/" is
+                // escaped).
+                var seg = key.Split('/');
+                if (Array.IndexOf(seg, "") >= 0) continue;
+                if (seg.Length == 3 && IsOwnedKind(seg[1]))
+                {
+                    SavedKind(moved.Shared, seg[1]).Set(Unesc(seg[2]), pair.Value);
+                }
+                else if (seg.Length == 4 && seg[1] == "flow" && seg[3] == "story")
+                {
+                    var p = FlowOf(seg[2]);
+                    if (p != null) p.Story = pair.Value;
+                }
+                else if (seg.Length == 5 && seg[1] == "flow" && IsOwnedKind(seg[3]))
+                {
+                    var p = FlowOf(seg[2]);
+                    if (p != null) SavedKind(p, seg[3]).Set(Unesc(seg[4]), pair.Value);
+                }
+                // Any other `storylets/` key is not a bag this engine has: dropped.
+            }
+            return moved;
+        }
+
+        /// <summary>A cleaned partition as registry sections, keyed the way its
+        /// bags register. Empty sections are left out: they would load nothing,
+        /// and a section for a bag that never registers would wait in the
+        /// registry for ever.</summary>
+        private static void SectionsOf(PropsPartition p, Func<string, string, string> keyOf,
+                                       OrderedMap<string, OrderedMap<string, StoryletValue>> outSections)
+        {
+            if (p.Story.Count > 0) outSections.Set(keyOf("story", null), p.Story);
+            foreach (var kind in OwnedScopes)
+            {
+                foreach (var pair in SavedKind(p, kind))
+                {
+                    if (pair.Value.Count > 0) outSections.Set(keyOf(kind, pair.Key), pair.Value);
+                }
+            }
         }
 
         /// <summary>The sort key separator: a UNIT SEPARATOR, because it cannot
@@ -1421,22 +1724,82 @@ namespace StoryletStudio.StoryletEngine
         /// lets PreviewLoad and LoadGame share it.</summary>
         private LoadPlan PlanLoad(SaveEnvelope envelope)
         {
+            var schema = envelope.Schema;
+            if (schema != Model.SAVE_SCHEMA && schema != Model.SAVE_SCHEMA_V1)
+            {
+                throw new StoryletError($"unsupported save schema: {schema ?? "undefined"}");
+            }
             var draft = new ReportDraft();
             var plan = new LoadPlan();
-            plan.Shared = WalkPartition(_sharedDecls, envelope.Shared?.Props, null, draft);
+            var envelopeFlows = envelope.Flows ?? new OrderedMap<string, FlowSave>();
+            // Where the property values are, if this envelope has them: a
+            // version 1 envelope's partitions, or a standalone engine's registry
+            // sections.
+            var flowIds = new HashSet<string>(envelopeFlows.Keys);
+            MovedValues moved = null;
+            if (schema == Model.SAVE_SCHEMA_V1)
+            {
+                moved = new MovedValues { Shared = envelope.Shared?.Props ?? new PropsPartition() };
+                foreach (var pair in envelopeFlows) moved.Flows[pair.Key] = pair.Value.Props ?? new PropsPartition();
+            }
+            else if (envelope.Registry != null)
+            {
+                moved = PartitionsFromSections(envelope.Registry, flowIds);
+            }
+            var shared = moved != null ? WalkPartition(_sharedDecls, moved.Shared, null, draft) : null;
             foreach (var cardId in envelope.Shared?.Spent ?? new List<string>())
             {
                 if (_cardsById.ContainsKey(cardId)) plan.Spent.Add(cardId);
                 else draft.DroppedSpent.Add(cardId);
             }
+            OrderedMap<string, OrderedMap<string, StoryletValue>> sections = null;
+            if (moved != null)
+            {
+                sections = new OrderedMap<string, OrderedMap<string, StoryletValue>>();
+                foreach (var pair in moved.Rest) sections.Set(pair.Key, pair.Value);
+                SectionsOf(shared, (kind, id) => kind == "story" ? "story" : SharedKey(kind, id), sections);
+            }
             var ids = new List<string>();
-            foreach (var pair in envelope.Flows)
+            foreach (var pair in envelopeFlows)
             {
                 ids.Add(pair.Key);
-                plan.Flows.Set(pair.Key, PlanFlowRestore(pair.Key, pair.Value, null, draft));
+                var saved = pair.Value;
+                if (moved != null)
+                {
+                    // The walk sees this flow's values wherever they came from;
+                    // the caller's blob is left as it was (PreviewLoad is pure).
+                    moved.Flows.TryGetValue(pair.Key, out var props);
+                    saved = WithProps(saved, props ?? new PropsPartition());
+                }
+                var clean = PlanFlowRestore(pair.Key, saved, null, draft);
+                if (sections != null && clean.Props != null)
+                {
+                    // The flow's values go into the registry, where its bags claim
+                    // them; the restored flow itself carries none.
+                    var flowId = pair.Key;
+                    SectionsOf(clean.Props, (kind, owner) => FlowKey(flowId, kind, owner), sections);
+                    clean.Props = null;
+                }
+                plan.Flows.Set(pair.Key, clean);
             }
+            plan.Sections = sections;
             plan.Report = FinishReport(_bundle.Content, envelope.Content, ids, draft);
             return plan;
+        }
+
+        /// <summary>A shallow copy of a flow blob with other property
+        /// partitions: the walk reads the blob and never writes it.</summary>
+        private static FlowSave WithProps(FlowSave saved, PropsPartition props)
+        {
+            return new FlowSave
+            {
+                Props = props,
+                Turns = saved.Turns,
+                Prng = saved.Prng,
+                Cooldowns = saved.Cooldowns,
+                Board = saved.Board,
+                PlayLog = saved.PlayLog,
+            };
         }
 
         /// <summary>One flow's walk. otherClaims is the rest of the world's
@@ -1446,7 +1809,9 @@ namespace StoryletStudio.StoryletEngine
         private FlowSave PlanFlowRestore(string id, FlowSave saved, Dictionary<string, int> otherClaims, ReportDraft draft)
         {
             var clean = new FlowSave { Prng = saved.Prng };
-            clean.Props = WalkPartition(_flowDecls, saved.Props, id, draft);
+            // A flow blob without properties (a version 2 envelope's: the
+            // registry has them) has nothing to walk.
+            clean.Props = saved.Props != null ? WalkPartition(_flowDecls, saved.Props, id, draft) : null;
             foreach (var pair in saved.Turns) clean.Turns.Set(pair.Key, pair.Value);
             foreach (var record in saved.PlayLog)
             {

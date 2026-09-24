@@ -1,6 +1,9 @@
 // The save-file string boundary for the C++ core: the .storyletsave FILE
 // (storylets/savefile@1 - the HOST's wrapper: the engine's envelope plus, when
-// the host keeps one, its @world container; design/flows.md).
+// the host keeps one, its @world container; design/flows.md). The envelope is
+// storylets/save@2, written in the TypeScript reference's key order (schema,
+// content, registry when the engine owns its registry, shared, flows);
+// storylets/save@1 envelopes still read.
 //
 // Pure std, self-sufficient, and PUBLIC - the parity member every runtime
 // carries under the same two names (serializeState / deserializeState; JS
@@ -109,7 +112,12 @@ namespace storylets
             inline void WriteFlow(std::string& Out, const FlowSave& F, int Depth)
             {
                 Out += "{\n";
-                Indent(Out, Depth + 1); Out += "\"props\": "; WritePartition(Out, F.props, Depth + 1); Out += ",\n";
+                // Only a parked flow (saveFlow) and a version 1 envelope carry
+                // props; a version 2 envelope's flows leave them to the registry.
+                if (F.props.has_value())
+                {
+                    Indent(Out, Depth + 1); Out += "\"props\": "; WritePartition(Out, *F.props, Depth + 1); Out += ",\n";
+                }
                 Indent(Out, Depth + 1); Out += "\"turns\": "; WriteNumberMap(Out, F.turns, Depth + 1); Out += ",\n";
                 Indent(Out, Depth + 1); Out += "\"prng\": " + NumToken(static_cast<double>(F.prng)) + ",\n";
                 Indent(Out, Depth + 1); Out += "\"cooldowns\": "; WriteNumberMap(Out, F.cooldowns, Depth + 1); Out += ",\n";
@@ -165,8 +173,9 @@ namespace storylets
             {
                 // The .storyletsave FILE is the HOST's wrapper (storylets/savefile@1,
                 // design/flows.md): the engine's envelope plus the host's @world
-                // container - which for this wrapper is the engine's self-backed
-                // values, so a file round trip preserves them.
+                // container, which a bound @world needs (the engine never saves
+                // it) and a self-backed one carries twice, harmlessly: its values
+                // ride the envelope's registry section too.
                 std::string Out = "{\n";
                 Indent(Out, 1);
                 Out += "\"schema\": " + StoryletValue::JsonQuote(SAVEFILE_SCHEMA) + ",\n";
@@ -184,12 +193,23 @@ namespace storylets
                 Out += "\"hash\": " + StoryletValue::JsonQuote(Env.content.hash) + "\n";
                 Indent(Out, 2);
                 Out += "},\n";
+                if (Env.registry.has_value())
+                {
+                    // A standalone engine's registry values, keyed by registry key.
+                    Indent(Out, 2);
+                    Out += "\"registry\": ";
+                    WriteKind(Out, *Env.registry, 2);
+                    Out += ",\n";
+                }
                 Indent(Out, 2);
                 Out += "\"shared\": {\n";
-                Indent(Out, 3);
-                Out += "\"props\": ";
-                WritePartition(Out, Env.shared.props, 3);
-                Out += ",\n";
+                if (Env.shared.props.has_value())
+                {
+                    Indent(Out, 3);
+                    Out += "\"props\": ";
+                    WritePartition(Out, *Env.shared.props, 3);
+                    Out += ",\n";
+                }
                 Indent(Out, 3);
                 Out += "\"spent\": [";
                 for (size_t i = 0; i < Env.shared.spent.size(); ++i)
@@ -271,7 +291,9 @@ namespace storylets
             inline FlowSave FlowFromTree(const JsonValue& Tree)
             {
                 FlowSave F;
-                F.props = PartitionFromTree(Tree.find("props"));
+                // Absent from a version 2 envelope's flows: the registry has them.
+                const JsonValue* Props = Tree.find("props");
+                if (Props && Props->isObject()) F.props = PartitionFromTree(Props);
                 const JsonValue* Turns = Tree.find("turns");
                 if (Turns && Turns->isObject())
                 {
@@ -311,6 +333,7 @@ namespace storylets
             inline SaveEnvelope EnvelopeFromTree(const JsonValue& Tree)
             {
                 SaveEnvelope Env;
+                Env.schema = Tree.strOr("schema");
                 const JsonValue* Content = Tree.find("content");
                 if (Content && Content->isObject())
                 {
@@ -318,10 +341,14 @@ namespace storylets
                     Env.content.version = Content->strOr("version");
                     Env.content.hash = Content->strOr("hash");
                 }
+                const JsonValue* Registry = Tree.find("registry");
+                if (Registry && Registry->isObject()) Env.registry = ParseKind(Registry);
                 const JsonValue* Shared = Tree.find("shared");
                 if (Shared && Shared->isObject())
                 {
-                    Env.shared.props = PartitionFromTree(Shared->find("props"));
+                    // Version 1 only: a version 2 envelope's shared half has no props.
+                    const JsonValue* Props = Shared->find("props");
+                    if (Props && Props->isObject()) Env.shared.props = PartitionFromTree(Props);
                     const JsonValue* Spent = Shared->find("spent");
                     if (Spent && Spent->isArray())
                     {
@@ -360,14 +387,17 @@ namespace storylets
      *
      *  Throws StoryletError on a foreign or malformed file, or a save for
      *  another project - before any mutation, so a refused load leaves the
-     *  engine exactly as it was. Returns the file's @world values for the HOST
-     *  to apply: the engine never carries them (design/flows.md). */
+     *  engine exactly as it was. The envelope may be storylets/save@2 or
+     *  storylets/save@1. Returns the file's @world values for the HOST to
+     *  apply: a bound @world is the game's, and the engine never carries it
+     *  (design/flows.md). */
     inline OrderedMap<std::string, StoryletValue> loadState(Engine& engine, const JsonValue& tree)
     {
         const JsonValue* engineTree = tree.find("engine");
+        const std::string envelopeSchema = engineTree && engineTree->isObject() ? engineTree->strOr("schema") : std::string();
         if (tree.strOr("schema") != SAVEFILE_SCHEMA
             || !engineTree || !engineTree->isObject()
-            || engineTree->strOr("schema") != SAVE_SCHEMA)
+            || (envelopeSchema != SAVE_SCHEMA && envelopeSchema != SAVE_SCHEMA_V1))
         {
             throw StoryletError(std::string("not a storylets save (expected schema \"") + SAVEFILE_SCHEMA + "\")");
         }
@@ -377,8 +407,8 @@ namespace storylets
             : OrderedMap<std::string, StoryletValue>{};
     }
 
-    /** ONE flow's blob as JSON, the same shape and the same bytes the envelope
-     *  carries per flow (design/engine-server.md 4.1). The string boundary for
+    /** ONE flow's blob as JSON, the shape the envelope carries per flow plus
+     *  the flow's props, as saveFlow parks it (design/engine-server.md 4.1). The string boundary for
      *  a host that parks a visit: Blueprint has no FlowSave struct, and a
      *  parked visit is stored and shipped as text anyway. */
     inline std::string serializeFlow(const FlowSave& flow)
@@ -412,6 +442,38 @@ namespace storylets
         {
             throw StoryletError("not valid JSON");
         }
+    }
+
+    /** A registry's values (ScopeRegistry::save()) as pretty-printed JSON,
+     *  keyed by registry key, the shape a standalone envelope carries under
+     *  `registry`. The game's half of a combined save: a game that passes its
+     *  one registry to several engines saves it once with this, beside each
+     *  engine's envelope. */
+    inline std::string saveRegistry(const ScopeRegistry& registry)
+    {
+        std::string out;
+        savedetail::WriteKind(out, registry.save(), 0);
+        return out;
+    }
+
+    /** The twin of saveRegistry: lay a saveRegistry string over the registry
+     *  (ScopeRegistry::load, a whole restore), before or after the engines
+     *  load their envelopes. Values for keys nobody has registered yet wait
+     *  for the bag that claims them. Throws StoryletError on malformed text or
+     *  anything but an object of sections, leaving the registry untouched. */
+    inline void loadRegistry(ScopeRegistry& registry, const std::string& json)
+    {
+        JsonValue tree;
+        try
+        {
+            tree = JsonParser(json).parse();
+        }
+        catch (const std::exception&)
+        {
+            throw StoryletError("not valid JSON");
+        }
+        if (!tree.isObject()) throw StoryletError("not a registry save (expected an object of sections)");
+        registry.load(savedetail::ParseKind(&tree));
     }
 
     /** A LoadReport as JSON (design/engine-server.md 4.9): the string face of

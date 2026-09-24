@@ -36,6 +36,7 @@
 #include <optional>
 #include "Storylets/StateLogger.h"
 #include "LiveLinkFixture.h"
+#include "OneRegistry.h"   // the JS one-registry.test.ts, ported
 #include "Storylets/Bundle.h"
 #include "Storylets/DescribeBundle.h"   // the bundle inspector compiles under -Wall -Wextra
 #include "Storylets/Dialect.h"
@@ -1182,8 +1183,9 @@ static int runScripted(const JsonValue& cases)
  *  be byte-identical. This can only be checked here now that serializeState /
  *  deserializeState live in the pure core (Storylets/Save.h); while they were
  *  UE-only, nothing outside an Unreal build ever exercised them. Also pins the
- *  two refusals (foreign schema, malformed text) and that @world rides the
- *  FILE, never the envelope. */
+ *  two refusals (foreign schema, malformed text). A standalone engine's
+ *  envelope carries its self-backed @world in its registry section, and the
+ *  file carries the @world values beside it for a host that binds its own. */
 static int runSave(const JsonValue& cases)
 {
     if (cases.arr.empty()) return 0;
@@ -1259,8 +1261,6 @@ static int runSave(const JsonValue& cases)
             if (!sawStory) fail("save", name, "the state logger's snapshot carried no story paths");
         }
 
-        // The ENVELOPE never carries @world: strip the file's world half and
-        // the restored engine falls back to the declared defaults.
         bool refusedForeign = false;
         Engine other(bundle, EngineOptions{});
         try { deserializeState(other, std::string("{\"schema\":\"patter/save@0\"}")); }
@@ -1552,6 +1552,8 @@ int main(int argc, char** argv)
         int sv = runSave(peek);
         size_t liveTotal = 0;
         size_t live = runLiveLink(path, liveLinkDump, liveTotal);
+        const oneregistry::Result oneRegistry = oneregistry::Run();
+        for (const std::string& f : oneRegistry.failures) fail("one-registry", "engine", f);
 
         std::cout << "corpus version " << version << "\n";
         std::cout << "describeBundle checks: " << d << "/1  maps: " << m << "/1  save round trip: " << sv << "/1\n";
@@ -1560,6 +1562,7 @@ int main(int argc, char** argv)
             << "  peek: " << p << "/" << peek.arr.size()
             << "  scripted: " << s << "/" << scripted.arr.size() << "\n";
         std::cout << "live-link fixture: " << live << "/" << liveTotal << " frames\n";
+        std::cout << "one registry per game: " << oneRegistry.passed << "/" << oneRegistry.total << "\n";
 
         // The expr parity corpus sits beside ours, vendored from ../expr.
         // Absent is a FAILURE, not a skip: a parity gate that quietly does

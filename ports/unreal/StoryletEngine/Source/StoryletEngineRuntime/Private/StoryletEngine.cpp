@@ -144,6 +144,28 @@ namespace
 
 UStoryletEngine* UStoryletEngine::Create(UStoryletBundle* Bundle, int32 Seed, bool bRetainLog, UStoryletWorld* World)
 {
+	return CreateOn(Bundle, nullptr, Seed, bRetainLog, World);
+}
+
+UStoryletEngine* UStoryletEngine::CreateWithRegistry(UStoryletBundle* Bundle, std::shared_ptr<storylets::ScopeRegistry> Registry,
+	int32 Seed, bool bRetainLog, UStoryletWorld* World)
+{
+	if (!Registry)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: CreateWithRegistry called with a null registry"));
+		return nullptr;
+	}
+	return CreateOn(Bundle, MoveTemp(Registry), Seed, bRetainLog, World);
+}
+
+std::shared_ptr<storylets::ScopeRegistry> UStoryletEngine::GetRegistry() const
+{
+	return IsValidEngine() ? Impl->Engine->registry() : nullptr;
+}
+
+UStoryletEngine* UStoryletEngine::CreateOn(UStoryletBundle* Bundle, std::shared_ptr<storylets::ScopeRegistry> Registry,
+	int32 Seed, bool bRetainLog, UStoryletWorld* World)
+{
 	if (!Bundle || !Bundle->GetCompiled() || !Bundle->GetCompiled()->Bundle)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: Create called with a null/uncompiled bundle"));
@@ -156,6 +178,9 @@ UStoryletEngine* UStoryletEngine::Create(UStoryletBundle* Bundle, int32 Seed, bo
 		storylets::EngineOptions Opts;
 		Opts.seed = static_cast<double>(Seed);
 		Opts.log = bRetainLog;
+		// Null: the engine makes its own registry and acts as its own game.
+		// Held in Options, so the ApplyLiveBundle rebuild lands in the same one.
+		Opts.registry = MoveTemp(Registry);
 		if (World)
 		{
 			// Held in Options too, so the ApplyLiveBundle rebuild keeps the binding.
@@ -1050,8 +1075,42 @@ bool UStoryletEngine::ApplyLiveBundle(UStoryletBundle* NewBundle, FString& OutEr
 		// refused save (another project) leaves this engine exactly as it was.
 		const storylets::SaveEnvelope Snapshot = Impl->Engine->saveGame();
 		storylets::BundlePtr NextBundle = NewBundle->GetCompiled()->Bundle;
-		std::unique_ptr<storylets::Engine> Next = std::make_unique<storylets::Engine>(NextBundle, Impl->Options);
-		Next->loadGame(Snapshot);
+		std::unique_ptr<storylets::Engine> Next;
+		if (Impl->Engine->ownsRegistry())
+		{
+			// The engine's own registry: the snapshot carries every value, and
+			// the new core makes a registry of its own to load them into.
+			Next = std::make_unique<storylets::Engine>(NextBundle, Impl->Options);
+			Next->loadGame(Snapshot);
+		}
+		else
+		{
+			// The game's registry: the snapshot carries no values, and both cores
+			// cannot hold the same keys at once. The old core hands its bags over
+			// (each leaves keeping its values) and the new one claims them as it
+			// registers. The one refusal a load makes is asked first, so a refused
+			// swap never touches the registry.
+			if (NextBundle->content.project != Impl->Bundle->content.project)
+			{
+				throw storylets::StoryletError("save is for project \"" + Impl->Bundle->content.project
+					+ "\", bundle is \"" + NextBundle->content.project + "\"");
+			}
+			Impl->Engine->releaseRegistrations(/*keep=*/true);
+			try
+			{
+				Next = std::make_unique<storylets::Engine>(NextBundle, Impl->Options);
+				Next->loadGame(Snapshot);
+			}
+			catch (...)
+			{
+				// Hand everything back: the new core's bags leave keeping their
+				// values, and the old core claims them again.
+				if (Next) Next->releaseRegistrations(/*keep=*/true);
+				Next.reset();
+				Impl->Engine->restoreRegistrations();
+				throw;
+			}
+		}
 		// The old core is about to go, and the hook we took on it with it. Drop
 		// it first so SyncCoreTraceHook below re-takes one on the NEW core:
 		// without this the engine's subscribers (Live Link among them) go quiet
