@@ -10,6 +10,17 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-24
+
+### Added
+
+- **A card can name Patter's shared properties.** A condition can read `@patter.visits` and an outcome can change `@patter.gold`, with no project setting: every engine in the family knows the others' game-wide scopes. The editor draws such a property as an ordinary pill, with a tip saying another engine owns it and checks it, because Storyletter cannot know Patter's names. A published bundle records which other engines its content names.
+
+### Changed
+
+- **The Storylet Engine 0.8.0 runs the Board.** Its engine is the one games ship with this release: one property registry per game shared with Patter, the new save format (the Board still restores snapshots saved by earlier versions), and Live Link refreshes that work in a game where Patter and the Storylet Engine share one registry.
+- **The Board says why it cannot play a project that names Patter's properties.** It runs the Storylet Engine on its own, so it cannot evaluate `@patter.visits`, and the engine now refuses such content rather than quietly reading false. The Board shows that refusal where the table would be, as it shows a build error, instead of failing without a word. Play it in a game that runs both engines.
+
 ## [0.9.1] - 2026-09-23
 
 ### Added

@@ -154,6 +154,16 @@ export function durableCardIds(bundle: Bundle): Map<string, { shared: boolean }>
   return out;
 }
 
+/** What the Board says when its engine refuses the project. The Board runs the Storylet Engine
+ *  on its own, so content naming another engine's scope (`@patter.visits`) is refused as the
+ *  flow opens; that refusal is explained in the Board's terms, with the engine's own words kept. */
+export function boardRefusal(message: string): string {
+  const other = /^this content names (@\S+?),/.exec(message)?.[1];
+  return other === undefined ? message
+    : `This project names ${other}, which another engine provides. The Board runs the Storylet Engine on its own, `
+      + `so it can only play this content in a game that runs both engines on one registry.\n\n${message}`;
+}
+
 export class Table {
   readonly engine: Engine;
   session: Flow;

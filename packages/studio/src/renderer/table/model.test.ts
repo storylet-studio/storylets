@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import { loadProjectFiles, parseProjectFiles, compileProject } from "@storylet-studio/compiler";
 import type { Bundle } from "@storylet-studio/model";
-import { Table, coerceStateInput } from "./model.js";
+import { Table, boardRefusal, coerceStateInput } from "./model.js";
 
 const exampleDir = fileURLToPath(new URL("../../../../../examples/saltmarsh.storylets", import.meta.url));
 
@@ -244,5 +244,21 @@ describe("the Board model", () => {
     expect(coerceStateInput("3")).toBe(3);
     expect(coerceStateInput("true")).toBe(true);
     expect(coerceStateInput("elder")).toBe("elder");
+  });
+});
+
+describe("a project that names another engine's scope", () => {
+  it("is refused as the Board opens it, and the Board explains why in its own terms", () => {
+    const bundle = { ...exampleBundle(), externalScopes: ["patter"] };
+    let message = "";
+    try { new Table(bundle, 0); } catch (e) { message = (e as Error).message; }
+    expect(message).toMatch(/^this content names @patter, /);
+    const shown = boardRefusal(message);
+    expect(shown.startsWith("This project names @patter, which another engine provides.")).toBe(true);
+    expect(shown.endsWith(message)).toBe(true);
+  });
+
+  it("leaves any other failure in the engine's own words", () => {
+    expect(boardRefusal("unknown box \"x\"")).toBe("unknown box \"x\"");
   });
 });

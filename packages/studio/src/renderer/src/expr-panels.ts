@@ -7,7 +7,7 @@
 
 import { mountEffectsEditor, mountExpressionEditor, renderConditionPreview, renderEffectsPreview } from "@wildwinter/expr-editor";
 import type { EditorEffect, EffectsEditorHandle, ExpressionEditorHandle } from "@wildwinter/expr-editor";
-import { storyletsDialect } from "@storylet-studio/dialect";
+import { storyletsDialect, EXTERNAL_SCOPES } from "@storylet-studio/dialect";
 import type { ConditionProperty } from "../../shared/api.js";
 import { catalogueFrom, schemaFrom, SCOPE_ORDER, storyletFunctions } from "./expr-shared.js";
 
@@ -18,6 +18,8 @@ export function previewCondition(src: string, properties: ConditionProperty[]): 
     dialect: storyletsDialect,
     catalogue: catalogueFrom(properties),
     scopeOrder: SCOPE_ORDER,
+    // Another engine's scope (`@patter.visits`) is that engine's to check: an ordinary pill.
+    otherEngineScopes: EXTERNAL_SCOPES,
   });
 }
 
@@ -51,6 +53,7 @@ export function mountCondition(host: HTMLElement, opts: {
     dialect: storyletsDialect,
     catalogue,
     scopeOrder: SCOPE_ORDER,
+    otherEngineScopes: EXTERNAL_SCOPES,
     functions: storyletFunctions(catalogue),
     mode: "tree",
     nullLabel: "always",
@@ -73,6 +76,7 @@ export function mountChanges(host: HTMLElement, opts: {
     dialect: storyletsDialect,
     catalogue,
     scopeOrder: SCOPE_ORDER,
+    otherEngineScopes: EXTERNAL_SCOPES,
     functions: storyletFunctions(catalogue),
     allowEmit: false,   // storylet changes are set-only (schema 3.7)
     onChange: (next) => opts.onChange(

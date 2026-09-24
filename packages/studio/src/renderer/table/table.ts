@@ -19,7 +19,7 @@ import { followButton, iconNode, initTooltips, metaLine, plural, staleBar, toast
 import type { IconName } from "@wildwinter/app-shell";
 import { confirmDialog } from "../src/confirm.js";
 import { colourIndex } from "../../shell/colour.js";
-import { Table, coerceStateInput, diffBoards, journalPlan } from "./model.js";
+import { Table, boardRefusal, coerceStateInput, diffBoards, journalPlan } from "./model.js";
 import { runMarks } from "./run-marks.js";
 import { playChoices, playedTail } from "./play-choices.js";
 import { setPlayRung, shows } from "../src/play-ladder.js";
@@ -174,7 +174,16 @@ async function build(): Promise<void> {
   // bundle rather than in it: the bundle deliberately does not carry the
   // setting, and this window has no other source for it.
   setPlayRung(result.play);
-  table = new Table(result.bundle, seed);
+  // A refused project (boardRefusal says when) is shown where the table would be, like a build error.
+  try { table = new Table(result.bundle, seed); }
+  catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    loadError = boardRefusal(why);
+    table = undefined;
+    toast(`The Board could not play the project: ${why}`, "error");
+    render();
+    return;
+  }
   peekBox = table.boxes()[0]?.gameId ?? "";
   for (const k of Object.keys(criteria)) delete criteria[k];
   for (const k of Object.keys(filters)) delete filters[k];
