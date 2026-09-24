@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "prepare": "git config core.hooksPath scripts/git-hooks || true",
-    "typecheck": "tsc --noEmit && npm run typecheck -w @storylet-studio/studio",
+    "typecheck": "tsc --noEmit && node scripts/typecheck-with-patter.mjs && npm run typecheck -w @storylet-studio/studio",
     "test": "vitest run",
     "bump:play": "node scripts/bump-play-version.mjs",
     "parity": "node scripts/check-runtime-api-parity.mjs",

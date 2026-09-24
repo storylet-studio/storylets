@@ -129,9 +129,18 @@ changed, because the bytes are part of the contract.
 
 ## The save envelope
 
-A running engine snapshots to a `storylets/save@1` envelope, which holds the shared state
-once, then every flow's own blob, keyed by the flow's name. Every id in it's immutable, so
-renaming things in the project doesn't break a save.
+A running engine snapshots to a `storylets/save@2` envelope, which holds what is not a
+property: what a shared one-shot spent, then every flow's own blob, keyed by the flow's name.
+Every id in it is immutable, so renaming things in the project doesn't break a save.
+
+Property values live in the game's **registry** (a `ScopeRegistry`, one per game, see
+[Running it with Patter](/play/with-patter/#one-registry)). An engine built without one makes
+its own, and then its envelope carries that registry's values under `registry`, so one call is
+still the whole run. An engine given the game's registry leaves them out, and the game saves the
+registry once, beside every engine's envelope. The keys are the same on every runtime:
+`story` for the shared `@story`, `storylets/<kind>/<id>` for a shared box, deck, hand, or
+value bag, and `storylets/flow/<flow>/story` or `storylets/flow/<flow>/<kind>/<id>` for a
+flow's own. A bag with no declared properties isn't registered.
 
 Claims aren't in it, deliberately. A claim is just "this card is on that hand right now", so
 it is read back off the boards rather than stored twice. What a shared one-shot **spent** is
@@ -139,23 +148,21 @@ durable, so that does ride the shared half.
 
 ```json5
 {
-  schema: "storylets/save@1",
+  schema: "storylets/save@2",
   content: { project: "proj_salt", version: "0.3.0", hash: "a91c..." },
-  shared: {                            // what every flow shares; no world key
-    props: {                           // the shared-flagged properties
-      story: { reputation: -1 },
-      box:   { "b_enc": { heat: 2 } },
-      deck:  {}, hand: {}, value: {},
-    },
+  registry: {                          // only when the engine made its own registry
+    story: { reputation: -1 },         // the shared-flagged properties
+    world: { gold: 120 },              // a self-backed @world
+    "storylets/box/b_enc": { heat: 2 },
+    "storylets/flow/main/deck/k_docks": { visits: 3 },   // this flow's own copies
+    "storylets/flow/main/hand/h_board": { owner: "elder" },
+    "storylets/flow/main/value/v_docks": { danger: 3 },  // tag state
+  },
+  shared: {
     spent: ["c_pixie"],                // shared one-shots taken out of the world
   },
   flows: {
     "main": {
-      props: {                         // this flow's own copies
-        story: {}, box: {}, deck: { "k_docks": { visits: 3 } },
-        hand:  { "h_board": { owner: "elder" } },
-        value: { "v_docks": { danger: 3 } },   // tag state
-      },
       turns: { "b_enc": 12 },          // per-box turn counters, per flow
       prng: 1199730143,                // mulberry32 state, uint32, per flow
       cooldowns: { "c_ambush": 15 },   // absolute next-eligible turn of that card's box
@@ -166,9 +173,15 @@ durable, so that does ride the shared half.
 }
 ```
 
-**`@world` is never in the envelope.** It's your game's state (the engine only borrows it),
-so your game saves its world once, beside the envelope
-([why](/play/world-state/#saving-it)). The `.storyletsave` FILE on disk is
+A `storylets/save@1` envelope, from before the registry held the properties, carried them as
+`props` partitions in its shared half and in each flow. Every runtime still loads one, and its
+values move into the registry as it does. `saveFlow(id)`, which parks one flow, still carries
+that flow's `props`, because a parked flow's values leave the registry when it closes.
+
+**A `@world` your game binds is never in the envelope.** It's your game's state (the engine only
+borrows it), so your game saves it once, beside the envelope
+([why](/play/world-state/#saving-it)). A self-backed `@world` is a property the engine's own
+registry stores, so it rides under `registry`. The `.storyletsave` FILE on disk is
 `storylets/savefile@1`, which is `{ schema, engine: <the envelope>, world?: <your values> }`,
 both halves in one file. Storyletter's Board writes them, every runtime reads and writes
 them, and a foreign, malformed, or wrong-project file is refused at the boundary instead of

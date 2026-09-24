@@ -1,0 +1,28 @@
+{
+  // The combined Patter + Storylet Engine proof, as its own program: it needs Patter's source
+  // from a sibling ../patter checkout. Checked by scripts/typecheck-with-patter.mjs when that
+  // checkout exists; the root tsconfig leaves this folder out.
+  "extends": "../../../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../../../..",
+    "paths": {
+      "@storylet-studio/model": ["packages/model/src/index.ts"],
+      "@storylet-studio/dialect": ["packages/dialect/src/index.ts"],
+      "@storylet-studio/compiler": ["packages/compiler/src/index.ts"],
+      "@storylet-studio/runtime": ["packages/runtime/src/index.ts"],
+      "@storylet-studio/play-helpers": ["packages/play-helpers/src/index.ts"],
+      "@storylet-studio/ops": ["packages/ops/src/index.ts"],
+      "@storylet-studio/conformance": ["packages/conformance/src/index.ts"],
+      "@wildwinter/expr": ["../expr/packages/expr/src/index.ts"],
+      "@wildwinter/expr-specificity": ["../expr/packages/expr-specificity/src/index.ts"],
+      "@wildwinter/scoperegistry": ["../expr/packages/scoperegistry/src/index.ts"],
+      "@patterkit/model": ["../patter/packages/model/src/index.ts"],
+      "@patterkit/core": ["../patter/packages/core/src/index.ts"],
+      "@patterkit/dialect": ["../patter/packages/dialect/src/index.ts"],
+      "@patterkit/compiler": ["../patter/packages/compiler/src/index.ts"],
+      "@patterkit/runtime": ["../patter/packages/runtime/src/index.ts"]
+    }
+  },
+  "include": ["."],
+  "exclude": []
+}

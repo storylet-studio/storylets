@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 
@@ -13,6 +13,17 @@ const expr = (pkg: string, entry = "index"): string | undefined => {
   return existsSync(src) ? fileURLToPath(src) : undefined;
 };
 
+// @patterkit/* live in the sibling repo github.com/wildwinter/patter. The combined proof - a
+// Patter engine and a Storylet Engine on one registry, with one save - runs against its source
+// when a `../patter` checkout exists (maintainers, CI). Without one it is left out, so a plain
+// clone still runs the whole of the rest of the suite.
+const patter = (pkg: string): string | undefined => {
+  const src = new URL(`../patter/packages/${pkg}/src/index.ts`, import.meta.url);
+  return existsSync(src) ? fileURLToPath(src) : undefined;
+};
+const PATTER_PACKAGES = ["model", "core", "dialect", "compiler", "runtime"];
+const withPatter = PATTER_PACKAGES.every((pkg) => patter(pkg) !== undefined);
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -26,6 +37,10 @@ export default defineConfig({
       ...(expr("expr") ? { "@wildwinter/expr": expr("expr")! } : {}),
       ...(expr("expr-specificity") ? { "@wildwinter/expr-specificity": expr("expr-specificity")! } : {}),
       ...(expr("scoperegistry") ? { "@wildwinter/scoperegistry": expr("scoperegistry")! } : {}),
+      ...(withPatter ? Object.fromEntries(PATTER_PACKAGES.map((pkg) => [`@patterkit/${pkg}`, patter(pkg)!])) : {}),
     },
+  },
+  test: {
+    exclude: [...configDefaults.exclude, ...(withPatter ? [] : ["packages/runtime/test/with-patter/**"])],
   },
 });

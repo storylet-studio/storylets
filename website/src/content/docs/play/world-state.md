@@ -62,7 +62,9 @@ nothing declares `isNight`. Property names are lower case (see [the format](/for
 state, and the game is one thing however many playthroughs run over it. You can hand the
 engine a resolver when you build it (`new Engine(bundle, { world: { get, set } })`), so
 conditions read your live game state directly. Or hand it nothing, and the engine backs
-`@world` itself from the declared defaults, which is fine for most games.
+`@world` itself from the declared defaults, as a property it saves, which is fine for most games.
+A game running more than one engine registers `@world` once in its registry instead, and hands
+the registry to each engine ([Running it with Patter](/play/with-patter/#one-registry)).
 
 ## Writing it from your game
 
@@ -190,12 +192,13 @@ did. `loadGame` returns a report of everything it dropped, defaulted, or reset, 
 `openFlow(id, { restore })` do the same for ONE flow, for a playthrough that steps away and
 comes back.
 
-**`@world` is deliberately not in the envelope.** It's your game's state (the engine only
-borrows it), so your game saves it, next to the envelope. That's also what makes a game that
-runs Patter and the Storylet Engine side by side safe. Both engines exclude `@world` from
-their own saves, your game saves its one world once, and nothing is written twice. The
-`.storyletsave` file format already carries both halves, and `play-helpers` ships a
-ready-made container for games with no world state of their own (see
+**A `@world` your game binds is deliberately not in the envelope.** It's your game's state (the
+engine only borrows it), so your game saves it, next to the envelope. A self-backed `@world` is
+different: nobody else holds those values, so the engine's own registry stores them and they ride
+in the save. A game running Patter and the Storylet Engine side by side keeps every property,
+`@world` included, in one registry and saves it once, so nothing is written twice. The
+`.storyletsave` file format carries a bound world's values beside the envelope, and `play-helpers`
+ships a ready-made container for games with no world state of their own (see
 [JavaScript, Save and load](/play/javascript/#save-and-load)).
 
 ## Next

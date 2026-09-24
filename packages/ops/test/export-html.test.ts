@@ -244,7 +244,7 @@ describe("the published page plays in a browser", () => {
       engine: { schema: string; content: { project: string }; flows: Record<string, unknown> };
       world: Record<string, unknown>;
     };
-    expect(saved.engine.schema).toBe("storylets/save@1");
+    expect(saved.engine.schema).toBe("storylets/save@2");
     expect(saved.engine.content.project).toBe("proj_village");
     expect(Object.keys(saved.engine.flows)).toEqual(["main"]);
     expect(saved.world).toBeDefined();

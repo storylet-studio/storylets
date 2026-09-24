@@ -20,6 +20,14 @@ jobs:
         with:
           repository: wildwinter/expr
           path: expr
+      # The combined Patter + Storylet Engine proof (packages/runtime/test/with-patter) runs
+      # against Patter's source in a sibling ../patter checkout, which vitest and
+      # scripts/typecheck-with-patter.mjs look for.
+      - name: Checkout Patter (sibling source, for the combined proof)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/patter
+          path: patter
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -27,6 +35,9 @@ jobs:
           cache-dependency-path: storylets/package-lock.json
       - run: npm ci
         working-directory: storylets
+      # Patter's compiler imports json5 and @wildwinter/toolkit from its own install.
+      - run: npm ci --ignore-scripts
+        working-directory: patter
       - run: npm run typecheck
         working-directory: storylets
       # The backstop for the pre-push hook, which is local-only and skippable with

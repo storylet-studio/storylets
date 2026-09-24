@@ -1,14 +1,14 @@
 // ---------------------------------------------------------------------------
 // Save-file plumbing over the .storyletsave file (storylets/savefile@1): the
-// HOST's file - the engine's envelope (storylets/save@1, shared partitions +
-// every flow) plus, when the host keeps one, its @world container. That is
+// HOST's file - the engine's envelope (storylets/save@2; @1 still read) plus,
+// when the host keeps one, its @world container. That is
 // "host saves its container once, each engine saves its own envelope"
 // (design/flows.md) folded into one file for the single-host case. These
 // helpers are the string boundary - a foreign or malformed blob throws
 // rather than corrupting a run.
 // ---------------------------------------------------------------------------
 
-import { SAVEFILE_SCHEMA, SAVE_SCHEMA } from "@storylet-studio/model";
+import { SAVEFILE_SCHEMA, SAVE_SCHEMA, SAVE_SCHEMA_V1 } from "@storylet-studio/model";
 import type { PropertyBag, SaveFile } from "@storylet-studio/model";
 import type { Engine } from "@storylet-studio/runtime";
 
@@ -50,7 +50,8 @@ export function saveState(engine: Engine, world?: PropertyBag): SaveFile {
  *  never touches them. */
 export function loadState(engine: Engine, file: SaveFile): PropertyBag | undefined {
   if (!file || typeof file !== "object"
-    || file.schema !== SAVEFILE_SCHEMA || file.engine?.schema !== SAVE_SCHEMA) {
+    || file.schema !== SAVEFILE_SCHEMA
+    || (file.engine?.schema !== SAVE_SCHEMA && file.engine?.schema !== SAVE_SCHEMA_V1)) {
     throw new Error(`not a storylets save (expected schema "${SAVEFILE_SCHEMA}")`);
   }
   engine.loadGame(file.engine);

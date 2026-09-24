@@ -15,10 +15,16 @@
 //     scope token): @story defaults shared; box, deck, hand and tag
 //     properties default per-flow. Every name is shared XOR per-flow, so a
 //     read is a union of two bags and a write routes by name.
-//   - @world is the game's own state: always engine-level, resolved through
-//     the host's resolver (EngineOptions.world) or a self-backed bag, and
-//     NEVER in saveGame() - the host saves its container, each engine saves
-//     its own envelope (engine-runtimes.md 3.1).
+//   - every property bag lives in ONE ScopeRegistry per game (the
+//     one-registry model): the game hands the engine its registry
+//     (EngineOptions.registry) or the engine makes its own and acts as its
+//     own game. The shared @story registers under `story`, every other bag
+//     under a key starting `storylets/`, which no expression can name.
+//     saveGame() carries what is NOT a property, plus the registry's values
+//     only when the engine made the registry itself.
+//   - @world is the game's: a resolver it binds (EngineOptions.world, never
+//     saved), a scope it registers in its registry, or, for a standalone
+//     engine, a self-backed bag the registry stores and saves.
 //   - there is no default flow and no ambient current flow: openFlow(id) is
 //     the only way in, an existing id is REPLACED (the old flow closes),
 //     and a closed flow's handle is INERT - every verb throws (Patter's
@@ -81,10 +87,11 @@ import {
 import type {
   Box, Bundle, BundleContent, Card, Deck, Expression, FlowSave, Hand, HandTemplate,
   LoadEviction, LoadProperty, LoadReport, PlayRecord, PropertyBag, PropertyDecl, PropsPartition,
-  SaveEnvelope, Tag, TagGroup,
+  SaveEnvelope, SaveEnvelopeV1, Tag, TagGroup,
 } from "@storylet-studio/model";
-import { PropertyBag as StateBag } from "@wildwinter/scoperegistry";
-import type { PropertyRow } from "@wildwinter/scoperegistry";
+import { SAVE_SCHEMA, SAVE_SCHEMA_V1 } from "@storylet-studio/model";
+import { PropertyBag as StateBag, ScopeRegistry } from "@wildwinter/scoperegistry";
+import type { PropertyRow, ScopeDeclaration } from "@wildwinter/scoperegistry";
 import { makePrng, shuffleInPlace } from "./prng.js";
 import type { Prng } from "./prng.js";
 
@@ -100,12 +107,25 @@ export interface EngineOptions {
   log?: boolean | { cap?: number };
   /**
    * The host's resolver for @world - the values the game owns and the
-   * story reads (and, where `set` is offered, writes). Omit it and the
-   * engine self-backs @world from the declared defaults. Engine-level,
-   * shared by all flows, never in saveGame(): the host saves its container
-   * once, each engine saves its own envelope (design/flows.md).
+   * story reads (and, where `set` is offered, writes). Engine-level, shared
+   * by all flows, never saved: the game keeps these values. Omit it and a
+   * standalone engine self-backs @world from the declared defaults, as a
+   * property its registry stores and saves. A game running several engines
+   * registers @world in its registry itself instead.
    */
   world?: ScopeResolver;
+  /**
+   * The game's registry: ONE per game, holding every engine's properties
+   * except those the game keeps itself, saved once. Given one, the engine
+   * registers its own scopes in it (@story under `story`, every other bag
+   * under a key starting `storylets/`, and @world if `world` is passed),
+   * reads every other scope from it, and `saveGame()` leaves the property
+   * values to the game. @world is then the game's to register: owned if the
+   * registry should store it, foreign if the game keeps it. Omit it and the
+   * engine makes its own registry and acts as its own game: it self-backs
+   * @world, and `saveGame()` carries the registry's values too.
+   */
+  registry?: ScopeRegistry;
   /**
    * Diagnostics hook (opt-in, dev tooling only): fired when `openFlow` REPLACES
    * a flow that still had cards dealt, with the flow id and how many. The
@@ -300,6 +320,67 @@ interface AskDescriptor {
   askNames: Record<string, string>;
 }
 
+/** The owner label on everything this engine registers: named in a clash
+ *  error and carried on the registry's examiner rows. */
+const OWNER = "Storylet Engine";
+
+/** Identity: storylets property names are case-significant as authored. */
+const identity = (n: string): string => n;
+
+/** The registry keys this engine's bags live under. An id is escaped (`%` and
+ *  `/`) so no two keys can meet. Every runtime writes the same keys: they are
+ *  in the save. Owners are keyed by INTERNAL id, as the save always was, so a
+ *  save survives a rename. */
+const esc = (id: string): string => id.replace(/%/g, "%25").replace(/\//g, "%2F");
+const unesc = (id: string): string => id.replace(/%2F/g, "/").replace(/%25/g, "%");
+const sharedKey = (kind: OwnedScope, id: string): string => `storylets/${kind}/${esc(id)}`;
+const flowPrefix = (flowId: string): string => `storylets/flow/${esc(flowId)}/`;
+const flowKey = (flowId: string, kind: FlaggedScope, id?: string): string =>
+  kind === "story" ? `${flowPrefix(flowId)}story` : `${flowPrefix(flowId)}${kind}/${esc(id!)}`;
+
+/** A registry section's values: registry key -> name -> value. */
+type Sections = Record<string, PropertyBag>;
+
+const emptyPartitionValues = (): PropsPartition => ({ story: {}, box: {}, deck: {}, hand: {}, value: {} });
+
+/** Sort a registry save's sections back into partitions, for the load walk:
+ *  the shared ones, each flow's (only the flows the save restores; the rest
+ *  are dropped), and everything that is not this engine's, passed through. */
+function partitionsFromSections(sections: Sections, flowIds: Set<string>): {
+  shared: PropsPartition; flows: Map<string, PropsPartition>; rest: Sections;
+} {
+  const shared = emptyPartitionValues();
+  const flows = new Map<string, PropsPartition>();
+  const rest: Sections = {};
+  const flowOf = (escaped: string): PropsPartition | undefined => {
+    const id = unesc(escaped);
+    if (!flowIds.has(id)) return undefined;
+    let p = flows.get(id);
+    if (!p) { p = emptyPartitionValues(); flows.set(id, p); }
+    return p;
+  };
+  for (const [key, values] of Object.entries(sections)) {
+    let m: RegExpExecArray | null;
+    if (key === "story") shared.story = values;
+    else if ((m = /^storylets\/(box|deck|hand|value)\/([^/]+)$/.exec(key))) shared[m[1] as OwnedScope][unesc(m[2]!)] = values;
+    else if ((m = /^storylets\/flow\/([^/]+)\/story$/.exec(key))) { const p = flowOf(m[1]!); if (p) p.story = values; }
+    else if ((m = /^storylets\/flow\/([^/]+)\/(box|deck|hand|value)\/([^/]+)$/.exec(key))) {
+      const p = flowOf(m[1]!); if (p) p[m[2] as OwnedScope][unesc(m[3]!)] = values;
+    } else if (!key.startsWith("storylets/")) rest[key] = values;
+  }
+  return { shared, flows, rest };
+}
+
+/** A cleaned partition as registry sections, keyed the way its bags register.
+ *  Empty sections are left out: they would load nothing, and a section for a
+ *  bag that never registers would wait in the registry for ever. */
+function sectionsOf(p: PropsPartition, keyOf: (kind: FlaggedScope, id?: string) => string, out: Sections): void {
+  if (Object.keys(p.story).length > 0) out[keyOf("story")] = p.story;
+  for (const kind of ["box", "deck", "hand", "value"] as const) {
+    for (const [id, values] of Object.entries(p[kind])) if (Object.keys(values).length > 0) out[keyOf(kind, id)] = values;
+  }
+}
+
 // Stores are shared-kernel bags (@wildwinter/scoperegistry, the properties
 // implementer Patter shares): identity normalisation because storylets
 // property names are case-significant as authored.
@@ -491,9 +572,21 @@ interface Internals {
    *  what the shared side WOULD hold without building a bag, which is what
    *  makes previewLoad pure. */
   sharedDecls: DeclSet;
-  /** The shared stores. Reassigned wholesale by loadGame/reset. */
+  /** The shared stores, registered in the registry for the engine's life.
+   *  Reseeded in place by reset and by a load that carries values. */
   shared: Partition;
-  /** @world: the host's resolver, or the self-backed bag's. */
+  /** The game's one registry (or the engine's own, when it is standalone). */
+  registry: ScopeRegistry;
+  /** True when the engine made the registry: `saveGame()` then carries its values. */
+  ownsRegistry: boolean;
+  /** True when the engine self-backed @world (standalone, no resolver bound). */
+  selfWorld: boolean;
+  /** Every OTHER scope in the registry, as an eval context sees it (instance
+   *  keys left out), rebuilt only when the registry's set of scopes moves. */
+  registryView: () => { scopes: EvalContext["scopes"]; qualities: EvalContext["qualities"] };
+  /** @world, read through the registry by name (the scope's own normalisation),
+   *  so a @world the game registered folded to lower case still answers the
+   *  names as authored. */
   worldResolver: ScopeResolver;
   /** The @world WRITE seam. `host` says the caller is the GAME's own surface -
    *  setProperty, the coverage harness, the CLI's --set - which the shared
@@ -793,6 +886,10 @@ export class Engine {
       flowDecls: { story: [], box: new Map(), deck: new Map(), hand: new Map(), value: new Map() },
       sharedDecls: { story: [], box: new Map(), deck: new Map(), hand: new Map(), value: new Map() },
       shared: undefined as unknown as Partition,
+      registry: opts.registry ?? new ScopeRegistry(),
+      ownsRegistry: opts.registry === undefined,
+      selfWorld: false,
+      registryView: () => view(),
       worldResolver: undefined as unknown as ScopeResolver,
       worldReadOnly: new Set<string>(),
       emitEngine: (flow, event, turn) => {
@@ -807,6 +904,20 @@ export class Engine {
       engineTracing: () => this.engineTraceHandlers.size > 0,
     };
     this.internals = internals;
+    let viewRevision = -1;
+    let viewCache: ReturnType<Internals["registryView"]> = { scopes: {}, qualities: undefined };
+    const view = (): ReturnType<Internals["registryView"]> => {
+      const reg = internals.registry;
+      if (reg.revision !== viewRevision) {
+        const ctx = reg.toEvalContext();
+        const scopes: EvalContext["scopes"] = {};
+        // An instance key (`storylets/deck/x`, another engine's) is no expression token.
+        for (const [k, v] of Object.entries(ctx.scopes)) if (!k.includes("/")) scopes[k] = v;
+        viewCache = { scopes, qualities: ctx.qualities };
+        viewRevision = reg.revision;
+      }
+      return viewCache;
+    };
 
     // The value scope's segments come off the whole bundle at once (a tag
     // gameId is only unique within its group), so they are built before the
@@ -861,32 +972,71 @@ export class Engine {
     this.initShared(this.hostWorld);
   }
 
-  /** Build the shared stores and the @world seam. `hostWorld` sticks for the
-   *  engine's lifetime; reset/loadGame rebuild the shared bags around it. */
+  /** Build the shared stores, register them and @world, and set up the @world
+   *  seam. Once, for the engine's life: reset and loads reseed the bags in
+   *  place, so the registry never sees them come and go. */
   private initShared(hostWorld?: ScopeResolver): void {
     const internals = this.internals;
+    const reg = internals.registry;
+    const worldDecls = internals.bundle.world.properties as unknown as ScopeDeclaration[];
     internals.shared = buildPartition(internals, sharedHalf);
     internals.worldReadOnly = new Set(internals.bundle.world.properties.filter((d) => d.writable === false).map((d) => d.name));
+    const registered: string[] = [];
+    try {
+      // `story` is this engine's token whether or not the bundle declares a shared
+      // @story property: registering it is what makes a clash show at once.
+      reg.mountOwned("story", internals.shared.story, { owner: OWNER }); // claims values the game loaded first
+      registered.push("story");
+      for (const kind of OWNED_SCOPES) {
+        for (const [id, bag] of internals.shared[kind]) {
+          if (bag.declarations().length === 0) continue; // holds nothing: not registered
+          reg.mountOwned(sharedKey(kind, id), bag, { owner: OWNER });
+          registered.push(sharedKey(kind, id));
+        }
+      }
+      if (hostWorld !== undefined) {
+        // The game keeps these values: an external scope, never saved.
+        reg.defineForeign("world", hostWorld, worldDecls, { normalise: identity, owner: OWNER });
+        registered.push("world");
+      } else if (internals.ownsRegistry && !reg.has("world")) {
+        // Standalone: self-backed from the declared defaults, DECLARATIONS AND
+        // ALL, as a property the registry stores and SAVES (only a resolver the
+        // game binds is external). The bag keeps `writable: false` so an
+        // examiner still reads it there, and the kernel lets a `{ host: true }`
+        // write past it, which is what the game's own surface passes.
+        reg.defineOwned("world", worldDecls, { normalise: identity, pathPrefix: "world.", owner: OWNER });
+        registered.push("world");
+        internals.selfWorld = true;
+      }
+      // Given the game's registry and no resolver, @world is the game's to
+      // register: this engine registers nothing for it.
+    } catch (e) {
+      for (const k of registered) reg.remove(k, { keep: true }); // a clash leaves the game's registry as it was
+      throw e;
+    }
+    internals.worldResolver = {
+      get: (n) => reg.get("world", n),
+      set: (n, v) => { reg.set("world", n, v); },
+    };
     if (hostWorld !== undefined) {
-      internals.worldResolver = hostWorld;
-      const set = hostWorld.set;
-      internals.worldSet = set !== undefined ? (n, v): void => { set(n, v); } : undefined;
+      // A bound resolver is opaque: it keeps whatever rule the game has, so the
+      // story's `writable: false` is kept by worldReadOnly before this seam.
+      internals.worldSet = hostWorld.set !== undefined ? (n, v): void => { reg.set("world", n, v, { host: true }); } : undefined;
     } else {
-      // Standalone: self-backed from the declared defaults, DECLARATIONS AND
-      // ALL. Still FOREIGN in spirit - never in saveGame(); a host that wants
-      // @world to persist saves the container itself (play-helpers ships one).
-      // The bag keeps `writable: false` so an examiner still reads it there,
-      // and the kernel lets a `{ host: true }` write past it, which is what
-      // the game's own surface passes.
-      const bag = bagFromDecls(internals.bundle.world.properties, "world.");
-      internals.worldResolver = {
-        // The engine writes through worldSet below, not through this; the `set`
-        // is the resolver's SHAPE, so @world still reads as writable to anything
-        // inspecting the seam, and it is the story's door: no host flag on it.
-        get: (n) => bag.get(n),
-        set: (n, v) => { bag.set(n, v); },
-      };
-      internals.worldSet = (n, v, host): void => { bag.set(n, v, host === true ? { host: true } : undefined); };
+      internals.worldSet = (n, v, host): void => { reg.set("world", n, v, host === true ? { host: true } : undefined); };
+    }
+  }
+
+  /** Every shared bag back to its declared defaults, in place (the registry
+   *  keeps them registered), the self-backed @world included. */
+  private reseedShared(): void {
+    const { shared, sharedDecls, registry } = this.internals;
+    shared.story.reseed(sharedDecls.story as unknown as ScopeDeclaration[]);
+    for (const kind of OWNED_SCOPES) {
+      for (const [id, bag] of shared[kind]) bag.reseed((sharedDecls[kind].get(id) ?? []) as unknown as ScopeDeclaration[]);
+    }
+    if (this.internals.selfWorld) {
+      registry.reseedOwned("world", this.internals.bundle.world.properties as unknown as ScopeDeclaration[]);
     }
   }
 
@@ -926,6 +1076,13 @@ export class Engine {
    *  state; shared state is untouched. There is no default flow: "main" is
    *  a caller convention, not an engine rule. */
   openFlow(id: string, opts: OpenFlowOptions = {}): Flow {
+    return this.open(id, opts, false);
+  }
+
+  /** openFlow, and loadGame's rebuild. `claim` says the new flow's bags take
+   *  the values the registry holds for them (a load); a fresh open is a reset
+   *  of that name, so anything waiting for it is discarded first. */
+  private open(id: string, opts: OpenFlowOptions, claim: boolean): Flow {
     // The world's claims as they stand WITHOUT this name, taken before the
     // replace: a resume competes with the other flows, never with the flow it
     // is replacing (which is about to release everything it holds).
@@ -944,6 +1101,7 @@ export class Engine {
       if (dealt > 0) this.onReplacedFlow?.(id, dealt);
       existing.markClosed();
     }
+    if (!claim) this.internals.registry.discardParked(flowPrefix(id));
     const flow = new Flow(this, this.internals, id, opts.seed ?? this.seed);
     this.flowsById.set(id, flow);
     if (opts.restore !== undefined) {
@@ -987,16 +1145,30 @@ export class Engine {
    *  self-backed @world included; a host-bound @world is the host's and is
    *  not touched). */
   reset(): void {
+    this.dropRun(false);
+    this.reseedShared();
+    // Values loaded for bags nobody has claimed yet are the old run's too: a
+    // flow opened after the reset must not pick them up. Other engines' stay.
+    this.internals.registry.discardParked("storylets/");
+  }
+
+  /** End the run: clear the log, close every flow, forget spent cards. Each
+   *  flow's bags leave the registry; `keepFlows` names the flows whose values
+   *  are kept there for the flow that replaces them (a load into the game's
+   *  registry). */
+  private dropRun(keepFlows: Set<string> | false): void {
     // The log is a run-lifetime utility and is not saved; a reset is a new run.
     // All three ports cleared it here and the reference did not, so `reset()`
-    // (and `loadGame`, which calls it) left the previous run's entries in place
-    // with `seq` continuing across the boundary - while the same call on Godot,
-    // Unity or Unreal returned an empty log (2026-08-29).
+    // (and `loadGame`) left the previous run's entries in place with `seq`
+    // continuing across the boundary - while the same call on Godot, Unity or
+    // Unreal returned an empty log (2026-08-29).
     this.engineLog = [];
-    for (const flow of this.flowsById.values()) flow.markClosed();
+    for (const [id, flow] of this.flowsById) {
+      flow.releaseBags(keepFlows !== false && keepFlows.has(id));
+      flow.markClosed();
+    }
     this.flowsById.clear();
     this.spent.clear();
-    this.initShared(this.hostWorld);
   }
 
   // --- shared scarcity (design/shared-scarcity.md) -----------------------------
@@ -1070,7 +1242,9 @@ export class Engine {
    */
   getProperty(path: string): ScalarValue {
     const found = this.resolveShared(path);
-    const value = found.kind === "world" ? this.internals.worldResolver.get(found.name) : found.bag.get(found.name);
+    const value = found.kind === "world" ? this.internals.worldResolver.get(found.name)
+      : found.kind === "scope" ? this.internals.registry.get(found.token, found.name)
+      : found.bag.get(found.name);
     if (value === undefined) throw new Error(`no property at "${path}"`);
     return value;
   }
@@ -1084,6 +1258,10 @@ export class Engine {
       this.internals.worldSet(found.name, value, true);
       return;
     }
+    if (found.kind === "scope") {
+      this.internals.registry.set(found.token, found.name, value, { host: true });
+      return;
+    }
     // A host write: silent under the firing rule (no subscriber feedback
     // loop), but visible to the bag's audit hook - and a HOST write, so a
     // `writable: false` does not refuse it. That flag is the story's promise
@@ -1091,12 +1269,19 @@ export class Engine {
     found.bag.set(found.name, value, { silent: true, reason: "host setProperty", host: true });
   }
 
-  private resolveShared(path: string): { kind: "world"; name: string } | { kind: "bag"; bag: StateBag; name: string } {
+  private resolveShared(path: string):
+    | { kind: "world"; name: string }
+    | { kind: "scope"; token: string; name: string }
+    | { kind: "bag"; bag: StateBag; name: string } {
     const parts = path.split(".");
     const perFlow = (): never => {
       throw new Error(`"${path}" is per-flow state - read it on a Flow, not the Engine`);
     };
     if (parts.length === 2 && parts[0] === "world") return { kind: "world", name: parts[1]! };
+    // Another engine's game-wide scope (`patter.gold`): every engine reads every scope.
+    if (parts.length === 2 && parts[0] !== "story" && this.internals.registry.has(parts[0]!)) {
+      return { kind: "scope", token: parts[0]!, name: parts[1]! };
+    }
     if (parts.length === 2 && parts[0] === "story") {
       const name = parts[1]!;
       if (this.internals.shared.story.get(name) !== undefined) return { kind: "bag", bag: this.internals.shared.story, name };
@@ -1180,15 +1365,19 @@ export class Engine {
 
   // --- persistence (schema 4) -------------------------------------------------
 
-  /** The whole engine, one envelope: the shared partitions once, then
-   *  every live flow keyed by its id. @world is NEVER here - the host
-   *  saves its container, each engine saves its own envelope. */
+  /** The whole engine's NON-property state, one envelope: the spent cards
+   *  once, then every live flow (board, clocks, cooldowns, PRNG, play log)
+   *  keyed by its id. The property values are the registry's: a standalone
+   *  engine (one that made its own registry) carries them here under
+   *  `registry`, self-backed @world included; a game that passed a registry
+   *  saves it once itself, beside each engine's envelope. */
   saveGame(): SaveEnvelope {
     return structuredClone({
-      schema: "storylets/save@1" as const,
+      schema: SAVE_SCHEMA,
       content: this.internals.bundle.content,
-      shared: { props: partitionValues(this.internals.shared), spent: [...this.spent].sort() },
-      flows: Object.fromEntries([...this.flowsById].map(([id, flow]) => [id, flow.snapshot()])),
+      ...(this.internals.ownsRegistry ? { registry: this.internals.registry.save() } : {}),
+      shared: { spent: [...this.spent].sort() },
+      flows: Object.fromEntries([...this.flowsById].map(([id, flow]) => [id, flow.snapshot(false)])),
     });
   }
 
@@ -1201,14 +1390,16 @@ export class Engine {
   saveFlow(id: string): FlowSave {
     const flow = this.flowsById.get(id);
     if (!flow) throw new Error(`unknown flow "${id}"`);
-    return structuredClone(flow.snapshot());
+    // Parked whole, properties included: a parked flow's bags leave the
+    // registry when it closes, so its values have to travel with it.
+    return structuredClone(flow.snapshot(true));
   }
 
   /** What `loadGame(envelope)` would do that is not a plain restore, without
    *  doing any of it (design/engine-server.md 4.9). Pure: nothing on this
    *  engine moves. A project mismatch is refused here exactly as `loadGame`
    *  refuses it - it is the one thing neither call will tolerate. */
-  previewLoad(envelope: SaveEnvelope): LoadReport {
+  previewLoad(envelope: SaveEnvelope | SaveEnvelopeV1): LoadReport {
     this.assertSameProject(envelope);
     return this.planLoad(envelope).report;
   }
@@ -1227,20 +1418,39 @@ export class Engine {
    *  Handles held from before the load are closed and inert (Patter's
    *  rule); take fresh ones from getFlow()/flows().
    *
+   *  Property values come from the registry. An envelope that carries them
+   *  (a standalone engine's, or a version 1 envelope) has them walked, cleaned,
+   *  and moved into the registry here, over fresh defaults. Otherwise the game
+   *  loads its registry itself, before or after this call: each flow's bags
+   *  are handed back to the registry with their values, and the restored
+   *  flows claim them. The report then covers only what this envelope holds;
+   *  the registry's own load rule applies to the values.
+   *
    *  Returns the report `previewLoad` would have given for this envelope: the
    *  drift tolerance that makes a load forgiving is what hides its cost, so
    *  the cost comes back with the load whether or not anybody looked first. */
-  loadGame(envelope: SaveEnvelope): LoadReport {
+  loadGame(envelope: SaveEnvelope | SaveEnvelopeV1): LoadReport {
     this.assertSameProject(envelope);
     const plan = this.planLoad(structuredClone(envelope));
-    this.reset();
-    loadPartition(this.internals.shared, plan.shared);
+    const reg = this.internals.registry;
+    if (plan.sections !== undefined) {
+      // The envelope carries the values: every bag of this engine back to its
+      // defaults, then the cleaned values over them.
+      this.reset();
+      // The engine's own registry takes the save wholesale. A game's registry may
+      // hold values the game loaded for other engines, still waiting: add to
+      // those, never replace them.
+      if (this.internals.ownsRegistry) reg.load(plan.sections);
+      else reg.load(plan.sections, { keepParked: true });
+    } else {
+      this.dropRun(new Set(plan.flows.map(([id]) => id)));
+    }
     for (const id of plan.spent) this.spent.add(id);
-    for (const [id, clean] of plan.flows) this.openFlow(id).restore(clean);
+    for (const [id, clean] of plan.flows) this.open(id, {}, true).restore(clean);
     return plan.report;
   }
 
-  private assertSameProject(envelope: SaveEnvelope): void {
+  private assertSameProject(envelope: SaveEnvelope | SaveEnvelopeV1): void {
     if (envelope.content.project !== this.internals.bundle.content.project) {
       throw new Error(`save is for project "${envelope.content.project}", bundle is "${this.internals.bundle.content.project}"`);
     }
@@ -1249,27 +1459,60 @@ export class Engine {
   /** The whole-envelope walk: the report, and the cleaned state the apply
    *  half writes. Nothing here touches the engine, which is what lets
    *  previewLoad and loadGame share it. */
-  private planLoad(envelope: SaveEnvelope): {
+  private planLoad(envelope: SaveEnvelope | SaveEnvelopeV1): {
     report: LoadReport;
-    shared: PropsPartition;
+    /** The cleaned property values to move into the registry, when the
+     *  envelope carries any. */
+    sections?: Sections;
     spent: string[];
     flows: [string, FlowSave][];
   } {
+    const schema = (envelope as { schema?: unknown }).schema;
+    if (schema !== SAVE_SCHEMA && schema !== SAVE_SCHEMA_V1) throw new Error(`unsupported save schema: ${String(schema)}`);
     const draft = emptyDraft();
-    const shared = walkPartition(this.internals, this.internals.sharedDecls,
-      envelope.shared?.props, undefined, draft);
+    // Where the property values are, if this envelope has them: a version 1
+    // envelope's partitions, or a standalone engine's registry sections.
+    const flowIds = new Set(Object.keys(envelope.flows ?? {}));
+    let moved: { shared: PropsPartition; flows: Map<string, PropsPartition>; rest: Sections } | undefined;
+    if (envelope.schema === SAVE_SCHEMA_V1) {
+      moved = {
+        shared: envelope.shared?.props ?? emptyPartitionValues(),
+        flows: new Map(Object.entries(envelope.flows ?? {}).map(([id, f]) => [id, f.props ?? emptyPartitionValues()])),
+        rest: {},
+      };
+    } else if (envelope.registry !== undefined) {
+      moved = partitionsFromSections(envelope.registry, flowIds);
+    }
+    const shared = moved !== undefined
+      ? walkPartition(this.internals, this.internals.sharedDecls, moved.shared, undefined, draft)
+      : undefined;
     const spent: string[] = [];
     for (const cardId of envelope.shared?.spent ?? []) {
       if (this.internals.cardsById.has(cardId)) spent.push(cardId);
       else draft.droppedSpent.push(cardId);
     }
     const flows: [string, FlowSave][] = [];
+    const sections: Sections | undefined = moved !== undefined ? { ...moved.rest } : undefined;
+    if (sections !== undefined && shared !== undefined) {
+      sectionsOf(shared, (kind, id) => (kind === "story" ? "story" : sharedKey(kind, id!)), sections);
+    }
     for (const [id, saved] of Object.entries(envelope.flows ?? {})) {
-      flows.push([id, this.planFlowRestore(id, saved, undefined, draft)]);
+      const withProps: FlowSave = moved !== undefined
+        ? { ...saved, props: moved.flows.get(id) ?? emptyPartitionValues() }
+        : { ...saved };
+      const clean = this.planFlowRestore(id, withProps, undefined, draft);
+      if (sections !== undefined && clean.props !== undefined) {
+        // The flow's values go into the registry, where its bags claim them; the
+        // restored flow itself carries none.
+        sectionsOf(clean.props, (kind, owner) => flowKey(id, kind, owner), sections);
+        delete clean.props;
+      }
+      flows.push([id, clean]);
     }
     return {
       report: finishReport(this.internals.bundle.content, envelope.content, flows.map(([id]) => id), draft),
-      shared, spent, flows,
+      ...(sections !== undefined ? { sections } : {}),
+      spent, flows,
     };
   }
 
@@ -1284,7 +1527,9 @@ export class Engine {
     draft: ReportDraft,
   ): FlowSave {
     const internals = this.internals;
-    const props = walkPartition(internals, internals.flowDecls, saved.props, id, draft);
+    // A flow blob without properties (a version 2 envelope's: the registry has
+    // them) has nothing to walk.
+    const props = saved.props !== undefined ? walkPartition(internals, internals.flowDecls, saved.props, id, draft) : undefined;
 
     const cooldowns: Record<string, number> = {};
     for (const [cardId, turn] of Object.entries(saved.cooldowns ?? {})) {
@@ -1330,7 +1575,7 @@ export class Engine {
     }
 
     return {
-      props,
+      ...(props !== undefined ? { props } : {}),
       turns: saved.turns ?? {},
       prng: saved.prng,
       cooldowns,
@@ -1377,8 +1622,10 @@ export class Flow {
   private lastPlayOf = new Map<string, PlayRecord>();
   private tagPlayCount = new Map<string, number>();
   private lastPlayInTag = new Map<string, PlayRecord>();
-  /** The per-flow property partitions (the not-shared halves). */
+  /** The per-flow property partitions (the not-shared halves), each bag
+   *  that declares something registered under this flow's keys. */
   private stores: Partition;
+  private readonly registered: string[] = [];
 
   private traceHandlers = new Set<TraceHandler>();
   private logEntries: LogEntry[] = [];
@@ -1399,6 +1646,16 @@ export class Flow {
     this.id = id;
     this.prng = makePrng(seed);
     this.stores = buildPartition(internals, flowHalf);
+    // Register the bags: each claims whatever the registry holds for its key (a
+    // load); openFlow discarded that first for a fresh flow.
+    const reg = internals.registry;
+    const put = (key: string, bag: StateBag): void => {
+      if (bag.declarations().length === 0) return; // holds nothing: not registered
+      reg.mountOwned(key, bag, { owner: OWNER });
+      this.registered.push(key);
+    };
+    put(flowKey(id, "story"), this.stores.story);
+    for (const kind of OWNED_SCOPES) for (const [owner, bag] of this.stores[kind]) put(flowKey(id, kind, owner), bag);
     for (const box of internals.bundle.boxes) {
       this.turnCounts.set(box.id, 0);
       for (const hand of box.hands) this.boardContents.set(hand.id, []);
@@ -1433,7 +1690,16 @@ export class Flow {
 
   /** @internal */
   markClosed(): void {
+    this.releaseBags(false);
     this.closed = true;
+  }
+
+  /** @internal - take this flow's bags out of the registry; with `keep`, their
+   *  values wait there for the flow that replaces this one (a load into the
+   *  game's registry). Idempotent. */
+  releaseBags(keep: boolean): void {
+    for (const key of this.registered) this.internals.registry.remove(key, { keep });
+    this.registered.length = 0;
   }
 
   private assertOpen(): void {
@@ -1593,8 +1859,12 @@ export class Flow {
    *  is the flow's MERGED view - its own copies over the shared values,
    *  names disjoint - and @world reads through the engine's resolver. */
   private evalCtx(box: Box<Expression>, deck: Deck<Expression> | undefined, handEnv: HandEnv): EvalContext {
+    const others = this.internals.registryView();
     return {
       scopes: {
+        // Every other engine's game-wide scope first (every engine reads every
+        // scope); this engine's own tokens are its merged views, over the top.
+        ...others.scopes,
         world: this.internals.worldResolver,
         story: this.storyReader,
         box: this.boxReaders.get(box.id) ?? {},
@@ -1605,9 +1875,9 @@ export class Flow {
       // The quality channel, answering for THIS ask's box and deck. Only wired
       // when a quality exists, so a bundle without one evaluates byte-
       // identically to before the feature.
-      ...(this.internals.hasQualities ? {
+      ...(this.internals.hasQualities || others.qualities !== undefined ? {
         qualities: (scope: string, name: string): readonly string[] | undefined =>
-          scope === "world" ? this.internals.ladders.world.get(name)
+          scope === "world" ? this.internals.ladders.world.get(name) ?? others.qualities?.(scope, name)
           : scope === "story" ? this.internals.ladders.story.get(name)
           : scope === "box" ? this.internals.ladders.box.get(box.id)?.get(name)
           : scope === "deck" && deck ? this.internals.ladders.deck.get(deck.id)?.get(name)
@@ -1615,7 +1885,7 @@ export class Flow {
           // value THIS ask: the bound tag, or the asking hand. `sources` is
           // already the map that answers that, because write-back needs it.
           : scope === "hand" ? this.handLadder(handEnv, name)
-          : undefined,
+          : others.qualities?.(scope, name),
       } : {}),
     };
   }
@@ -2498,6 +2768,7 @@ export class Flow {
     this.assertOpen();
     const found = this.resolvePath(path);
     const value = found.kind === "world" ? this.internals.worldResolver.get(found.name)
+      : found.kind === "scope" ? this.internals.registry.get(found.token, found.name)
       : found.own?.get(found.name) ?? found.shared?.get(found.name);
     if (value === undefined) throw new Error(`no property at "${path}"`);
     return value;
@@ -2511,6 +2782,10 @@ export class Flow {
       this.internals.worldSet(found.name, value, true);
       return;
     }
+    if (found.kind === "scope") {
+      this.internals.registry.set(found.token, found.name, value, { host: true });
+      return;
+    }
     const bag = found.own !== undefined && found.own.get(found.name) !== undefined ? found.own
       : found.shared !== undefined && found.shared.get(found.name) !== undefined ? found.shared
       : undefined;
@@ -2521,9 +2796,15 @@ export class Flow {
     bag.set(found.name, value, { silent: true, reason: "host setProperty", host: true });
   }
 
-  private resolvePath(path: string): { kind: "world"; name: string } | { kind: "bag"; own?: StateBag; shared?: StateBag; name: string } {
+  private resolvePath(path: string):
+    | { kind: "world"; name: string }
+    | { kind: "scope"; token: string; name: string }
+    | { kind: "bag"; own?: StateBag; shared?: StateBag; name: string } {
     const parts = path.split(".");
     if (parts.length === 2 && parts[0] === "world") return { kind: "world", name: parts[1]! };
+    if (parts.length === 2 && parts[0] !== "story" && this.internals.registry.has(parts[0]!)) {
+      return { kind: "scope", token: parts[0]!, name: parts[1]! };
+    }
     if (parts.length === 2 && parts[0] === "story") {
       return { kind: "bag", own: this.stores.story, shared: this.internals.shared.story, name: parts[1]! };
     }
@@ -2544,10 +2825,11 @@ export class Flow {
 
   // --- persistence (schema 4) -------------------------------------------------
 
-  /** @internal - this flow's blob inside the engine's envelope. */
-  snapshot(): FlowSave {
+  /** @internal - this flow's blob: inside the engine's envelope without its
+   *  properties (the registry has them), or parked whole by saveFlow. */
+  snapshot(withProps: boolean): FlowSave {
     return {
-      props: partitionValues(this.stores),
+      ...(withProps ? { props: partitionValues(this.stores) } : {}),
       turns: Object.fromEntries(this.turnCounts),
       prng: this.prng.state(),
       cooldowns: this.cooldowns,
@@ -2559,7 +2841,7 @@ export class Flow {
   /** @internal - restore a freshly opened flow from its blob (loadGame).
    *  Orphaned keys (deleted entities) drop; new declarations keep defaults. */
   restore(saved: FlowSave): void {
-    loadPartition(this.stores, saved.props);
+    if (saved.props !== undefined) loadPartition(this.stores, saved.props);
     this.turnCounts = new Map(this.internals.bundle.boxes.map((b) => [b.id, 0]));
     for (const [boxId, turn] of Object.entries(saved.turns ?? {})) {
       if (this.turnCounts.has(boxId)) this.turnCounts.set(boxId, turn);

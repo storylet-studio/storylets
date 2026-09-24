@@ -16208,7 +16208,7 @@
       ]
     },
     {
-      "name": "saveLoad carries the shared blob once and every flow - and @world goes back to the host",
+      "name": "saveLoad carries the shared blob once and every flow - and a self-backed @world with them",
       "bundle": {
         "schema": "storylets/bundle@0",
         "content": {
@@ -16413,7 +16413,7 @@
         {
           "op": "assertEngineRead",
           "path": "world.alarm",
-          "expect": 0
+          "expect": 1
         }
       ]
     },

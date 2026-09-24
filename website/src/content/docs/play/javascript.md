@@ -168,9 +168,12 @@ const flow = engine.openFlow("visitor-7", {
 });
 ```
 
-`@world` is deliberately not in the envelope, because it's your game's state, and your game
-saves it ([why](/play/world-state/)). For files, `play-helpers` gives you the string boundary,
-which wraps the envelope together with your world values:
+An engine built on its own carries every property value in its envelope, a self-backed
+`@world` included, so the two lines above are the whole run. A `@world` you bind to a resolver is
+your game's state, and your game saves it ([why](/play/world-state/)). A game that hands the engine
+its own registry saves that registry once, beside the envelope
+([Running it with Patter](/play/with-patter/#one-registry)). For files, `play-helpers` gives you
+the string boundary, which wraps the envelope together with your world values:
 
 ```js
 import { serializeState, deserializeState, createWorldContainer } from "@storylet-studio/play-helpers";

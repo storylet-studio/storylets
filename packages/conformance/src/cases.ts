@@ -1764,7 +1764,7 @@ export const fixtures: Fixtures = {
         { op: "deal", flow: "alice", hands: ["h_dock"], expectBoard: { h_dock: ["c_hot"] } },   // alice's danger is still 0
       ] },
 
-    { name: "saveLoad carries the shared blob once and every flow - and @world goes back to the host",
+    { name: "saveLoad carries the shared blob once and every flow - and a self-backed @world with them",
       world: [{ name: "alarm", type: "number", default: 0 }],
       story: [{ name: "gold", type: "number", default: 0 }],
       cards: [{ id: "c_heist", redraw: "never", outcomes: [{ id: "o_go", changes: {
@@ -1784,9 +1784,10 @@ export const fixtures: Fixtures = {
         // Alice's redraw-never survived the trip; Bob's fresh ledger did too.
         { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: [] } },
         { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: ["c_heist"] } },
-        // @world was NOT in the envelope: the fresh engine self-backs the
-        // default. The host saves its container; each engine saves its own.
-        { op: "assertEngineRead", path: "world.alarm", expect: 0 },
+        // A standalone engine self-backs @world as a property its own registry
+        // stores, so the value rode in the save and came back. Only a resolver
+        // the game binds is external, and the game saves those values itself.
+        { op: "assertEngineRead", path: "world.alarm", expect: 1 },
       ] },
 
     { name: "re-opening a flow name replaces it: per-flow state reseeds, shared state stands",

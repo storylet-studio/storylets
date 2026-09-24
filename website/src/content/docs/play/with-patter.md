@@ -99,53 +99,69 @@ runtime does with an ineligible option: a player who can see the door they canno
 told something, and a player who sees nothing is being told nothing. The Hamlet's Moneylenders'
 Men is the worked case, where paying the debt off needs a reputation you may not have yet.
 
-## The world
+## One registry
 
-Both engines read `@world` through a resolver your game provides. Hand the **same object** to
-both and there is one picture of the world and nothing to keep in step:
+Both engines keep their properties in one **registry**, a `ScopeRegistry` from
+[`@wildwinter/scoperegistry`](https://www.npmjs.com/package/@wildwinter/scoperegistry). Your game
+makes it, registers `@world` in it, and hands it to both engines:
 
 ```ts
-const world = new World({ time_of_day: "day", knows_road: false }, [/* names only you may set */]);
-const story = new StoryletEngine(storyBundle, { seed, world: world.resolver });
-const patter = new PatterEngine(patterBundle, { seed, world: world.resolver });
+import { ScopeRegistry } from "@wildwinter/scoperegistry";
+
+const registry = new ScopeRegistry()
+  .defineOwned("world", worldDeclarations, { owner: "Game" });   // stored and saved with the rest
+const story = new StoryletEngine(storyBundle, { seed, registry });
+const patter = new PatterEngine(patterBundle, { seed, registry });
 ```
 
-Declare the same properties in both projects, with the same names and types. A scene that sets
-`@world.knows_road` moves the value the cards' conditions read on the next deal; a card whose
-outcome sets it moves what the next scene sees.
+The Storylet Engine registers `@story` and its per-flow bags; Patter registers `@patter` and its
+per-flow and per-scene bags. A scene that sets `@world.knows_road` moves the value the cards'
+conditions read on the next deal, and a card whose outcome sets it moves what the next scene sees.
+A Patter condition can also read `@story` directly, and the Storylet Engine reads `@patter`
+through `getProperty("patter.gold")`.
+
+Declare the same `@world` properties in both projects, with the same names and types. If your game keeps `@world`
+in its own state instead, register it as a foreign scope with your resolver
+(`registry.defineForeign("world", resolver, worldDeclarations)`), and neither the registry nor
+either engine saves it.
 
 There are two ways to make a value read-only, and they mean different things. `writable: false`
 on the declaration is the story's own promise. Both compilers refuse a write in that project,
-and both engines refuse one at run time. Your game's read-only list (the second argument above)
-is your policy. A story that tries to set such a value is refused with an error naming it. Your
-own writes always land. The Hamlet leaves the list empty, so a scene or a card may move time in
-it.
+and both engines refuse one at run time. A resolver of your own can keep a read-only list as your
+policy, and refuse a story's write to a name on it with an error naming it. Your own writes always
+land.
 
-Patter's side of the same four points is on its
+A token is taken once. Building a second engine that wants a token the first holds fails at once,
+naming the engine that holds it.
+
+Patter's side of the same points is on its
 [world properties](https://patterkit.dev/play/world-properties/) page.
 
 ## Saving
 
-Each engine saves only what it owns, and neither puts `@world` in its file. Your game saves it
-once, with both engines' saves beside it:
+The registry holds every property from both engines, `@world` included, so your game saves it
+once, with each engine's own save beside it. Neither engine's save holds a property value when
+the game passed the registry:
 
 ```ts
-const envelope = {
-  storylets: serializeState(story),   // .storyletsave text
-  patter: patterSerialize(patter),    // Patter's save text
-  world: world.save(),
+const save = {
+  registry: registry.save(),          // every property, once
+  storylets: story.saveGame(),        // boards, clocks, cooldowns, the play log
+  patter: patter.saveGame(),          // positions, visit counts, selectors
   at: currentHand,
   performing: onScreen,               // the transcript so far, and the card being performed
 };
 ```
 
-On load, restore the world first, then each engine from its own text, then pick the flows back up
-with `getFlow` rather than opening them again, so a conversation paused at a choice is still
-paused with its options ready. Patter restores the flow's position; the lines already spoken are
-yours to have kept, which is what `performing` is for.
+On load, build the registry and both engines as before, then load the registry and each engine
+from its part, in either order: a value for a flow that hasn't reopened yet waits in the registry
+until it does. Then pick the flows back up with `getFlow` rather than opening them again, so a
+conversation paused at a choice is still paused with its options ready. Patter restores the
+flow's position; the lines already spoken are yours to have kept, which is what `performing` is
+for.
 
-The envelope is the same on every host, so a game saved in the browser loads in the Godot, Unity,
-or Unreal version of the Hamlet, mid-conversation, and the tests for each say so.
+The save is the same on every host, so a game saved in the browser loads in the Godot, Unity,
+or Unreal version, mid-conversation.
 
 ## The check
 

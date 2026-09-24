@@ -8,6 +8,14 @@ section for it.
 
 ## [Unreleased]
 
+### Changed
+
+- **One registry per game.** Every property bag now lives in a `ScopeRegistry` (`@wildwinter/scoperegistry` 0.7.0) instead of standing alone: the shared `@story` under `story`, and every other bag that declares something under a key starting `storylets/` (`storylets/deck/<id>`, `storylets/flow/<flow>/story`, and so on, keyed by internal id). A new `registry` option takes the game's own registry, shared with any other engine in the game, Patter included; without one the engine makes its own and acts as its own game, so a single-engine game needs no change.
+- **The save is `storylets/save@2`.** The envelope holds what is not a property (boards, clocks, cooldowns, PRNGs, play logs, spent cards). An engine built without a registry also carries that registry's values under `registry`, so one call is still the whole run, and the load report still walks them; an engine given the game's registry leaves them to the game, which saves the registry once. `storylets/save@1` envelopes still load, their values moving into the registry. `saveFlow` still carries the parked flow's properties.
+- **A self-backed `@world` is saved.** When the game binds no resolver, `@world` is a property the engine's registry stores, so a save and load keeps it where it used to fall back to its defaults. A resolver the game binds is still external and never saved. Given the game's registry, the engine self-backs nothing: `@world` is the game's to register there.
+- **Every expression reads every registered scope**, and `getProperty` / `setProperty` take another engine's game-wide path (`patter.gold`). A token two engines both want fails as the second is built, naming the first.
+- `@storylet-studio/play-helpers`, which ships at this version: `loadState` and `deserializeState` accept a `.storyletsave` whose envelope is either version.
+
 ## [0.7.0] - 2026-09-14
 
 ### Added

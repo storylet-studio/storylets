@@ -41,5 +41,10 @@
   // split by RUNTIME - a DOM file checked again here, with no DOM lib, would fail
   // for a reason that is about this config rather than about the code.
   "include": ["packages"],
-  "exclude": ["node_modules", "packages/*/dist", "packages/studio"]
+  //
+  // `packages/runtime/test/with-patter` is the combined Patter + Storylet Engine proof. It
+  // imports Patter's SOURCE from a sibling `../patter` checkout, which a plain clone does not
+  // have, so it is its own program: `scripts/typecheck-with-patter.mjs` checks it when the
+  // sibling is there, exactly as vitest runs it only then.
+  "exclude": ["node_modules", "packages/*/dist", "packages/studio", "packages/runtime/test/with-patter"]
 }

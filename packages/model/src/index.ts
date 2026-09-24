@@ -780,8 +780,27 @@ export interface Bundle {
 }
 
 // --- the save envelope --------------------------------------------------------
+//
+// Version 2 (the one-registry model): property values are the game's
+// ScopeRegistry's, not the engine's. The envelope holds what is NOT a property
+// (boards, clocks, cooldowns, PRNGs, play logs, spent cards), plus, when the
+// engine made its own registry (a standalone game), that registry's values
+// under `registry`. A game that passed a registry saves it once itself.
+// Version 1 envelopes still load on every runtime: their property partitions
+// move into the registry under the keys below.
+//
+// Registry keys (identical on every runtime, since they are in the save):
+// `story` for the shared @story; `storylets/<kind>/<id>` for a shared box,
+// deck, hand, or value bag (kind is `box`, `deck`, `hand`, or `value`, id the
+// internal id); `storylets/flow/<flowId>/story` and
+// `storylets/flow/<flowId>/<kind>/<id>` for a flow's own. Ids escape `%` as
+// `%25` and `/` as `%2F`. A bag with no declared properties is not registered.
+// A self-backed @world (no resolver bound) is a stored property too, under
+// `world`.
 
-export const SAVE_SCHEMA = "storylets/save@1";
+export const SAVE_SCHEMA = "storylets/save@2";
+/** The version 1 envelope's schema tag, still read. */
+export const SAVE_SCHEMA_V1 = "storylets/save@1";
 
 export interface PlayRecord {
   /** Card and outcome by gameId (feeds the play-history functions). */
@@ -810,10 +829,13 @@ export interface PropsPartition {
   value: Record<string, PropertyBag>;
 }
 
-/** One flow's snapshot inside the envelope (schema 4). */
+/** One flow's snapshot inside the envelope (schema 4), and the blob
+ *  `saveFlow` parks. */
 export interface FlowSave {
-  /** The per-flow property partitions. */
-  props: PropsPartition;
+  /** The per-flow property partitions. Carried by `saveFlow`, which parks one
+   *  flow whole; absent from a version 2 envelope's flows, whose properties
+   *  are the registry's. Present in every flow of a version 1 envelope. */
+  props?: PropsPartition;
   /** Per-box turn counters, keyed by box id (schema 3.4) - per flow: there
    *  is deliberately no global turn. */
   turns: Record<string, number>;
@@ -837,7 +859,8 @@ export interface FlowSave {
  *  (design/shared-scarcity.md). Claims are NOT here: they are derived from the
  *  live boards, and each flow's board rides its own blob. */
 export interface SharedSave {
-  props: PropsPartition;
+  /** The shared property partitions: version 1 only. */
+  props?: PropsPartition;
   /** Card ids, sorted, so a save is byte-stable for a diff. */
   spent: string[];
 }
@@ -845,8 +868,21 @@ export interface SharedSave {
 export interface SaveEnvelope {
   schema: typeof SAVE_SCHEMA;
   content: BundleContent;
+  /** The engine's own registry's values, keyed by registry key: present only
+   *  when the engine made the registry itself (a standalone game). A game that
+   *  passed a registry saves it once, beside this envelope. */
+  registry?: Record<string, PropertyBag>;
   shared: SharedSave;
   flows: Record<string, FlowSave>;
+}
+
+/** A version 1 envelope, from before the registry held the properties. Every
+ *  runtime still reads it: its partitions move into the registry as it loads. */
+export interface SaveEnvelopeV1 {
+  schema: typeof SAVE_SCHEMA_V1;
+  content: BundleContent;
+  shared: SharedSave & { props: PropsPartition };
+  flows: Record<string, FlowSave & { props: PropsPartition }>;
 }
 
 // --- the load report (design/engine-server.md 4.9) ----------------------------
@@ -943,7 +979,8 @@ export const SAVEFILE_SCHEMA = "storylets/savefile@1";
 
 export interface SaveFile {
   schema: typeof SAVEFILE_SCHEMA;
-  engine: SaveEnvelope;
+  /** The engine's envelope: version 2 when written today, version 1 still read. */
+  engine: SaveEnvelope | SaveEnvelopeV1;
   /** The host's @world values, saved and restored by the host. */
   world?: PropertyBag;
 }
