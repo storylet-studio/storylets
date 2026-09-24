@@ -40,24 +40,22 @@ bool FHamletLoopTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("tree shows the ambient only (survivor rule)"), Join(g2.Hand()), FString(TEXT("wind-in-the-leaves")));
 	g2.Start(g2.Hand()[0]); g2.Finish();   // no choice at all: it ends, and Continue plays it
 	TestTrue(TEXT("The Road North lands once the seat frees"), Join(g2.Hand()).Contains(TEXT("the-road-north")));
-	// Cross-host, maintainers' checkout only: envelopes the JS client wrote.
-	const FString fixtures = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("../../godot/HamletDemo/test/fixtures"));
+	// Cross-host: envelopes the JS client wrote. The release zip carries them in Tests/fixtures; in the
+	// repo checkout the Godot demo keeps them. Each is an assertion: a missing fixture, a refused load,
+	// or the wrong landing fails the test.
+	const FString shipped = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("Tests/fixtures"));
+	const FString fixtures = FPaths::DirectoryExists(shipped) ? shipped
+		: FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("../../godot/HamletDemo/test/fixtures"));
 	FString between, midjs;
-	if (FFileHelper::LoadFileToString(between, *(fixtures / TEXT("envelope-from-js.json"))))
-	{
-		FHamletGame g3; if (Fresh(g3)) { FString e3; const bool ok = g3.Load(between, e3);
-			if (ok) TestTrue(TEXT("the JS client's envelope loads here, same place and world"), g3.At == TEXT("the-mystic-tree") && g3.World.Store->GetBool(TEXT("knows_road")));
-			else AddInfo(TEXT("KNOWN GAP (findings 11): the JS client's envelope did not load here: ") + e3); }
-	}
-	else AddInfo(TEXT("SKIP cross-host: no fixtures at ") + fixtures);
-	if (FFileHelper::LoadFileToString(midjs, *(fixtures / TEXT("envelope-from-js-mid.json"))))
-	{
-		FHamletGame g4; if (Fresh(g4)) { FString e4; const bool ok = g4.Load(midjs, e4);
-			// Self-upgrading: an assertion the day the conversation comes back, a known gap until then.
-			if (ok && g4.Playing && g4.Playing->Choices.Num() == 2) TestTrue(TEXT("a MID-SCENE envelope from the JS client brings the conversation back"), true);
-			else AddInfo(FString::Printf(TEXT("KNOWN GAP (findings 11): Patter's save did not cross from JS to Unreal (loaded=%s, playing=%s, choices=%d): %s"),
-				ok ? TEXT("yes") : TEXT("no"), g4.Playing ? TEXT("yes") : TEXT("no"), g4.Playing ? g4.Playing->Choices.Num() : -1, *e4)); }
-	}
+	if (!TestTrue(TEXT("the JS client's envelope is at ") + fixtures, FFileHelper::LoadFileToString(between, *(fixtures / TEXT("envelope-from-js.json"))))) return false;
+	FHamletGame g3; if (!Fresh(g3)) return false; FString e3; const bool bLoaded3 = g3.Load(between, e3);
+	if (!TestTrue(TEXT("the JS client's envelope loads here: ") + e3, bLoaded3)) return false;
+	TestEqual(TEXT("the JS client's envelope lands in the same place"), g3.At, FString(TEXT("the-mystic-tree")));
+	TestTrue(TEXT("the JS client's envelope brings the same world (knows_road)"), g3.World.Store->GetBool(TEXT("knows_road")));
+	if (!TestTrue(TEXT("the JS client's mid-scene envelope is at ") + fixtures, FFileHelper::LoadFileToString(midjs, *(fixtures / TEXT("envelope-from-js-mid.json"))))) return false;
+	FHamletGame g4; if (!Fresh(g4)) return false; FString e4; const bool bLoaded4 = g4.Load(midjs, e4);
+	if (!TestTrue(TEXT("the JS client's mid-scene envelope loads here: ") + e4, bLoaded4)) return false;
+	TestTrue(TEXT("a MID-SCENE envelope from the JS client brings the conversation back, two choices on screen"), g4.Playing && g4.Playing->Choices.Num() == 2);
 	return true;
 }
 #endif

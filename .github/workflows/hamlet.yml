@@ -122,6 +122,9 @@ jobs:
           ( cd ports/unreal/HamletDemo && tar --exclude=Binaries --exclude=Intermediate --exclude=Saved --exclude=DerivedDataCache -cf - . ) | ( mkdir -p "/tmp/${pkg}/HamletDemo" && cd "/tmp/${pkg}/HamletDemo" && tar -xf - )
           cp -R ports/unreal/StoryletEngine "/tmp/${pkg}/StoryletEngine"
           cp -R ports/unreal/Patterplay "/tmp/${pkg}/Patterplay"
+          # The saves the web client wrote, which the project's automation test loads (Tests/fixtures).
+          mkdir -p "/tmp/${pkg}/HamletDemo/Tests/fixtures"
+          cp ports/godot/HamletDemo/test/fixtures/envelope-from-js*.json "/tmp/${pkg}/HamletDemo/Tests/fixtures/"
           cp LICENSE "/tmp/${pkg}/"
           ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
           echo "HAMLET_UNREAL_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"

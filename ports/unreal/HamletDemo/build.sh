@@ -5,7 +5,7 @@
 # bundles come from the JS client's build. FAILS rather than skips.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"; root="$(cd "$here/../../.." && pwd)"
-PATTER_UNREAL_VERSION="0.12.0"
+PATTER_UNREAL_VERSION="0.14.0"
 zip="patterplay-unreal-${PATTER_UNREAL_VERSION}.zip"
 url="https://github.com/patterkit/patter/releases/download/play-unreal-v${PATTER_UNREAL_VERSION}/${zip}"
 tmp="$(mktemp -d)"

@@ -8,7 +8,7 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../../.." && pwd)"
-PATTER_GODOT_VERSION="0.12.0"
+PATTER_GODOT_VERSION="0.14.0"
 
 rm -rf "$here/addons"; mkdir -p "$here/addons"
 cp -R "$root/ports/godot/addons/storyletengine" "$here/addons/storyletengine"

@@ -5,6 +5,13 @@ attaches one zip to the matching GitHub Release, with `make_latest: false` so
 it never takes Storyletter's Latest badge from electron-updater. The release
 job reads the section for the tagged version out of this file.
 
+## [Unreleased]
+
+### Changed
+
+- **Patterplay 0.14.0 in all four hosts.** The web client, and the Godot, Unity, and Unreal projects, pin Patter's released 0.14.0 in place of 0.12.0, beside the Storylet Engine 0.8.0. The Unity world is one Get and one Set on the expression kernel the two engines now share. Saves carry the new formats (Patter's version 3, `storylets/save@2`), and a save written by an earlier Hamlet still loads.
+- **The cross-host saves are the current formats.** The two saves the web client writes for the other hosts' tests were regenerated on 0.14.0 and 0.8.0, and every host loads both, the mid-scene one included, which brings the conversation back with its choices.
+
 ## [0.2.0] - 2026-09-14
 
 ### Added
