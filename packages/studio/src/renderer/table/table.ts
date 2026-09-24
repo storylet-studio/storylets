@@ -26,7 +26,7 @@ import { setPlayRung, shows } from "../src/play-ladder.js";
 import { createLiveRun } from "./live.js";   // Live Link: the game's run, rebuilt from its frames
 import type { LiveRun } from "./live.js";
 import type { BoardLogEntry, DealtView, LogEntry, NotDealt } from "./model.js";
-import type { SaveFile } from "@storylet-studio/model";
+import type { BoardSaveFile } from "./model.js";
 import { turnSpan } from "@storylet-studio/model";
 import type { BoxMapDto, LiveLinkStatus, ProjectMapDto, StudioApi } from "../../shared/api.js";
 import type { MountedBoardMap } from "./board-map.js";
@@ -48,7 +48,7 @@ let pending: string | undefined;
 let focusPending = false;
 let board: { hand: string; cards: DealtView[] }[] = [];
 let snapPanel: "save" | "restore" | undefined;
-let snapshots: { name: string; file: SaveFile }[] = [];
+let snapshots: { name: string; file: BoardSaveFile }[] = [];
 /** Journal kinds hidden by the filter chips (empty = the full story). */
 const journalHidden = new Set<LogEntry["type"]>();
 /** The rail's open tab: the record (journal) or the state (the old curtain). */
@@ -175,10 +175,10 @@ async function build(): Promise<void> {
   // setting, and this window has no other source for it.
   setPlayRung(result.play);
   // A refused project (boardRefusal says when) is shown where the table would be, like a build error.
-  try { table = new Table(result.bundle, seed); }
+  try { table = new Table(result.bundle, seed, result.scopes); }
   catch (e) {
     const why = e instanceof Error ? e.message : String(e);
-    loadError = boardRefusal(why);
+    loadError = boardRefusal(why, result.scopes);
     table = undefined;
     toast(`The Board could not play the project: ${why}`, "error");
     render();

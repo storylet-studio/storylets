@@ -216,10 +216,26 @@ See [Live Link](/play/live-link/).
   this says.
 - **World** holds the `@world` property declarations (your game's state), and the
   [coverage drivers](/production/coverage-testing/#writing-drivers-by-hand) that stand in
-  for them during a test run.
+  for them during a test run. Where the game shares its scopes (below), these are the
+  game's: saving writes them to `game-scopes/game.scopes.json` first, leaving every other
+  scope in that file as it was, and then copies them into the project.
 - **Publish** (under Project, as in Patterpad) holds the bundle path (by default a
   `storylet-dist/` folder beside the project, never inside it), whether metadata is `full`
   or `stripped`, and how many turns a play advances.
+
+### Sharing scopes with the game's other tools
+
+**File ▸ Share Scopes with Other Tools…** makes a `game-scopes/` folder, the one place a
+game's editing tools read each other's properties from (see
+[Running it with Patter](/play/with-patter/#sharing-scopes-between-the-editors)). It asks where,
+starting at the root of your repository, and writes two files there: `storylets.scopes.json`
+with your `@story` declarations, and `game.scopes.json` with your `@world`. The project keeps
+its own copy of `@world`. If the folder is somewhere the tools wouldn't find it by looking up
+from the project, the project file records where it is.
+
+From then on, every save brings `storylets.scopes.json` up to date, the World settings edit
+`game.scopes.json`, the condition and outcome editors offer the other tools' properties (with
+who declares each in the pill's tip), and the Board plays cards that name them.
 
 ### Play: how much of the app you see
 

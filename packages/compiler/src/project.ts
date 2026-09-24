@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import type { BoxMap, BoxShard, ContractShard, DeckShard, HandsShard, MapShard, ProjectShard, PropertyDecl, ScalarValue, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
+import type { MergedScopes, ScopesIssue } from "@wildwinter/scoperegistry/scopes";
 
 /** One shard as text: `path` is project-relative, posix separators. */
 export interface SourceFile {
@@ -113,6 +114,25 @@ export interface SourceContract {
   shard: ContractShard;
 }
 
+/**
+ * The game's shared scopes folder, as the loader found and read it (patterkit
+ * design/shared-scopes.md). Absent when there is none, which is the ordinary case:
+ * the project then works alone, exactly as it did before the folder existed.
+ */
+export interface GameScopes {
+  /** The folder, absolute. */
+  dir: string;
+  /** The same folder relative to the project folder, posix separators ("../game-scopes"):
+   *  what an issue about one of its files is anchored to. */
+  path: string;
+  /** The `*.scopes.json` file names read, sorted. */
+  files: string[];
+  /** Every file that parsed, merged: one spec for the game and who declares each token. */
+  merged: MergedScopes;
+  /** What is wrong with the folder: a file that doesn't parse, a token two files declare. */
+  issues: ScopesIssue[];
+}
+
 export interface SourceProject {
   /** The project shard's path (for issue anchoring). */
   path: string;
@@ -122,4 +142,8 @@ export interface SourceProject {
    *  Empty on every project that has never met a server, which is all of them
    *  until one is built. Not compiled: `validate` and the editor read it. */
   contracts: SourceContract[];
+  /** The game's shared scopes, when the loader found a folder (it reads files, so the
+   *  parser never sets this). The compiler takes `@world` from it and checks references
+   *  into the other tools' scopes against it. */
+  gameScopes?: GameScopes;
 }

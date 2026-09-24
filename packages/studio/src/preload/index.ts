@@ -194,6 +194,7 @@ const api: StudioApi = {
   exportXlsx: () => ipcRenderer.invoke("xlsx:export"),   // Publish Spreadsheet
   exportHtml: () => ipcRenderer.invoke("html:export"),   // Publish Playable HTML
   exportPack: () => ipcRenderer.invoke("pack:export"),
+  shareScopes: () => ipcRenderer.invoke("project:shareScopes"),
   choosePack: () => ipcRenderer.invoke("pack:choose"),
   openPackAt: (path: string) => ipcRenderer.invoke("pack:openAt", path),
   // The pack exchange: three calls, and the key never crosses this bridge.

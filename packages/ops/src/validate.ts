@@ -17,6 +17,7 @@ import { deadStateIssues } from "./deadstate.js";
 import { reachabilityIssues } from "./reachability.js";
 import type { LoadedProject } from "./load.js";
 import { bundleOutputPath } from "./export.js";
+import { staleScopesIssues } from "./game-scopes.js";
 
 export interface ValidateResult {
   issues: Issue[];
@@ -71,6 +72,9 @@ export function runValidate(loaded: LoadedProject, opts: ValidateOptions = {}): 
     // ...and conditions that can never hold at all: dead state's neighbour,
     // for the fault it cannot see (reachability.ts, design/reachability.md).
     issues.push(...reachabilityIssues(loaded.source, compiled.bundle));
+    // The Storylet Engine's file in the game's shared scopes folder, when there is one:
+    // what the other tools read of this project. Stale is a warning, never a gate.
+    issues.push(...staleScopesIssues(loaded));
 
     // Canonical-form drift: the byte contract merges and the hosted store
     // depend on. A warning, because git still merges non-canonical text.

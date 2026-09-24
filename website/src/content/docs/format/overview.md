@@ -121,6 +121,13 @@ storyletengine unpack village-returned.storyletpack -o . \
 Storyletter has the same three moves in its File menu: **Export as Storyletpack…**, **Open
 Storyletpack…**, and **Merge Returned Storyletpack…**.
 
+Where the game [shares its scopes](/play/with-patter/#sharing-scopes-between-the-editors), a
+pack also carries a read-only copy of the `game-scopes/` folder, and unpacking puts it in
+`game-scopes/` inside the project, so the other person's Storyletter checks, offers, and plays
+the other tools' names as yours does. Merging never writes their copy back, with one exception:
+if they changed the World properties, the merge writes them to your `game.scopes.json` as well,
+and tells you.
+
 Packing an unchanged project twice produces identical bytes, so a pack can be hashed and
 diffed like anything else. Conflicts behave exactly as they do in a [version-control
 merge](/setup/version-control/), where the shard is written with your version and a

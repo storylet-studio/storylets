@@ -26,6 +26,8 @@ import type { ProjectShard } from "@storylet-studio/model";
 import { ASSETS_DIR, assetUse } from "./assets.js";
 import { findProjectDir, loadProject } from "./load.js";
 import { ARCHIVE_ENTRY_OPTS } from "@wildwinter/toolkit/archive";
+import { GAME_SCOPES_DIR } from "@wildwinter/scoperegistry/scopes";
+import { readGameScopes } from "./game-scopes.js";
 
 /** The manifest at the pack root: what this envelope is, and what is in it. */
 export interface PackManifest {
@@ -39,6 +41,13 @@ export interface PackManifest {
    *  empty, when a pack carries none, so an older reader sees the shape it
    *  expects. */
   assets?: string[];
+  /** The game's shared scopes files carried, if any: file names, sorted, each
+   *  in the pack as `game-scopes/<name>`. A read-only snapshot for the
+   *  recipient, so their tool checks, offers and previews the other engines'
+   *  names (patterkit design/shared-scopes.md, "Packs"); never a shard, and
+   *  never written back by a merge. Absent, rather than empty, when the project
+   *  has no folder, so such a pack is the pack it always was. */
+  gameScopes?: string[];
 }
 
 export interface PackOptions {
@@ -114,11 +123,19 @@ export async function runPack(startPath: string, opts: PackOptions = {}): Promis
   // in the folder. Nothing is lost: the sender still has the file.
   const assets = wanted ? referencedAssets(root) : [];
 
+  // The game's shared scopes, when the project has a folder: found exactly as
+  // the loader finds it (the `gameScopes` override included), and carried as
+  // the text on disk. The folder sits above the project, so without this the
+  // recipient's tool would work alone. No folder carries nothing, and the pack
+  // is byte for byte what it was before packs carried scopes.
+  const scopes = gameScopesFiles(root, projectFileName, project.gameScopes);
+
   const manifest: PackManifest = {
     schema: PACK_SCHEMA,
     project: { id: project.project.id, name: project.project.name },
     files: files.map((f) => f.rel),
     ...(assets.length > 0 ? { assets: assets.map((a) => a.rel) } : {}),
+    ...(scopes.length > 0 ? { gameScopes: scopes.map((f) => f.name) } : {}),
   };
 
   const zip = new JSZip();
@@ -127,6 +144,7 @@ export async function runPack(startPath: string, opts: PackOptions = {}): Promis
   // Bytes, not text. Reading a PNG as utf8 and writing it back does not survive
   // the round trip, which is the whole reason assets needed this pass.
   for (const a of assets) zip.file(a.rel, readFileSync(a.abs), { ...ENTRY_OPTS, binary: true });
+  for (const f of scopes) zip.file(`${GAME_SCOPES_DIR}/${f.name}`, f.text, ENTRY_OPTS);
 
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", streamFiles: false });
 }
@@ -144,6 +162,21 @@ function referencedAssets(root: string): { abs: string; rel: string }[] {
     }
   }
   return out.sort((a, b) => a.rel.localeCompare(b.rel));
+}
+
+/** Every `*.scopes.json` in the project's game scopes folder, sorted, with its
+ *  text; none when there is no folder, or when the one the project names is not
+ *  there (validate says so; a pack is still a delivery). */
+function gameScopesFiles(root: string, projectFileName: string, override: unknown): { name: string; text: string }[] {
+  const found = readGameScopes(root, projectFileName, override).gameScopes;
+  if (found === undefined) return [];
+  const out: { name: string; text: string }[] = [];
+  for (const name of found.files) {
+    // A file that can't be read now has been reported by the loader; it is
+    // left out rather than taking the whole delivery down.
+    try { out.push({ name, text: readFileSync(join(found.dir, name), "utf8") }); } catch { /* left out */ }
+  }
+  return out;
 }
 
 /** Read a pack's manifest without exploding it (the editor's "what is this?"). */

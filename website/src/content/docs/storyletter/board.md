@@ -111,6 +111,19 @@ joins the snapshot list too).
 That's the same `.storyletsave` format a game writes, so a save from your game opens on
 the Board and a Board snapshot loads in your game.
 
+## Cards that name another engine
+
+The Board runs the Storylet Engine on its own, so a card that reads `@patter.visits` or
+changes `@patter.gold` needs Patter's values from somewhere. Where the game
+[shares its scopes](/play/with-patter/#sharing-scopes-between-the-editors), the Board stands
+Patter in: every property its file declares starts at its declared default, and the State tab
+lists them beside your own, so you can set `visits` to see what a card gated on it does. A game's own scopes (`@player`) are stood in the same
+way. A save made then carries those values too, in the file beside the engine's own part.
+
+Without the folder, or where no file in it declares the scope, the Board can't play the
+project. It says so where the table would be, naming the scope and the file that would
+declare it.
+
 ## Seed, restart, and staleness
 
 The top bar carries the session **seed** as an editable field. Change it and the session

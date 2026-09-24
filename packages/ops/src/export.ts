@@ -12,6 +12,7 @@ import { BUNDLE_EXTENSION, PROJECT_FOLDER_EXTENSION, backgroundsOf, bundleAssetP
 import type { Bundle } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
 import { assetPath } from "./assets.js";
+import { planStoryletsScopes } from "./game-scopes.js";
 import type { PlannedBinaryWrite, PlannedWrite } from "./write.js";
 
 export interface ExportResult {
@@ -30,6 +31,13 @@ export interface ExportResult {
    * something built for shards.
    */
   assets: PlannedBinaryWrite[];
+  /**
+   * The Storylet Engine's file in the game's shared scopes folder
+   * (`game-scopes/storylets.scopes.json`), when the project has a folder and the file does
+   * not already say what the project would write (patterkit design/shared-scopes.md). Never
+   * for stdout, and never when there is no folder: creating one is an explicit act.
+   */
+  scopesWrite?: PlannedWrite;
 }
 
 export interface ExportOptions {
@@ -113,11 +121,13 @@ export function runExport(loaded: LoadedProject, out?: string, opts: ExportOptio
   if (out === "-") return { issues: all, bundle, text, assets: [] };
 
   const path = out ?? bundleOutputPath(loaded);
+  const scopesWrite = planStoryletsScopes(loaded);
   return {
     issues: all,
     bundle,
     text,
     write: { path, content: text },
     assets: bundle.maps !== undefined ? mapAssets({ ...loaded, source }, path) : [],
+    ...(scopesWrite !== undefined ? { scopesWrite } : {}),
   };
 }

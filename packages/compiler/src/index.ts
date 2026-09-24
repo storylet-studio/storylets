@@ -9,5 +9,9 @@ export { contentAboveRung, summariseLadder, ladderWarning, playRungOf, PLAY_RUNG
 export type { LadderItem, LadderItemKind } from "./play-ladder.js";
 export type { SpatialGroup } from "./maps.js";
 export { loadProjectFiles, walkProjectFiles } from "./load.js";
-export type { Issue, IssueFix, SourceFile, SourceProject, SourceBox, SourceContract, SourceDeck } from "./project.js";
+export type { GameScopes, Issue, IssueFix, SourceFile, SourceProject, SourceBox, SourceContract, SourceDeck } from "./project.js";
+export {
+  STORYLETS_OWNER, STORYLETS_SCOPES_FILE, STORYLETS_TOKEN, fromScopeDeclaration, gameTokens, sameDeclarations,
+  scopesFilePath, sharedWorld, storyletsScopesFile, toScopeDeclaration, worldDeclarations,
+} from "./game-scopes.js";
 export { boxMapOf } from "./project.js";

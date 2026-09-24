@@ -1,6 +1,12 @@
 export { newId, slug } from "./ids.js";
 export type { PlannedWrite } from "./write.js";
 export { findProjectDir, loadProject } from "./load.js";
+// The game's shared scopes folder (patterkit design/shared-scopes.md): reading it, writing the
+// Storylet Engine's file and the game's @world, and the previews' stand-in registry.
+export {
+  defaultGameScopesParent, nodeScopesFs, planGameWorld, planShareScopes, planStoryletsScopes, previewRegistry,
+  readGameFile, readGameScopes, staleScopesIssues, storyletsScopesText,
+} from "./game-scopes.js";
 export type { LoadedProject } from "./load.js";
 export { runInit, projectFolderName } from "./init.js";
 export type { InitOptions, InitResult } from "./init.js";

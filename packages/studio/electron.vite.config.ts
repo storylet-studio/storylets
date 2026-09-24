@@ -17,11 +17,14 @@ const workspacePkgs = [
   "@wildwinter/toolkit",
   "@wildwinter/expr-specificity",
   "@wildwinter/expr-editor",
+  // Bundled, as it was when it arrived only through the runtime: the scopes entry point
+  // (shared game scopes) is imported here directly now, which made it a dependency.
+  "@wildwinter/scoperegistry",
 ];
 
 const here = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
-const expr = (pkg: string): string | undefined => {
-  const src = here(`../../../expr/packages/${pkg}/src/index.ts`);
+const expr = (pkg: string, entry = "index"): string | undefined => {
+  const src = here(`../../../expr/packages/${pkg}/src/${entry}.ts`);
   return existsSync(src) ? src : undefined;
 };
 
@@ -33,6 +36,10 @@ const aliases = {
   "@storylet-studio/ops": here("../ops/src/index.ts"),
   ...(expr("expr") ? { "@wildwinter/expr": expr("expr")! } : {}),
   ...(expr("expr-specificity") ? { "@wildwinter/expr-specificity": expr("expr-specificity")! } : {}),
+  // The subpath before the package, since an alias matches as a prefix. One copy of the
+  // registry for the runtime and the Board's stand-ins, from the sibling source like expr.
+  ...(expr("scoperegistry", "scopes") ? { "@wildwinter/scoperegistry/scopes": expr("scoperegistry", "scopes")! } : {}),
+  ...(expr("scoperegistry") ? { "@wildwinter/scoperegistry": expr("scoperegistry")! } : {}),
   // expr-editor is consumed from its published package (JS + styles.css); its
   // own @wildwinter/expr imports still hit the source alias above.
 };

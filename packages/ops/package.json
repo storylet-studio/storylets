@@ -31,6 +31,7 @@
     "@storylet-studio/model": "0.5.0",
     "@storylet-studio/runtime": "0.8.0",
     "@wildwinter/expr": "^0.5.0",
+    "@wildwinter/scoperegistry": "^0.8.0",
     "@wildwinter/toolkit": "^0.1.0",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1"

@@ -787,3 +787,117 @@ describe("content that names another engine's scope", () => {
     });
   }
 });
+
+// The game's shared scopes folder (patterkit design/shared-scopes.md): export brings the
+// Storylet Engine's file up to date and leaves it alone when it is, validate says when it is
+// stale, and the previews stand Patter in from its file, so the same content that is refused
+// above plays.
+describe("a game that shares its scopes", () => {
+  const PATTER = { version: 1, owner: "Patter", scopes: [{ token: "patter", declarations: [
+    { name: "visits", type: "number", default: 0 },
+    { name: "gold", type: "number", default: 3, writable: false },
+  ] }] };
+  const game = (): { root: string; dir: string } => {
+    const root = mkdtempSync(join(tmpdir(), "storyletengine-scopes-"));
+    mkdirSync(join(root, ".git"));
+    mkdirSync(join(root, "game-scopes"));
+    writeFileSync(join(root, "game-scopes", "patter.scopes.json"), `${JSON.stringify(PATTER, null, 2)}\n`);
+    const dir = join(root, "copy.storylets");
+    cpSync(exampleDir, dir, { recursive: true });
+    const deckPath = join(dir, "encounters", "decks", "docks.storyletdeck");
+    writeFileSync(deckPath, readFileSync(deckPath, "utf8").replace('"@story.reputation >= 0"', '"@patter.visits >= 0"'));
+    return { root, dir };
+  };
+
+  it("export writes storylets.scopes.json, and a second export leaves it byte-identical", async () => {
+    const { root, dir } = game();
+    const ours = join(root, "game-scopes", "storylets.scopes.json");
+    const first = await call("export", dir, "-o", join(root, "out.storyletsc"));
+    expect(first.code).toBe(0);
+    expect(first.out).toContain(`wrote ${ours}`);
+    const text = readFileSync(ours, "utf8");
+    expect(JSON.parse(text).owner).toBe("Storylet Engine");
+    const second = await call("export", dir, "-o", join(root, "out.storyletsc"));
+    expect(second.out.join("\n")).not.toContain("wrote");
+    expect(readFileSync(ours, "utf8")).toBe(text);
+  });
+
+  it("validate warns while the file is stale", async () => {
+    const { dir } = game();
+    const r = await call("validate", dir);
+    expect(r.err.join("\n")).toContain("game-scopes/storylets.scopes.json is out of date: save the project in Storyletter or run export");
+  });
+
+  for (const argv of [["peek", "encounters"], ["deal", "docks-street"], ["coverage"]]) {
+    it(`${argv[0]} plays content naming @patter, standing Patter in`, async () => {
+      const r = await call(...argv, game().dir);
+      expect(r.err.join("\n")).not.toContain("this content names");
+      expect(r.code).toBe(0);
+    });
+  }
+
+  // A pack carries a snapshot of the folder; unpack lands it inside the project;
+  // a returned pack's copy is never written back, but a World edit is.
+  const GAME = { version: 1, owner: "Game", scopes: [{ token: "world", declarations: [{ name: "danger", type: "number", default: 0 }] }] };
+  /** Pack the game's project, unpack it for the other author, let them work, and pack it back. */
+  const roundTrip = async (work: (theirs: string) => void) => {
+    const { root, dir } = game();
+    writeFileSync(join(root, "game-scopes", "game.scopes.json"), `${JSON.stringify(GAME, null, 2)}\n`);
+    const sent = join(root, "sent.storyletpack");
+    expect((await call("pack", dir, "-o", sent)).code).toBe(0);
+    const theirs = join(mkdtempSync(join(tmpdir(), "storyletengine-theirs-")), "theirs");
+    const unpacked = await call("unpack", sent, "-o", theirs);
+    expect(unpacked.code).toBe(0);
+    work(theirs);
+    const returned = join(root, "returned.storyletpack");
+    expect((await call("pack", theirs, "-o", returned)).code).toBe(0);
+    return { root, dir, sent, returned, theirs, unpacked };
+  };
+  const worldEdit = (theirs: string): void => {
+    const proj = join(theirs, "saltmarsh.storyletproj");
+    const shard = parseSource(readFileSync(proj, "utf8")) as { world: { properties: unknown[] } };
+    shard.world.properties.push({ name: "tide", type: "number", default: 3 });
+    writeFileSync(proj, canonicalStringify(shard));
+  };
+
+  it("unpack lands the pack's scopes in the project, and validate there checks @patter names", async () => {
+    const { theirs, unpacked } = await roundTrip((t) => {
+      const deck = join(t, "encounters", "decks", "docks.storyletdeck");
+      writeFileSync(deck, readFileSync(deck, "utf8").replace('"@patter.visits >= 0"', '"@patter.visitz >= 0"'));
+    });
+    expect(unpacked.out).toContain(`unpacked: ${join(theirs, "game-scopes", "patter.scopes.json")}`);
+    expect(unpacked.out.at(-1)).toContain("2 game scopes file(s)");
+    expect(readFileSync(join(theirs, "game-scopes", "patter.scopes.json"), "utf8")).toBe(`${JSON.stringify(PATTER, null, 2)}\n`);
+    expect((await call("validate", theirs)).err.join("\n")).toContain("visitz");
+  });
+
+  it("unpack --merge writes a returned World edit to game.scopes.json, and says so", async () => {
+    const { root, dir, sent, returned } = await roundTrip(worldEdit);
+    const r = await call("unpack", returned, "-o", dir, "--merge", "--base", sent);
+    expect(r.code).toBe(0);
+    const gameFile = join(root, "game-scopes", "game.scopes.json");
+    expect(r.out).toContain(`updated the game's World properties: ${gameFile}`);
+    expect(readFileSync(gameFile, "utf8")).toContain("tide");
+  });
+
+  it("unpack --merge never writes the returned snapshot, and leaves game.scopes.json alone with World unchanged", async () => {
+    const { root, dir, sent, returned } = await roundTrip((t) => {
+      writeFileSync(join(t, "game-scopes", "patter.scopes.json"), `${JSON.stringify({ ...PATTER, owner: "Somebody else" }, null, 2)}\n`);
+    });
+    const before = readFileSync(join(root, "game-scopes", "game.scopes.json"), "utf8");
+    const r = await call("unpack", returned, "-o", dir, "--merge", "--base", sent);
+    expect(r.code).toBe(0);
+    expect(r.out.join("\n")).not.toContain("World properties");
+    expect(readFileSync(join(root, "game-scopes", "patter.scopes.json"), "utf8")).toBe(`${JSON.stringify(PATTER, null, 2)}\n`);
+    expect(readFileSync(join(root, "game-scopes", "game.scopes.json"), "utf8")).toBe(before);
+    expect(existsSync(join(dir, "game-scopes"))).toBe(false);
+  });
+
+  it("unpack --merge warns, and writes nothing there, when game.scopes.json won't parse", async () => {
+    const { root, dir, sent, returned } = await roundTrip(worldEdit);
+    writeFileSync(join(root, "game-scopes", "game.scopes.json"), "{ not json");
+    const r = await call("unpack", returned, "-o", dir, "--merge", "--base", sent);
+    expect(r.err.join("\n")).toContain("warning: the returned World properties could not be written to");
+    expect(readFileSync(join(root, "game-scopes", "game.scopes.json"), "utf8")).toBe("{ not json");
+  });
+});

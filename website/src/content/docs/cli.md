@@ -102,6 +102,12 @@ committed `.storyletsc` whose content hash no longer matches the shards is an er
 Problems print as `severity: path [where]: message`. Any error exits 1, which makes this the
 natural pre-commit hook and CI gate.
 
+Where the game [shares its scopes](/play/with-patter/#sharing-scopes-between-the-editors), it also
+reads the `game-scopes/` folder: a file there that won't parse, or a scope two files both declare,
+is an error, and a reference into another tool's scope that its file doesn't allow is a warning.
+So is `game-scopes/storylets.scopes.json` being out of date, which `export` or a save in
+Storyletter fixes.
+
 ## format
 
 Rewrite shards into canonical form: sorted keys, one field per line, trailing commas, LF, a
@@ -137,6 +143,10 @@ them out. Without either, the project's own `export.map` setting decides, and it
 off, because geometry is authoring data and a shipping build needn't carry anything it
 doesn't use.
 The engine never reads a shipped map; it's there for a host that draws its own.
+
+Where the game [shares its scopes](/play/with-patter/#sharing-scopes-between-the-editors), export
+also brings `game-scopes/storylets.scopes.json` up to date (your `@story` declarations, for the
+other tools to read), writing it only when it changed. It never creates the folder.
 
 ## export-html
 
@@ -217,6 +227,12 @@ right now, in ranking order, without dealing anything.
 | `--set path=value` | both | Set a property before asking. Repeatable. The value is parsed as JSON5 where it parses, and taken as a bare string otherwise. |
 | `--seed N` | both | The flow's seed. Defaults to 0. |
 | `--deal-all` | both | Deal every hand first, so cards other hands have claimed are already gone. |
+
+Content that names another engine's scope (`@patter.visits`) needs that engine beside it. On its
+own the engine refuses such content, naming the scope, and the command exits 1. Where the game
+[shares its scopes](/play/with-patter/#sharing-scopes-between-the-editors), `peek`, `deal`, and
+`coverage` stand the other engines in instead, each property at the default its tool's file
+declares, so the content plays. `--set` can move one of them (`--set patter.visits=3`).
 
 `--set` takes the same paths the runtime does, the owner named as you name it in a shard:
 `story.started`, `world.market_day`, `value.docks.danger`, `box.street.heat`. Where two boxes
@@ -314,6 +330,12 @@ The pack carries the source shards and a manifest. It doesn't carry the compiled
 which is generated and would only go stale in transit. Packing an unchanged project twice
 produces identical bytes.
 
+Where the game [shares its scopes](/play/with-patter/#sharing-scopes-between-the-editors), the
+pack also carries a read-only copy of every `*.scopes.json` in the `game-scopes/` folder, found
+as the other commands find it. The folder sits outside the project, so without the copy the
+person you send it to would be working without the other tools' names. A project with no folder
+packs exactly as before.
+
 ## unpack
 
 Explode a pack back into shards, or fold a returned one into your project.
@@ -332,6 +354,10 @@ unpacked: village/encounters/box.storyletbox
 | `--merge` | Fold a returned pack into the project at `-o` instead of extracting. |
 | `--base SENT` | The pack you sent, used as the common ancestor. Required with `--merge`. |
 
+A pack that carries the game's scopes unpacks them into `game-scopes/` inside the project
+folder, where the other commands look first, so `validate` checks `@patter` names there as it
+does at home, and `peek`, `deal`, and `coverage` can stand the other engines in.
+
 With `--merge`, each shard goes through the same id-keyed three-way merge as
 [`merge`](#merge), so you and the other author can edit different fields of the same card
 and both edits survive. A conflict writes your version plus a `.storyletconflict` file and exits
@@ -345,6 +371,21 @@ merged: encounters/decks/docks.storyletdeck
 
 `--merge` without `--base` is a usage error, because with no ancestor there's no merge to do,
 only an overwrite.
+
+`--merge` never writes back the returned pack's copy of the game's scopes: your `game-scopes/`
+folder is the one that counts. The exception is the World properties. If the other author
+changed them, the merge writes the merged list to your `game.scopes.json` too and says so,
+because otherwise your next save would copy the old list back into the project and lose their
+edit without a word:
+
+```
+$ storyletengine unpack returned.storyletpack -o . --merge --base outbox/village.storyletpack
+merged: saltmarsh.storyletproj
+updated the game's World properties: /work/village/game-scopes/game.scopes.json
+9 shard(s) -> .; 0 conflict(s), 0 warning(s)
+```
+
+If `game.scopes.json` won't parse, the merge leaves it alone and warns instead.
 
 A pack may arrive from outside your team, so entry paths are checked before anything is
 written. An entry that would land outside `-o` is refused and nothing is written.

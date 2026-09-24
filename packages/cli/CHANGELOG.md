@@ -20,6 +20,12 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Added
+
+- **Shared game scopes.** Where the game keeps a `game-scopes/` folder (found by looking in the project folder and each folder above, up to the repository root, or named by the project's new `gameScopes` field), the CLI reads every `*.scopes.json` in it. `export` writes `game-scopes/storylets.scopes.json`, the project's `@story` declarations for the other tools, and only when it changed; it never creates the folder. `validate` warns when that file is out of date, reports a scopes file that won't parse or a scope two files declare as an error, and checks references into the other tools' scopes as warnings: a name their file doesn't declare, a type mismatch, or an outcome writing a property it marks read-only. `@world` comes from `game.scopes.json` when that declares it, with a warning if the project's copy differs. A game's own scope such as `@player` compiles once the folder declares it.
+- **`peek`, `deal` and `coverage` play content that names another engine**, where the game shares its scopes: the other engines are stood in from the defaults their files declare. Without the folder, such content is still refused, as before.
+- **Packs carry the game's shared scopes.** Where the project has a `game-scopes/` folder, `pack` carries a read-only copy of every `*.scopes.json` in it, listed in the manifest's new `gameScopes`, and `unpack` writes it to `game-scopes/` inside the unpacked project, so `validate`, `peek`, `deal` and `coverage` there know the other tools' names. `unpack --merge` never writes the returned copy back. If the other author changed the World properties, it writes the merged list to your `game.scopes.json` too and prints `updated the game's World properties`, since your next save would otherwise copy the old list back into the project; if that file won't parse, it warns and leaves it alone. A project with no folder packs to the same bytes as before, and older packs unpack as they always did.
+
 ## [0.7.0] - 2026-09-24
 
 ### Changed

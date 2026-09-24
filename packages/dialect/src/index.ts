@@ -185,3 +185,23 @@ export const storyletsDialect: Dialect = {
     },
   },
 };
+
+/**
+ * The dialect, also accepting the game-wide scopes `tokens` names: every token a game's
+ * shared scopes folder declares (`game-scopes/`, patterkit design/shared-scopes.md), so a
+ * game's own scope such as `@player` parses where the shared vocabulary alone would not. A
+ * token the dialect already has keeps its place and its policy; each new one gets the policy
+ * another engine's scope has, since whoever declared it owns its names. With nothing new to
+ * add this is `storyletsDialect` itself, so a project with no shared folder compiles exactly
+ * as before. For editing and publishing only: a runtime evaluates a compiled bundle, which
+ * names its scopes already.
+ */
+export function storyletsDialectWith(tokens: readonly string[]): Dialect {
+  const known = new Set(storyletsDialect.scopes.map((s) => s.token));
+  const added = [...new Set(tokens)].filter((t) => !known.has(t));
+  if (added.length === 0) return storyletsDialect;
+  return {
+    ...storyletsDialect,
+    scopes: [...storyletsDialect.scopes, ...added.map((token) => ({ token, missing: "throw" as const }))],
+  };
+}

@@ -1299,6 +1299,14 @@ export interface ProjectShard {
      *  on state nothing writes) always warns, because that kills cards now. */
     warnUnreadWrites?: boolean;
   };
+  /**
+   * Where the game's shared scopes folder is, relative to the folder holding this file
+   * (`"../../shared/game-scopes"`). Authoring config, never compiled, and usually absent: the
+   * tools find a `game-scopes/` folder by walking up from the project on their own, stopping at
+   * the version-control root, so this is only for a folder that walk would not reach. A path
+   * that doesn't exist is a project error. (patterkit design/shared-scopes.md.)
+   */
+  gameScopes?: string;
   world: {
     properties: PropertyDecl[];
     registry?: unknown;

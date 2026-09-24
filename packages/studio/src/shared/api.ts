@@ -361,6 +361,9 @@ export interface ConditionProperty {
    *  operators on it, and seeds an outcome to `advance()` because of it. */
   stages?: string[];
   purpose?: string;
+  /** Who declares it, when that is another tool (or the game) through the game's shared
+   *  scopes folder ("Patter", "Game"): the pill's tip says so. Absent for this project's own. */
+  owner?: string;
 }
 
 export interface DeckDto {
@@ -496,6 +499,30 @@ export interface ProjectDto {
    *  the window can ask `play-ladder.ts` what it may draw. */
   play: PlayRung;
   boxes: BoxDto[];
+  /** The game's shared scopes folder, when the project has one (patterkit
+   *  design/shared-scopes.md). What the expression editors need beyond the catalogue: the
+   *  tokens it declares, so the dialect accepts them, and which of them are opaque (any
+   *  name, unchecked). Absent when there is no folder. */
+  gameScopes?: GameScopesDto;
+}
+
+/** The game's shared scopes folder, as the renderer is told it. */
+export interface GameScopesDto {
+  /** The folder, absolute, for the author's benefit ("shared through ..."). */
+  dir: string;
+  /** Every game-wide token the folder declares other than this engine's own scopes. */
+  tokens: string[];
+  /** Those declared with no declarations: any name, unchecked. */
+  opaque: string[];
+  /** Whether `@world` comes from the folder (the World settings then edit its file). */
+  sharedWorld: boolean;
+}
+
+/** What the Board needs to stand the other engines in (decision 4): the folder's merged
+ *  spec and who declares each token, as plain data across the window boundary. */
+export interface BoardScopesDto {
+  spec: { version: number; scopes: { token: string; writable?: boolean; declarations?: { name: string; type: PropertyType; values?: string[]; stages?: string[]; default?: ScalarValue; writable?: boolean; purpose?: string }[] }[] };
+  owners: Record<string, { owner: string; fileName: string }>;
 }
 
 /** One shard's version-control state, folded from simple-vc-lib `fileStatus`
@@ -842,6 +869,10 @@ export interface ProjectSettingsDto {
   /** Also warn when state is written but nothing reads it (off by default:
    *  cards are routinely written ahead of the content that will read them). */
   warnUnreadWrites: boolean;
+  /** Where `world` lives when the game shares its scopes: the file the World settings
+   *  write first ("game-scopes/game.scopes.json"), before the project's synced copy.
+   *  Absent when the project's own declarations are the only ones. */
+  worldFile?: string;
 }
 
 /** One coverage driver in editable form. `ref` is the whole "@world.name"
@@ -1115,6 +1146,15 @@ export interface PackMergeSummary {
    * rather than a guard - see `ProvenanceCheck` in ops for the whole argument.
    */
   provenance?: string;
+  /**
+   * The other author changed the World properties, and the game shares its
+   * scopes: the merge writes them to the game's own file too (named as
+   * `game-scopes/game.scopes.json`), or the next save would rewrite the
+   * project's copy from that file and lose them. Absent otherwise.
+   */
+  gameWorld?: string;
+  /** ...or why it can't (that file won't parse, and is left alone), as a sentence. */
+  gameWorldError?: string;
 }
 
 /** What the Coverage window needs to open: the project it is looking at, how
@@ -1293,6 +1333,7 @@ export type MenuCommand =
   | { cmd: "review-prev" }
   | { cmd: "open-pack" }
   | { cmd: "export-pack" }
+  | { cmd: "share-scopes" }
   | { cmd: "merge-pack" }
   // The pack exchange (File ▸ Connect to a server…, and the Server menu that
   // appears once a project has come from one).
@@ -1463,7 +1504,7 @@ export interface StudioApi {
    *  re-pinned; remembered bounds cleared (Patterpad's rescue). */
   resetWindows(): Promise<void>;
   /** Compile the (freshly re-read) project to a bundle for the Board. */
-  tableBundle(): Promise<{ bundle: Bundle; name: string; play: PlayRung } | { error: string }>;
+  tableBundle(): Promise<{ bundle: Bundle; name: string; play: PlayRung; scopes?: BoardScopesDto } | { error: string }>;
   /** The current source content hash (compare to a running bundle's
    *  content.hash to tell if the Board is out of date). Null if it won't load. */
   projectHash(): Promise<string | null>;
@@ -1690,6 +1731,12 @@ export interface StudioApi {
   /** Publish Playable HTML: the project as one self-contained .html that
    *  plays in any browser, through a native Save dialog. Null = cancelled. */
   exportHtml(): Promise<{ path: string } | { error: string } | null>;
+
+  // --- the game's shared scopes folder (patterkit design/shared-scopes.md) ------
+  /** "Share Scopes with Other Tools...": create a `game-scopes/` folder where the author
+   *  picks (native folder dialog, opened at the version-control root above the project),
+   *  and write the project's scopes files into it. Null = cancelled. */
+  shareScopes(): Promise<OpenResult | { error: string } | null>;
 
   // --- the send envelope (.storyletpack, Reboot 7.1) -------------------------
   /** Write the open project to a .storyletpack (native save dialog).

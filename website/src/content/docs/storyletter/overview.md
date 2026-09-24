@@ -90,6 +90,12 @@ A project folder is perfect for version control but awkward to email or drop in 
 - **File ▸ Merge Returned Storyletpack…** takes a pack someone sends back and folds their
   edits into your project.
 
+Where the game [shares its scopes](/play/with-patter/#sharing-scopes-between-the-editors), the
+pack carries a copy of them, so the person you send it to gets the other tools' properties in
+their pickers and on their Board. When it comes back, their copy is ignored, except that World
+properties they changed are written to your `game.scopes.json` too. The merge's confirmation
+says so before anything is written.
+
 See [the send envelope](/format/overview/#the-send-envelope-storyletpack) for what travels
 and what doesn't.
 

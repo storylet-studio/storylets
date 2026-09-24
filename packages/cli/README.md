@@ -9,7 +9,9 @@ storyletengine init [dir] [--name X]     scaffold a new .storylets project
 storyletengine new box [path] [--kit K]  add a box, scaffolded from a kit
 storyletengine validate [path]           publish gate + bundle staleness + canonical form
 storyletengine format [path] [--check]   rewrite shards to canonical form (alias: fmt)
-storyletengine export [path] [-o file]   compile to the .storyletsc bundle (-o - for stdout)
+storyletengine export [path] [-o file]   compile to the .storyletsc bundle (-o - for stdout),
+                                         and bring game-scopes/storylets.scopes.json up to
+                                         date where the game shares its scopes
 storyletengine peek <box> [path]         look at the stock through the reference runtime
     [--where group=tag ...] [--n N] [--set path=value ...] [--seed N] [--deal-all]
 storyletengine deal <hand> [path]        refresh a hand through the reference runtime
@@ -32,6 +34,19 @@ storyletengine coverage [path]           seeded playthroughs: per-hand and per-c
 
 Exit codes: 0 ok, 1 the operation found problems, 2 usage. `merge` alone maps a
 malformed input to 2 as well, so a version-control driver can fall back.
+
+Where the game shares its scopes (a `game-scopes/` folder at or above the
+project, up to the repository root; patterkit design/shared-scopes.md),
+`validate` checks references into the other tools' scopes as warnings and
+warns when `storylets.scopes.json` is stale, `export` rewrites it when it
+changed, and `peek`, `deal` and `coverage` stand the other engines in from
+their files' defaults, so content naming `@patter` plays. `pack` carries a
+read-only copy of the folder's `*.scopes.json` files, and `unpack` puts it in
+`game-scopes/` inside the project, where the other commands look first.
+`unpack --merge` never writes the returned copy back; if the other author
+changed the World properties, it writes the merged list to your
+`game.scopes.json` and says so, since the next save would otherwise copy the
+old list back into the project.
 
 
 

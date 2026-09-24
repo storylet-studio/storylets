@@ -23,8 +23,9 @@
 // not analysed yet.
 // ---------------------------------------------------------------------------
 
-import { compileProject } from "@storylet-studio/compiler";
+import { compileProject, worldDeclarations } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
+import { previewRegistry } from "./game-scopes.js";
 import { Engine, makePrng } from "@storylet-studio/runtime";
 import type { Flow } from "@storylet-studio/runtime";
 import { PLACE_GROUP, effectiveGameId } from "@storylet-studio/model";
@@ -418,7 +419,15 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
   if (!bundle) return empty;
   // The sweep runs the Storylet Engine on its own, which refuses content that names another
   // engine's scope (`@patter.visits`) as a flow opens. Say so once, as an error, not per run.
-  try { new Engine(bundle, { seed }).openFlow("main"); }
+  // With a game scopes folder, each run stands the other engines in from their declared
+  // defaults instead (patterkit design/shared-scopes.md, decision 4): a fresh registry per
+  // run, as each run is a fresh game.
+  const merged = source.gameScopes?.merged;
+  const engineFor = (engineSeed: number): Engine => {
+    const registry = previewRegistry(bundle, merged);
+    return new Engine(bundle, { seed: engineSeed, ...(registry ? { registry } : {}) });
+  };
+  try { engineFor(seed).openFlow("main"); }
   catch (e) {
     return { ...empty, issues: [...issues, { severity: "error", path: source.path, message: e instanceof Error ? e.message : String(e) }] };
   }
@@ -498,7 +507,7 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
     if (opts.shouldStop?.()) break;
     // The engine's own seed derives from the harness PRNG: one seed, whole
     // run reproducible.
-    const session = new Engine(bundle, { seed: Math.floor(prng.next() * 0x100000000) }).openFlow("main");
+    const session = engineFor(Math.floor(prng.next() * 0x100000000)).openFlow("main");
     // Subscribing turns the trace on; the diagnostics it surfaces (a faulting
     // condition, an undeclared name) used to be swallowed by the sweep.
     const runDiags = new Set<string>();
@@ -754,7 +763,7 @@ export function proposeCoverage(source: SourceProject): { coverage: CoverageConf
   if (!bundle) return { coverage: {}, issues };
   const analysis = analyse(bundle);
 
-  const declByName = new Map((source.project.world?.properties ?? []).map((d) => [d.name, d]));
+  const declByName = new Map(worldDeclarations(source).map((d) => [d.name, d]));
   const drivers: Record<string, CoverageDriver> = {};
   for (const ref of [...analysis.allRefs].sort()) {
     if (!ref.startsWith("@world.") || analysis.written.has(ref)) continue;

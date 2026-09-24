@@ -129,6 +129,10 @@ export function refreshMenu(
           }),
         },
         { ...FILE_MENU.projectSettings, click: send({ cmd: "project-settings" }) },
+        // The game's shared scopes folder (patterkit design/shared-scopes.md): creating it is
+        // an explicit act, never a side effect, and this is the act. Beside Project Settings
+        // because it is about the project's place in the game rather than about any one shard.
+        { label: "Share Scopes with Other Tools\u2026", click: send({ cmd: "share-scopes" }) },
         // Who comments are signed as. Beside Project Settings and NOT in it: the
         // name belongs to the person at the keyboard, not to the project, which
         // is the same reason it lives in the app's state.

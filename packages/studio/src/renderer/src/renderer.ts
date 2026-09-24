@@ -60,7 +60,7 @@ import { createProjectSettings } from "./project-settings.js";
 import { mountPropertyList } from "./prop-list.js";
 import { revealRowWhenReady } from "@wildwinter/app-shell";
 import { setPlayRung } from "./play-ladder.js";
-import { setPropertyNavigator } from "./expr-panels.js";
+import { setGameScopes, setPropertyNavigator } from "./expr-panels.js";
 import { createNavHistory, historyNav, toast } from "@wildwinter/app-shell";
 // The small idioms (util.ts): one plural, one debounce, one "is the focus in a field".
 import { debounce, isEditableTarget, keyLabel, plural, tipWithKey } from "@wildwinter/app-shell";
@@ -1257,6 +1257,9 @@ const AUTOSAVE_MS = 700;
 function applyResult(result: OpenResult): void {
   project = result.project;
   remote = result.remote;
+  // The game's shared scopes folder, for the expression editors' dialect: seeded on every
+  // result, since sharing the project's scopes comes back through here.
+  setGameScopes(result.project.gameScopes);
   // The lead carries the unpushed count, and every write moves it: redrawn here
   // rather than only on a full workspace render, which a keystroke does not do.
   renderProjectLead();
@@ -2491,6 +2494,7 @@ async function adopt(pending: Promise<OpenResult | { error: string } | null>): P
   }
   project = result.project;
   remote = result.remote;
+  setGameScopes(result.project.gameScopes);
   setPlayRung(result.project.play);
   problems = result.problems;
   problemAt = 0;
@@ -2572,6 +2576,25 @@ async function exportPlayable(): Promise<void> {
   if (result === null) return;
   if ("error" in result) { flashError(result.error); return; }
   flash(`Published ${baseName(result.path)}`, "ok");
+}
+
+// --- the game's shared scopes folder (patterkit design/shared-scopes.md) -------
+
+/** "Share Scopes with Other Tools...": make the folder, or say where it already is. The
+ *  catalogue is re-read afterwards, since the other tools' properties are in it now. */
+async function shareScopes(): Promise<void> {
+  if (project?.gameScopes) {
+    flash(`This project already shares its scopes, through ${project.gameScopes.dir}`, "ok");
+    return;
+  }
+  await flushSaves();   // the files the other tools read are written from what is on disk
+  const result = await studio.shareScopes();
+  if (result === null) return;
+  if (!applied(result)) return;
+  if (catalogueDeck !== undefined) await loadCatalogue(catalogueDeck);
+  else if (catalogueBox !== undefined) await loadBoxCatalogue(catalogueBox);
+  else renderWorkspace();
+  flash("Shared the project's scopes: the game's other tools can read them now", "ok");
 }
 
 // --- the send envelope (.storyletpack) ---------------------------------------
@@ -2728,7 +2751,7 @@ async function mergePack(): Promise<void> {
   const planned = await withJob("merge", "Merging the returned pack…", () => studio.mergePackPlan());
   if (planned === null) return;                       // a picker was cancelled
   if ("error" in planned) { flashError(planned.error); return; }
-  const { shards, conflicts, assets, keptAssets, provenance } = planned.summary;
+  const { shards, conflicts, assets, keptAssets, provenance, gameWorld, gameWorldError } = planned.summary;
   const added = shards.filter((s) => s.added).length;
   const merged = shards.length - added;
 
@@ -2741,6 +2764,13 @@ async function mergePack(): Promise<void> {
   const conflictLine = conflicts > 0
     ? ` ${plural(conflicts, "conflict")} will keep your version, with a .storyletconflict file beside each.`
     : "";
+  // Their copy of the game's scopes is never merged in; a World edit they made
+  // is the one exception, and the author is told where it goes.
+  const worldLine = gameWorld !== undefined
+    ? ` They changed the World properties, so ${gameWorld} gets them too.`
+    : gameWorldError !== undefined
+      ? ` They changed the World properties, which only the project's copy gets: ${gameWorldError}.`
+      : "";
   // The mismatch is the HEADLINE when there is one, because it is the thing most
   // likely to mean the author picked the wrong file. Cancel is the shell confirm's
   // focused button either way, so the safe answer is the one already under the
@@ -2752,8 +2782,8 @@ async function mergePack(): Promise<void> {
     // nothing. Written as prose that reads without the break rather than as prose
     // that needs one it will not get.
     body: provenance !== undefined
-      ? `${provenance} Merging anyway would give you ${counts}.${conflictLine}`
-      : `${counts}.${conflictLine} You can undo this.`,
+      ? `${provenance} Merging anyway would give you ${counts}.${conflictLine}${worldLine}`
+      : `${counts}.${conflictLine}${worldLine} You can undo this.`,
     confirmLabel: "Merge",
   });
   if (!ok) { await studio.mergePackDrop(); return; }
@@ -2831,6 +2861,7 @@ function onMenu(command: MenuCommand): void {
     case "export-xlsx": if (project) void exportSpreadsheet(); break;   // Publish Spreadsheet
     case "export-html": if (project) void exportPlayable(); break;   // Publish Playable HTML
     case "export-pack": if (project) void exportPack(); break;
+    case "share-scopes": if (project) void shareScopes(); break;
     case "open-pack": void openPack(); break;
     // The pack exchange. Connect is offered whatever is open; Pull and Push
     // only reach a project that came from a server, and their menu is not

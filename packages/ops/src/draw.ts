@@ -9,6 +9,7 @@ import type { Issue } from "@storylet-studio/compiler";
 import { Engine } from "@storylet-studio/runtime";
 import type { ScalarValue } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
+import { previewRegistry } from "./game-scopes.js";
 
 export interface AskOptions {
   /** Peek: the box to look at (with optional criteria). */
@@ -54,8 +55,11 @@ export function runAsk(loaded: LoadedProject, opts: AskOptions): AskResult {
 
   try {
     // Inside the try: the engine refuses, as the flow opens, content that names another
-    // engine's scope (`@patter.visits`), and that is an error to report, not a crash.
-    const session = new Engine(bundle, { seed: opts.seed ?? 0 }).openFlow("main");
+    // engine's scope (`@patter.visits`), and that is an error to report, not a crash. With a
+    // game scopes folder the other engines are stood in from their declared defaults
+    // instead (patterkit design/shared-scopes.md, decision 4), so such content plays.
+    const registry = previewRegistry(bundle, loaded.source.gameScopes?.merged);
+    const session = new Engine(bundle, { seed: opts.seed ?? 0, ...(registry ? { registry } : {}) }).openFlow("main");
     for (const [path, value] of Object.entries(opts.sets ?? {})) {
       session.setProperty(path, value);
     }

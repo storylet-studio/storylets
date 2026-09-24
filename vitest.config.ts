@@ -36,6 +36,9 @@ export default defineConfig({
       "@storylet-studio/conformance": fileURLToPath(new URL("./packages/conformance/src/index.ts", import.meta.url)),
       ...(expr("expr") ? { "@wildwinter/expr": expr("expr")! } : {}),
       ...(expr("expr-specificity") ? { "@wildwinter/expr-specificity": expr("expr-specificity")! } : {}),
+      // The subpath BEFORE the package: an alias matches as a prefix, so the package's key would
+      // otherwise turn `@wildwinter/scoperegistry/scopes` into `.../index.ts/scopes`.
+      ...(expr("scoperegistry", "scopes") ? { "@wildwinter/scoperegistry/scopes": expr("scoperegistry", "scopes")! } : {}),
       ...(expr("scoperegistry") ? { "@wildwinter/scoperegistry": expr("scoperegistry")! } : {}),
       ...(withPatter ? Object.fromEntries(PATTER_PACKAGES.map((pkg) => [`@patterkit/${pkg}`, patter(pkg)!])) : {}),
     },

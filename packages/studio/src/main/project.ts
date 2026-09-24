@@ -6,17 +6,18 @@
 // ---------------------------------------------------------------------------
 
 import { basename, dirname, join } from "node:path";
-import { contractNotes, loadProject, runExport, runInit, runValidate } from "@storylet-studio/ops";
+import { contractNotes, defaultGameScopesParent, loadProject, planShareScopes, runExport, runInit, runValidate } from "@storylet-studio/ops";
 import { mkdirSync } from "node:fs";
 import type { LoadedProject } from "@storylet-studio/ops";
 import { writeBinaryFile, writeTextFiles as vcWrite } from "@wildwinter/simple-vc-lib";
-import { compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder } from "@storylet-studio/compiler";
+import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, worldDeclarations } from "@storylet-studio/compiler";
 import { writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { SHARD_EXTENSIONS, effectiveGameId, isSpatial, openThreadCounts, PLACE_GROUP } from "@storylet-studio/model";
 import type { Bundle, Card, CoverageDriver, HandTemplate, PlayRung, PropertyDecl } from "@storylet-studio/model";
 import type { SourceBox } from "@storylet-studio/compiler";
+import { boardScopes, gameScopesDto, worldFileLabel } from "./game-scopes.js";
 import type {
-  BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectSettingsDto,
+  BoardScopesDto, BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectSettingsDto,
   PropertyDeclDto, RemoteDto, ShardVcDto, VcStatusDto,
 } from "../shared/api.js";
 import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
@@ -159,6 +160,9 @@ export function toDto(loaded: LoadedProject): ProjectDto {
     // projects note a handful of things) and it saves the editor asking main
     // about each row it draws.
     threads: Object.assign({}, ...source.boxes.map((b) => openThreadCounts(b.notes))) as Record<string, number>,
+    // The game's shared scopes folder, for the expression editors' dialect (the catalogue
+    // itself travels with each card, as every property does).
+    ...(() => { const g = gameScopesDto(loaded); return g !== undefined ? { gameScopes: g } : {}; })(),
     boxes: source.boxes
       .map((box, i) => ({ box, o: box.box.box.order ?? i }))
       .sort((a, b) => a.o - b.o)
@@ -360,7 +364,10 @@ export function projectSettings(session: ProjectSession): ProjectSettingsDto {
   return {
     name: p.project.name,
     version: p.project.version,
-    world: p.world.properties.map(declDto),
+    // @world from the game's shared file when there is one: the dialog edits the source,
+    // and a save writes it there first and copies it into the project.
+    world: worldDeclarations(session.loaded.source!).map(declDto),
+    ...(() => { const f = worldFileLabel(session.loaded.source!); return f !== undefined ? { worldFile: f } : {}; })(),
     story: p.story.properties.map(declDto),
     drivers: driverDtos(p.coverage?.drivers),
     bundlePath: p.export.bundle,
@@ -382,7 +389,7 @@ export function projectSettings(session: ProjectSession): ProjectSettingsDto {
 
 /** Compile the freshly re-read project to a bundle for the Board (files are
  *  the truth: the live session reflects the latest saved state). */
-export function compileBundle(session: ProjectSession): { bundle: Bundle; name: string; play: PlayRung } | { error: string } {
+export function compileBundle(session: ProjectSession): { bundle: Bundle; name: string; play: PlayRung; scopes?: BoardScopesDto } | { error: string } {
   const loaded = loadProject(session.loaded.dir);
   if (!loaded.source) {
     return { error: loaded.issues.map((i) => i.message).join("; ") || "not a storylets project" };
@@ -395,7 +402,13 @@ export function compileBundle(session: ProjectSession): { bundle: Bundle; name: 
   // The rung comes WITH the bundle rather than in it: the Board is a window of
   // its own and needs it to know whether to offer New run (4.2), and the
   // setting is authoring shape that the bundle deliberately does not carry.
-  return { bundle, name: loaded.source.project.project.name, play: playRungOf(loaded.source.project.settings) };
+  // The game's shared scopes ride beside it too, so the Board can stand the other engines
+  // in when the content names one (patterkit design/shared-scopes.md, decision 4).
+  const scopes = boardScopes(loaded.source);
+  return {
+    bundle, name: loaded.source.project.project.name, play: playRungOf(loaded.source.project.settings),
+    ...(scopes !== undefined ? { scopes } : {}),
+  };
 }
 
 /** The current source content hash (freshly re-read from disk), or null if the
@@ -417,6 +430,12 @@ export function exportBundle(session: ProjectSession): { path: string } | { erro
   }
   const batch = vcWrite([{ filePath: result.write.path, content: result.write.content }]);
   if (!batch.success) return { error: "could not write the bundle" };
+  // The Storylet Engine's file in the game's shared scopes folder, when it changed: what the
+  // other tools read of this project, brought up to date on publish as on every save.
+  if (result.scopesWrite !== undefined) {
+    const scopes = vcWrite([{ filePath: result.scopesWrite.path, content: result.scopesWrite.content }]);
+    if (!scopes.success) return { error: `could not write ${basename(result.scopesWrite.path)}` };
+  }
   // The pictures a shipped map needs, beside it. Only ever non-empty when the
   // project asked for maps, and a failure here is a failure of the export: a
   // bundle naming pictures that are not there would be worse than no bundle.
@@ -435,4 +454,30 @@ export function compileForLivePush(session: ProjectSession): { hash: string; jso
   const result = runExport(loadProject(session.loaded.dir), "-");
   if (!result.bundle || result.text === undefined) return null;
   return { hash: result.bundle.content.hash, json: result.text };
+}
+
+/** Where "Share Scopes with Other Tools..." opens its folder dialog: the version-control
+ *  root above the project, else the project's parent folder. */
+export const shareScopesDefault = (session: ProjectSession): string => defaultGameScopesParent(session.loaded.dir);
+
+/**
+ * Share the project's scopes with the other tools: `game-scopes/` in `parent`, holding the
+ * Storylet Engine's file and `game.scopes.json` with the project's @world, which the project
+ * keeps as its synced copy. When the walk up from the project would not find the folder, the
+ * project names it (`gameScopes`). Not undoable, as creating a project is not: it makes a
+ * folder, and removing one is the author's call.
+ */
+export function shareScopes(session: ProjectSession, parent: string): { error: string } | undefined {
+  const plan = planShareScopes(session.loaded, parent);
+  if ("error" in plan) return plan;
+  mkdirSync(plan.dir, { recursive: true });
+  const batch = vcWrite(plan.writes.map((w) => ({ filePath: w.path, content: w.content })));
+  if (!batch.success) return { error: "could not write the scopes files" };
+  if (plan.override !== undefined) {
+    const source = session.loaded.source!;
+    const shard = { ...source.project, gameScopes: plan.override };
+    const one = vcWrite([{ filePath: join(session.loaded.dir, source.path), content: canonicalStringify(shard) }]);
+    if (!one.success) return { error: "the folder was made, but the project file could not be written to name it" };
+  }
+  return undefined;
 }

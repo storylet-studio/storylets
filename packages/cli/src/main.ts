@@ -42,7 +42,9 @@ Usage:
                                      box map out of an old view shard (alias: fmt)
                  [--check]            Report what would change; write nothing (for CI)
   storyletengine export [path]        Compile to the .storyletsc bundle (the project's
-                 [-o file]            declared path, or -o; -o - for stdout)
+                 [-o file]            declared path, or -o; -o - for stdout), and bring
+                                      game-scopes/storylets.scopes.json up to date
+                                      when the game shares its scopes
                  [--map|--no-map]     Carry the maps (zone shapes and background
                                       pictures), overriding the project setting
   storyletengine export-html [path]   One self-contained, playable .html (runtime,
@@ -68,7 +70,8 @@ Usage:
   storyletengine pack [path] -o FILE   Pack a project into one portable
                  [--assets|--no-assets]  .storyletpack, to hand to someone with
                                       no shared version control (--assets carries
-                                      the background pictures too)
+                                      the background pictures too; the game's
+                                      shared scopes travel whenever it has them)
   storyletengine unpack FILE -o DIR   Explode a .storyletpack into source shards
                  [--merge --base SENT.storyletpack]
                                       Fold a RETURNED pack back into the project
@@ -331,6 +334,12 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
       }
       io.log(`exported ${result.write!.path}`);
       if (result.assets.length > 0) io.log(`  with ${result.assets.length} map picture(s)`);
+      // The game's shared scopes folder, when the project has one: what the other tools read
+      // of this project, written only when it changed.
+      if (result.scopesWrite !== undefined) {
+        if (!commitWrites([result.scopesWrite], io)) return 1;
+        io.log(`wrote ${result.scopesWrite.path}`);
+      }
       return 0;
     }
     // export-html: the playable page (parity audit 9.3). Patter's export-html:
@@ -544,13 +553,29 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
             io.log(`added asset: ${a.path}`);
           }
           for (const kept of result.keptAssets) io.log(`kept your own asset: ${kept}`);
+          // The returned pack's copy of the game's scopes is never written back:
+          // the folder here is the truth. A World edit the other author made is
+          // the exception, since the project's copy of it would otherwise be
+          // rewritten from game.scopes.json on the next save and lost.
+          if (result.gameWorld !== undefined) {
+            if ("error" in result.gameWorld) {
+              io.error(`warning: the returned World properties could not be written to ${result.gameWorld.path}: ${result.gameWorld.error}`);
+            } else {
+              if (!commitWrites([result.gameWorld], io)) return 1;
+              io.log(`updated the game's World properties: ${result.gameWorld.path}`);
+            }
+          }
           io.log(`${result.shards.length} shard(s) -> ${target}; ${result.conflicts} conflict(s), ${result.warnings} warning(s)`);
           return result.conflicts > 0 ? 1 : 0;
         }
 
-        const { shards, assets } = await runUnpack(readFileSync(file), target);
-        if (!commitWrites(shards, io)) return 1;
+        const { shards, assets, scopes } = await runUnpack(readFileSync(file), target);
+        // The game's shared scopes the pack carried land in game-scopes/ inside
+        // the project, where discovery looks first, so validate and the rest
+        // know the other tools' names here as they did where it was packed.
+        if (!commitWrites([...shards, ...scopes], io)) return 1;
         for (const w of shards) io.log(`unpacked: ${w.path}`);
+        for (const w of scopes) io.log(`unpacked: ${w.path}`);
         // Assets go through fs rather than the VC layer: they are bytes, not
         // text, and nothing downstream should be asked to diff them.
         for (const a of assets) {
@@ -558,7 +583,8 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
           writeFileSync(a.path, a.bytes);
           io.log(`unpacked: ${a.path}`);
         }
-        io.log(`${shards.length} shard(s)${assets.length > 0 ? `, ${assets.length} asset(s)` : ""} -> ${target}`);
+        io.log(`${shards.length} shard(s)${assets.length > 0 ? `, ${assets.length} asset(s)` : ""}`
+          + `${scopes.length > 0 ? `, ${scopes.length} game scopes file(s)` : ""} -> ${target}`);
         return 0;
       } catch (e) {
         // A pack from outside the team that tries to write outside the target

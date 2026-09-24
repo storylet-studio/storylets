@@ -9,6 +9,10 @@ import { Engine } from "@storylet-studio/runtime";
 import type { Flow, LogEntry, TraceEvent, TraceVerdict } from "@storylet-studio/runtime";
 import { SAVEFILE_SCHEMA, effectiveGameId, valueAddresses } from "@storylet-studio/model";
 import type { Bundle, PropertyBag, PropertyDecl, SaveFile, ScalarValue } from "@storylet-studio/model";
+import { ENGINE_SCOPES } from "@storylet-studio/dialect";
+import { GAME_SCOPES_DIR, GAME_SCOPES_FILE, standInRegistry } from "@wildwinter/scoperegistry/scopes";
+import type { ScopeDeclaration, ScopeRegistry } from "@wildwinter/scoperegistry";
+import type { BoardScopesDto } from "../../shared/api.js";
 
 export type { LogEntry, TraceEvent } from "@storylet-studio/runtime";
 
@@ -154,15 +158,61 @@ export function durableCardIds(bundle: Bundle): Map<string, { shared: boolean }>
   return out;
 }
 
-/** What the Board says when its engine refuses the project. The Board runs the Storylet Engine
- *  on its own, so content naming another engine's scope (`@patter.visits`) is refused as the
- *  flow opens; that refusal is explained in the Board's terms, with the engine's own words kept. */
-export function boardRefusal(message: string): string {
-  const other = /^this content names (@\S+?),/.exec(message)?.[1];
-  return other === undefined ? message
-    : `This project names ${other}, which another engine provides. The Board runs the Storylet Engine on its own, `
-      + `so it can only play this content in a game that runs both engines on one registry.\n\n${message}`;
+/** The file in a game's scopes folder that would declare a token, and who writes it. */
+function ownerFile(token: string): string {
+  if (token === "patter") return "patter.scopes.json, which Patterpad and the patter CLI write when they save";
+  if (ENGINE_SCOPES.some((s) => s.token === token)) {
+    const engine = ENGINE_SCOPES.find((s) => s.token === token)!.engine;
+    return `${token}.scopes.json, which ${engine}'s editor writes when it saves`;
+  }
+  return `${GAME_SCOPES_FILE}, the game's own scopes, which any tool's World settings can edit`;
 }
+
+/**
+ * What the Board says when its engine refuses the project. Content naming another engine's
+ * scope (`@patter.visits`) is refused as the flow opens unless something provides that scope.
+ * Where the game shares its scopes (patterkit design/shared-scopes.md), the Board stands the
+ * other engines in from their declared defaults; so the refusal says what is missing: the
+ * folder itself, or the file in it that would declare the token. The engine's own words are
+ * kept at the end.
+ */
+export function boardRefusal(message: string, scopes?: BoardScopesDto): string {
+  const other = /^this content names @(\S+?),/.exec(message)?.[1];
+  if (other === undefined) return message;
+  const head = `This project names @${other}, which another engine provides. `;
+  const why = scopes === undefined
+    ? "The Board runs the Storylet Engine on its own, so it can play this content only where the game shares its scopes. "
+      + `File > Share Scopes with Other Tools makes a ${GAME_SCOPES_DIR} folder. Once that holds ${ownerFile(other)}, `
+      + `the Board stands @${other} in from its declared defaults. A game that runs both engines on one registry plays it as it is.`
+    : `The Board stands other engines in from the game's shared scopes, but no file in ${GAME_SCOPES_DIR} declares @${other}. `
+      + `It belongs in ${ownerFile(other)}.`;
+  return `${head}${why}\n\n${message}`;
+}
+
+/**
+ * The registry the Board builds its engine on when the project's content names another
+ * engine's scope and the game shares its scopes (decision 4): every scope in the folder except
+ * `@story`, stood in from its declared defaults, plus `@world` from the bundle's declarations
+ * when the folder has none, since an engine given a registry does not self-back `@world`.
+ * Undefined otherwise, and the engine runs alone as it always has. (ops' `previewRegistry`
+ * for the CLI, which the renderer cannot import, since ops reads files.)
+ */
+export function boardRegistry(bundle: Bundle, scopes: BoardScopesDto | undefined): ScopeRegistry | undefined {
+  if (scopes === undefined || (bundle.externalScopes ?? []).length === 0) return undefined;
+  const merged = { spec: scopes.spec, owners: new Map(Object.entries(scopes.owners)), issues: [] };
+  const registry = standInRegistry(merged, { except: ["story"] });
+  if (!registry.has("world")) {
+    registry.defineOwned("world", bundle.world.properties as unknown as ScopeDeclaration[],
+      { normalise: (name) => name, pathPrefix: "world.", owner: "Game" });
+  }
+  return registry;
+}
+
+/** The Board's save file: the family's `.storyletsave`, plus the stand-in registry's values
+ *  when the Board built its engine on one. An engine given a registry leaves every property
+ *  value out of `saveGame()` (the game saves the registry once), so the Board, being the game
+ *  here, carries them itself. Any other reader of the file ignores the extra key. */
+export type BoardSaveFile = SaveFile & { registry?: Record<string, Record<string, ScalarValue>> };
 
 export class Table {
   readonly engine: Engine;
@@ -181,12 +231,23 @@ export class Table {
   /** Card id -> its box's gameId, for the journal's box-qualified stamps. */
   private readonly cardBoxes = new Map<string, string>();
 
-  constructor(readonly bundle: Bundle, readonly seed: number) {
+  /** The stand-in registry, when the Board built its engine on one (see `boardRegistry`). */
+  readonly registry: ScopeRegistry | undefined;
+  /** The other engines' stood-in scopes, for the State tab: what the folder declares, less
+   *  this engine's own and `@world` (which has rows of its own). Empty with no registry. */
+  private readonly standIns: BoardScopesDto["spec"]["scopes"];
+
+  constructor(readonly bundle: Bundle, readonly seed: number, scopes?: BoardScopesDto) {
     // The flow keeps its own retained log (the game-engine introspection
     // seam) - the window reads it rather than buffering the trace itself.
     // The Board is a HOST: one engine, one "main" flow (the flow tools come
-    // later, design/flows.md), the engine self-backing @world.
-    this.engine = new Engine(bundle, { seed, log: { cap: 200 } });
+    // later, design/flows.md), the engine self-backing @world, unless the
+    // content names another engine and the game shares its scopes, when the
+    // other engines (and @world) are stood in on a registry of the Board's.
+    this.registry = boardRegistry(bundle, scopes);
+    this.standIns = this.registry === undefined ? []
+      : (scopes?.spec.scopes ?? []).filter((x) => x.token !== "story" && x.token !== "world" && x.declarations !== undefined);
+    this.engine = new Engine(bundle, { seed, log: { cap: 200 }, ...(this.registry ? { registry: this.registry } : {}) });
     this.session = this.engine.openFlow("main");
     for (const box of bundle.boxes) {
       for (const deck of box.decks) {
@@ -216,16 +277,22 @@ export class Table {
 
   /** The .storyletsave FILE: the engine's envelope plus the Board's @world
    *  container - the host-saves-its-container rule in one file (schema 4). */
-  saveFile(): SaveFile {
-    return { schema: SAVEFILE_SCHEMA, engine: this.engine.saveGame(), world: this.worldValues() };
+  saveFile(): BoardSaveFile {
+    return {
+      schema: SAVEFILE_SCHEMA, engine: this.engine.saveGame(), world: this.worldValues(),
+      ...(this.registry ? { registry: this.registry.save() } : {}),
+    };
   }
 
   /** Restore from a save file: the envelope first (loadGame rebuilds every
    *  flow, so the "main" handle is re-taken), then the file's @world values
    *  over the reseeded container. The retained journal starts afresh - it
    *  belongs to the flow, and the flow is new. */
-  loadFile(file: SaveFile): void {
+  loadFile(file: BoardSaveFile): void {
     this.engine.loadGame(file.engine);
+    // On a stand-in registry the property values are the registry's, saved beside the
+    // engine's part; loaded after it, so the reopened flows' bags are there to take them.
+    if (this.registry && file.registry) this.registry.load(file.registry);
     this.session = this.engine.getFlow("main") ?? this.engine.openFlow("main");
     this.meddles = [];
     for (const [name, value] of Object.entries(file.world ?? {})) {
@@ -553,6 +620,11 @@ export class Table {
     };
     for (const decl of this.bundle.world.properties) push(`world.${decl.name}`, decl.name, "world", decl);
     for (const decl of this.bundle.story.properties) push(`story.${decl.name}`, decl.name, "story", decl);
+    // The other engines, stood in (patterkit design/shared-scopes.md): a tester pokes
+    // `@patter.visits` to see what a card gated on it does, exactly as they poke @world.
+    for (const scope of this.standIns) {
+      for (const decl of scope.declarations ?? []) push(`${scope.token}.${decl.name}`, decl.name, scope.token, decl);
+    }
     // The tag rows' owner segment, from the shared rule (4.4): the tag's
     // gameId, or "<boxGameId>/<tagGameId>" where two boxes name a tag the same
     // way. The LABEL carries whichever the path does, so a designer looking at

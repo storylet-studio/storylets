@@ -24,7 +24,8 @@
       "@storylet-studio/conformance": ["packages/conformance/src/index.ts"],
       "@wildwinter/expr": ["../expr/packages/expr/src/index.ts"],
       "@wildwinter/expr-specificity": ["../expr/packages/expr-specificity/src/index.ts"],
-      "@wildwinter/scoperegistry": ["../expr/packages/scoperegistry/src/index.ts"]
+      "@wildwinter/scoperegistry": ["../expr/packages/scoperegistry/src/index.ts"],
+      "@wildwinter/scoperegistry/scopes": ["../expr/packages/scoperegistry/src/scopes.ts"]
     }
   },
   // THE PACKAGE, not a list of the directories a package happens to use. This was

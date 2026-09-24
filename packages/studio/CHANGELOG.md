@@ -10,6 +10,18 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **Share Scopes with Other Tools.** A new File menu command makes a `game-scopes/` folder (by default at the root of your repository) and writes the project's `@story` declarations to `storylets.scopes.json` and its `@world` to `game.scopes.json`, so Patterpad and the game's other editing tools can read them. Nothing makes the folder but this command.
+- **Where the game shares its scopes, the editors know the other tools' properties.** The condition and outcome editors offer `@patter.visits` and the rest in the picker, each pill's tip saying who declares it, and a misspelt name is marked. A game's own scope such as `@player` can be named at all. Problems lists a reference its owner's file doesn't allow as a warning, never an error, since the other project may be a save behind.
+- **Storyletpacks carry the game's shared scopes.** Where the game shares its scopes, Export as Storyletpack includes a read-only copy of the folder, and Open Storyletpack puts it inside the unpacked project, so the person you send it to gets the other tools' properties in their pickers and on their Board. Merge Returned Storyletpack never writes their copy back, but World properties they changed are written to your `game.scopes.json` too, in the same undoable step, and the confirmation says so; without that, your next save would have copied the old list back into the project. Landing a pack from a server works the same way for a new project, and a pull into a project you already have never writes the copy.
+- **The Board plays cards that name another engine** where the game shares its scopes, standing that engine in from the defaults its file declares. The State tab lists those properties so you can set them, and Save state and Restore keep their values. Without the folder the Board still can't play such a project, and now says how to share scopes, or which file in the folder should declare the missing scope.
+
+### Changed
+
+- **Every save keeps `storylets.scopes.json` up to date** where the game shares its scopes, as Publish Bundle does, in the same undoable step as the save.
+- **World properties are the game's** where the game shares its scopes: Project Settings reads them from `game-scopes/game.scopes.json` and writes them there first, keeping the file's other scopes, then copies them into the project, which keeps them so it still compiles packed or on its own.
+
 ## [0.10.1] - 2026-09-24
 
 ### Fixed

@@ -12,3 +12,9 @@ via `EvalContext.host`.
 
 Authored against [the bundle format](https://storylet.studio/format/bundle/),
 section 6.
+
+`storyletsDialectWith(tokens)` is the same dialect accepting more game-wide
+scope tokens: the ones a game's shared scopes folder declares (`game-scopes/`,
+where each editing tool writes its scopes for the others), such as a game's
+own `@player`. Each added token gets the policy another engine's scope has.
+With nothing new to add it returns `storyletsDialect` itself.

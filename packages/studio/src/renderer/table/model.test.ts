@@ -4,9 +4,10 @@
 
 import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
-import { loadProjectFiles, parseProjectFiles, compileProject } from "@storylet-studio/compiler";
+import { canonicalStringify, loadProjectFiles, parseProjectFiles, parseSource, compileProject } from "@storylet-studio/compiler";
 import type { Bundle } from "@storylet-studio/model";
-import { Table, boardRefusal, coerceStateInput } from "./model.js";
+import { Table, boardRefusal, boardRegistry, coerceStateInput } from "./model.js";
+import type { BoardScopesDto } from "../../shared/api.js";
 
 const exampleDir = fileURLToPath(new URL("../../../../../examples/saltmarsh.storylets", import.meta.url));
 
@@ -260,5 +261,89 @@ describe("a project that names another engine's scope", () => {
 
   it("leaves any other failure in the engine's own words", () => {
     expect(boardRefusal("unknown box \"x\"")).toBe("unknown box \"x\"");
+  });
+});
+
+// The game's shared scopes folder (patterkit design/shared-scopes.md, decision 4): where the
+// game shares its scopes, the Board stands the other engines in from their declared defaults,
+// so content naming `@patter` plays. The engine then sits on a registry of the Board's, which
+// keeps every property value out of `saveGame()`, so Save state has to carry them itself.
+describe("standing the other engines in", () => {
+  /** The example, with the rat job gated on Patter's visits and its outcome counting one. */
+  function patterBundle(): Bundle {
+    const files = loadProjectFiles(exampleDir).map((f) => {
+      if (!f.path.endsWith("docks.storyletdeck")) return f;
+      const v = parseSource(f.text) as { cards: { id: string; condition?: string; outcomes: { changes?: Record<string, string> }[] }[] };
+      const card = v.cards.find((c) => c.id === "c_rat_job")!;
+      card.condition = "@patter.visits >= 1";
+      card.outcomes[0]!.changes = { ...card.outcomes[0]!.changes, "@patter.visits": "@patter.visits + 1" };
+      return { ...f, text: canonicalStringify(v) };
+    });
+    const { bundle, issues } = compileProject(parseProjectFiles(files).project!);
+    if (!bundle) throw new Error(issues.map((i) => i.message).join("; "));
+    return bundle;
+  }
+  const scopes: BoardScopesDto = {
+    spec: { version: 1, scopes: [{ token: "patter", declarations: [{ name: "visits", type: "number", default: 1 }] }] },
+    owners: { patter: { owner: "Patter", fileName: "patter.scopes.json" } },
+  };
+
+  it("plays content naming @patter, from Patter's declared defaults, with @world from the bundle", () => {
+    const table = new Table(patterBundle(), 0, scopes);
+    expect(table.registry!.get("patter", "visits")).toBe(1);
+    expect(table.registry!.get("world", "danger")).toBe(0);
+    const docks = table.dealAll().find((h) => h.hand === "docks-street")!;
+    expect(docks.cards.map((c) => c.gameId)).toContain("rat-job");
+    table.play("c_rat_job", "accepted", "docks-street");
+    expect(table.registry!.get("patter", "visits")).toBe(2);
+  });
+
+  it("the State tab lists the stood-in properties, and a poke moves them", () => {
+    const table = new Table(patterBundle(), 0, scopes);
+    const row = table.stateRows().find((r) => r.path === "patter.visits")!;
+    expect(row).toMatchObject({ label: "visits", scope: "patter", value: 1, editable: true });
+    table.session.setProperty("patter.visits", 0);
+    expect(table.stateRows().find((r) => r.path === "patter.visits")!.value).toBe(0);
+    expect(table.dealAll().find((h) => h.hand === "docks-street")!.cards.map((c) => c.gameId)).not.toContain("rat-job");
+  });
+
+  it("Save state and Restore carry the registry's values, which saveGame leaves out", () => {
+    const table = new Table(patterBundle(), 0, scopes);
+    table.dealAll();
+    table.play("c_rat_job", "accepted", "docks-street");
+    table.session.setProperty("world.danger", 3);
+    const file = table.saveFile();
+    expect(file.registry!["patter"]).toEqual({ visits: 2 });
+
+    const again = new Table(patterBundle(), 0, scopes);
+    again.loadFile(JSON.parse(JSON.stringify(file)));
+    expect(again.registry!.get("patter", "visits")).toBe(2);
+    expect(again.session.getProperty("story.visited")).toEqual(["docks"]);
+    expect(again.session.getProperty("world.danger")).toBe(3);
+  });
+
+  it("a project that names no other engine runs alone, as it always has", () => {
+    const table = new Table(exampleBundle(), 0, scopes);
+    expect(table.registry).toBeUndefined();
+    expect(boardRegistry(exampleBundle(), scopes)).toBeUndefined();
+    expect("registry" in table.saveFile()).toBe(false);
+  });
+
+  it("without the folder it is refused, and the Board says how to share scopes", () => {
+    let message = "";
+    try { new Table(patterBundle(), 0); } catch (e) { message = (e as Error).message; }
+    const shown = boardRefusal(message);
+    expect(shown).toMatch(/File > Share Scopes with Other Tools makes a game-scopes folder\. Once that holds patter\.scopes\.json, which Patterpad and the patter CLI write when they save, the Board stands @patter in/);
+    expect(shown.endsWith(message)).toBe(true);
+  });
+
+  it("with a folder that declares nobody's @patter, it names the file that should", () => {
+    const empty: BoardScopesDto = { spec: { version: 1, scopes: [{ token: "player" }] }, owners: { player: { owner: "Game", fileName: "game.scopes.json" } } };
+    let message = "";
+    try { new Table(patterBundle(), 0, empty); } catch (e) { message = (e as Error).message; }
+    expect(message).toMatch(/^this content names @patter, /);
+    expect(boardRefusal(message, empty)).toMatch(/^This project names @patter, which another engine provides\. The Board stands other engines in from the game's shared scopes, but no file in game-scopes declares @patter\. It belongs in patter\.scopes\.json/);
+    const game = boardRefusal("this content names @player, which no engine on this registry registered: give every engine the game's one registry", empty);
+    expect(game).toMatch(/It belongs in game\.scopes\.json, the game's own scopes/);
   });
 });

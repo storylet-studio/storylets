@@ -8,6 +8,10 @@ section for it.
 
 ## [Unreleased]
 
+### Changed
+
+- **`@wildwinter/scoperegistry` 0.8.0.** The runtime's registry is the same; the new release adds the editing tools' shared game scopes under a separate entry point, which the runtime doesn't load.
+
 ## [0.8.0] - 2026-09-24
 
 ### Added

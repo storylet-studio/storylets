@@ -21,6 +21,12 @@ not in your game.
 
 Your game doesn't declare anything. It fills in what's already declared.
 
+A game with more than one editing tool (Storyletter and Patterpad, say) keeps `@world` in one
+place instead: `game.scopes.json` in its
+[shared scopes folder](/play/with-patter/#sharing-scopes-between-the-editors). Storyletter's
+World settings then edit that file, and each project keeps a synced copy so it still compiles
+on its own.
+
 ```
 @world.is_night   boolean  default false
 @world.gold       number   default 0

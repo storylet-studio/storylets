@@ -119,15 +119,18 @@ per-flow and per-scene bags. A scene that sets `@world.knows_road` moves the val
 conditions read on the next deal, and a card whose outcome sets it moves what the next scene sees.
 Each engine can name the other's game-wide scope directly, with no setting in either project:
 a Patter line can read and write `@story.act`, and a card can gate on `@patter.visits` or change
-`@patter.gold` in an outcome. Each compiler lets the other engine's token through without
+`@patter.gold` in an outcome. On its own, each compiler lets the other engine's token through without
 checking its names, because that engine owns them; a name that doesn't exist fails when the
-card is first evaluated. Only the other engine's shared values are visible this way: Patter's
+card is first evaluated. [Sharing scopes](#sharing-scopes-between-the-editors) lets each editor
+check them instead. Only the other engine's shared values are visible this way: Patter's
 per-flow globals and scene properties belong to its flows, not to the game. Content that names
 the other engine runs only where that engine is on the same registry: without it, opening a flow
 or loading a save is refused, naming the token, before anything changes. A tool that runs one
-engine alone, such as a preview or a coverage run, refuses that content for the same reason.
+engine alone, such as a preview or a coverage run, refuses that content for the same reason,
+unless the game shares its scopes, when it stands the other engine in.
 
-Declare the same `@world` properties in both projects, with the same names and types. If your game keeps `@world`
+Declare the same `@world` properties in both projects, with the same names and types, or share
+your scopes and declare them once. If your game keeps `@world`
 in its own state instead, register it as a foreign scope with your resolver
 (`registry.defineForeign("world", resolver, worldDeclarations)`), and neither the registry nor
 either engine saves it.
@@ -143,6 +146,70 @@ naming the engine that holds it.
 
 Patter's side of the same points is on its
 [world properties](https://patterkit.dev/play/world-properties/) page.
+
+## Sharing scopes between the editors
+
+At run time the registry knows every engine's properties, because each engine registers what
+it owns. While you write, Storyletter and Patterpad don't know each other's. So a game keeps
+one **`game-scopes/`** folder, usually at the root of its repository, and each tool writes its
+own file there and reads the others:
+
+```
+my-game/
+  game-scopes/
+    patter.scopes.json      written by Patterpad and the patter CLI
+    storylets.scopes.json   written by Storyletter and storyletengine
+    game.scopes.json        the game's own scopes: @world, and any others such as @player
+  story/the-hamlet.patter/...
+  cards/the-hamlet.storylets/...
+```
+
+Make it with **File ▸ Share Scopes with Other Tools…** in either editor. That's the only way it
+appears: no tool creates the folder by itself. Commit it beside the projects, so a pull brings
+each tool's file and its project together.
+
+Each tool finds the folder by looking in its project folder and then each folder above,
+stopping at the root of your repository. A project whose folder is somewhere else names it
+with `gameScopes` in its project file (see [the format](/format/shards/#the-project-shard)).
+
+**What each file holds.** `storylets.scopes.json` is your `@story` declarations: name, type,
+values or stages, default, read-only, and purpose. It's written whenever you save the project
+in Storyletter or run `storyletengine export`, and only when it changed, always in the same
+canonical form, so a diff shows real changes. `game.scopes.json` belongs to the game rather
+than to either tool. Any tool's World settings edit its `@world`, re-reading it before each
+write and leaving its other scopes alone.
+
+**`@world` has one home.** Where `game.scopes.json` declares it, that is `@world` for every
+project in the game. The compiler checks against it and copies it into the bundle, so a
+standalone engine still backs it from the right defaults. Each project keeps a synced copy of
+its own, rewritten on every save, so it still compiles when it's packed or checked out alone.
+If the two ever differ (someone edited one by hand), `validate` warns and the shared file wins.
+
+**Checking is warnings.** With `patter.scopes.json` in the folder, `@patter.vists` is a
+warning naming the file that should declare it, and so are a type mismatch
+(`@patter.visits == "lots"`) and an outcome writing a property Patter marks read-only. Never
+errors, because the other project may be a save behind on someone's branch. A token nobody's
+file declares is still accepted and unchecked, as before. The game's own scopes work the same
+way: once `game.scopes.json` declares `@player`, a card can read `@player.hp`, and the bundle
+lists `player` among the scopes it needs someone else to provide.
+
+**The editors offer them.** The condition and outcome editors list the other tools'
+properties in the picker, with each one's purpose and owner in the pill's tip.
+
+**Previews stand the other engine in.** The Board, and `peek`, `deal` and `coverage`, build
+their engine on a registry holding every scope in the folder except `@story`, each property at
+its declared default, so a card gated on `@patter.visits` plays in Storyletter alone. This is
+for previews only. Bundles never carry another tool's declarations, and your game still
+refuses such content when no engine registered the scope.
+
+**Packs carry a copy.** A [`.storyletpack`](/format/overview/#the-send-envelope-storyletpack)
+holds one project folder, and `game-scopes/` sits outside it, so a pack also carries a
+read-only copy of the folder's files. Unpacking puts the copy in `game-scopes/` inside the
+project, where the tools look first, so the person you send it to gets the checks, the picker,
+and the Board's stand-ins too. Merging their pack back never writes their copy over your
+folder. If they changed the World properties, though, the merge writes the merged list to your
+`game.scopes.json` and says so, since your next save would otherwise copy the old list back
+into the project.
 
 ## Saving
 
@@ -182,7 +249,8 @@ Hamlet's `scripts/pairing.mjs` runs before every build and fails it in any of th
 - A card with several outcomes declares one that no option and no event can ever name.
 - A `@world` property is declared in one project and not the other, or with a different type,
   values, default, or `writable` flag, or an outcome writes a property Patter's project declares
-  read-only.
+  read-only. Sharing scopes makes this one hard to get wrong while you edit, since both projects
+  take `@world` from `game.scopes.json`, and the check still holds the bundles to it.
 
 Run it whenever you rename a card or an outcome. A `gameId` derived from a card's title
 changes when the title does, so pin it on the card to keep the scene name stable.

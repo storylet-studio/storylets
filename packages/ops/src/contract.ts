@@ -24,6 +24,7 @@ import {
   contractPropertyPath, contractPropertyType, effectiveGameId, valueAddresses,
 } from "@storylet-studio/model";
 import type { ContractShard, PropertyDecl, PropertyType } from "@storylet-studio/model";
+import { worldDeclarations } from "@storylet-studio/compiler";
 import type { Issue, SourceBox, SourceProject } from "@storylet-studio/compiler";
 
 /** A hand's declarations: a template instance inherits its template's, a
@@ -81,7 +82,7 @@ function declarations(source: SourceProject): Map<string, { decl: PropertyDecl; 
     return out;
   };
 
-  add("world", [""], source.project.world?.properties, source.path, "world");
+  add("world", [""], worldDeclarations(source), source.path, "world");
   add("story", [""], source.project.story?.properties, source.path, "story");
   for (const box of source.boxes) {
     add("box", both(box.box.box), box.box.box.properties, `${box.path}/box`, effectiveGameId(box.box.box));

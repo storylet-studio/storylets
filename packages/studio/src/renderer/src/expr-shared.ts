@@ -21,8 +21,16 @@ export const catalogueFrom = (props: ConditionProperty[]): CatalogueEntry[] =>
     // operators and the advance() seed. Dropping it here left a quality
     // pickable and unfinishable.
     ...(p.stages !== undefined ? { stages: p.stages } : {}),
-    ...(p.purpose !== undefined ? { purpose: p.purpose } : {}),
+    // Another tool's property (through the game's shared scopes folder) says whose it is,
+    // in the tip and the picker's search alike: expr-editor shows `purpose` in both.
+    ...(p.purpose !== undefined || p.owner !== undefined ? { purpose: purposeWithOwner(p) } : {}),
   }));
+
+/** A property's purpose, with who declares it when that is another tool: "How often the
+ *  guard has shouted (Patter)", or "Declared by Patter" when it has no purpose of its own. */
+export const purposeWithOwner = (p: { purpose?: string; owner?: string }): string =>
+  p.owner === undefined ? p.purpose ?? ""
+    : p.purpose !== undefined && p.purpose !== "" ? `${p.purpose} (${p.owner})` : `Declared by ${p.owner}`;
 
 export function schemaFrom(props: ConditionProperty[]): ExpressionSchema {
   const m = new Map<string, Map<string, PropertyMeta>>();

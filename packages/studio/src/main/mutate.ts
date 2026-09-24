@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { basename, join } from "node:path";
-import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
+import { canonicalStringify, parseSource, worldDeclarations } from "@storylet-studio/compiler";
 import type { SourceBox, SourceDeck } from "@storylet-studio/compiler";
 import {
   analyseInfluence, ASSETS_DIR, contractNotes, freeAssetName, imageSize, isSafeAssetName, layoutByDependency, mapSites, newId,
@@ -15,6 +15,7 @@ import {
   boxFolderWrites,
 } from "@storylet-studio/ops";
 import type { CanvasRef, CardPlacement } from "@storylet-studio/ops";
+import { gameWorldWrite, otherToolsCatalogue, withGameScopes } from "./game-scopes.js";
 
 /** A pin's new home on the map. Where it is; which zone that turns out to be is
  *  worked out here, not asked for. */
@@ -285,7 +286,11 @@ let structCounter = 0;
  *  coalesces consecutive same-key edits into one undo step; pass a unique key
  *  for a standalone (structural) change. Exported for the project-wide
  *  Replace (replace.ts), which is the same path with more files in it. */
-export function commit(session: ProjectSession, label: string, key: string, writes: FileState[]): OpenResult | { error: string } {
+export function commit(session: ProjectSession, label: string, key: string, given: FileState[]): OpenResult | { error: string } {
+  // The game's shared scopes folder, when there is one: a write of the project shard
+  // brings the Storylet Engine's file and the project's copy of @world along, in this
+  // same undoable step (game-scopes.ts). The identity with no folder.
+  const writes = withGameScopes(session.loaded.source, session.loaded.dir, given);
   // The role the project was fetched with, where there is one. An author's key
   // may change the cards and the comments; the shape is the designer's, and the
   // editor says so rather than offering an edit the far end would refuse.
@@ -794,9 +799,16 @@ export function saveProjectSettings(session: ProjectSession, dto: ProjectSetting
   const source = session.loaded.source;
   if (!source) return { error: "no project open" };
   const p = source.project;
+  // Where the game shares its scopes, @world is the game's file: written FIRST, with the
+  // project's own declarations its synced copy (the same list, written below), so the
+  // project still compiles packed or checked out alone (patterkit design/shared-scopes.md).
+  // Asked before anything is changed, so a game file that can't be read refuses the save whole.
+  const world = dto.world.filter((d) => d.name.trim()).map(declFromDto);
+  const shared = gameWorldWrite(source, world);
+  if ("error" in shared) return shared;
   p.project.name = dto.name;
   p.project.version = dto.version;
-  p.world.properties = dto.world.filter((d) => d.name.trim()).map(declFromDto);
+  p.world.properties = world;
   p.story.properties = dto.story.filter((d) => d.name.trim()).map(declFromDto);
   p.export.bundle = dto.bundlePath;
   p.export.metadata = dto.metadata;
@@ -814,7 +826,7 @@ export function saveProjectSettings(session: ProjectSession, dto: ProjectSetting
   writeDrivers(p, dto.drivers);
   const path = join(session.loaded.dir, source.path);
   return commit(session, "Project settings", `struct:${structCounter++}`,
-    [{ path, content: canonicalStringify(source.project) }]);
+    [...shared, { path, content: canonicalStringify(source.project) }]);
 }
 
 /** Fold the edited driver list back into the shard's map. A driver with no
@@ -903,7 +915,9 @@ function catalogueFor(session: ProjectSession, box: SourceBox, deck: SourceDeck 
       });
     }
   };
-  add("world", project.world?.properties ?? []);
+  // @world from the game's shared file when it declares one, which is what the compiler
+  // checks against; the project's own copy otherwise.
+  add("world", worldDeclarations(session.loaded.source!));
   add("story", project.story?.properties ?? []);
   add("box", box.box.box.properties ?? []);
   if (deck) add("deck", deck.shard.deck.properties ?? []);
@@ -946,6 +960,9 @@ function catalogueFor(session: ProjectSession, box: SourceBox, deck: SourceDeck 
       add("hand", [{ name, type: "enum", values: group.tags.map((t) => effectiveGameId(t)) }]);
     }
   }
+  // The other tools' game-wide scopes (`@patter.visits`, a game's `@player.hp`), when the
+  // game shares its scopes: offered in the picker with who declares them.
+  out.push(...otherToolsCatalogue(session.loaded.source!));
   return out;
 }
 
@@ -1219,7 +1236,7 @@ export function handDetail(session: ProjectSession, boxId: string, handId: strin
   const movableFrom = [
     ...handDecls.filter(canName).map((d) => `@hand.${d.name}`),
     ...(project.story?.properties ?? []).filter(canName).map((d) => `@story.${d.name}`),
-    ...(project.world?.properties ?? []).filter(canName).map((d) => `@world.${d.name}`),
+    ...worldDeclarations(session.loaded.source!).filter(canName).map((d) => `@world.${d.name}`),
   ];
   // What a venue depends on about this hand (design/engine-server.md 4.11).
   // Derived here beside `movableFrom`, and for the same reason: it exists only
@@ -1948,10 +1965,15 @@ export function declareProperty(
 
   if (scope === "story" || scope === "world") {
     const holder = scope === "story" ? source.project.story : source.project.world;
+    // @world, where the game shares it, is declared in the game's file first and copied
+    // into the project, exactly as the World settings do it.
+    if (scope === "world") holder.properties = [...worldDeclarations(source)];
     if (holder.properties.some((p) => p.name === name)) return { error: `"${name}" is already declared` };
     holder.properties.push(decl);
+    const shared = scope === "world" ? gameWorldWrite(source, holder.properties) : [];
+    if ("error" in shared) return shared;
     return commit(session, `Declare @${scope}.${name}`, `struct:${structCounter++}`,
-      [{ path: join(session.loaded.dir, source.path), content: canonicalStringify(source.project) }]);
+      [...shared, { path: join(session.loaded.dir, source.path), content: canonicalStringify(source.project) }]);
   }
 
   if (scope === "box") {

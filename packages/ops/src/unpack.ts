@@ -38,6 +38,9 @@ import { ASSETS_DIR } from "./assets.js";
 import { PACK_MANIFEST } from "./pack.js";
 import type { PlannedBinaryWrite, PlannedWrite } from "./write.js";
 import { escapesTarget, isUnsafeEntry } from "@wildwinter/toolkit/archive";
+import { GAME_SCOPES_DIR, GAME_SCOPES_FILE, SCOPES_FILE_SUFFIX } from "@wildwinter/scoperegistry/scopes";
+import type { ProjectShard, PropertyDecl } from "@storylet-studio/model";
+import { planGameWorld, readGameScopes } from "./game-scopes.js";
 
 /** A pack entry whose path escapes the target directory (always rejected). */
 export class UnsafeEntryError extends Error {}
@@ -51,6 +54,15 @@ export { isUnsafeEntry } from "@wildwinter/toolkit/archive";
  *  is, matching how a pack collects them: a format nobody thought of still
  *  travels, and still must not be read as text. */
 const isAssetEntry = (name: string): boolean => name.split("/").includes(ASSETS_DIR);
+
+/** Is this entry one of the game's shared scopes files a pack carries as a
+ *  snapshot (`game-scopes/<name>.scopes.json`)? Neither a shard nor an asset.
+ *  Only a scopes file directly in the folder, as a pack writes them, so a box
+ *  folder that happened to share the name would still be read as shards. */
+const isScopesEntry = (name: string): boolean => {
+  const parts = name.split("/");
+  return parts.length === 2 && parts[0] === GAME_SCOPES_DIR && parts[1]!.endsWith(SCOPES_FILE_SUFFIX);
+};
 
 /** Check an entry is bound for somewhere inside the target. Both checks, for the
  *  reasons in the header: neither is enough alone. */
@@ -69,7 +81,7 @@ async function readPackShards(bytes: Buffer | Uint8Array, targetDir: string): Pr
   return (await readPack(bytes, targetDir)).shards;
 }
 
-/** A pack's shards AND assets, from ONE read of the zip.
+/** A pack's shards, assets AND game scopes snapshot, from ONE read of the zip.
  *
  *  `runUnpack` used to call two readers that each did their own
  *  `JSZip.loadAsync`, so every unpack inflated the archive twice - and the
@@ -78,37 +90,48 @@ async function readPackShards(bytes: Buffer | Uint8Array, targetDir: string): Pr
 async function readPack(
   bytes: Buffer | Uint8Array,
   targetDir: string,
-): Promise<{ shards: Map<string, string>; assets: Map<string, Uint8Array> }> {
+): Promise<{ shards: Map<string, string>; assets: Map<string, Uint8Array>; scopes: Map<string, string> }> {
   const zip = await JSZip.loadAsync(bytes);
   const shards = new Map<string, string>();
   const assets = new Map<string, Uint8Array>();
+  const scopes = new Map<string, string>();
   for (const [name, entry] of Object.entries(zip.files)) {
     if (entry.dir || name === PACK_MANIFEST) continue;
     // Every entry that is not the manifest is going somewhere on disk, so it
-    // is checked once, here, whichever half it belongs to.
+    // is checked once, here, whichever part it belongs to.
     refuseEscape(targetDir, name);
-    if (isAssetEntry(name)) assets.set(name, await entry.async("uint8array"));
+    if (isScopesEntry(name)) scopes.set(name, await entry.async("string"));
+    else if (isAssetEntry(name)) assets.set(name, await entry.async("uint8array"));
     else shards.set(name, await entry.async("string"));
   }
-  return { shards, assets };
+  return { shards, assets, scopes };
 }
 
 /** What a pack explodes into: text to write, and bytes to write. */
 export interface UnpackResult {
   shards: PlannedWrite[];
   assets: PlannedBinaryWrite[];
+  /** The game's shared scopes the pack carried, bound for `game-scopes/` INSIDE
+   *  the unpacked project folder, where discovery looks first: the recipient's
+   *  checks, pickers and previews then know the other engines' names. Empty for
+   *  a pack from a project with no folder, and for any pack from before packs
+   *  carried scopes. */
+  scopes: PlannedWrite[];
 }
 
 /** Explode a pack into planned writes under `targetDir`. Pure: the caller
  *  commits, so the same op serves the CLI and the editor. */
 export async function runUnpack(bytes: Buffer | Uint8Array, targetDir: string): Promise<UnpackResult> {
-  const { shards, assets } = await readPack(bytes, targetDir);
+  const { shards, assets, scopes } = await readPack(bytes, targetDir);
   return {
     shards: [...shards.entries()]
       .map(([name, content]) => ({ path: join(targetDir, name), content }))
       .sort((a, b) => a.path.localeCompare(b.path)),
     assets: [...assets.entries()]
       .map(([name, data]) => ({ path: join(targetDir, name), bytes: data }))
+      .sort((a, b) => a.path.localeCompare(b.path)),
+    scopes: [...scopes.entries()]
+      .map(([name, content]) => ({ path: join(targetDir, name), content }))
       .sort((a, b) => a.path.localeCompare(b.path)),
   };
 }
@@ -138,6 +161,15 @@ export interface UnpackMergeResult {
   warnings: number;
   /** Whether the three project ids agree. Never a refusal - see `ProvenanceCheck`. */
   provenance: ProvenanceCheck;
+  /**
+   * The recipient's World edit, carried to the game's own `game.scopes.json`:
+   * the write, or why it cannot be made (that file will not parse). Present
+   * only when the project has a game scopes folder AND the returned project
+   * declares other World properties than the pack that was sent; absent
+   * otherwise, and then nothing outside the project is touched. See the note
+   * at the end of `runUnpackMerge`.
+   */
+  gameWorld?: PlannedWrite | { path: string; error: string };
 }
 
 /**
@@ -274,6 +306,8 @@ export async function runUnpackMerge(
   const sidecars: PlannedWrite[] = [];
   let conflicts = 0;
   let warnings = 0;
+  /** The project shard as the merge leaves it, for the World check below. */
+  let mergedProject: { rel: string; shard: unknown } | undefined;
 
   for (const [rel, theirText] of [...theirs.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     const outPath = join(projectDir, rel);
@@ -282,6 +316,9 @@ export async function runUnpackMerge(
       // merge against, and refusing it would silently drop new content.
       writes.push({ path: outPath, content: theirText });
       shards.push({ path: rel, added: true });
+      if (rel.endsWith(SHARD_EXTENSIONS.project)) {
+        try { mergedProject = { rel, shard: parseSource(theirText) }; } catch { /* cannot say */ }
+      }
       continue;
     }
     const baseText = base.get(rel);
@@ -307,6 +344,7 @@ export async function runUnpackMerge(
     const baseObj = baseText !== undefined ? read(baseText, "sent") : {};
 
     const result = runMerge(baseObj, ours, theirsObj);
+    if (rel.endsWith(SHARD_EXTENSIONS.project)) mergedProject = { rel, shard: result.merged };
     writes.push({ path: outPath, content: canonicalStringify(result.merged) });
     if (result.conflicts.length > 0) {
       sidecars.push({ path: `${outPath}${CONFLICT_SIDECAR_EXTENSION}`, content: conflictSidecar(result) });
@@ -329,5 +367,65 @@ export async function runUnpackMerge(
     else assets.push({ path: outPath, bytes: data });
   }
 
-  return { shards, writes, sidecars, assets, keptAssets, conflicts, warnings, provenance };
+  // The game's shared scopes are NOT merged: the snapshot either pack carries
+  // is never written anywhere, since the sender's folder is the truth and the
+  // returned copy is only what the recipient was shown. One thing in it can
+  // have been edited on purpose, though: the World properties, which the
+  // recipient's tool wrote to its snapshot AND to the project's synced copy.
+  // That copy has just merged, but the next save here rewrites it from
+  // `game.scopes.json`, which would drop the edit without a word. So where the
+  // project has a folder and the returned project's World differs from the
+  // sent one's, the merged World goes to the game's file too, and is reported.
+  const gameWorld = mergedProject !== undefined
+    ? planReturnedWorld(projectDir, mergedProject, theirs, base)
+    : undefined;
+
+  return {
+    shards, writes, sidecars, assets, keptAssets, conflicts, warnings, provenance,
+    ...(gameWorld !== undefined ? { gameWorld } : {}),
+  };
+}
+
+/** A project shard's World declarations, canonical, or undefined when they
+ *  cannot be read (a "cannot say", which writes nothing). */
+function worldText(shards: Map<string, string>, rel: string): string | undefined {
+  const text = shards.get(rel);
+  if (text === undefined) return undefined;
+  try {
+    const properties = (parseSource(text) as Partial<ProjectShard>).world?.properties;
+    return Array.isArray(properties) ? canonicalStringify(properties) : undefined;
+  } catch { return undefined; }
+}
+
+/** The local project shard's `gameScopes` override, as the loader would read
+ *  it, or undefined (none, or a shard that will not parse, which the merge has
+ *  already refused). */
+function localOverride(projectDir: string, rel: string): unknown {
+  const path = join(projectDir, rel);
+  if (!existsSync(path)) return undefined;
+  try { return (parseSource(readFileSync(path, "utf8")) as Partial<ProjectShard>).gameScopes; }
+  catch { return undefined; }
+}
+
+/** The write that carries a returned World edit to `game.scopes.json`, or
+ *  undefined when there is nothing to carry: no folder, no edit, or the file
+ *  already says it. See the note at the call. */
+function planReturnedWorld(
+  projectDir: string, merged: { rel: string; shard: unknown },
+  theirs: Map<string, string>, base: Map<string, string>,
+): PlannedWrite | { path: string; error: string } | undefined {
+  const returned = worldText(theirs, merged.rel);
+  const sent = worldText(base, merged.rel);
+  if (returned === undefined || sent === undefined || returned === sent) return undefined;
+  const shard = merged.shard as Partial<ProjectShard>;
+  const world = shard.world?.properties;
+  if (!Array.isArray(world)) return undefined;
+  // The folder as the loader finds it for the project being merged into, its
+  // own `gameScopes` override included: ours as it stands on disk, since where
+  // this game keeps its folder is not the recipient's to say.
+  const found = readGameScopes(projectDir, merged.rel, localOverride(projectDir, merged.rel)).gameScopes;
+  if (found === undefined) return undefined;
+  const planned = planGameWorld(found.dir, world as PropertyDecl[]);
+  if ("error" in planned) return { path: join(found.dir, GAME_SCOPES_FILE), error: planned.error };
+  return planned.write;
 }

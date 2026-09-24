@@ -871,6 +871,9 @@ export async function planConnect(opts: {
 export interface OpenedPack {
   shards: Map<string, string>;
   assets: Map<string, Uint8Array>;
+  /** The game's shared scopes the pack carried, `game-scopes/<name>` -> text:
+   *  a snapshot, never a shard, so never hashed, merged or pushed as one. */
+  scopes: Map<string, string>;
   remote?: RemoteRecord;
 }
 
@@ -882,8 +885,8 @@ export interface OpenedPack {
  * of the project is refused there as it is for the CLI.
  */
 export async function openPackBytes(bytes: Buffer | Uint8Array, dir: string): Promise<OpenedPack> {
-  const { shards, assets } = await runUnpack(bytes, dir);
-  const out: OpenedPack = { shards: new Map(), assets: new Map() };
+  const { shards, assets, scopes } = await runUnpack(bytes, dir);
+  const out: OpenedPack = { shards: new Map(), assets: new Map(), scopes: new Map() };
   const rel = (path: string): string => relative(dir, path).split(sep).join("/");
   for (const write of shards) {
     const name = rel(write.path);
@@ -897,6 +900,7 @@ export async function openPackBytes(bytes: Buffer | Uint8Array, dir: string): Pr
     out.shards.set(name, write.content);
   }
   for (const write of assets) out.assets.set(rel(write.path), write.bytes);
+  for (const write of scopes) out.scopes.set(rel(write.path), write.content);
   return out;
 }
 
@@ -933,6 +937,12 @@ export interface PullPlan {
   sidecars: { path: string; content: string }[];
   /** Pictures the pack brought that we do not have. One we DO have is kept. */
   assets: { path: string; bytes: Uint8Array }[];
+  /** The game's shared scopes the pack carried, for `game-scopes/` inside the
+   *  project, and ONLY when the pack is landing a project the folder does not
+   *  hold yet. Into a project that already stands, never: its folder (often
+   *  the real one, above it) is the truth, and a copy written inside the
+   *  project would hide it, since discovery looks there first. */
+  scopes: { path: string; content: string }[];
   merged: number;
   added: number;
   /** Contract shards taken from the pack whole. The venue owns its own file. */
@@ -974,9 +984,17 @@ export async function planPull(
   const theirs = await openPackBytes(head, dir);
   const ancestor = base === undefined ? undefined : (await openPackBytes(base, dir)).shards;
   const plan: PullPlan = {
-    writes: [], sidecars: [], assets: [], merged: 0, added: 0, replaced: 0, conflicts: 0,
+    writes: [], sidecars: [], assets: [], scopes: [], merged: 0, added: 0, replaced: 0, conflicts: 0,
     base: hashShards(theirs.shards),
   };
+  // A fresh landing is one whose project shard is not here yet (asked before
+  // anything is planned, since the loop below decides the same thing per shard).
+  const project = [...theirs.shards.keys()].find((name) => name.endsWith(SHARD_EXTENSIONS.project));
+  if (project !== undefined && !existsSync(join(dir, project))) {
+    for (const [name, content] of [...theirs.scopes.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      plan.scopes.push({ path: join(dir, name), content });
+    }
+  }
 
   for (const name of [...theirs.shards.keys()].sort()) {
     const theirText = theirs.shards.get(name)!;

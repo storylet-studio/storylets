@@ -378,6 +378,34 @@ describe("pulling", () => {
     expect(JSON.parse(plan.sidecars[0]!.content).conflicts).toHaveLength(1);
   });
 
+  it("lands the game's scopes a pack carries in a fresh project, and never in one that already stands", async () => {
+    // A pack from a game that shares its scopes carries a snapshot of the folder.
+    const root = mkdtempSync(join(tmpdir(), "remote-scopes-"));
+    mkdirSync(join(root, ".git"));
+    mkdirSync(join(root, "game-scopes"));
+    const patter = `${JSON.stringify({ version: 1, owner: "Patter", scopes: [{ token: "patter", declarations: [] }] }, null, 2)}\n`;
+    writeFileSync(join(root, "game-scopes", "patter.scopes.json"), patter);
+    const project = join(root, "saltmarsh.storylets");
+    cpSync(example, project, { recursive: true });
+    const pack = await runPack(project, { assets: true });
+
+    // Landing it fresh: the snapshot goes inside the project, where discovery
+    // looks first, and it is not a shard, so it is in nobody's base.
+    const target = join(mkdtempSync(join(tmpdir(), "remote-scopes-land-")), "saltmarsh.storylets");
+    mkdirSync(target, { recursive: true });
+    const fresh = await planPull(target, pack, undefined);
+    expect(fresh.scopes).toEqual([{ path: join(target, "game-scopes", "patter.scopes.json"), content: patter }]);
+    expect(fresh.writes.some((w) => w.path.includes("game-scopes"))).toBe(false);
+    expect(Object.keys(fresh.base).some((name) => name.includes("game-scopes"))).toBe(false);
+
+    // Into a project that already stands, nothing: a copy inside it would hide
+    // the game's own folder from discovery.
+    const mine = copyExample("pull-scopes");
+    const pulled = await planPull(mine, pack, server.revisions[0]!);
+    expect(pulled.scopes).toEqual([]);
+    expect(pulled.writes.some((w) => w.path.includes("game-scopes"))).toBe(false);
+  });
+
   it("leaves a local edit alone when we are already level with the head", async () => {
     const mine = copyExample("pull-level");
     const deck = findDeck(mine);

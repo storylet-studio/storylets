@@ -11,7 +11,8 @@
 
 import { compile as compileExpr, parseAndValidate } from "@wildwinter/expr";
 import type { Expression, ExpressionSchema, PropertyMeta } from "@wildwinter/expr";
-import { storyletsDialect, OWN_SCOPES, EXTERNAL_SCOPES } from "@storylet-studio/dialect";
+import { storyletsDialectWith, OWN_SCOPES, EXTERNAL_SCOPES } from "@storylet-studio/dialect";
+import { referenceNote, scopesSchema } from "@wildwinter/scoperegistry/scopes";
 import type {
   Box, Bundle, Card, Deck, Hand, HandTemplate, Outcome, PropertyDecl, ScalarValue, TagGroup,
 } from "@storylet-studio/model";
@@ -22,6 +23,7 @@ import { contentAboveRung, ladderWarning, playRungOf } from "./play-ladder.js";
 import { canonicalStringify } from "./serialize.js";
 import { compileMaps } from "./maps.js";
 import { hash32 } from "./hash.js";
+import { gameTokens, sameDeclarations, scopesFilePath, sharedWorld } from "./game-scopes.js";
 
 export interface CompileResult {
   /** Present only when there are no error-severity issues. */
@@ -71,10 +73,29 @@ const sameMeta = (a: PropertyMeta, b: PropertyMeta): boolean =>
   && JSON.stringify(a.enumValues ?? null) === JSON.stringify(b.enumValues ?? null)
   && JSON.stringify(a.stages ?? null) === JSON.stringify(b.stages ?? null);
 
+/** Every `@scope.name` an expression's AST reads or names, in the order met. */
+const scopedRefs = (node: unknown): { scope: string; name: string }[] => {
+  const out: { scope: string; name: string }[] = [];
+  const walk = (n: unknown): void => {
+    if (Array.isArray(n)) { for (const x of n) walk(x); return; }
+    if (n === null || typeof n !== "object") return;
+    const v = n as { kind?: unknown; scope?: unknown; name?: unknown };
+    if (v.kind === "scopedvar" && typeof v.scope === "string" && typeof v.name === "string") out.push({ scope: v.scope, name: v.name });
+    for (const child of Object.values(n)) walk(child);
+  };
+  walk(node);
+  return out;
+};
+
 /** The content hash: over the canonical serialisation of the parsed shards,
  *  so formatting and comments never perturb it (schema 2.8). */
 export function projectHash(source: SourceProject): string {
+  // The shared @world, when the game's scopes folder declares one, is part of what the
+  // bundle is compiled from (its world block), so an edit to it makes a committed bundle
+  // stale. Only then: a project with no folder hashes exactly as it always has.
+  const world = sharedWorld(source)?.decls;
   return hash32(canonicalStringify({
+    ...(world !== undefined ? { sharedWorld: world } : {}),
     project: source.project,
     boxes: source.boxes.map((b) => ({
       path: b.path,
@@ -255,16 +276,45 @@ export function compileProject(source: SourceProject): CompileResult {
   const cardGameIds = new Map<string, string>();
   const boxGameIds = new Map<string, string>();
 
+  // --- the game's shared scopes (patterkit design/shared-scopes.md) ------------------
+  // The folder's @world, when it declares one, is this project's @world
+  // (decision 2): the checks below and the bundle's world block read it, and the
+  // project's own declarations are its synced copy, the fallback for a project
+  // on its own. The copy differing means an edit made outside the tools.
+  const gameScopes = source.gameScopes;
+  const merged = gameScopes?.merged;
+  const shared = sharedWorld(source);
+  const worldDecls: PropertyDecl[] = shared?.decls ?? source.project.world?.properties ?? [];
+  const worldPath = shared ? scopesFilePath(source, shared.fileName) : source.path;
+  if (shared && !sameDeclarations(source.project.world?.properties ?? [], shared.decls)) {
+    report({
+      severity: "warning", path: source.path, where: "world",
+      message: `the project's @world declarations differ from ${scopesFilePath(source, shared.fileName)}, which wins:`
+        + " save the project in Storyletter to bring its copy up to date",
+    });
+  }
+  // The game-wide scopes other tools declare (`@patter`, a game's `@player`):
+  // the dialect accepts every one of them, content naming one is recorded in the
+  // bundle like any other engine's, and references into a declared one are
+  // checked, as warnings (decision 3), since the other project may be a save
+  // behind on someone's branch. A token nobody declares is the shared
+  // vocabulary's: accepted and unchecked, as before the folder existed.
+  const declaredTokens = gameTokens(merged, OWN_SCOPES);
+  const otherTokens = [...new Set([...EXTERNAL_SCOPES, ...declaredTokens])];
+  const dialect = storyletsDialectWith(declaredTokens);
+  const otherSchema = merged ? scopesSchema(merged, { except: OWN_SCOPES }).properties : undefined;
+  const checkedTokens = new Set(otherSchema ? [...otherSchema.keys()] : []);
+
   // --- expression validation plumbing --------------------------------------------
   legalPropertyName("story", source.project.story?.properties, source.path);
-  legalPropertyName("world", source.project.world?.properties, source.path);
+  legalPropertyName("world", worldDecls, worldPath);
   // The sharing flag stops at @world's door (design/flows.md): @world is the
   // game's own state, always one value across every flow, so a flag either
   // way is a claim the scope cannot honour.
-  for (const d of source.project.world?.properties ?? []) {
+  for (const d of worldDecls) {
     if (d.shared !== undefined) {
       report({
-        severity: "error", path: source.path, where: `world.${d.name}`,
+        severity: "error", path: worldPath, where: `world.${d.name}`,
         message: `@world.${d.name} declares "shared" - @world is the game's own state and is always shared across flows; the flag belongs on @story, box, deck, hand or tag properties`,
       });
     }
@@ -273,13 +323,13 @@ export function compileProject(source: SourceProject): CompileResult {
     // long the game keeps it is the game's business and not the story's.
     if (d.durable !== undefined) {
       report({
-        severity: "error", path: source.path, where: `world.${d.name}`,
+        severity: "error", path: worldPath, where: `world.${d.name}`,
         message: `@world.${d.name} declares "durable" - @world is the game's own state and the game decides how long it keeps it; the flag belongs on @story, box, deck, hand or tag properties`,
       });
     }
   }
   const storySchema = bagSchema(source.project.story?.properties ?? []);
-  const worldSchema = bagSchema(source.project.world?.properties ?? []);
+  const worldSchema = bagSchema(worldDecls);
   /**
    * The @hand schema for one box, INFERRED from what the box already declares
    * (design/hand-typing.md step A). @hand is composed per ask, in the three
@@ -373,7 +423,7 @@ export function compileProject(source: SourceProject): CompileResult {
   });
 
   // A change target: one of the engine's own scopes, or another engine's.
-  const changeTarget = new RegExp(`^@(${[...OWN_SCOPES, ...EXTERNAL_SCOPES].join("|")})\\.[a-z][a-z0-9_-]*$`);
+  const changeTarget = new RegExp(`^@(${[...OWN_SCOPES, ...otherTokens].join("|")})\\.[a-z][a-z0-9_-]*$`);
 
   // Other engines' game-wide scopes the content names (`@patter.gold`): recorded
   // in the bundle, so the engine can say at run time when the game has not
@@ -383,8 +433,39 @@ export function compileProject(source: SourceProject): CompileResult {
     if (Array.isArray(node)) { for (const n of node) noteExternal(n); return; }
     if (node === null || typeof node !== "object") return;
     const n = node as { kind?: unknown; scope?: unknown };
-    if (n.kind === "scopedvar" && typeof n.scope === "string" && EXTERNAL_SCOPES.includes(n.scope)) externalUsed.add(n.scope);
+    if (n.kind === "scopedvar" && typeof n.scope === "string" && otherTokens.includes(n.scope)) externalUsed.add(n.scope);
     for (const v of Object.values(node)) noteExternal(v);
+  };
+
+  /**
+   * References into the other tools' declared scopes, as warnings (decision 3). The
+   * expression has already passed with those scopes unchecked; validating it again with
+   * their declarations added finds what they say about it (a type mismatch, a comparison
+   * with a value an enum doesn't have), and whatever that second pass adds is theirs.
+   * A name the owner doesn't declare is said by `referenceNote`, which names the file.
+   */
+  const checkOtherScopes = (
+    src: string, ast: unknown, firstIssues: readonly { message: string }[], schema: ExpressionSchema,
+    path: string, where: string, label: string, field: string,
+  ): void => {
+    if (!merged || !otherSchema || checkedTokens.size === 0) return;
+    const refs = scopedRefs(ast).filter((r) => checkedTokens.has(r.scope));
+    if (refs.length === 0) return;
+    const warn = (message: string): void => { report({ severity: "warning", path, where, field, message: `${label}: ${message}` }); };
+    const said = new Set<string>();
+    for (const r of refs) {
+      const note = referenceNote(merged, r.scope, r.name);
+      if (note !== undefined && !said.has(note)) { said.add(note); warn(note); }
+    }
+    const full = parseAndValidate(src, { properties: new Map([...otherSchema, ...schema.properties]) }, dialect);
+    const before = new Set(firstIssues.map((i) => i.message));
+    for (const issue of full.issues) {
+      if (before.has(issue.message) || said.has(issue.message)) continue;
+      // An undeclared name: referenceNote has said it, naming the file that should declare it.
+      if (issue.kind === "unresolved-scoped-property") continue;
+      said.add(issue.message);
+      warn(issue.message);
+    }
   };
 
   const expr = (
@@ -395,13 +476,14 @@ export function compileProject(source: SourceProject): CompileResult {
      *  happen to agree. */
     field: string = label,
   ): Expression | undefined => {
-    const result = parseAndValidate(src, schema, storyletsDialect);
+    const result = parseAndValidate(src, schema, dialect);
     for (const issue of result.issues) {
       report({ severity: issue.severity, path, where, field, message: `${label}: ${issue.message}` });
     }
     if (!result.ok || result.ast === null) return undefined;
     noteExternal(result.ast);
-    return compileExpr(src, storyletsDialect);
+    checkOtherScopes(src, result.ast, result.issues, schema, path, where, label, field);
+    return compileExpr(src, dialect);
   };
 
   // --- per-box assembly ------------------------------------------------------------
@@ -488,7 +570,7 @@ export function compileProject(source: SourceProject): CompileResult {
         if (!ref) {
           report({ severity: "error", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" must be a @world or @story property reference` });
         } else {
-          const decls = ref[1] === "world" ? source.project.world?.properties : source.project.story?.properties;
+          const decls = ref[1] === "world" ? worldDecls : source.project.story?.properties;
           const decl = (decls ?? []).find((d) => d.name === ref[2]);
           if (!decl) {
             report({ severity: "error", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" is not a declared ${ref[1]} property` });
@@ -702,10 +784,17 @@ export function compileProject(source: SourceProject): CompileResult {
               continue;
             }
             const [, scope] = match;
-            if (EXTERNAL_SCOPES.includes(scope!)) {
+            if (otherTokens.includes(scope!)) {
               // Another engine's scope: its names and writability are that
               // engine's, so the registry refuses at run time what it must.
               externalUsed.add(scope!);
+              // Where the game's scopes folder declares it, say what its owner
+              // would refuse (decision 3: a warning, the owner may be a save
+              // behind): a name it doesn't declare, a property it marks read-only.
+              const note = merged ? referenceNote(merged, scope!, target.slice(1).split(".")[1]!, { write: true }) : undefined;
+              if (note !== undefined) {
+                report({ severity: "warning", path, where: `${effectiveGameId(card)}/${effectiveGameId(outcome)}`, field: "changes", message: `change ${target}: ${note}` });
+              }
             } else if (scope === "hand") {
               // @hand has no single owner to declare into, so no quick-fix, but
               // two faults are worth naming. A tag group's name is the CHOSEN
@@ -746,7 +835,7 @@ export function compileProject(source: SourceProject): CompileResult {
             // bug. The game is not bound by it; its resolver is its policy.
             if (scope === "world") {
               const name = target.slice(1).split(".")[1]!;
-              const decl = (source.project.world?.properties ?? []).find((d) => d.name === name);
+              const decl = worldDecls.find((d) => d.name === name);
               if (decl && decl.writable === false) {
                 report({ severity: "error", path, where: `${effectiveGameId(card)}/${effectiveGameId(outcome)}`, field: "changes",
                   message: `change target "${target}" is read-only to the story (writable: false): the game owns it, and a condition may read it but an outcome may not write it` });
@@ -848,7 +937,7 @@ export function compileProject(source: SourceProject): CompileResult {
         return;
       }
       const decls = parsed.scope === "hand" ? handDecls
-        : parsed.scope === "world" ? source.project.world?.properties
+        : parsed.scope === "world" ? worldDecls
         : source.project.story?.properties;
       const decl = (decls ?? []).find((d) => d.name === parsed.name);
       if (!decl) {
@@ -1046,7 +1135,7 @@ export function compileProject(source: SourceProject): CompileResult {
   // domain is a config bug the author should see immediately.
   const coverage = source.project.coverage;
   if (coverage) {
-    const worldDecls = new Map((source.project.world?.properties ?? []).map((d) => [d.name, d]));
+    const worldByName = new Map(worldDecls.map((d) => [d.name, d]));
     const matches = (value: unknown, type: string, values?: string[]): boolean =>
       type === "number" ? typeof value === "number"
       : type === "boolean" ? typeof value === "boolean"
@@ -1055,7 +1144,7 @@ export function compileProject(source: SourceProject): CompileResult {
       : typeof value === "string";
     for (const [ref, driver] of Object.entries(coverage.drivers ?? {})) {
       const match = /^@world\.([a-z][a-z0-9_-]*)$/.exec(ref);
-      const decl = match ? worldDecls.get(match[1]!) : undefined;
+      const decl = match ? worldByName.get(match[1]!) : undefined;
       if (!decl) {
         report({ severity: "error", path: source.path, where: ref, message: "coverage driver ref must name a declared @world property (the host seam is the only drivable scope)" });
         continue;
@@ -1087,7 +1176,7 @@ export function compileProject(source: SourceProject): CompileResult {
     metadata: strip ? "stripped" : "full",
     settings: { playAdvancesTurns: source.project.settings?.playAdvancesTurns ?? 1 },
     world: {
-      properties: source.project.world?.properties ?? [],
+      properties: worldDecls,
       ...(source.project.world?.registry !== undefined ? { registry: source.project.world.registry } : {}),
     },
     story: { properties: source.project.story?.properties ?? [] },

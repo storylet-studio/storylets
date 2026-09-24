@@ -182,6 +182,19 @@ is `initial` (rolled once per playthrough) or `recurring` (re-rolled per turn at
 **`templates`** is the configuration bag for templates of play, keyed by template name. The
 core validates only what it knows about.
 
+**`gameScopes`** (optional, usually absent) names the game's
+[shared scopes folder](/play/with-patter/#sharing-scopes-between-the-editors), relative to the
+folder holding the project file: `gameScopes: "../../shared/game-scopes"`. You rarely need it.
+Every tool finds a `game-scopes/` folder on its own by looking in the project folder and then
+each folder above it, stopping at the root of your repository, so this is only for a folder
+that search wouldn't reach. A path that doesn't exist is an error. Storyletter writes it for
+you when you share scopes into a folder outside the search. It never reaches the bundle.
+
+Where the game shares its scopes and its `game.scopes.json` declares `@world`, the project's
+**`world`** declarations are a synced copy of those. Storyletter rewrites the copy from the
+shared file whenever it saves, so the project still compiles when it's packed or checked out
+on its own. The shared file wins, and `validate` warns if the two ever differ.
+
 ## The box shard
 
 The card shape and the ranking toggle. It's small and changes rarely. In a team this file is

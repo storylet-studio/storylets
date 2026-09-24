@@ -11,6 +11,7 @@ import { SHARD_EXTENSIONS } from "@storylet-studio/model";
 import { loadProjectFiles, parseProjectFiles, walkProjectFiles } from "@storylet-studio/compiler";
 import type { Issue, SourceFile, SourceProject } from "@storylet-studio/compiler";
 import { CONFLICT_SIDECAR_EXTENSION } from "./merge.js";
+import { readGameScopes } from "./game-scopes.js";
 
 const hasProjectShard = (dir: string): boolean => {
   try {
@@ -63,5 +64,13 @@ export function loadProject(path = "."): LoadedProject {
   }
   const files = loadProjectFiles(dir);
   const { project, issues } = parseProjectFiles(files);
-  return { dir, files, ...(project !== undefined ? { source: project } : {}), issues, sidecars: findConflictSidecars(dir) };
+  // The game's shared scopes folder, when there is one (patterkit design/shared-scopes.md):
+  // found by walking up, or where the project says. Its problems are the project's.
+  let source = project;
+  if (project !== undefined) {
+    const found = readGameScopes(dir, project.path, project.project.gameScopes);
+    issues.push(...found.issues);
+    if (found.gameScopes !== undefined) source = { ...project, gameScopes: found.gameScopes };
+  }
+  return { dir, files, ...(source !== undefined ? { source } : {}), issues, sidecars: findConflictSidecars(dir) };
 }

@@ -126,6 +126,11 @@ export function createProjectSettings(
         { id: "world", label: "World", group: "State", mount: (h) => {
           // Neither sharing axis on @world: both are compile errors there,
           // @world being the game's own state (flows.md; engine-server.md 4.2).
+          // Where the game shares its scopes, these are the game's, not this project's: said
+          // first, so an author editing them knows the other tools will see the change.
+          if (data!.worldFile !== undefined) {
+            h.append(el("p", { className: "set-note", text: `Shared with the game's other tools: saving writes these to ${data!.worldFile} first, then copies them into this project, so it still compiles on its own.` }));
+          }
           const props = mountPropertyList(h, data!.world, { readOnlySwitch: true, sharingSwitches: false });
           h.append(el("h3", { className: "set-cap", text: "Coverage drivers" }));
           h.append(el("p", { className: "set-note", text: "Values the coverage test feeds these properties, so cards gated on them get dealt." }));

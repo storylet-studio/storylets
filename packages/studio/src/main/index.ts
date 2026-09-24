@@ -27,7 +27,7 @@ import {
   LEAVE_SETTLE_MS, REMOTE_FILE,
 } from "./remote.js";
 import type { InAppPrompt, LeaveChoice, LeavePrompt, ProjectAnchor, PullPlan, RemoteRecord } from "./remote.js";
-import { compileBundle, compileForLivePush, createProject, currentProjectHash, exportBundle, openProject, openResult, projectSettings, validate, vcStatus } from "./project.js";
+import { compileBundle, compileForLivePush, createProject, currentProjectHash, exportBundle, openProject, openResult, projectSettings, shareScopes, shareScopesDefault, validate, vcStatus } from "./project.js";
 import { createLiveLinkServer, type LiveLinkServer } from "./live-link.js";   // Live Link
 import { setProjectWrittenListener } from "./mutate.js";   // Live Link: refresh a connected game after a write
 import { spreadsheetExport } from "./spreadsheet.js";   // Publish Spreadsheet
@@ -56,6 +56,7 @@ import type { InfluenceEdge } from "@storylet-studio/ops";
 import { deckEdges, linkReasons } from "./link-graph.js";
 import type { SourceBox } from "@storylet-studio/compiler";
 import type { ProjectSession } from "./project.js";
+import { returnedWorldSummary, returnedWorldWrites } from "./game-scopes.js";
 import { SAVEFILE_SCHEMA, SAVE_SCHEMA, commentsOf, effectiveGameId, isSpatial, polygonOf, handBinding, markOf, marksOn, stacked, threadsFor, zOf, backgroundsOf, byDisplayOrder } from "@storylet-studio/model";
 import type { Bundle, Comment, Frame, PropertyDecl, SaveFile, ScalarValue, StackMove } from "@storylet-studio/model";
 import type { BackgroundEdit } from "./mutate.js";
@@ -436,12 +437,16 @@ async function unpackToChosenDir(packPath: string): Promise<OpenResult | { error
   const target = dirPick.filePaths[0];
   if (dirPick.canceled || target === undefined) return null;
   try {
-    const { shards, assets } = await runUnpack(readFileSync(packPath), target);
+    const { shards, assets, scopes } = await runUnpack(readFileSync(packPath), target);
     // The record a server-issued pack carries is NOT written by this route. A
     // pack opened by file is an ordinary project until somebody connects: the
     // role it names would otherwise make the shape read-only in an editor that
     // has no server to explain it and no menu to act on it.
-    const batch = writeTextFiles(shards
+    //
+    // The game's shared scopes the pack carried land in game-scopes/ inside the
+    // project, where discovery looks first, so the pickers, checks and the
+    // Board know the other tools' names here as they did where it was packed.
+    const batch = writeTextFiles([...shards, ...scopes]
       .filter((w) => w.path !== join(target, REMOTE_FILE))
       .map((w) => ({ filePath: w.path, content: w.content })));
     if (!batch.success) {
@@ -775,7 +780,7 @@ async function landPackNow(
 /** Write a plan's shards, sidecars and pictures. Returns the reason it could
  *  not, or nothing. */
 function commitPlan(plan: PullPlan): string | undefined {
-  const batch = writeTextFiles([...plan.writes, ...plan.sidecars]
+  const batch = writeTextFiles([...plan.writes, ...plan.sidecars, ...plan.scopes]
     .map((w) => ({ filePath: w.path, content: w.content })));
   if (!batch.success) {
     const first = batch.results.find((r) => !r.success);
@@ -2052,6 +2057,27 @@ function wireIpc(): void {
   // A pack is a DELIVERY, not the canonical files, so all three of these go
   // through a file picker: nothing is ever written back to a pack silently, and
   // unpacking always names its own destination.
+  // "Share Scopes with Other Tools..." (patterkit design/shared-scopes.md): the folder dialog
+  // opens where the folder belongs by default, the version-control root above the project,
+  // and says what will be made there, in Patterpad's words for every folder it asks for.
+  ipcMain.handle("project:shareScopes", async (): Promise<OpenResult | { error: string } | null> => {
+    if (!session) return { error: "no project open" };
+    const already = session.loaded.source?.gameScopes;
+    if (already) return { error: `This project already shares its scopes, through ${already.dir}` };
+    const picked = await dialog.showOpenDialog(window!, {
+      title: "Share scopes with other tools",
+      message: "Storyletter will create \"game-scopes\" here, for the game's editing tools to share their scopes through. The version-control root is the usual place.",
+      buttonLabel: "Create Here",
+      defaultPath: shareScopesDefault(session),
+      properties: ["openDirectory", "createDirectory"],
+    });
+    const parent = picked.filePaths[0];
+    if (picked.canceled || parent === undefined) return null;
+    const failed = shareScopes(session, parent);
+    if (failed) return failed;
+    return openResult(session, validate(session));
+  });
+
   ipcMain.handle("pack:export", async (): Promise<{ path: string } | { error: string } | null> => {
     if (!session) return { error: "no project open" };
     const name = session.loaded.source?.project.project.name ?? "project";
@@ -2247,6 +2273,8 @@ function wireIpc(): void {
         assets: merged.assets.length,
         keptAssets: merged.keptAssets.length,
         ...(merged.provenance.message !== undefined ? { provenance: merged.provenance.message } : {}),
+        // The returned World edit, carried to the game's own file, or why it can't be.
+        ...returnedWorldSummary(merged.gameWorld),
       };
       return { summary };
     } catch (e) {
@@ -2273,7 +2301,9 @@ function wireIpc(): void {
         mkdirSync(dirname(asset.path), { recursive: true });
         writeFileSync(asset.path, asset.bytes);
       }
-      const writes = [...merged.writes, ...merged.sidecars];
+      // The returned World edit goes to the game's own file in the same batch,
+      // so the one undo puts it back with the rest (game-scopes.ts).
+      const writes = [...merged.writes, ...merged.sidecars, ...returnedWorldWrites(merged.gameWorld)];
       const before = captureBefore(writes.map((w) => w.path));
       if (!applyStates(writes.map((w) => ({ path: w.path, content: w.content })))) {
         return { error: "could not write the merge (locked or read-only?)" };
