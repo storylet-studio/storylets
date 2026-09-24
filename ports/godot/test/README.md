@@ -20,8 +20,12 @@ godot --headless --path ports/godot --import
       [-- /abs/path/to/corpus.json]
   ```
 
-  Defaults to the repo's `packages/conformance/corpus.json`. Prints
-  per-family counts then `ALL PASS` (exit 0) or `N FAILED` (exit 1).
+  Defaults to the repo's `packages/conformance/corpus.json`. Also runs the two
+  corpora vendored from `../expr` beside it: `expr-corpus.json` (the
+  evaluator's) and `registry-corpus.json` (the ScopeRegistry's, through the
+  shared runner `registry_corpus.gd`, vendored here too; a missing file is a
+  failure). Prints per-family counts, `registry corpus: N/N`, then `ALL PASS`
+  (exit 0) or `N FAILED` (exit 1).
 
 - `test_smoke.gd` - loads the bundled Hamlet demo, deals, plays one outcome
   and round-trips the run through the `.storyletsave` string boundary:

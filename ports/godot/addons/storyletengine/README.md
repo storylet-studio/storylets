@@ -111,7 +111,10 @@ diagnostic; never a silent pass, never a crash.
   See [Live Link](https://storylet.studio/play/live-link/).
 - **State kernel**: `StoryletPropertyBag` and `StoryletScopeRegistry` are the
   shared properties implementer (the owned / foreign scope split for a host
-  `@world`).
+  `@world`). Both are thin shims over sources shared with Patterplay
+  (`runtime/expr/`), so a game running both engines can hand them one
+  registry. A refused registry call returns its error String ("" on
+  success).
 
 ## Exporting your game
 

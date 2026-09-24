@@ -6,6 +6,10 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Changed
+
+- **`StoryletScopeRegistry` is the shared registry, one per game** (2026-09-24). The class is now a thin shim over `runtime/expr/scope_registry.gd`, vendored from expr and shared with Patterplay, so a game that runs both engines can hand them one registry. It matches `@wildwinter/scoperegistry` 0.7.0 and runs that package's registry corpus. New: `define_owned(token, declarations, {"path_prefix", "normalise", "owner"})` (rows default to the `<token>.` prefix; the two-argument form still works), an `owner` on `mount_owned` and `define_foreign` that a clash error names and every `list_properties()` row carries, `define_foreign(..., {"writable", "normalise", "owner"})` beside the old bool form, `remove(token, {"keep": true})`, `discard_parked(prefix)`, a read-only `revision`, and `to_eval_context(host, {"aliases": {token: key}})`. A `load()` section for a key nobody has registered is now PARKED, handed to the scope when that key registers and kept in the next `save()`, where it used to be dropped; pass `{"keep_parked": true}` to keep what an earlier load parked. `list_properties()` rows now carry `path` and `stages` on foreign scopes too. **Breaking**: `define_owned`, `mount_owned`, `define_foreign`, and `reseed_owned` return an error String ("" on success) in place of the registry, so they no longer chain; and `save_fragment`, `load_fragment`, and `SAVE_FRAGMENT_VERSION` are gone, since versioning belongs to the save that embeds `save()`. The engine itself does not use the registry yet, so a game that never touched `StoryletScopeRegistry` sees no change.
+
 ## [0.7.0] - 2026-09-14
 
 ### Added

@@ -19,6 +19,8 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="LiveLinkFixture.cs" />
+    <!-- The registry corpus runner, vendored from expr/ports/unity/testing. -->
+    <Compile Include="RegistryCorpus.cs" />
     <Compile Include="../StoryletEngine/Runtime/**/*.cs" />
     <!-- The UnityEngine-touching runtime layer (bundle asset, debug registry)
          cannot compile outside Unity; everything else under Runtime/ stays

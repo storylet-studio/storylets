@@ -11,7 +11,10 @@
 #
 # Families: expressions (evaluator + dialect), specificity (matched-constraint
 # scorer), peek (bundle + one ask, asked TWICE - a peek registers nothing),
-# scripted (deals, plays, turns, save/load incl. into the edited bundle B).
+# scripted (deals, plays, turns, save/load incl. into the edited bundle B). Then
+# the two corpora vendored from ../expr beside it: expr-corpus.json (the
+# evaluator's) and registry-corpus.json (the ScopeRegistry's, run by the shared
+# runner in registry_corpus.gd).
 # Prints per-family counts then ALL PASS (exit 0) or N FAILED (exit 1).
 extends SceneTree
 
@@ -44,6 +47,11 @@ var _probe_finished := false
 var _run_finished := false
 var _exit_code := 1
 var _dialect: Dictionary = StoryletDialect.dialect()
+
+## The shared registry corpus runner (vendored beside this file from ../expr, no
+## class_name) and the shared evaluator it evaluates `eval` steps with.
+const RegistryCorpus := preload("res://test/registry_corpus.gd")
+const ExprEval := preload("res://addons/storyletengine/runtime/expr/expr_eval.gd")
 
 
 func _initialize() -> void:
@@ -119,18 +127,23 @@ func _run_all() -> void:
 	_runner_finished = false
 	var xe := _run_expressions(x_expr)
 	_check_runner("expr/expressions")
-	# A family the corpus carries and this harness does not run is a check that
-	# cannot fail here, so a missing key is a failure, not a skip.
-	if not expr_root.has("registry"):
-		push_error("expr parity corpus has no registry family")
-		_finish(2)
-		return
-	var x_reg: Array = expr_root["registry"]
+	print("expr corpus v%d - prng: %d/%d  expressions: %d/%d" % [
+		int(expr_root["version"]), xp, x_prng.size(), xe, x_expr.size()])
+
+	# The registry corpus sits beside it too, vendored from ../expr: the contract every
+	# copy of the ScopeRegistry runs, the `writable` rule included, here through
+	# StoryletScopeRegistry. Absent is a failure, not a skip; the shared runner reports
+	# it as one.
 	_runner_finished = false
-	var xr := _run_expr_registry(x_reg)
-	_check_runner("expr/registry")
-	print("expr corpus v%d - prng: %d/%d  expressions: %d/%d  registry: %d/%d" % [
-		int(expr_root["version"]), xp, x_prng.size(), xe, x_expr.size(), xr, x_reg.size()])
+	var reg := RegistryCorpus.run(path.get_base_dir().path_join("registry-corpus.json"),
+		StoryletScopeRegistry, StoryletPropertyBag, ExprEval)
+	for f in reg["failures"]:
+		_fail("registry", "(corpus)", str(f))
+	if int(reg["cases"]) == 0 or int(reg["passed"]) != int(reg["cases"]):
+		_fail("registry", "(corpus)", "%d of %d cases passed" % [int(reg["passed"]), int(reg["cases"])])
+	_runner_finished = true
+	_check_runner("registry")
+	print("registry corpus: %d/%d" % [int(reg["passed"]), int(reg["cases"])])
 
 	print("ALL PASS" if _fails == 0 else "%d FAILED" % _fails)
 	_finish(0 if _fails == 0 else 1)
@@ -993,71 +1006,3 @@ func _self_world_examiner(bundle: Dictionary) -> Array:
 		failures.append("self-backed examiner: a host write made the declaration writable")
 	_probe_finished = true
 	return failures
-
-
-# -- the expr parity corpus: registry ---------------------------------------------
-#
-# The scope kernel's `writable` rule: decl.writable ?? scope.writable ?? true. A case
-# with no "scope" seeds a StoryletPropertyBag and writes to it; one with a "scope"
-# mounts the declarations as a FOREIGN scope on a StoryletScopeRegistry over a plain
-# Dictionary, with the scope default, and writes through the registry - the
-# registry's own rule, not the bag's. The value is read back on BOTH outcomes: a
-# refusal that half-wrote is a failure, and so is a "landed" write that went nowhere.
-func _run_expr_registry(cases: Array) -> int:
-	var pass_count := 0
-	for c in cases:
-		var name: String = c["name"]
-		var decls: Array = []
-		for d in c["declarations"]:
-			var decl: Dictionary = (d as Dictionary).duplicate()
-			decl["default"] = StoryletValues.to_value(d["default"])
-			decls.append(decl)
-		var set_name: String = c["set"]["name"]
-		var value = StoryletValues.to_value(c["set"]["value"])
-		var expect_error: bool = c.get("expectError", false)
-		# The case says whether the write is the HOST's: `writable: false` is the
-		# story's promise, and the game is never bound by it.
-		var host: bool = c.get("host", false)
-		var expected = StoryletValues.to_value(c["expected"])
-
-		var error := ""
-		var read_back = null
-		if not c.has("scope"):
-			var bag := StoryletPropertyBag.new(decls)
-			var change: Dictionary = bag.set_value(set_name, value, {"host": host})
-			if change.has("error"):
-				error = str(change["error"])
-			read_back = bag.get_value(set_name)
-		else:
-			var store := {}
-			for d in decls:
-				store[str(d["name"]).to_lower()] = d["default"]
-			var resolver := {
-				"get": func(n: String): return store.get(n),
-				"set": func(n: String, v) -> void: store[n] = v,
-			}
-			var scope: Dictionary = c["scope"]
-			var registry := StoryletScopeRegistry.new().define_foreign(
-				"s", resolver, decls, bool(scope.get("writable", true)))
-			error = registry.set_value("s", set_name, value, {"host": host})
-			read_back = registry.get_value("s", set_name)
-
-		var ok := true
-		if expect_error:
-			if error == "":
-				_fail("expr/registry", name, "expected a read-only refusal, the write landed")
-				ok = false
-			elif not error.contains("is read-only"):
-				_fail("expr/registry", name, "refused, but not as read-only: " + error)
-				ok = false
-		elif error != "":
-			_fail("expr/registry", name, "unexpected refusal: " + error)
-			ok = false
-		if not StoryletValues.value_equals(read_back, expected):
-			_fail("expr/registry", name, "read back %s, expected %s" % [
-				StoryletValues.show(read_back), StoryletValues.show(expected)])
-			ok = false
-		if ok:
-			pass_count += 1
-	_runner_finished = true
-	return pass_count

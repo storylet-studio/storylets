@@ -136,6 +136,11 @@ namespace StoryletStudio.StoryletEngine
             }
         }
 
+        /// <summary>A name as this bag keys it: its normalisation policy applied. The
+        /// registry keys quality ladders the bag's own way with it, so a case-significant
+        /// (identity) bag is not folded to lower case one layer up.</summary>
+        public string Normalise(string name) => _norm(name);
+
         public StoryletValue Get(string name)
         {
             return Values.GetOrDefault(_norm(name));

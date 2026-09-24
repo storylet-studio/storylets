@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`ScopeRegistry` is the shared registry, one per game** (2026-09-24). The hand-ported `Runtime/ScopeRegistry.cs` is gone; `Runtime/Expr/ScopeRegistry.cs` is vendored from `expr/ports/unity`, the same source Patterplay ships, and is held to the registry conformance corpus (`packages/conformance/registry-corpus.json`, which the TestHost runs). It matches `@wildwinter/scoperegistry` 0.7:
+  - `DefineOwned(token, decls, new OwnedScopeOptions { PathPrefix, Normalise, Owner })`, where rows address themselves as `<token>.name` unless `PathPrefix` says otherwise and names fold to lower case unless `Normalise` says otherwise; `MountOwned(token, bag, owner)`; `DefineForeign(token, resolver, decls, new ForeignScopeOptions { Writable, Normalise, Owner })`. The two-argument `DefineOwned` and the `bool` form of `DefineForeign` still work.
+  - `Remove(token, keep)`, `DiscardParked(prefix)`, and `Revision`, a counter that moves on each registration or removal and at no other time.
+  - `Load(blob, keepParked)` parks a section for a key nobody has registered, the next registration of that key claims it, and `Save()` includes what is still parked. **Breaking:** such sections used to be dropped.
+  - `ToEvalContext(host, aliases)` points an expression token at a registered key, for scopes and quality ladders alike.
+  - `ListProperties()` rows carry `Owner`, `Path`, and `Stages`, and a clash error names the owner that got there first.
+  - **Breaking:** `SaveFragment`, `LoadFragment`, `OwnedStateFragment`, and `SAVE_FRAGMENT_VERSION` are removed. Nothing called them; embed `Save()` in your own versioned save.
+
 ## [0.7.0] - 2026-09-14
 
 ### Added

@@ -88,17 +88,17 @@ namespace StoryletStudio.StoryletEngine.TestHost
             var xexpr = (JArray)exprRoot["expressions"];
             int xp = RunExprPrng(xprng);
             int xe = RunExpressions(xexpr);
-            // A family the corpus carries and this harness does not run is a check
-            // that cannot fail here, so a missing key is a failure, not a skip.
-            if (exprRoot["registry"] is not JArray xreg)
-            {
-                Console.Error.WriteLine("expr parity corpus has no registry family");
-                return 2;
-            }
-            int xr = RunExprRegistry(xreg);
             Console.WriteLine(
                 $"expr corpus v{exprRoot.Value<int>("version")} - " +
-                $"prng: {xp}/{xprng.Count}  expressions: {xe}/{xexpr.Count}  registry: {xr}/{xreg.Count}");
+                $"prng: {xp}/{xprng.Count}  expressions: {xe}/{xexpr.Count}");
+
+            // The registry corpus (packages/scoperegistry/corpus.json in ../expr) sits beside
+            // it too, and runs through the vendored shared ScopeRegistry. It is the registry's
+            // contract, the `writable` rule included. Absent is a failure here as well:
+            // RegistryCorpus.Run reports a missing file as one.
+            var registry = RegistryCorpus.Run(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".", "registry-corpus.json"));
+            foreach (var f in registry.Failures) { _fails++; Console.Error.WriteLine($"  FAIL [registry corpus] {f}"); }
+            Console.WriteLine($"registry corpus: {registry.Passed}/{registry.Total}");
 
             Console.WriteLine(_fails == 0 ? "ALL PASS" : $"{_fails} FAILED");
             return _fails == 0 ? 0 : 1;
@@ -193,93 +193,6 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 case "-Infinity": return double.NegativeInfinity;
                 default: throw new Exception($"unknown seed literal: {v.ToObject<string>()}");
             }
-        }
-
-        /// <summary>A foreign scope over a plain map, for the registry cases: the
-        /// registry's own writable rule is what is under test, so the resolver
-        /// accepts everything.</summary>
-        private sealed class RecordResolver : IScopeResolver
-        {
-            private readonly Dictionary<string, StoryletValue> _store;
-            public RecordResolver(Dictionary<string, StoryletValue> store) { _store = store; }
-            public StoryletValue Get(string name) => _store.TryGetValue(name, out var v) ? v : null;
-            public bool CanSet => true;
-            public void Set(string name, StoryletValue value) { _store[name] = value; }
-        }
-
-        // The scope kernel's `writable` rule: decl.writable ?? scope.writable ?? true. A
-        // case with no "scope" seeds a PropertyBag and writes to it; one with a "scope"
-        // mounts the declarations as a FOREIGN scope on a ScopeRegistry, with the scope
-        // default, and writes through the registry - the registry's own rule, not the
-        // bag's. The value is read back on BOTH outcomes: a refusal that half-wrote is a
-        // failure, and so is a "landed" write that went nowhere.
-        private static int RunExprRegistry(JArray cases)
-        {
-            int pass = 0;
-            foreach (var c in cases.Cast<JObject>())
-            {
-                var name = c.Value<string>("name");
-                var decls = new List<ScopeDeclaration>();
-                foreach (var d in ((JArray)c["declarations"]).Cast<JObject>())
-                {
-                    decls.Add(new ScopeDeclaration
-                    {
-                        Name = d.Value<string>("name"),
-                        Type = d.Value<string>("type"),
-                        Default = StoryletJson.ToValue(d["default"]),
-                        Writable = d["writable"] == null ? (bool?)null : d.Value<bool>("writable"),
-                    });
-                }
-                string setName = c["set"].Value<string>("name");
-                var value = StoryletJson.ToValue(c["set"]["value"]);
-                bool expectError = c.Value<bool?>("expectError") ?? false;
-                // The case says whether the write is the HOST's: writable: false is
-                // the story's promise, and the game is never bound by it.
-                bool host = c.Value<bool?>("host") ?? false;
-                var expected = StoryletJson.ToValue(c["expected"]);
-
-                string error = null;
-                StoryletValue readBack;
-                try
-                {
-                    if (c["scope"] is not JObject scope)
-                    {
-                        var bag = new PropertyBag(decls);
-                        try { bag.Set(setName, value, host: host); } catch (Exception ex) { error = ex.Message; }
-                        readBack = bag.Get(setName);
-                    }
-                    else
-                    {
-                        var store = new Dictionary<string, StoryletValue>();
-                        foreach (var d in decls) store[d.Name.ToLowerInvariant()] = d.Default;
-                        var registry = new ScopeRegistry().DefineForeign(
-                            "s", new RecordResolver(store), decls, scope.Value<bool?>("writable") ?? true);
-                        try { registry.Set("s", setName, value, host: host); } catch (Exception ex) { error = ex.Message; }
-                        readBack = registry.Get("s", setName);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Fail("expr/registry", name, "the runner itself failed: " + ex.Message);
-                    continue;
-                }
-
-                bool ok = true;
-                if (expectError)
-                {
-                    if (error == null) { Fail("expr/registry", name, "expected a read-only refusal, the write landed"); ok = false; }
-                    else if (!error.Contains("is read-only")) { Fail("expr/registry", name, "refused, but not as read-only: " + error); ok = false; }
-                }
-                else if (error != null) { Fail("expr/registry", name, "unexpected refusal: " + error); ok = false; }
-                bool same = readBack == null ? expected == null : (expected != null && readBack.ValueEquals(expected));
-                if (!same)
-                {
-                    Fail("expr/registry", name, $"read back {(readBack == null ? "<unset>" : readBack.ToJsonString())}, expected {expected.ToJsonString()}");
-                    ok = false;
-                }
-                if (ok) pass++;
-            }
-            return pass;
         }
 
         private static int RunExprPrng(JArray cases)
@@ -830,7 +743,8 @@ namespace StoryletStudio.StoryletEngine.TestHost
         /// <summary>The loader's OWN declarations, straight into a kernel bag: a
         /// `writable: false` world property refuses a story write, takes a host one,
         /// and still reports itself read-only to an examiner. Hand-built
-        /// ScopeDeclarations (the expr/registry family) never reached this, and until
+        /// ScopeDeclarations (the expr corpus's old registry family, whose cases are
+        /// the registry corpus now) never reached this, and until
         /// 2026-09-05 PropertyDecl.Writable SHADOWED ScopeDeclaration.Writable: the
         /// loader filled one field, the bag read the other, and Unity's bag refused
         /// nothing at all.</summary>

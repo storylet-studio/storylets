@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`ScopeRegistry` is the shared one, vendored from expr, and brought up to `@wildwinter/scoperegistry` 0.7** (2026-09-24). The hand-ported `Storylets/ScopeRegistry.h` is gone; include `Storylets/Expr/ScopeRegistry.h`, which Patterplay vendors too and which the registry corpus (`packages/conformance/registry-corpus.json`) now pins on this port, run by the TestHost. The calls it already had keep their forms and their behaviour, `defineForeign(token, resolver, &decls, scopeWritable)` and `set(scope, name, value, host)` included. What is new: `mountOwned` and `defineOwned` take an owner label, and `defineOwned` takes `OwnedScopeOptions` (a path prefix, which defaults to `<token>.`, a name normalisation, and an owner) or a path prefix alone; `defineForeign` takes `ForeignScopeOptions` (writable, normalise, and owner), and a foreign scope's normalisation now applies to its declarations, reads, writes, and ladders, where the old port always lower-cased; `remove(token, keep)` unregisters a scope, parking an owned scope's values for the next registration of the key when `keep` is set; `load(blob, keepParked)` parks the sections for keys nobody has registered yet, hands them over on registration, and keeps them in the next `save()`, where the old port dropped them; `discardParked(prefix)` drops what nobody claimed; `revision()` moves on each registration and removal; `toEvalContext(host, aliases)` points an expression token at a registered key for one context, ladders included; a clash names the owner that got there first; and `listProperties()` rows carry `owner`, `path`, and `stages`, which the old port's rows left out. The spec reader is a template over the JSON node, so it reads a `JsonValue` as before and reads `stages` now too.
+
+### Removed
+
+- **The owned-state fragment** (`saveFragment`, `loadFragment`, `OwnedStateFragment`, `SAVE_FRAGMENT_VERSION`), deprecated in the TypeScript package and not ported: versioning belongs to the save that embeds `save()`. Nothing in this plugin called it. `qualityLadders()` is private now; `toEvalContext` is how a host gets the ladders.
+
 ## [0.7.0] - 2026-09-14
 
 ### Added

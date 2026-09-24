@@ -41,7 +41,8 @@
 #include "Storylets/Dialect.h"
 #include "Storylets/Expression.h"
 #include "Storylets/Mulberry32.h"
-#include "Storylets/ScopeRegistry.h"   // the kernel header compiles under -Wall -Wextra
+#include "Storylets/Expr/ScopeRegistry.h"   // the kernel header compiles under -Wall -Wextra
+#include "RegistryCorpus.h"   // the shared registry corpus runner, vendored from ../expr
 #include "Storylets/Engine.h"
 #include "Storylets/Specificity.h"
 #include "Storylets/StoryletValue.h"
@@ -1468,104 +1469,6 @@ static double exprSeed(const JsonValue& v)
     return v.num;
 }
 
-static bool jsonHas(const JsonValue& obj, const std::string& key)
-{
-    for (const auto& kv : obj.obj) if (kv.first == key) return true;
-    return false;
-}
-
-/** A foreign scope over a plain map, for the registry cases: the registry's own
- *  writable rule is what is under test, so the resolver accepts everything. */
-class RecordResolver : public IScopeResolver
-{
-public:
-    explicit RecordResolver(std::map<std::string, StoryletValue>& store) : store_(store) {}
-    std::optional<StoryletValue> get(const std::string& name) const override
-    {
-        auto it = store_.find(name);
-        return it == store_.end() ? std::nullopt : std::optional<StoryletValue>(it->second);
-    }
-    bool canSet() const override { return true; }
-    void set(const std::string& name, const StoryletValue& value) override { store_[name] = value; }
-private:
-    std::map<std::string, StoryletValue>& store_;
-};
-
-// The scope kernel's `writable` rule: decl.writable ?? scope.writable ?? true. A case
-// with no "scope" seeds a PropertyBag and writes to it; one with a "scope" mounts the
-// declarations as a FOREIGN scope on a ScopeRegistry, with the scope default, and
-// writes through the registry - the registry's own rule, not the bag's. The value is
-// read back on BOTH outcomes: a refusal that half-wrote is a failure, and so is a
-// "landed" write that went nowhere.
-static int runExprRegistry(const JsonValue& cases)
-{
-    int pass = 0;
-    for (const auto& c : cases.arr)
-    {
-        std::string name = c.strOr("name");
-        std::vector<ScopeDeclaration> decls;
-        for (const auto& d : c.at("declarations").arr)
-        {
-            ScopeDeclaration decl;
-            decl.name = d.strOr("name");
-            decl.type = d.strOr("type");
-            decl.defaultValue = bundleloader::ToValue(d.at("default"));
-            if (jsonHas(d, "writable")) decl.writable = d.at("writable").b;
-            decls.push_back(std::move(decl));
-        }
-        const std::string setName = c.at("set").strOr("name");
-        const StoryletValue value = bundleloader::ToValue(c.at("set").at("value"));
-        const bool expectError = c.boolOr("expectError");
-        // The case says whether the write is the HOST's: `writable: false` is the
-        // story's promise, and the game is never bound by it.
-        const bool host = c.boolOr("host");
-        const StoryletValue expected = bundleloader::ToValue(c.at("expected"));
-
-        std::optional<std::string> error;
-        std::optional<StoryletValue> readBack;
-        try
-        {
-            if (!jsonHas(c, "scope"))
-            {
-                PropertyBag bag(&decls);
-                try { bag.set(setName, value, /*silent=*/false, "", host); } catch (const std::exception& ex) { error = ex.what(); }
-                readBack = bag.get(setName);
-            }
-            else
-            {
-                std::map<std::string, StoryletValue> store;
-                for (const auto& d : decls) if (d.defaultValue) store[LowercaseName(d.name)] = *d.defaultValue;
-                const JsonValue& scope = c.at("scope");
-                bool scopeWritable = jsonHas(scope, "writable") ? scope.at("writable").b : true;
-                ScopeRegistry registry;
-                registry.defineForeign("s", std::make_shared<RecordResolver>(store), &decls, scopeWritable);
-                try { registry.set("s", setName, value, host); } catch (const std::exception& ex) { error = ex.what(); }
-                readBack = registry.get("s", setName);
-            }
-        }
-        catch (const std::exception& ex)
-        {
-            fail("expr/registry", name, std::string("the runner itself failed: ") + ex.what());
-            continue;
-        }
-
-        bool ok = true;
-        if (expectError)
-        {
-            if (!error) { fail("expr/registry", name, "expected a read-only refusal, the write landed"); ok = false; }
-            else if (error->find("is read-only") == std::string::npos) { fail("expr/registry", name, "refused, but not as read-only: " + *error); ok = false; }
-        }
-        else if (error) { fail("expr/registry", name, "unexpected refusal: " + *error); ok = false; }
-        if (!readBack || !readBack->valueEquals(expected))
-        {
-            fail("expr/registry", name, "read back " + (readBack ? readBack->toJsonString() : std::string("<unset>")) + ", expected " + expected.toJsonString());
-            ok = false;
-        }
-        if (ok) ++pass;
-    }
-    return pass;
-}
-
 static int runExprPrng(const JsonValue& cases)
 {
     int pass = 0;
@@ -1679,19 +1582,19 @@ int main(int argc, char** argv)
         const JsonValue& exprExprs = exprRoot.at("expressions");
         int xp = runExprPrng(exprPrng);
         int xe = runExpressions(exprExprs);
-        // A family the corpus carries and this harness does not run is a check
-        // that cannot fail here, so a missing key is a failure, not a skip.
-        if (!jsonHas(exprRoot, "registry"))
-        {
-            std::cerr << "expr parity corpus has no registry family\n";
-            return 2;
-        }
-        const JsonValue& exprReg = exprRoot.at("registry");
-        int xr = runExprRegistry(exprReg);
         std::cout << "expr corpus v" << static_cast<int>(exprRoot.numOr("version", 0))
             << " - prng: " << xp << "/" << exprPrng.arr.size()
-            << "  expressions: " << xe << "/" << exprExprs.arr.size()
-            << "  registry: " << xr << "/" << exprReg.arr.size() << "\n";
+            << "  expressions: " << xe << "/" << exprExprs.arr.size() << "\n";
+
+        // The registry corpus, vendored from ../expr beside the other two, run through
+        // the shared runner against the vendored ScopeRegistry. It is the registry's
+        // contract, the `writable` rule included. Absent is a failure here too: the
+        // runner reports a missing file as one.
+        const std::string registryPath =
+            (slash == std::string::npos ? std::string() : path.substr(0, slash + 1)) + "registry-corpus.json";
+        const RegistryCorpusResult reg = RunRegistryCorpus(registryPath);
+        for (const std::string& f : reg.failures) fail("registry", "corpus", f);
+        std::cout << "registry corpus: " << reg.passed << "/" << reg.total << "\n";
         std::cout << (g_fails == 0 ? "ALL PASS" : std::to_string(g_fails) + " FAILED") << "\n";
         return g_fails == 0 ? 0 : 1;
     }
