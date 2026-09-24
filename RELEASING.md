@@ -150,9 +150,11 @@ over to it. Patter hit this.
 through the wide range `>=0.1.0 <1.0.0`, not a caret, so a model MINOR does not cascade a patch
 bump into them: their versions are the four runtimes' version and come only from `npm run
 bump:play`. A caret let the first Version Packages PR (2026-09-04) propose runtime 0.4.1 with an
-empty changelog, which the lockstep forbids. Patter's `packages/runtime` carries the same range
-for the same reason. Their other internal dependencies are caret ranges, which patch bumps stay
-inside, and the exact pin of the helpers on the runtime is rewritten by `bump:play`.
+empty changelog, which the lockstep forbids. The runtime's dependency on `@storylet-studio/dialect`
+is the wide range `>=0.1.0 <1.0.0` for the same reason: on a 0.x caret every minor is out of range,
+which is how Patter's dialect 0.2.0 tried to bump its runtime off the lockstep (2026-09-24). Patter's
+`packages/runtime` carries the same ranges. Any internal dependency the runtime gains takes a wide
+range too, and the exact pin of the helpers on the runtime is rewritten by `bump:play`.
 
 ### Three settings that are not optional
 
