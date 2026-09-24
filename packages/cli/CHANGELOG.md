@@ -20,6 +20,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-24
+
 ### Added
 
 - **Shared game scopes.** Where the game keeps a `game-scopes/` folder (found by looking in the project folder and each folder above, up to the repository root, or named by the project's new `gameScopes` field), the CLI reads every `*.scopes.json` in it. `export` writes `game-scopes/storylets.scopes.json`, the project's `@story` declarations for the other tools, and only when it changed; it never creates the folder. `validate` warns when that file is out of date, reports a scopes file that won't parse or a scope two files declare as an error, and checks references into the other tools' scopes as warnings: a name their file doesn't declare, a type mismatch, or an outcome writing a property it marks read-only. `@world` comes from `game.scopes.json` when that declares it, with a warning if the project's copy differs. A game's own scope such as `@player` compiles once the folder declares it.

@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-24
+
 ### Added
 
 - **Share Scopes with Other Tools.** A new File menu command makes a `game-scopes/` folder (by default at the root of your repository) and writes the project's `@story` declarations to `storylets.scopes.json` and its `@world` to `game.scopes.json`, so Patterpad and the game's other editing tools can read them. Nothing makes the folder but this command.
