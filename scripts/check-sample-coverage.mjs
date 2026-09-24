@@ -71,6 +71,7 @@ const OMITTED = [
   { member: "createLiveLink", why: "an editor facility by definition - it connects a running game to the EDITOR. A shipped game has no editor to talk to" },
   { member: "boardFrame", why: "part of the Live Link protocol, same reason" },
   { member: "applyLiveBundle", why: "Live Link's hot-reload half, same reason" },
+  { member: "hotSwap", why: "rebuilding the engine on an edited bundle mid-run is what applyLiveBundle does for Live Link, same reason: a shipped game plays the bundle it shipped with" },
   { member: "createPropertyInspector", why: "a debug examiner mounted beside a board. The client shows state the way a GAME does, so the examiners stay in packages/play-helpers/demo where they belong" },
   { member: "createBundleInspector", why: "same: an examiner, not a game surface" },
   { member: "ensureInspectorStyle", why: "belongs to the inspectors above" },
