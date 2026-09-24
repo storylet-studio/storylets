@@ -7,6 +7,8 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-24
+
 ### Changed
 
 - **Patterplay 0.14.0 in all four hosts.** The web client, and the Godot, Unity, and Unreal projects, pin Patter's released 0.14.0 in place of 0.12.0, beside the Storylet Engine 0.8.0. The Unity world is one Get and one Set on the expression kernel the two engines now share. Saves carry the new formats (Patter's version 3, `storylets/save@2`), and a save written by an earlier Hamlet still loads.

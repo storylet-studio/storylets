@@ -20,6 +20,16 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-24
+
+### Changed
+
+- **The Storylet Engine 0.8.0 inside.** `peek`, `deal`, `coverage`, and `export-html` run the engine games ship with this release: one property registry per game, shared with Patter, and the new save format. A playable page exported before still plays, and a save it wrote still loads.
+
+### Added
+
+- **A card can name Patter's shared properties.** `validate` and `export` accept `@patter.visits` in a condition and `@patter.gold` in an outcome's changes, with no project setting, and leave checking the name to Patter. The bundle records which other engines its content names. `peek`, `deal`, and `coverage` run the Storylet Engine on its own, so they refuse such content with a message naming the scope, rather than quietly reading false.
+
 ## [0.6.0] - 2026-09-13
 
 ### Added

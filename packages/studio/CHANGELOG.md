@@ -10,6 +10,12 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-24
+
+### Fixed
+
+- **A card that reads Patter's properties is no longer called dead.** The problems list warned that `@patter.visits` "is read but nothing writes it, so every gate on it stays shut". Patter writes it, where the project cannot see, so it is now left alone, as `@world` always was.
+
 ## [0.10.0] - 2026-09-24
 
 ### Added

@@ -9,6 +9,12 @@ the release notes, and refuses a tag with no dated section for it.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-24
+
+### Changed
+
+- **The Storylet Engine 0.8.0.** The Village plays on the engine games ship with this release: one property registry per game and the new save format. A game saved in the browser by an earlier Village still loads.
+
 ## [0.2.0] - 2026-09-14
 
 ### Added
