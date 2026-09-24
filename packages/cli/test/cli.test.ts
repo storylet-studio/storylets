@@ -755,3 +755,35 @@ describe("--version", () => {
     expect(out.join("\n")).toContain("--version");
   });
 });
+
+// The Storylet Engine run on its own refuses content that names another engine's scope, as a
+// flow opens. peek, deal, and coverage say so as an error and exit 1, and never crash.
+describe("content that names another engine's scope", () => {
+  const withPatter = (): string => {
+    const dir = join(mkdtempSync(join(tmpdir(), "storyletengine-patter-")), "copy.storylets");
+    cpSync(exampleDir, dir, { recursive: true });
+    const deckPath = join(dir, "encounters", "decks", "docks.storyletdeck");
+    const swap = (v: unknown): unknown =>
+      v === "@story.reputation >= 0" ? "@patter.visits >= 0"
+        : Array.isArray(v) ? v.map(swap)
+        : v !== null && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, swap(x)]))
+        : v;
+    writeFileSync(deckPath, canonicalStringify(swap(parseSource(readFileSync(deckPath, "utf8")))));
+    return dir;
+  };
+  const refusal = "this content names @patter, which no engine on this registry registered: give every engine the game's one registry";
+
+  it("validates clean: Patter writes @patter.visits, so nothing here calls it dead", async () => {
+    const r = await call("validate", withPatter());
+    expect(r.code).toBe(0);
+    expect(r.err.join("\n")).not.toContain("@patter");
+  });
+
+  for (const argv of [["peek", "encounters"], ["deal", "docks-street"], ["coverage"]]) {
+    it(`${argv[0]} reports the refusal and exits 1`, async () => {
+      const r = await call(...argv, withPatter());
+      expect(r.code).toBe(1);
+      expect(r.err.join("\n")).toContain(refusal);
+    });
+  }
+});

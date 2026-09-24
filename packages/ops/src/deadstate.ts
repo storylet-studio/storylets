@@ -15,7 +15,8 @@
 //
 // @world is deliberately out of scope. The HOST writes it, so a read with no
 // write in the content is the normal case, and coverage's honesty net already
-// owns that story.
+// owns that story. Another engine's game-wide scope (`@patter.visits`) is out
+// of scope for the same reason: that engine writes it.
 //
 // Scoped state is tracked PER OWNER. @deck.progress in one deck and
 // @deck.progress in another are different properties at runtime, each deck
@@ -172,9 +173,12 @@ export function deadStateIssues(source: SourceProject, compiled?: Bundle): Issue
 
   const issues: Issue[] = [];
   const one = (wheres: string[]): string => wheres[0] ?? "";
+  // Another engine's game-wide scope (`@patter.visits`): that engine writes it, where nothing here can see.
+  const otherEngines = bundle.externalScopes ?? [];
   for (const [key, l] of [...m].sort(([a], [b]) => a.localeCompare(b))) {
     const scoped = refOf(key), ref = displayOf(key);
     if (scoped.startsWith("@world.") || scoped.startsWith("@hand.")) continue;   // host-owned / composed
+    if (otherEngines.some((t) => scoped.startsWith(`@${t}.`))) continue;          // another engine writes it
 
     // The READ side warns everywhere content can be gated: an unwritten read
     // shuts its gates forever, and nothing but an outcome can open them.

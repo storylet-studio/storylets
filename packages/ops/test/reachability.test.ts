@@ -309,6 +309,14 @@ describe("reachability: @world is the host's, so it anchors nothing", () => {
     ], { deck: [{ ...LATCH, name: "seen" }], world: [{ ...HOST, name: "alarm" }] }))).toEqual([]);
   });
 
+  it("says nothing when the NEGATED term is another engine's ref: Patter can move it back", () => {
+    expect(named(project([
+      { id: "c_raise", outcomes: [{ id: "o1", changes: { "@patter.alarm": "true" } }] },
+      { id: "c_act", condition: "@patter.alarm", outcomes: [{ id: "o2", changes: { "@deck.acted": "true" } }] },
+      { id: "fine", condition: "@deck.acted && !@patter.alarm" },
+    ], { deck: [{ ...LATCH, name: "acted" }] }))).toEqual([]);
+  });
+
   it("says nothing when the NEGATED term is a @world ref", () => {
     // The mirror: "nothing sets it back" is exactly what we cannot claim about a
     // ref the game owns, so it cannot carry the negated half either.

@@ -238,6 +238,13 @@ describe("dead state", () => {
     }));
     expect(issues).toEqual([]);
   });
+
+  it("leaves another engine's scope alone: Patter writes @patter.visits, where nothing here can see", () => {
+    const issues = check(project({
+      cards: [card("c_a", { condition: "@patter.visits >= 1" })],
+    }));
+    expect(issues).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

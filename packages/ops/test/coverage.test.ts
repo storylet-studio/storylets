@@ -597,3 +597,14 @@ describe("observed edges", () => {
     expect(a.observedEdges).toEqual(b.observedEdges);
   });
 });
+
+// The sweep runs the Storylet Engine on its own, and the engine refuses content that names
+// another engine's scope as a flow opens. That is one error on the report, never a crash.
+describe("coverage: content that names another engine's scope", () => {
+  it("is refused once, as an error naming the scope, with no runs", () => {
+    const report = runCoverage(project({ cards: [{ id: "c_a", condition: "@patter.visits >= 1" }] }), OPTS);
+    expect(report.runs).toBe(0);
+    expect(report.issues.filter((i) => i.severity === "error").map((i) => i.message))
+      .toEqual(["this content names @patter, which no engine on this registry registered: give every engine the game's one registry"]);
+  });
+});

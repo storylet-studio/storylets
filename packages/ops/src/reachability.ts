@@ -146,7 +146,12 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
   // implemented it. Raised from the Patter side as a third route of the same
   // class as the two above, with the suggestion to look when such a thing first
   // appeared; it already had.
-  const hostDriven = (key: string): boolean => key.startsWith("@world.");
+  //
+  // Another engine's game-wide scope (`@patter.visits`) is the same case: that engine
+  // moves it, both ways, where nothing here can see.
+  const otherEngines = bundle.externalScopes ?? [];
+  const hostDriven = (key: string): boolean =>
+    key.startsWith("@world.") || otherEngines.some((t) => key.startsWith(`@${t}.`));
 
   const monotonic = (key: string): boolean =>
     latched.has(key) && !broken.has(key) && !hostDriven(key);

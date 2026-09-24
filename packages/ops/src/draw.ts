@@ -52,8 +52,10 @@ export function runAsk(loaded: LoadedProject, opts: AskOptions): AskResult {
   const all = [...loaded.issues, ...issues];
   if (!bundle) return { issues: all };
 
-  const session = new Engine(bundle, { seed: opts.seed ?? 0 }).openFlow("main");
   try {
+    // Inside the try: the engine refuses, as the flow opens, content that names another
+    // engine's scope (`@patter.visits`), and that is an error to report, not a crash.
+    const session = new Engine(bundle, { seed: opts.seed ?? 0 }).openFlow("main");
     for (const [path, value] of Object.entries(opts.sets ?? {})) {
       session.setProperty(path, value);
     }

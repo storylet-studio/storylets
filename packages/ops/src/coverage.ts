@@ -416,6 +416,12 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
     cards: [], outcomes: [], hands: [], unwrittenInputs: [], unprovidedHandRefs: [], diagnostics: [], issues,
   };
   if (!bundle) return empty;
+  // The sweep runs the Storylet Engine on its own, which refuses content that names another
+  // engine's scope (`@patter.visits`) as a flow opens. Say so once, as an error, not per run.
+  try { new Engine(bundle, { seed }).openFlow("main"); }
+  catch (e) {
+    return { ...empty, issues: [...issues, { severity: "error", path: source.path, message: e instanceof Error ? e.message : String(e) }] };
+  }
 
   // The sweep's turns read as time only when the whole project agrees: every
   // box timed, on one unit (design/engine-server.md 4.8). A project that mixes
