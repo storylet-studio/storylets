@@ -1,7 +1,10 @@
 {
     "name": "StoryletEngine.Runtime",
     "rootNamespace": "StoryletStudio.StoryletEngine",
-    "references": [],
+    "references": [
+        "Patterplay.Expr",
+        "StoryletEngine.Expr"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

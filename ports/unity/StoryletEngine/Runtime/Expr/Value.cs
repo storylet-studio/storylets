@@ -8,8 +8,9 @@
 //
 // The four kinds the expression language has. Both families had their own, 68%
 // alike and with character-identical ValueEquals, so most of the difference was
-// spelling. Lands in the package's own namespace, inside its Runtime asmdef.
-// The family supplies its own EvalError before this is used.
+// spelling; since 2026-09-24 there is one, ExprValue, shared by every family, so
+// one registry can hold every engine's values. Part of the kernel assembly: see
+// Errors.cs for how the kernel is packaged.
 // ---------------------------------------------------------------------------
 
 using System;
@@ -17,40 +18,40 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace StoryletStudio.StoryletEngine
+namespace Wildwinter.Expr
 {
-    public enum StoryletKind { Bool, Number, Str, Flags }
+    public enum ExprKind { Bool, Number, Str, Flags }
 
-    public sealed class StoryletValue
+    public sealed class ExprValue
     {
-        public StoryletKind Kind { get; }
+        public ExprKind Kind { get; }
         private readonly bool _b;
         private readonly double _n;
         private readonly string _s;
         private readonly IReadOnlyList<string> _f;
 
-        private StoryletValue(StoryletKind kind, bool b = false, double n = 0, string s = null, IReadOnlyList<string> f = null)
+        private ExprValue(ExprKind kind, bool b = false, double n = 0, string s = null, IReadOnlyList<string> f = null)
         {
             Kind = kind; _b = b; _n = n; _s = s; _f = f;
         }
 
-        public static StoryletValue Bool(bool v) => v ? True : False;
-        public static StoryletValue Num(double v) => new StoryletValue(StoryletKind.Number, n: v);
-        public static StoryletValue Str(string v) => new StoryletValue(StoryletKind.Str, s: v ?? "");
-        /// <summary>Flags list. The list is copied, so a StoryletValue is immutable.</summary>
-        public static StoryletValue Flags(IEnumerable<string> v)
+        public static ExprValue Bool(bool v) => v ? True : False;
+        public static ExprValue Num(double v) => new ExprValue(ExprKind.Number, n: v);
+        public static ExprValue Str(string v) => new ExprValue(ExprKind.Str, s: v ?? "");
+        /// <summary>Flags list. The list is copied, so a ExprValue is immutable.</summary>
+        public static ExprValue Flags(IEnumerable<string> v)
         {
             var list = v != null ? new List<string>(v) : new List<string>();
-            return new StoryletValue(StoryletKind.Flags, f: list);
+            return new ExprValue(ExprKind.Flags, f: list);
         }
 
-        public static readonly StoryletValue False = new StoryletValue(StoryletKind.Bool, b: false);
-        public static readonly StoryletValue True = new StoryletValue(StoryletKind.Bool, b: true);
+        public static readonly ExprValue False = new ExprValue(ExprKind.Bool, b: false);
+        public static readonly ExprValue True = new ExprValue(ExprKind.Bool, b: true);
 
-        public bool IsBool => Kind == StoryletKind.Bool;
-        public bool IsNumber => Kind == StoryletKind.Number;
-        public bool IsString => Kind == StoryletKind.Str;
-        public bool IsFlags => Kind == StoryletKind.Flags;
+        public bool IsBool => Kind == ExprKind.Bool;
+        public bool IsNumber => Kind == ExprKind.Number;
+        public bool IsString => Kind == ExprKind.Str;
+        public bool IsFlags => Kind == ExprKind.Flags;
 
         public bool AsBool => _b;
         public double AsNumber => _n;
@@ -59,12 +60,12 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>`==` / `!=` semantics: primitives by value; flags element-wise,
         /// in order; mixed kinds unequal (the evaluator's valueEquals).</summary>
-        public bool ValueEquals(StoryletValue other)
+        public bool ValueEquals(ExprValue other)
         {
             if (other == null) return false;
-            if (Kind == StoryletKind.Flags || other.Kind == StoryletKind.Flags)
+            if (Kind == ExprKind.Flags || other.Kind == ExprKind.Flags)
             {
-                if (Kind != StoryletKind.Flags || other.Kind != StoryletKind.Flags) return false;
+                if (Kind != ExprKind.Flags || other.Kind != ExprKind.Flags) return false;
                 if (_f.Count != other._f.Count) return false;
                 // Compared as a SET: order is an artefact of the order somebody
                 // happened to add things in, and was significant until
@@ -78,9 +79,9 @@ namespace StoryletStudio.StoryletEngine
             if (Kind != other.Kind) return false;
             switch (Kind)
             {
-                case StoryletKind.Bool: return _b == other._b;
-                case StoryletKind.Number: return _n == other._n;
-                case StoryletKind.Str: return _s == other._s;
+                case ExprKind.Bool: return _b == other._b;
+                case ExprKind.Number: return _n == other._n;
+                case ExprKind.Str: return _s == other._s;
                 default: return false;
             }
         }
@@ -91,10 +92,10 @@ namespace StoryletStudio.StoryletEngine
         {
             switch (Kind)
             {
-                case StoryletKind.Bool: return _b ? "true" : "false";
-                case StoryletKind.Number: return JsNumber(_n);
-                case StoryletKind.Str: return JsonQuote(_s);
-                case StoryletKind.Flags:
+                case ExprKind.Bool: return _b ? "true" : "false";
+                case ExprKind.Number: return JsNumber(_n);
+                case ExprKind.Str: return JsonQuote(_s);
+                case ExprKind.Flags:
                 {
                     var sb = new StringBuilder("[");
                     for (int i = 0; i < _f.Count; i++)
@@ -154,10 +155,10 @@ namespace StoryletStudio.StoryletEngine
         {
             switch (Kind)
             {
-                case StoryletKind.Bool: return _b ? "true" : "false";
-                case StoryletKind.Number: return JsNumber(_n);
-                case StoryletKind.Str: return _s;
-                case StoryletKind.Flags: return string.Join(",", _f);
+                case ExprKind.Bool: return _b ? "true" : "false";
+                case ExprKind.Number: return JsNumber(_n);
+                case ExprKind.Str: return _s;
+                case ExprKind.Flags: return string.Join(",", _f);
                 default: return "";
             }
         }
@@ -172,10 +173,10 @@ namespace StoryletStudio.StoryletEngine
             {
                 switch (Kind)
                 {
-                    case StoryletKind.Bool: return _b;
-                    case StoryletKind.Number: return _n != 0;
-                    case StoryletKind.Str: return _s.Length > 0;
-                    case StoryletKind.Flags: return _f.Count > 0;
+                    case ExprKind.Bool: return _b;
+                    case ExprKind.Number: return _n != 0;
+                    case ExprKind.Str: return _s.Length > 0;
+                    case ExprKind.Flags: return _f.Count > 0;
                     default: return false;
                 }
             }

@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine
 {
@@ -20,14 +21,14 @@ namespace StoryletStudio.StoryletEngine
     public sealed class SaveFile
     {
         public SaveEnvelope Engine;
-        public OrderedMap<string, StoryletValue> World;
+        public OrderedMap<string, ExprValue> World;
     }
 
     public static class StoryletSave
     {
         /// <summary>The current engine state (and the host's @world values, if
         /// given) as pretty-printed .storyletsave JSON.</summary>
-        public static string SerializeState(Engine engine, OrderedMap<string, StoryletValue> world = null)
+        public static string SerializeState(Engine engine, OrderedMap<string, ExprValue> world = null)
         {
             var file = new JObject
             {
@@ -46,7 +47,7 @@ namespace StoryletStudio.StoryletEngine
         /// object, SerializeState / DeserializeState on TEXT. This port matched
         /// the JS reference, and the reference did not match the family, until
         /// 2026-08-29; Godot and Unreal already had the family shape.</summary>
-        public static SaveFile SaveState(Engine engine, OrderedMap<string, StoryletValue> world = null)
+        public static SaveFile SaveState(Engine engine, OrderedMap<string, ExprValue> world = null)
         {
             return new SaveFile { Engine = engine.SaveGame(), World = world };
         }
@@ -55,7 +56,7 @@ namespace StoryletStudio.StoryletEngine
         /// rebuilt; re-take your Flow handles afterwards). Throws on a foreign
         /// or malformed file. Returns the file's @world values, if any - the
         /// HOST applies them; the engine never touches them.</summary>
-        public static OrderedMap<string, StoryletValue> LoadState(Engine engine, SaveFile file)
+        public static OrderedMap<string, ExprValue> LoadState(Engine engine, SaveFile file)
         {
             if (file == null || file.Engine == null)
             {
@@ -68,7 +69,7 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Parse + restore a SerializeState string: the TEXT twin of
         /// LoadState, as Patterplay pairs them. Throws on malformed JSON, a
         /// foreign file or a project mismatch.</summary>
-        public static OrderedMap<string, StoryletValue> DeserializeState(Engine engine, string json)
+        public static OrderedMap<string, ExprValue> DeserializeState(Engine engine, string json)
         {
             JObject parsed;
             try
@@ -121,7 +122,7 @@ namespace StoryletStudio.StoryletEngine
             return new JValue(n);
         }
 
-        private static JToken ValueToken(StoryletValue v)
+        private static JToken ValueToken(ExprValue v)
         {
             if (v.IsBool) return new JValue(v.AsBool);
             if (v.IsNumber) return NumToken(v.AsNumber);
@@ -131,14 +132,14 @@ namespace StoryletStudio.StoryletEngine
             return arr;
         }
 
-        private static JObject BagToken(OrderedMap<string, StoryletValue> bag)
+        private static JObject BagToken(OrderedMap<string, ExprValue> bag)
         {
             var o = new JObject();
             foreach (var pair in bag) o[pair.Key] = ValueToken(pair.Value);
             return o;
         }
 
-        private static JObject KindToken(OrderedMap<string, OrderedMap<string, StoryletValue>> kind)
+        private static JObject KindToken(OrderedMap<string, OrderedMap<string, ExprValue>> kind)
         {
             var o = new JObject();
             foreach (var pair in kind) o[pair.Key] = BagToken(pair.Value);
@@ -232,17 +233,17 @@ namespace StoryletStudio.StoryletEngine
             return o;
         }
 
-        private static OrderedMap<string, StoryletValue> ParseBag(JToken token)
+        private static OrderedMap<string, ExprValue> ParseBag(JToken token)
         {
-            var bag = new OrderedMap<string, StoryletValue>();
+            var bag = new OrderedMap<string, ExprValue>();
             if (!(token is JObject o)) return bag;
             foreach (var pair in o) bag.Set(pair.Key, StoryletJson.ToValue(pair.Value));
             return bag;
         }
 
-        private static OrderedMap<string, OrderedMap<string, StoryletValue>> ParseKind(JToken token)
+        private static OrderedMap<string, OrderedMap<string, ExprValue>> ParseKind(JToken token)
         {
-            var kind = new OrderedMap<string, OrderedMap<string, StoryletValue>>();
+            var kind = new OrderedMap<string, OrderedMap<string, ExprValue>>();
             if (!(token is JObject o)) return kind;
             foreach (var pair in o) kind.Set(pair.Key, ParseBag(pair.Value));
             return kind;

@@ -132,7 +132,7 @@ one engine never has to think about it. A game running more than one engine,
 each engine. From C++:
 
 ```cpp
-#include "Storylets/Expr/ScopeRegistry.h"
+#include "Storylets/Kernel.h"   // storylets::ScopeRegistry: the shared kernel's
 
 // Your @world declarations: a std::vector<storylets::ScopeDeclaration>.
 auto Registry = std::make_shared<storylets::ScopeRegistry>();
@@ -145,6 +145,17 @@ UStoryletEngine* Engine = UStoryletEngine::CreateWithRegistry(Bundle, Registry, 
 
 `CreateWithRegistry` is C++ only: the registry is a standard C++ object shared by pointer, and
 no Blueprint pin carries one. On the engine core, the same option is `EngineOptions::registry`.
+
+`storylets::ScopeRegistry` is the shared expression kernel's `wildwinter::expr::ScopeRegistry`,
+and Patterplay's plugin carries the same kernel, byte for byte: in a game with both,
+`storylets::ScopeRegistry` and `patter::ScopeRegistry` are one type, so the same registry goes to
+`UPatterEngine::CreateWithRegistry`. Build both plugins from the same kernel: their headers are
+compiled into your game module, and if one is older, the module that includes both stops at a
+compile error that says so, so update the older plugin. The module that makes the registry
+sets `bEnableExceptions = true` in its `Build.cs`, since the registry refuses by throwing; one
+that only calls `UStoryletEngine` does not. The engine reports its refusals as it always has, as
+`storylets::StoryletError` (an expression's as `storylets::EvalError`); a call you make on the
+registry yourself throws the kernel's `wildwinter::expr::RegistryError`.
 
 The engine registers `@story` under `story`, and every other bag that declares something under
 a key starting `storylets/`, which no expression can name. Given your registry, it registers

@@ -1,9 +1,10 @@
 // Matched-constraint specificity - port of @wildwinter/expr-specificity.
 //
 // The scorer is the SHARED source, vendored from expr/ports/unreal/Specificity.h
-// to Expr/Specificity.h beside this. It lands in the `storylets` namespace, so
+// to Expr/Specificity.h beside this. It is the kernel's, named in `storylets` by
+// Kernel.h, so
 // MatchedSpecificity, CountingCall and EvalTruthy read here exactly as they did
 // when this file held them.
 #pragma once
 
-#include "Storylets/Expr/Specificity.h"
+#include "Storylets/Kernel.h"   // the shared kernel (Expr/), its names in `storylets`, and kernelCall

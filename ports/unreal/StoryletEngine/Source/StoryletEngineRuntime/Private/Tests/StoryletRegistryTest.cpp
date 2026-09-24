@@ -14,7 +14,7 @@
 #include "StoryletSave.h"
 #include "StoryletTypes.h"
 
-#include "Storylets/Expr/ScopeRegistry.h"
+#include "Storylets/Kernel.h"   // the shared kernel (Expr/), its names in `storylets`, and kernelCall
 
 namespace
 {

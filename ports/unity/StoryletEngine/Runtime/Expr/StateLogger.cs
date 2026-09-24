@@ -18,14 +18,14 @@
 using System;
 using System.Collections.Generic;
 
-namespace StoryletStudio.StoryletEngine
+namespace Wildwinter.Expr
 {
     /// <summary>One flattened state transition. Null = unset.</summary>
     public sealed class StateChange
     {
         public string Path;
-        public StoryletValue From;
-        public StoryletValue To;
+        public ExprValue From;
+        public ExprValue To;
     }
 
     /// <summary>
@@ -53,7 +53,7 @@ namespace StoryletStudio.StoryletEngine
     public sealed class StateLoggerAdapter
     {
         public Func<List<LogMount>> Mounts;
-        public Func<OrderedMap<string, StoryletValue>> Extra;
+        public Func<OrderedMap<string, ExprValue>> Extra;
     }
 
     public sealed class StateLogger : IDisposable
@@ -67,7 +67,7 @@ namespace StoryletStudio.StoryletEngine
         private readonly StateLoggerAdapter _adapter;
         private readonly Action<string> _sink;
         private readonly string _label;
-        private OrderedMap<string, StoryletValue> _baseline;
+        private OrderedMap<string, ExprValue> _baseline;
         private List<StateChange> _pushed = new List<StateChange>();
         private List<Mounted> _mounted = new List<Mounted>();
 
@@ -81,7 +81,7 @@ namespace StoryletStudio.StoryletEngine
             Mount();
         }
 
-        private static string Show(StoryletValue v) => v == null ? "<unset>" : v.ToJsonString();
+        private static string Show(ExprValue v) => v == null ? "<unset>" : v.ToJsonString();
 
         private static string PrefixOf(LogMount m) => m.PathPrefix ?? m.Bag.PathPrefix;
 
@@ -89,11 +89,11 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>The full flattened snapshot: every mounted bag's values under its prefix,
         /// plus the adapter's non-property paths.</summary>
-        public OrderedMap<string, StoryletValue> Snapshot() => Full();
+        public OrderedMap<string, ExprValue> Snapshot() => Full();
 
-        private OrderedMap<string, StoryletValue> Full()
+        private OrderedMap<string, ExprValue> Full()
         {
-            var snapshot = new OrderedMap<string, StoryletValue>();
+            var snapshot = new OrderedMap<string, ExprValue>();
             foreach (var mount in _adapter.Mounts())
             {
                 string prefix = PrefixOf(mount);
@@ -163,7 +163,7 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>The changed paths between two snapshots, sorted; null = unset.</summary>
         public static List<StateChange> DiffState(
-            OrderedMap<string, StoryletValue> prev, OrderedMap<string, StoryletValue> next)
+            OrderedMap<string, ExprValue> prev, OrderedMap<string, ExprValue> next)
         {
             var paths = new List<string>();
             var seen = new HashSet<string>();

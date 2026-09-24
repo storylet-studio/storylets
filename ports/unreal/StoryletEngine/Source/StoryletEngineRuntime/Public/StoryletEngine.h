@@ -24,11 +24,12 @@
 #include "UObject/Object.h"
 #include "Templates/PimplPtr.h"
 #include "StoryletTypes.h"
+#include "Storylets/StoryletValue.h"   // storylets::ScopeRegistry, the shared kernel's (declared only: nothing that throws)
 #include "StoryletEngine.generated.h"
 
 class UStoryletBundle;
 class UStoryletEngine;
-namespace storylets { class Engine; class Flow; class ScopeRegistry; struct TraceEvent; }
+namespace storylets { class Engine; class Flow; struct TraceEvent; }
 
 /** Pimpl holders (defined in StoryletEngine.cpp). */
 class UStoryletWorld;
@@ -272,7 +273,13 @@ public:
 	 *  std object shared by pointer, which no Blueprint pin carries. Returns
 	 *  nullptr (and logs) on a null or uncompiled bundle or a null registry,
 	 *  and when a token the engine registers is already another's (the log
-	 *  names who holds it; the registry is left as it was). */
+	 *  names who holds it; the registry is left as it was).
+	 *
+	 *  storylets::ScopeRegistry is the shared kernel's
+	 *  wildwinter::expr::ScopeRegistry, the SAME type Patterplay's
+	 *  UPatterEngine::CreateWithRegistry takes, so a game combining the two
+	 *  passes one registry to both. The module that makes the registry includes
+	 *  "Storylets/Kernel.h" and sets bEnableExceptions in its Build.cs. */
 	static UStoryletEngine* CreateWithRegistry(UStoryletBundle* Bundle, std::shared_ptr<storylets::ScopeRegistry> Registry,
 		int32 Seed = 0, bool bRetainLog = false, UStoryletWorld* World = nullptr);
 
@@ -294,7 +301,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	UStoryletFlow* OpenFlow(const FString& Id);
 
-	/** The open flow of that name, or null. */
+	/** The open flow of that name, or null. Every flow a load restored is
+	 *  open, including one this engine never opened itself. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	UStoryletFlow* GetFlow(const FString& Id) const;
 
@@ -469,9 +477,13 @@ private:
 	UPROPERTY()
 	TObjectPtr<UStoryletWorld> WorldRef = nullptr;
 
-	/** Every wrapper handed out by OpenFlow, so a live swap can re-bind them
-	 *  by id (weak: a flow the game dropped must not be kept alive here). */
-	TArray<TWeakObjectPtr<UStoryletFlow>> WrappedFlows;
+	/** Every LIVE wrapper handed out by OpenFlow or GetFlow, so a live swap
+	 *  or a load can re-bind them by id (weak: a flow the game dropped must
+	 *  not be kept alive here). A wrapper leaves when its flow is closed or
+	 *  replaced: re-binding by id would otherwise point it at the next flow
+	 *  of that name, and a closed flow stays closed. Mutable because GetFlow
+	 *  (const) makes the wrapper for a flow a load restored. */
+	mutable TArray<TWeakObjectPtr<UStoryletFlow>> WrappedFlows;
 
 	TPimplPtr<FStoryletEngineImpl> Impl;
 };

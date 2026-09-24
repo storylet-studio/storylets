@@ -9,7 +9,7 @@
 
 #include "CoreMinimal.h"
 #include "Storylets/StoryletValue.h"
-#include "Storylets/Expr/OrderedMap.h"
+#include "Storylets/Kernel.h"   // the shared kernel (Expr/), its names in `storylets`, and kernelCall
 #include <string>
 
 namespace storylets { class Engine; }

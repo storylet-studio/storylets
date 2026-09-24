@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The combined Patter + Storylet Engine proof on C# (CombinedGame.cs): both
+       engines on ONE ScopeRegistry, with one save. It compiles the Storylet
+       Engine's Runtime and Json layers from this repo, Patterplay's from the
+       SOURCE of a sibling ../patter checkout (the Patter this programme is
+       building, not a release), and exactly ONE kernel: Patterplay's Runtime/Expr.
+       The Storylet Engine's own copy of the kernel (Runtime/Expr) and its skew
+       assembly (Runtime/ExprSkew) are left out, as Unity leaves them out when
+       Patterplay 0.14.0 or newer is installed beside it. Two copies of the kernel
+       in one compilation could not build (every Wildwinter.Expr type twice), so
+       this build is the one-kernel game or nothing.
+
+       How to run it is in ../README.md (an XML comment cannot hold the double
+       hyphen of the command line).
+
+       With no Patter checkout it compiles Skip.cs alone, which prints SKIP and
+       exits 0 (or FAIL and 1 under REQUIRE_PATTER=1), so a plain clone of this
+       repo is not broken by a proof it cannot run. The parent TestHost.csproj
+       names its files, so it never compiles anything in this folder.
+       Pinned to LangVersion 9, as the other hosts are, to stay Unity-safe. Never ships. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>9.0</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>StoryletEngine.WithPatter.TestHost</AssemblyName>
+    <RootNamespace>StoryletStudio.CombinedProof</RootNamespace>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <StoryletEngineDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../StoryletEngine'))</StoryletEngineDir>
+    <PatterDir Condition="'$(PatterDir)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../../../../patter'))</PatterDir>
+    <PatterplayDir>$(PatterDir)/ports/unity/Patterplay</PatterplayDir>
+    <!-- Keyed on the PACKAGE, not on its kernel: a Patter checkout that has no
+         kernel (one from before the shared kernel) must fail to build here, not
+         skip. -->
+    <WithPatter Condition="Exists('$(PatterplayDir)/package.json')">true</WithPatter>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="BuildInfo.cs" />
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>PatterDir</_Parameter1>
+      <_Parameter2>$(PatterDir)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WithPatter)' == 'true'">
+    <Compile Include="Program.cs" />
+    <Compile Include="CombinedGame.cs" />
+    <!-- The Storylet Engine: its pure layer and its Newtonsoft Json layer, WITHOUT
+         its kernel. -->
+    <Compile Include="$(StoryletEngineDir)/Runtime/**/*.cs" />
+    <Compile Remove="$(StoryletEngineDir)/Runtime/Unity/**/*.cs" />
+    <Compile Remove="$(StoryletEngineDir)/Runtime/Expr/**/*.cs" />
+    <Compile Remove="$(StoryletEngineDir)/Runtime/ExprSkew/**/*.cs" />
+    <!-- Patterplay: its pure layer, its Newtonsoft Json layer, and the one kernel
+         (Runtime/Expr, the Patterplay.Expr assembly in Unity). -->
+    <Compile Include="$(PatterplayDir)/Runtime/**/*.cs" />
+    <Compile Remove="$(PatterplayDir)/Runtime/Unity/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WithPatter)' != 'true'">
+    <Compile Include="Skip.cs" />
+  </ItemGroup>
+
+  <!-- Both packages' Unity loaders use Newtonsoft (com.unity.nuget.newtonsoft-json
+       in Unity), and so does CombinedGame.cs, which the real-Unity check compiles too. -->
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>

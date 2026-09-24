@@ -23,7 +23,7 @@
 #include <vector>
 
 // The node struct itself is the SHARED source, vendored from expr/ports/unreal.
-#include "Storylets/Expr/Ast.h"
+#include "Storylets/Kernel.h"   // the shared kernel (Expr/), its names in `storylets`, and kernelCall
 #include "Storylets/JsonValue.h"
 #include "Storylets/StoryletValue.h"
 
@@ -33,10 +33,11 @@ namespace storylets
      *
      *  One line, because the tag dispatch is the SHARED source (Expr/Ast.h),
      *  parameterised on the JSON type. Our neutral JsonValue matches the default
-     *  AstJson accessors, so there is nothing to specialise. */
+     *  AstJson accessors, so there is nothing to specialise. A malformed tree is
+     *  the kernel's ExprError, rethrown as EvalError. */
     inline AstPtr DeserialiseAst(const JsonValue& node)
     {
-        return DeserialiseAstFrom<JsonValue>(node);
+        return kernelCall([&] { return DeserialiseAstFrom<JsonValue>(node); });
     }
 
     struct Expression

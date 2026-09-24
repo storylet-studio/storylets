@@ -3,7 +3,9 @@
   "rootNamespace": "StoryletStudio.StoryletEngine",
   "references": [
     "StoryletEngine.Runtime",
-    "StoryletEngine.Runtime.Json"
+    "StoryletEngine.Runtime.Json",
+    "Patterplay.Expr",
+    "StoryletEngine.Expr"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

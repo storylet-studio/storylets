@@ -42,7 +42,7 @@ fi
 # real compile, and afterwards require every one of them to exist and to be newer than the
 # moment the run started.
 assemblies="$project/Library/ScriptAssemblies"
-expected=(StoryletEngine.Runtime.dll StoryletEngine.Runtime.Json.dll StoryletEngine.Runtime.Unity.dll StoryletEngine.Editor.dll StoryletEngineDemo.dll StoryletEngineDemo.Editor.dll)
+expected=(StoryletEngine.Expr.dll StoryletEngine.Runtime.dll StoryletEngine.Runtime.Json.dll StoryletEngine.Runtime.Unity.dll StoryletEngine.Editor.dll StoryletEngineDemo.dll StoryletEngineDemo.Editor.dll)
 rm -rf "$assemblies"
 stamp="$(mktemp "${TMPDIR:-/tmp}/check-unity-demo-stamp.XXXXXX")"
 # Unity's build step crashed ("Unhandled exception during build") under a long TMPDIR, so

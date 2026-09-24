@@ -42,6 +42,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine
 {
@@ -340,7 +341,7 @@ namespace StoryletStudio.StoryletEngine
             {
                 if (!first) sb.Append(",");
                 first = false;
-                sb.Append(Esc(box.GameId)).Append(":").Append(StoryletValue.JsNumber(box.Turn));
+                sb.Append(Esc(box.GameId)).Append(":").Append(ExprValue.JsNumber(box.Turn));
             }
             sb.Append("}}");
             return sb.ToString();
@@ -390,7 +391,7 @@ namespace StoryletStudio.StoryletEngine
                 case PlayEvent e:
                     sb.Append("{\"type\":\"play\",\"card\":").Append(Esc(e.Card))
                       .Append(",\"outcome\":").Append(Esc(e.Outcome))
-                      .Append(",\"turn\":").Append(StoryletValue.JsNumber(e.Turn)).Append("}");
+                      .Append(",\"turn\":").Append(ExprValue.JsNumber(e.Turn)).Append("}");
                     break;
                 case WriteEvent e:
                     sb.Append("{\"type\":\"write\",\"target\":").Append(Esc(e.Target))
@@ -402,7 +403,7 @@ namespace StoryletStudio.StoryletEngine
                     break;
                 case TurnsEvent e:
                     sb.Append("{\"type\":\"turns\",\"box\":").Append(Esc(e.Box))
-                      .Append(",\"turn\":").Append(StoryletValue.JsNumber(e.Turn)).Append("}");
+                      .Append(",\"turn\":").Append(ExprValue.JsNumber(e.Turn)).Append("}");
                     break;
                 case DiagnosticEvent e:
                     sb.Append("{\"type\":\"diagnostic\",\"where\":").Append(Esc(e.Where))
@@ -425,15 +426,15 @@ namespace StoryletStudio.StoryletEngine
                     if (i > 0) sb.Append(",");
                     sb.Append("{\"id\":").Append(Esc(card.Id))
                       .Append(",\"verdict\":").Append(Esc(Flow.VerdictWire(card.Verdict)));
-                    if (card.Priority != null) sb.Append(",\"priority\":").Append(StoryletValue.JsNumber(card.Priority.Value));
-                    if (card.Specificity != null) sb.Append(",\"specificity\":").Append(StoryletValue.JsNumber(card.Specificity.Value));
+                    if (card.Priority != null) sb.Append(",\"priority\":").Append(ExprValue.JsNumber(card.Priority.Value));
+                    if (card.Specificity != null) sb.Append(",\"specificity\":").Append(ExprValue.JsNumber(card.Specificity.Value));
                     sb.Append("}");
                 }
             }
             sb.Append("]");
         }
 
-        private static string Esc(string s) => s == null ? "null" : StoryletValue.JsonQuote(s);
+        private static string Esc(string s) => s == null ? "null" : ExprValue.JsonQuote(s);
 
         // -- the socket side ---------------------------------------------------------
 

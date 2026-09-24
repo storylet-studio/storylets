@@ -5,6 +5,10 @@ public class HamletDemo : ModuleRules
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
+		// HamletGame.h includes Patterplay's std C++ core (Patter/Engine.h), whose expression kernel
+		// throws; any module including a kernel header needs this. A Mac build compiles with
+		// exceptions whatever this says, so only a Windows or Linux build would catch its absence.
+		bEnableExceptions = true;
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core", "CoreUObject", "Engine", "InputCore", "Slate", "SlateCore", "UMG", "Json",

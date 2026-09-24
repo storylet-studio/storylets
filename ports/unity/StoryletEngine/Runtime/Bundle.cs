@@ -7,6 +7,7 @@
 
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine
 {
@@ -169,7 +170,7 @@ namespace StoryletStudio.StoryletEngine
         /// to the host with the outcome. The engine never reads it: a press can
         /// say one line ("The notice is in your pocket") without spending a card
         /// on it. Null when the outcome carries none.</summary>
-        public OrderedMap<string, StoryletValue> Fields;
+        public OrderedMap<string, ExprValue> Fields;
     }
 
     public sealed class Card : IIdentified
@@ -202,7 +203,7 @@ namespace StoryletStudio.StoryletEngine
         /// them back through OpenFlow(id, restore) and MarkTaken.</summary>
         public bool? Durable;
         /// <summary>Card-template data: field name -> value.</summary>
-        public OrderedMap<string, StoryletValue> Fields;
+        public OrderedMap<string, ExprValue> Fields;
         public List<Outcome> Outcomes = new List<Outcome>();
     }
 
@@ -461,12 +462,12 @@ namespace StoryletStudio.StoryletEngine
     /// owns it.</summary>
     public sealed class PropsPartition
     {
-        public OrderedMap<string, StoryletValue> Story = new OrderedMap<string, StoryletValue>();
-        public OrderedMap<string, OrderedMap<string, StoryletValue>> Box = new OrderedMap<string, OrderedMap<string, StoryletValue>>();
-        public OrderedMap<string, OrderedMap<string, StoryletValue>> Deck = new OrderedMap<string, OrderedMap<string, StoryletValue>>();
-        public OrderedMap<string, OrderedMap<string, StoryletValue>> Hand = new OrderedMap<string, OrderedMap<string, StoryletValue>>();
+        public OrderedMap<string, ExprValue> Story = new OrderedMap<string, ExprValue>();
+        public OrderedMap<string, OrderedMap<string, ExprValue>> Box = new OrderedMap<string, OrderedMap<string, ExprValue>>();
+        public OrderedMap<string, OrderedMap<string, ExprValue>> Deck = new OrderedMap<string, OrderedMap<string, ExprValue>>();
+        public OrderedMap<string, OrderedMap<string, ExprValue>> Hand = new OrderedMap<string, OrderedMap<string, ExprValue>>();
         /// <summary>Tag state, keyed by tag id.</summary>
-        public OrderedMap<string, OrderedMap<string, StoryletValue>> Value = new OrderedMap<string, OrderedMap<string, StoryletValue>>();
+        public OrderedMap<string, OrderedMap<string, ExprValue>> Value = new OrderedMap<string, OrderedMap<string, ExprValue>>();
     }
 
     /// <summary>One flow's blob inside the envelope (schema 4), and the blob
@@ -533,7 +534,7 @@ namespace StoryletStudio.StoryletEngine
         /// present only when the engine made the registry itself (a standalone
         /// game). Null when the game passed a registry: the game saves that
         /// once, beside this envelope.</summary>
-        public OrderedMap<string, OrderedMap<string, StoryletValue>> Registry;
+        public OrderedMap<string, OrderedMap<string, ExprValue>> Registry;
         public SharedSave Shared = new SharedSave();
         public OrderedMap<string, FlowSave> Flows = new OrderedMap<string, FlowSave>();
     }

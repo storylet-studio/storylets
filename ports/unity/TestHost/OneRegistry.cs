@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using StoryletStudio.StoryletEngine;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine.TestHost
 {
@@ -44,7 +45,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
         private static Game NewGame()
         {
             var registry = new ScopeRegistry().DefineOwned("world",
-                new List<ScopeDeclaration> { new ScopeDeclaration { Name = "alarm", Type = "number", Default = StoryletValue.Num(0) } },
+                new List<ScopeDeclaration> { new ScopeDeclaration { Name = "alarm", Type = "number", Default = ExprValue.Num(0) } },
                 new OwnedScopeOptions { Owner = "Game" });
             return new Game { Registry = registry, Engine = new Engine(NewBundle(), new EngineOptions { Registry = registry, Seed = 1 }) };
         }
@@ -61,9 +62,24 @@ namespace StoryletStudio.StoryletEngine.TestHost
             if (!ok) throw new Failed(what);
         }
 
-        private static void Num(StoryletValue v, double want, string what)
+        private static void Num(ExprValue v, double want, string what)
         {
             if (v == null || !v.IsNumber || v.AsNumber != want) throw new Failed($"{what}: expected {want}, got {(v == null ? "nothing" : v.ToJsonString())}");
+        }
+
+        /// <summary>A refusal the engine must throw as ITS OWN type (exactly T, not a
+        /// subclass and never the kernel's ExprError or RegistryError), carrying the
+        /// kernel's message.</summary>
+        private static void ThrowsExactly<T>(Action act, string contains, string what) where T : Exception
+        {
+            try { act(); }
+            catch (Exception e)
+            {
+                if (e.GetType() != typeof(T)) throw new Failed($"{what}: threw {e.GetType().Name} \"{e.Message}\", expected {typeof(T).Name}");
+                if (!e.Message.Contains(contains)) throw new Failed($"{what}: threw \"{e.Message}\", expected \"{contains}\"");
+                return;
+            }
+            throw new Failed($"{what}: did not throw");
         }
 
         private static void Throws(Action act, string contains, string what)
@@ -79,7 +95,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
 
         /// <summary>JS-style number token (integral doubles as integers), so a
         /// blob and an expectation written as JSON compare like the JS toEqual.</summary>
-        private static JToken Token(StoryletValue v)
+        private static JToken Token(ExprValue v)
         {
             if (v.IsBool) return new JValue(v.AsBool);
             if (v.IsNumber) return v.AsNumber == Math.Floor(v.AsNumber) ? new JValue((long)v.AsNumber) : new JValue(v.AsNumber);
@@ -87,7 +103,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             return new JArray(v.AsFlags.Cast<object>().ToArray());
         }
 
-        private static JObject Blob(OrderedMap<string, OrderedMap<string, StoryletValue>> blob)
+        private static JObject Blob(OrderedMap<string, OrderedMap<string, ExprValue>> blob)
         {
             var o = new JObject();
             foreach (var section in blob)
@@ -307,14 +323,67 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 Check(!withWorld.Has("story"), "the failed engine left story registered");
             }),
 
+            // The kernel throws its own ExprError / RegistryError; every place the
+            // engine calls it, the game must still see the engine's own type, with
+            // the kernel's message. One case per rethrow site.
+            ("a story write the game's @world refuses is a StoryletError (WorldSet)", () =>
+            {
+                var registry = new ScopeRegistry().DefineOwned("world",
+                    new List<ScopeDeclaration> { new ScopeDeclaration { Name = "alarm", Type = "number", Default = ExprValue.Num(0), Writable = false } },
+                    new OwnedScopeOptions { Owner = "Game" });
+                var engine = new Engine(NewBundle(), new EngineOptions { Registry = registry, Seed = 1 });
+                ThrowsExactly<StoryletError>(() => Heist(engine.OpenFlow("f")), "'@world.alarm' is read-only", "the outcome's @world write");
+            }),
+
+            ("a story write to a read-only @story property is a StoryletError (outcome write)", () =>
+            {
+                var json = BundleJson.Replace(@"{""name"":""gold"",""type"":""number"",""default"":0}",
+                    @"{""name"":""gold"",""type"":""number"",""default"":0,""writable"":false}");
+                Check(json != BundleJson, "the fixture did not mark gold read-only");
+                var engine = new Engine(BundleLoader.Parse(json), new EngineOptions { Seed = 1 });
+                ThrowsExactly<StoryletError>(() => Heist(engine.OpenFlow("f")), "'gold' is read-only", "the outcome's @story write");
+            }),
+
+            ("a malformed expression in a bundle is an EvalError (AST load)", () =>
+            {
+                var json = BundleJson.Replace(@"[""n"",1]", @"[""zz"",1]");
+                Check(json != BundleJson, "the fixture did not break an expression");
+                ThrowsExactly<EvalError>(() => BundleLoader.Parse(json), "unknown ast tag: zz", "loading the bundle");
+            }),
+
+            ("a flow's bag clashing with a key the game holds is a StoryletError (flow mount)", () =>
+            {
+                var g = NewGame();
+                g.Registry.DefineOwned("storylets/flow/f/story", new List<ScopeDeclaration>(), new OwnedScopeOptions { Owner = "Game" });
+                ThrowsExactly<StoryletError>(() => g.Engine.OpenFlow("f"),
+                    "scope '@storylets/flow/f/story' is already registered by Game", "opening the flow");
+            }),
+
+            ("an expression the kernel refuses is an EvalError (evaluation)", () =>
+            {
+                var json = BundleJson.Replace(@"[""bin"",""+"",[""sv"",""story"",""gold""],[""n"",1]]", @"[""bin"",""/"",[""n"",1],[""n"",0]]");
+                Check(json != BundleJson, "the fixture did not break the gold change");
+                var engine = new Engine(BundleLoader.Parse(json), new EngineOptions { Seed = 1 });
+                ThrowsExactly<EvalError>(() => Heist(engine.OpenFlow("f")), "division by zero", "the outcome's @story change");
+            }),
+
+            ("the game's write to another engine's scope with no setter is a StoryletError (SetProperty)", () =>
+            {
+                var registry = new ScopeRegistry().DefineForeign("patter", new ZeroWorld(), new List<ScopeDeclaration>(),
+                    new ForeignScopeOptions { Owner = "Patter" });
+                var engine = new Engine(NewBundle(), new EngineOptions { Registry = registry });
+                ThrowsExactly<StoryletError>(() => engine.SetProperty("patter.gold", ExprValue.Num(5)), "'@patter.gold' is read-only", "the engine's SetProperty");
+                ThrowsExactly<StoryletError>(() => engine.OpenFlow("f").SetProperty("patter.gold", ExprValue.Num(5)), "'@patter.gold' is read-only", "a flow's SetProperty");
+            }),
+
             ("reads and writes another engine's game-wide scope by path", () =>
             {
                 var registry = new ScopeRegistry().DefineOwned("patter",
-                    new List<ScopeDeclaration> { new ScopeDeclaration { Name = "gold", Type = "number", Default = StoryletValue.Num(3) } },
+                    new List<ScopeDeclaration> { new ScopeDeclaration { Name = "gold", Type = "number", Default = ExprValue.Num(3) } },
                     new OwnedScopeOptions { Owner = "Patter" });
                 var engine = new Engine(NewBundle(), new EngineOptions { Registry = registry });
                 Num(engine.GetProperty("patter.gold"), 3, "engine patter.gold");
-                engine.OpenFlow("f").SetProperty("patter.gold", StoryletValue.Num(5));
+                engine.OpenFlow("f").SetProperty("patter.gold", ExprValue.Num(5));
                 Num(registry.Get("patter", "gold"), 5, "registry patter.gold");
             }),
 
@@ -327,12 +396,12 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 var card = (JObject)json["boxes"][0]["decks"][0]["cards"][0];
                 card["condition"] = new JObject { ["src"] = "@patter.gold > 2", ["ast"] = JArray.Parse(@"[""bin"","">"",[""sv"",""patter"",""gold""],[""n"",2]]") };
                 var registry = new ScopeRegistry().DefineOwned("patter",
-                    new List<ScopeDeclaration> { new ScopeDeclaration { Name = "gold", Type = "number", Default = StoryletValue.Num(0) } },
+                    new List<ScopeDeclaration> { new ScopeDeclaration { Name = "gold", Type = "number", Default = ExprValue.Num(0) } },
                     new OwnedScopeOptions { Owner = "Patter" });
                 var engine = new Engine(BundleLoader.Parse(json), new EngineOptions { Registry = registry });
                 var flow = engine.OpenFlow("f");
                 Check(flow.Deal("q").Count == 0, "the card was dealt with @patter.gold at 0");
-                registry.Set("patter", "gold", StoryletValue.Num(3));
+                registry.Set("patter", "gold", ExprValue.Num(3));
                 Check(flow.Deal("q").Count == 1, "the card was not dealt with @patter.gold at 3");
             }),
 
@@ -390,7 +459,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 Check(row != null && row.Path == "deck.main.stock" && row.Owner == "Storylet Engine", "the shared deck row");
 
                 var standalone = new Engine(BundleLoader.Parse(json), new EngineOptions { Seed = 1 });
-                standalone.SetProperty("deck.main.stock", StoryletValue.Num(7));
+                standalone.SetProperty("deck.main.stock", ExprValue.Num(7));
                 var save = Reread(standalone.SaveGame());
                 var restored = new Engine(BundleLoader.Parse(json), new EngineOptions { Seed = 1 });
                 Check(restored.LoadGame(save).Exact, "the report is not exact");
@@ -410,9 +479,9 @@ namespace StoryletStudio.StoryletEngine.TestHost
 
         private sealed class ZeroWorld : IScopeResolver
         {
-            public StoryletValue Get(string name) => StoryletValue.Num(0);
+            public ExprValue Get(string name) => ExprValue.Num(0);
             public bool CanSet => false;
-            public void Set(string name, StoryletValue value) { }
+            public void Set(string name, ExprValue value) { }
         }
 
         private sealed class GameSave
@@ -452,12 +521,12 @@ namespace StoryletStudio.StoryletEngine.TestHost
             Num(g.Registry.Get("story", "gold"), 2, "registry story.gold after g's heist");
         }
 
-        private static OrderedMap<string, OrderedMap<string, StoryletValue>> Sections(string json)
+        private static OrderedMap<string, OrderedMap<string, ExprValue>> Sections(string json)
         {
-            var blob = new OrderedMap<string, OrderedMap<string, StoryletValue>>();
+            var blob = new OrderedMap<string, OrderedMap<string, ExprValue>>();
             foreach (var section in JObject.Parse(json))
             {
-                var values = new OrderedMap<string, StoryletValue>();
+                var values = new OrderedMap<string, ExprValue>();
                 foreach (var pair in (JObject)section.Value) values.Set(pair.Key, StoryletJson.ToValue(pair.Value));
                 blob.Set(section.Key, values);
             }

@@ -26,11 +26,37 @@ recording sink and compared with `frames.json` byte for byte, compact JSON;
 `LiveLinkFixture.h`), the one-registry checks (`OneRegistry.h`: the JS
 runtime's `packages/runtime/test/one-registry.test.ts` ported case for case,
 plus the registry leaving with a destroyed engine and the live swap's
-hand-over), the expr parity corpus and the registry corpus beside ours, and
+hand-over), the kernel-error checks (also in `OneRegistry.h`: one case per
+place the engine rethrows the shared kernel's `ExprError` / `RegistryError`
+as its own `EvalError` / `StoryletError`, each failing when its rethrow is
+removed), the expr parity corpus and the registry corpus beside ours, and
 `ALL PASS`, exiting non-zero on any divergence from the reference
 expectations. A second argument writes the frames the
 client sent, one per line, to that path (for pairing them with a running
 Storyletter over a real socket).
+
+## With Patterplay: `with-patter/`
+
+```sh
+bash ports/unreal/TestHost/with-patter/build.sh            # the combined game, and the tripwire
+bash ports/unreal/TestHost/with-patter/build.sh --probes   # and show every case can fail
+```
+
+The combined proof on C++, the twin of the JS runtime's
+`packages/runtime/test/with-patter/combined-game.test.ts`: Patterplay's C++
+core and this one in ONE translation unit, on ONE `ScopeRegistry`, every case
+of the JS test, run once per plugin's registry save helpers and once crossed.
+It compiles Patterplay's source from a sibling `../patter` checkout (or
+`PATTER_ROOT`), as the JS test does, and skips, saying so, when there is none.
+Both plugins carry the shared kernel (`Storylets/Expr/`, `Patter/Expr/`); the
+host checks at compile time that `storylets::ScopeRegistry` and
+`patter::ScopeRegistry` are one type, then shows the kernel's tripwire: the
+same translation unit with Patterplay's kernel restamped with another kernel
+id must stop at the `#error` naming the fix, in either include order.
+`--probes` runs five deliberate integration mistakes (two registries, a
+registry never loaded, engines saving their own values, a rebuild in place of
+a hot swap, a second engine on another registry) and fails unless every case
+fails under at least one.
 
 ## What this does NOT cover
 

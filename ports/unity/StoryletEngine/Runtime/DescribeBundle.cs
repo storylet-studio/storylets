@@ -17,6 +17,7 @@
 // template's declarations, exactly as the session's hand bags do).
 
 using System.Collections.Generic;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine
 {
@@ -71,7 +72,7 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>The slot cap as the inspectors show it ("unbounded" for the
         /// uncapped hand).</summary>
         public string SlotsLabel =>
-            double.IsPositiveInfinity(Slots) ? "unbounded" : StoryletValue.JsNumber(Slots);
+            double.IsPositiveInfinity(Slots) ? "unbounded" : ExprValue.JsNumber(Slots);
     }
 
     /// <summary>One tag group and its tags, by gameId: the Peek() criteria
@@ -120,7 +121,7 @@ namespace StoryletStudio.StoryletEngine
         public string Name;
         /// <summary>boolean / number / string / enum / flags (PropertyTypes).</summary>
         public string Type;
-        public StoryletValue Default;
+        public ExprValue Default;
         /// <summary>Enum / flags options, where declared (null otherwise).</summary>
         public List<string> Values;
         /// <summary>Declared DURABLE (design/engine-server.md 4.2): the value

@@ -22,9 +22,7 @@
 #include <utility>
 #include <vector>
 
-#include "Storylets/Expr/OrderedMap.h"
-#include "Storylets/Expr/PropertyBag.h"
-#include "Storylets/Expr/StateLogger.h"
+#include "Storylets/Kernel.h"   // the shared kernel (Expr/), its names in `storylets`, and kernelCall
 #include "Storylets/Engine.h"
 #include "Storylets/StoryletValue.h"
 

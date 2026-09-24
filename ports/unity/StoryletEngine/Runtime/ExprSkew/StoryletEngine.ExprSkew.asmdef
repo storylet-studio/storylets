@@ -1,0 +1,28 @@
+{
+  "name": "StoryletEngine.ExprSkew",
+  "rootNamespace": "",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "PATTERPLAY_PRESENT",
+    "!PATTERPLAY_EXPR_OK"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.patterkit.patterplay",
+      "expression": "",
+      "define": "PATTERPLAY_PRESENT"
+    },
+    {
+      "name": "com.patterkit.patterplay",
+      "expression": "0.14.0",
+      "define": "PATTERPLAY_EXPR_OK"
+    }
+  ],
+  "noEngineReferences": true
+}

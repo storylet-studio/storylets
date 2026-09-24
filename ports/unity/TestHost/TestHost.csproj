@@ -28,6 +28,11 @@
          cannot compile outside Unity; everything else under Runtime/ stays
          engine-free and corpus-verified here. -->
     <Compile Remove="../StoryletEngine/Runtime/Unity/**/*.cs" />
+    <!-- The skew assembly is one #error line that Unity compiles only when an old
+         Patterplay is installed beside this package; it is never part of a build
+         that compiles the kernel, and this host compiles the kernel (Runtime/Expr)
+         exactly once. -->
+    <Compile Remove="../StoryletEngine/Runtime/ExprSkew/**/*.cs" />
   </ItemGroup>
 
   <!-- The Unity loader layer uses Newtonsoft (com.unity.nuget.newtonsoft-json in

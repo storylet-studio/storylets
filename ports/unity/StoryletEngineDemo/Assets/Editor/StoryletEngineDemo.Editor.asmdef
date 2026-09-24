@@ -4,7 +4,9 @@
     "references": [
         "StoryletEngine.Runtime",
         "StoryletEngine.Runtime.Unity",
-        "StoryletEngineDemo"
+        "StoryletEngineDemo",
+        "StoryletEngine.Expr",
+        "Patterplay.Expr"
     ],
     "includePlatforms": [
         "Editor"

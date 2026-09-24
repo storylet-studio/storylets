@@ -71,9 +71,7 @@
 #include "Storylets/Dialect.h"
 #include "Storylets/Expression.h"
 #include "Storylets/Mulberry32.h"
-#include "Storylets/Expr/OrderedMap.h"
-#include "Storylets/Expr/PropertyBag.h"
-#include "Storylets/Expr/ScopeRegistry.h"
+#include "Storylets/Kernel.h"   // the shared kernel (Expr/), its names in `storylets`, and kernelCall
 #include "Storylets/Specificity.h"
 #include "Storylets/StoryletValue.h"
 
@@ -1066,10 +1064,11 @@ namespace storylets
          *  worldReadOnly, asked before this seam is reached. A BOUND resolver is
          *  opaque - it takes a name and a value and keeps whatever rule the game
          *  has - so it is always written as the host, and the flag only reaches a
-         *  @world the registry stores. */
+         *  @world the registry stores. A refusal is the kernel's RegistryError,
+         *  rethrown as StoryletError. */
         void worldSet(const std::string& name, const StoryletValue& value, bool host = false)
         {
-            registry_->set("world", name, value, hostWorld_.has_value() ? true : host);
+            kernelCall([&] { registry_->set("world", name, value, hostWorld_.has_value() ? true : host); });
         }
 
         /** @internal - the live swap's hand-over (UStoryletEngine::ApplyLiveBundle
@@ -1372,8 +1371,9 @@ namespace storylets
             }
             catch (...)
             {
+                // The clash itself is the kernel's RegistryError, rethrown as StoryletError.
                 for (const auto& key : registered) reg.remove(key, /*keep=*/true);
-                throw;
+                rethrowKernelError();
             }
             registered_ = std::move(registered);
         }
@@ -1666,8 +1666,9 @@ namespace storylets
             }
             catch (...)
             {
+                // The clash itself is the kernel's RegistryError, rethrown as StoryletError.
                 for (const auto& key : registered) reg.remove(key, /*keep=*/true);
-                throw;
+                rethrowKernelError();
             }
             registered_ = std::move(registered);
         }
@@ -2537,9 +2538,10 @@ namespace storylets
             return ctx;
         }
 
+        /** A refusal from the evaluator is the kernel's ExprError, rethrown as EvalError. */
         StoryletValue eval(const ExpressionPtr& expr, EvalContext& ctx) const
         {
-            return Evaluate(expr->ast, ctx, StoryletsDialect());
+            return kernelCall([&] { return Evaluate(expr->ast, ctx, StoryletsDialect()); });
         }
 
         bool passes(const ExpressionPtr& expr, EvalContext& ctx, const std::string& where = "condition")
@@ -3281,8 +3283,10 @@ namespace storylets
                 : shared && shared->get(name).has_value() ? shared
                 : nullptr;
             if (!bag) throw StoryletError("no property at \"" + path + "\"");
-            // An engine write: the bag's subscribers fire (the firing rule).
-            BagChange change = bag->set(name, value);
+            // An engine write: the bag's subscribers fire (the firing rule). A story write
+            // to a `writable: false` declaration is the kernel's RegistryError, rethrown as
+            // StoryletError.
+            BagChange change = kernelCall([&] { return bag->set(name, value); });
             WriteResult result;
             result.path = path;
             result.prev = change.prev;
@@ -3573,8 +3577,9 @@ namespace storylets
             }
             if (parts.size() == 2 && parts[0] != "story" && engine_->registry_->has(parts[0]))
             {
-                // Another engine's game-wide scope, written as the host.
-                engine_->registry_->set(parts[0], parts[1], value, /*host=*/true);
+                // Another engine's game-wide scope, written as the host. A refusal (a scope
+                // lent with no setter) is the kernel's RegistryError, rethrown as StoryletError.
+                kernelCall([&] { engine_->registry_->set(parts[0], parts[1], value, /*host=*/true); });
                 return;
             }
             PropertyBag* own = nullptr;
@@ -4019,8 +4024,9 @@ namespace storylets
         }
         if (parts.size() == 2 && parts[0] != "story" && registry_->has(parts[0]))
         {
-            // Another engine's game-wide scope, written as the host.
-            registry_->set(parts[0], parts[1], value, /*host=*/true);
+            // Another engine's game-wide scope, written as the host. A refusal (a scope
+            // lent with no setter) is the kernel's RegistryError, rethrown as StoryletError.
+            kernelCall([&] { registry_->set(parts[0], parts[1], value, /*host=*/true); });
             return;
         }
         // Resolved once, then reused for both halves (4.4). The write used to

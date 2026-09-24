@@ -7,12 +7,21 @@ behaviour, held to the shared conformance corpus.
 
 ## Layering
 
-Four assemblies, the Patterplay split applied verbatim:
+Four assemblies, the Patterplay split applied verbatim, plus the shared kernel:
 
+- `Runtime/Expr/` (`StoryletEngine.Expr`, namespace `Wildwinter.Expr`) - the
+  expression kernel, vendored from `expr/ports/unity` and byte-identical to
+  Patterplay's: the value type (`ExprValue`), the mulberry32 PRNG, the state
+  kernel (`PropertyBag`, `ScopeRegistry`), the expression AST, evaluator and
+  specificity scorer, and the kernel's own errors (`ExprError`,
+  `RegistryError`). With Patterplay 0.14.0 or newer installed this assembly
+  switches itself off and every engine runs on Patterplay's copy
+  (`Patterplay.Expr`), so one registry is one type to both; with an older
+  Patterplay, `Runtime/ExprSkew/` stops the compile with an error naming the
+  fix. Every assembly below references both kernel assembly names, and so must
+  a game assembly definition that references this package.
 - `Runtime/` (`StoryletEngine.Runtime`) - pure C#, no UnityEngine, no JSON
-  library. The value type (`StoryletValue`), the mulberry32 PRNG, the state
-  kernel (`PropertyBag`, `ScopeRegistry`), the expression AST + evaluator +
-  storylets dialect + specificity scorer, the bundle model, and the play
+  library. The storylets dialect, the bundle model, and the play
   surface (`Engine`: the bundle, the shared state, `@world`, the run log and
   the flow manager; `Flow`: deal / peek / play / outcomes / board / turns / trace /
   property access), and `StoryletLiveLink`, the game-side Live Link

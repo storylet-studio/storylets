@@ -270,7 +270,9 @@ UStoryletFlow* UStoryletEngine::OpenFlow(const FString& FlowId)
 		const storylets::FlowPtr Core = Impl->Engine->openFlow(Std(FlowId));
 		UStoryletFlow* Wrapper = NewObject<UStoryletFlow>(GetTransientPackage());
 		Wrapper->Init(this, FlowId, Core);
-		WrappedFlows.RemoveAll([](const TWeakObjectPtr<UStoryletFlow>& W) { return !W.IsValid(); });
+		// The replaced flow's wrapper leaves the list: kept, the next re-bind
+		// by id would point it at this new flow.
+		WrappedFlows.RemoveAll([&FlowId](const TWeakObjectPtr<UStoryletFlow>& W) { return !W.IsValid() || W->GetFlowId() == FlowId; });
 		WrappedFlows.Add(Wrapper);
 		return Wrapper;
 	}
@@ -315,7 +317,9 @@ UStoryletFlow* UStoryletEngine::OpenFlowFromJson(const FString& FlowId, const FS
 		const storylets::FlowPtr Core = Impl->Engine->openFlow(Std(FlowId), Options);
 		UStoryletFlow* Wrapper = NewObject<UStoryletFlow>(GetTransientPackage());
 		Wrapper->Init(this, FlowId, Core);
-		WrappedFlows.RemoveAll([](const TWeakObjectPtr<UStoryletFlow>& W) { return !W.IsValid(); });
+		// The replaced flow's wrapper leaves the list: kept, the next re-bind
+		// by id would point it at this new flow.
+		WrappedFlows.RemoveAll([&FlowId](const TWeakObjectPtr<UStoryletFlow>& W) { return !W.IsValid() || W->GetFlowId() == FlowId; });
 		WrappedFlows.Add(Wrapper);
 		return Wrapper;
 	}
@@ -351,12 +355,20 @@ UStoryletFlow* UStoryletEngine::GetFlow(const FString& FlowId) const
 	if (!IsValidEngine()) return nullptr;
 	const storylets::FlowPtr Core = Impl->Engine->getFlow(Std(FlowId));
 	if (!Core) return nullptr;
+	// The wrapper already made for THIS flow, matched by the flow it holds.
 	for (const TWeakObjectPtr<UStoryletFlow>& Weak : WrappedFlows)
 	{
 		UStoryletFlow* Wrapper = Weak.Get();
-		if (Wrapper && Wrapper->GetFlowId() == FlowId && !Wrapper->IsClosed()) return Wrapper;
+		if (Wrapper && Wrapper->GetCoreFlow() == Core.get()) return Wrapper;
 	}
-	return nullptr;
+	// None: a flow a load restored into an engine that never opened it (the
+	// JS getFlow answers with every restored flow). Wrap it now, once, and
+	// keep it with the others so the next load or swap re-binds it.
+	UStoryletFlow* Wrapper = NewObject<UStoryletFlow>(GetTransientPackage());
+	Wrapper->Init(const_cast<UStoryletEngine*>(this), FlowId, Core);
+	WrappedFlows.RemoveAll([](const TWeakObjectPtr<UStoryletFlow>& W) { return !W.IsValid(); });
+	WrappedFlows.Add(Wrapper);
+	return Wrapper;
 }
 
 TArray<UStoryletFlow*> UStoryletEngine::Flows() const
@@ -376,13 +388,16 @@ void UStoryletEngine::CloseFlow(const FString& FlowId)
 	if (!IsValidEngine()) return;
 	Impl->Engine->closeFlow(Std(FlowId));
 	// The wrappers hold a shared_ptr, so nothing dangles; the core's own
-	// closed flag is what makes them inert from here.
+	// closed flag is what makes them inert from here. The wrapper leaves the
+	// list, so a later load's re-bind cannot revive it.
+	WrappedFlows.RemoveAll([&FlowId](const TWeakObjectPtr<UStoryletFlow>& W) { return !W.IsValid() || W->GetFlowId() == FlowId; });
 }
 
 void UStoryletEngine::Reset()
 {
 	if (!IsValidEngine()) return;
 	Impl->Engine->reset();
+	WrappedFlows.Reset(); // every flow went with it, closed for good
 }
 
 bool UStoryletEngine::IsValidEngine() const
@@ -1167,6 +1182,9 @@ void UStoryletEngine::RebindFlowsAfterLoad()
 			Wrapper->Rebind(Impl->Engine->getFlow(Std(Wrapper->GetFlowId())));
 		}
 	}
+	// A wrapper whose flow did not survive is closed for good: it leaves the
+	// list, so a later re-bind cannot revive it.
+	WrappedFlows.RemoveAll([](const TWeakObjectPtr<UStoryletFlow>& W) { return !W.IsValid() || W->IsClosed(); });
 }
 
 UStoryletWorld* UStoryletEngine::GetBoundWorld() const

@@ -16,6 +16,8 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using StoryletStudio.StoryletEngine;
+using Wildwinter.Expr;
+using Wildwinter.Expr.Testing;
 
 namespace StoryletStudio.StoryletEngine.TestHost
 {
@@ -154,7 +156,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             Console.Error.WriteLine($"  FAIL [{family}] {name}: {detail}");
         }
 
-        private static bool ConditionPasses(StoryletValue v)
+        private static bool ConditionPasses(ExprValue v)
         {
             if (v.IsBool) return v.AsBool;
             if (v.IsNumber) return v.AsNumber != 0;
@@ -168,7 +170,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             var ctx = new EvalContext();
             foreach (var scope in scopes)
             {
-                var bag = new OrderedMap<string, StoryletValue>();
+                var bag = new OrderedMap<string, ExprValue>();
                 foreach (var prop in (JObject)scope.Value) bag.Set(prop.Key, StoryletJson.ToValue(prop.Value));
                 ctx.Scopes[scope.Key] = new BagScope(bag);
             }
@@ -264,7 +266,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     var prng = new Mulberry32(c.Value<double?>("seed") ?? 0);
                     ctx.Host = new StoryletsHost { NextRandom = prng.Next };
 
-                    StoryletValue actual;
+                    ExprValue actual;
                     string error = null;
                     try
                     {
@@ -371,10 +373,10 @@ namespace StoryletStudio.StoryletEngine.TestHost
 
         /// <summary>"turn.&lt;boxId&gt;" reads that box's clock (schema 3.4);
         /// everything else is a property path.</summary>
-        private static StoryletValue ReadState(Flow session, string path)
+        private static ExprValue ReadState(Flow session, string path)
         {
             return path.StartsWith("turn.", StringComparison.Ordinal)
-                ? StoryletValue.Num(session.Turn(path.Substring("turn.".Length)))
+                ? ExprValue.Num(session.Turn(path.Substring("turn.".Length)))
                 : session.GetProperty(path);
         }
 
@@ -400,7 +402,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
         // An outcome that carries none reads as empty, so a null map and a `{}`
         // expectation agree.
 
-        private static bool FieldsMatch(OrderedMap<string, StoryletValue> actual, JObject expected)
+        private static bool FieldsMatch(OrderedMap<string, ExprValue> actual, JObject expected)
         {
             var count = actual == null ? 0 : actual.Count;
             if (count != expected.Count) return false;
@@ -412,7 +414,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             return true;
         }
 
-        private static string ShowFields(OrderedMap<string, StoryletValue> fields)
+        private static string ShowFields(OrderedMap<string, ExprValue> fields)
         {
             if (fields == null) return "{}";
             var parts = fields.Keys.OrderBy(k => k, StringComparer.Ordinal)
@@ -723,19 +725,19 @@ namespace StoryletStudio.StoryletEngine.TestHost
 
         sealed class RecordingWorld : IScopeResolver
         {
-            public readonly Dictionary<string, StoryletValue> Values = new Dictionary<string, StoryletValue>();
+            public readonly Dictionary<string, ExprValue> Values = new Dictionary<string, ExprValue>();
             public readonly List<string> Sets = new List<string>();
-            public StoryletValue Get(string name) => Values.TryGetValue(name, out var v) ? v : null;
+            public ExprValue Get(string name) => Values.TryGetValue(name, out var v) ? v : null;
             public bool CanSet => true;
-            public void Set(string name, StoryletValue value) { Sets.Add(name); Values[name] = value; }
+            public void Set(string name, ExprValue value) { Sets.Add(name); Values[name] = value; }
         }
 
         static List<string> RunReadOnlyWorldProbe(JObject bundleJson)
         {
             var failures = new List<string>();
             var world = new RecordingWorld();
-            world.Values["clock"] = StoryletValue.Num(0);
-            world.Values["mood"] = StoryletValue.Num(0);
+            world.Values["clock"] = ExprValue.Num(0);
+            world.Values["mood"] = ExprValue.Num(0);
             var bundle = BundleLoader.Parse(bundleJson);
             var flow = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = 0, World = world }).OpenFlow("main");
             flow.Deal("h_q");
@@ -760,21 +762,23 @@ namespace StoryletStudio.StoryletEngine.TestHost
             var failures = new List<string>();
             var bundle = BundleLoader.Parse(bundleJson);
             var bag = new PropertyBag(bundle.World.Properties, n => n, "world.");
+            // A kernel bag, called directly, refuses with the kernel's own RegistryError (the
+            // engine rethrows it as a StoryletError; a game calling the kernel sees it as is).
             try
             {
-                bag.Set("clock", StoryletValue.Num(1));
+                bag.Set("clock", ExprValue.Num(1));
                 failures.Add("loaded-decl bag: a writable: false declaration took a plain write");
             }
-            catch (StoryletError ex)
+            catch (RegistryError ex)
             {
                 if (!ex.Message.Contains("is read-only")) failures.Add("loaded-decl bag: refused, but not as read-only: " + ex.Message);
             }
             if (bag.Get("clock").AsNumber != 0) failures.Add("loaded-decl bag: the refused write landed anyway");
             try
             {
-                bag.Set("clock", StoryletValue.Num(5), host: true);
+                bag.Set("clock", ExprValue.Num(5), host: true);
             }
-            catch (StoryletError ex)
+            catch (RegistryError ex)
             {
                 failures.Add("loaded-decl bag: the HOST's write was refused: " + ex.Message);
             }
@@ -797,7 +801,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             if (row("world.clock") == null) { failures.Add("self-backed examiner: no row for world.clock"); return failures; }
             if (row("world.clock").Writable) failures.Add("self-backed examiner: world.clock did not report writable: false");
             if (!row("world.mood").Writable) failures.Add("self-backed examiner: world.mood reported read-only");
-            try { engine.SetProperty("world.clock", StoryletValue.Num(5)); }
+            try { engine.SetProperty("world.clock", ExprValue.Num(5)); }
             catch (StoryletError ex) { failures.Add("self-backed examiner: the game's own SetProperty was refused: " + ex.Message); }
             if (engine.GetProperty("world.clock").AsNumber != 5) failures.Add("self-backed examiner: the host's write did not land");
             if (row("world.clock").Writable) failures.Add("self-backed examiner: a host write made the declaration writable");
@@ -1211,7 +1215,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     {
                         foreach (var pair in (JObject)op["expect"])
                         {
-                            StoryletValue actual = null;
+                            ExprValue actual = null;
                             string error = null;
                             try
                             {
@@ -1338,7 +1342,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         // Engine-level read: world.* and shared refs answer; a
                         // per-flow ref must THROW (the teaching rule).
                         var path = op.Value<string>("path");
-                        StoryletValue engineValue = null;
+                        ExprValue engineValue = null;
                         string readError = null;
                         try { engineValue = engine.GetProperty(path); }
                         catch (StoryletError e) { readError = e.Message; }

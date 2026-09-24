@@ -19,7 +19,7 @@
 
 #include "Storylets/Bundle.h"
 #include "Storylets/Engine.h"
-#include "Storylets/Expr/ScopeRegistry.h"
+#include "Storylets/Kernel.h"
 #include "Storylets/JsonParse.h"
 #include "Storylets/JsonValue.h"
 #include "Storylets/Save.h"
@@ -558,6 +558,172 @@ namespace oneregistry
     {
         Result result;
         for (const auto& test : Tests())
+        {
+            ++result.total;
+            std::vector<std::string> failures;
+            Check check{failures, test.first};
+            try
+            {
+                test.second(check);
+            }
+            catch (const std::exception& e)
+            {
+                failures.push_back(test.first + ": threw " + e.what());
+            }
+            if (failures.empty()) ++result.passed;
+            for (auto& f : failures) result.failures.push_back(std::move(f));
+        }
+        return result;
+    }
+    // ----- kernel errors --------------------------------------------------------
+    //
+    // The kernel (wildwinter::expr, shared with Patterplay since 2026-09-24)
+    // throws its own ExprError and RegistryError, never the engine's. Every place
+    // the engine calls it for something that can refuse catches them and rethrows
+    // the engine's own type with the kernel's message, as it threw before the
+    // kernel was shared: an ExprError as EvalError, a RegistryError as
+    // StoryletError. So a host's catch keeps working and no kernel exception
+    // crosses the plugin's API. One case per rethrow site in the core, each of
+    // which fails (the kernel's own type arrives instead) when that site's
+    // kernelCall is removed.
+
+    /** The exact type a refusal arrived as: EvalError is tested before its base,
+     *  StoryletError, and the kernel's two are named for what they are. */
+    inline std::string ThrownType(const std::function<void()>& fn, std::string& message)
+    {
+        try { fn(); }
+        catch (const EvalError& e) { message = e.what(); return "EvalError"; }
+        catch (const StoryletError& e) { message = e.what(); return "StoryletError"; }
+        catch (const ExprError& e) { message = e.what(); return "the kernel's ExprError"; }
+        catch (const RegistryError& e) { message = e.what(); return "the kernel's RegistryError"; }
+        catch (const std::exception& e) { message = e.what(); return "some other std::exception"; }
+        return "";
+    }
+
+    /** fn must throw exactly `type` (the engine's own), carrying `contains`. */
+    inline void ThrowsExactly(Check& c, const std::string& what, const std::function<void()>& fn,
+                              const std::string& type, const std::string& contains)
+    {
+        std::string message;
+        const std::string got = ThrownType(fn, message);
+        if (got.empty()) c.failures.push_back(c.test + ": " + what + " did not throw");
+        else if (got != type) c.failures.push_back(c.test + ": " + what + " threw " + got + " (\"" + message + "\"), expected " + type);
+        else if (message.find(contains) == std::string::npos)
+            c.failures.push_back(c.test + ": " + what + " threw \"" + message + "\", expected \"" + contains + "\"");
+    }
+
+    /** BundleJson with one fragment replaced; a fixture that did not change is a failure. */
+    inline std::string Patched(Check& c, const std::string& from, const std::string& to)
+    {
+        std::string json = BundleJson();
+        const size_t at = json.find(from);
+        if (at == std::string::npos) { c.failures.push_back(c.test + ": the fixture has no " + from); return json; }
+        return json.replace(at, from.size(), to);
+    }
+
+    /** A scope another engine lends with no way to write it. */
+    struct NoSetScope : IScopeResolver
+    {
+        std::optional<StoryletValue> get(const std::string&) const override { return StoryletValue::Num(0); }
+        bool canSet() const override { return false; }
+        void set(const std::string&, const StoryletValue&) override {}
+    };
+
+    inline std::vector<std::pair<std::string, std::function<void(Check&)>>> KernelErrorTests()
+    {
+        std::vector<std::pair<std::string, std::function<void(Check&)>>> tests;
+
+        tests.emplace_back("a story write the game's @world refuses is a StoryletError (Engine::worldSet)", [](Check& c)
+        {
+            auto registry = std::make_shared<ScopeRegistry>();
+            ScopeDeclaration alarm;
+            alarm.name = "alarm"; alarm.type = PropertyTypes::Number; alarm.defaultValue = StoryletValue::Num(0); alarm.writable = false;
+            OwnedScopeOptions options; options.owner = std::string("Game");
+            registry->defineOwned("world", std::vector<ScopeDeclaration>{alarm}, options);
+            EngineOptions opts; opts.registry = registry; opts.seed = 1;
+            Engine engine(MakeBundle(), opts);
+            ThrowsExactly(c, "the outcome's @world write", [&] { Heist(*engine.openFlow("f")); }, "StoryletError", "'@world.alarm' is read-only");
+        });
+
+        tests.emplace_back("a story write to a read-only @story property is a StoryletError (Flow::landIn)", [](Check& c)
+        {
+            // `writable: false` on @story.gold, read from the BUNDLE, as the JS reference and C#
+            // read it. PropertyDecl once re-declared `writable`, hiding the kernel's
+            // ScopeDeclaration::writable: the reader filled the copy, the bag read the other, and
+            // a read-only declaration refused nothing. The game's own write still lands: the flag
+            // is the story's promise, not a lock on the host.
+            const std::string json = Patched(c, R"({"name":"gold","type":"number","default":0})",
+                R"({"name":"gold","type":"number","default":0,"writable":false})");
+            EngineOptions opts; opts.seed = 1;
+            Engine engine(MakeBundle(json), opts);
+            ThrowsExactly(c, "the outcome's @story write", [&] { Heist(*engine.openFlow("f")); }, "StoryletError", "'gold' is read-only");
+            try { engine.setProperty("story.gold", StoryletValue::Num(7)); }
+            catch (const std::exception& ex) { c.failures.push_back(c.test + ": the host's write was refused: " + ex.what()); }
+            c.eq("the host's write landed", Show(engine.getProperty("story.gold")), "7");
+        });
+
+        tests.emplace_back("a malformed expression in a bundle is an EvalError (DeserialiseAst)", [](Check& c)
+        {
+            const std::string json = Patched(c, R"(["n",1])", R"(["zz",1])");
+            ThrowsExactly(c, "loading the bundle", [&] { MakeBundle(json); }, "EvalError", "unknown ast tag: zz");
+        });
+
+        tests.emplace_back("a flow's bag clashing with a key the game holds is a StoryletError (Flow::registerBags)", [](Check& c)
+        {
+            Game g = MakeGame(MakeBundle());
+            OwnedScopeOptions options; options.owner = std::string("Game");
+            g.registry->defineOwned("storylets/flow/f/story", {}, options);
+            ThrowsExactly(c, "opening the flow", [&] { g.engine->openFlow("f"); }, "StoryletError",
+                "scope '@storylets/flow/f/story' is already registered by Game");
+        });
+
+        tests.emplace_back("a token clash as the engine registers is a StoryletError (Engine::registerShared)", [](Check& c)
+        {
+            auto registry = std::make_shared<ScopeRegistry>();
+            OwnedScopeOptions options; options.owner = std::string("Game");
+            registry->defineOwned("story", {}, options);
+            EngineOptions opts; opts.registry = registry;
+            ThrowsExactly(c, "building the engine", [&] { Engine engine(MakeBundle(), opts); }, "StoryletError",
+                "scope '@story' is already registered by Game (wanted by Storylet Engine)");
+        });
+
+        tests.emplace_back("an expression the kernel refuses is an EvalError (Flow::eval)", [](Check& c)
+        {
+            const std::string json = Patched(c, R"(["bin","+",["sv","story","gold"],["n",1]])", R"(["bin","/",["n",1],["n",0]])");
+            EngineOptions opts; opts.seed = 1;
+            Engine engine(MakeBundle(json), opts);
+            ThrowsExactly(c, "the outcome's @story change", [&] { Heist(*engine.openFlow("f")); }, "EvalError", "division by zero");
+        });
+
+        tests.emplace_back("the game's write to another engine's scope with no setter is a StoryletError (Engine::setProperty)", [](Check& c)
+        {
+            auto registry = std::make_shared<ScopeRegistry>();
+            ForeignScopeOptions options; options.owner = std::string("Patter");
+            registry->defineForeign("patter", std::make_shared<NoSetScope>(), nullptr, options);
+            EngineOptions opts; opts.registry = registry;
+            Engine engine(MakeBundle(), opts);
+            ThrowsExactly(c, "the engine's setProperty", [&] { engine.setProperty("patter.gold", StoryletValue::Num(5)); },
+                "StoryletError", "'@patter.gold' is read-only");
+        });
+
+        tests.emplace_back("the game's write to another engine's scope with no setter is a StoryletError (Flow::setProperty)", [](Check& c)
+        {
+            auto registry = std::make_shared<ScopeRegistry>();
+            ForeignScopeOptions options; options.owner = std::string("Patter");
+            registry->defineForeign("patter", std::make_shared<NoSetScope>(), nullptr, options);
+            EngineOptions opts; opts.registry = registry;
+            Engine engine(MakeBundle(), opts);
+            ThrowsExactly(c, "a flow's setProperty", [&] { engine.openFlow("f")->setProperty("patter.gold", StoryletValue::Num(5)); },
+                "StoryletError", "'@patter.gold' is read-only");
+        });
+
+        return tests;
+    }
+
+    inline Result RunKernelErrors()
+    {
+        Result result;
+        for (const auto& test : KernelErrorTests())
         {
             ++result.total;
             std::vector<std::string> failures;

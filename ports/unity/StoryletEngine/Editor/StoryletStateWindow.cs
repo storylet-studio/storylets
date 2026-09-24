@@ -22,6 +22,7 @@ using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine.Editor
 {
@@ -262,21 +263,21 @@ namespace StoryletStudio.StoryletEngine.Editor
         /// no-label overload: that overload reaches Style.DrawPrefixLabel with a
         /// null GUIContent and throws ("may not be called with GUIContent that is
         /// null"). These rows draw their own label, so none is the right content.</summary>
-        private StoryletValue DrawValueField(PropertyRow row)
+        private ExprValue DrawValueField(PropertyRow row)
         {
             switch (row.Type)
             {
                 case PropertyTypes.Boolean:
-                    return StoryletValue.Bool(EditorGUILayout.Toggle(row.Value != null && row.Value.IsBool && row.Value.AsBool));
+                    return ExprValue.Bool(EditorGUILayout.Toggle(row.Value != null && row.Value.IsBool && row.Value.AsBool));
                 case PropertyTypes.Number:
                 {
                     double current = row.Value != null && row.Value.IsNumber ? row.Value.AsNumber : 0;
-                    return StoryletValue.Num(EditorGUILayout.DelayedDoubleField(GUIContent.none, current));
+                    return ExprValue.Num(EditorGUILayout.DelayedDoubleField(GUIContent.none, current));
                 }
                 case PropertyTypes.String:
                 {
                     string current = row.Value != null && row.Value.IsString ? row.Value.AsString : "";
-                    return StoryletValue.Str(EditorGUILayout.DelayedTextField(GUIContent.none, current));
+                    return ExprValue.Str(EditorGUILayout.DelayedTextField(GUIContent.none, current));
                 }
                 case PropertyTypes.Enum:
                 case PropertyTypes.Quality:
@@ -296,7 +297,7 @@ namespace StoryletStudio.StoryletEngine.Editor
                         ? Mathf.Max(0, opts.IndexOf(row.Value.AsString))
                         : 0;
                     int next = EditorGUILayout.Popup(cur, opts.ToArray());
-                    return StoryletValue.Str(opts[Mathf.Clamp(next, 0, opts.Count - 1)]);
+                    return ExprValue.Str(opts[Mathf.Clamp(next, 0, opts.Count - 1)]);
                 }
                 case PropertyTypes.Flags:
                 {
@@ -306,7 +307,7 @@ namespace StoryletStudio.StoryletEngine.Editor
                     string next = EditorGUILayout.DelayedTextField(GUIContent.none, current);
                     if (next == current) return null;
                     var list = next.Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
-                    return StoryletValue.Flags(list);
+                    return ExprValue.Flags(list);
                 }
                 default:
                     EditorGUILayout.LabelField(row.Value?.ToString() ?? "");
@@ -328,7 +329,7 @@ namespace StoryletStudio.StoryletEngine.Editor
             return "diagnostic";
         }
 
-        private static string ShowValue(StoryletValue v) => v == null ? "<unset>" : v.ToJsonString();
+        private static string ShowValue(ExprValue v) => v == null ? "<unset>" : v.ToJsonString();
 
         private static string DealtIds(List<TraceCard> cards)
         {
@@ -360,7 +361,7 @@ namespace StoryletStudio.StoryletEngine.Editor
 
         internal static string FormatLogEntry(LogEntry entry, string flowPrefix = "")
         {
-            var stamp = (entry.Turn != null ? $"[{StoryletValue.JsNumber(entry.Turn.Value)}] " : "[-] ") + flowPrefix;
+            var stamp = (entry.Turn != null ? $"[{ExprValue.JsNumber(entry.Turn.Value)}] " : "[-] ") + flowPrefix;
             switch (entry.Event)
             {
                 case DealEvent e:
@@ -378,7 +379,7 @@ namespace StoryletStudio.StoryletEngine.Editor
                 case WriteEvent e:
                     return $"{stamp}write {e.Path}: {ShowValue(e.Prev)} -> {ShowValue(e.Value)}";
                 case TurnsEvent e:
-                    return $"{stamp}turns {e.Box} -> {StoryletValue.JsNumber(e.Turn)}";
+                    return $"{stamp}turns {e.Box} -> {ExprValue.JsNumber(e.Turn)}";
                 case DiagnosticEvent e:
                     return $"{stamp}diagnostic {e.Where}: {e.Message}";
                 default:
@@ -488,7 +489,7 @@ namespace StoryletStudio.StoryletEngine.Editor
             foreach (var box in session.ListBoxes())
             {
                 var label = string.IsNullOrEmpty(box.Title) ? box.GameId : box.Title;
-                EditorGUILayout.LabelField("  " + label, StoryletValue.JsNumber(box.Turn));
+                EditorGUILayout.LabelField("  " + label, ExprValue.JsNumber(box.Turn));
             }
 
             EditorGUILayout.LabelField("Board", EditorStyles.miniBoldLabel);

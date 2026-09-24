@@ -15,10 +15,16 @@
 // its own code reads `v.n` and `v.kind` thirty-five times and the Storylet
 // Engine's reads the accessors three.
 //
-// Lands in the plugin's own namespace, so two installed plugins never collide.
-// The family supplies its own EvalError before including this.
+// ExprValue, one type in every product since 2026-09-24 (it was stamped as
+// PatterValue and StoryletValue until then, which each product keeps as an
+// alias), so one registry can hold every engine's values. Part of the kernel:
+// see Errors.h for how the kernel stays one type.
 // ---------------------------------------------------------------------------
-#pragma once
+#include "Errors.h"   // the kernel id tripwire, WILDWINTER_EXPR_VISIBLE, ExprError, RegistryError
+// Compiled once per translation unit, and never beside a different kernel: Errors.h stops
+// that build with an #error, and this copy then stays out of the way of the first.
+#if !defined(WILDWINTER_EXPR_k11805ede_VALUE_H) && WILDWINTER_EXPR_KERNEL == 0x11805ede
+#define WILDWINTER_EXPR_k11805ede_VALUE_H
 
 #include <algorithm>
 #include <cmath>
@@ -27,28 +33,28 @@
 #include <string>
 #include <vector>
 
-namespace storylets
+namespace wildwinter { namespace expr { inline namespace k11805ede
 {
-    enum class StoryletKind { Bool, Number, Str, Flags };
+    enum class ExprKind { Bool, Number, Str, Flags };
 
-    struct StoryletValue
+    struct ExprValue
     {
-        StoryletKind kind = StoryletKind::Bool;
+        ExprKind kind = ExprKind::Bool;
         bool b = false;
         double n = 0;
         std::string s;
         std::vector<std::string> f;
 
-        static StoryletValue Bool(bool v) { StoryletValue x; x.kind = StoryletKind::Bool; x.b = v; return x; }
-        static StoryletValue Num(double v) { StoryletValue x; x.kind = StoryletKind::Number; x.n = v; return x; }
-        static StoryletValue Str(std::string v) { StoryletValue x; x.kind = StoryletKind::Str; x.s = std::move(v); return x; }
+        static ExprValue Bool(bool v) { ExprValue x; x.kind = ExprKind::Bool; x.b = v; return x; }
+        static ExprValue Num(double v) { ExprValue x; x.kind = ExprKind::Number; x.n = v; return x; }
+        static ExprValue Str(std::string v) { ExprValue x; x.kind = ExprKind::Str; x.s = std::move(v); return x; }
         /** Flags list (copied in; a value is a value). */
-        static StoryletValue Flags(std::vector<std::string> v) { StoryletValue x; x.kind = StoryletKind::Flags; x.f = std::move(v); return x; }
+        static ExprValue Flags(std::vector<std::string> v) { ExprValue x; x.kind = ExprKind::Flags; x.f = std::move(v); return x; }
 
-        bool isBool() const { return kind == StoryletKind::Bool; }
-        bool isNumber() const { return kind == StoryletKind::Number; }
-        bool isString() const { return kind == StoryletKind::Str; }
-        bool isFlags() const { return kind == StoryletKind::Flags; }
+        bool isBool() const { return kind == ExprKind::Bool; }
+        bool isNumber() const { return kind == ExprKind::Number; }
+        bool isString() const { return kind == ExprKind::Str; }
+        bool isFlags() const { return kind == ExprKind::Flags; }
 
         bool asBool() const { return b; }
         double asNumber() const { return n; }
@@ -62,11 +68,11 @@ namespace storylets
          *  value IS a set, and its stored order is an artefact of the order
          *  somebody happened to add things in. Compared as MULTISETS (sorted
          *  copies), so a duplicate still counts. */
-        bool valueEquals(const StoryletValue& o) const
+        bool valueEquals(const ExprValue& o) const
         {
-            if (kind == StoryletKind::Flags || o.kind == StoryletKind::Flags)
+            if (kind == ExprKind::Flags || o.kind == ExprKind::Flags)
             {
-                if (kind != StoryletKind::Flags || o.kind != StoryletKind::Flags) return false;
+                if (kind != ExprKind::Flags || o.kind != ExprKind::Flags) return false;
                 if (f.size() != o.f.size()) return false;
                 std::vector<std::string> x = f, y = o.f;
                 std::sort(x.begin(), x.end());
@@ -76,9 +82,9 @@ namespace storylets
             if (kind != o.kind) return false;
             switch (kind)
             {
-                case StoryletKind::Bool: return b == o.b;
-                case StoryletKind::Number: return n == o.n;
-                case StoryletKind::Str: return s == o.s;
+                case ExprKind::Bool: return b == o.b;
+                case ExprKind::Number: return n == o.n;
+                case ExprKind::Str: return s == o.s;
                 default: return false;
             }
         }
@@ -93,10 +99,10 @@ namespace storylets
         {
             switch (kind)
             {
-                case StoryletKind::Bool: return b;
-                case StoryletKind::Number: return n != 0;
-                case StoryletKind::Str: return !s.empty();
-                case StoryletKind::Flags: return !f.empty();
+                case ExprKind::Bool: return b;
+                case ExprKind::Number: return n != 0;
+                case ExprKind::Str: return !s.empty();
+                case ExprKind::Flags: return !f.empty();
                 default: return false;
             }
         }
@@ -107,10 +113,10 @@ namespace storylets
         {
             switch (kind)
             {
-                case StoryletKind::Bool: return b ? "true" : "false";
-                case StoryletKind::Number: return JsNumber(n);
-                case StoryletKind::Str: return JsonQuote(s);
-                case StoryletKind::Flags:
+                case ExprKind::Bool: return b ? "true" : "false";
+                case ExprKind::Number: return JsNumber(n);
+                case ExprKind::Str: return JsonQuote(s);
+                case ExprKind::Flags:
                 {
                     std::string out = "[";
                     for (size_t i = 0; i < f.size(); ++i) { if (i) out += ","; out += JsonQuote(f[i]); }
@@ -126,10 +132,10 @@ namespace storylets
         {
             switch (kind)
             {
-                case StoryletKind::Bool: return b ? "true" : "false";
-                case StoryletKind::Number: return JsNumber(n);
-                case StoryletKind::Str: return s;
-                case StoryletKind::Flags:
+                case ExprKind::Bool: return b ? "true" : "false";
+                case ExprKind::Number: return JsNumber(n);
+                case ExprKind::Str: return s;
+                case ExprKind::Flags:
                 {
                     std::string out;
                     for (size_t i = 0; i < f.size(); ++i) { if (i) out += ","; out += f[i]; }
@@ -200,4 +206,6 @@ namespace storylets
             return out + "\"";
         }
     };
-}
+}}} // namespace wildwinter::expr
+
+#endif

@@ -32,6 +32,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine
 {
@@ -51,7 +52,7 @@ namespace StoryletStudio.StoryletEngine
         /// name routes on write (schema 3.6).</summary>
         private sealed class HandEnv
         {
-            public OrderedMap<string, StoryletValue> Bag;
+            public OrderedMap<string, ExprValue> Bag;
             public Dictionary<string, HandSource> Sources;
             /// <summary>tag group id -> bound tag id (home included, its "tag" a hand id).</summary>
             public OrderedMap<string, string> BoundTags;
@@ -81,7 +82,7 @@ namespace StoryletStudio.StoryletEngine
         {
             public PropertyBag Own;
             public PropertyBag Shared;
-            public StoryletValue Get(string name)
+            public ExprValue Get(string name)
             {
                 return Own?.Get(name) ?? Shared?.Get(name);
             }
@@ -97,7 +98,7 @@ namespace StoryletStudio.StoryletEngine
         private sealed class WriteResult
         {
             public string Path;
-            public StoryletValue Prev;
+            public ExprValue Prev;
         }
 
         // Stores are shared-kernel bags: identity normalisation because storylets
@@ -111,7 +112,7 @@ namespace StoryletStudio.StoryletEngine
         /// on the SHARED value type: the two families disagreed about it until
         /// 2026-09-01, and they share a property registry, so the same value read
         /// from the same registry must answer the same question.</summary>
-        private static bool ConditionPasses(StoryletValue v) => v.Truthy;
+        private static bool ConditionPasses(ExprValue v) => v.Truthy;
 
         internal static string VerdictWire(TraceVerdict v)
         {
@@ -186,7 +187,8 @@ namespace StoryletStudio.StoryletEngine
             void Put(string key, PropertyBag bag)
             {
                 if (bag.Declarations().Count == 0) return; // holds nothing: not registered
-                reg.MountOwned(key, bag, Engine.OwnerLabel);
+                try { reg.MountOwned(key, bag, Engine.OwnerLabel); }
+                catch (Exception e) when (KernelErrors.Is(e)) { throw KernelErrors.As(e); }
                 _registered.Add(key);
             }
             Put(Engine.FlowKey(id, "story"), _stores.Story);
@@ -410,7 +412,7 @@ namespace StoryletStudio.StoryletEngine
             };
         }
 
-        private static readonly OrderedMap<string, StoryletValue> EmptyBag = new OrderedMap<string, StoryletValue>();
+        private static readonly OrderedMap<string, ExprValue> EmptyBag = new OrderedMap<string, ExprValue>();
 
         /// <summary>The evaluation environment (schema 3.1/6.2): @box/@deck resolve
         /// to the card under evaluation; in hand-condition contexts @deck is an
@@ -480,9 +482,10 @@ namespace StoryletStudio.StoryletEngine
             return ctx;
         }
 
-        private StoryletValue Eval(Expression expr, EvalContext ctx)
+        private ExprValue Eval(Expression expr, EvalContext ctx)
         {
-            return Expr.Evaluate(Node(expr), ctx, StoryletsDialect.Instance);
+            try { return Expr.Evaluate(Node(expr), ctx, StoryletsDialect.Instance); }
+            catch (Exception e) when (KernelErrors.Is(e)) { throw KernelErrors.As(e); }
         }
 
         private bool Passes(Expression expr, EvalContext ctx, string where = null)
@@ -645,7 +648,7 @@ namespace StoryletStudio.StoryletEngine
                 Emit(new DiagnosticEvent { Where = where, Message = $"\"{reference}\" fills a tag group that is not in this box" });
                 return;
             }
-            StoryletValue value = null;
+            ExprValue value = null;
             if (scope == "hand")
             {
                 // The merged view: the flow's own bag first, the shared bag
@@ -664,7 +667,7 @@ namespace StoryletStudio.StoryletEngine
                 Emit(new DiagnosticEvent { Where = where, Message = $"\"{reference}\" names a property that is not declared" });
                 return;
             }
-            var wanted = value.Kind == StoryletKind.Str ? value.AsString : value.ToString();
+            var wanted = value.Kind == ExprKind.Str ? value.AsString : value.ToString();
             var tag = found.Group.Tags.Find(t => Model.EffectiveGameId(t) == wanted);
             if (tag == null)
             {
@@ -691,14 +694,14 @@ namespace StoryletStudio.StoryletEngine
                     Emit(new DiagnosticEvent { Where = $"tag group {Model.EffectiveGameId(group)}", Message = $"boundBy \"{group.BoundBy}\" is not a @world or @story property reference" });
                     continue;
                 }
-                StoryletValue value;
+                ExprValue value;
                 try { value = GetProperty($"{match.Groups[1].Value}.{match.Groups[2].Value}"); }
                 catch (StoryletError)
                 {
                     Emit(new DiagnosticEvent { Where = $"tag group {Model.EffectiveGameId(group)}", Message = $"boundBy \"{group.BoundBy}\" names a property that is not declared" });
                     continue;
                 }
-                var wanted = value.Kind == StoryletKind.Str ? value.AsString : value.ToString();
+                var wanted = value.Kind == ExprKind.Str ? value.AsString : value.ToString();
                 var tag = group.Tags.Find(t => Model.EffectiveGameId(t) == wanted);
                 if (tag == null)
                 {
@@ -714,7 +717,7 @@ namespace StoryletStudio.StoryletEngine
 
         private HandEnv BuildHandEnv(AskDescriptor ask)
         {
-            var bag = new OrderedMap<string, StoryletValue>();
+            var bag = new OrderedMap<string, ExprValue>();
             var sources = new Dictionary<string, HandSource>();
 
             // 1. Tag properties of every bound tag (home binds a hand, not a
@@ -749,7 +752,7 @@ namespace StoryletStudio.StoryletEngine
             // 3. Chosen tags / criteria, by group name (the tag's gameId as value).
             foreach (var pair in ask.AskNames)
             {
-                bag.Set(pair.Key, StoryletValue.Str(pair.Value));
+                bag.Set(pair.Key, ExprValue.Str(pair.Value));
                 sources[pair.Key] = new HandSource { Kind = "criteria" };
             }
             return new HandEnv { Bag = bag, Sources = sources, BoundTags = ask.BoundTags };
@@ -1342,11 +1345,11 @@ namespace StoryletStudio.StoryletEngine
 
             // Every right-hand side evaluates against PRE-play state, then all
             // writes land (schema 3.7).
-            var writes = new List<KeyValuePair<string, StoryletValue>>();
+            var writes = new List<KeyValuePair<string, ExprValue>>();
             // A bare play (no outcome) has nothing to write.
             foreach (var change in outcome?.Changes ?? new OrderedMap<string, Expression>())
             {
-                writes.Add(new KeyValuePair<string, StoryletValue>(change.Key, Eval(change.Value, ctx)));
+                writes.Add(new KeyValuePair<string, ExprValue>(change.Key, Eval(change.Value, ctx)));
             }
             foreach (var write in writes)
             {
@@ -1422,7 +1425,7 @@ namespace StoryletStudio.StoryletEngine
         /// is shared - the union/partition invariant made executable. Returns
         /// the resolved store path (for the trace) and the value it replaced
         /// (for the log's "0 -> 1" reading).</summary>
-        private WriteResult LandIn(string kind, string ownerId, string name, StoryletValue value, string path)
+        private WriteResult LandIn(string kind, string ownerId, string name, ExprValue value, string path)
         {
             PropertyBag own = kind == "story" ? _stores.Story : KindOf(_stores, kind).GetOrDefault(ownerId);
             PropertyBag shared = kind == "story" ? _engine._shared.Story : KindOf(_engine._shared, kind).GetOrDefault(ownerId);
@@ -1430,8 +1433,11 @@ namespace StoryletStudio.StoryletEngine
                 : shared != null && shared.Get(name) != null ? shared
                 : null;
             if (bag == null) throw new StoryletError($"no property at \"{path}\"");
-            // An engine write: the bag's subscribers fire (the firing rule).
-            var change = bag.Set(name, value);
+            // An engine write: the bag's subscribers fire (the firing rule). A story
+            // write to a Writable == false declaration is refused, as a StoryletError.
+            BagChange change;
+            try { change = bag.Set(name, value); }
+            catch (Exception e) when (KernelErrors.Is(e)) { throw KernelErrors.As(e); }
             return new WriteResult { Path = path, Prev = change.Prev };
         }
 
@@ -1446,7 +1452,7 @@ namespace StoryletStudio.StoryletEngine
             }
         }
 
-        private WriteResult ApplyWrite(string target, StoryletValue value, CardEntry entry, HandEnv handEnv)
+        private WriteResult ApplyWrite(string target, ExprValue value, CardEntry entry, HandEnv handEnv)
         {
             var match = ChangeTarget.Match(target);
             if (!match.Success) throw new StoryletError($"bad change target \"{target}\"");
@@ -1594,11 +1600,11 @@ namespace StoryletStudio.StoryletEngine
         /// everywhere else (4.4). Its internal id is accepted for this release
         /// and earns a DiagnosticEvent naming the address to move to; the next
         /// lockstep release refuses it.</summary>
-        public StoryletValue GetProperty(string path)
+        public ExprValue GetProperty(string path)
         {
             AssertOpen();
             var parts = path.Split('.');
-            StoryletValue value = null;
+            ExprValue value = null;
             if (parts.Length == 2 && parts[0] == "world")
             {
                 value = _engine.WorldGet(parts[1]);
@@ -1628,7 +1634,7 @@ namespace StoryletStudio.StoryletEngine
             return value;
         }
 
-        public void SetProperty(string path, StoryletValue value)
+        public void SetProperty(string path, ExprValue value)
         {
             AssertOpen();
             var parts = path.Split('.');
@@ -1640,7 +1646,8 @@ namespace StoryletStudio.StoryletEngine
             }
             if (_engine.IsOtherScope(parts))
             {
-                _engine._registry.Set(parts[0], parts[1], value, host: true);
+                try { _engine._registry.Set(parts[0], parts[1], value, host: true); }
+                catch (Exception e) when (KernelErrors.Is(e)) { throw KernelErrors.As(e); }
                 return;
             }
             PropertyBag own, shared;
@@ -1677,7 +1684,7 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>This flow's blob: inside the engine's envelope without its
         /// properties (the registry has them), or parked whole by SaveFlow.
-        /// StoryletValue is immutable, so a container-deep copy is the TS
+        /// ExprValue is immutable, so a container-deep copy is the TS
         /// structuredClone.</summary>
         internal FlowSave Snapshot(bool withProps)
         {
@@ -1743,7 +1750,7 @@ namespace StoryletStudio.StoryletEngine
 
         private static void LoadKind(
             OrderedMap<string, PropertyBag> stores,
-            OrderedMap<string, OrderedMap<string, StoryletValue>> saved)
+            OrderedMap<string, OrderedMap<string, ExprValue>> saved)
         {
             foreach (var pair in saved)
             {

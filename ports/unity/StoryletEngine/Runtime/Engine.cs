@@ -55,6 +55,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine
 {
@@ -207,7 +208,7 @@ namespace StoryletStudio.StoryletEngine
         public string GameId;
         public string Title;
         public string Purpose;
-        public OrderedMap<string, StoryletValue> Fields;
+        public OrderedMap<string, ExprValue> Fields;
     }
 
     public sealed class OutcomeView
@@ -219,7 +220,7 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>The outcome's fields, exactly as the bundle carries them:
         /// game data declared by the box's OutcomeFields, never read by the
         /// engine.</summary>
-        public OrderedMap<string, StoryletValue> Fields;
+        public OrderedMap<string, ExprValue> Fields;
         /// <summary>Evaluated against CURRENT state at the moment of the ask.</summary>
         public bool Available;
     }
@@ -317,8 +318,8 @@ namespace StoryletStudio.StoryletEngine
     {
         public string Target;
         public string Path;
-        public StoryletValue Value;
-        public StoryletValue Prev;
+        public ExprValue Value;
+        public ExprValue Prev;
     }
 
     /// <summary>An explicit clock advance via AdvanceTurns (schema 3.4); Turn is
@@ -715,7 +716,7 @@ namespace StoryletStudio.StoryletEngine
         private sealed class WorldSource : IScopeSource
         {
             public Engine Owner;
-            public StoryletValue Get(string name) => Owner.WorldGet(name);
+            public ExprValue Get(string name) => Owner.WorldGet(name);
         }
 
         public Engine(Bundle bundle, EngineOptions opts = null)
@@ -867,10 +868,11 @@ namespace StoryletStudio.StoryletEngine
                 // Given the game's registry and no resolver, @world is the game's
                 // to register: this engine registers nothing for it.
             }
-            catch (Exception)
+            catch (Exception e)
             {
                 // A clash leaves the game's registry as it was.
                 foreach (var key in registered) reg.Remove(key, keep: true);
+                if (KernelErrors.Is(e)) throw KernelErrors.As(e);
                 throw;
             }
         }
@@ -937,7 +939,7 @@ namespace StoryletStudio.StoryletEngine
         /// normalisation), so a @world the game registered folded to lower case
         /// still answers the names as authored. Null when nothing answers,
         /// including a game's registry with no @world registered.</summary>
-        internal StoryletValue WorldGet(string name)
+        internal ExprValue WorldGet(string name)
         {
             return _registry.Get("world", name);
         }
@@ -962,9 +964,10 @@ namespace StoryletStudio.StoryletEngine
         /// resolver is opaque - it takes a name and a value and keeps whatever rule
         /// the game has - so a write to it always passes host, and the flag only
         /// ever matters to a stored @world (self-backed, or the game's own).</summary>
-        internal void WorldSet(string name, StoryletValue value, bool host = false)
+        internal void WorldSet(string name, ExprValue value, bool host = false)
         {
-            _registry.Set("world", name, value, host: _hostWorld != null || host);
+            try { _registry.Set("world", name, value, host: _hostWorld != null || host); }
+            catch (Exception e) when (KernelErrors.Is(e)) { throw KernelErrors.As(e); }
         }
 
         // --- flow management (Patter's surface, name for name) ------------------
@@ -1149,7 +1152,7 @@ namespace StoryletStudio.StoryletEngine
         /// shared), "box.village.heat" (when shared) - the owner segment is its
         /// GAMEID (design/engine-server.md 4.4). A ref that resolves PER-FLOW
         /// throws, naming the fix (Patter's teaching rule).</summary>
-        public StoryletValue GetProperty(string path)
+        public ExprValue GetProperty(string path)
         {
             var parts = path.Split('.');
             if (parts.Length == 2 && parts[0] == "world")
@@ -1215,7 +1218,7 @@ namespace StoryletStudio.StoryletEngine
             EmitEngine("", new DiagnosticEvent { Where = "property address", Message = message }, null);
         }
 
-        public void SetProperty(string path, StoryletValue value)
+        public void SetProperty(string path, ExprValue value)
         {
             var parts = path.Split('.');
             if (parts.Length == 2 && parts[0] == "world")
@@ -1226,7 +1229,8 @@ namespace StoryletStudio.StoryletEngine
             }
             if (IsOtherScope(parts))
             {
-                _registry.Set(parts[0], parts[1], value, host: true);
+                try { _registry.Set(parts[0], parts[1], value, host: true); }
+                catch (Exception e) when (KernelErrors.Is(e)) { throw KernelErrors.As(e); }
                 return;
             }
             // Reuse the read-side routing: a per-flow or unknown ref throws the
@@ -1509,7 +1513,7 @@ namespace StoryletStudio.StoryletEngine
             public LoadReport Report;
             /// <summary>The cleaned property values to move into the registry,
             /// when the envelope carries any; null when it does not.</summary>
-            public OrderedMap<string, OrderedMap<string, StoryletValue>> Sections;
+            public OrderedMap<string, OrderedMap<string, ExprValue>> Sections;
             public List<string> Spent = new List<string>();
             public OrderedMap<string, FlowSave> Flows = new OrderedMap<string, FlowSave>();
         }
@@ -1522,8 +1526,8 @@ namespace StoryletStudio.StoryletEngine
         {
             public PropsPartition Shared = new PropsPartition();
             public Dictionary<string, PropsPartition> Flows = new Dictionary<string, PropsPartition>();
-            public OrderedMap<string, OrderedMap<string, StoryletValue>> Rest =
-                new OrderedMap<string, OrderedMap<string, StoryletValue>>();
+            public OrderedMap<string, OrderedMap<string, ExprValue>> Rest =
+                new OrderedMap<string, OrderedMap<string, ExprValue>>();
         }
 
         private static bool IsOwnedKind(string kind)
@@ -1532,7 +1536,7 @@ namespace StoryletStudio.StoryletEngine
         }
 
         private static MovedValues PartitionsFromSections(
-            OrderedMap<string, OrderedMap<string, StoryletValue>> sections, HashSet<string> flowIds)
+            OrderedMap<string, OrderedMap<string, ExprValue>> sections, HashSet<string> flowIds)
         {
             var moved = new MovedValues();
             PropsPartition FlowOf(string escaped)
@@ -1588,7 +1592,7 @@ namespace StoryletStudio.StoryletEngine
         /// and a section for a bag that never registers would wait in the
         /// registry for ever.</summary>
         private static void SectionsOf(PropsPartition p, Func<string, string, string> keyOf,
-                                       OrderedMap<string, OrderedMap<string, StoryletValue>> outSections)
+                                       OrderedMap<string, OrderedMap<string, ExprValue>> outSections)
         {
             if (p.Story.Count > 0) outSections.Set(keyOf("story", null), p.Story);
             foreach (var kind in OwnedScopes)
@@ -1611,7 +1615,7 @@ namespace StoryletStudio.StoryletEngine
         /// type and still no longer a legal value. A declaration with no
         /// vocabulary constrains nothing, so anything of the right type
         /// fits.</summary>
-        private static bool ValueFits(PropertyDecl decl, StoryletValue value)
+        private static bool ValueFits(PropertyDecl decl, ExprValue value)
         {
             if (value == null) return false;
             switch (decl.Type)
@@ -1635,16 +1639,16 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Walk one bag's worth of saved values against one bag's worth
         /// of declarations: report the orphans, the newcomers and the misfits,
         /// and return the values that survive.</summary>
-        private static OrderedMap<string, StoryletValue> WalkScope(
+        private static OrderedMap<string, ExprValue> WalkScope(
             List<PropertyDecl> decls,
-            OrderedMap<string, StoryletValue> saved,
+            OrderedMap<string, ExprValue> saved,
             Func<string, string> path,
             string flow,
             ReportDraft draft)
         {
             var byName = new Dictionary<string, PropertyDecl>();
             if (decls != null) foreach (var d in decls) byName[d.Name] = d;
-            var clean = new OrderedMap<string, StoryletValue>();
+            var clean = new OrderedMap<string, ExprValue>();
             if (saved != null)
             {
                 foreach (var pair in saved)
@@ -1707,7 +1711,7 @@ namespace StoryletStudio.StoryletEngine
             return outP;
         }
 
-        private static OrderedMap<string, OrderedMap<string, StoryletValue>> SavedKind(PropsPartition p, string kind)
+        private static OrderedMap<string, OrderedMap<string, ExprValue>> SavedKind(PropsPartition p, string kind)
         {
             if (p == null) return null;
             switch (kind)
@@ -1752,10 +1756,10 @@ namespace StoryletStudio.StoryletEngine
                 if (_cardsById.ContainsKey(cardId)) plan.Spent.Add(cardId);
                 else draft.DroppedSpent.Add(cardId);
             }
-            OrderedMap<string, OrderedMap<string, StoryletValue>> sections = null;
+            OrderedMap<string, OrderedMap<string, ExprValue>> sections = null;
             if (moved != null)
             {
-                sections = new OrderedMap<string, OrderedMap<string, StoryletValue>>();
+                sections = new OrderedMap<string, OrderedMap<string, ExprValue>>();
                 foreach (var pair in moved.Rest) sections.Set(pair.Key, pair.Value);
                 SectionsOf(shared, (kind, id) => kind == "story" ? "story" : SharedKey(kind, id), sections);
             }

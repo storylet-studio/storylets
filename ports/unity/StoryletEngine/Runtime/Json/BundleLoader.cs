@@ -9,25 +9,26 @@
 
 using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine
 {
     public static class StoryletJson
     {
         /// <summary>A JSON scalar (bool / number / string / string[]) as a runtime value.</summary>
-        public static StoryletValue ToValue(JToken token)
+        public static ExprValue ToValue(JToken token)
         {
             switch (token.Type)
             {
-                case JTokenType.Boolean: return StoryletValue.Bool(token.Value<bool>());
+                case JTokenType.Boolean: return ExprValue.Bool(token.Value<bool>());
                 case JTokenType.Integer:
-                case JTokenType.Float: return StoryletValue.Num(token.Value<double>());
-                case JTokenType.String: return StoryletValue.Str(token.Value<string>());
+                case JTokenType.Float: return ExprValue.Num(token.Value<double>());
+                case JTokenType.String: return ExprValue.Str(token.Value<string>());
                 case JTokenType.Array:
                 {
                     var flags = new List<string>();
                     foreach (var item in (JArray)token) flags.Add(item.Value<string>());
-                    return StoryletValue.Flags(flags);
+                    return ExprValue.Flags(flags);
                 }
                 default: throw new StoryletError($"unsupported scalar value kind: {token.Type}");
             }
@@ -66,7 +67,9 @@ namespace StoryletStudio.StoryletEngine
         /// pure deserialiser walks, then as an ExprNode.</summary>
         public static ExprNode ToAst(JToken token)
         {
-            return Ast.DeserialiseAst((IReadOnlyList<object>)ToTree(token));
+            // The kernel refuses a malformed tree with its own ExprError; a bundle load throws EvalError.
+            try { return Ast.DeserialiseAst((IReadOnlyList<object>)ToTree(token)); }
+            catch (ExprError e) { throw new EvalError(e.Message); }
         }
 
         private static object ToTree(JToken token)
@@ -334,7 +337,7 @@ namespace StoryletStudio.StoryletEngine
             if (o["durable"] != null) card.Durable = o.Value<bool>("durable");
             if (o["fields"] is JObject cardFields)
             {
-                card.Fields = new OrderedMap<string, StoryletValue>();
+                card.Fields = new OrderedMap<string, ExprValue>();
                 foreach (var pair in cardFields) card.Fields.Set(pair.Key, StoryletJson.ToValue(pair.Value));
             }
             if (o["outcomes"] is JArray outcomes)
@@ -360,7 +363,7 @@ namespace StoryletStudio.StoryletEngine
             }
             if (o["fields"] is JObject outcomeFields)
             {
-                outcome.Fields = new OrderedMap<string, StoryletValue>();
+                outcome.Fields = new OrderedMap<string, ExprValue>();
                 foreach (var pair in outcomeFields) outcome.Fields.Set(pair.Key, StoryletJson.ToValue(pair.Value));
             }
             return outcome;

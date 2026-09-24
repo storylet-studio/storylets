@@ -1554,6 +1554,8 @@ int main(int argc, char** argv)
         size_t live = runLiveLink(path, liveLinkDump, liveTotal);
         const oneregistry::Result oneRegistry = oneregistry::Run();
         for (const std::string& f : oneRegistry.failures) fail("one-registry", "engine", f);
+        const oneregistry::Result kernelErrors = oneregistry::RunKernelErrors();
+        for (const std::string& f : kernelErrors.failures) fail("kernel-errors", "engine", f);
 
         std::cout << "corpus version " << version << "\n";
         std::cout << "describeBundle checks: " << d << "/1  maps: " << m << "/1  save round trip: " << sv << "/1\n";
@@ -1563,6 +1565,7 @@ int main(int argc, char** argv)
             << "  scripted: " << s << "/" << scripted.arr.size() << "\n";
         std::cout << "live-link fixture: " << live << "/" << liveTotal << " frames\n";
         std::cout << "one registry per game: " << oneRegistry.passed << "/" << oneRegistry.total << "\n";
+        std::cout << "kernel errors reach the game as the engine's own: " << kernelErrors.passed << "/" << kernelErrors.total << "\n";
 
         // The expr parity corpus sits beside ours, vendored from ../expr.
         // Absent is a FAILURE, not a skip: a parity gate that quietly does
@@ -1595,7 +1598,7 @@ int main(int argc, char** argv)
         // runner reports a missing file as one.
         const std::string registryPath =
             (slash == std::string::npos ? std::string() : path.substr(0, slash + 1)) + "registry-corpus.json";
-        const RegistryCorpusResult reg = RunRegistryCorpus(registryPath);
+        const wildwinter::expr::testing::RegistryCorpusResult reg = wildwinter::expr::testing::RunRegistryCorpus(registryPath);
         for (const std::string& f : reg.failures) fail("registry", "corpus", f);
         std::cout << "registry corpus: " << reg.passed << "/" << reg.total << "\n";
         std::cout << (g_fails == 0 ? "ALL PASS" : std::to_string(g_fails) + " FAILED") << "\n";

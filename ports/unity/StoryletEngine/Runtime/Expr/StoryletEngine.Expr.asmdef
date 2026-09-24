@@ -1,0 +1,22 @@
+{
+  "name": "StoryletEngine.Expr",
+  "rootNamespace": "Wildwinter.Expr",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "!PATTERPLAY_EXPR_OK"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.patterkit.patterplay",
+      "expression": "0.14.0",
+      "define": "PATTERPLAY_EXPR_OK"
+    }
+  ],
+  "noEngineReferences": true
+}

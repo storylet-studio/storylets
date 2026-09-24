@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine
 {
@@ -37,9 +38,9 @@ namespace StoryletStudio.StoryletEngine
         /// survive a rename). The bags carry the address, so reading them is
         /// what keeps this snapshot and the live logger's lines in ONE path
         /// space - which is the invariant the whole diff rests on.</summary>
-        public static OrderedMap<string, StoryletValue> SnapshotState(Engine engine, Flow flow)
+        public static OrderedMap<string, ExprValue> SnapshotState(Engine engine, Flow flow)
         {
-            var snapshot = new OrderedMap<string, StoryletValue>();
+            var snapshot = new OrderedMap<string, ExprValue>();
             // Shared under the flow's own: names are disjoint (shared XOR
             // per-flow by declaration), so one path space holds both.
             var mounts = engine.ListBags();
@@ -58,13 +59,13 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>The storylets path-provider adapter for non-property state
         /// (design 3.4): one flow's turns / cooldowns / board, off its blob in
         /// the envelope (null for a just-closed flow: no paths).</summary>
-        private static OrderedMap<string, StoryletValue> ExtraState(FlowSave saved)
+        private static OrderedMap<string, ExprValue> ExtraState(FlowSave saved)
         {
-            var extra = new OrderedMap<string, StoryletValue>();
+            var extra = new OrderedMap<string, ExprValue>();
             if (saved == null) return extra;
-            foreach (var pair in saved.Turns) extra.Set($"turn:{pair.Key}", StoryletValue.Num(pair.Value));
-            foreach (var pair in saved.Cooldowns) extra.Set($"cooldown:{pair.Key}", StoryletValue.Num(pair.Value));
-            foreach (var pair in saved.Board) extra.Set($"board:{pair.Key}", StoryletValue.Flags(pair.Value));
+            foreach (var pair in saved.Turns) extra.Set($"turn:{pair.Key}", ExprValue.Num(pair.Value));
+            foreach (var pair in saved.Cooldowns) extra.Set($"cooldown:{pair.Key}", ExprValue.Num(pair.Value));
+            foreach (var pair in saved.Board) extra.Set($"board:{pair.Key}", ExprValue.Flags(pair.Value));
             return extra;
         }
 

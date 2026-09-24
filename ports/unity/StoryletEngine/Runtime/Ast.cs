@@ -8,6 +8,7 @@
 // strings here; meaning is supplied by a Dialect (see Expression.cs).
 
 using System.Collections.Generic;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine
 {

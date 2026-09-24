@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using StoryletStudio.StoryletEngine;
 using Patterkit.Patterplay;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.Hamlet
 {
@@ -25,9 +26,9 @@ namespace StoryletStudio.Hamlet
 
         // --- the Storylet Engine's door (IScopeResolver) ---
         // Both packages declare an IScopeSource, so ours is named in full.
-        StoryletValue StoryletStudio.StoryletEngine.IScopeSource.Get(string name) => Values.TryGetValue(name, out var v) ? ToStorylet(v) : null;
+        ExprValue StoryletStudio.StoryletEngine.IScopeSource.Get(string name) => Values.TryGetValue(name, out var v) ? ToStorylet(v) : null;
         public bool CanSet => true;
-        public void Set(string name, StoryletValue value) => Write(name, FromStorylet(value));
+        public void Set(string name, ExprValue value) => Write(name, FromStorylet(value));
 
         // --- Patter's door (IHostScope) ---
         PatterValue IHostScope.Get(string name) => Values.TryGetValue(name, out var v) ? ToPatter(v) : null;
@@ -42,17 +43,17 @@ namespace StoryletStudio.Hamlet
             Values[name] = value; Changed?.Invoke();
         }
 
-        private static StoryletValue ToStorylet(object v) => v switch
+        private static ExprValue ToStorylet(object v) => v switch
         {
-            bool b => StoryletValue.Bool(b), double d => StoryletValue.Num(d), int i => StoryletValue.Num(i),
-            string s => StoryletValue.Str(s), List<string> l => StoryletValue.Flags(l), _ => null,
+            bool b => ExprValue.Bool(b), double d => ExprValue.Num(d), int i => ExprValue.Num(i),
+            string s => ExprValue.Str(s), List<string> l => ExprValue.Flags(l), _ => null,
         };
         private static PatterValue ToPatter(object v) => v switch
         {
             bool b => PatterValue.Bool(b), double d => PatterValue.Num(d), int i => PatterValue.Num(i),
             string s => PatterValue.Str(s), List<string> l => PatterValue.Flags(l), _ => null,
         };
-        private static object FromStorylet(StoryletValue v) => v.IsBool ? v.AsBool : v.IsNumber ? (object)v.AsNumber : v.IsString ? v.AsString : null;
+        private static object FromStorylet(ExprValue v) => v.IsBool ? v.AsBool : v.IsNumber ? (object)v.AsNumber : v.IsString ? v.AsString : null;
         private static object FromPatter(PatterValue v) => v.IsBool ? v.AsBool : v.IsNumber ? (object)v.AsNumber : v.IsString ? v.AsString : null;
     }
 }

@@ -95,8 +95,8 @@ outcome is gated shut or the card isn't in that hand. A card with no outcomes is
 ## Your game's state
 
 ```csharp
-_flow.SetProperty("world.time_of_day", StoryletValue.Str("night"));   // write before you deal
-StoryletValue gold = _flow.GetProperty("world.gold");
+_flow.SetProperty("world.time_of_day", ExprValue.Str("night"));   // write before you deal
+ExprValue gold = _flow.GetProperty("world.gold");
 List<PropertyRow> rows = _flow.ListProperties();
 
 _flow.AdvanceTurns("village", 1);
@@ -104,7 +104,9 @@ double turn = _flow.Turn("village");
 List<BoxView> boxes = _flow.ListBoxes();      // id, gameId, title, turn
 ```
 
-The paths, and when to write them, are on [Your game's state](/play/world-state/).
+The paths, and when to write them, are on [Your game's state](/play/world-state/). `ExprValue`,
+the value type, is in the `Wildwinter.Expr` namespace (`using Wildwinter.Expr;`), with the
+registry and the rest of the shared expression kernel.
 
 `@world` is your game's. Hand the engine a resolver, an `IScopeResolver` with `Get`, `CanSet`,
 and `Set`, and conditions read your live game state directly:
@@ -140,6 +142,16 @@ Every expression reads every scope in the registry, so a card's condition can re
 `@patter.gold`, and `GetProperty("patter.gold")` and `SetProperty("patter.gold", value)` reach
 another engine's values from your code. A token is taken once: building an engine that wants a
 token another already holds throws at once, naming the holder, and leaves the registry as it was.
+
+The registry is one type to every engine because the expression kernel is shared: the
+`Wildwinter.Expr` namespace, in its own assembly. Patterplay carries the same kernel, and with
+both packages installed it compiles once, in Patterplay's `Patterplay.Expr`; on its own, this
+package compiles its copy, `StoryletEngine.Expr`. So beside Patterplay, the Storylet Engine
+needs Patterplay 0.14.0 or newer, and stops the compile with an error saying so if it finds an
+older one. If your scripts have their own assembly definition, reference `StoryletEngine.Expr`
+and `Patterplay.Expr` beside `StoryletEngine.Runtime`: Unity ignores whichever is not installed.
+The engine's own errors are still `StoryletError` and `EvalError`; a call you make straight to
+the registry throws the kernel's `RegistryError`.
 
 ## Save and load
 

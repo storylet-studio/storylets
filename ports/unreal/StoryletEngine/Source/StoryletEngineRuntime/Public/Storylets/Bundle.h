@@ -18,8 +18,7 @@
 
 #include "Storylets/Ast.h"
 #include "Storylets/JsonValue.h"
-#include "Storylets/Expr/OrderedMap.h"
-#include "Storylets/Expr/PropertyBag.h"
+#include "Storylets/Kernel.h"   // the shared kernel (Expr/), its names in `storylets`, and kernelCall
 #include "Storylets/StoryletValue.h"
 
 namespace storylets
@@ -187,9 +186,13 @@ namespace storylets
          *  boundary through GetProperty / SetProperty. Never valid on a @world
          *  declaration (the compiler refuses it). */
         std::optional<bool> durable;
-        /** @world only: false is the story's promise not to write it (Reboot.md 10).
-         *  Absent = writable. Mirrors Patter's HostScopeDecl.writable. */
-        std::optional<bool> writable;
+        // `writable` (false is the story's promise not to write it, Reboot.md 10;
+        // absent = writable) is the KERNEL's field, declared once, on
+        // ScopeDeclaration. Re-declaring it here HID the base one: the loader
+        // filled this copy, PropertyBag::set read the other, and a read-only
+        // @story (or other owned) declaration refused nothing. C# lost the same
+        // shadow on 2026-09-05 (CS0108 said so); clang says nothing under -Wall, so
+        // nothing here would catch it coming back.
         std::string purpose;
     };
 

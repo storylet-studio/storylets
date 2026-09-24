@@ -20,6 +20,10 @@ Two layers, the Patterplay split applied verbatim:
   loader + save envelope, and the play surface (`Engine`: the bundle, the
   shared state, the run log and the flow manager; `Flow`: deal / peek / play /
   outcomes / board / turns / trace / property access).
+  The value type, the PRNG, the map, the state kernel and the evaluator are
+  the shared kernel (`Storylets/Expr/`, namespace `wildwinter::expr`),
+  vendored from expr byte-identical to Patterplay's copy, so both plugins in
+  one game share one registry type.
 - The UE wrapper layer (the rest of `Source/StoryletEngineRuntime` plus
   `Source/StoryletEngineEditor`): everything Unreal-flavoured, over the core
   via `TPimplPtr`. Exceptions from the core are caught at this boundary and
@@ -77,7 +81,11 @@ transliteration in C#; the three stay in lockstep.
   game saves the registry once, beside it (`storylets::saveRegistry(registry)` /
   `loadRegistry(registry, json)` in `Storylets/Save.h` are its text door), and loads it
   before or after the engine. `@world` is then the game's to register, unless a `UStoryletWorld` is
-  bound. See [Unreal](https://storylet.studio/play/unreal/#one-registry-per-game).
+  bound. The registry is the shared kernel's `wildwinter::expr::ScopeRegistry`, the same type
+  Patterplay's `UPatterEngine::CreateWithRegistry` takes, so a game running both hands one registry
+  to each; include `Storylets/Kernel.h` where you make it, with `bEnableExceptions = true` in that
+  module's Build.cs. Both plugins must be built from the same kernel (a mismatch is a compile error
+  naming the fix). See [Unreal](https://storylet.studio/play/unreal/#one-registry-per-game).
 - **Live Link**: `FStoryletLiveLink` connects a running game to Storyletter
   (`ws://127.0.0.1:4472`): `Create(Bundle->GetBuildId(), Project)` then
   `Attach(Engine)` streams every flow's trace and board snapshots, each
@@ -123,7 +131,8 @@ specificity, peek, scripted) exactly as documented in
 the corpus (`live-link/script.json` through the std-only client against a
 recording sink, every frame compared byte for byte with `frames.json`),
 runs the one-registry checks (`TestHost/OneRegistry.h`, the JS runtime's
-`one-registry.test.ts` ported case for case), the expr parity corpus and the
+`one-registry.test.ts` ported case for case, and one case per place the engine
+rethrows a kernel error as its own), the expr parity corpus and the
 registry corpus, prints a per-family summary and exits non-zero on any
 divergence from the reference expectations.
 

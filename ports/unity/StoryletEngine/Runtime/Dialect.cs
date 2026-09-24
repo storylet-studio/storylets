@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using Wildwinter.Expr;
 
 namespace StoryletStudio.StoryletEngine
 {
@@ -102,7 +103,7 @@ namespace StoryletStudio.StoryletEngine
                     }
                     var lo = Math.Min(a.AsNumber, b.AsNumber);
                     var hi = Math.Max(a.AsNumber, b.AsNumber);
-                    return StoryletValue.Num(Math.Floor(nextRandom() * (hi - lo + 1)) + lo);
+                    return ExprValue.Num(Math.Floor(nextRandom() * (hi - lo + 1)) + lo);
                 },
             };
 
@@ -120,10 +121,10 @@ namespace StoryletStudio.StoryletEngine
                         }
                         if (delta.Sign == "+" ? !flags.Contains(delta.Name) : flags.Contains(delta.Name))
                         {
-                            return StoryletValue.False;
+                            return ExprValue.False;
                         }
                     }
-                    return StoryletValue.True;
+                    return ExprValue.True;
                 },
             };
 
@@ -155,7 +156,7 @@ namespace StoryletStudio.StoryletEngine
                     // stored form only, and Patterplay not sorting is a difference that costs
                     // nothing.
                     result.Sort(StringComparer.Ordinal);
-                    return StoryletValue.Flags(result);
+                    return ExprValue.Flags(result);
                 },
             };
 
@@ -167,7 +168,7 @@ namespace StoryletStudio.StoryletEngine
                     var card = StringArg("count_played", args, h, 0);
                     var fn = Host(h).CountPlayed;
                     if (fn == null) throw new EvalError("count_played() called without a play log in context");
-                    return StoryletValue.Num(fn(card));
+                    return ExprValue.Num(fn(card));
                 },
             };
 
@@ -179,7 +180,7 @@ namespace StoryletStudio.StoryletEngine
                     var card = StringArg("turns_since_played", args, h, 0);
                     var fn = Host(h).TurnsSincePlayed;
                     if (fn == null) throw new EvalError("turns_since_played() called without a play log in context");
-                    return StoryletValue.Num(fn(card));
+                    return ExprValue.Num(fn(card));
                 },
             };
 
@@ -192,7 +193,7 @@ namespace StoryletStudio.StoryletEngine
                     var value = StringArg("count_played_in", args, h, 1);
                     var fn = Host(h).CountPlayedIn;
                     if (fn == null) throw new EvalError("count_played_in() called without a play log in context");
-                    return StoryletValue.Num(fn(dimension, value));
+                    return ExprValue.Num(fn(dimension, value));
                 },
             };
 
@@ -205,7 +206,7 @@ namespace StoryletStudio.StoryletEngine
                     var value = StringArg("turns_since_played_in", args, h, 1);
                     var fn = Host(h).TurnsSincePlayedIn;
                     if (fn == null) throw new EvalError("turns_since_played_in() called without a play log in context");
-                    return StoryletValue.Num(fn(dimension, value));
+                    return ExprValue.Num(fn(dimension, value));
                 },
             };
 

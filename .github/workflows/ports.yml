@@ -22,7 +22,9 @@
 # one step. What a GitHub-HOSTED runner lacks is Unity itself, and installing it
 # there is what needs credentials. So there are two ways to close this, and
 # neither is blocked on anything:
-#   - run `./scripts/check-unity-demo.sh` before a release (no secret, no CI);
+#   - run `./scripts/check-unity-demo.sh` before a release (no secret, no CI),
+#     and `./scripts/check-unity-with-patter.sh`, which compiles both packages
+#     in one real Unity project (the kernel deferral the dotnet host cannot see);
 #   - or point a SELF-HOSTED runner at a machine that has Unity, where the same
 #     script runs as a step with nothing else needed.
 # The `unity-demo` job below is the third way, for a hosted runner, and skips
@@ -40,8 +42,22 @@ env:
 jobs:
   godot:
     runs-on: ubuntu-latest
+    # Checked out as storylets/ beside patter/, the way ci.yml's build job does,
+    # for the combined proof at the end; every other step runs in storylets/.
+    defaults:
+      run:
+        working-directory: storylets
     steps:
       - uses: actions/checkout@v5
+        with:
+          path: storylets
+      # The combined Patter + Storylet Engine proof (ports/godot/test/with-patter)
+      # runs Patterplay from the source of a sibling ../patter checkout.
+      - name: Checkout Patter (sibling source, for the combined proof)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/patter
+          path: patter
       - name: Fetch Godot ${{ env.GODOT_VERSION }} (headless)
         run: |
           base="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
@@ -90,6 +106,14 @@ jobs:
       - name: State logger
         run: |
           "$GODOT" --headless --path ports/godot --script res://test/test_state_logger.gd
+      # Both addons in one throwaway project (Patterplay from ../patter's source),
+      # on one registry with one save. REQUIRE_PATTER turns the script's skip for
+      # a missing checkout into a failure: here a skip would be a green that
+      # proved nothing.
+      - name: Patter and the Storylet Engine on one registry
+        env:
+          REQUIRE_PATTER: "1"
+        run: bash ports/godot/test/with-patter/run.sh
 
   # The @wildwinter/expr parity corpus is authored in ../expr and VENDORED here as
   # packages/conformance/expr-corpus.json, so the port test hosts above run with no
@@ -192,8 +216,22 @@ jobs:
 
   unity-runtime:
     runs-on: ubuntu-latest
+    # Checked out as storylets/ beside patter/, the way ci.yml's build job does,
+    # for the combined proof at the end; every other step runs in storylets/.
+    defaults:
+      run:
+        working-directory: storylets
     steps:
       - uses: actions/checkout@v5
+        with:
+          path: storylets
+      # The combined Patter + Storylet Engine proof (ports/unity/TestHost/with-patter)
+      # compiles Patterplay from the source of a sibling ../patter checkout.
+      - name: Checkout Patter (sibling source, for the combined proof)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/patter
+          path: patter
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
@@ -201,15 +239,39 @@ jobs:
       # the corpus, the Live Link fixture (byte for byte) and the live refresh.
       - name: C# runtime against the corpus and the fixtures
         run: dotnet run --project ports/unity/TestHost
+      # Both runtimes compiled together against ONE kernel (Patterplay's), on one
+      # registry with one save. REQUIRE_PATTER turns the host's skip for a missing
+      # checkout into a failure: here a skip would be a green that proved nothing.
+      # The host's exit code is its verdict (WITH PATTER ALL PASS or N FAILED).
+      - name: Patter and the Storylet Engine on one registry
+        env:
+          REQUIRE_PATTER: "1"
+        run: dotnet run --project ports/unity/TestHost/with-patter
 
   unreal-core:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: storylets
     steps:
       - uses: actions/checkout@v5
+        with:
+          path: storylets
+      # The combined proof includes Patter's headers from a sibling ../patter checkout, one
+      # translation unit holding both plugins' copies of the shared kernel.
+      - name: Checkout Patter (sibling source, for the combined proof)
+        uses: actions/checkout@v5
+        with:
+          repository: wildwinter/patter
+          path: patter
       # build.sh compiles the std-only core with clang and runs it against the
       # committed corpus.json. No Unreal involved.
       - name: std C++ core against the corpus
         run: ./ports/unreal/TestHost/build.sh
+      - name: Patter and the Storylet Engine on one registry (C++)
+        env:
+          REQUIRE_PATTER: "1"
+        run: bash ports/unreal/TestHost/with-patter/build.sh --probes
 
   # The demo scripts, which is where the bug that motivated this file lived.
   #
