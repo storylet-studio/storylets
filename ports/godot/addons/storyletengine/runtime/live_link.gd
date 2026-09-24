@@ -20,10 +20,10 @@
 #   add_child(link)                                   # starts polling
 #   link.attach(engine)                               # hello + a board snapshot, then every trace event
 #   link.bundle_pushed.connect(func(build: String, data: String) -> void:
-#       var r := StoryletLiveLink.apply_live_bundle(engine, data, {"seed": 7})
+#       var r := StoryletLiveLink.apply_live_bundle(engine, data)
 #       if not r["ok"]:
 #           return                                    # bad JSON, another project: keep yours
-#       engine = r["engine"]                          # re-bind: load_game rebuilt every flow
+#       engine = r["engine"]                          # re-bind: hot_swap rebuilt every flow
 #       flow = engine.get_flow("main")                # so re-take your flow handles too
 #       link.attach(engine)
 #       link.set_build(build))                        # the editor's icon goes back to in sync
@@ -218,35 +218,29 @@ func close() -> void:
 	_enabled = false
 
 
-## Live refresh: apply a bundle the editor pushed. A new ENGINE over the
-## parsed bundle, loaded from the old one's save (the run carries across -
-## every flow of it: turns, properties, cooldowns, the hands on the table;
-## a deleted card leaves the table, a new property takes its default).
+## Live refresh: apply a bundle the editor pushed, through the engine's own
+## hot_swap. A new ENGINE over the parsed bundle carrying the old one's run
+## (every flow of it: turns, properties, cooldowns, the hands on the table; a
+## deleted card leaves the table, a new property takes its default).
 ## Returns {"ok": true, "engine", "bundle"} or {"ok": false, "error"} with
-## the old engine untouched: malformed JSON, a bundle the runtime rejects,
-## another project. `opts` are the options the old engine was created with
-## ("log" and "world" matter - neither rides the envelope; "seed" only
-## shapes fresh flows, the save carries each flow's PRNG state). load_game
-## rebuilt every flow, so re-take your handles from the returned engine.
-## A game that passed the old engine its registry cannot swap this way yet:
-## the new engine's tokens clash with the old one's in that registry, and the
-## swap is refused with the old engine untouched, as in the JS runtime.
+## the old engine left as it was: malformed JSON, a bundle the runtime
+## rejects, another project. hot_swap rebuilt every flow, so re-take your
+## handles from the returned engine.
+##
+## Works whether the engine made its own registry or was given the game's: on
+## the game's registry the old engine hands its keys to the replacement (and is
+## spent), which a plain save and load into a second engine cannot do, since
+## the two would clash. The engine remembers the options it was built with
+## (seed, log, world), so `opts` is only for overriding one of them for the
+## replacement.
 static func apply_live_bundle(engine: StoryletEngine, data: String, opts: Dictionary = {}) -> Dictionary:
 	var loaded := StoryletBundle.load_from_string(data)
 	if not loaded["ok"]:
 		return {"ok": false, "error": "pushed bundle: " + str(loaded["error"])}
-	var next := StoryletEngine.create(loaded["bundle"], opts)
-	if next == null:
-		return {"ok": false, "error": "pushed bundle: could not create an engine (bad options, or a token clash in the game's registry)"}
-	var envelope := engine.save_game()
-	# The refusal is asked for by name: load_game answers with a LoadReport now,
-	# and a pushed bundle for another project has to come back as an error the
-	# caller can show.
-	var refusal: String = next._project_mismatch(envelope)
-	if refusal != "":
-		return {"ok": false, "error": refusal}
-	next.load_game(envelope)
-	return {"ok": true, "engine": next, "bundle": loaded["bundle"]}
+	var swapped := engine._swap(loaded["bundle"], opts)
+	if not swapped["ok"]:
+		return {"ok": false, "error": swapped["error"]}
+	return {"ok": true, "engine": swapped["engine"], "bundle": loaded["bundle"]}
 
 
 ## The cheap snapshot: hands by gameId holding card gameIds in dealt order,

@@ -395,11 +395,14 @@ public:
 	 *  bundle here, then SetBuild). Edited content is tolerated the way a load
 	 *  is: orphaned hand contents and cooldowns drop, new properties take
 	 *  their defaults, and a flow whose name is gone reads as closed. The
-	 *  retained logs start again. On the game's registry (CreateWithRegistry)
-	 *  the old core hands its bags over: each leaves the registry keeping its
-	 *  values, and the new core claims them as it registers the same keys.
+	 *  retained logs start again. This is the core's hotSwap: on the game's
+	 *  registry (CreateWithRegistry) the old core carries its own values across
+	 *  and steps out of the registry, and the new core loads them as a save
+	 *  loads, so a property the edit dropped is dropped, a new one takes its
+	 *  default, and values another engine keeps there are never touched.
 	 *  False (with OutError, engine untouched) on a null or uncompiled bundle,
-	 *  or a save the new bundle refuses. */
+	 *  a save the new bundle refuses, or a rebuild that fails (the old core
+	 *  then takes its registrations back). */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Live Link")
 	bool ApplyLiveBundle(UStoryletBundle* NewBundle, FString& OutError);
 

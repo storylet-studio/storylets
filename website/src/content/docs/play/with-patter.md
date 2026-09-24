@@ -117,8 +117,15 @@ const patter = new PatterEngine(patterBundle, { seed, registry });
 The Storylet Engine registers `@story` and its per-flow bags; Patter registers `@patter` and its
 per-flow and per-scene bags. A scene that sets `@world.knows_road` moves the value the cards'
 conditions read on the next deal, and a card whose outcome sets it moves what the next scene sees.
-A Patter condition can also read `@story` directly, and the Storylet Engine reads `@patter`
-through `getProperty("patter.gold")`.
+Each engine can name the other's game-wide scope directly, with no setting in either project:
+a Patter line can read and write `@story.act`, and a card can gate on `@patter.visits` or change
+`@patter.gold` in an outcome. Each compiler lets the other engine's token through without
+checking its names, because that engine owns them; a name that doesn't exist fails when the
+card is first evaluated. Only the other engine's shared values are visible this way: Patter's
+per-flow globals and scene properties belong to its flows, not to the game. Content that names
+the other engine runs only where that engine is on the same registry: without it, opening a flow
+or loading a save is refused, naming the token, before anything changes. A tool that runs one
+engine alone, such as a preview or a coverage run, refuses that content for the same reason.
 
 Declare the same `@world` properties in both projects, with the same names and types. If your game keeps `@world`
 in its own state instead, register it as a foreign scope with your resolver

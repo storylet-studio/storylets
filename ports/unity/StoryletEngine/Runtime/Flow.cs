@@ -170,6 +170,9 @@ namespace StoryletStudio.StoryletEngine
         /// keys.</summary>
         private Partition _stores;
         private readonly List<string> _registered = new List<string>();
+        /// <summary>This flow's bags that declare something, under their
+        /// registry keys.</summary>
+        private readonly List<KeyValuePair<string, PropertyBag>> _bagKeys = new List<KeyValuePair<string, PropertyBag>>();
 
         private readonly List<Action<TraceEvent>> _traceHandlers = new List<Action<TraceEvent>>();
         private List<LogEntry> _logEntries = new List<LogEntry>();
@@ -183,19 +186,17 @@ namespace StoryletStudio.StoryletEngine
             _stores = engine.BuildFlowPartition();
             // Register the bags: each claims whatever the registry holds for its
             // key (a load); OpenFlow discarded that first for a fresh flow.
-            var reg = engine._registry;
             void Put(string key, PropertyBag bag)
             {
                 if (bag.Declarations().Count == 0) return; // holds nothing: not registered
-                try { reg.MountOwned(key, bag, Engine.OwnerLabel); }
-                catch (Exception e) when (KernelErrors.Is(e)) { throw KernelErrors.As(e); }
-                _registered.Add(key);
+                _bagKeys.Add(new KeyValuePair<string, PropertyBag>(key, bag));
             }
             Put(Engine.FlowKey(id, "story"), _stores.Story);
             foreach (var kind in Engine.OwnedScopes)
             {
                 foreach (var pair in KindOf(_stores, kind)) Put(Engine.FlowKey(id, kind, pair.Key), pair.Value);
             }
+            MountBags();
             foreach (var box in engine._bundle.Boxes)
             {
                 _turnCounts.Set(box.Id, 0);
@@ -226,6 +227,25 @@ namespace StoryletStudio.StoryletEngine
         {
             foreach (var key in _registered) _engine._registry.Remove(key, keep);
             _registered.Clear();
+        }
+
+        /// <summary>The registry keys this flow holds right now.</summary>
+        internal List<string> RegisteredKeys()
+        {
+            return new List<string>(_registered);
+        }
+
+        /// <summary>Register this flow's bags (again): at construction, and when a
+        /// failed HotSwap hands them back. Each claims what the registry holds
+        /// for it.</summary>
+        internal void MountBags()
+        {
+            foreach (var pair in _bagKeys)
+            {
+                try { _engine._registry.MountOwned(pair.Key, pair.Value, Engine.OwnerLabel); }
+                catch (Exception e) when (KernelErrors.Is(e)) { throw KernelErrors.As(e); }
+                _registered.Add(pair.Key);
+            }
         }
 
         private void AssertOpen()
@@ -1485,7 +1505,26 @@ namespace StoryletStudio.StoryletEngine
                     }
                     return LandIn(source.Kind, source.Id, name, value, $"{Address(source.Kind, source.Id)}.{name}");
                 }
-                default: throw new StoryletError($"bad change target scope \"@{scope}\"");
+                default:
+                {
+                    // Another engine's game-wide scope (`@patter.x`): the family's
+                    // shared vocabulary lets a card write it, and the registry keeps
+                    // that engine's rules (a read-only property is refused). A story
+                    // write, so no host flag.
+                    var reg = _engine._registry;
+                    if (reg.Has(scope))
+                    {
+                        var prev = reg.Get(scope, name);
+                        try { reg.Set(scope, name, value); }
+                        catch (Exception e) when (KernelErrors.Is(e)) { throw KernelErrors.As(e); }
+                        return new WriteResult { Path = $"{scope}.{name}", Prev = prev };
+                    }
+                    if (_engine._bundle.ExternalScopes != null && _engine._bundle.ExternalScopes.Contains(scope))
+                    {
+                        throw new StoryletError($"@{scope}.{name} cannot be written: no engine on this registry registered @{scope}");
+                    }
+                    throw new StoryletError($"bad change target scope \"@{scope}\"");
+                }
             }
         }
 

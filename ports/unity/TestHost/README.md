@@ -27,7 +27,8 @@ The combined proof on C#: a Patter engine and a Storylet Engine in one game, on 
 `packages/runtime/test/with-patter/combined-game.test.ts`, case for case, with the same content:
 Patter reading `@story.act`, a storylet gated on a `@world` value a Patter scene wrote, the one
 save loaded in either order, content drift and a Patter hot swap on the same registry, and token
-clashes naming the holder. Each case runs twice, the game saving its registry through
+clashes naming the holder, and a card naming `@patter` directly followed by a Storylet
+Engine hot swap on the shared registry. Each case runs twice, the game saving its registry through
 Patterplay's `PatterSave` and then through the Storylet Engine's `StoryletSave`, and a last case
 reads one's output with the other.
 

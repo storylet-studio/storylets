@@ -164,12 +164,27 @@ nothing for `@world`: that's yours. `defineOwned` has the registry store and sav
 saves it. Passing a `UStoryletWorld` to `CreateWithRegistry` registers that world in your
 registry for you.
 
-Every expression reads every scope in the registry, so a card's condition can read
-`@patter.gold`, and `GetPropertyNumber(TEXT("patter.gold"))` and its setters reach another
-engine's values from your code. A token is taken once: an engine that wants a token another
-already holds is refused as it is built, `CreateWithRegistry` returns null and logs who holds
-it, and the registry is left as it was. When a `UStoryletEngine` goes away, its values leave the
-registry with it, and `ApplyLiveBundle` hands them from the old engine core to the new one.
+Every expression reads every scope in the registry, and `GetPropertyNumber(TEXT("patter.gold"))`
+and its setters reach another engine's values from your code. A card can name Patter's
+game-wide scope directly, with no setting in either project: gate on `@patter.visits`, or change
+`@patter.gold` in an outcome, which writes it through your registry under Patter's rules. Only
+Patter's shared values are visible this way. If a project names `@patter` and no Patter engine
+is on the Storylet Engine's registry, it refuses the content before anything changes: `OpenFlow`
+returns null and `UStoryletSave::LoadStateFromJson` returns false, each logging `this content
+names @patter, which no engine on this registry registered: give every engine the game's one
+registry` as an error. So build every engine on the game's one registry before opening a flow or
+loading a save. If Patter's engine goes away mid-game, an outcome writing `@patter` fails naming
+the scope.
+
+A token is taken once: an engine that wants a token another already holds is refused as it is
+built, `CreateWithRegistry` returns null and logs who holds it, and the registry is left as it
+was. When a `UStoryletEngine` goes away, its values leave the registry with it.
+`ApplyLiveBundle` works on your registry as on the engine's own: the new engine core carries the
+run across, a property the edit dropped leaves the registry, and nothing another engine keeps
+there is touched. From C++, the core's `hotSwap(Bundle)` does the same and hands back the load
+report too. The replacement keeps the options the engine was built with; to change one, pass a
+callback that edits a copy of them, `hotSwap(Bundle, [](storylets::EngineOptions& O) { O.log = true; })`,
+and everything it does not touch stays as it was.
 
 ## Save and load
 
@@ -235,8 +250,9 @@ Shipping builds.
 
 `FStoryletLiveLink::Create(Bundle->GetBuildId(), TEXT("My Game"))` then `Link->Attach(Engine)`
 joins the running game to Storyletter. The editor's Board shows the game's run, and a save in
-the editor pushes the new bundle into it, applied in place by `ApplyLiveBundle`. It compiles to
-no-ops in a Shipping build. The wiring, and what carries across, are on
+the editor pushes the new bundle into it, applied in place by `ApplyLiveBundle`, whether the
+engine made its own registry or shares yours with Patter. It compiles to no-ops in a Shipping
+build. The wiring, and what carries across, are on
 [Live Link](/play/live-link/).
 
 ## The bundle inspector

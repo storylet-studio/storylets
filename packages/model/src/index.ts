@@ -777,6 +777,10 @@ export interface Bundle {
   boxes: Box<Expression>[];
   /** Maps, when the project asked for them. Absent is the normal state. */
   maps?: BundleMap[];
+  /** Other engines' game-wide scopes the content names (`patter`), sorted: the
+   *  family's shared vocabulary, let through unchecked by the compiler. The
+   *  engine reports when the game has not registered one. Absent when none. */
+  externalScopes?: string[];
 }
 
 // --- the save envelope --------------------------------------------------------

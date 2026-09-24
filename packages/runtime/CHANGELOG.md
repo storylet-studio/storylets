@@ -8,6 +8,11 @@ section for it.
 
 ## [Unreleased]
 
+### Added
+
+- **Other engines' scopes, with no setting.** A card can name another engine's game-wide scope from the family's shared list (`@patter.visits` in a condition, `@patter.gold` in an outcome's changes). The compiler lets it through unchecked and records it in the bundle (`externalScopes`); an outcome writes it through the game's registry under that engine's rules; a name that does not exist fails when the card is first evaluated. Content that names one runs only where that engine is on the same registry: without it, `openFlow` and `loadGame` refuse before anything changes (`this content names @patter, which no engine on this registry registered: give every engine the game's one registry`).
+- **`Engine.hotSwap(bundle, opts?)`**, live bundle refresh as an engine method, returning the replacement and its load report. On the game's registry the old engine hands its keys over: it carries its own values into the snapshot, so the report covers property drift and a dropped property is dropped, and nothing belonging to another engine is touched; a failed rebuild puts everything back. `@storylet-studio/play-helpers`' `applyLiveBundle` now calls it, so a Live Link refresh works when the game owns the registry, where it used to be refused.
+
 ### Changed
 
 - **One registry per game.** Every property bag now lives in a `ScopeRegistry` (`@wildwinter/scoperegistry` 0.7.0) instead of standing alone: the shared `@story` under `story`, and every other bag that declares something under a key starting `storylets/` (`storylets/deck/<id>`, `storylets/flow/<flow>/story`, and so on, keyed by internal id). A new `registry` option takes the game's own registry, shared with any other engine in the game, Patter included; without one the engine makes its own and acts as its own game, so a single-engine game needs no change.

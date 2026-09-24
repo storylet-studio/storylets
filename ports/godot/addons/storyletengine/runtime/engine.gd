@@ -132,6 +132,18 @@ var _view_cache: Dictionary = {"scopes": {}, "qualities": null}
 
 var _flows: Dictionary = {}             # id -> StoryletFlow, open order
 var _engine_trace_handlers: Array[Callable] = []
+## The options this engine was built with: hot_swap builds its replacement
+## from them.
+var _creation_options: Dictionary = {}
+## How to register each shared scope again, in registration order: a failed
+## hot_swap puts this engine back exactly as it was. Each entry is
+## {"key", "bag"} (an owned bag) or {"key", "resolver", "decls"} (the game's
+## bound @world). Data, not Callables: a lambda made here would hold this
+## engine, and the engine holds the list.
+var _shared_mounts: Array = []
+## Other engines' game-wide scopes the content names (the bundle's
+## externalScopes): every one must be registered for a flow to open.
+var _external_scopes: Array = []
 
 
 ## The sharing default per scope (design/flows.md): @story shared, the
@@ -302,33 +314,37 @@ func legacy_address_message(kind: String, segment: String, name: String) -> Stri
 ## A token another engine already holds in that registry refuses the engine:
 ## null with push_error naming the holder, and the registry left as it was.
 static func create(bundle: Dictionary, opts: Dictionary = {}) -> StoryletEngine:
-	for key in opts:
-		if not CREATE_OPTION_KEYS.has(key):
-			push_error('StoryletEngine.create: unknown option "%s" (valid: %s)' % [key, ", ".join(CREATE_OPTION_KEYS)])
-			return null
-	if opts.has("log"):
-		var log_opt = opts["log"]
-		if not (log_opt is bool) and not (log_opt is Dictionary):
-			push_error("StoryletEngine.create: log option must be a bool or {\"cap\": int}")
-			return null
-		if log_opt is Dictionary:
-			for key in log_opt:
-				if key != "cap":
-					push_error('StoryletEngine.create: unknown log option key "%s"' % key)
-					return null
-	if opts.has("world"):
-		var w = opts["world"]
-		if not (w is Dictionary) or not (w.get("get") is Callable):
-			push_error('StoryletEngine.create: world option must be {"get": Callable, "set": Callable?}')
-			return null
-	if opts.has("registry") and not _is_registry(opts["registry"]):
-		push_error("StoryletEngine.create: registry option must be a scope registry (StoryletScopeRegistry, or any copy of the shared one)")
+	var bad := _options_error(opts)
+	if bad != "":
+		push_error("StoryletEngine.create: " + bad)
 		return null
 	var engine := StoryletEngine.new(bundle, opts)
 	if engine._init_error != "":
 		push_error("StoryletEngine.create: " + engine._init_error)
 		return null
 	return engine
+
+
+## What is wrong with create's options, or "" when nothing is.
+static func _options_error(opts: Dictionary) -> String:
+	for key in opts:
+		if not CREATE_OPTION_KEYS.has(key):
+			return 'unknown option "%s" (valid: %s)' % [key, ", ".join(CREATE_OPTION_KEYS)]
+	if opts.has("log"):
+		var log_opt = opts["log"]
+		if not (log_opt is bool) and not (log_opt is Dictionary):
+			return "log option must be a bool or {\"cap\": int}"
+		if log_opt is Dictionary:
+			for key in log_opt:
+				if key != "cap":
+					return 'unknown log option key "%s"' % key
+	if opts.has("world"):
+		var w = opts["world"]
+		if not (w is Dictionary) or not (w.get("get") is Callable):
+			return 'world option must be {"get": Callable, "set": Callable?}'
+	if opts.has("registry") and not _is_registry(opts["registry"]):
+		return "registry option must be a scope registry (StoryletScopeRegistry, or any copy of the shared one)"
+	return ""
 
 
 ## Duck-typed, because a combined game may hand over the registry another
@@ -339,7 +355,9 @@ static func _is_registry(r) -> bool:
 
 
 func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
+	_creation_options = opts
 	_bundle = bundle
+	_external_scopes = StoryletBundle.external_scopes(bundle)
 	_seed = int(opts.get("seed", 0))
 	var log_opt = opts.get("log", false)
 	if log_opt is Dictionary:
@@ -446,7 +464,9 @@ func _init_shared() -> void:
 	# `story` is this engine's token whether or not the bundle declares a shared
 	# @story property: registering it is what makes a clash show at once. A
 	# registration claims whatever values the game loaded for its key first.
-	refused = _registry.mount_owned("story", shared["story"], {"owner": OWNER})
+	# Each registration is remembered as it lands (_shared_mounts), so a failed
+	# hot_swap can register this engine again exactly as it was.
+	refused = _mount_shared({"key": "story", "bag": shared["story"]})
 	if refused == "":
 		registered.append("story")
 		for kind in OWNED_KINDS:
@@ -454,7 +474,7 @@ func _init_shared() -> void:
 				var bag: StoryletPropertyBag = shared[kind][id]
 				if bag.declarations().is_empty():
 					continue   # holds nothing: not registered
-				refused = _registry.mount_owned(shared_key(kind, id), bag, {"owner": OWNER})
+				refused = _mount_shared({"key": shared_key(kind, id), "bag": bag})
 				if refused != "":
 					break
 				registered.append(shared_key(kind, id))
@@ -466,7 +486,7 @@ func _init_shared() -> void:
 			var resolver := {"get": _host_world["get"]}
 			if _host_world.get("set") is Callable:
 				resolver["set"] = _host_world["set"]
-			refused = _registry.define_foreign("world", resolver, world_decls, {"normalise": identity, "owner": OWNER})
+			refused = _mount_shared({"key": "world", "resolver": resolver, "decls": world_decls})
 			if refused == "":
 				registered.append("world")
 		elif _owns_registry and not _registry.has("world"):
@@ -478,14 +498,32 @@ func _init_shared() -> void:
 			refused = _registry.define_owned("world", world_decls, {"normalise": identity, "path_prefix": "world.", "owner": OWNER})
 			if refused == "":
 				registered.append("world")
+				_shared_mounts.append({"key": "world", "bag": _registry.owned_bag("world")})
 				_self_world = true
 		# Given the game's registry and no resolver, @world is the game's to
 		# register: this engine registers nothing for it.
 	if refused != "":
 		for key in registered:
 			_registry.remove(key, {"keep": true})   # a clash leaves the game's registry as it was
+		_shared_mounts = []
 		_self_world = false
 		_init_error = refused
+
+
+## Register one shared scope, and remember how (see _shared_mounts). Returns
+## the registry's refusal, or "".
+func _mount_shared(m: Dictionary) -> String:
+	var refused := _register_mount(m)
+	if refused == "":
+		_shared_mounts.append(m)
+	return refused
+
+
+## One _shared_mounts entry into the registry. Returns the refusal, or "".
+func _register_mount(m: Dictionary) -> String:
+	if m.has("resolver"):
+		return _registry.define_foreign(m["key"], m["resolver"], m["decls"], {"normalise": _identity(), "owner": OWNER})
+	return _registry.mount_owned(m["key"], m["bag"], {"owner": OWNER})
 
 
 ## Identity name normalisation: storylets property names are case-significant
@@ -643,7 +681,9 @@ func world_read_only(name: String) -> bool:
 ## re-opening a name is a reset of that name's whole per-flow state; shared
 ## state is untouched. There is no default flow: "main" is a caller
 ## convention, not an engine rule. Options: {"seed": int} overrides the
-## engine's default for this flow's PRNG.
+## engine's default for this flow's PRNG. Content that names another engine's
+## scope nothing on this registry registered is refused: null with push_error,
+## and nothing is touched.
 func open_flow(id: String, opts: Dictionary = {}) -> StoryletFlow:
 	for key in opts:
 		if not OPEN_FLOW_OPTION_KEYS.has(key):
@@ -656,6 +696,10 @@ func open_flow(id: String, opts: Dictionary = {}) -> StoryletFlow:
 ## values the registry holds for them (a load); a fresh open is a reset of that
 ## name, so anything waiting for it is discarded first.
 func _open(id: String, opts: Dictionary, claim: bool) -> StoryletFlow:
+	var unregistered := _external_scope_refusal()
+	if unregistered != "":
+		push_error("StoryletEngine.open_flow: " + unregistered)
+		return null
 	# The world's claims as they stand WITHOUT this name, taken before the
 	# replace: a resume competes with the other flows, never with the flow it is
 	# replacing (which is about to release everything it holds).
@@ -900,6 +944,19 @@ func _diagnose(message: String) -> void:
 	emit_engine("", {"type": "diagnostic", "where": "property address", "message": message})
 
 
+## Other engines' scopes the content names (the bundle's externalScopes) must
+## all be registered by the time a flow opens or a load runs: by then a game has
+## built all of its engines, whatever order it built them in. The first token in
+## the list the registry does not have is the refusal, or "" when every one is
+## there.
+func _external_scope_refusal() -> String:
+	for token in _external_scopes:
+		if not _registry.has(token):
+			return ("this content names @%s, which no engine on this registry registered: " % token) \
+				+ "give every engine the game's one registry"
+	return ""
+
+
 ## The shared surface as examiner rows: @world (read through the resolver)
 ## then the shared partitions. Per-flow rows live on each flow.
 func list_properties() -> Array:
@@ -998,6 +1055,128 @@ func _partition_values(p: Dictionary) -> Dictionary:
 	return out
 
 
+## Live bundle refresh: rebuild on an edited bundle with the whole run carried
+## over. Returns {"ok": true, "engine": the replacement, "report": the
+## LoadReport its load produced}, or {"ok": false, "error": message} with
+## push_error.
+##
+## Standalone, that is a save and a load into a new engine, and this one is
+## left untouched (discard it). With the game's registry the two cannot both
+## hold the same keys, so this engine is spent afterwards (its flows closed,
+## the replacement holding everything on the same registry): it carries its
+## own values into the snapshot, steps out of the registry, and the
+## replacement loads them the way a standalone save loads, so the report
+## covers the properties the edit dropped, defaulted, or retyped, and a
+## dropped property is dropped rather than kept. Values the game loaded that
+## were still waiting for a flow of this engine carry across as they were,
+## and nothing belonging to any other engine is touched. A bundle for another
+## project is refused before anything moves; if the rebuild fails for any
+## other reason, this engine takes its registrations back and is left exactly
+## as it was.
+##
+## `opts` override the options this engine was built with (seed, log, world,
+## on_replaced_flow); the registry is always this engine's.
+func hot_swap(bundle: Dictionary, opts: Dictionary = {}) -> Dictionary:
+	var r := _swap(bundle, opts)
+	if not r["ok"]:
+		push_error("StoryletEngine.hot_swap: " + str(r["error"]))
+	return r
+
+
+## @internal - hot_swap without the push_error, for StoryletLiveLink, which
+## hands a refusal back to the game and never push_errors one.
+func _swap(bundle: Dictionary, opts: Dictionary = {}) -> Dictionary:
+	var checked := StoryletBundle.load_from_dict(bundle)
+	if not checked["ok"]:
+		return _swap_refused(str(checked["error"]))
+	if _init_error != "":
+		return _swap_refused("this engine was refused its registration (%s)" % _init_error)
+	if str(bundle["content"]["project"]) != str(_bundle["content"]["project"]):
+		return _swap_refused('save is for project "%s", bundle is "%s"' % [str(_bundle["content"]["project"]), str(bundle["content"]["project"])])
+	var options := _creation_options.duplicate()
+	options.merge(opts, true)
+	options.erase("registry")
+	var bad := _options_error(options)
+	if bad != "":
+		return _swap_refused(bad)
+	var snapshot := save_game()
+	if _owns_registry:
+		# Its own registry: a save and a load into a new engine, as it always
+		# was, and this engine is left untouched.
+		var alone := StoryletEngine.new(bundle, options)
+		if alone._init_error != "":
+			return _swap_refused(alone._init_error)
+		var own_report := alone.load_game(snapshot)
+		if own_report.is_empty():
+			return _swap_refused("the replacement refused this engine's save")
+		return {"ok": true, "engine": alone, "report": own_report}
+	var reg = _registry
+	# This engine's own values, registered or still waiting for a flow.
+	var mine := {}
+	var saved: Dictionary = reg.save()
+	for key in saved:
+		if key == "story" or str(key).begins_with("storylets/"):
+			mine[key] = saved[key]
+	var registered := {}
+	for m in _shared_mounts:
+		registered[m["key"]] = true
+	for flow in _flows.values():
+		for key in (flow as StoryletFlow).registered_keys():
+			registered[key] = true
+	var waiting := {}
+	for key in mine:
+		if not registered.has(key):
+			waiting[key] = mine[key]
+	# Step out of the registry. The bags keep their values, so stepping back in
+	# is exact.
+	for m in _shared_mounts:
+		if reg.has(m["key"]):
+			reg.remove(m["key"])
+	for flow in _flows.values():
+		(flow as StoryletFlow).release_bags(false)
+	options["registry"] = reg
+	var next := StoryletEngine.new(bundle, options)
+	var error := next._init_error
+	if error == "":
+		var carried := snapshot.duplicate()
+		carried["registry"] = mine
+		var report := next.load_game(carried)
+		if not report.is_empty():
+			# Values that were waiting for a flow wait on, for the replacement's
+			# flow of that name.
+			var still := {}
+			for key in waiting:
+				if not reg.has(key):
+					still[key] = waiting[key]
+			if not still.is_empty():
+				reg.load(still, {"keep_parked": true})
+			_drop_run(null)
+			return {"ok": true, "engine": next, "report": report}
+		error = "the replacement refused this engine's save"
+	# Back as it was. The replacement's registrations go; a constructor that
+	# failed part way parked what it had claimed, so this engine's keys are
+	# cleared of anything waiting, registered again, and its own values laid
+	# back over them (the waiting ones parked again).
+	next._drop_run(null)
+	for m in next._shared_mounts:
+		if reg.has(m["key"]):
+			reg.remove(m["key"])
+	reg.discard_parked("storylets/")
+	for m in _shared_mounts:
+		_register_mount(m)
+	for flow in _flows.values():
+		(flow as StoryletFlow).mount_bags()
+	# `story` may have claimed what the failed replacement parked there: back to
+	# its declarations, then this engine's own values over it.
+	_reseed_shared()
+	reg.load(mine, {"keep_parked": true})
+	return _swap_refused(error)
+
+
+static func _swap_refused(message: String) -> Dictionary:
+	return {"ok": false, "error": message}
+
+
 ## The whole engine's NON-property state, one envelope ("storylets/save@2"):
 ## the spent cards once, then every live flow (board, clocks, cooldowns, PRNG,
 ## play log) keyed by its id. The property values are the registry's: a
@@ -1074,9 +1253,12 @@ func preview_flow_restore(id: String, saved: Dictionary) -> Dictionary:
 ## drift tolerance that makes a load forgiving is what hides its cost, so the
 ## cost comes back with the load whether or not anybody looked first. A foreign
 ## save (wrong project, or a schema this runtime does not read) is refused: {}
-## with push_error, and nothing is touched.
+## with push_error, and nothing is touched. So is any load of content that names
+## another engine's scope nothing on this registry registered.
 func load_game(envelope: Dictionary) -> Dictionary:
 	var refusal := _project_mismatch(envelope)
+	if refusal == "":
+		refusal = _external_scope_refusal()
 	if refusal == "":
 		refusal = _schema_mismatch(envelope)
 	if refusal != "":
@@ -1102,6 +1284,8 @@ func load_game(envelope: Dictionary) -> Dictionary:
 	for id in (plan["spent"] as Array):
 		_spent[str(id)] = true
 	var flows_clean: Dictionary = plan["flows"]
+	# Other engines' scopes were checked before anything moved, so no _open
+	# here refuses.
 	for id in flows_clean:
 		_open(str(id), {}, true).restore(flows_clean[id])
 	return plan["report"]

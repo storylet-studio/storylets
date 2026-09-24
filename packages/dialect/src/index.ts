@@ -9,6 +9,9 @@
 // ---------------------------------------------------------------------------
 
 import { EvalError } from "@wildwinter/expr";
+import { ENGINE_SCOPES } from "./engine-scopes.js";
+export { ENGINE_SCOPES } from "./engine-scopes.js";
+export type { EngineScope } from "./engine-scopes.js";
 import type { Dialect, EvalHelpers, ExprNode, ScalarValue } from "@wildwinter/expr";
 
 /** turns_since_played / _in when the card / value has never been played. */
@@ -56,16 +59,30 @@ const flagsArg = (fn: string, args: ExprNode[], h: EvalHelpers): string[] => {
   throw new EvalError(`${fn}() first argument must be a flags property`);
 };
 
+/** The Storylet Engine's own five scope tokens. */
+export const OWN_SCOPES = ["story", "world", "box", "deck", "hand"] as const;
+
+/**
+ * Other engines' game-wide scopes a card may name, from the family's shared list
+ * (expr/family/engine-scopes.json): `@patter.gold` reads Patterplay's shared
+ * globals in a game that runs both. On by default, with no project setting, so
+ * combining the engines needs no wiring. The compiler lets these through
+ * unchecked (the other engine owns its names and types), and the engine reports
+ * at run time when the game has not registered one.
+ */
+export const EXTERNAL_SCOPES: readonly string[] = ENGINE_SCOPES
+  .map((s) => s.token)
+  .filter((t) => !(OWN_SCOPES as readonly string[]).includes(t));
+
 export const storyletsDialect: Dialect = {
   // A missing property in a PRESENT scope is always an error: every property
   // is declared with a default, so absence means a publish bug, a drifted
-  // save, or a foreign scope the host never fed (schema 6.2).
+  // save, or a foreign scope the host never fed (schema 6.2). The same holds
+  // for another engine's scope: `@patter.glod` is a typo, and it says so the
+  // first time the card is evaluated rather than quietly reading false.
   scopes: [
-    { token: "story", missing: "throw" },
-    { token: "world", missing: "throw" },
-    { token: "box", missing: "throw" },
-    { token: "deck", missing: "throw" },
-    { token: "hand", missing: "throw" },
+    ...OWN_SCOPES.map((token) => ({ token, missing: "throw" as const })),
+    ...EXTERNAL_SCOPES.map((token) => ({ token, missing: "throw" as const })),
   ],
   defaultScope: "story",
   functions: {

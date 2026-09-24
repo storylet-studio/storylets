@@ -138,7 +138,9 @@ namespace StoryletStudio.StoryletEngine.Demo
         {
             if (_link == null || !_link.TryReceive(out var raw)) return;
             if (!StoryletLiveBundle.TryParsePush(raw, out var build, out var data)) return;
-            var r = StoryletLiveBundle.Apply(_engine, data, new EngineOptions { Seed = Seed, Log = true });
+            // The engine remembers the options it was built with (Seed, Log), so
+            // the replacement is built the same way.
+            var r = StoryletLiveBundle.Apply(_engine, data);
             if (!r.Ok)
             {
                 Append($"! live refresh refused: {r.Error}");

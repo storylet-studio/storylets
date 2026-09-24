@@ -119,6 +119,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
         /// and value does.</summary>
         private static void Same(JToken actual, string expectedJson, string what)
         {
+            actual = actual ?? JValue.CreateNull();   // a missing section reads as null, not a crash
             var expected = JToken.Parse(expectedJson);
             if (!JToken.DeepEquals(actual, expected))
             {
@@ -477,9 +478,254 @@ namespace StoryletStudio.StoryletEngine.TestHost
             }),
         };
 
+        // --- hotSwap on the game's registry ------------------------------------------
+        //
+        // A live bundle refresh that hands this engine's keys to its replacement,
+        // reports property drift as a load does, and touches nothing else in the
+        // registry. The JS test's "hotSwap on the game's registry", case for case.
+
+        /// <summary>The JS test's `edited` bundle, through expandBundle: @story
+        /// gains `rumours`, the per-flow `steps` is gone, and the box gains a
+        /// SHARED `heat` (a bag, and a key, the old engine never had).</summary>
+        private const string EditedJson = @"{""schema"":""storylets/bundle@0"",""content"":{""project"":""conf"",""version"":""0.0.0"",""hash"":""""},""metadata"":""full"",""settings"":{""playAdvancesTurns"":1},""world"":{""properties"":[{""name"":""alarm"",""type"":""number"",""default"":0}]},""story"":{""properties"":[{""name"":""gold"",""type"":""number"",""default"":0},{""name"":""rumours"",""type"":""number"",""default"":0}]},""boxes"":[{""id"":""b_x"",""gameId"":""box"",""ranking"":{""specificity"":true},""fields"":[],""properties"":[{""name"":""heat"",""type"":""number"",""default"":0,""shared"":true}],""tagGroups"":[{""id"":""d_zone"",""gameId"":""zone"",""tags"":[{""id"":""v_docks"",""gameId"":""docks"",""properties"":[{""name"":""danger"",""type"":""number"",""default"":0}]},{""id"":""v_market"",""gameId"":""market""}]}],""decks"":[{""id"":""k_main"",""gameId"":""main"",""properties"":[{""name"":""drawn"",""type"":""number"",""default"":0}],""cards"":[{""id"":""c_heist"",""gameId"":""heist"",""priority"":0,""redraw"":""always"",""outcomes"":[{""id"":""o_go"",""gameId"":""go"",""changes"":{""@deck.drawn"":{""src"":""@deck.drawn + 1"",""ast"":[""bin"",""+"",[""sv"",""deck"",""drawn""],[""n"",1]]},""@story.gold"":{""src"":""@story.gold + 1"",""ast"":[""bin"",""+"",[""sv"",""story"",""gold""],[""n"",1]]},""@world.alarm"":{""src"":""@world.alarm + 1"",""ast"":[""bin"",""+"",[""sv"",""world"",""alarm""],[""n"",1]]}}}]}]}],""handTemplates"":[],""hands"":[{""id"":""h_q"",""gameId"":""q"",""rule"":{""slots"":""unbounded""}}]}]}";
+
+        private static Bundle Edited() => BundleLoader.Parse(EditedJson);
+
+        /// <summary>A game mid-run: Patter's scope beside the engine's, a heist
+        /// played, and two values waiting in the registry, one for a flow of this
+        /// engine that has not opened and one for another engine's key.</summary>
+        private static Game Playing()
+        {
+            var g = NewGame();
+            g.Registry.DefineOwned("patter",
+                new List<ScopeDeclaration> { new ScopeDeclaration { Name = "visits", Type = "number", Default = ExprValue.Num(4) } },
+                new OwnedScopeOptions { Owner = "Patter" });
+            Heist(g.Engine.OpenFlow("f"));
+            var waiting = new OrderedMap<string, OrderedMap<string, ExprValue>>();
+            waiting.Set("storylets/flow/z/story", Section("steps", 5));
+            waiting.Set("other/deck/inn", Section("drawn", 2));
+            g.Registry.Load(waiting, keepParked: true);
+            return g;
+        }
+
+        private static OrderedMap<string, ExprValue> Section(string name, double value)
+        {
+            var m = new OrderedMap<string, ExprValue>();
+            m.Set(name, ExprValue.Num(value));
+            return m;
+        }
+
+        private static readonly List<(string Name, Action Run)> HotSwapCases = new List<(string, Action)>
+        {
+            ("hotSwap: carries the run across, reports the dropped property, and really drops it", () =>
+            {
+                var g = Playing();
+                var swapped = g.Engine.HotSwap(Edited());
+                var engine = swapped.Engine;
+                Num(engine.GetProperty("story.gold"), 1, "story.gold carried");
+                Num(engine.GetProperty("story.rumours"), 0, "story.rumours defaulted");
+                Num(engine.GetFlow("f").GetProperty("deck.main.drawn"), 1, "flow f deck.main.drawn carried");
+                var dropped = string.Join(",", swapped.Report.DroppedProperties.Select(d => d.Flow + ":" + d.Path));
+                Check(dropped == "f:story.steps", "report.droppedProperties: " + dropped);
+                Check(!g.Registry.Save().ContainsKey("storylets/flow/f/story"), "the dropped property's key is gone, not a stray");
+                // On the game's registry the old engine is spent: its flows closed.
+                Check(g.Engine.GetFlow("f") == null && g.Engine.Flows().Count == 0, "the old engine still holds a flow");
+                Heist(engine.GetFlow("f"));
+                Num(g.Registry.Get("story", "gold"), 2, "the replacement plays on the registry");
+            }),
+
+            ("hotSwap: touches nothing that is not this engine's, and waiting values wait on", () =>
+            {
+                var g = Playing();
+                g.Engine.HotSwap(Edited());
+                var saved = Blob(g.Registry.Save());
+                Same(saved["patter"], @"{ ""visits"": 4 }", "patter");
+                Same(saved["other/deck/inn"], @"{ ""drawn"": 2 }", "other/deck/inn");
+                Same(saved["storylets/flow/z/story"], @"{ ""steps"": 5 }", "storylets/flow/z/story");
+                Same(saved["world"], @"{ ""alarm"": 1 }", "world");
+            }),
+
+            ("hotSwap: refuses another project before anything moves", () =>
+            {
+                var g = Playing();
+                var before = Blob(g.Registry.Save()).ToString(Newtonsoft.Json.Formatting.None);
+                var other = Edited();
+                other.Content.Project = "somebody-else";
+                ThrowsExactly<StoryletError>(() => g.Engine.HotSwap(other), "somebody-else", "another project");
+                Check(Blob(g.Registry.Save()).ToString(Newtonsoft.Json.Formatting.None) == before, "the refused swap changed the registry");
+                Heist(g.Engine.GetFlow("f"));                              // the old engine still plays
+                Num(g.Registry.Get("story", "gold"), 2, "story.gold after the old engine plays on");
+            }),
+
+            ("hotSwap: a rebuild that fails part way leaves this engine and the registry exactly as they were", () =>
+            {
+                var g = Playing();
+                var before = Blob(g.Registry.Save());
+                // The replacement is asked to bind @world, which the game already
+                // registered: it clashes mid-build.
+                ThrowsExactly<StoryletError>(() => g.Engine.HotSwap(Edited(), o => o.World = new ZeroWorld()),
+                    "scope '@world' is already registered by Game", "the clash");
+                // Every key and value as before (the order of keys may differ: registering again appends).
+                Same(Blob(g.Registry.Save()), before.ToString(Newtonsoft.Json.Formatting.None), "the registry after the failed swap");
+                Heist(g.Engine.GetFlow("f"));
+                Num(g.Registry.Get("story", "gold"), 2, "story.gold");
+                Num(g.Engine.GetFlow("f").GetProperty("story.steps"), 2, "the flow's own story.steps");
+                // Registered again, not merely parked: the registry reads the flow's live bag.
+                Check(g.Registry.Has("storylets/flow/f/story"), "the flow's bag is not registered again");
+                Num(g.Registry.Get("storylets/flow/f/story", "steps"), 2, "the registry's storylets/flow/f/story.steps");
+            }),
+
+            ("hotSwap: the Live Link's StoryletLiveBundle.Apply now works on the game's registry", () =>
+            {
+                var g = Playing();
+                var r = StoryletLiveBundle.Apply(g.Engine, EditedJson);
+                Check(r.Ok, "Apply refused: " + r.Error);
+                Num(r.Engine.GetProperty("story.gold"), 1, "story.gold through Apply");
+                var dropped = string.Join(",", r.Report.DroppedProperties.Select(d => d.Flow + ":" + d.Path));
+                Check(dropped == "f:story.steps", "Apply's report.droppedProperties: " + dropped);
+            }),
+
+            ("hotSwap: a change through the callback keeps every option it leaves alone", () =>
+            {
+                // Built with a Seed and a World resolver; the swap turns on Log
+                // and nothing else, so the replacement keeps both.
+                var engine = new Engine(NewBundle(), new EngineOptions { Seed = 7, World = new FiveWorld() });
+                engine.OpenFlow("f").Deal("q");
+                Check(engine.Log().Count == 0, "the engine was built without Log");
+                var next = engine.HotSwap(Edited(), o => o.Log = true).Engine;
+                next.OpenFlow("n").Deal("q");
+                Check(next.Log().Count > 0, "the change (Log) did not reach the replacement");
+                Num(next.GetProperty("world.alarm"), 5, "world.alarm through the World resolver it was built with");
+                var seeded = new Engine(Edited(), new EngineOptions { Seed = 7 });
+                seeded.OpenFlow("n");
+                var unseeded = new Engine(Edited());
+                unseeded.OpenFlow("n");
+                Check(seeded.SaveFlow("n").Prng != unseeded.SaveFlow("n").Prng, "seeds 7 and 0 start the same, so the check below proves nothing");
+                Check(next.SaveFlow("n").Prng == seeded.SaveFlow("n").Prng, "the replacement's new flow is not on Seed 7");
+                // The engine's own options are a copy: the callback changed nothing of them.
+                var again = engine.HotSwap(Edited()).Engine;
+                again.OpenFlow("m").Deal("q");
+                Check(again.Log().Count == 0, "the callback changed the options this engine remembers");
+            }),
+
+            ("hotSwap: a standalone engine is saved and loaded into a new one, and left untouched", () =>
+            {
+                var engine = new Engine(NewBundle(), new EngineOptions { Seed = 1 });
+                Heist(engine.OpenFlow("f"));
+                var swapped = engine.HotSwap(Edited());
+                Num(swapped.Engine.GetProperty("story.gold"), 1, "story.gold carried");
+                Num(swapped.Engine.GetProperty("world.alarm"), 1, "the self-backed world.alarm carried");
+                Check(swapped.Engine.SaveGame().Registry != null, "the replacement is still its own game");
+                Num(engine.GetFlow("f").GetProperty("story.steps"), 1, "the old engine still has its flow");
+                Heist(engine.GetFlow("f"));
+                Num(engine.GetProperty("story.gold"), 2, "and plays on, on its own registry");
+                Num(swapped.Engine.GetProperty("story.gold"), 1, "which is not the replacement's");
+            }),
+        };
+
+        // --- other engines' scopes -------------------------------------------------------
+        //
+        // A card may name `@patter.x` with no project setting; the compiler lets it
+        // through and records it in the bundle (externalScopes). The JS compiler
+        // test's runtime cases ("the engine reads and writes it through the game's
+        // registry" and "refuses to open a flow, or load a save, where nobody
+        // registered the scope, before anything changes"), with its bundles as
+        // the compiler wrote them, plus the write branch's other refusals.
+
+        /// <summary>compileFiles(heist("@patter.visits >= 1", { "@patter.gold": "@patter.gold - 1" })).</summary>
+        private const string CardsPatterJson = @"{""schema"":""storylets/bundle@0"",""content"":{""project"":""p"",""version"":""0.0.1"",""hash"":""16f2jt4""},""metadata"":""full"",""settings"":{""playAdvancesTurns"":1},""world"":{""properties"":[]},""story"":{""properties"":[]},""boxes"":[{""id"":""b_1"",""gameId"":""b1"",""ranking"":{""specificity"":true},""fields"":[],""properties"":[],""tagGroups"":[{""id"":""d_1"",""gameId"":""d1"",""tags"":[{""id"":""v_1"",""gameId"":""v1""}]}],""decks"":[{""id"":""k_1"",""gameId"":""main"",""properties"":[],""cards"":[{""id"":""c_1"",""gameId"":""c1"",""condition"":{""src"":""@patter.visits >= 1"",""ast"":[""bin"","">="",[""sv"",""patter"",""visits""],[""n"",1]]},""priority"":0,""redraw"":""always"",""outcomes"":[{""id"":""o_1"",""gameId"":""go"",""changes"":{""@patter.gold"":{""src"":""@patter.gold - 1"",""ast"":[""bin"",""-"",[""sv"",""patter"",""gold""],[""n"",1]]}}}]}]}],""handTemplates"":[],""hands"":[{""id"":""h_1"",""gameId"":""h1"",""rule"":{""slots"":1}}]}],""externalScopes"":[""patter""]}";
+
+        /// <summary>compileFiles(heist("true", { "@patter.gold": "1" })): a card any
+        /// flow is dealt, whose only change writes Patter's scope.</summary>
+        private const string CardsWriteOnlyJson = @"{""schema"":""storylets/bundle@0"",""content"":{""project"":""p"",""version"":""0.0.1"",""hash"":""0mw21g1""},""metadata"":""full"",""settings"":{""playAdvancesTurns"":1},""world"":{""properties"":[]},""story"":{""properties"":[]},""boxes"":[{""id"":""b_1"",""gameId"":""b1"",""ranking"":{""specificity"":true},""fields"":[],""properties"":[],""tagGroups"":[{""id"":""d_1"",""gameId"":""d1"",""tags"":[{""id"":""v_1"",""gameId"":""v1""}]}],""decks"":[{""id"":""k_1"",""gameId"":""main"",""properties"":[],""cards"":[{""id"":""c_1"",""gameId"":""c1"",""condition"":{""src"":""true"",""ast"":[""b"",true]},""priority"":0,""redraw"":""always"",""outcomes"":[{""id"":""o_1"",""gameId"":""go"",""changes"":{""@patter.gold"":{""src"":""1"",""ast"":[""n"",1]}}}]}]}],""handTemplates"":[],""hands"":[{""id"":""h_1"",""gameId"":""h1"",""rule"":{""slots"":1}}]}],""externalScopes"":[""patter""]}";
+
+        private static ScopeRegistry PatterStandIn() => new ScopeRegistry().DefineOwned("patter", new List<ScopeDeclaration>
+        {
+            new ScopeDeclaration { Name = "gold", Type = "number", Default = ExprValue.Num(3) },
+            new ScopeDeclaration { Name = "visits", Type = "number", Default = ExprValue.Num(1) },
+        }, new OwnedScopeOptions { Owner = "Patter" });
+
+        private static readonly List<(string Name, Action Run)> ExternalScopeCases = new List<(string, Action)>
+        {
+            ("other engines' scopes: the bundle carries externalScopes, and none is none", () =>
+            {
+                var ext = BundleLoader.Parse(CardsPatterJson).ExternalScopes;
+                Check(ext != null && ext.SequenceEqual(new[] { "patter" }), "externalScopes: " + (ext == null ? "null" : string.Join(",", ext)));
+                Check(NewBundle().ExternalScopes == null, "a bundle naming no other engine has none");
+            }),
+
+            ("other engines' scopes: read and written through the game's registry", () =>
+            {
+                var registry = PatterStandIn();
+                var flow = new Engine(BundleLoader.Parse(CardsPatterJson), new EngineOptions { Registry = registry }).OpenFlow("main");
+                var dealt = flow.Deal("h1").Select(c => c.GameId).ToList();
+                Check(dealt.SequenceEqual(new[] { "c1" }), "dealt: " + string.Join(",", dealt));
+                flow.Play("c1", "go", "h1");
+                Num(registry.Get("patter", "gold"), 2, "patter.gold");
+            }),
+
+            ("other engines' scopes: refuses to open a flow, or load a save, where nobody registered the scope, before anything changes", () =>
+            {
+                const string refusal = "this content names @patter, which no engine on this registry registered: give every engine the game's one registry";
+                var alone = new Engine(BundleLoader.Parse(CardsPatterJson));
+                ThrowsExactly<StoryletError>(() => alone.OpenFlow("main"), refusal, "OpenFlow with nobody registering @patter");
+                Check(alone.GetFlow("main") == null, "the refused open opened a flow");
+
+                // A save made where Patter was present, loaded where it is not: refused whole.
+                var game = new Engine(BundleLoader.Parse(CardsPatterJson), new EngineOptions { Registry = PatterStandIn() });
+                game.OpenFlow("main").Deal("h1");
+                var save = game.SaveGame();
+                var elsewhere = PatterStandIn();
+                var other = new Engine(BundleLoader.Parse(CardsPatterJson), new EngineOptions { Registry = elsewhere });
+                other.OpenFlow("keep");
+                elsewhere.Remove("patter");
+                ThrowsExactly<StoryletError>(() => other.LoadGame(save), refusal, "LoadGame with nobody registering @patter");
+                var ids = string.Join(",", other.Flows().Select(f => f.Id));
+                Check(ids == "keep", "the load changed the flows: " + ids);
+
+                // The engine that took the scope away mid-game: a write names it.
+                var shared = new ScopeRegistry().DefineOwned("patter", new List<ScopeDeclaration>
+                {
+                    new ScopeDeclaration { Name = "gold", Type = "number", Default = ExprValue.Num(3) },
+                });
+                var paying = new Engine(BundleLoader.Parse(CardsWriteOnlyJson), new EngineOptions { Registry = shared }).OpenFlow("main");
+                paying.Deal("h1");
+                shared.Remove("patter");
+                ThrowsExactly<StoryletError>(() => paying.Play("c1", "go", "h1"),
+                    "@patter.gold cannot be written: no engine on this registry registered @patter", "the unregistered write");
+            }),
+
+            ("other engines' scopes: a token in no bundle's list is still a bad change target", () =>
+            {
+                var json = CardsWriteOnlyJson.Replace(",\"externalScopes\":[\"patter\"]", "");
+                var flow = new Engine(BundleLoader.Parse(json), new EngineOptions { Registry = new ScopeRegistry() }).OpenFlow("main");
+                flow.Deal("h1");
+                ThrowsExactly<StoryletError>(() => flow.Play("c1", "go", "h1"), "bad change target scope \"@patter\"", "an unlisted token");
+            }),
+
+            ("other engines' scopes: the registry keeps the other engine's rules (a read-only property is refused)", () =>
+            {
+                var registry = new ScopeRegistry().DefineOwned("patter", new List<ScopeDeclaration>
+                {
+                    new ScopeDeclaration { Name = "gold", Type = "number", Default = ExprValue.Num(3), Writable = false },
+                }, new OwnedScopeOptions { Owner = "Patter" });
+                var flow = new Engine(BundleLoader.Parse(CardsWriteOnlyJson), new EngineOptions { Registry = registry }).OpenFlow("main");
+                flow.Deal("h1");
+                ThrowsExactly<StoryletError>(() => flow.Play("c1", "go", "h1"), "read-only", "a read-only property of another engine");
+                Num(registry.Get("patter", "gold"), 3, "patter.gold untouched");
+            }),
+        };
+
         private sealed class ZeroWorld : IScopeResolver
         {
             public ExprValue Get(string name) => ExprValue.Num(0);
+            public bool CanSet => false;
+            public void Set(string name, ExprValue value) { }
+        }
+
+        private sealed class FiveWorld : IScopeResolver
+        {
+            public ExprValue Get(string name) => ExprValue.Num(5);
             public bool CanSet => false;
             public void Set(string name, ExprValue value) { }
         }
@@ -556,7 +802,8 @@ namespace StoryletStudio.StoryletEngine.TestHost
         {
             var failures = new List<string>();
             int passed = 0;
-            foreach (var (name, run) in Cases)
+            var all = Cases.Concat(HotSwapCases).Concat(ExternalScopeCases).ToList();
+            foreach (var (name, run) in all)
             {
                 try
                 {
@@ -568,7 +815,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     failures.Add($"{name}: {e.Message}");
                 }
             }
-            return (passed, Cases.Count, failures);
+            return (passed, all.Count, failures);
         }
     }
 }

@@ -52,6 +52,7 @@ Patterpad publishes to `../patter-dist/` in the same way.
   },
   boxes: [ /* each box, with its tag groups, decks, templates and hands */ ],
   maps: [ /* only when the project asked: see below */ ],
+  externalScopes: ["patter"],          // other engines' scopes the content names, when any
 }
 ```
 

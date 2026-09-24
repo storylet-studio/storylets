@@ -146,6 +146,14 @@ namespace StoryletStudio.StoryletEngine
             {
                 foreach (var box in boxes) bundle.Boxes.Add(ParseBox((JObject)box));
             }
+            // Other engines' scopes the content names (`@patter.visits`): read
+            // and written through the game's registry, and reported when no
+            // engine registered one.
+            if (b["externalScopes"] is JArray external)
+            {
+                bundle.ExternalScopes = new List<string>();
+                foreach (var token in external) bundle.ExternalScopes.Add(token.Value<string>());
+            }
             if (b["maps"] is JArray maps)
             {
                 foreach (var map in maps) bundle.Maps.Add(ParseMap((JObject)map));

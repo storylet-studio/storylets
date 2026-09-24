@@ -83,8 +83,15 @@ link.attach(engine);
 ```
 
 `applyLiveBundle` never throws. A bundle it can't apply comes back as `{ ok: false, error }`
-and your engine is untouched. The seed you pass only matters for fresh flows; the swap
-resumes the random sequence exactly where the old flow was, so later draws match.
+and your engine is untouched. It calls the engine's own `hotSwap(bundle)`, which you can call
+directly for the load report. The engine remembers the options it was built with, so the options
+you pass only override them; the swap resumes the random sequence exactly where the old flow was,
+so later draws match.
+
+It works the same when the engine shares the game's registry with Patter. The old engine hands
+its values to the replacement on that registry, the report says which properties the edit
+dropped or defaulted, and nothing belonging to Patter or the game is touched. Only then is the
+old engine spent, so re-take every handle from the new one.
 
 There are honest limits. Your game's own side effects don't rewind (things already spawned
 stay spawned). A card already on the table stays there if it still exists and is evicted if
@@ -160,7 +167,7 @@ void Update()
     // Live refresh: the editor pushed a bundle. Apply = a new engine over it, carrying the run.
     if (_link.TryReceive(out var raw) && StoryletLiveBundle.TryParsePush(raw, out var build, out var data))
     {
-        var r = StoryletLiveBundle.Apply(_engine, data, new EngineOptions { Seed = 7, Log = true });
+        var r = StoryletLiveBundle.Apply(_engine, data);    // the engine keeps its own options
         if (!r.Ok) { Debug.LogWarning(r.Error); return; }   // another project, bad JSON: keep yours
         _engine = r.Engine;                                  // re-bind your handles and anything over them
         _flow = _engine.GetFlow("main") ?? _engine.OpenFlow("main");
@@ -226,7 +233,7 @@ link.attach(engine)                   # forward every flow's trace; a board each
 
 # Live refresh: the editor saved and pushed a new bundle.
 link.bundle_pushed.connect(func(build: String, data: String) -> void:
-    var r := StoryletLiveLink.apply_live_bundle(engine, data, {"seed": 7, "log": true})
+    var r := StoryletLiveLink.apply_live_bundle(engine, data)
     if not r["ok"]:
         push_warning(r["error"])      # another project, bad JSON: keep yours
         return
@@ -239,8 +246,8 @@ link.bundle_pushed.connect(func(build: String, data: String) -> void:
 ```
 
 `apply_live_bundle` never `push_error`s. A bundle it can't apply comes back as
-`{"ok": false, "error": ...}` and your run is untouched. Pass the options you created the
-engine with. The addon's Board demo (`addons/storyletengine/demo/board_demo.tscn`) is wired
+`{"ok": false, "error": ...}` and your run is untouched. The engine remembers the options it
+was created with; pass options only to override one for the replacement. The addon's Board demo (`addons/storyletengine/demo/board_demo.tscn`) is wired
 this way. Run it from the editor with Live Link on and the Board follows it.
 
 ## The wire protocol (`storyletengine/debug@1`)

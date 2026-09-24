@@ -499,6 +499,11 @@ namespace storylets
         std::vector<Box> boxes;
         /** Maps, when the build carried them. Empty is the normal state. */
         std::vector<BundleMap> maps;
+        /** Other engines' game-wide scopes the content names (`patter`),
+         *  sorted: the family's shared vocabulary, let through unchecked by the
+         *  compiler. The engine reports when the game has not registered one,
+         *  and an outcome writing one fails naming it. Empty when none. */
+        std::vector<std::string> externalScopes;
     };
 
     using BundlePtr = std::shared_ptr<const Bundle>;
@@ -1081,6 +1086,11 @@ namespace storylets
         if (maps && maps->isArray())
         {
             for (const auto& map : maps->arr) bundle->maps.push_back(bundleloader::ParseMap(map));
+        }
+        const JsonValue* external = b.find("externalScopes");
+        if (external && external->isArray())
+        {
+            for (const auto& token : external->arr) bundle->externalScopes.push_back(token.str);
         }
         return bundle;
     }

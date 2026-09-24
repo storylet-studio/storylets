@@ -25,11 +25,15 @@ replayed through the std-only client in `Storylets/LiveLink.h` against a
 recording sink and compared with `frames.json` byte for byte, compact JSON;
 `LiveLinkFixture.h`), the one-registry checks (`OneRegistry.h`: the JS
 runtime's `packages/runtime/test/one-registry.test.ts` ported case for case,
-plus the registry leaving with a destroyed engine and the live swap's
-hand-over), the kernel-error checks (also in `OneRegistry.h`: one case per
-place the engine rethrows the shared kernel's `ExprError` / `RegistryError`
-as its own `EvalError` / `StoryletError`, each failing when its rethrow is
-removed), the expr parity corpus and the registry corpus beside ours, and
+`hotSwap` on the game's registry included, plus its options callback changing
+only what it changes, the registry leaving with a
+destroyed engine, a spent engine taking nothing with it, and the runtime half
+of the compiler test's "other engines' scopes": a card reading and writing
+`@patter`, and the refusal to open a flow or load a save where nobody
+registered it, before anything changes), the kernel-error checks (also
+in `OneRegistry.h`: one case per place the engine rethrows the shared
+kernel's `ExprError` / `RegistryError` as its own `EvalError` /
+`StoryletError`, each failing when its rethrow is removed), the expr parity corpus and the registry corpus beside ours, and
 `ALL PASS`, exiting non-zero on any divergence from the reference
 expectations. A second argument writes the frames the
 client sent, one per line, to that path (for pairing them with a running

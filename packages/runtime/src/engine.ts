@@ -866,7 +866,14 @@ export class Engine {
    *  self-backed resolver is rebuilt instead. */
   private readonly hostWorld?: ScopeResolver;
 
+  /** The options this engine was built with: hotSwap builds its replacement from them. */
+  private readonly creationOptions: EngineOptions;
+  /** How to register each shared scope again, in registration order: a failed
+   *  hotSwap puts this engine back exactly as it was. */
+  private readonly sharedMounts: Array<{ key: string; mount: () => void }> = [];
+
   constructor(bundle: Bundle, opts: EngineOptions = {}) {
+    this.creationOptions = opts;
     this.seed = opts.seed ?? 0;
     this.onReplacedFlow = opts.onReplacedFlow;
     if (opts.world !== undefined) this.hostWorld = opts.world;
@@ -982,22 +989,26 @@ export class Engine {
     internals.shared = buildPartition(internals, sharedHalf);
     internals.worldReadOnly = new Set(internals.bundle.world.properties.filter((d) => d.writable === false).map((d) => d.name));
     const registered: string[] = [];
+    // Register now, and remember how, so a failed hotSwap can register again.
+    const mount = (key: string, register: () => void): void => {
+      register();
+      registered.push(key);
+      this.sharedMounts.push({ key, mount: register });
+    };
     try {
       // `story` is this engine's token whether or not the bundle declares a shared
       // @story property: registering it is what makes a clash show at once.
-      reg.mountOwned("story", internals.shared.story, { owner: OWNER }); // claims values the game loaded first
-      registered.push("story");
+      const story = internals.shared.story;
+      mount("story", () => { reg.mountOwned("story", story, { owner: OWNER }); }); // claims values the game loaded first
       for (const kind of OWNED_SCOPES) {
         for (const [id, bag] of internals.shared[kind]) {
           if (bag.declarations().length === 0) continue; // holds nothing: not registered
-          reg.mountOwned(sharedKey(kind, id), bag, { owner: OWNER });
-          registered.push(sharedKey(kind, id));
+          mount(sharedKey(kind, id), () => { reg.mountOwned(sharedKey(kind, id), bag, { owner: OWNER }); });
         }
       }
       if (hostWorld !== undefined) {
         // The game keeps these values: an external scope, never saved.
-        reg.defineForeign("world", hostWorld, worldDecls, { normalise: identity, owner: OWNER });
-        registered.push("world");
+        mount("world", () => { reg.defineForeign("world", hostWorld, worldDecls, { normalise: identity, owner: OWNER }); });
       } else if (internals.ownsRegistry && !reg.has("world")) {
         // Standalone: self-backed from the declared defaults, DECLARATIONS AND
         // ALL, as a property the registry stores and SAVES (only a resolver the
@@ -1005,7 +1016,9 @@ export class Engine {
         // examiner still reads it there, and the kernel lets a `{ host: true }`
         // write past it, which is what the game's own surface passes.
         reg.defineOwned("world", worldDecls, { normalise: identity, pathPrefix: "world.", owner: OWNER });
+        const worldBag = reg.ownedBag("world");
         registered.push("world");
+        this.sharedMounts.push({ key: "world", mount: () => { reg.mountOwned("world", worldBag, { owner: OWNER }); } });
         internals.selfWorld = true;
       }
       // Given the game's registry and no resolver, @world is the game's to
@@ -1083,6 +1096,7 @@ export class Engine {
    *  the values the registry holds for them (a load); a fresh open is a reset
    *  of that name, so anything waiting for it is discarded first. */
   private open(id: string, opts: OpenFlowOptions, claim: boolean): Flow {
+    this.assertExternalScopes();
     // The world's claims as they stand WITHOUT this name, taken before the
     // replace: a resume competes with the other flows, never with the flow it
     // is replacing (which is about to release everything it holds).
@@ -1311,6 +1325,20 @@ export class Engine {
     this.internals.emitEngine("", { type: "diagnostic", where: "property address", message });
   }
 
+  /** Content that names another engine's scope (`@patter.visits`) runs only
+   *  where that engine is on this registry: without it every read would answer
+   *  false and every write fail, so the flow is refused as it opens, before
+   *  anything changes. By then a game has built all of its engines, whatever
+   *  order it built them in. The same message on every runtime. */
+  private assertExternalScopes(): void {
+    for (const token of this.internals.bundle.externalScopes ?? []) {
+      if (!this.internals.registry.has(token)) {
+        throw new Error(`this content names @${token}, which no engine on this registry registered: `
+          + `give every engine the game's one registry`);
+      }
+    }
+  }
+
   /** The shared surface as examiner rows: @world (read through the
    *  resolver) then the shared partitions. Per-flow rows live on each Flow. */
   listProperties(): PropertyRow[] {
@@ -1364,6 +1392,76 @@ export class Engine {
   }
 
   // --- persistence (schema 4) -------------------------------------------------
+
+  /**
+   * Live bundle refresh: rebuild on an edited bundle with the whole run carried
+   * over, and return the replacement with the report its load produced.
+   *
+   * Standalone, that is a save and a load into a new engine, and this one is left
+   * untouched (discard it). With the game's registry the two cannot both hold the
+   * same keys, so this engine is spent afterwards (its flows closed, the
+   * replacement holding everything on the same registry): it carries its
+   * own values into the snapshot, steps out of the registry, and the replacement
+   * loads them the way a standalone save loads: so the report covers the
+   * properties the edit dropped, defaulted, or retyped, and a dropped property
+   * is dropped rather than kept. Values the game loaded that were still waiting
+   * for a flow of this engine carry across as they were, and nothing belonging
+   * to any other engine is touched. A save for another project is refused before
+   * anything moves; if the rebuild fails for any other reason, this engine takes
+   * its registrations back and is left exactly as it was.
+   */
+  hotSwap(bundle: Bundle, opts: EngineOptions = {}): { engine: Engine; report: LoadReport } {
+    if (bundle.content.project !== this.internals.bundle.content.project) {
+      throw new Error(`save is for project "${this.internals.bundle.content.project}", bundle is "${bundle.content.project}"`);
+    }
+    const options: EngineOptions = { ...this.creationOptions, ...opts };
+    const snapshot = this.saveGame();
+    const reg = this.internals.registry;
+    if (this.internals.ownsRegistry) {
+      // Its own registry: a save and a load into a new engine, as it always was,
+      // and this engine is left untouched.
+      const next = new Engine(bundle, { ...options, registry: undefined });
+      return { engine: next, report: next.loadGame(snapshot) };
+    }
+    // This engine's own values, registered or still waiting for a flow.
+    const mine: Record<string, Record<string, ScalarValue>> = {};
+    for (const [key, values] of Object.entries(reg.save())) {
+      if (key === "story" || key.startsWith("storylets/")) mine[key] = values;
+    }
+    const registeredKeys = new Set([
+      ...this.sharedMounts.map((m) => m.key),
+      ...[...this.flowsById.values()].flatMap((f) => f.registeredKeys()),
+    ]);
+    const waiting = Object.fromEntries(Object.entries(mine).filter(([key]) => !registeredKeys.has(key)));
+    // Step out of the registry. The bags keep their values, so stepping back in is exact.
+    for (const { key } of this.sharedMounts) if (reg.has(key)) reg.remove(key);
+    for (const flow of this.flowsById.values()) flow.releaseBags(false);
+    let next: Engine | undefined;
+    try {
+      next = new Engine(bundle, { ...options, registry: reg });
+      const report = next.loadGame({ ...snapshot, registry: mine });
+      // Values that were waiting for a flow wait on, for the replacement's flow of that name.
+      const stillWaiting = Object.fromEntries(Object.entries(waiting).filter(([key]) => !reg.has(key)));
+      if (Object.keys(stillWaiting).length > 0) reg.load(stillWaiting, { keepParked: true });
+      this.dropRun(false);
+      return { engine: next, report };
+    } catch (e) {
+      // Back as it was. The replacement's registrations go; a constructor that
+      // failed part way parked what it had claimed, so this engine's keys are
+      // cleared of anything waiting, registered again, and its own values laid
+      // back over them (the waiting ones parked again).
+      next?.dropRun(false);
+      for (const { key } of next?.sharedMounts ?? []) if (reg.has(key)) reg.remove(key);
+      reg.discardParked("storylets/");
+      for (const { mount } of this.sharedMounts) mount();
+      for (const flow of this.flowsById.values()) flow.mountBags();
+      // `story` may have claimed what the failed replacement parked there: back to
+      // its declarations, then this engine's own values over it.
+      this.reseedShared();
+      reg.load(mine, { keepParked: true });
+      throw e;
+    }
+  }
 
   /** The whole engine's NON-property state, one envelope: the spent cards
    *  once, then every live flow (board, clocks, cooldowns, PRNG, play log)
@@ -1431,6 +1529,7 @@ export class Engine {
    *  the cost comes back with the load whether or not anybody looked first. */
   loadGame(envelope: SaveEnvelope | SaveEnvelopeV1): LoadReport {
     this.assertSameProject(envelope);
+    this.assertExternalScopes();
     const plan = this.planLoad(structuredClone(envelope));
     const reg = this.internals.registry;
     if (plan.sections !== undefined) {
@@ -1626,6 +1725,8 @@ export class Flow {
    *  that declares something registered under this flow's keys. */
   private stores: Partition;
   private readonly registered: string[] = [];
+  /** This flow's bags that declare something, under their registry keys. */
+  private readonly bagKeys: Array<[string, StateBag]> = [];
 
   private traceHandlers = new Set<TraceHandler>();
   private logEntries: LogEntry[] = [];
@@ -1648,14 +1749,13 @@ export class Flow {
     this.stores = buildPartition(internals, flowHalf);
     // Register the bags: each claims whatever the registry holds for its key (a
     // load); openFlow discarded that first for a fresh flow.
-    const reg = internals.registry;
     const put = (key: string, bag: StateBag): void => {
       if (bag.declarations().length === 0) return; // holds nothing: not registered
-      reg.mountOwned(key, bag, { owner: OWNER });
-      this.registered.push(key);
+      this.bagKeys.push([key, bag]);
     };
     put(flowKey(id, "story"), this.stores.story);
     for (const kind of OWNED_SCOPES) for (const [owner, bag] of this.stores[kind]) put(flowKey(id, kind, owner), bag);
+    this.mountBags();
     for (const box of internals.bundle.boxes) {
       this.turnCounts.set(box.id, 0);
       for (const hand of box.hands) this.boardContents.set(hand.id, []);
@@ -1700,6 +1800,20 @@ export class Flow {
   releaseBags(keep: boolean): void {
     for (const key of this.registered) this.internals.registry.remove(key, { keep });
     this.registered.length = 0;
+  }
+
+  /** @internal - the registry keys this flow holds right now. */
+  registeredKeys(): string[] {
+    return [...this.registered];
+  }
+
+  /** @internal - register this flow's bags (again): at construction, and when a
+   *  failed hotSwap hands them back. Each claims what the registry holds for it. */
+  mountBags(): void {
+    for (const [key, bag] of this.bagKeys) {
+      this.internals.registry.mountOwned(key, bag, { owner: OWNER });
+      this.registered.push(key);
+    }
   }
 
   private assertOpen(): void {
@@ -2671,7 +2785,20 @@ export class Flow {
         if (source.kind === "criteria") throw new Error(`@hand.${name} is a chosen tag / criteria name and cannot be written`);
         return this.landIn(source.kind, source.id, name, value, `${this.address(source.kind, source.id)}.${name}`);
       }
-      default: throw new Error(`bad change target scope "@${scope}"`);
+      default: {
+        // Another engine's game-wide scope (`@patter.x`): the family's shared
+        // vocabulary lets a card write it, and the registry keeps that engine's
+        // rules (a read-only property is refused). A story write, so no host flag.
+        if (this.internals.registry.has(scope)) {
+          const prev = this.internals.registry.get(scope, name);
+          this.internals.registry.set(scope, name, value);
+          return { path: `${scope}.${name}`, ...(prev !== undefined ? { prev } : {}) };
+        }
+        if (this.internals.bundle.externalScopes?.includes(scope)) {
+          throw new Error(`@${scope}.${name} cannot be written: no engine on this registry registered @${scope}`);
+        }
+        throw new Error(`bad change target scope "@${scope}"`);
+      }
     }
   }
 

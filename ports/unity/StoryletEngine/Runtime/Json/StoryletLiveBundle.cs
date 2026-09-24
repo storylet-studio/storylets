@@ -1,8 +1,9 @@
 // Live refresh - the game-side applier (the C# parity of
 // @storylet-studio/play-helpers' applyLiveBundle). The editor pushes
 // {t:"bundle", build, data} over the Live Link; the game drains it on ITS OWN
-// thread (StoryletLiveLink.TryReceive, e.g. from Update()) and applies: a new
-// session over the pushed bundle, loaded from the old one's save. The runtime's
+// thread (StoryletLiveLink.TryReceive, e.g. from Update()) and applies it
+// through the engine's own HotSwap: a new engine over the pushed bundle,
+// carrying the old one's run, on the same registry. The runtime's
 // Load already tolerates edited content (a deleted card leaves the table,
 // orphaned cooldowns and hand contents drop, a new property takes its
 // default), so the run carries across; it refuses only a save from another
@@ -12,9 +13,9 @@
 //
 //   if (_link.TryReceive(out var raw) && StoryletLiveBundle.TryParsePush(raw, out var build, out var data))
 //   {
-//       var r = StoryletLiveBundle.Apply(_engine, data, new EngineOptions { Seed = Seed, Log = true });
+//       var r = StoryletLiveBundle.Apply(_engine, data);
 //       if (!r.Ok) { Debug.LogWarning(r.Error); return; }
-//       _engine = r.Engine;                            // re-bind: LoadGame rebuilt
+//       _engine = r.Engine;                            // re-bind: HotSwap rebuilt
 //       _flow = _engine.GetFlow("main");               // every flow, so re-take handles
 //       _link.Attach(_engine);                         // re-attach the ENGINE
 //       _link.SetBuild(build);
@@ -30,13 +31,18 @@ namespace StoryletStudio.StoryletEngine
 {
     /// <summary>What applying a pushed bundle produced: on success the new
     /// ENGINE carrying the old one's run (every flow of it) and the bundle it
-    /// runs; on failure the reason, and the engine you had is untouched.
-    /// LoadGame rebuilt every flow, so re-take your handles.</summary>
+    /// runs, and the report its load gave; on failure the reason, and the
+    /// engine you had is left as it was. The swap rebuilt every flow, so
+    /// re-take your handles.</summary>
     public sealed class StoryletLiveBundleResult
     {
         public bool Ok;
         public Engine Engine;
         public Bundle Bundle;
+        /// <summary>What the load did that was not a plain restore (a property
+        /// the edit dropped, defaulted or retyped, a card it evicted); null on
+        /// failure.</summary>
+        public LoadReport Report;
         public string Error;
     }
 
@@ -59,17 +65,21 @@ namespace StoryletStudio.StoryletEngine
         }
 
         /// <summary>Apply a pushed bundle: parse <paramref name="data"/> (the
-        /// .storyletsc JSON), create an ENGINE over it with <paramref name="opts"/>
-        /// (the options the old engine was created with; the seed does not
-        /// matter here, the save carries each flow's PRNG state, but Log and
-        /// World do - neither rides the envelope), and load the old engine's
-        /// save into it. Never throws; a failure (bad JSON, a bundle the
-        /// runtime rejects, another project) comes back with Ok false and
-        /// <paramref name="engine"/> is untouched. An engine built with the
-        /// game's own EngineOptions.Registry cannot be swapped this way: the new
-        /// engine's `story` clashes with the old engine's in that registry, so
-        /// Apply returns Ok false and the registry is left as it was.</summary>
-        public static StoryletLiveBundleResult Apply(Engine engine, string data, EngineOptions opts = null)
+        /// .storyletsc JSON) and swap it in through the engine's own
+        /// <see cref="Engine.HotSwap"/>, returning the replacement. Never
+        /// throws; a failure (bad JSON, a bundle the runtime rejects, another
+        /// project) comes back with Ok false and <paramref name="engine"/> left
+        /// as it was.
+        ///
+        /// Works whether the engine made its own registry or was given the
+        /// game's: on the game's registry the old engine hands its keys to the
+        /// replacement, which a plain save and load into a second engine cannot
+        /// do (the two would clash). The engine remembers the options it was
+        /// built with (Seed, Log, World, Registry), so <paramref name="change"/>
+        /// is only for building the replacement with different ones: it edits a
+        /// copy of them, and whatever it leaves alone is kept (a Registry it
+        /// sets is ignored), as in <see cref="Engine.HotSwap"/>.</summary>
+        public static StoryletLiveBundleResult Apply(Engine engine, string data, Action<EngineOptions> change = null)
         {
             Bundle bundle;
             try
@@ -82,9 +92,11 @@ namespace StoryletStudio.StoryletEngine
             }
             try
             {
-                var next = new Engine(bundle, opts);
-                next.LoadGame(engine.SaveGame());
-                return new StoryletLiveBundleResult { Ok = true, Engine = next, Bundle = bundle };
+                // The engine's own HotSwap: on the game's registry the old engine
+                // has to hand its keys over, which a plain save and load into a
+                // new engine cannot do.
+                var swapped = engine.HotSwap(bundle, change);
+                return new StoryletLiveBundleResult { Ok = true, Engine = swapped.Engine, Bundle = bundle, Report = swapped.Report };
             }
             catch (Exception e)
             {

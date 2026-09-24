@@ -30,6 +30,33 @@ const BUNDLE_JSON := """{"schema":"storylets/bundle@0","content":{"project":"con
    "@world.alarm":{"src":"@world.alarm + 1","ast":["bin","+",["sv","world","alarm"],["n",1]]}}}]}]}],
  "handTemplates":[],"hands":[{"id":"h_q","gameId":"q","rule":{"slots":"unbounded"}}]}]}"""
 
+## The JS hotSwap describe's `edited`, expanded the same way: @story gains
+## `rumours`, the per-flow `steps` is gone, and the box gains a SHARED property
+## (a bag, and a key, the old engine never had).
+const EDITED_JSON := """{"schema":"storylets/bundle@0","content":{"project":"conf","version":"0.0.0","hash":""},"metadata":"full","settings":{"playAdvancesTurns":1},
+"world":{"properties":[{"name":"alarm","type":"number","default":0}]},
+"story":{"properties":[{"name":"gold","type":"number","default":0},{"name":"rumours","type":"number","default":0}]},
+"boxes":[{"id":"b_x","gameId":"box","ranking":{"specificity":true},"fields":[],"properties":[{"name":"heat","type":"number","default":0,"shared":true}],
+ "tagGroups":[{"id":"d_zone","gameId":"zone","tags":[{"id":"v_docks","gameId":"docks","properties":[{"name":"danger","type":"number","default":0}]},{"id":"v_market","gameId":"market"}]}],
+ "decks":[{"id":"k_main","gameId":"main","properties":[{"name":"drawn","type":"number","default":0}],
+  "cards":[{"id":"c_heist","gameId":"heist","priority":0,"redraw":"always","outcomes":[{"id":"o_go","gameId":"go","changes":{
+   "@deck.drawn":{"src":"@deck.drawn + 1","ast":["bin","+",["sv","deck","drawn"],["n",1]]},
+   "@story.gold":{"src":"@story.gold + 1","ast":["bin","+",["sv","story","gold"],["n",1]]},
+   "@world.alarm":{"src":"@world.alarm + 1","ast":["bin","+",["sv","world","alarm"],["n",1]]}}}]}]}],
+ "handTemplates":[],"hands":[{"id":"h_q","gameId":"q","rule":{"slots":"unbounded"}}]}]}"""
+
+## The JS compiler test's "other engines' scopes" project, as compileProject
+## writes it: one card gated on @patter.visits that spends @patter.gold, and the
+## bundle's record that the content names @patter.
+const PATRON_JSON := """{"schema":"storylets/bundle@0","content":{"project":"p","version":"0.0.1","hash":"16f2jt4"},"metadata":"full","settings":{"playAdvancesTurns":1},
+"world":{"properties":[]},"story":{"properties":[]},
+"boxes":[{"id":"b_1","gameId":"b1","ranking":{"specificity":true},"fields":[],"properties":[],
+ "tagGroups":[{"id":"d_1","gameId":"d1","tags":[{"id":"v_1","gameId":"v1"}]}],
+ "decks":[{"id":"k_1","gameId":"main","properties":[],"cards":[{"id":"c_1","gameId":"c1",
+  "condition":{"src":"@patter.visits >= 1","ast":["bin",">=",["sv","patter","visits"],["n",1]]},"priority":0,"redraw":"always",
+  "outcomes":[{"id":"o_1","gameId":"go","changes":{"@patter.gold":{"src":"@patter.gold - 1","ast":["bin","-",["sv","patter","gold"],["n",1]]}}}]}]}],
+ "handTemplates":[],"hands":[{"id":"h_1","gameId":"h1","rule":{"slots":1}}]}],"externalScopes":["patter"]}"""
+
 var _bundle: Dictionary
 var _failures: Array = []
 ## Set by each case as its last act: a GDScript runtime error abandons the
@@ -58,6 +85,17 @@ func run() -> Dictionary:
 		["reads and writes another engine's game-wide scope by path", _other_engines_scope],
 		["another engine's game-wide scope reaches a card's condition", _other_engines_scope_in_conditions],
 		["reset reseeds a self-backed @world in place", _reset_reseeds_self_world],
+		# Other engines' scopes (the JS compiler test's "other engines' scopes").
+		["the loader reads externalScopes, and refuses one that is not a list of tokens", _external_scopes_loaded],
+		["the engine reads and writes another engine's scope through the game's registry", _external_scopes_read_written],
+		["refuses to open a flow, or load a save, where nobody registered the scope, before anything changes", _external_scopes_refused],
+		["a scope the content does not name as another engine's stays a bad change target", _external_scopes_unnamed_write],
+		# hot_swap on the game's registry (the JS "hotSwap on the game's registry").
+		["hot_swap carries the run across, reports the dropped property, and really drops it", _hot_swap_carries],
+		["hot_swap touches nothing that is not this engine's, and waiting values wait on", _hot_swap_touches_nothing_else],
+		["hot_swap refuses another project before anything moves", _hot_swap_refuses_project],
+		["a hot_swap rebuild that fails part way leaves this engine and the registry exactly as they were", _hot_swap_rolls_back],
+		["the Live Link's apply_live_bundle now works on the game's registry", _hot_swap_live_link],
 	]
 	var passed := 0
 	var all: Array = []
@@ -418,4 +456,201 @@ func _reset_reseeds_self_world() -> void:
 	engine.reset()
 	_expect("world.alarm after the reset", engine.get_property("world.alarm"), 0)
 	_expect("the registry after the reset", engine.save_game().get("registry"), {"story": {"gold": 0}, "world": {"alarm": 0}})
+	_finished = true
+
+
+# --- other engines' scopes --------------------------------------------------------
+
+func _external_scopes_loaded() -> void:
+	var loaded := StoryletBundle.load_from_string(PATRON_JSON)
+	_check("the patron bundle loads", loaded["ok"])
+	if loaded["ok"]:
+		_expect("its externalScopes", StoryletBundle.external_scopes(loaded["bundle"]), ["patter"])
+	_expect("a bundle naming none", StoryletBundle.external_scopes(_bundle), [])
+	var bad: Dictionary = JSON.parse_string(PATRON_JSON)
+	bad["externalScopes"] = "patter"
+	_check("a string for externalScopes loaded", not StoryletBundle.load_from_dict(bad)["ok"])
+	bad["externalScopes"] = ["patter", 3]
+	_check("a non-token in externalScopes loaded", not StoryletBundle.load_from_dict(bad)["ok"])
+	_finished = true
+
+
+func _external_scopes_read_written() -> void:
+	var bundle: Dictionary = JSON.parse_string(PATRON_JSON)
+	var registry := StoryletScopeRegistry.new()
+	registry.define_owned("patter", [{"name": "gold", "type": "number", "default": 3},
+		{"name": "visits", "type": "number", "default": 1}], {"owner": "Patter"})
+	var flow := StoryletEngine.create(bundle, {"registry": registry}).open_flow("main")
+	_expect("dealt", flow.deal("h1").map(func(c): return c["gameId"]), ["c1"])
+	var err := flow.play("c1", "go", "h1")
+	_check("the patron would not play: " + err, err == "")
+	_expect("the registry's patter.gold", registry.get_value("patter", "gold"), 2)
+	_finished = true
+
+
+## What `fn` returned, and the messages it push_error'd: the refusal channel of
+## a verb that has no exceptions to throw.
+class _Caught extends Logger:
+	var errors: Array = []
+	func _log_error(_function: String, _file: String, _line: int, code: String, _rationale: String,
+			_editor_notify: bool, _error_type: int, _script_backtrace: Array[ScriptBacktrace]) -> void:
+		errors.append(code)
+
+
+static func _catching(fn: Callable) -> Dictionary:
+	var caught := _Caught.new()
+	OS.add_logger(caught)
+	var result = fn.call()
+	OS.remove_logger(caught)
+	return {"result": result, "errors": caught.errors}
+
+
+func _external_scopes_refused() -> void:
+	var bundle: Dictionary = JSON.parse_string(PATRON_JSON)
+	var refusal := "this content names @patter, which no engine on this registry registered: give every engine the game's one registry"
+	var alone := StoryletEngine.create(bundle)
+	var opened := _catching(func(): return alone.open_flow("main"))
+	_check("open_flow was not refused: " + str(opened["result"]), opened["result"] == null)
+	_expect("open_flow's refusal", opened["errors"], ["StoryletEngine.open_flow: " + refusal])
+	_check("a refused open_flow opened a flow", alone.get_flow("main") == null and alone.flows().is_empty())
+
+	# A save made where Patter was present, loaded where it is not: refused whole.
+	var registry := StoryletScopeRegistry.new()
+	registry.define_owned("patter", [{"name": "gold", "type": "number", "default": 3},
+		{"name": "visits", "type": "number", "default": 1}], {"owner": "Patter"})
+	var game := StoryletEngine.create(bundle, {"registry": registry})
+	game.open_flow("main").deal("h1")
+	var save := game.save_game()
+	var elsewhere := StoryletScopeRegistry.new()
+	elsewhere.define_owned("patter", [{"name": "gold", "type": "number", "default": 3},
+		{"name": "visits", "type": "number", "default": 1}])
+	var other := StoryletEngine.create(bundle, {"registry": elsewhere})
+	var keep := other.open_flow("keep")
+	elsewhere.remove("patter")
+	var loaded := _catching(func(): return other.load_game(save))
+	_expect("load_game's answer", loaded["result"], {})
+	_expect("load_game's refusal", loaded["errors"], ["StoryletEngine.load_game: " + refusal])
+	_expect("the flows after the refused load", other.flows().map(func(f): return f.id), ["keep"])
+	_check("the refused load touched the flow it kept", other.get_flow("keep") == keep and not keep.is_closed())
+
+	# The engine that took the scope away mid-game: a write names it.
+	var pays: Dictionary = JSON.parse_string(PATRON_JSON)
+	# Ungated, and writing a constant: reading nobody's @patter.gold would fail first.
+	var card: Dictionary = pays["boxes"][0]["decks"][0]["cards"][0]
+	card.erase("condition")
+	card["outcomes"][0]["changes"] = {"@patter.gold": {"src": "1", "ast": ["n", 1]}}
+	var shared := StoryletScopeRegistry.new()
+	shared.define_owned("patter", [{"name": "gold", "type": "number", "default": 3}])
+	var paying := StoryletEngine.create(pays, {"registry": shared}).open_flow("main")
+	_expect("dealt", paying.deal("h1").map(func(c): return c["gameId"]), ["c1"])
+	shared.remove("patter")
+	var err := paying.play("c1", "go", "h1")
+	_check("the write to nobody's @patter did not fail naming it: " + err,
+		err.contains("@patter.gold cannot be written: no engine on this registry registered @patter"))
+	_finished = true
+
+
+func _external_scopes_unnamed_write() -> void:
+	var bundle: Dictionary = JSON.parse_string(PATRON_JSON)
+	var card: Dictionary = bundle["boxes"][0]["decks"][0]["cards"][0]
+	card.erase("condition")
+	card["outcomes"][0]["changes"] = {"@patter.gold": {"src": "1", "ast": ["n", 1]}}
+	# A scope the content does not name as another engine's is still no target.
+	bundle.erase("externalScopes")
+	var other := StoryletEngine.create(bundle).open_flow("main")
+	other.deal("h1")
+	var err := other.play("c1", "go", "h1")
+	_check("an unnamed scope was not a bad target: " + err, err.contains('bad change target scope "@patter"'))
+	_finished = true
+
+
+# --- hot_swap on the game's registry ------------------------------------------------
+
+## A game playing: Patter's scope beside this engine's, one heist in flow f,
+## and values the game loaded that wait for a flow z of this engine and for
+## another engine altogether.
+func _playing() -> Dictionary:
+	var g := _game()
+	g["registry"].define_owned("patter", [{"name": "visits", "type": "number", "default": 4}], {"owner": "Patter"})
+	_heist((g["engine"] as StoryletEngine).open_flow("f"))
+	g["registry"].load({"storylets/flow/z/story": {"steps": 5}, "other/deck/inn": {"drawn": 2}}, {"keep_parked": true})
+	return g
+
+
+func _edited() -> Dictionary:
+	return JSON.parse_string(EDITED_JSON)
+
+
+func _hot_swap_carries() -> void:
+	var g := _playing()
+	var old_flow: StoryletFlow = (g["engine"] as StoryletEngine).get_flow("f")
+	var r: Dictionary = (g["engine"] as StoryletEngine).hot_swap(_edited())
+	_check("the swap was refused: " + str(r.get("error", "")), r.get("ok", false))
+	if not r.get("ok", false):
+		_finished = true
+		return
+	_check("the old engine was not spent: its flow is still open", old_flow.is_closed())
+	var engine: StoryletEngine = r["engine"]
+	_expect("story.gold", engine.get_property("story.gold"), 1)
+	_expect("story.rumours", engine.get_property("story.rumours"), 0)
+	_expect("deck.main.drawn", (engine.get_flow("f") as StoryletFlow).get_property("deck.main.drawn"), 1)
+	_expect("the report's droppedProperties", r["report"].get("droppedProperties"), [{"flow": "f", "path": "story.steps"}])
+	_check("the dropped bag stayed as a stray", not g["registry"].save().has("storylets/flow/f/story"))
+	_heist(engine.get_flow("f"))
+	_expect("the registry's story.gold", g["registry"].get_value("story", "gold"), 2)
+	_finished = true
+
+
+func _hot_swap_touches_nothing_else() -> void:
+	var g := _playing()
+	var r: Dictionary = (g["engine"] as StoryletEngine).hot_swap(_edited())
+	_check("the swap was refused: " + str(r.get("error", "")), r.get("ok", false))
+	var saved: Dictionary = g["registry"].save()
+	_expect("patter", saved.get("patter"), {"visits": 4})
+	_expect("another engine's waiting values", saved.get("other/deck/inn"), {"drawn": 2})
+	_expect("this engine's waiting values", saved.get("storylets/flow/z/story"), {"steps": 5})
+	_expect("the game's world", saved.get("world"), {"alarm": 1})
+	_finished = true
+
+
+func _hot_swap_refuses_project() -> void:
+	var g := _playing()
+	var before := JSON.stringify(g["registry"].save())
+	var other := _edited()
+	other["content"]["project"] = "somebody-else"
+	var r: Dictionary = (g["engine"] as StoryletEngine).hot_swap(other)
+	_check("another project's bundle was not refused naming it: " + str(r),
+		not r.get("ok", true) and str(r.get("error", "")).contains("somebody-else"))
+	_expect("the registry", JSON.stringify(g["registry"].save()), before)
+	_heist((g["engine"] as StoryletEngine).get_flow("f"))   # the old engine still plays
+	_expect("the registry's story.gold", g["registry"].get_value("story", "gold"), 2)
+	_finished = true
+
+
+func _hot_swap_rolls_back() -> void:
+	var g := _playing()
+	var before: Dictionary = g["registry"].save()
+	# The replacement is asked to bind @world, which the game already registered:
+	# it clashes mid-build.
+	var r: Dictionary = (g["engine"] as StoryletEngine).hot_swap(_edited(), {"world": {"get": func(_n): return 0}})
+	_check("the clash was not the refusal: " + str(r),
+		not r.get("ok", true) and str(r.get("error", "")).contains("scope '@world' is already registered by Game"))
+	# Every key and value as before (the order of keys may differ: registering
+	# again appends).
+	_expect("the registry", g["registry"].save(), before)
+	var flow = (g["engine"] as StoryletEngine).get_flow("f")
+	_heist(flow)
+	_expect("the registry's story.gold", g["registry"].get_value("story", "gold"), 2)
+	_expect("the old flow's story.steps", (flow as StoryletFlow).get_property("story.steps"), 2)
+	# Its bags are registered again, not left parked: the registry sees the write.
+	_expect("the registry's copy of the old flow's steps", g["registry"].save().get("storylets/flow/f/story"), {"steps": 2})
+	_finished = true
+
+
+func _hot_swap_live_link() -> void:
+	var g := _playing()
+	var r := StoryletLiveLink.apply_live_bundle(g["engine"], EDITED_JSON)
+	_check("apply_live_bundle refused: " + str(r.get("error", "")), r.get("ok", false))
+	if r.get("ok", false):
+		_expect("story.gold", (r["engine"] as StoryletEngine).get_property("story.gold"), 1)
 	_finished = true

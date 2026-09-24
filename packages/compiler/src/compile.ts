@@ -11,7 +11,7 @@
 
 import { compile as compileExpr, parseAndValidate } from "@wildwinter/expr";
 import type { Expression, ExpressionSchema, PropertyMeta } from "@wildwinter/expr";
-import { storyletsDialect } from "@storylet-studio/dialect";
+import { storyletsDialect, OWN_SCOPES, EXTERNAL_SCOPES } from "@storylet-studio/dialect";
 import type {
   Box, Bundle, Card, Deck, Hand, HandTemplate, Outcome, PropertyDecl, ScalarValue, TagGroup,
 } from "@storylet-studio/model";
@@ -372,6 +372,21 @@ export function compileProject(source: SourceProject): CompileResult {
     ]),
   });
 
+  // A change target: one of the engine's own scopes, or another engine's.
+  const changeTarget = new RegExp(`^@(${[...OWN_SCOPES, ...EXTERNAL_SCOPES].join("|")})\\.[a-z][a-z0-9_-]*$`);
+
+  // Other engines' game-wide scopes the content names (`@patter.gold`): recorded
+  // in the bundle, so the engine can say at run time when the game has not
+  // registered one. Let through unchecked: the other engine owns those names.
+  const externalUsed = new Set<string>();
+  const noteExternal = (node: unknown): void => {
+    if (Array.isArray(node)) { for (const n of node) noteExternal(n); return; }
+    if (node === null || typeof node !== "object") return;
+    const n = node as { kind?: unknown; scope?: unknown };
+    if (n.kind === "scopedvar" && typeof n.scope === "string" && EXTERNAL_SCOPES.includes(n.scope)) externalUsed.add(n.scope);
+    for (const v of Object.values(node)) noteExternal(v);
+  };
+
   const expr = (
     src: string, schema: ExpressionSchema, path: string, where: string, label: string,
     /** The shard field this expression is the value of, for the editor's jump.
@@ -385,6 +400,7 @@ export function compileProject(source: SourceProject): CompileResult {
       report({ severity: issue.severity, path, where, field, message: `${label}: ${issue.message}` });
     }
     if (!result.ok || result.ast === null) return undefined;
+    noteExternal(result.ast);
     return compileExpr(src, storyletsDialect);
   };
 
@@ -680,13 +696,17 @@ export function compileProject(source: SourceProject): CompileResult {
           checkFields(outcomeFieldDecls, outcome.fields, "outcome fields", "outcomeFields", path, `${effectiveGameId(card)}/${effectiveGameId(outcome)}`);
           const changes: Record<string, Expression> = {};
           for (const [target, src] of Object.entries(outcome.changes ?? {})) {
-            const match = /^@(world|story|box|deck|hand)\.[a-z][a-z0-9_-]*$/.exec(target);
+            const match = changeTarget.exec(target);
             if (!match) {
               report({ severity: "error", path, where: `${effectiveGameId(card)}/${effectiveGameId(outcome)}`, field: "changes", message: `change target "${target}" is not a property reference (@scope.name)` });
               continue;
             }
             const [, scope] = match;
-            if (scope === "hand") {
+            if (EXTERNAL_SCOPES.includes(scope!)) {
+              // Another engine's scope: its names and writability are that
+              // engine's, so the registry refuses at run time what it must.
+              externalUsed.add(scope!);
+            } else if (scope === "hand") {
               // @hand has no single owner to declare into, so no quick-fix, but
               // two faults are worth naming. A tag group's name is the CHOSEN
               // TAG: it is what the ask asked for, not state, and the runtime
@@ -1073,6 +1093,7 @@ export function compileProject(source: SourceProject): CompileResult {
     story: { properties: source.project.story?.properties ?? [] },
     boxes: byId(boxes),
     ...(maps !== undefined ? { maps } : {}),
+    ...(externalUsed.size > 0 ? { externalScopes: [...externalUsed].sort() } : {}),
   };
   return { bundle, issues };
 }

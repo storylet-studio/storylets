@@ -174,6 +174,21 @@ namespace StoryletStudio.StoryletEngine
         /// GetFlow is the call. Parity with the JS runtime's onReplacedFlow.
         /// Zero cost when unset.</summary>
         public Action<string, int> OnReplacedFlow = null;
+
+        /// <summary>A copy, for a HotSwap replacement: the engine keeps the
+        /// options it was built with, and a caller that changes its own
+        /// EngineOptions afterwards changes nothing here.</summary>
+        internal EngineOptions Copy() => (EngineOptions)MemberwiseClone();
+    }
+
+    /// <summary>What Engine.HotSwap produced: the replacement engine, and the
+    /// report its load gave (the properties the edit dropped, defaulted or
+    /// retyped, the cards it evicted, and the drift between the two
+    /// builds).</summary>
+    public sealed class HotSwapResult
+    {
+        public Engine Engine;
+        public LoadReport Report;
     }
 
     public sealed class OpenFlowOptions
@@ -682,6 +697,22 @@ namespace StoryletStudio.StoryletEngine
             return _view;
         }
 
+        /// <summary>The options this engine was built with: HotSwap builds its
+        /// replacement from them.</summary>
+        private readonly EngineOptions _creationOptions;
+
+        /// <summary>How to register one shared scope again.</summary>
+        private sealed class SharedMount
+        {
+            public string Key;
+            public Action Mount;
+        }
+
+        /// <summary>Every shared scope this engine registered, in registration
+        /// order, and how: a failed HotSwap puts this engine back exactly as it
+        /// was.</summary>
+        private readonly List<SharedMount> _sharedMounts = new List<SharedMount>();
+
         private readonly OrderedMap<string, Flow> _flows = new OrderedMap<string, Flow>();
         private readonly List<Action<string, TraceEvent>> _engineTraceHandlers = new List<Action<string, TraceEvent>>();
 
@@ -722,6 +753,7 @@ namespace StoryletStudio.StoryletEngine
         public Engine(Bundle bundle, EngineOptions opts = null)
         {
             opts = opts ?? new EngineOptions();
+            _creationOptions = opts.Copy();
             _bundle = bundle;
             _seed = opts.Seed;
             _onReplacedFlow = opts.OnReplacedFlow;
@@ -828,29 +860,37 @@ namespace StoryletStudio.StoryletEngine
 
             var reg = _registry;
             var registered = new List<string>();
+            // Register now, and remember how, so a failed HotSwap can register again.
+            void Mount(string key, Action register)
+            {
+                register();
+                registered.Add(key);
+                _sharedMounts.Add(new SharedMount { Key = key, Mount = register });
+            }
             try
             {
                 // `story` is this engine's token whether or not the bundle
                 // declares a shared @story property: registering it is what
                 // makes a clash show at once. Claims values the game loaded
                 // first.
-                reg.MountOwned("story", shared.Story, OwnerLabel);
-                registered.Add("story");
+                Mount("story", () => reg.MountOwned("story", shared.Story, OwnerLabel));
                 foreach (var kind in OwnedScopes)
                 {
                     foreach (var pair in KindOf(shared, kind))
                     {
                         if (pair.Value.Declarations().Count == 0) continue; // holds nothing: not registered
-                        reg.MountOwned(SharedKey(kind, pair.Key), pair.Value, OwnerLabel);
-                        registered.Add(SharedKey(kind, pair.Key));
+                        var key = SharedKey(kind, pair.Key);
+                        var bag = pair.Value;
+                        Mount(key, () => reg.MountOwned(key, bag, OwnerLabel));
                     }
                 }
                 if (_hostWorld != null)
                 {
                     // The game keeps these values: an external scope, never saved.
-                    reg.DefineForeign("world", _hostWorld, _bundle.World.Properties,
-                        new ForeignScopeOptions { Normalise = Identity, Owner = OwnerLabel });
-                    registered.Add("world");
+                    var world = _hostWorld;
+                    var decls = _bundle.World.Properties;
+                    Mount("world", () => reg.DefineForeign("world", world, decls,
+                        new ForeignScopeOptions { Normalise = Identity, Owner = OwnerLabel }));
                 }
                 else if (_ownsRegistry && !reg.Has("world"))
                 {
@@ -862,7 +902,9 @@ namespace StoryletStudio.StoryletEngine
                     // game's own surface passes.
                     reg.DefineOwned("world", _bundle.World.Properties,
                         new OwnedScopeOptions { Normalise = Identity, PathPrefix = "world.", Owner = OwnerLabel });
+                    var worldBag = reg.OwnedBag("world");
                     registered.Add("world");
+                    _sharedMounts.Add(new SharedMount { Key = "world", Mount = () => reg.MountOwned("world", worldBag, OwnerLabel) });
                     _selfWorld = true;
                 }
                 // Given the game's registry and no resolver, @world is the game's
@@ -987,6 +1029,7 @@ namespace StoryletStudio.StoryletEngine
         /// first.</summary>
         private Flow Open(string id, OpenFlowOptions opts, bool claim)
         {
+            AssertExternalScopes();
             // The world's claims as they stand WITHOUT this name, taken before
             // the replace: a resume competes with the other flows, never with
             // the flow it is replacing (which is about to release everything).
@@ -1208,6 +1251,24 @@ namespace StoryletStudio.StoryletEngine
             throw new StoryletError($"bad property path \"{path}\"");
         }
 
+        /// <summary>Other engines' scopes the content names (Bundle.ExternalScopes),
+        /// in listed order: the first one the registry does not hold refuses the
+        /// open or the load, before anything changes. Content that names another
+        /// engine's scope needs that engine on this registry; without it every
+        /// read of the scope would answer false and every write would fail, so
+        /// the engine says so where the game starts playing, not partway through
+        /// a run.</summary>
+        private void AssertExternalScopes()
+        {
+            if (_bundle.ExternalScopes == null) return;
+            foreach (var token in _bundle.ExternalScopes)
+            {
+                if (!_registry.Has(token))
+                    throw new StoryletError($"this content names @{token}, which no engine on this registry registered: "
+                        + "give every engine the game's one registry");
+            }
+        }
+
         /// <summary>The engine's own surface has no flow, so an engine-level
         /// diagnostic carries the EMPTY flow id - the same way a LoadReport's
         /// shared half carries no flow. It reaches the run log and the engine
@@ -1372,6 +1433,115 @@ namespace StoryletStudio.StoryletEngine
 
         // --- persistence (schema 4) ----------------------------------------------
 
+        /// <summary>Live bundle refresh: rebuild on an edited bundle with the whole
+        /// run carried over, and return the replacement with the report its load
+        /// produced.
+        ///
+        /// Standalone, that is a save and a load into a new engine, and this one
+        /// is left untouched (discard it). With the game's registry the two
+        /// cannot both hold the same keys, so this engine is spent afterwards
+        /// (its flows closed, the replacement holding everything on the same
+        /// registry): it carries its own values into the snapshot, steps out of
+        /// the registry, and the replacement loads them the way a standalone save
+        /// loads, so the report covers the properties the edit dropped,
+        /// defaulted, or retyped, and a dropped property is dropped rather than
+        /// kept. Values the game loaded that were still waiting for a flow of
+        /// this engine carry across as they were, and nothing belonging to any
+        /// other engine is touched. A save for another project is refused before
+        /// anything moves; if the rebuild fails for any other reason, this engine
+        /// takes its registrations back and is left exactly as it was.
+        ///
+        /// The replacement is built with a copy of the options this engine was
+        /// built with, which <paramref name="change"/> (when given) edits first,
+        /// so only what it sets differs: <c>HotSwap(b, o => o.Log = true)</c>
+        /// keeps the Seed, the World resolver, and the rest. Registry is
+        /// ignored: the replacement is on this engine's registry, or its own
+        /// when this engine made its own. Re-take every flow handle from the
+        /// replacement.</summary>
+        public HotSwapResult HotSwap(Bundle bundle, Action<EngineOptions> change = null)
+        {
+            if (bundle.Content.Project != _bundle.Content.Project)
+            {
+                throw new StoryletError(
+                    $"save is for project \"{_bundle.Content.Project}\", bundle is \"{bundle.Content.Project}\"");
+            }
+            var options = _creationOptions.Copy();
+            change?.Invoke(options);
+            var snapshot = SaveGame();
+            var reg = _registry;
+            if (_ownsRegistry)
+            {
+                // Its own registry: a save and a load into a new engine, as it
+                // always was, and this engine is left untouched.
+                options.Registry = null;
+                var fresh = new Engine(bundle, options);
+                return new HotSwapResult { Engine = fresh, Report = fresh.LoadGame(snapshot) };
+            }
+            // This engine's own values, registered or still waiting for a flow.
+            var mine = new OrderedMap<string, OrderedMap<string, ExprValue>>();
+            foreach (var pair in reg.Save())
+            {
+                if (pair.Key == "story" || pair.Key.StartsWith("storylets/", StringComparison.Ordinal)) mine.Set(pair.Key, pair.Value);
+            }
+            var registeredKeys = new HashSet<string>(_sharedMounts.Select(m => m.Key));
+            foreach (var pair in _flows) registeredKeys.UnionWith(pair.Value.RegisteredKeys());
+            var waiting = new OrderedMap<string, OrderedMap<string, ExprValue>>();
+            foreach (var pair in mine)
+            {
+                if (!registeredKeys.Contains(pair.Key)) waiting.Set(pair.Key, pair.Value);
+            }
+            // Step out of the registry. The bags keep their values, so stepping
+            // back in is exact.
+            foreach (var m in _sharedMounts)
+            {
+                if (reg.Has(m.Key)) reg.Remove(m.Key);
+            }
+            foreach (var pair in _flows) pair.Value.ReleaseBags(false);
+            Engine next = null;
+            try
+            {
+                options.Registry = reg;
+                next = new Engine(bundle, options);
+                snapshot.Registry = mine;
+                var report = next.LoadGame(snapshot);
+                // Values that were waiting for a flow wait on, for the
+                // replacement's flow of that name.
+                var stillWaiting = new OrderedMap<string, OrderedMap<string, ExprValue>>();
+                foreach (var pair in waiting)
+                {
+                    if (!reg.Has(pair.Key)) stillWaiting.Set(pair.Key, pair.Value);
+                }
+                if (stillWaiting.Count > 0) reg.Load(stillWaiting, keepParked: true);
+                DropRun(null);
+                return new HotSwapResult { Engine = next, Report = report };
+            }
+            catch (Exception)
+            {
+                // Back as it was. The replacement's registrations go; a
+                // constructor that failed part way parked what it had claimed, so
+                // this engine's keys are cleared of anything waiting, registered
+                // again, and its own values laid back over them (the waiting ones
+                // parked again).
+                if (next != null)
+                {
+                    next.DropRun(null);
+                    foreach (var m in next._sharedMounts)
+                    {
+                        if (reg.Has(m.Key)) reg.Remove(m.Key);
+                    }
+                }
+                reg.DiscardParked("storylets/");
+                foreach (var m in _sharedMounts) m.Mount();
+                foreach (var pair in _flows) pair.Value.MountBags();
+                // `story` may have claimed what the failed replacement parked
+                // there: back to its declarations, then this engine's own values
+                // over it.
+                ReseedShared();
+                reg.Load(mine, keepParked: true);
+                throw;
+            }
+        }
+
         /// <summary>The whole engine's NON-property state, one envelope: the
         /// spent cards once, then every live flow (board, clocks, cooldowns,
         /// PRNG, play log) keyed by its id. The property values are the
@@ -1456,6 +1626,7 @@ namespace StoryletStudio.StoryletEngine
         public LoadReport LoadGame(SaveEnvelope envelope)
         {
             AssertSameProject(envelope);
+            AssertExternalScopes();
             var plan = PlanLoad(envelope);
             if (plan.Sections != null)
             {

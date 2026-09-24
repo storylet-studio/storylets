@@ -43,7 +43,10 @@ var _shim: GDScript = null
 #
 # The JS test's storyletBundle(), expanded exactly as the conformance package's
 # expandBundle writes it (the scaffold's box, zone tags and hand included).
-# `extra_story` is the newer build's extra @story property, rumours.
+# `extra_story` is the newer build's extra @story property, rumours. The patron
+# is gated on Patter's @patter.visits and writes it: a card naming another
+# engine's scope directly. (expandBundle records no externalScopes; a compiled
+# bundle would carry ["patter"].)
 
 const STORYLET_BUNDLE_JSON := """{"schema":"storylets/bundle@0","content":{"project":"conf","version":"0.0.0","hash":""},"metadata":"full","settings":{"playAdvancesTurns":1},
 "world":{"properties":[{"name":"alarm","type":"number","default":0}]},
@@ -56,7 +59,10 @@ const STORYLET_BUNDLE_JSON := """{"schema":"storylets/bundle@0","content":{"proj
     "@story.act":{"src":"@story.act + 1","ast":["bin","+",["sv","story","act"],["n",1]]},
     "@world.alarm":{"src":"@world.alarm + 1","ast":["bin","+",["sv","world","alarm"],["n",1]]}}}]},
    {"id":"c_manhunt","gameId":"manhunt","condition":{"src":"@world.alarm >= 10","ast":["bin",">=",["sv","world","alarm"],["n",10]]},
-    "priority":0,"redraw":"always","outcomes":[{"id":"o_run","gameId":"run","changes":{}}]}]}],
+    "priority":0,"redraw":"always","outcomes":[{"id":"o_run","gameId":"run","changes":{}}]},
+   {"id":"c_patron","gameId":"patron","condition":{"src":"@patter.visits >= 1","ast":["bin",">=",["sv","patter","visits"],["n",1]]},
+    "priority":0,"redraw":"always","outcomes":[{"id":"o_tip","gameId":"tip","changes":{
+    "@patter.visits":{"src":"@patter.visits + 10","ast":["bin","+",["sv","patter","visits"],["n",10]]}}}]}]}],
  "handTemplates":[],"hands":[{"id":"h_q","gameId":"q","rule":{"slots":"unbounded"}}]}]}"""
 
 
@@ -73,6 +79,8 @@ static func _storylet_bundle(extra_story := false) -> Dictionary:
 # guard's snippet waits for @story.act >= 2 and, on exit, raises @world.alarm by
 # ten and counts a visit. Only the line's text changes between the builds, so
 # the structure hash is one and the build hash is the compiler's for each text.
+# The compiler records the Storylet Engine's scope the content names in
+# externalScopes, which leaves both hashes as they were.
 
 const LINE_HASHES := {"Thief!": "1q2dsxn", "Stop, thief!": "1d8lt0v", "Halt!": "04hkhhs"}
 
@@ -103,6 +111,7 @@ static func _patter_bundle(line := "Thief!") -> Dictionary:
 				"jump": {"to": "END"},
 			}]}]}},
 		"strings": {"en": {"L": line}},
+		"externalScopes": ["story"],
 	}
 
 
@@ -192,6 +201,7 @@ func _run() -> void:
 		_case("resumes both engines from the one save, registry first", _resumes.bind(true))
 		_case("resumes both engines from the one save, engines first", _resumes.bind(false))
 		_case("loads across content drift in both engines, and Patter hot-swaps without disturbing the other", _drift_and_hot_swap)
+		_case("a card names @patter directly, and the Storylet Engine hot-swaps on the shared registry", _patron_and_storylets_hot_swap)
 		_case("a token clash fails as the game combines its engines, naming who holds it", _clash)
 	_run_finished = true
 
@@ -362,6 +372,33 @@ func _drift_and_hot_swap() -> void:
 	_expect("@visits after the watch", swapped.get_property("@visits"), 2)
 	_expect("world.alarm after the watch", g2["registry"].get_value("world", "alarm"), 21)
 	_expect("the other engine never noticed", storylets.get_property("story.act"), 2)
+	_finished = true
+
+
+func _patron_and_storylets_hot_swap() -> void:
+	var g := _combined_game()
+	_play_first_part(g)
+	var thief: StoryletFlow = (g["storylets"] as StoryletEngine).get_flow("thief")
+	var early := _game_ids(thief.deal("q"))
+	_check("visits 0: the patron is not dealt yet", not early.has("patron"), str(early))
+	(g["patter"] as PatterEngine).get_flow("guard").advance()   # the guard's exit: visits 1
+	var dealt := _game_ids(thief.deal("q"))
+	_check("the patron is dealt once the guard has shouted", dealt.has("patron"), str(dealt))
+	var err := thief.play("patron", "tip", "q")
+	_check("the patron plays", err == "", err)
+	_expect("a storylet wrote Patter's value", (g["patter"] as PatterEngine).get_property("@visits"), 11)
+
+	# A live Storylets edit mid-game, on the registry Patter shares.
+	var r: Dictionary = (g["storylets"] as StoryletEngine).hot_swap(_storylet_bundle(true))
+	_check("the Storylet Engine hot-swaps", r.get("ok", false), str(r.get("error", "")))
+	if not r.get("ok", false):
+		return
+	var swapped: StoryletEngine = r["engine"]
+	_expect("the report's defaultedProperties", r["report"].get("defaultedProperties"), [{"path": "story.rumours"}])
+	_expect("story.act after the swap", swapped.get_property("story.act"), 2)
+	_expect("story.rumours after the swap", swapped.get_property("story.rumours"), 0)
+	_expect("Patter reads the replacement's @story", (g["patter"] as PatterEngine).get_property("@story.act"), 2)
+	_expect("and its own values stand", g["registry"].get_value("patter", "visits"), 11)
 	_finished = true
 
 

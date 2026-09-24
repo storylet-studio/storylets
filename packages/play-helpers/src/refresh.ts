@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // Live refresh (design/live-link.md): the game-side applier. The editor pushes
 // a freshly compiled bundle over the Live Link (createLiveLink's `onBundle`);
-// this swaps it in under the running engine: a new Engine over the new
-// bundle, loaded from the old one's save. The runtime's loadGame() already
+// this swaps it in under the running engine through engine.hotSwap: a new
+// Engine over the new bundle, carrying the old one's run, on the same registry. The runtime's loadGame() already
 // tolerates edited content (a deleted card leaves the table, orphaned
 // cooldowns and hand contents drop, a new property takes its default), so the
 // run carries across - every flow of it; it refuses only a save from another
@@ -40,18 +40,17 @@ export type LiveBundleResult =
   | { ok: false; error: string };
 
 /**
- * Apply a bundle the editor pushed over the Live Link: `new Engine(parsed,
- * opts)` then `loadGame(engine.saveGame())`, returning the new engine. Never
- * throws; a failure (unparseable JSON, a bundle the runtime rejects, a
- * different project) comes back as `{ ok: false, error }` and the old engine
- * is untouched.
+ * Apply a bundle the editor pushed over the Live Link through the engine's own
+ * `hotSwap`, returning the replacement. Never throws; a failure (unparseable
+ * JSON, a bundle the runtime rejects, a different project) comes back as
+ * `{ ok: false, error }` and the old engine is left as it was.
  *
- * `opts` are the options the old engine was created with. An engine does
- * not expose its seed, and it does not matter here: the save envelope carries
- * each flow's PRNG state, so `loadGame` resumes the draw sequences exactly
- * where they were and `seed` only shapes fresh flows. `log` does matter (the
- * retained log is per flow), and so does `world` (the host's binding does not
- * ride the envelope), so pass them if you had them.
+ * Works whether the engine made its own registry or was given the game's: on
+ * the game's registry the old engine hands its keys to the replacement, which a
+ * plain save and load into a second engine cannot do (the two would clash).
+ *
+ * The engine remembers the options it was built with (seed, log, world,
+ * registry), so `opts` is only for overriding one of them for the replacement.
  */
 export function applyLiveBundle(engine: Engine, bundleJson: string, opts: EngineOptions = {}): LiveBundleResult {
   let bundle: Bundle;
@@ -61,8 +60,9 @@ export function applyLiveBundle(engine: Engine, bundleJson: string, opts: Engine
     return { ok: false, error: "pushed bundle is not valid JSON" };
   }
   try {
-    const next = new Engine(bundle, opts);
-    next.loadGame(engine.saveGame());
+    // The engine's own hotSwap: on the game's registry the old engine has to hand
+    // its keys over, which a plain save and load into a new engine cannot do.
+    const { engine: next } = engine.hotSwap(bundle, opts);
     return { ok: true, engine: next, bundle };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };

@@ -58,7 +58,9 @@ registry store and save it, `DefineForeign` with a resolver to keep it yourself)
 `SaveGame()` leaves the values to the game, which saves `registry.Save()` once and loads it
 before or after `LoadGame`. Without one the engine makes its own registry, self-backs
 `@world`, and `SaveGame()` carries every value, so one call is still the whole run.
-`storylets/save@1` envelopes still load. See
+`storylets/save@1` envelopes still load. A card may name another engine's scope
+(`@patter.visits`) with no setting: it is read and written through the registry, and
+`OpenFlow` and `LoadGame` refuse content that names one no engine on the registry registered. See
 [Unity](https://storylet.studio/play/unity/#one-registry-per-game) on the site.
 
 ## The state window
@@ -94,8 +96,9 @@ link discovers flows itself and announces them as they open and close, so a
 multi-participant run needs nothing extra from the host.
 `TryReceive` (drained from `Update()`) hands back a bundle the editor pushed
 after a save, which `StoryletLiveBundle.TryParsePush` + `Apply` swap in under
-the run (a new engine loaded from the old one's save), then `Attach` the
-new engine and `SetBuild` to re-hello. The socket runs on a worker thread,
+the run through `Engine.HotSwap` (a new engine carrying the old one's run, on
+the same registry, the game's included), then `Attach` the new engine and
+`SetBuild` to re-hello. The socket runs on a worker thread,
 nothing in it throws into the game, and a missing editor is a silent no-op;
 wire it behind `#if UNITY_EDITOR || DEVELOPMENT_BUILD` all the same, as the
 demo does. The shared fixture `packages/conformance/live-link/` holds the

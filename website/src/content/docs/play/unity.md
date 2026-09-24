@@ -140,8 +140,15 @@ Passing both `Registry` and `World` registers your resolver in your registry for
 
 Every expression reads every scope in the registry, so a card's condition can read
 `@patter.gold`, and `GetProperty("patter.gold")` and `SetProperty("patter.gold", value)` reach
-another engine's values from your code. A token is taken once: building an engine that wants a
-token another already holds throws at once, naming the holder, and leaves the registry as it was.
+another engine's values from your code. A card can also change `@patter.gold` in an outcome,
+with no setting in your project: the write goes through the registry under Patter's rules, so a
+property Patter declares read-only is refused. Give every engine the game's one registry: if your
+content names `@patter` and no engine on the registry registered it, `OpenFlow` and `LoadGame`
+refuse it before anything changes, with the error `this content names @patter, which no engine on
+this registry registered: give every engine the game's one registry`. If Patter takes its scope
+away mid-game, an outcome that writes it throws, naming the scope. A token is taken once:
+building an engine that wants a token another already holds throws at once, naming the holder,
+and leaves the registry as it was.
 
 The registry is one type to every engine because the expression kernel is shared: the
 `Wildwinter.Expr` namespace, in its own assembly. Patterplay carries the same kernel, and with
@@ -230,6 +237,27 @@ hands, boxes, tags, declared properties. Nothing running needed. See
 run, and saving in the editor pushes the new bundle into the game without a restart. Wire it
 behind `#if UNITY_EDITOR || DEVELOPMENT_BUILD`, and a release build strips it. The wiring, and
 what the link carries, are on [Live Link](/play/live-link/#wire-the-client).
+
+`StoryletLiveBundle.Apply(engine, data)` swaps the pushed bundle in through the engine's own
+`HotSwap`, which you can call yourself for the load report:
+
+```csharp
+var swap = _engine.HotSwap(newBundle);   // the engine remembers the options it was built with
+_engine = swap.Engine;                    // re-take every flow handle from the replacement
+foreach (var p in swap.Report.DroppedProperties) Debug.Log($"dropped {p.Path}");
+```
+
+To build the replacement with a different option, pass a callback that changes a copy of the
+engine's own options: `_engine.HotSwap(newBundle, o => o.Log = true)` turns the log on and keeps
+the seed, the `World` resolver, and everything else it leaves alone. `Apply` takes the same
+callback.
+
+It works on your game's registry too. The old engine hands its values to the replacement on that
+registry, the report says which properties the edit dropped, defaulted, or retyped, values still
+waiting for a flow keep waiting, and nothing belonging to Patter or your game is touched; the old
+engine is spent, its flows closed. A bundle for another project is refused before anything moves,
+and if the rebuild fails for any other reason, the old engine and the registry are left exactly as
+they were.
 
 ## The demo project
 

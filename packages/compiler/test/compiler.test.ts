@@ -14,6 +14,7 @@ import {
 } from "../src/index.js";
 import type { Issue, SourceFile, SourceProject } from "../src/index.js";
 import { Engine } from "@storylet-studio/runtime";
+import { ScopeRegistry } from "@wildwinter/scoperegistry";
 
 const exampleDir = fileURLToPath(new URL("../../../examples/saltmarsh.storylets", import.meta.url));
 const files = loadProjectFiles(exampleDir);
@@ -450,6 +451,79 @@ describe("publish-gate validation", () => {
       [{ id: "c_1", gameId: "c1", redraw: 3, outcomes: [] }], { turn: { seconds: 60 } }));
     expect(result.issues).toEqual([]);
     expect(result.bundle!.boxes[0]!.turn).toEqual({ seconds: 60 });
+  });
+
+  // Other engines' game-wide scopes (expr/family/engine-scopes.json): a card may
+  // name `@patter.x` with no project setting, the compiler lets it through
+  // unchecked, and the bundle records it so the engine can say when the game has
+  // not registered it.
+  describe("other engines' scopes", () => {
+    const heist = (cond: string, changes: Record<string, string>) => minimal(
+      [{ id: "c_1", gameId: "c1", condition: cond, outcomes: [{ id: "o_1", gameId: "go", changes }] }],
+      { hands: [{ id: "h_1", gameId: "h1", rule: { slots: 1 } }] });
+
+    it("a card reads and writes @patter with no setting, and the bundle records it", () => {
+      const result = compileFiles(heist("@patter.visits >= 1", { "@patter.gold": "@patter.gold - 1" }));
+      expect(result.issues).toEqual([]);
+      expect(result.bundle!.externalScopes).toEqual(["patter"]);
+    });
+
+    it("a condition alone records it, and so does a change target alone", () => {
+      expect(compileFiles(heist("@patter.visits >= 1", {})).bundle!.externalScopes).toEqual(["patter"]);
+      expect(compileFiles(heist("true", { "@patter.gold": "1" })).bundle!.externalScopes).toEqual(["patter"]);
+    });
+
+    it("content that names no other engine carries no externalScopes key", () => {
+      const result = compileFiles(heist("true", {}));
+      expect(result.issues).toEqual([]);
+      expect("externalScopes" in result.bundle!).toBe(false);
+    });
+
+    it("a token no engine in the family owns is still refused", () => {
+      expect(errors(compileFiles(heist("@nosuch.x >= 1", {})).issues).length).toBeGreaterThan(0);
+      expect(errors(compileFiles(heist("true", { "@nosuch.x": "1" })).issues).join(" ")).toMatch(/change target "@nosuch.x"/);
+    });
+
+    it("the engine reads and writes it through the game's registry", () => {
+      const { bundle } = compileFiles(heist("@patter.visits >= 1", { "@patter.gold": "@patter.gold - 1" }));
+      const registry = new ScopeRegistry()
+        .defineOwned("patter", [{ name: "gold", type: "number", default: 3 }, { name: "visits", type: "number", default: 1 }], { owner: "Patter" });
+      const flow = new Engine(bundle!, { registry }).openFlow("main");
+      const dealt = flow.deal("h1");
+      expect(dealt.map((c) => c.gameId)).toEqual(["c1"]);
+      flow.play("c1", "go", "h1");
+      expect(registry.get("patter", "gold")).toBe(2);
+    });
+
+    it("refuses to open a flow, or load a save, where nobody registered the scope, before anything changes", () => {
+      const { bundle } = compileFiles(heist("@patter.visits >= 1", { "@patter.gold": "@patter.gold - 1" }));
+      const refusal = "this content names @patter, which no engine on this registry registered: give every engine the game's one registry";
+      const alone = new Engine(bundle!);
+      expect(() => alone.openFlow("main")).toThrow(refusal);
+      expect(alone.getFlow("main")).toBeUndefined();
+
+      // A save made where Patter was present, loaded where it is not: refused whole.
+      const registry = new ScopeRegistry()
+        .defineOwned("patter", [{ name: "gold", type: "number", default: 3 }, { name: "visits", type: "number", default: 1 }], { owner: "Patter" });
+      const game = new Engine(bundle!, { registry });
+      game.openFlow("main").deal("h1");
+      const save = game.saveGame();
+      const elsewhere = new ScopeRegistry().defineOwned("patter", [{ name: "gold", type: "number", default: 3 }, { name: "visits", type: "number", default: 1 }]);
+      const other = new Engine(bundle!, { registry: elsewhere });
+      other.openFlow("keep");
+      elsewhere.remove("patter");
+      expect(() => other.loadGame(save)).toThrow(refusal);
+      expect(other.flows().map((f) => f.id)).toEqual(["keep"]);   // the load changed nothing
+
+      // The engine that took the scope away mid-game: a write names it.
+      const pays = compileFiles(heist("true", { "@patter.gold": "1" })).bundle!;
+      const shared = new ScopeRegistry().defineOwned("patter", [{ name: "gold", type: "number", default: 3 }]);
+      const paying = new Engine(pays, { registry: shared }).openFlow("main");
+      paying.deal("h1");
+      shared.remove("patter");
+      expect(() => paying.play("c1", "go", "h1"))
+        .toThrow("@patter.gold cannot be written: no engine on this registry registered @patter");
+    });
   });
 
   it("an untimed box carries no turn at all", () => {

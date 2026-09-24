@@ -443,6 +443,11 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Maps, when the build carried them. Empty is the normal
         /// state and costs nothing.</summary>
         public List<BundleMap> Maps = new List<BundleMap>();
+        /// <summary>Other engines' game-wide scopes the content names
+        /// (`patter`), sorted: the family's shared vocabulary, let through
+        /// unchecked by the compiler. The engine reports when the game has not
+        /// registered one. Null when the content names none.</summary>
+        public List<string> ExternalScopes;
     }
 
     // --- the save envelope ----------------------------------------------------

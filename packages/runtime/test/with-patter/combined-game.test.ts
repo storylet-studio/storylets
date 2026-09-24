@@ -38,6 +38,8 @@ const storyletBundle = (extraStory = false) => expandBundle({
       } }] },
       // Only once a Patter scene has raised the alarm past ten.
       { id: "c_manhunt", condition: "@world.alarm >= 10", outcomes: [{ id: "o_run" }] },
+      // Only once Patter's guard has shouted: a card naming another engine's scope directly.
+      { id: "c_patron", condition: "@patter.visits >= 1", outcomes: [{ id: "o_tip", changes: { "@patter.visits": "@patter.visits + 10" } }] },
     ],
   }],
   hands: [{ id: "h_q", rule: { slots: "unbounded" } }],
@@ -189,6 +191,25 @@ describe("Patter and the Storylet Engine: one registry, one save", () => {
     expect(swapped.getProperty("@visits")).toBe(2);
     expect(g2.registry.get("world", "alarm")).toBe(21);
     expect(g2.storylets.getProperty("story.act")).toBe(2);       // the other engine never noticed
+  });
+
+  it("a card names @patter directly, and the Storylet Engine hot-swaps on the shared registry", () => {
+    const g = combinedGame();
+    playFirstPart(g);
+    const thief = g.storylets.getFlow("thief")!;
+    expect(thief.deal("q").map((c) => c.gameId)).not.toContain("patron");   // visits 0: not yet
+    g.patter.getFlow("guard")!.advance();                                    // the guard's exit: visits 1
+    expect(thief.deal("q").map((c) => c.gameId)).toContain("patron");
+    thief.play("patron", "tip", "q");
+    expect(g.patter.getProperty("@visits")).toBe(11);                        // a storylet wrote Patter's value
+
+    // A live Storylets edit mid-game, on the registry Patter shares.
+    const { engine: swapped, report } = g.storylets.hotSwap(storyletBundle(true));
+    expect(report.defaultedProperties).toEqual([{ path: "story.rumours" }]);
+    expect(swapped.getProperty("story.act")).toBe(2);
+    expect(swapped.getProperty("story.rumours")).toBe(0);
+    expect(g.patter.getProperty("@story.act")).toBe(2);                      // Patter reads the replacement's @story
+    expect(g.registry.get("patter", "visits")).toBe(11);                     // and its own values stand
   });
 
   it("a token clash fails as the game combines its engines, naming who holds it", () => {

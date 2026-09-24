@@ -162,6 +162,24 @@ resolver instead and it registers that foreign scope for you. A token is taken o
 engine that wants a token another already holds is refused, `create` returns null, the error
 names the holder, and the registry is left as it was.
 
+A card can name Patter's game-wide scope directly, with no setting in either project: gate on
+`@patter.visits`, or change `@patter.gold` in an outcome, which writes it through the registry
+under Patter's rules. The bundle records the tokens it names in `externalScopes`
+(`StoryletBundle.external_scopes(bundle)` reads it). That content runs only where Patter is on
+the same registry. If it is not, `open_flow` and `load_game` refuse before anything changes: each
+`push_error`s `this content names @patter, which no engine on this registry registered: give
+every engine the game's one registry`, then `open_flow` returns null and `load_game` returns an
+empty Dictionary. If Patter takes its scope away mid-game, an outcome writing it fails with an
+error String naming the scope.
+
+`engine.hot_swap(edited_bundle)` rebuilds the engine on an edited bundle with the run carried
+over, and works on your registry too. It returns `{"ok": true, "engine", "report"}`: the
+replacement, on the same registry, and the load report, which names the properties the edit
+dropped or defaulted. The old engine hands its own values over and is spent, its flows closed,
+so re-take every handle from the new one; nothing belonging to Patter or your game is touched.
+A bundle for another project comes back as `{"ok": false, "error"}` before anything moves, and a
+rebuild that fails part way puts the old engine and the registry back exactly as they were.
+
 ## Errors
 
 GDScript has no exceptions, so the addon reports errors as values:
@@ -190,7 +208,9 @@ registration covers every flow, however many you open later.
 To watch the game from Storyletter instead, and to have saves reach the run without a
 restart, add a `StoryletLiveLink` node and attach your ENGINE (the link finds your flows
 itself). It opens only in a debug
-build. [Live Link](/play/live-link/) has the wiring and the protocol.
+build. A pushed bundle goes in through `StoryletLiveLink.apply_live_bundle(engine, data)`,
+which calls `hot_swap`, so a refresh works whether the engine made its own registry or shares
+yours with Patterplay. [Live Link](/play/live-link/) has the wiring and the protocol.
 
 ## The bundle inspector
 

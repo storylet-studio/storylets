@@ -1071,18 +1071,41 @@ namespace storylets
             kernelCall([&] { registry_->set("world", name, value, hostWorld_.has_value() ? true : host); });
         }
 
-        /** @internal - the live swap's hand-over (UStoryletEngine::ApplyLiveBundle
-         *  with the game's registry): take every bag this engine and its flows
-         *  registered, and @world if it registered it, out of the registry.
-         *  With `keep`, their values wait there for the replacement engine, which
-         *  claims them as it registers the same keys. The engine is unusable
-         *  until restoreRegistrations. Idempotent. */
-        void releaseRegistrations(bool keep);
+        /** What hotSwap hands back: the replacement engine, and the report its
+         *  load produced. */
+        struct HotSwapResult
+        {
+            std::unique_ptr<Engine> engine;
+            LoadReport report;
+        };
 
-        /** @internal - undo releaseRegistrations: register everything again,
-         *  each bag claiming the values waiting for its key (a swap that failed
-         *  after the release). */
-        void restoreRegistrations();
+        /**
+         * Live bundle refresh: rebuild on an edited bundle with the whole run
+         * carried over, and return the replacement with the report its load
+         * produced. The replacement is built from a copy of the options this
+         * engine was built with (seed, log, world, onReplacedFlow); `change`,
+         * when given, edits that copy first, so only what it changes differs
+         * (`[](EngineOptions& o) { o.seed = 7; }` keeps the rest). It always
+         * lands on this engine's registry, or a new one of its own when this
+         * engine made its own: the registry is not the caller's to change here,
+         * so a `registry` that `change` sets is ignored.
+         *
+         * Standalone, that is a save and a load into a new engine, and this one
+         * is left untouched (discard it). With the game's registry the two cannot
+         * both hold the same keys, so this engine is spent afterwards (its flows
+         * closed, the replacement holding everything on the same registry): it
+         * carries its own values into the snapshot, steps out of the registry,
+         * and the replacement loads them the way a standalone save loads: so the
+         * report covers the properties the edit dropped, defaulted, or retyped,
+         * and a dropped property is dropped rather than kept. Values the game
+         * loaded that were still waiting for a flow of this engine carry across
+         * as they were, and nothing belonging to any other engine is touched. A
+         * save for another project is refused before anything moves; if the
+         * rebuild fails for any other reason, this engine takes its
+         * registrations back and is left exactly as it was. A refusal is a
+         * StoryletError (or the replacement's own EvalError), never the kernel's.
+         */
+        HotSwapResult hotSwap(BundlePtr bundle, const std::function<void(EngineOptions&)>& change = {});
 
     private:
         friend class Flow;
@@ -1454,6 +1477,24 @@ namespace storylets
 
         void initLadders();
 
+        /** Content that names another engine's scope (`@patter.visits`) runs
+         *  only where that engine is on this registry: without it every read
+         *  would answer false and every write fail, so the flow is refused as it
+         *  opens (loadGame's rebuild included) and a save as it loads, before
+         *  anything changes. By then a game has built all of its engines,
+         *  whatever order it built them in. The same message on every runtime. */
+        void assertExternalScopes() const
+        {
+            for (const std::string& token : bundle_->externalScopes)
+            {
+                if (!registry_->has(token))
+                {
+                    throw StoryletError("this content names @" + token
+                        + ", which no engine on this registry registered: give every engine the game's one registry");
+                }
+            }
+        }
+
         void emitEngine(const std::string& flowId, const TraceEvent& evt, std::optional<double> turn)
         {
             // Retain first, then notify: the run's log is the record,
@@ -1490,6 +1531,8 @@ namespace storylets
         bool engineTracing() const { return !engineTraceHandlers_.empty(); }
 
         BundlePtr bundle_;
+        /** The options this engine was built with: hotSwap builds its replacement from them. */
+        EngineOptions creationOptions_;
         double seed_ = 0;
         std::function<void(const std::string&, int)> onReplacedFlow_;
         std::optional<int> logCap_;
@@ -3340,6 +3383,25 @@ namespace storylets
                 return landIn(kindName, source->second.id, name, value,
                     address(kindName, source->second.id) + "." + name);
             }
+            // Another engine's game-wide scope (`@patter.x`): the family's shared
+            // vocabulary lets a card write it, and the registry keeps that
+            // engine's rules (a read-only property is refused, as the kernel's
+            // RegistryError rethrown as StoryletError). A story write, so no host
+            // flag.
+            ScopeRegistry& reg = *engine_->registry_;
+            if (reg.has(scope))
+            {
+                WriteResult result;
+                result.path = scope + "." + name;
+                result.prev = reg.get(scope, name);
+                kernelCall([&] { reg.set(scope, name, value); });
+                return result;
+            }
+            const std::vector<std::string>& external = engine_->bundle_->externalScopes;
+            if (std::find(external.begin(), external.end(), scope) != external.end())
+            {
+                throw StoryletError("@" + scope + "." + name + " cannot be written: no engine on this registry registered @" + scope);
+            }
             throw StoryletError("bad change target scope \"@" + scope + "\"");
         }
 
@@ -3708,7 +3770,7 @@ namespace storylets
     // --- Engine methods that need the complete Flow ------------------------------
 
     inline Engine::Engine(BundlePtr bundle, const EngineOptions& opts)
-        : bundle_(std::move(bundle)), seed_(opts.seed), onReplacedFlow_(opts.onReplacedFlow)
+        : bundle_(std::move(bundle)), creationOptions_(opts), seed_(opts.seed), onReplacedFlow_(opts.onReplacedFlow)
     {
         if (opts.log) logCap_ = opts.logCap;
         if (opts.world.has_value()) hostWorld_ = opts.world;
@@ -3821,26 +3883,6 @@ namespace storylets
         registered_.clear();
     }
 
-    inline void Engine::releaseRegistrations(bool keep)
-    {
-        for (const auto& pair : flows_) pair.second->releaseBags(keep);
-        for (const auto& key : registered_)
-        {
-            if (registry_->has(key)) registry_->remove(key, keep);
-        }
-        registered_.clear();
-    }
-
-    inline void Engine::restoreRegistrations()
-    {
-        if (!registered_.empty()) return;
-        registerShared();
-        for (const auto& pair : flows_)
-        {
-            if (pair.second->registered_.empty()) pair.second->registerBags();
-        }
-    }
-
     inline FlowPtr Engine::openFlow(const std::string& id, const OpenFlowOptions& opts)
     {
         return open(id, opts, false);
@@ -3848,6 +3890,7 @@ namespace storylets
 
     inline FlowPtr Engine::open(const std::string& id, const OpenFlowOptions& opts, bool claim)
     {
+        assertExternalScopes();
         // The world's claims as they stand WITHOUT this name, taken before the
         // replace: a resume competes with the other flows, never with the flow
         // it is replacing (which is about to release everything it holds).
@@ -4128,6 +4171,7 @@ namespace storylets
     inline LoadReport Engine::loadGame(const SaveEnvelope& envelope)
     {
         assertSameProject(envelope);
+        assertExternalScopes();
         LoadPlan plan = planLoad(envelope);
         if (plan.sections.has_value())
         {
@@ -4151,6 +4195,89 @@ namespace storylets
             open(pair.first, OpenFlowOptions(), /*claim=*/true)->restore(pair.second);
         }
         return plan.report;
+    }
+
+    inline Engine::HotSwapResult Engine::hotSwap(BundlePtr bundle, const std::function<void(EngineOptions&)>& change)
+    {
+        if (!bundle) throw StoryletError("hotSwap needs a bundle");
+        // A load's project refusal, asked before anything moves.
+        if (bundle->content.project != bundle_->content.project)
+        {
+            throw StoryletError("save is for project \"" + bundle_->content.project
+                + "\", bundle is \"" + bundle->content.project + "\"");
+        }
+        // The options this engine was built with, and only what `change` edits differs.
+        EngineOptions opts = creationOptions_;
+        if (change) change(opts);
+        SaveEnvelope snapshot = saveGame();
+        HotSwapResult result;
+        if (ownsRegistry_)
+        {
+            // Its own registry: a save and a load into a new engine, as it always
+            // was, and this engine is left untouched.
+            EngineOptions own = opts;
+            own.registry = nullptr;
+            result.engine = std::make_unique<Engine>(std::move(bundle), own);
+            result.report = result.engine->loadGame(snapshot);
+            return result;
+        }
+        ScopeRegistry& reg = *registry_;
+        // This engine's own values, registered or still waiting for a flow.
+        ScopeRegistry::SaveBlob mine;
+        for (const auto& section : reg.save())
+        {
+            if (section.first == "story" || section.first.compare(0, 10, "storylets/") == 0) mine.set(section.first, section.second);
+        }
+        std::unordered_set<std::string> held(registered_.begin(), registered_.end());
+        for (const auto& pair : flows_) held.insert(pair.second->registered_.begin(), pair.second->registered_.end());
+        ScopeRegistry::SaveBlob waiting;
+        for (const auto& section : mine)
+        {
+            if (!held.count(section.first)) waiting.set(section.first, section.second);
+        }
+        // Step out of the registry. The bags keep their values, so stepping back in is exact.
+        for (const auto& key : registered_)
+        {
+            if (reg.has(key)) reg.remove(key);
+        }
+        registered_.clear();
+        for (const auto& pair : flows_) pair.second->releaseBags(false);
+        EngineOptions next = opts;
+        next.registry = registry_;
+        std::unique_ptr<Engine> replacement;
+        try
+        {
+            replacement = std::make_unique<Engine>(std::move(bundle), next);
+            snapshot.registry = mine;
+            result.report = replacement->loadGame(snapshot);
+            // Values that were waiting for a flow wait on, for the replacement's flow of that name.
+            ScopeRegistry::SaveBlob stillWaiting;
+            for (const auto& section : waiting)
+            {
+                if (!reg.has(section.first)) stillWaiting.set(section.first, section.second);
+            }
+            if (!stillWaiting.empty()) reg.load(stillWaiting, /*keepParked=*/true);
+            dropRun(nullptr);
+            result.engine = std::move(replacement);
+            return result;
+        }
+        catch (...)
+        {
+            // Back as it was. The replacement goes, and its registrations with it
+            // (a constructor that failed part way already took its own out,
+            // parking what it had claimed), so this engine's keys are cleared of
+            // anything waiting, registered again, and its own values laid back
+            // over them (the waiting ones parked again).
+            replacement.reset();
+            reg.discardParked(std::string("storylets/"));
+            registerShared();
+            for (const auto& pair : flows_) pair.second->registerBags();
+            // `story` may have claimed what the failed replacement parked there:
+            // back to its declarations, then this engine's own values over it.
+            reseedShared();
+            reg.load(mine, /*keepParked=*/true);
+            rethrowKernelError();
+        }
     }
 
     inline PropsPartition Engine::walkPartition(const detail::FlowDecls& decls, const PropsPartition* values,

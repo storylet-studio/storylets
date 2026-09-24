@@ -121,6 +121,28 @@ static func load_from_dict(bundle: Dictionary) -> Dictionary:
 		return {"ok": false, "error": "bundle has no world/story sections"}
 	if not (bundle.get("boxes") is Array):
 		return {"ok": false, "error": "bundle has no boxes"}
+	if bundle.has("externalScopes"):
+		var ext = bundle["externalScopes"]
+		var ok: bool = ext is Array
+		if ok:
+			for t in ext:
+				ok = ok and t is String
+		if not ok:
+			return {"ok": false, "error": "bundle externalScopes must be an array of scope tokens"}
 	return {"ok": true, "bundle": bundle}
+
+
+## Other engines' game-wide scopes the content names (`patter`), sorted, from
+## the bundle's "externalScopes": the family's shared vocabulary, which the
+## compiler lets through unchecked. [] when the bundle names none (the key is
+## absent then).
+static func external_scopes(bundle: Dictionary) -> Array:
+	var out: Array = []
+	var ext = bundle.get("externalScopes")
+	if ext is Array:
+		for t in ext:
+			if t is String and t != "":
+				out.append(t)
+	return out
 
 

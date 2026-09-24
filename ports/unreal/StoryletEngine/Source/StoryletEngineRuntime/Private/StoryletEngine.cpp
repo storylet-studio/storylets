@@ -16,8 +16,6 @@ struct FStoryletEngineImpl
 {
 	storylets::BundlePtr Bundle;
 	std::unique_ptr<storylets::Engine> Engine;
-	/** What Create was given; re-applied to the ApplyLiveBundle rebuild. */
-	storylets::EngineOptions Options;
 	/** Engine-level trace subscribers, held at the WRAPPER so they survive an
 	 *  ApplyLiveBundle swap of the core beneath them - the same reason the
 	 *  flow's own handlers live on its wrapper. */
@@ -179,17 +177,16 @@ UStoryletEngine* UStoryletEngine::CreateOn(UStoryletBundle* Bundle, std::shared_
 		Opts.seed = static_cast<double>(Seed);
 		Opts.log = bRetainLog;
 		// Null: the engine makes its own registry and acts as its own game.
-		// Held in Options, so the ApplyLiveBundle rebuild lands in the same one.
+		// The core keeps its options, so ApplyLiveBundle's hotSwap lands in the same one.
 		Opts.registry = MoveTemp(Registry);
 		if (World)
 		{
-			// Held in Options too, so the ApplyLiveBundle rebuild keeps the binding.
+			// Kept by the core too, so ApplyLiveBundle's hotSwap keeps the binding.
 			Opts.world = World->MakeResolver();
 			E->WorldRef = World;
 		}
 		TPimplPtr<FStoryletEngineImpl> Impl = MakePimpl<FStoryletEngineImpl>();
 		Impl->Bundle = Bundle->GetCompiled()->Bundle;
-		Impl->Options = Opts;
 		Impl->Engine = std::make_unique<storylets::Engine>(Impl->Bundle, Opts);
 		E->Impl = MoveTemp(Impl);
 		// No flow is opened here: play happens on one you open by name
@@ -1086,46 +1083,19 @@ bool UStoryletEngine::ApplyLiveBundle(UStoryletBundle* NewBundle, FString& OutEr
 	}
 	try
 	{
-		// The new core is built and loaded BEFORE anything is swapped, so a
-		// refused save (another project) leaves this engine exactly as it was.
-		const storylets::SaveEnvelope Snapshot = Impl->Engine->saveGame();
+		// The core's own hotSwap, with the options this core was built with (the
+		// same registry, @world binding, seed and log). Standalone it is a save
+		// and a load into a new core, the old one untouched. On the game's
+		// registry the old core carries its own values into the snapshot and
+		// steps out, and the new one loads them as a standalone save loads, so
+		// the load's report covers the properties the edit dropped, defaulted or
+		// retyped, and a dropped one is really dropped. A save for another
+		// project is refused before anything moves, and a rebuild that fails
+		// puts the old core back exactly as it was: either way this engine is
+		// untouched when this returns false.
 		storylets::BundlePtr NextBundle = NewBundle->GetCompiled()->Bundle;
-		std::unique_ptr<storylets::Engine> Next;
-		if (Impl->Engine->ownsRegistry())
-		{
-			// The engine's own registry: the snapshot carries every value, and
-			// the new core makes a registry of its own to load them into.
-			Next = std::make_unique<storylets::Engine>(NextBundle, Impl->Options);
-			Next->loadGame(Snapshot);
-		}
-		else
-		{
-			// The game's registry: the snapshot carries no values, and both cores
-			// cannot hold the same keys at once. The old core hands its bags over
-			// (each leaves keeping its values) and the new one claims them as it
-			// registers. The one refusal a load makes is asked first, so a refused
-			// swap never touches the registry.
-			if (NextBundle->content.project != Impl->Bundle->content.project)
-			{
-				throw storylets::StoryletError("save is for project \"" + Impl->Bundle->content.project
-					+ "\", bundle is \"" + NextBundle->content.project + "\"");
-			}
-			Impl->Engine->releaseRegistrations(/*keep=*/true);
-			try
-			{
-				Next = std::make_unique<storylets::Engine>(NextBundle, Impl->Options);
-				Next->loadGame(Snapshot);
-			}
-			catch (...)
-			{
-				// Hand everything back: the new core's bags leave keeping their
-				// values, and the old core claims them again.
-				if (Next) Next->releaseRegistrations(/*keep=*/true);
-				Next.reset();
-				Impl->Engine->restoreRegistrations();
-				throw;
-			}
-		}
+		storylets::Engine::HotSwapResult Swap = Impl->Engine->hotSwap(NextBundle);
+		std::unique_ptr<storylets::Engine> Next = std::move(Swap.engine);
 		// The old core is about to go, and the hook we took on it with it. Drop
 		// it first so SyncCoreTraceHook below re-takes one on the NEW core:
 		// without this the engine's subscribers (Live Link among them) go quiet

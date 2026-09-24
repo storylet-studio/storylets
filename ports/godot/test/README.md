@@ -31,7 +31,15 @@ godot --headless --path ports/godot --import
   not claiming a load's values, `reset` dropping only this engine's waiting
   values, a token clash leaving the registry as it was, and another engine's
   scope read by path and by a condition), the JS runtime's
-  `one-registry.test.ts` case for case. Prints per-family counts,
+  `one-registry.test.ts` case for case, its "hotSwap on the game's registry"
+  included (`hot_swap` carrying the run and its drift report, leaving other
+  engines' values and waiting values alone, refusing another project, putting
+  everything back when the rebuild fails, and `apply_live_bundle` on the
+  game's registry). It also runs the runtime half of the JS compiler test's
+  "other engines' scopes": a bundle's `externalScopes`, a card reading and
+  writing `@patter` through the registry, `open_flow` and `load_game` refused
+  before anything changes when nobody registered it, and an outcome's write to
+  it failing once Patter has taken it away. Prints per-family counts,
   `registry corpus: N/N`, `one registry: N/N`, then `ALL PASS` (exit 0) or
   `N FAILED` (exit 1).
 
@@ -117,7 +125,9 @@ case for case, with the same content: Patter reading `@story.act`, a storylet
 gated on a `@world` value a Patter scene wrote, the Storylet Engine reading
 `patter.visits` by path, the save loaded registry first and engines first,
 content drift in both engines with a Patter `hot_swap` on the same registry,
-and token clashes naming the holder. Every case runs twice, on a registry the
+a card (`c_patron`) gated on `@patter.visits` that writes it, followed by a
+Storylet Engine `hot_swap` on the shared registry, and token clashes naming
+the holder. Every case runs twice, on a registry the
 game made with Patterplay's shim (`PatterScopeRegistry`) and with this addon's
 (`StoryletScopeRegistry`), and a first case proves the two addons'
 `class_name`s coexist (every one either addon declares is registered, once, to
@@ -146,4 +156,5 @@ CI sets it), `KEEP=1` (keep the assembled project and print its path).
 The bundles are written in the test as the compilers emit them: the Storylet
 Engine's expanded as the conformance package's `expandBundle` writes it (as
 `one_registry_checks.gd` does), Patter's as `exportBundle` writes it, build
-hashes included.
+hashes and `externalScopes` included. To regenerate one, run the JS test's own
+builder (`storyletBundle`, `patterBundle`) and paste its `JSON.stringify`.

@@ -2,10 +2,12 @@
 // GAME's side: what is in the registry, what the game saves, and that loading
 // works in either order and from a version 1 envelope. The C++ port of the
 // JS reference's packages/runtime/test/one-registry.test.ts, case for case,
-// over the same bundle (expanded from the same fixture by the conformance
-// scaffold and pasted here as JSON), plus what only a native engine has: the
-// registry is released when the engine is destroyed, and the live swap's
-// hand-over (UStoryletEngine::ApplyLiveBundle) keeps every value.
+// over the same bundles (expanded from the same fixtures by the conformance
+// scaffold and pasted here as JSON), hotSwap on the game's registry among them,
+// plus what only a native engine has: the registry is released when the engine
+// is destroyed, and an engine a hot swap spent takes nothing with it when it
+// goes. Beside them, the runtime half of the compiler test's "other engines'
+// scopes" (a card naming @patter), over the bundle that test compiles.
 #pragma once
 
 #include <algorithm>
@@ -187,6 +189,68 @@ namespace oneregistry
     {
         for (const auto& section : blob) if (section.first.compare(0, prefix.size(), prefix) == 0) return true;
         return false;
+    }
+
+    /** The hotSwap tests' edit (one-registry.test.ts's `edited`): @story gains
+     *  `rumours`, the per-flow `steps` is gone, and the box gains a SHARED
+     *  property (a bag, and a key, the old engine never had). */
+    inline std::string EditedJson()
+    {
+        return R"JSON({"schema":"storylets/bundle@0","content":{"project":"conf","version":"0.0.0","hash":""},"metadata":"full","settings":{"playAdvancesTurns":1},"world":{"properties":[{"name":"alarm","type":"number","default":0}]},"story":{"properties":[{"name":"gold","type":"number","default":0},{"name":"rumours","type":"number","default":0}]},"boxes":[{"id":"b_x","gameId":"box","ranking":{"specificity":true},"fields":[],"properties":[{"name":"heat","type":"number","default":0,"shared":true}],"tagGroups":[{"id":"d_zone","gameId":"zone","tags":[{"id":"v_docks","gameId":"docks","properties":[{"name":"danger","type":"number","default":0}]},{"id":"v_market","gameId":"market"}]}],"decks":[{"id":"k_main","gameId":"main","properties":[{"name":"drawn","type":"number","default":0}],"cards":[{"id":"c_heist","gameId":"heist","priority":0,"redraw":"always","outcomes":[{"id":"o_go","gameId":"go","changes":{"@deck.drawn":{"src":"@deck.drawn + 1","ast":["bin","+",["sv","deck","drawn"],["n",1]]},"@story.gold":{"src":"@story.gold + 1","ast":["bin","+",["sv","story","gold"],["n",1]]},"@world.alarm":{"src":"@world.alarm + 1","ast":["bin","+",["sv","world","alarm"],["n",1]]}}}]}]}],"handTemplates":[],"hands":[{"id":"h_q","gameId":"q","rule":{"slots":"unbounded"}}]}]})JSON";
+    }
+
+    /** The compiler test's card naming another engine's scope, as the compiler
+     *  writes it: `@patter.visits >= 1` gates it, and its outcome changes
+     *  `@patter.gold` to `@patter.gold - 1`. The bundle records `patter` in
+     *  `externalScopes`. */
+    inline std::string PatronJson()
+    {
+        return R"JSON({"schema":"storylets/bundle@0","content":{"project":"p","version":"0.0.1","hash":"16f2jt4"},"metadata":"full","settings":{"playAdvancesTurns":1},"world":{"properties":[]},"story":{"properties":[]},"boxes":[{"id":"b_1","gameId":"b1","ranking":{"specificity":true},"fields":[],"properties":[],"tagGroups":[{"id":"d_1","gameId":"d1","tags":[{"id":"v_1","gameId":"v1"}]}],"decks":[{"id":"k_1","gameId":"main","properties":[],"cards":[{"id":"c_1","gameId":"c1","condition":{"src":"@patter.visits >= 1","ast":["bin",">=",["sv","patter","visits"],["n",1]]},"priority":0,"redraw":"always","outcomes":[{"id":"o_1","gameId":"go","changes":{"@patter.gold":{"src":"@patter.gold - 1","ast":["bin","-",["sv","patter","gold"],["n",1]]}}}]}]}],"handTemplates":[],"hands":[{"id":"h_1","gameId":"h1","rule":{"slots":1}}]}],"externalScopes":["patter"]})JSON";
+    }
+
+    /** One JSON fragment replaced; throws when the fixture has no such fragment. */
+    inline std::string Swapped(std::string json, const std::string& from, const std::string& to)
+    {
+        const size_t at = json.find(from);
+        if (at == std::string::npos) throw StoryletError("the fixture has no " + from);
+        return json.replace(at, from.size(), to);
+    }
+
+    /** Another engine's game-wide scope, registered as that engine would: owned, under its label. */
+    inline void RegisterPatter(ScopeRegistry& registry, const std::vector<std::pair<std::string, double>>& values, bool goldWritable = true)
+    {
+        std::vector<ScopeDeclaration> decls;
+        for (const auto& v : values)
+        {
+            ScopeDeclaration d;
+            d.name = v.first;
+            d.type = PropertyTypes::Number;
+            d.defaultValue = StoryletValue::Num(v.second);
+            if (v.first == "gold" && !goldWritable) d.writable = false;
+            decls.push_back(d);
+        }
+        OwnedScopeOptions options;
+        options.owner = std::string("Patter");
+        registry.defineOwned("patter", decls, options);
+    }
+
+    /** A game mid-run, as the hotSwap tests start it: Patter registered beside the
+     *  engine, a heist played on flow f, and values the game loaded that wait for
+     *  a flow of this engine (z) and for another engine entirely. */
+    inline Game Playing()
+    {
+        Game g = MakeGame(MakeBundle());
+        RegisterPatter(*g.registry, {{"visits", 4}});
+        Heist(*g.engine->openFlow("f"));
+        g.registry->load(MakeBlob({{"storylets/flow/z/story", "steps", 5}, {"other/deck/inn", "drawn", 2}}), /*keepParked=*/true);
+        return g;
+    }
+
+    inline std::string Joined(const std::vector<std::string>& v)
+    {
+        std::string out;
+        for (const auto& s : v) out += "[" + s + "]";
+        return out;
     }
 
     /** Every test: a name and a body that records failures. */
@@ -519,29 +583,253 @@ namespace oneregistry
             c.yes("a new engine registers on the same registry", registry->has("story"));
         });
 
-        tests.emplace_back("the live swap's hand-over keeps every value, and a failed swap puts them back", [](Check& c)
+        // --- hotSwap on the game's registry ---------------------------------------
+        // A live bundle refresh that hands this engine's keys to its replacement,
+        // reports property drift as a load does, and touches nothing else in the
+        // registry.
+
+        tests.emplace_back("hotSwap carries the run across, reports the dropped property, and really drops it", [](Check& c)
         {
-            Game g = MakeGame(MakeBundle());
-            Heist(*g.engine->openFlow("f"));
-            const SaveEnvelope snapshot = g.engine->saveGame();
-            // A failed swap: released, then restored.
-            g.engine->releaseRegistrations(true);
-            c.yes("released: story is gone", !g.registry->has("story"));
-            g.engine->restoreRegistrations();
-            c.eq("restored story.gold", Show(g.engine->getProperty("story.gold")), "1");
-            c.eq("restored deck.main.drawn", Show(g.engine->getFlow("f")->getProperty("deck.main.drawn")), "1");
-            // The swap itself: the replacement claims what the old engine left.
-            g.engine->releaseRegistrations(true);
+            Game g = Playing();
+            Engine::HotSwapResult swap = g.engine->hotSwap(MakeBundle(EditedJson()));
+            Engine& next = *swap.engine;
+            c.eq("story.gold", Show(next.getProperty("story.gold")), "1");
+            c.eq("story.rumours", Show(next.getProperty("story.rumours")), "0");
+            c.eq("f deck.main.drawn", Show(next.getFlow("f")->getProperty("deck.main.drawn")), "1");
+            std::string dropped;
+            for (const auto& p : swap.report.droppedProperties) dropped += "[" + p.flow + "|" + p.path + "]";
+            c.eq("dropped", dropped, "[f|story.steps]");
+            c.yes("the dropped property is gone, not a stray", !g.registry->save().contains("storylets/flow/f/story"));
+            Heist(*next.getFlow("f"));
+            c.eq("the registry's gold after the replacement plays", Show(*g.registry->get("story", "gold")), "2");
+            // The spent engine goes, and takes nothing of the replacement's with it.
+            g.engine.reset();
+            c.yes("story is still registered", g.registry->has("story"));
+            c.yes("the box's new shared bag is still registered", g.registry->has("storylets/box/b_x"));
+            c.yes("f's deck bag is still registered", g.registry->has("storylets/flow/f/deck/k_main"));
+            c.eq("gold after the old engine went", Show(next.getProperty("story.gold")), "2");
+        });
+
+        tests.emplace_back("hotSwap touches nothing that is not this engine's, and waiting values wait on", [](Check& c)
+        {
+            Game g = Playing();
+            Engine::HotSwapResult swap = g.engine->hotSwap(MakeBundle(EditedJson()));
+            const Blob saved = g.registry->save();
+            auto one = [&saved](const std::string& key) -> std::string
+            {
+                const auto* section = saved.get(key);
+                if (!section) return "<none>";
+                Blob just;
+                just.set(key, *section);
+                return Show(just);
+            };
+            c.eq("patter", one("patter"), Show(MakeBlob({{"patter", "visits", 4}})));
+            c.eq("other/deck/inn", one("other/deck/inn"), Show(MakeBlob({{"other/deck/inn", "drawn", 2}})));
+            c.eq("storylets/flow/z/story", one("storylets/flow/z/story"), Show(MakeBlob({{"storylets/flow/z/story", "steps", 5}})));
+            c.eq("world", one("world"), Show(MakeBlob({{"world", "alarm", 1}})));
+        });
+
+        tests.emplace_back("hotSwap refuses another project before anything moves", [](Check& c)
+        {
+            Game g = Playing();
+            const std::string before = saveRegistry(*g.registry);   // in order: nothing re-registered
+            const std::string other = Swapped(EditedJson(), R"("project":"conf")", R"("project":"somebody-else")");
+            c.throws("the swap", [&] { g.engine->hotSwap(MakeBundle(other)); }, "somebody-else");
+            c.eq("the registry", saveRegistry(*g.registry), before);
+            Heist(*g.engine->getFlow("f"));                         // the old engine still plays
+            c.eq("the registry's gold", Show(*g.registry->get("story", "gold")), "2");
+        });
+
+        tests.emplace_back("hotSwap that fails part way leaves this engine and the registry exactly as they were", [](Check& c)
+        {
+            Game g = Playing();
+            const std::string before = Show(g.registry->save());
+            // The replacement is asked to bind @world, which the game already
+            // registered: it clashes mid-build.
+            WorldResolver resolver;
+            resolver.get = [](const std::string&) -> std::optional<StoryletValue> { return StoryletValue::Num(0); };
+            std::string type, message;
+            try { g.engine->hotSwap(MakeBundle(EditedJson()), [&resolver](EngineOptions& o) { o.world = resolver; }); }
+            catch (const StoryletError& e) { type = "StoryletError"; message = e.what(); }
+            catch (const std::exception& e) { type = "another type"; message = e.what(); }
+            c.eq("the refusal", type + ": " + message, "StoryletError: scope '@world' is already registered by Game (wanted by Storylet Engine)");
+            // Every key and value as before (the order of keys may differ: registering again appends).
+            c.eq("the registry", Show(g.registry->save()), before);
+            Heist(*g.engine->getFlow("f"));
+            c.eq("the registry's gold", Show(*g.registry->get("story", "gold")), "2");
+            c.eq("f story.steps", Show(g.engine->getFlow("f")->getProperty("story.steps")), "2");
+        });
+
+        tests.emplace_back("a standalone engine's hotSwap is a save and a load, and leaves the engine untouched", [](Check& c)
+        {
             EngineOptions opts;
-            opts.registry = g.registry;
             opts.seed = 1;
-            auto next = std::make_unique<Engine>(MakeBundle(), opts);
-            next->loadGame(snapshot);
-            g.engine = std::move(next);   // the old engine goes, and takes nothing with it
-            c.eq("story.gold", Show(g.engine->getProperty("story.gold")), "1");
-            c.eq("f story.steps", Show(g.engine->getFlow("f")->getProperty("story.steps")), "1");
-            c.eq("f deck.main.drawn", Show(g.engine->getFlow("f")->getProperty("deck.main.drawn")), "1");
-            c.yes("story is registered", g.registry->has("story"));
+            Engine engine(MakeBundle(), opts);
+            Heist(*engine.openFlow("f"));
+            Engine::HotSwapResult swap = engine.hotSwap(MakeBundle(EditedJson()));
+            c.yes("the replacement made a registry of its own", swap.engine->registry() != engine.registry() && swap.engine->ownsRegistry());
+            std::string dropped;
+            for (const auto& p : swap.report.droppedProperties) dropped += "[" + p.flow + "|" + p.path + "]";
+            c.eq("dropped", dropped, "[f|story.steps]");
+            c.eq("the replacement's gold", Show(swap.engine->getProperty("story.gold")), "1");
+            FlowPtr old = engine.getFlow("f");
+            c.yes("the old engine's flow is still open", old != nullptr && !old->isClosed());
+            if (!old || old->isClosed()) return;
+            c.eq("the old engine's steps", Show(old->getProperty("story.steps")), "1");
+            Heist(*old);
+            c.eq("the old engine still plays", Show(engine.getProperty("story.gold")), "2");
+            c.eq("and the replacement never noticed", Show(swap.engine->getProperty("story.gold")), "1");
+        });
+
+        tests.emplace_back("hotSwap changes only what the callback changes, and keeps the rest of the options", [](Check& c)
+        {
+            // Built with a seed and a @world the game keeps; the swap turns the log on and nothing else.
+            auto alarm = std::make_shared<double>(3);
+            WorldResolver resolver;
+            resolver.get = [alarm](const std::string& name) -> std::optional<StoryletValue>
+            {
+                if (name == "alarm") return StoryletValue::Num(*alarm);
+                return std::nullopt;
+            };
+            resolver.set = [alarm](const std::string& name, const StoryletValue& value)
+            {
+                if (name == "alarm") *alarm = value.n;
+            };
+            EngineOptions opts;
+            opts.seed = 7;
+            opts.world = resolver;
+            Engine engine(MakeBundle(), opts);
+            Engine::HotSwapResult swap = engine.hotSwap(MakeBundle(EditedJson()), [](EngineOptions& o) { o.log = true; });
+            Engine& next = *swap.engine;
+            c.eq("world.alarm, through the resolver it was built with", Show(next.getProperty("world.alarm")), "3");
+            // A new flow's PRNG starts from the engine's seed: the same as a fresh engine seeded 7, not 0.
+            auto prngOf = [](Engine& e) -> std::string
+            {
+                e.openFlow("n");
+                const SaveEnvelope save = e.saveGame();
+                const FlowSave* flow = save.flows.get("n");
+                return flow ? std::to_string(flow->prng) : "<none>";
+            };
+            EngineOptions seven;
+            seven.seed = 7;
+            Engine sevenRef(MakeBundle(EditedJson()), seven);
+            Engine zeroRef(MakeBundle(EditedJson()));
+            const std::string got = prngOf(next);
+            c.eq("the seed it was built with", got, prngOf(sevenRef));
+            c.yes("a seed of 7 starts where a seed of 0 does not", got != prngOf(zeroRef));
+            // What the callback changed: the replacement keeps a log, where the engine it replaced did not.
+            Heist(*next.openFlow("f2"));
+            Heist(*engine.openFlow("f2"));
+            c.yes("the replacement keeps a log", !next.log().empty());
+            c.yes("the engine it replaced kept none", engine.log().empty());
+            // And a later swap of the replacement starts from ITS options: the log stays on.
+            Engine::HotSwapResult again = next.hotSwap(MakeBundle(EditedJson()));
+            Heist(*again.engine->openFlow("f3"));
+            c.yes("a second swap keeps the first one's change", !again.engine->log().empty());
+            c.yes("the heists wrote the game's alarm", *alarm > 3);
+            c.eq("and the resolver", Show(again.engine->getProperty("world.alarm")), Num(*alarm));
+        });
+
+        // --- other engines' scopes ---------------------------------------------
+        // A card may name `@patter.x` with no project setting: the compiler records
+        // the token in the bundle (`externalScopes`), and the engine reads and
+        // writes it through the game's registry, and refuses to open a flow (or
+        // load a save) where nobody registered it, before anything changes.
+
+        tests.emplace_back("reads externalScopes from the bundle", [](Check& c)
+        {
+            c.eq("externalScopes", Joined(MakeBundle(PatronJson())->externalScopes), "[patter]");
+            c.eq("a bundle naming no other engine", Joined(MakeBundle()->externalScopes), "");
+        });
+
+        tests.emplace_back("the engine reads and writes it through the game's registry", [](Check& c)
+        {
+            auto registry = std::make_shared<ScopeRegistry>();
+            RegisterPatter(*registry, {{"gold", 3}, {"visits", 1}});
+            EngineOptions opts;
+            opts.registry = registry;
+            Engine engine(MakeBundle(PatronJson()), opts);
+            std::string writes;
+            engine.subscribeTrace([&writes](const std::string&, const TraceEvent& e)
+            {
+                if (e.kind == TraceEvent::Kind::Write) writes += "[" + e.path + " " + (e.prev ? Show(*e.prev) : "-") + "]";
+            });
+            FlowPtr flow = engine.openFlow("main");
+            std::vector<std::string> dealt;
+            for (const auto& card : flow->deal("h1")) dealt.push_back(card.gameId);
+            c.eq("dealt", Joined(dealt), "[c1]");
+            flow->play("c1", "go", "h1");
+            c.eq("the registry's patter.gold", Show(*registry->get("patter", "gold")), "2");
+            c.eq("the write on the trace", writes, "[patter.gold 3]");
+        });
+
+        tests.emplace_back("refuses to open a flow, or load a save, where nobody registered the scope, before anything changes", [](Check& c)
+        {
+            const std::string refusal =
+                "this content names @patter, which no engine on this registry registered: give every engine the game's one registry";
+            // The engine's own error, carrying exactly the message every runtime gives.
+            auto refused = [&c, &refusal](const std::string& what, const std::function<void()>& fn)
+            {
+                try { fn(); c.yes(what + " did not throw", false); }
+                catch (const StoryletError& e) { c.eq(what, e.what(), refusal); }
+                catch (const std::exception& e) { c.yes(what + " threw another type: " + e.what(), false); }
+            };
+            Engine alone(MakeBundle(PatronJson()));
+            refused("the open", [&] { alone.openFlow("main"); });
+            c.yes("the refused open left no flow", alone.getFlow("main") == nullptr);
+
+            // A save made where Patter was present, loaded where it is not: refused whole.
+            auto registry = std::make_shared<ScopeRegistry>();
+            RegisterPatter(*registry, {{"gold", 3}, {"visits", 1}});
+            EngineOptions opts;
+            opts.registry = registry;
+            Engine game(MakeBundle(PatronJson()), opts);
+            game.openFlow("main")->deal("h1");
+            const SaveEnvelope save = game.saveGame();
+            auto elsewhere = std::make_shared<ScopeRegistry>();
+            RegisterPatter(*elsewhere, {{"gold", 3}, {"visits", 1}});
+            EngineOptions otherOpts;
+            otherOpts.registry = elsewhere;
+            Engine other(MakeBundle(PatronJson()), otherOpts);
+            FlowPtr keep = other.openFlow("keep");
+            elsewhere->remove("patter");
+            refused("the load", [&] { other.loadGame(save); });
+            std::vector<std::string> ids;
+            for (const auto& flow : other.flows()) ids.push_back(flow->id());
+            c.eq("the load changed nothing", Joined(ids), "[keep]");
+            c.yes("the flow it had is still open", !keep->isClosed());
+
+            // The engine that took the scope away mid-game: a write names it.
+            const std::string always = Swapped(Swapped(PatronJson(), R"(["bin",">=",["sv","patter","visits"],["n",1]])", R"(["b",true])"),
+                R"(["bin","-",["sv","patter","gold"],["n",1]])", R"(["n",1])");
+            auto shared = std::make_shared<ScopeRegistry>();
+            RegisterPatter(*shared, {{"gold", 3}});
+            EngineOptions sharedOpts;
+            sharedOpts.registry = shared;
+            Engine payingEngine(MakeBundle(always), sharedOpts);
+            FlowPtr paying = payingEngine.openFlow("main");
+            paying->deal("h1");
+            shared->remove("patter");
+            c.throws("the play", [&] { paying->play("c1", "go", "h1"); },
+                "@patter.gold cannot be written: no engine on this registry registered @patter");
+            // A token the bundle does not name is not another engine's: still a bad target.
+            const std::string unnamed = Swapped(always, R"(,"externalScopes":["patter"])", "");
+            Engine plain(MakeBundle(unnamed));
+            FlowPtr unlisted = plain.openFlow("main");
+            unlisted->deal("h1");
+            c.throws("the play without externalScopes", [&] { unlisted->play("c1", "go", "h1"); }, "bad change target scope \"@patter\"");
+        });
+
+        tests.emplace_back("opens once the game has registered it, whatever order it built its engines in", [](Check& c)
+        {
+            auto registry = std::make_shared<ScopeRegistry>();
+            EngineOptions opts;
+            opts.registry = registry;
+            Engine engine(MakeBundle(PatronJson()), opts);
+            // After the engine, before any flow.
+            RegisterPatter(*registry, {{"gold", 3}, {"visits", 1}});
+            FlowPtr flow = engine.openFlow("main");
+            c.eq("dealt", std::to_string(flow->deal("h1").size()), "1");
         });
 
         return tests;
@@ -693,6 +981,17 @@ namespace oneregistry
             EngineOptions opts; opts.seed = 1;
             Engine engine(MakeBundle(json), opts);
             ThrowsExactly(c, "the outcome's @story change", [&] { Heist(*engine.openFlow("f")); }, "EvalError", "division by zero");
+        });
+
+        tests.emplace_back("an outcome's write another engine's scope refuses is a StoryletError (Flow::applyWrite)", [](Check& c)
+        {
+            auto registry = std::make_shared<ScopeRegistry>();
+            RegisterPatter(*registry, {{"gold", 3}, {"visits", 1}}, /*goldWritable=*/false);
+            EngineOptions opts; opts.registry = registry;
+            Engine engine(MakeBundle(PatronJson()), opts);
+            FlowPtr flow = engine.openFlow("main");
+            flow->deal("h1");
+            ThrowsExactly(c, "the outcome's @patter write", [&] { flow->play("c1", "go", "h1"); }, "StoryletError", "'@patter.gold' is read-only");
         });
 
         tests.emplace_back("the game's write to another engine's scope with no setter is a StoryletError (Engine::setProperty)", [](Check& c)

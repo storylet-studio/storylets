@@ -59,6 +59,9 @@ var _last_play_in_tag: Dictionary = {}
 var _stores: Dictionary = {}
 # The registry keys this flow's bags are registered under, until released.
 var _registered: Array[String] = []
+## This flow's bags that declare something, as [registry key, bag] pairs: what
+## mount_bags registers.
+var _bag_keys: Array = []
 
 var _trace_handlers: Array[Callable] = []
 var _log_entries: Array = []
@@ -104,8 +107,22 @@ func close() -> void:
 func _put(key: String, bag: StoryletPropertyBag) -> void:
 	if bag.declarations().is_empty():
 		return   # holds nothing: not registered
+	_bag_keys.append([key, bag])
 	if _engine._registry.mount_owned(key, bag, {"owner": StoryletEngine.OWNER}) == "":
 		_registered.append(key)
+
+
+## @internal - register this flow's bags again, when a failed hot_swap hands
+## them back. Each claims what the registry holds for it.
+func mount_bags() -> void:
+	for pair in _bag_keys:
+		if _engine._registry.mount_owned(pair[0], pair[1], {"owner": StoryletEngine.OWNER}) == "":
+			_registered.append(pair[0])
+
+
+## @internal - the registry keys this flow holds right now.
+func registered_keys() -> Array:
+	return _registered.duplicate()
 
 
 ## @internal
@@ -1366,6 +1383,21 @@ func _apply_write(target: String, value, entry: Dictionary, hand_env: Dictionary
 			if source["kind"] == "criteria":
 				return {"error": "@hand.%s is a chosen tag / criteria name and cannot be written" % name}
 			return _land_in(source["kind"], source["id"], name, value, "%s.%s" % [_address(source["kind"], source["id"]), name])
+	# Another engine's game-wide scope (`@patter.x`): the family's shared
+	# vocabulary lets a card write it, and the registry keeps that engine's
+	# rules (a read-only property is refused). A story write, so no host flag.
+	var reg = _engine._registry
+	if reg.has(scope):
+		var prev = reg.get_value(scope, name)
+		var refused: String = reg.set_value(scope, name, value)
+		if refused != "":
+			return {"error": refused}
+		var out := {"path": "%s.%s" % [scope, name]}
+		if prev != null:
+			out["prev"] = prev
+		return out
+	if _engine._external_scopes.has(scope):
+		return {"error": "@%s.%s cannot be written: no engine on this registry registered @%s" % [scope, name, scope]}
 	return {"error": 'bad change target scope "@%s"' % scope}
 
 

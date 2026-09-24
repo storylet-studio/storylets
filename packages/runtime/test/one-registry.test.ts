@@ -12,6 +12,7 @@ import { ScopeRegistry } from "@wildwinter/scoperegistry";
 import { expandBundle } from "@storylet-studio/conformance";
 import type { SaveEnvelopeV1 } from "@storylet-studio/model";
 import { Engine } from "../src/index.js";
+import { applyLiveBundle } from "@storylet-studio/play-helpers";
 import type { Flow } from "../src/index.js";
 
 const bundle = expandBundle({
@@ -236,5 +237,91 @@ describe("one registry per game: the Storylet Engine", () => {
     expect(engine.getProperty("patter.gold")).toBe(3);
     engine.openFlow("f").setProperty("patter.gold", 5);
     expect(registry.get("patter", "gold")).toBe(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// hotSwap on the game's registry: a live bundle refresh that hands this engine's
+// keys to its replacement, reports property drift as a load does, and touches
+// nothing else in the registry.
+// ---------------------------------------------------------------------------
+
+describe("hotSwap on the game's registry", () => {
+  // The edit: @story gains `rumours`, the per-flow `steps` is gone, and the box
+  // gains a SHARED property (a bag, and a key, the old engine never had).
+  const edited = expandBundle({
+    world: [{ name: "alarm", type: "number", default: 0 }],
+    boxProperties: [{ name: "heat", type: "number", default: 0, shared: true }],
+    story: [
+      { name: "gold", type: "number", default: 0 },
+      { name: "rumours", type: "number", default: 0 },
+    ],
+    decks: [{
+      id: "k_main",
+      properties: [{ name: "drawn", type: "number", default: 0 }],
+      cards: [{ id: "c_heist", redraw: "always", outcomes: [{ id: "o_go", changes: {
+        "@story.gold": "@story.gold + 1", "@deck.drawn": "@deck.drawn + 1", "@world.alarm": "@world.alarm + 1",
+      } }] }],
+    }],
+    hands: [{ id: "h_q", rule: {} }],
+  });
+
+  const playing = () => {
+    const g = game();
+    g.registry.defineOwned("patter", [{ name: "visits", type: "number", default: 4 }], { owner: "Patter" });
+    heist(g.engine.openFlow("f"));
+    g.registry.load({ "storylets/flow/z/story": { steps: 5 }, "other/deck/inn": { drawn: 2 } }, { keepParked: true });
+    return g;
+  };
+
+  it("carries the run across, reports the dropped property, and really drops it", () => {
+    const g = playing();
+    const { engine, report } = g.engine.hotSwap(edited);
+    expect(engine.getProperty("story.gold")).toBe(1);
+    expect(engine.getProperty("story.rumours")).toBe(0);
+    expect(engine.getFlow("f")!.getProperty("deck.main.drawn")).toBe(1);
+    expect(report.droppedProperties).toEqual([{ flow: "f", path: "story.steps" }]);
+    expect(g.registry.save()["storylets/flow/f/story"]).toBeUndefined();   // gone, not a stray
+    heist(engine.getFlow("f")!);
+    expect(g.registry.get("story", "gold")).toBe(2);
+  });
+
+  it("touches nothing that is not this engine's, and waiting values wait on", () => {
+    const g = playing();
+    g.engine.hotSwap(edited);
+    const saved = g.registry.save();
+    expect(saved.patter).toEqual({ visits: 4 });
+    expect(saved["other/deck/inn"]).toEqual({ drawn: 2 });
+    expect(saved["storylets/flow/z/story"]).toEqual({ steps: 5 });
+    expect(saved.world).toEqual({ alarm: 1 });
+  });
+
+  it("refuses another project before anything moves", () => {
+    const g = playing();
+    const before = JSON.stringify(g.registry.save());
+    const other = { ...edited, content: { ...edited.content, project: "somebody-else" } };
+    expect(() => g.engine.hotSwap(other)).toThrow(/somebody-else/);
+    expect(JSON.stringify(g.registry.save())).toBe(before);
+    heist(g.engine.getFlow("f")!);                              // the old engine still plays
+    expect(g.registry.get("story", "gold")).toBe(2);
+  });
+
+  it("a rebuild that fails part way leaves this engine and the registry exactly as they were", () => {
+    const g = playing();
+    const before = g.registry.save();
+    // The replacement is asked to bind @world, which the game already registered: it clashes mid-build.
+    expect(() => g.engine.hotSwap(edited, { world: { get: () => 0 } })).toThrow("scope '@world' is already registered by Game");
+    // Every key and value as before (the order of keys may differ: registering again appends).
+    expect(g.registry.save()).toEqual(before);
+    heist(g.engine.getFlow("f")!);
+    expect(g.registry.get("story", "gold")).toBe(2);
+    expect(g.engine.getFlow("f")!.getProperty("story.steps")).toBe(2);
+  });
+
+  it("the Live Link's applyLiveBundle now works on the game's registry", () => {
+    const g = playing();
+    const r = applyLiveBundle(g.engine, JSON.stringify(edited));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.engine.getProperty("story.gold")).toBe(1);
   });
 });

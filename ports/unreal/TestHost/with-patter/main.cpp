@@ -75,7 +75,7 @@ namespace
         TwoRegistries,     // the Storylet Engine gets a registry of its own
         NoRegistryLoad,    // the game forgets to load its registry on resume
         EnginesSaveValues, // both engines are standalone, so each save carries the values
-        FreshSwap,         // a Patter edit rebuilds the engine instead of hot-swapping it
+        FreshSwap,         // a live edit rebuilds the engine instead of hot-swapping it
         NoClash,           // the second engine of a kind goes on a registry of its own
     };
 
@@ -219,9 +219,10 @@ namespace
     // The JS test's storyletBundle(), expanded exactly as the conformance package's
     // expandBundle writes it (the scaffold's box, zone tags and hand included), written
     // out by running the JS test's own storyletBundle() from source. The newer build
-    // (extraStory) adds a @story property, rumours.
+    // (extraStory) adds a @story property, rumours. Its third card, patron, names
+    // Patter's scope directly: gated on @patter.visits, it adds ten to it.
 
-    const char* kStoryletBundle = R"JSON({"schema":"storylets/bundle@0","content":{"project":"conf","version":"0.0.0","hash":""},"metadata":"full","settings":{"playAdvancesTurns":1},"world":{"properties":[{"name":"alarm","type":"number","default":0}]},"story":{"properties":[{"name":"act","type":"number","default":1}]},"boxes":[{"id":"b_x","gameId":"box","ranking":{"specificity":true},"fields":[],"properties":[],"tagGroups":[{"id":"d_zone","gameId":"zone","tags":[{"id":"v_docks","gameId":"docks","properties":[{"name":"danger","type":"number","default":0}]},{"id":"v_market","gameId":"market"}]}],"decks":[{"id":"k_main","gameId":"main","properties":[],"cards":[{"id":"c_heist","gameId":"heist","priority":0,"redraw":"never","outcomes":[{"id":"o_go","gameId":"go","changes":{"@story.act":{"src":"@story.act + 1","ast":["bin","+",["sv","story","act"],["n",1]]},"@world.alarm":{"src":"@world.alarm + 1","ast":["bin","+",["sv","world","alarm"],["n",1]]}}}]},{"id":"c_manhunt","gameId":"manhunt","condition":{"src":"@world.alarm >= 10","ast":["bin",">=",["sv","world","alarm"],["n",10]]},"priority":0,"redraw":"always","outcomes":[{"id":"o_run","gameId":"run","changes":{}}]}]}],"handTemplates":[],"hands":[{"id":"h_q","gameId":"q","rule":{"slots":"unbounded"}}]}]})JSON";
+    const char* kStoryletBundle = R"JSON({"schema":"storylets/bundle@0","content":{"project":"conf","version":"0.0.0","hash":""},"metadata":"full","settings":{"playAdvancesTurns":1},"world":{"properties":[{"name":"alarm","type":"number","default":0}]},"story":{"properties":[{"name":"act","type":"number","default":1}]},"boxes":[{"id":"b_x","gameId":"box","ranking":{"specificity":true},"fields":[],"properties":[],"tagGroups":[{"id":"d_zone","gameId":"zone","tags":[{"id":"v_docks","gameId":"docks","properties":[{"name":"danger","type":"number","default":0}]},{"id":"v_market","gameId":"market"}]}],"decks":[{"id":"k_main","gameId":"main","properties":[],"cards":[{"id":"c_heist","gameId":"heist","priority":0,"redraw":"never","outcomes":[{"id":"o_go","gameId":"go","changes":{"@story.act":{"src":"@story.act + 1","ast":["bin","+",["sv","story","act"],["n",1]]},"@world.alarm":{"src":"@world.alarm + 1","ast":["bin","+",["sv","world","alarm"],["n",1]]}}}]},{"id":"c_manhunt","gameId":"manhunt","condition":{"src":"@world.alarm >= 10","ast":["bin",">=",["sv","world","alarm"],["n",10]]},"priority":0,"redraw":"always","outcomes":[{"id":"o_run","gameId":"run","changes":{}}]},{"id":"c_patron","gameId":"patron","condition":{"src":"@patter.visits >= 1","ast":["bin",">=",["sv","patter","visits"],["n",1]]},"priority":0,"redraw":"always","outcomes":[{"id":"o_tip","gameId":"tip","changes":{"@patter.visits":{"src":"@patter.visits + 10","ast":["bin","+",["sv","patter","visits"],["n",10]]}}}]}]}],"handTemplates":[],"hands":[{"id":"h_q","gameId":"q","rule":{"slots":"unbounded"}}]}]})JSON";
 
     S::BundlePtr StoryletBundle(bool extraStory = false)
     {
@@ -240,9 +241,10 @@ namespace
     // the JS test's own function): the guard's snippet waits for @story.act >= 2 and,
     // on exit, raises @world.alarm by ten and counts a visit. Only the line's text
     // changes between the builds, so the structure hash is one and the build hash is
-    // the compiler's for each text.
+    // the compiler's for each text. The compiler records @story, another engine's
+    // scope, in externalScopes.
 
-    const char* kPatterBundle = R"JSON({"schema":"patter/bundle@0","content":{"project":"p","hash":"HASH","structureHash":"0zmhmuj"},"voiced":false,"locales":{"default":"en","included":["en"]},"cast":[{"name":"GUARD"}],"properties":[{"name":"visits","type":"number","default":0,"shared":true}],"scenes":{"gate":{"id":"gate","type":"scene","name":"Gate","gameId":"gate","blocks":[{"id":"b","type":"block","name":"B","children":[{"id":"shout","type":"snippet","condition":{"src":"@story.act >= 2","ast":["bin",">=",["sv","story","act"],["n",2]]},"beats":[{"id":"L","kind":"line","character":"GUARD"}],"onExit":[{"kind":"set","target":"@world.alarm","value":{"src":"@world.alarm + 10","ast":["bin","+",["sv","world","alarm"],["n",10]]}},{"kind":"set","target":"@visits","value":{"src":"@visits + 1","ast":["bin","+",["sv","patter","visits"],["n",1]]}}],"jump":{"to":"END"}}]}]}},"strings":{"en":{"L":"LINE"}}})JSON";
+    const char* kPatterBundle = R"JSON({"schema":"patter/bundle@0","content":{"project":"p","hash":"HASH","structureHash":"0zmhmuj"},"voiced":false,"locales":{"default":"en","included":["en"]},"cast":[{"name":"GUARD"}],"properties":[{"name":"visits","type":"number","default":0,"shared":true}],"scenes":{"gate":{"id":"gate","type":"scene","name":"Gate","gameId":"gate","blocks":[{"id":"b","type":"block","name":"B","children":[{"id":"shout","type":"snippet","condition":{"src":"@story.act >= 2","ast":["bin",">=",["sv","story","act"],["n",2]]},"beats":[{"id":"L","kind":"line","character":"GUARD"}],"onExit":[{"kind":"set","target":"@world.alarm","value":{"src":"@world.alarm + 10","ast":["bin","+",["sv","world","alarm"],["n",10]]}},{"kind":"set","target":"@visits","value":{"src":"@visits + 1","ast":["bin","+",["sv","patter","visits"],["n",1]]}}],"jump":{"to":"END"}}]}]}},"strings":{"en":{"L":"LINE"}},"externalScopes":["story"]})JSON";
 
     const std::map<std::string, std::string> kLineHashes = {
         {"Thief!", "1q2dsxn"}, {"Stop, thief!", "1d8lt0v"}, {"Halt!", "04hkhhs"},
@@ -350,6 +352,7 @@ namespace
         for (const auto& c : b.at("cast").arr) { P::Cast cast; cast.name = c.at("name").str; bundle->cast.push_back(cast); }
         for (const auto& p : b.at("properties").arr) bundle->properties.push_back(PatterProp(p));
         for (const auto& loc : b.at("strings").obj) for (const auto& kv : loc.second.obj) bundle->strings[loc.first][kv.first] = kv.second.str;
+        if (const auto* ext = b.find("externalScopes")) bundle->externalScopes = StrList(*ext);
         for (const auto& sc : b.at("scenes").obj)
         {
             P::Scene scene;
@@ -659,6 +662,49 @@ namespace
         }
     }
 
+    /** A card names @patter directly, and the Storylet Engine hot-swaps on the
+     *  registry Patter shares. */
+    void PatronAndStoryletHotSwap()
+    {
+        Game g = CombinedGame();
+        PlayFirstPart(g);
+        Check(g.patter->getFlow("guard") != nullptr, "the guard's flow is open");
+        S::FlowPtr thief = g.storylets->getFlow("thief");
+        Check(!Has(Dealt(*thief), "patron"), "visits 0: the patron is not dealt yet");
+        End(g.patter->getFlow("guard")->advance(), "the guard's exit: visits 1");
+        Check(Has(Dealt(*thief), "patron"), "visits 1: the patron is dealt: " + Joined(Dealt(*thief)));
+        thief->play("patron", "tip", "q");
+        Num(g.patter->getProperty("@visits"), 11, "a storylet wrote Patter's value");
+
+        // A live Storylets edit mid-game, on the registry Patter shares.
+        std::unique_ptr<S::Engine> swapped;
+        S::LoadReport report;
+        if (g_probe == Probe::FreshSwap)
+        {
+            // The mistake: a new engine instead of a swap. It cannot even register (the old
+            // one still holds @story), so drop the old one first, as a game doing this would.
+            const S::SaveEnvelope save = g.storylets->saveGame();
+            g.storylets.reset();
+            S::EngineOptions so; so.seed = 3; so.registry = g.registry;
+            swapped = std::make_unique<S::Engine>(StoryletBundle(true), so);
+            report = swapped->loadGame(save);
+        }
+        else
+        {
+            S::Engine::HotSwapResult swap = g.storylets->hotSwap(StoryletBundle(true));
+            swapped = std::move(swap.engine);
+            report = swap.report;
+            g.storylets.reset();   // the spent engine goes, and takes nothing of the replacement's with it
+        }
+        std::string defaulted;
+        for (const auto& p : report.defaultedProperties) defaulted += "[" + p.flow + "|" + p.path + "]";
+        Check(defaulted == "[|story.rumours]", "the report's defaulted properties: " + defaulted);
+        Num(swapped->getProperty("story.act"), 2, "story.act, carried over");
+        Num(swapped->getProperty("story.rumours"), 0, "story.rumours, its default");
+        Num(g.patter->getProperty("@story.act"), 2, "Patter reads the replacement's @story");
+        Num(g.registry->get("patter", "visits"), 11, "and its own values stand");
+    }
+
     struct Case { const char* name; std::function<void()> run; };
 
     const std::vector<Case> kCases = {
@@ -667,6 +713,7 @@ namespace
         {"resumes both engines from the one save, registry first", [] { Resumes(true); }},
         {"resumes both engines from the one save, engines first", [] { Resumes(false); }},
         {"loads across content drift in both engines, and Patter hot-swaps without disturbing the other", DriftAndHotSwap},
+        {"a card names @patter directly, and the Storylet Engine hot-swaps on the shared registry", PatronAndStoryletHotSwap},
         {"a token clash fails as the game combines its engines, naming who holds it", TokenClash},
     };
 }

@@ -2,7 +2,8 @@
 // game, on ONE ScopeRegistry, with one save (patterkit
 // design/one-registry-handover.md). A port of the JS runtime's
 // packages/runtime/test/with-patter/combined-game.test.ts, case for case, with
-// the same content and the same expectations.
+// the same content and the same expectations: a card naming @patter directly
+// and a Storylet Engine hot swap on the shared registry included.
 //
 // The game owns the registry and registers @world itself, as a property the
 // registry stores. Each engine registers its own scopes: the Storylet Engine
@@ -47,7 +48,7 @@ namespace StoryletStudio.CombinedProof
         // included). Written out by running the JS test's own storyletBundle(), so
         // the two tests play one bundle.
 
-        private const string StoryletBundleJson = @"{""schema"":""storylets/bundle@0"",""content"":{""project"":""conf"",""version"":""0.0.0"",""hash"":""""},""metadata"":""full"",""settings"":{""playAdvancesTurns"":1},""world"":{""properties"":[{""name"":""alarm"",""type"":""number"",""default"":0}]},""story"":{""properties"":[{""name"":""act"",""type"":""number"",""default"":1}]},""boxes"":[{""id"":""b_x"",""gameId"":""box"",""ranking"":{""specificity"":true},""fields"":[],""properties"":[],""tagGroups"":[{""id"":""d_zone"",""gameId"":""zone"",""tags"":[{""id"":""v_docks"",""gameId"":""docks"",""properties"":[{""name"":""danger"",""type"":""number"",""default"":0}]},{""id"":""v_market"",""gameId"":""market""}]}],""decks"":[{""id"":""k_main"",""gameId"":""main"",""properties"":[],""cards"":[{""id"":""c_heist"",""gameId"":""heist"",""priority"":0,""redraw"":""never"",""outcomes"":[{""id"":""o_go"",""gameId"":""go"",""changes"":{""@story.act"":{""src"":""@story.act + 1"",""ast"":[""bin"",""+"",[""sv"",""story"",""act""],[""n"",1]]},""@world.alarm"":{""src"":""@world.alarm + 1"",""ast"":[""bin"",""+"",[""sv"",""world"",""alarm""],[""n"",1]]}}}]},{""id"":""c_manhunt"",""gameId"":""manhunt"",""condition"":{""src"":""@world.alarm >= 10"",""ast"":[""bin"","">="",[""sv"",""world"",""alarm""],[""n"",10]]},""priority"":0,""redraw"":""always"",""outcomes"":[{""id"":""o_run"",""gameId"":""run"",""changes"":{}}]}]}],""handTemplates"":[],""hands"":[{""id"":""h_q"",""gameId"":""q"",""rule"":{""slots"":""unbounded""}}]}]}";
+        private const string StoryletBundleJson = @"{""schema"":""storylets/bundle@0"",""content"":{""project"":""conf"",""version"":""0.0.0"",""hash"":""""},""metadata"":""full"",""settings"":{""playAdvancesTurns"":1},""world"":{""properties"":[{""name"":""alarm"",""type"":""number"",""default"":0}]},""story"":{""properties"":[{""name"":""act"",""type"":""number"",""default"":1}]},""boxes"":[{""id"":""b_x"",""gameId"":""box"",""ranking"":{""specificity"":true},""fields"":[],""properties"":[],""tagGroups"":[{""id"":""d_zone"",""gameId"":""zone"",""tags"":[{""id"":""v_docks"",""gameId"":""docks"",""properties"":[{""name"":""danger"",""type"":""number"",""default"":0}]},{""id"":""v_market"",""gameId"":""market""}]}],""decks"":[{""id"":""k_main"",""gameId"":""main"",""properties"":[],""cards"":[{""id"":""c_heist"",""gameId"":""heist"",""priority"":0,""redraw"":""never"",""outcomes"":[{""id"":""o_go"",""gameId"":""go"",""changes"":{""@story.act"":{""src"":""@story.act + 1"",""ast"":[""bin"",""+"",[""sv"",""story"",""act""],[""n"",1]]},""@world.alarm"":{""src"":""@world.alarm + 1"",""ast"":[""bin"",""+"",[""sv"",""world"",""alarm""],[""n"",1]]}}}]},{""id"":""c_manhunt"",""gameId"":""manhunt"",""condition"":{""src"":""@world.alarm >= 10"",""ast"":[""bin"","">="",[""sv"",""world"",""alarm""],[""n"",10]]},""priority"":0,""redraw"":""always"",""outcomes"":[{""id"":""o_run"",""gameId"":""run"",""changes"":{}}]},{""id"":""c_patron"",""gameId"":""patron"",""condition"":{""src"":""@patter.visits >= 1"",""ast"":[""bin"","">="",[""sv"",""patter"",""visits""],[""n"",1]]},""priority"":0,""redraw"":""always"",""outcomes"":[{""id"":""o_tip"",""gameId"":""tip"",""changes"":{""@patter.visits"":{""src"":""@patter.visits + 10"",""ast"":[""bin"",""+"",[""sv"",""patter"",""visits""],[""n"",10]]}}}]}]}],""handTemplates"":[],""hands"":[{""id"":""h_q"",""gameId"":""q"",""rule"":{""slots"":""unbounded""}}]}]}";
 
         /// <summary>The JS test's storyletBundle(extraStory): the newer build adds a
         /// @story property, rumours.</summary>
@@ -69,7 +70,7 @@ namespace StoryletStudio.CombinedProof
         // counts a visit. Only the line's text changes between the builds, so the
         // structure hash is one and the build hash is the compiler's for each text.
 
-        private const string PatterBundleJson = @"{""schema"":""patter/bundle@0"",""content"":{""project"":""p"",""hash"":""HASH"",""structureHash"":""0zmhmuj""},""voiced"":false,""locales"":{""default"":""en"",""included"":[""en""]},""cast"":[{""name"":""GUARD""}],""properties"":[{""name"":""visits"",""type"":""number"",""default"":0,""shared"":true}],""scenes"":{""gate"":{""id"":""gate"",""type"":""scene"",""name"":""Gate"",""gameId"":""gate"",""blocks"":[{""id"":""b"",""type"":""block"",""name"":""B"",""children"":[{""id"":""shout"",""type"":""snippet"",""condition"":{""src"":""@story.act >= 2"",""ast"":[""bin"","">="",[""sv"",""story"",""act""],[""n"",2]]},""beats"":[{""id"":""L"",""kind"":""line"",""character"":""GUARD""}],""onExit"":[{""kind"":""set"",""target"":""@world.alarm"",""value"":{""src"":""@world.alarm + 10"",""ast"":[""bin"",""+"",[""sv"",""world"",""alarm""],[""n"",10]]}},{""kind"":""set"",""target"":""@visits"",""value"":{""src"":""@visits + 1"",""ast"":[""bin"",""+"",[""sv"",""patter"",""visits""],[""n"",1]]}}],""jump"":{""to"":""END""}}]}]}},""strings"":{""en"":{""L"":""LINE""}}}";
+        private const string PatterBundleJson = @"{""schema"":""patter/bundle@0"",""content"":{""project"":""p"",""hash"":""HASH"",""structureHash"":""0zmhmuj""},""voiced"":false,""locales"":{""default"":""en"",""included"":[""en""]},""cast"":[{""name"":""GUARD""}],""properties"":[{""name"":""visits"",""type"":""number"",""default"":0,""shared"":true}],""scenes"":{""gate"":{""id"":""gate"",""type"":""scene"",""name"":""Gate"",""gameId"":""gate"",""blocks"":[{""id"":""b"",""type"":""block"",""name"":""B"",""children"":[{""id"":""shout"",""type"":""snippet"",""condition"":{""src"":""@story.act >= 2"",""ast"":[""bin"","">="",[""sv"",""story"",""act""],[""n"",2]]},""beats"":[{""id"":""L"",""kind"":""line"",""character"":""GUARD""}],""onExit"":[{""kind"":""set"",""target"":""@world.alarm"",""value"":{""src"":""@world.alarm + 10"",""ast"":[""bin"",""+"",[""sv"",""world"",""alarm""],[""n"",10]]}},{""kind"":""set"",""target"":""@visits"",""value"":{""src"":""@visits + 1"",""ast"":[""bin"",""+"",[""sv"",""patter"",""visits""],[""n"",1]]}}],""jump"":{""to"":""END""}}]}]}},""strings"":{""en"":{""L"":""LINE""}},""externalScopes"":[""story""]}";
 
         private static readonly Dictionary<string, string> LineHashes = new Dictionary<string, string>
         {
@@ -238,6 +239,29 @@ namespace StoryletStudio.CombinedProof
                 Num(swapped.GetProperty("@visits"), 2, "@visits after the watch");
                 Num(g2.Registry.Get("world", "alarm"), 21, "world.alarm after the watch");
                 Num(g2.Storylets.GetProperty("story.act"), 2, "the other engine never noticed");
+            }),
+
+            ("a card names @patter directly, and the Storylet Engine hot-swaps on the shared registry", () =>
+            {
+                var g = CombinedGameOf();
+                PlayFirstPart(g);
+                var thief = g.Storylets.GetFlow("thief");
+                var dealt = Dealt(thief);
+                Check(!dealt.Contains("patron"), "visits 0: the patron is not dealt yet: " + string.Join(",", dealt));
+                g.Patter.GetFlow("guard").Advance();                                   // the guard's exit: visits 1
+                dealt = Dealt(thief);
+                Check(dealt.Contains("patron"), "visits 1: the patron is dealt: " + string.Join(",", dealt));
+                thief.Play("patron", "tip", "q");
+                Num(g.Patter.GetProperty("@visits"), 11, "a storylet wrote Patter's value");
+
+                // A live Storylets edit mid-game, on the registry Patter shares.
+                var swap = g.Storylets.HotSwap(StoryletBundle(true));
+                var defaulted = string.Join(",", swap.Report.DefaultedProperties.Select(d => (d.Flow ?? "") + ":" + d.Path));
+                Check(defaulted == ":story.rumours", "report.defaultedProperties: " + defaulted);
+                Num(swap.Engine.GetProperty("story.act"), 2, "story.act carried");
+                Num(swap.Engine.GetProperty("story.rumours"), 0, "story.rumours defaulted");
+                Num(g.Patter.GetProperty("@story.act"), 2, "Patter reads the replacement's @story");
+                Num(g.Registry.Get("patter", "visits"), 11, "and its own values stand");
             }),
 
             ("a token clash fails as the game combines its engines, naming who holds it", () =>
