@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@storylet-studio/compiler": "0.0.0",
-    "@storylet-studio/model": "0.5.0",
+    "@storylet-studio/model": "0.6.0",
     "@storylet-studio/runtime": "0.8.0",
     "@wildwinter/expr": "^0.5.0",
     "@wildwinter/scoperegistry": "^0.8.0",
