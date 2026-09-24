@@ -1,5 +1,12 @@
 # @storylet-studio/model
 
+## 0.5.0
+
+### Minor Changes
+
+- 882bfcb: One registry per game. `SAVE_SCHEMA` is `storylets/save@2`: `SaveEnvelope` holds what is not a property, plus the engine's own registry's values under an optional `registry`, and `SharedSave.props` and `FlowSave.props` are optional (a flow parked by `saveFlow` still carries its own). The version 1 shape is kept as `SaveEnvelopeV1` with `SAVE_SCHEMA_V1` for readers, and `SaveFile.engine` takes either. Registry keys for the engine's bags are documented beside the types.
+- 0f5311a: Other engines' scopes, with no setting. `@storylet-studio/dialect` accepts every game-wide scope token in the family's shared list other than its own (`@patter`), with the Storylet Engine's missing-property policy, and exports `ENGINE_SCOPES`, `EXTERNAL_SCOPES`, and `OWN_SCOPES`. `Bundle.externalScopes` records the other engines' tokens the content names.
+
 ## 0.4.1
 
 ### Patch Changes
