@@ -7,7 +7,7 @@
 # their shards. FAILS rather than skips.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"; root="$(cd "$here/../../.." && pwd)"
-PATTER_UNITY_VERSION="0.12.0"
+PATTER_UNITY_VERSION="0.14.0"
 zip="patterplay-unity-${PATTER_UNITY_VERSION}.zip"
 url="https://github.com/patterkit/patter/releases/download/play-unity-v${PATTER_UNITY_VERSION}/${zip}"
 tmp="$(mktemp -d)"

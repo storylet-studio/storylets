@@ -56,7 +56,7 @@ jobs:
       - name: Checkout Patter (sibling source, for the combined proof)
         uses: actions/checkout@v5
         with:
-          repository: wildwinter/patter
+          repository: patterkit/patter
           path: patter
       - name: Fetch Godot ${{ env.GODOT_VERSION }} (headless)
         run: |
@@ -236,7 +236,7 @@ jobs:
       - name: Checkout Patter (sibling source, for the combined proof)
         uses: actions/checkout@v5
         with:
-          repository: wildwinter/patter
+          repository: patterkit/patter
           path: patter
       - uses: actions/setup-dotnet@v4
         with:
@@ -268,7 +268,7 @@ jobs:
       - name: Checkout Patter (sibling source, for the combined proof)
         uses: actions/checkout@v5
         with:
-          repository: wildwinter/patter
+          repository: patterkit/patter
           path: patter
       # build.sh compiles the std-only core with clang and runs it against the
       # committed corpus.json. No Unreal involved.

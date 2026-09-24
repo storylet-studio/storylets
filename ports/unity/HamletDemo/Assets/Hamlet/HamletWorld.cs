@@ -1,9 +1,10 @@
 // The shared world: ONE object, handed to BOTH engines.
 //
-// Each engine has its own resolver interface and its own value type (the two
-// value types are the same shared source under two names), so this holds plain
-// C# values once and converts at each door. The GAME's read-only policy lives
-// here too: a story that tries to move a read-only value is refused loudly.
+// Both engines speak the one expression kernel's value type (Wildwinter.Expr),
+// so a single Get and Set serve the Storylet Engine's resolver and Patter's
+// host scope alike; this holds plain C# values once and converts at the door.
+// The GAME's read-only policy lives here too: a story that tries to move a
+// read-only value is refused loudly.
 using System;
 using System.Collections.Generic;
 using StoryletStudio.StoryletEngine;
@@ -24,15 +25,10 @@ namespace StoryletStudio.Hamlet
             _readOnly = new HashSet<string>(readOnly);
         }
 
-        // --- the Storylet Engine's door (IScopeResolver) ---
-        // Both packages declare an IScopeSource, so ours is named in full.
-        ExprValue StoryletStudio.StoryletEngine.IScopeSource.Get(string name) => Values.TryGetValue(name, out var v) ? ToStorylet(v) : null;
+        // --- both engines' door ---
+        public ExprValue Get(string name) => Values.TryGetValue(name, out var v) ? ToValue(v) : null;
         public bool CanSet => true;
-        public void Set(string name, ExprValue value) => Write(name, FromStorylet(value));
-
-        // --- Patter's door (IHostScope) ---
-        PatterValue IHostScope.Get(string name) => Values.TryGetValue(name, out var v) ? ToPatter(v) : null;
-        public void Set(string name, PatterValue value) => Write(name, FromPatter(value));
+        public void Set(string name, ExprValue value) => Write(name, FromValue(value));
 
         // --- the host's own writes, which the read-only policy does not bind ---
         public void Host(string name, object value) { Values[name] = value; Changed?.Invoke(); }
@@ -43,17 +39,11 @@ namespace StoryletStudio.Hamlet
             Values[name] = value; Changed?.Invoke();
         }
 
-        private static ExprValue ToStorylet(object v) => v switch
+        private static ExprValue ToValue(object v) => v switch
         {
             bool b => ExprValue.Bool(b), double d => ExprValue.Num(d), int i => ExprValue.Num(i),
             string s => ExprValue.Str(s), List<string> l => ExprValue.Flags(l), _ => null,
         };
-        private static PatterValue ToPatter(object v) => v switch
-        {
-            bool b => PatterValue.Bool(b), double d => PatterValue.Num(d), int i => PatterValue.Num(i),
-            string s => PatterValue.Str(s), List<string> l => PatterValue.Flags(l), _ => null,
-        };
-        private static object FromStorylet(ExprValue v) => v.IsBool ? v.AsBool : v.IsNumber ? (object)v.AsNumber : v.IsString ? v.AsString : null;
-        private static object FromPatter(PatterValue v) => v.IsBool ? v.AsBool : v.IsNumber ? (object)v.AsNumber : v.IsString ? v.AsString : null;
+        private static object FromValue(ExprValue v) => v.IsBool ? v.AsBool : v.IsNumber ? (object)v.AsNumber : v.IsString ? v.AsString : null;
     }
 }

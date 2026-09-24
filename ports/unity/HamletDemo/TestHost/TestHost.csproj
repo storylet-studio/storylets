@@ -15,6 +15,10 @@
     <Compile Include="../Assets/Hamlet/HamletGame.cs" />
     <Compile Include="../../StoryletEngine/Runtime/**/*.cs" />
     <Compile Remove="../../StoryletEngine/Runtime/Unity/**/*.cs" />
+    <!-- One expression kernel, as in Unity: Patterplay's copy compiles and ours defers to it,
+         and the skew guard is for Unity's version check, not this build. -->
+    <Compile Remove="../../StoryletEngine/Runtime/Expr/**/*.cs" />
+    <Compile Remove="../../StoryletEngine/Runtime/ExprSkew/**/*.cs" />
     <Compile Include="../Packages/Patterplay/Runtime/**/*.cs" />
     <Compile Remove="../Packages/Patterplay/Runtime/Unity/**/*.cs" />
   </ItemGroup>
