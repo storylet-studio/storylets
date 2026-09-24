@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-24
+
 ### Added
 
 - **Other engines' scopes, with no setting.** A card can name another engine's game-wide scope from the family's shared list (`@patter.visits` in a condition, `@patter.gold` in an outcome's changes). The compiler lets it through unchecked and records it in the bundle (`externalScopes`); an outcome writes it through the game's registry under that engine's rules; a name that does not exist fails when the card is first evaluated. Content that names one runs only where that engine is on the same registry: without it, `openFlow` and `loadGame` refuse before anything changes (`this content names @patter, which no engine on this registry registered: give every engine the game's one registry`).

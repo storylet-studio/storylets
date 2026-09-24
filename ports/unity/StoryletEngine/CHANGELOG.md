@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-24
+
 ### Changed
 
 - **Breaking: one expression kernel, shared with Patterplay** (2026-09-24). `StoryletValue` and `StoryletKind` are now `ExprValue` and `ExprKind`, in the `Wildwinter.Expr` namespace with the rest of the shared kernel (`ScopeRegistry`, `PropertyBag`, `OrderedMap`, `Mulberry32`, and the evaluator), which now has its own assembly definition, `StoryletEngine.Expr`. Patterplay carries the same kernel: installed beside Patterplay 0.14.0 or newer, this package's copy switches itself off and both engines run on Patterplay's, so one `ScopeRegistry` is the same type to both; beside an older Patterplay the compile stops with an error that says to update it. On its own the package compiles its own copy, as before. The engine's API still throws `StoryletError` (a registry refusal) and `EvalError` (an expression), with the same messages; a call straight to the registry or a property bag throws the kernel's `RegistryError`, and `Expr.Evaluate` its `ExprError`. **To migrate:** rename `StoryletValue` to `ExprValue` and `StoryletKind` to `ExprKind`, and add `using Wildwinter.Expr;`. A game assembly definition that references `StoryletEngine.Runtime` must also reference `StoryletEngine.Expr` and `Patterplay.Expr` (Unity ignores whichever is not installed); scripts with no assembly definition need nothing more.

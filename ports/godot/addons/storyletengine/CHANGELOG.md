@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-24
+
 ### Added
 
 - **Other engines' scopes, with no setting.** A card can name another engine's game-wide scope from the family's shared list (`@patter.visits` in a condition, `@patter.gold` in an outcome's changes). The compiler lets it through unchecked and records it in the bundle (`externalScopes`, which `StoryletBundle.load_from_dict` checks and `StoryletBundle.external_scopes(bundle)` reads); an outcome writes it through the game's registry under that engine's rules. Content that names one runs only where that engine is on the same registry: without it, `open_flow` and `load_game` refuse before anything changes, checking `externalScopes` in order and refusing on the first token the registry does not have, the way they refuse anything else (`push_error`, then `open_flow` returns null and `load_game` an empty Dictionary) with the same message as every runtime: `this content names @patter, which no engine on this registry registered: give every engine the game's one registry`. `load_game` checks right after the same-project check, so a refused load leaves every flow as it was. An outcome can still meet an unregistered scope when another engine takes its scope away mid-game, and fails with `@patter.gold cannot be written: no engine on this registry registered @patter`.

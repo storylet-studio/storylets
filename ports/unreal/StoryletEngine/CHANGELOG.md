@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-24
+
 ### Added
 
 - **A registry option: one `ScopeRegistry` per game** (patterkit design/one-registry-handover.md, 2026-09-24). `EngineOptions::registry` takes the game's registry as a `std::shared_ptr<storylets::ScopeRegistry>`, shared with any other engine the game runs; `UStoryletEngine::CreateWithRegistry(Bundle, Registry, Seed, bRetainLog, World)` is the same for the UE wrapper, C++ only, because a std object shared by pointer crosses no Blueprint pin. Without one, the engine makes its own registry and acts as its own game, so a single-engine game needs no change. `Engine::registry()`, `Engine::ownsRegistry()` and `UStoryletEngine::GetRegistry()` say which registry an engine is using, and `saveRegistry(registry)` / `loadRegistry(registry, json)` in `Storylets/Save.h` are the registry's text door, for the game's half of a combined save.
