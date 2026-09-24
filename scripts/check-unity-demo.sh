@@ -35,6 +35,20 @@ if [ ! -x "$unity" ]; then
   exit 2
 fi
 
+# Positive evidence of a compile, not a grep for a name. The old proof was a grep for
+# `Assembly-CSharp`, and a crashed build step logs that name too ("... is not valid.
+# Loading of assembly skipped"), so on 2026-09-24 this check reported success for a Unity
+# that had crashed and compiled nothing. So: clear the compiled assemblies first, forcing a
+# real compile, and afterwards require every one of them to exist and to be newer than the
+# moment the run started.
+assemblies="$project/Library/ScriptAssemblies"
+expected=(StoryletEngine.Runtime.dll StoryletEngine.Runtime.Json.dll StoryletEngine.Runtime.Unity.dll StoryletEngine.Editor.dll StoryletEngineDemo.dll StoryletEngineDemo.Editor.dll)
+rm -rf "$assemblies"
+stamp="$(mktemp "${TMPDIR:-/tmp}/check-unity-demo-stamp.XXXXXX")"
+# Unity's build step crashed ("Unhandled exception during build") under a long TMPDIR, so
+# it gets a short one of its own for the run.
+unity_tmp="$(mktemp -d /tmp/check-unity-demo.XXXXXX)"
+trap 'rm -rf "$stamp" "$unity_tmp"' EXIT
 echo "check-unity-demo: $unity"
 rm -f "$log"
 # -ignorecompilercerrors so Unity reports every error rather than stopping at the
@@ -42,7 +56,7 @@ rm -f "$log"
 # batch-mode Unity exits 0 with a project full of compiler errors, which is the
 # trap this script exists to avoid falling into.
 set +e
-"$unity" -batchmode -quit -nographics -projectPath "$project" -logFile "$log" -ignorecompilererrors >/dev/null 2>&1
+TMPDIR="$unity_tmp" "$unity" -batchmode -quit -nographics -projectPath "$project" -logFile "$log" -ignorecompilererrors >/dev/null 2>&1
 set -e
 
 if [ ! -f "$log" ]; then
@@ -50,17 +64,28 @@ if [ ! -f "$log" ]; then
   exit 1
 fi
 
-# Proof the compile actually happened, so a silently skipped one cannot pass.
-if ! grep -q "Compiling Scripts\|Assembly-CSharp" "$log"; then
-  echo "check-unity-demo: the log shows no script compilation - treating that as a failure." >&2
-  echo "  (A licence prompt or a locked project library will do this.)  See: $log" >&2
-  exit 1
-fi
-
 errors="$(grep -c "error CS" "$log" || true)"
 if [ "$errors" -gt 0 ]; then
   echo "check-unity-demo: $errors compiler error(s) in the Unity demo:" >&2
   grep "error CS" "$log" | sort -u | sed 's/^/  /' >&2
+  exit 1
+fi
+
+# A crash or an abandoned build can leave a log with no compiler error in it at all.
+if grep -q "Unhandled exception\|Aborting batchmode due to failure\|Scripts have compiler errors" "$log"; then
+  echo "check-unity-demo: Unity did not finish the build:" >&2
+  grep "Unhandled exception\|Aborting batchmode due to failure\|Scripts have compiler errors" "$log" | sort -u | sed 's/^/  /' >&2
+  echo "  See: $log" >&2
+  exit 1
+fi
+
+missing=()
+for dll in "${expected[@]}"; do
+  [ "$assemblies/$dll" -nt "$stamp" ] || missing+=("$dll")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  echo "check-unity-demo: Unity did not compile ${missing[*]}, so nothing proves the scripts build." >&2
+  echo "  (A licence prompt, a locked project library, or a crashed build step will do this.)  See: $log" >&2
   exit 1
 fi
 
