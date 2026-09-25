@@ -50,6 +50,7 @@ storyletengine contract show [installation] [path]
 storyletengine merge BASE OURS THEIRS [-o out] [--json] [--path realfile]
 storyletengine links [path] [--deck X | --box X | --card X] [--refs] [--json]
 storyletengine coverage [path] [--runs N] [--max-turns M] [--seed S] [--json] [--fail-on-gap] [--propose]
+storyletengine share-scopes [path] [--at DIR]
 storyletengine pack [path] -o FILE [--assets|--no-assets]
 storyletengine unpack FILE -o DIR [--merge --base SENT.storyletpack]
 ```
@@ -309,6 +310,30 @@ to standard error. It exits 1 when there are conflicts and 2 on unparseable inpu
 version control driver falls back to its own behaviour instead of trusting a guess.
 
 Full detail on [version control](/setup/version-control/).
+
+## share-scopes
+
+Share the project's scopes with the game's other editing tools: the terminal's version of
+Storyletter's **File ▸ Share Scopes with Other Tools…** (see
+[Sharing scopes between the editors](/play/with-patter/#sharing-scopes-between-the-editors)).
+
+```
+$ storyletengine share-scopes .
+wrote /work/my-game/game-scopes/storylets.scopes.json
+wrote /work/my-game/game-scopes/game.scopes.json
+```
+
+It makes the game's `game-scopes/` folder, by default at the version-control root above the
+project (else beside the project), with the Storylet Engine's `storylets.scopes.json` and a
+`game.scopes.json` holding the project's `@world`, which the project keeps as its synced copy.
+
+| Flag | Does |
+|---|---|
+| `--at DIR` | Put `game-scopes/` in `DIR` instead. When looking up from the project wouldn't find it there, the project names it in its `gameScopes` field. |
+
+A folder that already exists, made by another tool, is joined rather than replaced: its
+`game.scopes.json` keeps every scope it holds, and gains `@world` only when it has none. A
+project that already shares its scopes is refused, naming the folder.
 
 ## pack
 

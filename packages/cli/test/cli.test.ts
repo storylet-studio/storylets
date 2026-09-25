@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { cpSync, mkdirSync, mkdtempSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { canonicalStringify, parseSource } from "@storylet-studio/ops";
 import { run } from "../src/main.js";
@@ -899,5 +899,42 @@ describe("a game that shares its scopes", () => {
     const r = await call("unpack", returned, "-o", dir, "--merge", "--base", sent);
     expect(r.err.join("\n")).toContain("warning: the returned World properties could not be written to");
     expect(readFileSync(join(root, "game-scopes", "game.scopes.json"), "utf8")).toBe("{ not json");
+  });
+});
+
+// share-scopes: the terminal's twin of Storyletter's File > Share Scopes with Other Tools, on the same plan.
+describe("share-scopes", () => {
+  const game = (): { gameDir: string; dir: string } => {
+    const gameDir = mkdtempSync(join(tmpdir(), "storyletengine-share-"));
+    mkdirSync(join(gameDir, ".git"));
+    const dir = join(gameDir, "saltmarsh.storylets");
+    cpSync(exampleDir, dir, { recursive: true });
+    return { gameDir, dir };
+  };
+
+  it("makes game-scopes/ at the version-control root with the Storylet Engine's file and the game's @world, and won't do it twice", async () => {
+    const { gameDir, dir } = game();
+    const r = await call("share-scopes", dir);
+    expect(r.code).toBe(0);
+    const gameFile = JSON.parse(readFileSync(join(gameDir, "game-scopes", "game.scopes.json"), "utf8")) as { scopes: { token: string }[] };
+    expect(gameFile.scopes.map((s) => s.token)).toEqual(["world"]);
+    expect(existsSync(join(gameDir, "game-scopes", "storylets.scopes.json"))).toBe(true);
+    const again = await call("share-scopes", dir);
+    expect(again.code).toBe(1);
+    expect(again.err.join("\n")).toContain("already shares its scopes");
+  });
+
+  it("joins a folder another tool made, keeping its @world, and names a folder the project wouldn't find", async () => {
+    const { gameDir, dir } = game();
+    const shared = join(gameDir, "..", `${basename(gameDir)}-shared`);
+    mkdirSync(join(shared, "game-scopes"), { recursive: true });
+    const theirs = { version: 1, owner: "Game", scopes: [{ token: "world", declarations: [{ name: "alarm", type: "number", default: 0 }] }] };
+    writeFileSync(join(shared, "game-scopes", "game.scopes.json"), JSON.stringify(theirs, null, 2));
+    const r = await call("share-scopes", dir, "--at", shared);
+    expect(r.code).toBe(0);
+    expect(JSON.parse(readFileSync(join(shared, "game-scopes", "game.scopes.json"), "utf8"))).toEqual(theirs);
+    expect(existsSync(join(shared, "game-scopes", "storylets.scopes.json"))).toBe(true);
+    const project = parseSource(readFileSync(join(dir, "saltmarsh.storyletproj"), "utf8")) as { gameScopes?: string };
+    expect(project.gameScopes).toBeDefined();
   });
 });

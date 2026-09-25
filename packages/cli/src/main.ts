@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { deleteFile, writeBinaryFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
 import {
   canonicalStringify, conflictSidecar, loadProject, parseFlagValue, parseSource,
@@ -23,6 +23,7 @@ import {
   runExportXlsx, // export-xlsx: the readable workbook
   runExportHtml, bundleOutputPath, // export-html: the playable page
   BOX_KITS,                        // the one kit list; --kit validates from it
+  planShareScopes, defaultGameScopesParent, // share-scopes: Storyletter's Share Scopes, from the terminal
 } from "@storylet-studio/ops";
 import type { BoxKit, Issue, PlannedWrite } from "@storylet-studio/ops";
 import { contractPropertyPath, contractPropertyType, turnSpan } from "@storylet-studio/model";
@@ -67,6 +68,12 @@ Usage:
   storyletengine resolve <query> [path]  Find an item by gameId, id or title: which
                                       box, deck and shard it lives in (the same
                                       lookup as Storyletter's --at)
+  storyletengine share-scopes [path]  Share the project's scopes with the game's other
+                 [--at DIR]           tools: make the game's game-scopes/ folder (in
+                                      DIR, else the version-control root above the
+                                      project) with storylets.scopes.json and
+                                      game.scopes.json; joins a folder that already
+                                      exists, adding @world only when it has none
   storyletengine pack [path] -o FILE   Pack a project into one portable
                  [--assets|--no-assets]  .storyletpack, to hand to someone with
                                       no shared version control (--assets carries
@@ -122,6 +129,7 @@ const FLAGS: Record<string, { boolean: string[]; valued: string[]; repeated: str
   // --assets/--no-assets were read by the handler from the day they were
   // designed and never declared here, so every use of them was an "unknown
   // flag" and the override was unreachable. Declared now, with a test.
+  "share-scopes": { boolean: [], valued: ["at"], repeated: [] },
   pack: { boolean: ["assets", "no-assets"], valued: ["o"], repeated: [] },
   unpack: { boolean: ["merge"], valued: ["o", "base"], repeated: [] },
   merge: { boolean: ["json"], valued: ["o", "path"], repeated: [] },
@@ -480,6 +488,29 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
       }
       return 0;
     }
+    case "share-scopes": {
+      // The terminal's twin of Storyletter's File > Share Scopes with Other Tools
+      // (patterkit design/shared-scopes.md): the same plan, so the two can't
+      // disagree about what the folder holds.
+      const loaded = loadProject(positionals[0] ?? ".");
+      if (!loaded.source) { printIssues(loaded.issues, io); return 1; }
+      const parent = typeof flags["at"] === "string" ? resolve(flags["at"]) : defaultGameScopesParent(loaded.dir);
+      const plan = planShareScopes(loaded, parent);
+      if ("error" in plan) { io.error(`share-scopes: ${plan.error}`); return 1; }
+      const writes: PlannedWrite[] = [...plan.writes];
+      if (plan.override !== undefined) {
+        const shard = { ...loaded.source.project, gameScopes: plan.override };
+        writes.push({ path: join(loaded.dir, loaded.source.path), content: canonicalStringify(shard) });
+      }
+      mkdirSync(plan.dir, { recursive: true });
+      if (!commitWrites(writes, io)) return 1;
+      for (const w of writes) io.log(`wrote ${w.path}`);
+      if (plan.override !== undefined) {
+        io.log(`the project names the folder (gameScopes: ${plan.override}), since looking up from the project wouldn't find it`);
+      }
+      return 0;
+    }
+
     case "pack": {
       if (typeof flags["o"] !== "string") {
         io.error("usage: pack [path] -o <file.storyletpack>");

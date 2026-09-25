@@ -22,6 +22,7 @@ storyletengine export-html [path]        one self-contained playable .html (runt
     [-o file]                            and bundle inlined; opens in any browser)
 storyletengine export-xlsx [path] -o F   the whole project as a readable .xlsx workbook
 storyletengine links [path]              the influence graph: which cards open which
+storyletengine share-scopes [path] [--at DIR]  make the game's game-scopes/ folder and write this project's files into it
 storyletengine pack [path] -o FILE       pack a project into one portable .storyletpack
     [--assets|--no-assets]               (--assets carries the background pictures too)
 storyletengine unpack FILE -o DIR        explode a .storyletpack into source shards
