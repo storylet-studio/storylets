@@ -47,6 +47,8 @@ import {
 // Find: the Property and Replace tabs
 import { applyReplace, propertyUsage, propertyUsageMany, replacePreview } from "./replace.js";
 import { pinForPublish } from "./pin.js";
+import { findPatterpad, launchPatterpad, patterpadExecutable } from "./patterpad.js";
+import { findScene, readPatterLink } from "@storylet-studio/ops";
 import { analyseInfluence, canvasFurniture, cardNeighbourhood, cardPositions, clearCanonicalCache, describeContribution, mapSites, runCoverage, runCoverageAsync, projectFolderName, runPack, runUnpack, runUnpackMerge, sharedSpaces, PACK_EXTENSION, assetPath, orphanAssetPaths } from "@storylet-studio/ops";
 import { clearParseCache } from "@storylet-studio/compiler";
 import type { UnpackMergeResult } from "@storylet-studio/ops";
@@ -373,6 +375,10 @@ function retitle(ctx: ServerContext | undefined, standing?: { revision: number; 
     : "Storyletter");
 }
 
+/** Is the open project paired with a Patter project (its `patter`)? Edit Scene in Patterpad
+ *  shows only then, and the menu is rebuilt when a write changes the answer. */
+const patterPaired = (): boolean => session?.loaded.source?.project.patter !== undefined;
+let shownPatter = false;
 const menu = (): void => {
   const ctx = serverContext();
   const dir = session?.loaded.dir;
@@ -381,7 +387,7 @@ const menu = (): void => {
   refreshMenu(window, store.get(), liveLinkOn(), menuState(
     ctx?.remote, ctx !== undefined, standing?.edits ?? 0,
     dir !== undefined ? serverSession.head(dir) : undefined,
-  ));
+  ), shownPatter = patterPaired());
   retitle(ctx, standing);
 };
 
@@ -391,7 +397,7 @@ const menu = (): void => {
 function noteProjectWritten(): void {
   const ctx = serverContext();
   const edits = ctx === undefined ? undefined : unpushedShards(ctx.dir);
-  if (edits === serverSession.shownEdits) return;
+  if (edits === serverSession.shownEdits && patterPaired() === shownPatter) return;
   menu();
 }
 
@@ -2077,6 +2083,66 @@ function wireIpc(): void {
   // "Share Scopes with Other Tools..." (patterkit design/shared-scopes.md): the folder dialog
   // opens where the folder belongs by default, the version-control root above the project,
   // and says what will be made there, in Patterpad's words for every folder it asks for.
+  // The paired Patter project (the project shard's `patter`). Choose: a Patter project, as a path
+  // relative to this project, for Project Settings to hold until it saves. Null = cancelled.
+  ipcMain.handle("patter:choose", async (): Promise<{ path: string } | null> => {
+    if (!session) return null;
+    const picked = await dialog.showOpenDialog(window!, {
+      title: "Choose the Patter project",
+      message: "The Patter project this project's cards perform: its scenes are named after the cards.",
+      buttonLabel: "Choose",
+      defaultPath: dirname(session.loaded.dir),
+      // A .patter project is a folder (a package on macOS, when Patterpad is installed): take
+      // the folder, or its .patterproj, whichever the platform lets the author pick.
+      properties: ["openFile", "openDirectory"],
+      filters: [{ name: "Patter project", extensions: ["patter", "patterproj"] }],
+    });
+    const chosen = picked.filePaths[0];
+    if (picked.canceled || chosen === undefined) return null;
+    const dir = chosen.endsWith(".patterproj") ? dirname(chosen) : chosen;
+    return { path: relative(session.loaded.dir, dir).split(sep).join("/") };
+  });
+
+  // Edit Scene in Patterpad: the paired Patter project, at the scene named after the card.
+  // Patterpad forwards a second launch to the running app, which jumps in place.
+  ipcMain.handle("patter:edit", async (_e, cardId: string): Promise<{ address: string; published: boolean } | { error: string } | null> => {
+    if (!session?.loaded.source) return { error: "no project open" };
+    const { link, issues } = readPatterLink(session.loaded);
+    if (!link) return { error: issues[0]?.message ?? "This project isn't paired with a Patter project. Choose one in Project Settings." };
+    const card = session.loaded.source.boxes.flatMap((b) => b.decks.flatMap((d) => d.shard.cards)).find((c) => c.id === cardId);
+    if (!card) return { error: `unknown card (id ${cardId})` };
+    const address = effectiveGameId(card);
+    let executable = findPatterpad(store.patterpadPath());
+    if (executable === undefined) {
+      const answer = await dialog.showMessageBox(window!, {
+        type: "question",
+        message: "Storyletter can't find Patterpad.",
+        detail: "Point to it once and Storyletter will remember where it is.",
+        buttons: ["Locate Patterpad…", "Cancel"],
+        defaultId: 0, cancelId: 1,
+      });
+      if (answer.response !== 0) return null;
+      const picked = await dialog.showOpenDialog(window!, {
+        title: "Locate Patterpad",
+        message: "Choose the Patterpad app. Storyletter will remember where it is.",
+        buttonLabel: "Use Patterpad",
+        properties: ["openFile"],
+        ...(process.platform === "darwin" ? { defaultPath: "/Applications", filters: [{ name: "Applications", extensions: ["app"] }] } : {}),
+        ...(process.platform === "win32" ? { filters: [{ name: "Patterpad", extensions: ["exe"] }] } : {}),
+      });
+      const chosen = picked.filePaths[0];
+      if (picked.canceled || chosen === undefined) return null;
+      executable = findPatterpad(chosen);
+      if (executable === undefined) return { error: `${basename(chosen)} isn't Patterpad (no ${basename(patterpadExecutable(chosen))} in it)` };
+      store.setPatterpadPath(chosen);
+    }
+    try { launchPatterpad(executable, link.dir, address); }
+    catch (e) { return { error: `couldn't start Patterpad: ${e instanceof Error ? e.message : String(e)}` }; }
+    // Whether the PUBLISHED bundle has the scene: Patterpad resolves from its own shards, which may
+    // be ahead, so this only colours the confirmation and never stops the launch.
+    return { address, published: link.scenes !== undefined && findScene(link.scenes, address) !== undefined };
+  });
+
   ipcMain.handle("project:shareScopes", async (): Promise<OpenResult | { error: string } | null> => {
     if (!session) return { error: "no project open" };
     const already = session.loaded.source?.gameScopes;

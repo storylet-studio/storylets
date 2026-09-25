@@ -253,7 +253,23 @@ Hamlet's `scripts/pairing.mjs` runs before every build and fails it in any of th
   take `@world` from `game.scopes.json`, and the check still holds the bundles to it.
 
 Run it whenever you rename a card or an outcome. A `gameId` derived from a card's title
-changes when the title does, so pin it on the card to keep the scene name stable.
+changes when the title does until the card is first published, and Publish Bundle pins it then,
+so the scene name stays put after that.
+
+### Pairing the projects in Storyletter
+
+Tell Storyletter where the Patter project is and it runs most of the same check as you work.
+In **Project Settings ▸ General ▸ Patter project**, choose the `.patter` folder. The path is
+saved in the project, relative to it, so everyone who checks the game out gets the same pairing.
+
+Storyletter then reads the Patter project's published bundle (wherever Patterpad publishes it)
+and checks every card that has a scene of its name, putting what it finds in the problems bar.
+`storyletengine validate` does the same, so CI catches it too. It can't tell you a card is
+*missing* its scene, because only your game knows which boxes Patter performs; keep that part
+of the check in your build.
+
+Pairing also adds **Edit ▸ Edit Scene in Patterpad**, which opens Patterpad at the open card's
+scene. The first time, if Storyletter can't find Patterpad, it asks you to point to it once.
 
 ## The Hamlet on each engine
 

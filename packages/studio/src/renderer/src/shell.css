@@ -803,6 +803,11 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
    quiet, per the density pass. */
 .set-cap { margin: 22px 0 0; font: 600 13px/1.3 var(--font-ui); }
 .set-note { margin: 2px 0 8px; font-size: 12px; line-height: 1.4; color: var(--muted); max-width: 52ch; }
+/* A path field with its picker beside it (Project Settings > General > Patter project). */
+.set-inline { display: flex; align-items: center; gap: 8px; }
+.set-inline input { flex: 1; min-width: 0; }
+.set-choose { font: inherit; font-size: 13px; padding: 4px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: none; color: var(--muted); cursor: pointer; }
+.set-choose:hover { color: var(--accent); border-color: var(--accent); }
 /* An inline link-shaped button inside a note (the Story page's pointer to
    Project Settings > World). */
 .set-note .linklike { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }

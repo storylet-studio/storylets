@@ -195,6 +195,8 @@ const api: StudioApi = {
   exportHtml: () => ipcRenderer.invoke("html:export"),   // Publish Playable HTML
   exportPack: () => ipcRenderer.invoke("pack:export"),
   shareScopes: () => ipcRenderer.invoke("project:shareScopes"),
+  choosePatterProject: () => ipcRenderer.invoke("patter:choose"),
+  editInPatterpad: (cardId: string) => ipcRenderer.invoke("patter:edit", cardId),
   choosePack: () => ipcRenderer.invoke("pack:choose"),
   openPackAt: (path: string) => ipcRenderer.invoke("pack:openAt", path),
   // The pack exchange: three calls, and the key never crosses this bridge.

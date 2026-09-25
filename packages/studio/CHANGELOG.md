@@ -10,6 +10,18 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **Pair a project with its Patter project.** Project Settings ▸ General ▸ Patter project takes
+  the `.patter` folder whose scenes your cards play, saved in the project as a relative path so
+  the whole team shares it. Each card is then checked against the scene of the same name in the
+  Patter project's published bundle: a scene that names an outcome the card doesn't have, or a
+  branch that can't say which of several outcomes it reached, is an error in the problems bar,
+  and an outcome no branch reaches, or a scene no card plays, is a warning. `storyletengine
+  validate` runs the same check.
+- **Edit ▸ Edit Scene in Patterpad** opens Patterpad at the open card's scene, when the project
+  is paired. If Storyletter can't find Patterpad it asks you to point to it once, and remembers.
+
 ### Changed
 
 - **Publish Bundle pins every game id that still follows a title.** A box, deck, card, outcome, hand or

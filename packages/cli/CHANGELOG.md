@@ -20,6 +20,15 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Added
+
+- **`validate` checks cards against their Patter scenes** when the project names its Patter
+  project (the project file's `patter`, a path relative to it). It reads the Patter project's
+  published bundle and reports, on each card with a scene of its name, an outcome the scene names
+  that the card doesn't have, or a branch that can't say which of several outcomes it reached
+  (errors), and an outcome no branch reaches or a scene no card plays (warnings). An unpublished
+  or missing Patter project is a warning, and the check waits.
+
 ## [0.9.0] - 2026-09-25
 
 ### Added

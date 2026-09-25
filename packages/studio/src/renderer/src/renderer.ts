@@ -2923,6 +2923,7 @@ function onMenu(command: MenuCommand): void {
     case "review-next": stepReview(1); break;
     case "review-prev": stepReview(-1); break;
     case "duplicate": if (project) void duplicateSelection(); break;
+    case "edit-in-patterpad": if (project) void editInPatterpad(); break;
     case "toggle-nav": if (project) shell.togglePane("nav"); break;
     case "reset-view": if (project) { shell.resetWidths(); shell.setPaneOpen("nav", true); void studio.resetWindows(); } break;
     case "toggle-auto-rebuild": if (project) void toggleAutoRebuild(); break;
@@ -2943,6 +2944,19 @@ function duplicateSelection(): void {
     case "tagGroup": actions.duplicateTagGroup(inspected.box, inspected.group); break;
     case "box": break;   // a box is a folder of shards; duplication is a VCS-level act
   }
+}
+
+/** Edit > Edit Scene in Patterpad: the open card's scene, in the paired Patter project. Pending
+ *  edits land first, since a gameId just typed is the address Patterpad is asked for. */
+async function editInPatterpad(): Promise<void> {
+  if (inspected?.kind !== "card") { flashError("Open a card first: its scene is the one named after it."); return; }
+  await flushSaves();
+  const result = await studio.editInPatterpad(inspected.card);
+  if (result === null) return;
+  if ("error" in result) { flashError(result.error); return; }
+  flash(result.published
+    ? `Opening ${result.address} in Patterpad`
+    : `Opening Patterpad at ${result.address}. The published Patter bundle has no scene by that name yet.`, "ok");
 }
 
 async function toggleAutoRebuild(): Promise<void> {

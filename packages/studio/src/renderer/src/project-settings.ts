@@ -108,12 +108,26 @@ export function createProjectSettings(
           const d = data!;
           const unread = el("input"); unread.type = "checkbox"; unread.checked = d.warnUnreadWrites;
           unread.addEventListener("change", () => { d.warnUnreadWrites = unread.checked; });
+          // The paired Patter project: typed, or chosen, as a path relative to this project.
+          d.patterProject ??= "";
+          const patter = textField(d.patterProject, (v) => { d.patterProject = v; });
+          patter.placeholder = "None";
+          const choose = el("button", { className: "set-choose", text: "Choose…" });
+          choose.type = "button";
+          choose.addEventListener("click", () => void (async () => {
+            const picked = await studio.choosePatterProject();
+            if (picked) { patter.value = picked.path; d.patterProject = picked.path; }
+          })());
+          const patterRow = el("div", { className: "set-inline" });
+          patterRow.append(patter, choose);
           h.append(
             labelled("Name", textField(d.name, (v) => { d.name = v; })),
             labelled("Version", textField(d.version, (v) => { d.version = v; })),
             ...playField(d),
             labelled("Warn about unread state", unread),
             el("p", { className: "set-note", text: "Also flag state an outcome writes that no condition reads. It's off by default, because cards are often written ahead of the content that will read them. A gate on state nothing writes always warns, whatever this says." }),
+            labelled("Patter project", patterRow),
+            el("p", { className: "set-note", text: "The Patter project whose scenes these cards play, named after them. Each card is checked against its scene in the Patter project's published bundle, and Edit ▸ Edit Scene in Patterpad opens it." }),
           );
           return {};
         } },

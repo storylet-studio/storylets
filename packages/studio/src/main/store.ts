@@ -54,6 +54,10 @@ interface StudioSlice {
    *  designer, its sidecar flipped role, and the read-only rule on the shape
    *  went with it. A project uses the slot its own sidecar's role names. */
   servers?: Record<string, ServerSlots>;
+  /** Where Patterpad is, when Storyletter could not find it and the author pointed at it.
+   *  Per person, never in the project: the project says WHICH Patter project it is paired with,
+   *  and where the app that edits it is installed differs from one machine to the next. */
+  patterpadPath?: string;
 }
 
 /** The keys held for one address: at most one per role. A file written before
@@ -279,6 +283,9 @@ export class StudioStore {
   setAutoRebuild(on: boolean): void { this.store.patchApp({ autoRebuild: on }); }
   setViewMode(mode: ViewMode): void { this.store.patchApp({ viewMode: mode }); }
   setBoardFollow(on: boolean): void { this.store.patchApp({ boardFollow: on }); }
+  /** Patterpad's location, as the author pointed at it (undefined = look for it). */
+  patterpadPath(): string | undefined { return this.store.get().app.patterpadPath; }
+  setPatterpadPath(path: string): void { this.store.patchApp({ patterpadPath: path }); }
   setBoardView(view: "list" | "map"): void { this.patchBoardPlace({ view }); }
   /** Which box the Board's navigator is watching ("" = Everything). */
   setBoardBox(box: string): void { this.patchBoardPlace({ box }); }

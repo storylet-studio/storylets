@@ -46,6 +46,9 @@ export { runReplace } from "./replace.js";
 export type { ReplaceOptions, ReplaceHit, ReplaceField, ReplacePlan } from "./replace.js";
 // Pin on publish: the editor's Publish writes down every address still following its title
 export { planPins } from "./pin.js";
+// The paired Patter project: where it is, its published bundle, and cards against their scenes
+export { PATTER_BUNDLE_SCHEMA, findScene, readPatterLink, patterPairingIssues, patterIssues, optionsOf, outcomesReported } from "./patter-link.js";
+export type { PatterLink, PatterScenes, PatterSceneShape } from "./patter-link.js";
 export type { PinnedName, PinPlan } from "./pin.js";
 export {
   ASSETS_DIR, assetPath, assetUse, freeAssetName, imageSize, isSafeAssetName, orphanAssetPaths,

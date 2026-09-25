@@ -869,6 +869,8 @@ export interface ProjectSettingsDto {
   /** Also warn when state is written but nothing reads it (off by default:
    *  cards are routinely written ahead of the content that will read them). */
   warnUnreadWrites: boolean;
+  /** The paired Patter project, relative to this project ("" = none): the shard's `patter`. */
+  patterProject: string;
   /** Where `world` lives when the game shares its scopes: the file the World settings
    *  write first ("game-scopes/game.scopes.json"), before the project's synced copy.
    *  Absent when the project's own declarations are the only ones. */
@@ -1321,6 +1323,7 @@ export type MenuCommand =
   | { cmd: "export-xlsx" }   // Publish Spreadsheet: the readable workbook
   | { cmd: "export-html" }   // Publish Playable HTML: the one-file playable page
   | { cmd: "duplicate" }
+  | { cmd: "edit-in-patterpad" }
   | { cmd: "toggle-nav" }
   | { cmd: "reset-view" }
   | { cmd: "toggle-auto-rebuild" }
@@ -1740,6 +1743,14 @@ export interface StudioApi {
    *  picks (native folder dialog, opened at the version-control root above the project),
    *  and write the project's scopes files into it. Null = cancelled. */
   shareScopes(): Promise<OpenResult | { error: string } | null>;
+
+  // --- the paired Patter project (the project shard's `patter`) --------------
+  /** Pick a Patter project for Project Settings, as a path relative to this project. Null = cancelled. */
+  choosePatterProject(): Promise<{ path: string } | null>;
+  /** Edit Scene in Patterpad: open the paired Patter project at the scene named after the card.
+   *  `published` says whether the Patter project's published bundle already has that scene.
+   *  Null = cancelled (Patterpad wasn't found and the author didn't point at it). */
+  editInPatterpad(cardId: string): Promise<{ address: string; published: boolean } | { error: string } | null>;
 
   // --- the send envelope (.storyletpack, Reboot 7.1) -------------------------
   /** Write the open project to a .storyletpack (native save dialog).

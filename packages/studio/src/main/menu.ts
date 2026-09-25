@@ -39,6 +39,8 @@ export interface ServerMenuState {
  *  `server`: the open project came from one and we still hold its key. */
 export function refreshMenu(
   window: BrowserWindow | undefined, state: StudioState, liveLink = false, server?: ServerMenuState,
+  /** The open project names its Patter project, so Edit Scene in Patterpad has somewhere to go. */
+  patter = false,
 ): void {
   const send = (command: MenuCommand) => () => window?.webContents.send("menu", command);
   // The family's labels AND keys, from the shell's tables rather than typed
@@ -185,6 +187,9 @@ export function refreshMenu(
         { ...EDIT_MENU.redo, click: send({ cmd: "redo" }) },
         { type: "separator" },
         { ...EDIT_MENU.duplicate, click: send({ cmd: "duplicate" }) },
+        // Only while the project is paired with a Patter project (its `patter`): the card's scene
+        // is the scene named after it (Reboot 10). Beside Duplicate, as the other act on the open item.
+        ...(patter ? [{ label: "Edit Scene in Patterpad", click: send({ cmd: "edit-in-patterpad" }) }] : []),
         { type: "separator" },
         { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" },
         { type: "separator" },

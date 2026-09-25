@@ -1307,6 +1307,15 @@ export interface ProjectShard {
    * that doesn't exist is a project error. (patterkit design/shared-scopes.md.)
    */
   gameScopes?: string;
+  /**
+   * The Patter project this one is paired with: a `.patter` folder, relative to the folder
+   * holding this file (`"../story/the-hamlet.patter"`). Authoring config, never compiled: the
+   * engines still know nothing of each other (Reboot 10). With it, `validate` checks each card
+   * against the scene of the same name in the Patter project's published bundle, and
+   * Storyletter can open Patterpad at a card's scene. A folder that isn't there is a warning,
+   * since a writer may hold the cards without the dialogue.
+   */
+  patter?: string;
   world: {
     properties: PropertyDecl[];
     registry?: unknown;

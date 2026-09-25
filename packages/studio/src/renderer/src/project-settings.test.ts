@@ -28,7 +28,7 @@ const settings = (): ProjectSettingsDto => ({
   world: [], story: [], drivers: [],
   bundlePath: "build/saltmarsh.storyletsc", metadata: "full", exportMap: false,
   playAdvancesTurns: 1, play: "solo", ladder: { solo: [], shared: [] },
-  warnUnreadWrites: false,
+  warnUnreadWrites: false, patterProject: "",
 });
 
 /** Enough of the bridge for this dialog: it reads the settings and, on Save,

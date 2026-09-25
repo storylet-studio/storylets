@@ -816,6 +816,9 @@ export function saveProjectSettings(session: ProjectSession, dto: ProjectSetting
   // shard says what an author chose, and a key nobody set is noise in a diff.
   if (dto.exportMap) p.export.map = true; else delete p.export.map;
   if (dto.warnUnreadWrites) p.validation = { warnUnreadWrites: true }; else delete p.validation;
+  // The paired Patter project: absent when none, like every setting nobody chose.
+  const patter = (dto.patterProject ?? "").trim();
+  if (patter) p.patter = patter; else delete p.patter;
   p.settings.playAdvancesTurns = dto.playAdvancesTurns;
   // The play ladder's rung (design/engine-server.md 4.10). Written whatever it
   // is, "solo" included: it is a three-way choice, not an off/on flag, and a

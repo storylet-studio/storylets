@@ -384,6 +384,7 @@ export function projectSettings(session: ProjectSession): ProjectSettingsDto {
       shared: summariseLadder(contentAboveRung(session.loaded.source!, "shared")),
     },
     warnUnreadWrites: p.validation?.warnUnreadWrites === true,
+    patterProject: p.patter ?? "",
   };
 }
 
