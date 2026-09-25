@@ -20,6 +20,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-25
+
 ### Added
 
 - **`share-scopes`**, the terminal's version of Storyletter's File > Share Scopes with Other Tools: makes the game's `game-scopes/` folder (in `--at DIR`, else at the version-control root above the project) with `storylets.scopes.json` and a `game.scopes.json` holding the project's `@world`. A folder another tool already made is joined, never replaced, and the project names a folder it wouldn't find by looking up.
