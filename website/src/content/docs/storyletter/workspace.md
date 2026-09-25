@@ -82,7 +82,7 @@ segment. **View ▸ Up a Level** (`Cmd+[`) goes up one level. Page-level control
 card/table/node switch and the card stepper, sit to the right of the trail.
 
 The second is **the identity heading**, which holds the item's type, its title, its gameId
-as a chip (worked out from the title, or pinned), and its purpose. An overflow menu beside
+as a chip (worked out from the title until it's first published, then pinned), and its purpose. An overflow menu beside
 the type holds **Delete**.
 
 ### Tabs

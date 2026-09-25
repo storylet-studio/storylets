@@ -280,9 +280,11 @@ function gameIdField(
     // to click a dead control is worse than no hint at all. What shut it is
     // said above the document, by the notice that shut it.
     const shut = (root as HTMLButtonElement).disabled;
+    // Pinned by hand or by the first Publish (design/pin-on-publish.md): either
+    // way a title edit no longer moves it, and that is what the author needs.
     const usual = pinned
-      ? `Game id, fixed by hand${shut ? "" : " (click to edit)"}`
-      : `Game id, following the title${shut ? "" : " (click to override)"}`;
+      ? `Game id, pinned: editing the title no longer changes it${shut ? "" : " (click to edit)"}`
+      : `Game id, following the title until the bundle is first published${shut ? "" : " (click to override)"}`;
     root.title = bound?.length ? [...bound, usual].join("\n") : usual;
     root.replaceChildren(
       el("span", { className: "gid-value", text: pinned || derived() || "(unnamed)" }),

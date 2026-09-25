@@ -10,6 +10,17 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **Publish Bundle pins every game id that still follows a title.** A box, deck, card, outcome, hand or
+  hand template takes its game id from its title until you pin one, so retitling a card after the game
+  started dealing it moved the name the game calls. The first time an item is published, its game id is
+  written down as it is, and a later title edit (or a Replace) leaves it alone. It is one undo step, and the
+  confirmation says how many were pinned. New items still follow their title until they are published, so
+  a card can be called "New Card" while you decide. Auto Rebuild, Live Link and `storyletengine export`
+  never pin. Patterpad does the same for its scenes and blocks, so a card and the scene named after it
+  stay paired.
+
 ## [0.11.0] - 2026-09-24
 
 ### Added

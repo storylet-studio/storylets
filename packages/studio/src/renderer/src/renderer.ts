@@ -2549,10 +2549,15 @@ function repaintReplacedProject(): void {
   renderWorkspace();
 }
 
+/** Publish Bundle, the manual one: it pins every address still following its
+ *  title first (design/pin-on-publish.md), and says so, once, so the diff that
+ *  follows is not a surprise. Main flushes pending edits before it pins. */
 async function exportBundle(): Promise<void> {
-  const result = await withJob("bundle", "Publishing the bundle…", () => studio.exportBundle());
-  if ("error" in result) { flashError(result.error); return; }
-  flash(`Exported ${baseName(result.path)}`, "ok");
+  const result = await withJob("bundle", "Publishing the bundle…", () => studio.exportBundle({ pin: true }));
+  // Re-read even on a failure: the pins may have landed before the export failed.
+  if ("error" in result) { flashError(result.error); void revalidate(); return; }
+  const pinned = result.pinned > 0 ? `, and pinned ${plural(result.pinned, "game id")} that followed a title` : "";
+  flash(`Exported ${baseName(result.path)}${pinned}`, "ok");
   void revalidate();
 }
 
@@ -2942,7 +2947,7 @@ function duplicateSelection(): void {
 
 async function toggleAutoRebuild(): Promise<void> {
   await remember("autoRebuild", !state.autoRebuild);
-  if (state.autoRebuild) void exportBundle();   // rebuild once on enable
+  if (state.autoRebuild) rebuildSoon();   // rebuild once on enable: a working build, so it pins nothing
 }
 
 // --- boot ----------------------------------------------------------------------

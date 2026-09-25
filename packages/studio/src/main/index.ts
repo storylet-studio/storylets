@@ -46,6 +46,7 @@ import {
 } from "./mutate.js";
 // Find: the Property and Replace tabs
 import { applyReplace, propertyUsage, propertyUsageMany, replacePreview } from "./replace.js";
+import { pinForPublish } from "./pin.js";
 import { analyseInfluence, canvasFurniture, cardNeighbourhood, cardPositions, clearCanonicalCache, describeContribution, mapSites, runCoverage, runCoverageAsync, projectFolderName, runPack, runUnpack, runUnpackMerge, sharedSpaces, PACK_EXTENSION, assetPath, orphanAssetPaths } from "@storylet-studio/ops";
 import { clearParseCache } from "@storylet-studio/compiler";
 import type { UnpackMergeResult } from "@storylet-studio/ops";
@@ -1482,9 +1483,25 @@ function wireIpc(): void {
     }
   });
 
-  ipcMain.handle("bundle:export", () => {
+  // Publish Bundle. The manual one pins first (design/pin-on-publish.md): the
+  // editor flushes its pending edits, since one carrying an old empty gameId
+  // would otherwise land on top of the pin and undo it, then the pins commit
+  // as one undo step, then the export reads the pinned shards, so the
+  // bundle's staleness hash matches them. Auto Rebuild passes no `pin`.
+  ipcMain.handle("bundle:export", async (_e, opts?: { pin?: boolean }) => {
     const s = session;
-    return s ? runJob("bundle", async () => exportBundle(s)) : { error: "no project open" };
+    if (!s) return { error: "no project open" };
+    return runJob("bundle", async () => {
+      let pinned = 0;
+      if (opts?.pin === true) {
+        await flushEditor();
+        const pins = pinForPublish(s);
+        if ("error" in pins) return pins;
+        pinned = pins.pinned.length;
+      }
+      const r = exportBundle(s);
+      return "error" in r ? r : { ...r, pinned };
+    });
   });
 
   // Publish Spreadsheet: the readable workbook through a Save dialog (Patterpad's

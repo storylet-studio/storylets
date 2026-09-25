@@ -1723,8 +1723,11 @@ export interface StudioApi {
    *  that reads the project should listen (see the satellite registry in
    *  main/index.ts). */
   onProjectChanged(handler: () => void): void;
-  /** Compile and write the .storyletsc bundle to its declared path. */
-  exportBundle(): Promise<{ path: string } | { error: string }>;
+  /** Compile and write the .storyletsc bundle to its declared path. `pin` is
+   *  the manual Publish's: first write down every address still following its
+   *  title (design/pin-on-publish.md), one undo step, and say how many.
+   *  Auto Rebuild leaves it off. */
+  exportBundle(opts?: { pin?: boolean }): Promise<{ path: string; pinned: number } | { error: string }>;
   /** Publish Spreadsheet: the whole project as a readable .xlsx workbook,
    *  through a native Save dialog. Null = cancelled. */
   exportXlsx(): Promise<{ path: string } | { error: string } | null>;

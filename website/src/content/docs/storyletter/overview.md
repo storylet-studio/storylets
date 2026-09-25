@@ -103,8 +103,10 @@ and what doesn't.
 
 Everything under the **Publish** menu turns your project into something you hand to others.
 **Publish Bundle** (`Shift+Cmd+B`) is the everyday one. It compiles the `.storyletsc` your
-game loads, to the path in your project settings. The other two are for people, a page
-anyone can play and a workbook anyone can read.
+game loads, to the path in your project settings. The first time a card, deck, hand or box goes
+out, it also pins its gameId, so retitling it afterwards can't change the name your game calls
+(Auto Rebuild and Live Link don't pin anything). The other two are for people, a page anyone
+can play and a workbook anyone can read.
 
 ### A playable page: one file, plays anywhere
 

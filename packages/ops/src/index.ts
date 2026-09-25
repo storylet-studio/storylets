@@ -44,6 +44,9 @@ export { runPropertyUsage, runPropertyUsageMany, parsePropertyQuery } from "./us
 export type { PropertyUsage } from "./usage.js";
 export { runReplace } from "./replace.js";
 export type { ReplaceOptions, ReplaceHit, ReplaceField, ReplacePlan } from "./replace.js";
+// Pin on publish: the editor's Publish writes down every address still following its title
+export { planPins } from "./pin.js";
+export type { PinnedName, PinPlan } from "./pin.js";
 export {
   ASSETS_DIR, assetPath, assetUse, freeAssetName, imageSize, isSafeAssetName, orphanAssetPaths,
 } from "./assets.js";
