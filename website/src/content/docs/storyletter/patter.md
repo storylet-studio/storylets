@@ -115,3 +115,10 @@ Patterpad updates the scenes it plays, and Patterpad's playhead follows the line
 
 If a card has no scene, or its scene ends without saying which outcome it reached, the Board
 says so and gives you the outcome buttons instead, so you can carry on playing.
+
+## A playable page with the dialogue
+
+**Publish ▸ Publish Playable HTML…** on a paired project with boxes Patter performs makes a page
+that plays those cards' scenes too, the same way the Board does, from the Patter project's
+published bundle. It's still one file that opens in any browser, so you can send the whole
+story, dialogue and all, to someone who has neither app.

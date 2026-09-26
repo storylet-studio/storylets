@@ -20,7 +20,8 @@ import { assetPath } from "./assets.js";
 import type { LoadedProject } from "./load.js";
 import { sharedSpaces } from "./spaces.js";
 import { mapSites } from "./map.js";
-import { PLAYABLE_PLAYER_JS } from "./playable-player.js";
+import { PLAYABLE_PATTERPLAY_JS, PLAYABLE_PLAYER_JS } from "./playable-player.js";
+import { performedBoxes, readPatterLink } from "./patter-link.js";
 
 export interface ExportHtmlResult {
   issues: Issue[];
@@ -225,6 +226,11 @@ const STYLE = String.raw`
                 border: 1px solid var(--line); border-radius: 5px; background: #fafafa; }
   .bd-outcome:hover:enabled { background: #eee; }
   .bd-outcome:disabled { color: var(--muted); cursor: default; opacity: 0.6; }
+  .bd-scene { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+  .bd-line, .bd-chose, .bd-problem { margin: 0; font-size: 13px; line-height: 1.45; }
+  .bd-who { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  .bd-chose { font-style: italic; }
+  .bd-problem { color: #a33; }
 
   #controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 10px; }
   .bd-control { font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer;
@@ -249,6 +255,19 @@ const STYLE = String.raw`
   .bd-hand.bd-found { outline: 2px solid #888; transition: outline 0.2s; }
 `;
 
+/** What a page from a project paired with Patter carries: the Patter project's published bundle,
+ *  and the gameIds of the boxes it performs. Undefined unless both are there. */
+function pagePatter(loaded: LoadedProject): { bundle: unknown; boxes: string[] } | undefined {
+  const source = loaded.source;
+  const performed = source ? performedBoxes(source) : undefined;
+  if (!source || !performed) return undefined;
+  const { link } = readPatterLink(loaded);
+  if (!link?.scenes) return undefined;
+  let bundle: unknown;
+  try { bundle = JSON.parse(readFileSync(link.bundlePath, "utf8")); } catch { return undefined; }
+  return { bundle, boxes: source.boxes.filter((b) => performed.has(b.box.box.id)).map((b) => effectiveGameId(b.box.box)) };
+}
+
 /**
  * Build the playable page for the loaded project. Pure: returns the file's
  * text; the caller writes it (the CLI to `-o` or beside the bundle, the
@@ -268,6 +287,12 @@ export function runExportHtml(loaded: LoadedProject): ExportHtmlResult {
   // Every `<` in the JSON is escaped, so the data cannot close the <script> it sits in.
   const bundleJson = serialiseBundle(bundle).trimEnd().replace(/</g, "\\u003c");
   const mapsJson = JSON.stringify(playableMaps(loaded, all)).replace(/</g, "\\u003c");
+  // Paired with Patter and naming the boxes it performs: the page carries the Patter project's
+  // published scenes and Patterplay, and plays those boxes' cards as their scenes, as the Board
+  // does. Otherwise the page is exactly what it was.
+  const patter = pagePatter(loaded);
+  const patterScripts = patter === undefined ? "" :
+    `<script>window.PATTER=${JSON.stringify(patter).replace(/</g, "\\u003c")};</script>\n<script>${PLAYABLE_PATTERPLAY_JS}</script>\n`;
 
   const html = `<!doctype html>
 <html lang="en">
@@ -296,7 +321,7 @@ export function runExportHtml(loaded: LoadedProject): ExportHtmlResult {
 </div>
 <script>window.STORYLET_BUNDLE=${bundleJson};</script>
 <script>window.STORYLET_MAPS=${mapsJson};</script>
-<script>${PLAYABLE_PLAYER_JS}</script>
+${patterScripts}<script>${PLAYABLE_PLAYER_JS}</script>
 </body>
 </html>
 `;

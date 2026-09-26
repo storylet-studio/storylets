@@ -32,6 +32,7 @@ export default defineConfig({
       "@storylet-studio/compiler": fileURLToPath(new URL("./packages/compiler/src/index.ts", import.meta.url)),
       "@storylet-studio/runtime": fileURLToPath(new URL("./packages/runtime/src/index.ts", import.meta.url)),
       "@storylet-studio/play-helpers": fileURLToPath(new URL("./packages/play-helpers/src/index.ts", import.meta.url)),
+      "@storylet-studio/with-patter": fileURLToPath(new URL("./packages/with-patter/src/index.ts", import.meta.url)),
       "@storylet-studio/ops": fileURLToPath(new URL("./packages/ops/src/index.ts", import.meta.url)),
       "@storylet-studio/conformance": fileURLToPath(new URL("./packages/conformance/src/index.ts", import.meta.url)),
       ...(expr("expr") ? { "@wildwinter/expr": expr("expr")! } : {}),

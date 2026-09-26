@@ -18,6 +18,9 @@ here is part of shipping, not a courtesy.
   reached, with Continue. Both engines share one set of properties, and a save or a restart
   carries Patter's part too. With Live Link on in Patterpad, the Board connects to it like a game:
   each save there updates the scenes it plays, and Patterpad's playhead follows the Board.
+- **Publish Playable HTML carries the dialogue.** On a paired project with boxes Patter performs,
+  the page plays those cards' Patter scenes the way the Board does, from the Patter project's
+  published bundle, still as one file that opens in any browser.
 - **Performed by Patter also sharpens the check.** Only those boxes are checked, and a card in one
   with no scene of its name is an error.
 

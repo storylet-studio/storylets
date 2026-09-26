@@ -7,7 +7,7 @@
 
 import { Engine } from "@storylet-studio/runtime";
 import type { Flow, LogEntry, TraceEvent, TraceVerdict } from "@storylet-studio/runtime";
-import { SAVEFILE_SCHEMA, effectiveGameId, gameIdify, valueAddresses } from "@storylet-studio/model";
+import { SAVEFILE_SCHEMA, effectiveGameId, valueAddresses } from "@storylet-studio/model";
 import type { Bundle, PropertyBag, PropertyDecl, SaveFile, ScalarValue } from "@storylet-studio/model";
 import { ENGINE_SCOPES } from "@storylet-studio/dialect";
 import { GAME_SCOPES_DIR, GAME_SCOPES_FILE, standInRegistry } from "@wildwinter/scoperegistry/scopes";
@@ -16,7 +16,7 @@ import type { ScopeDeclaration } from "@wildwinter/scoperegistry";
 import { Engine as PatterEngine } from "@patterkit/runtime";
 import { applyLiveBundle } from "@patterkit/play-helpers";
 import type { BoardPatterDto, BoardScopesDto } from "../../shared/api.js";
-import { Performer } from "./performance.js";
+import { Performer, sceneIdFor } from "@storylet-studio/with-patter";
 
 export type { LogEntry, TraceEvent } from "@storylet-studio/runtime";
 
@@ -293,10 +293,7 @@ export class Table {
 
   /** A scene reference to its internal id, as Patter's runtime resolves one: id, then address. */
   patterSceneId(ref: string): string | undefined {
-    const scenes = (this.patterBundle as { scenes?: Record<string, { name: string; gameId?: string }> } | undefined)?.scenes;
-    if (!scenes) return undefined;
-    if (scenes[ref]) return ref;
-    return Object.entries(scenes).find(([, s]) => (s.gameId?.trim() || gameIdify(s.name)) === ref)?.[0];
+    return this.patter && this.patterBundle ? sceneIdFor(this.patter, this.patterBundle, ref) : undefined;
   }
 
   /** The build identity of the Patter bundle running, for Patterpad's Live Link. */

@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
-// The Board performing a card through Patter: when the project is paired with
-// a Patter project and the card's box is one the project says Patter performs
-// (`patterBoxes`), opening the card runs the scene named after it, and the
-// scene decides the outcome (Reboot 10, the Hamlet's `performance.js`).
+// Performing a dealt card through Patter: the card's gameId names a Patter
+// scene, the scene runs, and the scene decides which of the card's outcomes
+// was reached (the Storylets-with-Patter contract; the Hamlet's
+// `performance.js`, lifted so a game, Storyletter's Board and the playable
+// page all run the same code).
 //
 // The Hamlet's rules, kept exactly because they are the host's contract:
 // - ONE Patter flow per performed box, named after the box, entered with
@@ -14,10 +15,21 @@
 // - An option is greyed when either engine says no: Patter's `eligible`, or
 //   the Storylet Engine's gate on the outcome the option names.
 //
-// This module knows nothing of the DOM: the Board draws what it returns.
+// This module knows nothing of the DOM, or of the Storylet Engine: the host
+// deals, draws what `start` and `choose` return, and plays the outcome.
 // ---------------------------------------------------------------------------
 
-import type { Engine as PatterEngine, Flow as PatterFlow, StepResult } from "@patterkit/runtime";
+import type { Bundle as PatterBundle, Engine as PatterEngine, Flow as PatterFlow, StepResult } from "@patterkit/runtime";
+
+/**
+ * A card's scene reference (its gameId) to the scene's internal id, as Patter's runtime resolves a
+ * reference: an internal id first, else a scene's address by Patter's own rules. Undefined when no
+ * scene matches.
+ */
+export function sceneIdFor(engine: PatterEngine, bundle: PatterBundle, ref: string): string | undefined {
+  if (bundle.scenes[ref]) return ref;
+  return Object.keys(bundle.scenes).find((id) => engine.sceneAddress(id) === ref);
+}
 
 /** One thing the scene has said, for the transcript. */
 export type Beat =

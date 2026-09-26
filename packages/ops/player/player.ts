@@ -22,6 +22,17 @@ import { SAVE_SCHEMA } from "@storylet-studio/model";
 import type { Bundle, PropertyBag, SaveEnvelope } from "@storylet-studio/model";
 import { Engine, describeBundle } from "@storylet-studio/runtime";
 import type { DealtCard, Flow, OutcomeView } from "@storylet-studio/runtime";
+import { ScopeRegistry } from "@wildwinter/scoperegistry";
+import type { ScopeDeclaration } from "@wildwinter/scoperegistry";
+import { Performer } from "@storylet-studio/with-patter";
+import type { Performance } from "@storylet-studio/with-patter";
+import type { Bundle as PatterBundle, Engine as PatterEngineType } from "@patterkit/runtime";
+
+/** What a page exported from a project paired with Patter carries (export-html.ts): the Patter
+ *  project's published bundle and the boxes it performs. Patterplay itself rides beside it, as
+ *  the `Patterplay` global its browser build defines. */
+interface PagePatter { bundle: PatterBundle; boxes: string[] }
+type PatterplayGlobal = { Engine: new (bundle: PatterBundle, opts: { registry: ScopeRegistry; seed: number }) => PatterEngineType };
 
 /** The maps the page carries beside the bundle (export-html.ts builds them:
  *  zones, placed hands, and the background pictures as data URIs). The page
@@ -71,9 +82,33 @@ const worldResolver = {
   get: (n: string) => worldValues[n],
   set: (n: string, v: PropertyBag[string]) => { worldValues[n] = v; },
 };
+// --- Patter, when the page carries it ------------------------------------------
+//
+// A page exported from a project paired with Patter plays its performed boxes' cards as their
+// scenes (@storylet-studio/with-patter, the Board's own code). Both engines then share ONE
+// registry, the page's, which holds @world too: the combined game's arrangement.
+let pagePatter: PagePatter | undefined;
+let registry: ScopeRegistry | undefined;
+let patter: PatterEngineType | undefined;
+let performer: Performer | undefined;
+/** The open card's scene, while it plays. */
+let performing: Performance | undefined;
+/** Card id -> its box's gameId, for asking whether Patter performs it. */
+const cardBoxes = new Map<string, string>();
+
 const freshEngine = (): void => {
   freshWorld();
-  engine = new Engine(bundle, { seed: SEED, world: worldResolver });
+  const Patterplay = (window as unknown as { Patterplay?: PatterplayGlobal }).Patterplay;
+  if (pagePatter && Patterplay) {
+    registry = new ScopeRegistry().defineOwned("world", bundle.world.properties as unknown as ScopeDeclaration[],
+      { normalise: (name) => name, pathPrefix: "world.", owner: "Game" });
+    engine = new Engine(bundle, { seed: SEED, registry });
+    patter = new Patterplay.Engine(pagePatter.bundle, { registry, seed: SEED });
+    performer = new Performer(patter, new Set(pagePatter.boxes));
+  } else {
+    engine = new Engine(bundle, { seed: SEED, world: worldResolver });
+  }
+  performing = undefined;
   session = engine.openFlow("main");
 };
 /** Hand gameId -> title-or-gameId: board() and dealMany() key by gameId. */
@@ -96,11 +131,19 @@ let saveKey = "";
 interface PageSave {
   engine: SaveEnvelope;
   world: PropertyBag;
+  /** With Patter on the page: the shared registry's values, and Patter's own part. */
+  registry?: Record<string, PropertyBag>;
+  patter?: unknown;
 }
 
 const persist = (): void => {
   try {
-    localStorage.setItem(saveKey, JSON.stringify({ engine: engine.saveGame(), world: worldValues }));
+    const page: PageSave = {
+      engine: engine.saveGame(), world: worldValues,
+      ...(registry ? { registry: registry.save() } : {}),
+      ...(patter ? { patter: patter.saveGame() } : {}),
+    };
+    localStorage.setItem(saveKey, JSON.stringify(page));
   } catch {
     // Storage can be off or full; the game still plays, it just starts over next time.
   }
@@ -166,6 +209,7 @@ const playOutcome = (hand: string, card: DealtCard, outcome?: OutcomeView): void
   }
   say(`played "${named(card.title, card.gameId)}"${outcome ? ` -> ${named(outcome.title, outcome.gameId)}` : ""}`);
   open = undefined;
+  performing = undefined;
   refill();
   persist();
 };
@@ -187,6 +231,14 @@ const renderOutcomes = (hand: string, card: DealtCard): HTMLElement => {
   const wrap = document.createElement("div");
   wrap.className = "bd-outcomes";
   const outcomes = session.outcomes(card.id, hand);
+  // A card from a box Patter performs plays its scene; its outcomes come back only if the scene
+  // can't say which it reached.
+  const box = cardBoxes.get(card.id);
+  if (performer && box !== undefined && performer.performs(box)) {
+    if (performing?.card !== card.id) performing = performer.start(card, box, outcomes);
+    wrap.append(renderScene(hand, card, performing, outcomes));
+    if (!performing.problem) return wrap;
+  }
   if (outcomes.length === 0) {
     const done = document.createElement("button");
     done.type = "button";
@@ -209,6 +261,53 @@ const renderOutcomes = (hand: string, card: DealtCard): HTMLElement => {
     wrap.append(button);
   }
   return wrap;
+};
+
+/** A card's Patter scene: what has been said, then the choice, or the outcome with Continue. */
+const renderScene = (hand: string, card: DealtCard, p: Performance, outcomes: OutcomeView[]): HTMLElement => {
+  const scene = document.createElement("div");
+  scene.className = "bd-scene";
+  for (const beat of p.transcript) {
+    const line = document.createElement("p");
+    line.className = beat.kind === "chose" ? "bd-chose" : "bd-line";
+    if (beat.kind === "line" && beat.who) {
+      const who = document.createElement("span");
+      who.className = "bd-who";
+      who.textContent = beat.who;
+      line.append(who, " ");
+    }
+    line.append(beat.text);
+    scene.append(line);
+  }
+  if (p.options) {
+    for (const o of p.options) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "bd-outcome";
+      button.textContent = o.enabled ? o.text : `${o.text} (locked)`;
+      button.disabled = !o.enabled;
+      button.addEventListener("click", () => {
+        performing = performer!.choose(p, o.id, outcomes);
+        persist();
+        renderBoard();
+      });
+      scene.append(button);
+    }
+  } else if (p.outcome !== undefined) {
+    const reached = outcomes.find((o) => o.gameId === p.outcome);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "bd-outcome";
+    button.textContent = `Continue (${named(reached?.title, p.outcome)})`;
+    button.addEventListener("click", () => playOutcome(hand, card, reached));
+    scene.append(button);
+  } else if (p.problem) {
+    const note = document.createElement("p");
+    note.className = "bd-problem";
+    note.textContent = `${p.problem} Choose the outcome:`;
+    scene.append(note);
+  }
+  return scene;
 };
 
 // --- the map ----------------------------------------------------------------
@@ -606,6 +705,8 @@ const start = (): void => {
     handsByBox.set(hand.box, list);
   }
   maps = (window as unknown as { STORYLET_MAPS?: PlayableMap[] }).STORYLET_MAPS ?? [];
+  pagePatter = (window as unknown as { PATTER?: PagePatter }).PATTER;
+  for (const box of bundle.boxes) for (const deck of box.decks) for (const card of deck.cards) cardBoxes.set(card.id, box.gameId ?? box.id);
   paneMaps = [...maps.filter((m) => m.boxes.length > 1), ...maps.filter((m) => m.boxes.length === 1)];
 
   freshEngine();
@@ -623,6 +724,8 @@ const start = (): void => {
   if (saved !== undefined) {
     try {
       engine.loadGame(saved.engine);
+      if (patter && saved.patter !== undefined) patter.loadGame(saved.patter as Parameters<PatterEngineType["loadGame"]>[0]);
+      if (registry && saved.registry) registry.load(saved.registry);
       session = engine.getFlow("main") ?? engine.openFlow("main");
       worldValues = { ...worldValues, ...saved.world };
       say("(resumed where you left off)");

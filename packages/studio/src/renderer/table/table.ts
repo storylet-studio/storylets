@@ -27,7 +27,7 @@ import { createLiveRun } from "./live.js";   // Live Link: the game's run, rebui
 import type { LiveRun } from "./live.js";
 import type { BoardLogEntry, DealtView, LogEntry, NotDealt } from "./model.js";
 import type { BoardSaveFile } from "./model.js";
-import type { Performance } from "./performance.js";
+import type { Performance } from "@storylet-studio/with-patter";
 import { createDebugLink } from "@patterkit/play-helpers";
 import type { DebugLink } from "@patterkit/play-helpers";
 import { turnSpan } from "@storylet-studio/model";

@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { compileProject, loadProjectFiles, parseProjectFiles } from "@storylet-studio/compiler";
 import type { Bundle } from "@storylet-studio/model";
 import { Table } from "./model.js";
-import type { Performance } from "./performance.js";
+import type { Performance } from "@storylet-studio/with-patter";
 
 const examples = fileURLToPath(new URL("../../../../../examples/", import.meta.url));
 

@@ -20,6 +20,7 @@
       "@storylet-studio/compiler": ["packages/compiler/src/index.ts"],
       "@storylet-studio/runtime": ["packages/runtime/src/index.ts"],
       "@storylet-studio/play-helpers": ["packages/play-helpers/src/index.ts"],
+      "@storylet-studio/with-patter": ["packages/with-patter/src/index.ts"],
       "@storylet-studio/ops": ["packages/ops/src/index.ts"],
       "@storylet-studio/conformance": ["packages/conformance/src/index.ts"],
       "@wildwinter/expr": ["../expr/packages/expr/src/index.ts"],
