@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-26
+
 ### Added
 
 - **Pair a project with its Patter project.** Project Settings ▸ General ▸ Patter project takes

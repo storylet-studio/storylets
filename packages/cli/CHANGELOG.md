@@ -20,6 +20,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-26
+
 ### Added
 
 - **`validate` checks cards against their Patter scenes** when the project names its Patter
