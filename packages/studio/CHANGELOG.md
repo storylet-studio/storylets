@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-26
+
 ### Added
 
 - **The Board plays Patter scenes.** On a paired project, tick **Performed by Patter** on a box's

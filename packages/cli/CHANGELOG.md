@@ -20,6 +20,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-26
+
 ### Added
 
 - **`export-html` carries the dialogue** for a project paired with Patter that names the boxes
