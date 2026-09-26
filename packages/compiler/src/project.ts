@@ -46,7 +46,10 @@ export type IssueFix =
     }
   /** A paired Patter scene names an outcome its card doesn't have (ops `patter-link.ts`): give
    *  the card an outcome by that name. `card` is the card's id, `gameId` the name the scene uses. */
-  | { kind: "add-outcome"; card: string; gameId: string };
+  | { kind: "add-outcome"; card: string; gameId: string }
+  /** A card in a box Patter performs has no scene: write a stub one into the paired Patter project,
+   *  named after the card, one option per outcome (Patter core's `planScene`). */
+  | { kind: "create-scene"; card: string };
 
 export interface Issue {
   /** A one-click repair, when one is canonical (storyletter.md section 4). */

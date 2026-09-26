@@ -79,6 +79,19 @@ describe("performed boxes (patterBoxes)", () => {
     expect(found.filter((m) => !m.includes("has no scene named"))).toEqual([]);
   });
 
+  it("offers to create a missing scene, and says publish when the scene is written but not published", () => {
+    const dir = game(bundle(...clean()), { boxes: ["b_village"] });
+    const missing = patterIssues(loadProject(dir)).find((i) => i.where === "c_bryna")!;
+    expect(missing.fix).toEqual({ kind: "create-scene", card: "c_bryna" });
+    // Write Bryna's scene into the Patter project's own files, as a stub would be, unpublished.
+    mkdirSync(join(dir, "..", "story.patter", "scenes"), { recursive: true });
+    writeFileSync(join(dir, "..", "story.patter", "scenes", "bryna.patterflow"),
+      JSON.stringify({ schema: "patter/flow@0", scene: { id: "scn_b", type: "scene", name: "Bryna", gameId: "answer-brynas-summons", blocks: [] } }));
+    const now = patterIssues(loadProject(dir)).find((i) => i.where === "c_bryna")!;
+    expect(now).toMatchObject({ severity: "warning", message: 'the Patter project has a scene named "answer-brynas-summons", but it hasn\'t been published yet: Publish Bundle in Patterpad' });
+    expect(now.fix).toBeUndefined();
+  });
+
   it("warns about a box id that doesn't exist, and about naming boxes with no Patter project", () => {
     expect(messages(game(bundle(...clean()), { boxes: ["b_gone"] }))).toContain("warning: patterBoxes names a box that doesn't exist (b_gone)");
     const unpaired = messages(game(undefined, { link: undefined, boxes: ["b_village"] }));

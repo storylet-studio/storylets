@@ -1384,7 +1384,8 @@ export interface StudioApi {
    *  menu and the welcome screen empty; nothing on disk is touched). */
   clearRecents(): Promise<void>;
   /** Scaffold a new project (runInit) under a chosen parent dir; null = cancelled. */
-  createProject(name: string): Promise<OpenResult | { error: string } | null>;
+  /** `kit` "with-patter" also creates a Patter project beside it, paired, with a stub scene per card. */
+  createProject(name: string, kit?: "blank" | "with-patter"): Promise<OpenResult | { error: string } | null>;
   /** Copy a shipped worked example somewhere the author owns, and open it. Null
    *  when they cancel the folder picker. */
   openExample(name: string): Promise<OpenResult | { error: string } | null>;
@@ -1550,6 +1551,9 @@ export interface StudioApi {
   /** The Patter quick fix: give card `card` an outcome named `gameId`, which its paired scene
    *  already names. Says where the new outcome is, so the editor can open it. */
   addOutcome(card: string, gameId: string): Promise<{ result: OpenResult; box: string; deck: string; outcome: string } | { error: string }>;
+  /** The Patter quick fix for a card with no scene: write a stub scene into the paired Patter
+   *  project (Patter core's planScene). Says the scene's address and the files it wrote. */
+  createPatterScene(card: string): Promise<{ address: string; files: string[] } | { error: string }>;
   /** A sweep finished anywhere (it is run from the Coverage window): the editor
    *  re-reads the overlay so it is never showing the run before last. Returns
    *  its own unsubscribe. */

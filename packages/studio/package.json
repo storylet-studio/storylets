@@ -24,6 +24,7 @@
     "publish:mac": "npm run build:mac-icons && electron-vite build && dotenv -e .env.local -- electron-builder --mac --publish always"
   },
   "dependencies": {
+    "@patterkit/core": "^0.3.0",
     "@patterkit/play-helpers": "^0.7.1",
     "@patterkit/runtime": "^0.14.0",
     "@storylet-studio/compiler": "0.0.0",

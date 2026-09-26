@@ -68,6 +68,10 @@ export interface PatterLink {
   bundlePath: string;
   /** The published bundle's scenes, when it was there and readable. */
   scenes?: PatterScenes;
+  /** Every scene in the Patter project's own files, published or not, by internal id and by
+   *  address: so a card whose scene exists but hasn't been published is told to publish, not
+   *  to write it. */
+  sourceScenes?: ReadonlySet<string>;
 }
 
 const posix = (path: string): string => path.split("\\").join("/");
@@ -103,15 +107,17 @@ export function readPatterLink(loaded: LoadedProject): { link?: PatterLink; issu
 
   // Where Patterpad publishes: the project's export.bundle, else the sibling patter-dist/.
   let declared: string | undefined;
+  let project: { export?: { bundle?: unknown }; layout?: { flow?: string } };
   try {
-    const project = parseSource(readFileSync(projectFile, "utf8")) as { export?: { bundle?: unknown } };
+    project = parseSource(readFileSync(projectFile, "utf8")) as typeof project;
     if (typeof project.export?.bundle === "string" && project.export.bundle.trim()) declared = project.export.bundle;
   } catch {
     return { issues: [at("warning", `${posix(relative(loaded.dir, projectFile))} doesn't parse, so cards aren't checked against their scenes`)] };
   }
   const rel = declared ?? `../patter-dist/${basename(projectFile).replace(/\.patterproj$/, "")}.patterc`;
   const bundlePath = isAbsolute(rel) ? rel : resolve(dir, rel);
-  const link: PatterLink = { dir, projectFile, bundlePath };
+  const flowDir = resolve(dir, (project.layout?.flow ?? "scenes/"));
+  const link: PatterLink = { dir, projectFile, bundlePath, sourceScenes: readSourceScenes(flowDir) };
   const shown = posix(relative(loaded.dir, bundlePath));
 
   if (!existsSync(bundlePath)) {
@@ -125,6 +131,38 @@ export function readPatterLink(loaded: LoadedProject): { link?: PatterLink; issu
     return { link, issues: [at("warning", `${shown} is a Patter bundle this version doesn't recognise (${read.unknown}), so cards aren't checked against their scenes`)] };
   }
   return { link: { ...link, scenes: read }, issues: [] };
+}
+
+/** Each scene file read, by path, kept while its size and modification time hold. */
+const sourceCache = new Map<string, { mtimeMs: number; size: number; names: string[] }>();
+
+/** The ids and addresses of every scene in a Patter project's flow folder (`*.patterflow`). */
+function readSourceScenes(flowDir: string): Set<string> {
+  const found = new Set<string>();
+  const walk = (d: string): void => {
+    let entries: string[];
+    try { entries = readdirSync(d); } catch { return; }
+    for (const name of entries) {
+      const full = join(d, name);
+      let stat;
+      try { stat = statSync(full); } catch { continue; }
+      if (stat.isDirectory()) { walk(full); continue; }
+      if (!name.endsWith(".patterflow")) continue;
+      let hit = sourceCache.get(full);
+      if (!hit || hit.mtimeMs !== stat.mtimeMs || hit.size !== stat.size) {
+        let names: string[] = [];
+        try {
+          const scene = (parseSource(readFileSync(full, "utf8")) as { scene?: PatterSceneShape }).scene;
+          if (scene) names = [scene.id, sceneAddress(scene)];
+        } catch { /* a scene file that doesn't parse is Patterpad's to report */ }
+        hit = { mtimeMs: stat.mtimeMs, size: stat.size, names };
+        sourceCache.set(full, hit);
+      }
+      for (const n of hit.names) found.add(n);
+    }
+  };
+  walk(flowDir);
+  return found;
 }
 
 /** The last bundle read, by path, kept while its size and modification time hold: the editor
@@ -221,7 +259,7 @@ export function optionsOf(scene: unknown): PatterOption[] {
  * outcome it reached); warnings for what merely can't be reached yet (an outcome no branch names,
  * a scene no card plays).
  */
-export function patterPairingIssues(source: SourceProject, scenes: PatterScenes, performed = performedBoxes(source)): Issue[] {
+export function patterPairingIssues(source: SourceProject, scenes: PatterScenes, performed = performedBoxes(source), sourceScenes?: ReadonlySet<string>): Issue[] {
   const issues: Issue[] = [];
   const played = new Set<PatterSceneShape>();
   for (const box of source.boxes) {
@@ -233,7 +271,17 @@ export function patterPairingIssues(source: SourceProject, scenes: PatterScenes,
         const scene = findScene(scenes, effectiveGameId(card));
         if (!scene) {
           if (performed) {
-            issues.push({ severity: "error", path: deck.path, where: card.id, message: `this box is performed by Patter, and the Patter project has no scene named "${effectiveGameId(card)}"` });
+            const name = effectiveGameId(card);
+            // Written but not yet published: the fix is Patterpad's Publish, not a new scene.
+            if (sourceScenes?.has(name)) {
+              issues.push({ severity: "warning", path: deck.path, where: card.id, message: `the Patter project has a scene named "${name}", but it hasn't been published yet: Publish Bundle in Patterpad` });
+            } else {
+              issues.push({
+                severity: "error", path: deck.path, where: card.id,
+                message: `this box is performed by Patter, and the Patter project has no scene named "${name}"`,
+                fix: { kind: "create-scene", card: card.id },
+              });
+            }
           }
           continue;
         }
@@ -343,6 +391,6 @@ export function patterIssues(loaded: LoadedProject): Issue[] {
       issues.push({ severity: "warning", path: source.path, where: "patterBoxes", message: "patterBoxes names boxes for Patter, but the project isn't paired with a Patter project" });
     }
   }
-  if (link?.scenes && source) issues.push(...patterPairingIssues(source, link.scenes));
+  if (link?.scenes && source) issues.push(...patterPairingIssues(source, link.scenes, performedBoxes(source), link.sourceScenes));
   return issues;
 }

@@ -18,7 +18,7 @@ const api: StudioApi = {
   openProjectDialog: () => ipcRenderer.invoke("project:openDialog"),
   openProjectPath: (path: string) => ipcRenderer.invoke("project:openPath", path),
   revealProject: () => { void ipcRenderer.invoke("project:reveal"); },
-  createProject: (name: string) => ipcRenderer.invoke("project:create", name),
+  createProject: (name: string, kit?: "blank" | "with-patter") => ipcRenderer.invoke("project:create", name, kit),
   openExample: (name: string) => ipcRenderer.invoke("example:open", name),
   closeProject: () => ipcRenderer.invoke("project:close"),
   clearRecents: () => ipcRenderer.invoke("state:clearRecents"),
@@ -112,6 +112,7 @@ const api: StudioApi = {
   declareProperty: (scope, name, owner, guess) => ipcRenderer.invoke("problem:declareProperty", scope, name, owner, guess),
   repointTag: (holder, group, from, to) => ipcRenderer.invoke("problem:repointTag", holder, group, from, to),
   addOutcome: (card, gameId) => ipcRenderer.invoke("problem:addOutcome", card, gameId),
+  createPatterScene: (card) => ipcRenderer.invoke("problem:createScene", card),
   coverageOverlay: () => ipcRenderer.invoke("coverage:overlay"),
   onCoverageDone: (handler) => {
     const listener = (): void => handler();

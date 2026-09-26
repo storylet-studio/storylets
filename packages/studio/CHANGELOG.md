@@ -18,6 +18,12 @@ here is part of shipping, not a courtesy.
   reached, with Continue. Both engines share one set of properties, and a save or a restart
   carries Patter's part too. With Live Link on in Patterpad, the Board connects to it like a game:
   each save there updates the scenes it plays, and Patterpad's playhead follows the Board.
+- **Create the scene in Patter.** A card in a box Patter performs that has no scene gets a quick
+  fix that writes a stub scene into the Patter project (named after the card, its purpose as the
+  first line, one option per outcome) and opens it in Patterpad. Until it's published, the
+  problem is a reminder to publish.
+- **Starter project with Patter**, in New Project: the starter project and a Patter project
+  beside it, paired, the box performed by Patter, and a stub scene for each card.
 - **Publish Playable HTML carries the dialogue.** On a paired project with boxes Patter performs,
   the page plays those cards' Patter scenes the way the Board does, from the Patter project's
   published bundle, still as one file that opens in any browser.

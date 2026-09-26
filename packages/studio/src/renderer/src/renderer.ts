@@ -1849,6 +1849,19 @@ function applyFix(problem: Problem, fix: NonNullable<Problem["fix"]>, anchor: HT
     })();
     return;
   }
+  // The stub scene: written into the Patter project, then opened in Patterpad for the writing.
+  // Patter publishes it; until then the problem becomes a reminder to.
+  if (fix.kind === "create-scene") {
+    void (async () => {
+      const made = await studio.createPatterScene(fix.card);
+      if ("error" in made) { flashError(made.error); return; }
+      await revalidate();
+      const opened = await studio.editInPatterpad(fix.card);
+      const tail = opened !== null && !("error" in opened) ? " Opening it in Patterpad." : "";
+      flash(`Created the scene “${made.address}” in the Patter project.${tail} Publish it from Patterpad to play it.`, "ok");
+    })();
+    return;
+  }
   // The tag repair ASKS, because there is no single right answer: the group has
   // several tags and only the author knows which was meant. The ellipsis on the
   // button already promised this.
@@ -2333,7 +2346,7 @@ function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
  * here; filling it is a content job.
  */
 function openNewProject(): void {
-  openKitPicker<"blank">({
+  openKitPicker<"blank" | "with-patter">({
     title: "New project",
     what: "A project is one game's worth of storylets. It holds boxes of cards, the places they're dealt to, and the bundle your game loads.",
     sub: "A game kit is a starting point you own. It's fully editable the moment it lands.",
@@ -2341,8 +2354,13 @@ function openNewProject(): void {
     // NOT "Empty project ... and nothing else", which was false: init lands a box,
     // a `whats-next` hand and two wired cards, so a new project plays immediately.
     // The old blurb undersold the one thing that gets a newcomer to press Play.
-    kits: [{ id: "blank", name: "Starter project", blurb: "One box, one place to deal to, and two cards that already work together. Add kits to it as you go." }],
-    onPick: (_kit, name) => { if (name !== undefined) void adopt(studio.createProject(name)); },
+    kits: [
+      { id: "blank", name: "Starter project", blurb: "One box, one place to deal to, and two cards that already work together. Add kits to it as you go." },
+      // The two products together: dialogue written in Patterpad, dealt by storylets. Offered to
+      // everyone, since it only creates files; Patterpad is needed later, to write and publish them.
+      { id: "with-patter", name: "Starter project with Patter", blurb: "The starter project, and a Patter project beside it for its dialogue: paired, with a scene for each card ready to write in Patterpad." },
+    ],
+    onPick: (kit, name) => { if (name !== undefined) void adopt(studio.createProject(name, kit)); },
   });
 }
 

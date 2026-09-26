@@ -22,6 +22,13 @@ in [Storylets with Patter](/play/with-patter/).
   an outcome wins over the label, which is how dialogue *after* a choice can decide the result.
 - **A card with one outcome needs neither.** Reaching the end of the scene reaches it.
 
+## Starting a project with Patter
+
+**File ▸ New Project…** offers **Starter project with Patter**: the starter project, and a Patter
+project beside it with the same name. They're paired already, the starter box is performed by
+Patter, and each card has a stub scene waiting in Patterpad. Write the scenes, publish them from
+Patterpad, and press Play.
+
 ## Pairing the projects
 
 Open **Project Settings ▸ General**, and under **Patter project** choose the `.patter` folder
@@ -60,6 +67,12 @@ Then the check covers only those boxes, and a card in one with no scene of its n
 since the game will try to play a scene that isn't there. With no box ticked, every card that
 happens to have a scene is checked, and none is required to have one.
 
+When a card in a box Patter performs has no scene, the problem comes with a fix: **Create the
+scene in Patter**. It writes a stub scene into the Patter project, named after the card, with the
+card's purpose as its first line and one option per outcome (none for a card with one outcome),
+then opens it in Patterpad for you to write. Once you publish it from Patterpad, the check and the
+Board pick it up.
+
 The same setting tells the [Board](#playing-scenes-on-the-board) which cards to perform. It's
 saved in the project, and it never goes into the bundle: your game still decides for itself
 which boxes it plays through Patter.
@@ -92,6 +105,9 @@ projects are paired.
 The first time, if Storyletter can't find Patterpad, it asks you to point to it and remembers
 where it is. That's kept on your machine, not in the project, since everyone installs apps in
 different places.
+
+Going the other way, Patterpad's **Edit ▸ Show Card in Storyletter** opens the card the scene
+you're writing belongs to.
 
 ## Keeping names steady
 

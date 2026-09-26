@@ -1057,6 +1057,7 @@ export function fixLabel(fix: NonNullable<Problem["fix"]>): string {
   if (fix.kind === "declare-property") return `Set up “@${fix.scope}.${fix.name}”`;
   if (fix.kind === "repoint-tag") return "Choose a tag…";
   if (fix.kind === "add-outcome") return `Add outcome “${fix.gameId}”`;
+  if (fix.kind === "create-scene") return "Create the scene in Patter";
   return "Fix";
 }
 
@@ -1070,6 +1071,7 @@ function fixButton(
     className: "stepbar-action", text: fixLabel(fix),
     tip: fix.kind === "declare-property" ? "Declare it, then take me to it"
       : fix.kind === "add-outcome" ? "Give this card the outcome its Patter scene names, then open it"
+      : fix.kind === "create-scene" ? "Write a stub scene for this card into the Patter project, one option per outcome, then open it in Patterpad"
       : "Point this at a tag that exists",
   });
   button.addEventListener("click", () => onFix(problem, fix, button));

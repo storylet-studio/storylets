@@ -7,7 +7,9 @@
 
 import { basename, dirname, join } from "node:path";
 import { contractNotes, defaultGameScopesParent, loadProject, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate } from "@storylet-studio/ops";
-import { mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { planProject } from "@patterkit/core";
+import { planCardScene } from "./patter-scene.js";
 import type { LoadedProject, PatterReport, PatterScenes } from "@storylet-studio/ops";
 import { writeBinaryFile, writeTextFiles as vcWrite } from "@wildwinter/simple-vc-lib";
 import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, worldDeclarations } from "@storylet-studio/compiler";
@@ -334,15 +336,53 @@ export function validate(session: ProjectSession): Problem[] {
   return runValidate(loaded, { checkBundle: false }).issues;
 }
 
-export function createProject(parentDir: string, name: string): { path: string } | { error: string } {
+/** The kits New Project offers: the starter, and the starter with a Patter project beside it. */
+export type ProjectKit = "blank" | "with-patter";
+
+/** The Patter project folder the with-Patter kit creates beside `storyletsDir`. */
+export const patterFolderFor = (storyletsDir: string): string => storyletsDir.replace(/\.storylets$/, "") + ".patter";
+
+export function createProject(parentDir: string, name: string, kit: ProjectKit = "blank"): { path: string } | { error: string } {
   try {
     const result = runInit({ dir: `${parentDir}/${name}`, name });
+    const patterDir = patterFolderFor(result.dir);
+    if (kit === "with-patter" && existsSync(patterDir)) return { error: `${basename(patterDir)} is already there` };
     const batch = writeTextFiles(result.writes.map((w) => ({ filePath: w.path, content: w.content })));
     if (!batch.success) return { error: "could not write the project files" };
+    if (kit === "with-patter") {
+      const paired = addPatterProject(result.dir, name, patterDir);
+      if ("error" in paired) return paired;
+    }
     return { path: result.dir };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/**
+ * The with-Patter starter: a Patter project beside the new one (Patter core's `planProject`), a stub
+ * scene for each of its cards (`planCardScene`), and the pairing: the project's `patter` and every
+ * box in `patterBoxes`, so the Board plays those scenes as soon as Patterpad has published them.
+ */
+function addPatterProject(storyletsDir: string, name: string, patterDir: string): { ok: true } | { error: string } {
+  const loaded = loadProject(storyletsDir);
+  const source = loaded.source;
+  if (!source) return { error: "the new project didn't load" };
+  const writes: { filePath: string; content: string }[] = [];
+  const projectFile = planProject({ name });
+  writes.push({ filePath: join(patterDir, projectFile.path), content: projectFile.content });
+  const taken = new Set<string>();
+  for (const card of source.boxes.flatMap((b) => b.decks.flatMap((d) => d.shard.cards))) {
+    const plan = planCardScene(card, { locale: "en", takenStems: taken });
+    for (const w of plan.writes) writes.push({ filePath: join(patterDir, w.path), content: w.content });
+    taken.add(basename(plan.writes[0]!.path).replace(/\.patterflow$/, ""));
+  }
+  source.project.patter = `../${basename(patterDir)}`;
+  source.project.patterBoxes = source.boxes.map((b) => b.box.box.id).sort();
+  writes.push({ filePath: join(storyletsDir, source.path), content: canonicalStringify(source.project) });
+  for (const w of writes) mkdirSync(dirname(w.filePath), { recursive: true });
+  const batch = writeTextFiles(writes);
+  return batch.success ? { ok: true } : { error: "could not write the Patter project" };
 }
 
 export function openResult(session: ProjectSession, problems: Problem[]): OpenResult {

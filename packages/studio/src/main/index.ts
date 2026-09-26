@@ -27,7 +27,8 @@ import {
   LEAVE_SETTLE_MS, REMOTE_FILE,
 } from "./remote.js";
 import type { InAppPrompt, LeaveChoice, LeavePrompt, ProjectAnchor, PullPlan, RemoteRecord } from "./remote.js";
-import { compileBundle, compileForLivePush, createProject, currentProjectHash, exportBundle, openProject, openResult, projectSettings, shareScopes, shareScopesDefault, validate, vcStatus } from "./project.js";
+import { compileBundle, compileForLivePush, createProject, currentProjectHash, exportBundle, openProject, openResult, patterFolderFor, projectSettings, shareScopes, shareScopesDefault, validate, vcStatus } from "./project.js";
+import type { ProjectKit } from "./project.js";
 import { createLiveLinkServer, type LiveLinkServer } from "./live-link.js";   // Live Link
 import { setProjectWrittenListener } from "./mutate.js";   // Live Link: refresh a connected game after a write
 import { spreadsheetExport } from "./spreadsheet.js";   // Publish Spreadsheet
@@ -48,6 +49,7 @@ import {
 import { applyReplace, propertyUsage, propertyUsageMany, replacePreview } from "./replace.js";
 import { pinForPublish } from "./pin.js";
 import { findPatterpad, launchPatterpad, patterpadExecutable } from "./patterpad.js";
+import { createPatterScene } from "./patter-scene.js";
 import { findScene, readPatterLink } from "@storylet-studio/ops";
 import { analyseInfluence, canvasFurniture, cardNeighbourhood, cardPositions, clearCanonicalCache, describeContribution, mapSites, runCoverage, runCoverageAsync, projectFolderName, runPack, runUnpack, runUnpackMerge, sharedSpaces, PACK_EXTENSION, assetPath, orphanAssetPaths } from "@storylet-studio/ops";
 import { clearParseCache } from "@storylet-studio/compiler";
@@ -1122,19 +1124,22 @@ function wireIpc(): void {
     return projects.isKnownPath(path) ? openAt(path) : { error: "that project is not one of yours" };
   });
 
-  ipcMain.handle("project:create", async (_event, name: string): Promise<OpenResult | { error: string } | null> => {
+  ipcMain.handle("project:create", async (_event, name: string, kit?: ProjectKit): Promise<OpenResult | { error: string } | null> => {
     if (!(await mayLeaveProject("close"))) return null;
+    const folder = projectFolderName(name);
     const picked = await dialog.showOpenDialog(window!, {
       title: "Choose where to create the project",
       // Patterpad's wording, and its shape: say what will be CREATED here,
       // naming it from the same rule that creates it (`projectFolderName`).
-      message: `Storyletter will create "${projectFolderName(name)}" here.`,
+      message: kit === "with-patter"
+        ? `Storyletter will create "${folder}" and, beside it, the Patter project "${patterFolderFor(folder)}" here.`
+        : `Storyletter will create "${folder}" here.`,
       buttonLabel: "Create Here",
       properties: ["openDirectory", "createDirectory"],
     });
     const parent = picked.filePaths[0];
     if (parent === undefined) return null;
-    const created = createProject(parent, name);
+    const created = createProject(parent, name, kit);
     if ("error" in created) return created;
     return openAt(created.path);
   });
@@ -1283,6 +1288,9 @@ function wireIpc(): void {
   // The Patter quick fix: give a card the outcome its paired scene names (ops patter-link.ts).
   ipcMain.handle("problem:addOutcome", (_event, card: string, gameId: string) =>
     (session ? addNamedOutcome(session, card, gameId) : { error: "no project open" }));
+  // The other Patter quick fix: write a stub scene for a card into the paired Patter project.
+  ipcMain.handle("problem:createScene", (_event, card: string) =>
+    (session ? createPatterScene(session, card) : { error: "no project open" }));
 
   ipcMain.handle("hand:detail", (_event, boxId: string, handId: string) =>
     (session ? handDetail(session, boxId, handId) : null));
