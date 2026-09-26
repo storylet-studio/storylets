@@ -40,7 +40,7 @@ import {
   boxCatalogue, createHand, deleteBox, deleteCard, deleteDeck, deleteTagGroup, deleteHand, deleteTemplate, tagGroupDetail, duplicateBox, duplicateCard,
   duplicateDeck, duplicateTagGroup, duplicateHand, duplicateTemplate, handDetail, moveBox, moveCard, moveDeck, moveHand, templateDetail, redo, renameDeck,
   saveHand,
-  declareProperty, deleteCommentMessage, repointTag,
+  declareProperty, deleteCommentMessage, repointTag, addNamedOutcome,
   saveBox, saveCard, saveTagGroup, saveProjectSettings, saveTemplate, proposeDrivers, undo, moveCardsOnCanvas, createCardOnCanvas, layoutDeck,
   moveComment, postComment, setCanvasFurniture, setCommentResolved, setGroupSpatial, setZonePolygon, moveSitesOnMap, removeSitesFromMap, createZone, restackZone, addBackground, editBackground, restackBackground, removeBackground,
 } from "./mutate.js";
@@ -1280,6 +1280,9 @@ function wireIpc(): void {
     (session ? declareProperty(session, scope, name, owner, guess) : { error: "no project open" }));
   ipcMain.handle("problem:repointTag", (_event, holder: string, group: string, from: string, to: string) =>
     (session ? repointTag(session, holder, group, from, to) : { error: "no project open" }));
+  // The Patter quick fix: give a card the outcome its paired scene names (ops patter-link.ts).
+  ipcMain.handle("problem:addOutcome", (_event, card: string, gameId: string) =>
+    (session ? addNamedOutcome(session, card, gameId) : { error: "no project open" }));
 
   ipcMain.handle("hand:detail", (_event, boxId: string, handId: string) =>
     (session ? handDetail(session, boxId, handId) : null));

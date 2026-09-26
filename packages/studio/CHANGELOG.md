@@ -21,6 +21,13 @@ here is part of shipping, not a courtesy.
   validate` runs the same check.
 - **Edit ▸ Edit Scene in Patterpad** opens Patterpad at the open card's scene, when the project
   is paired. If Storyletter can't find Patterpad it asks you to point to it once, and remembers.
+- **Each outcome says how its Patter scene reaches it.** Expand an outcome on a paired card and
+  an In Patter section names the option the player picks, in the scene's own words, or the
+  gameEvent that fires it, or the scene ending for a card's only outcome.
+- **Add the outcome a scene names, in one click.** When a paired scene names an outcome its card
+  doesn't have, the problem offers Add outcome "…": the card gets an outcome with that gameId,
+  pinned, titled from it, and it opens for you to finish.
+- **A Working with Patter page in the docs**, for pairing, the check, and Edit Scene in Patterpad.
 
 ### Changed
 

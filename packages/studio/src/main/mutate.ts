@@ -350,6 +350,32 @@ function newCard(session: ProjectSession): Card<string> {
   };
 }
 
+/**
+ * The Patter quick fix (ops `patter-link.ts`): the card's paired scene names an outcome the card
+ * doesn't have, so give it one by that name. The gameId is PINNED to the scene's name, since that
+ * name is the link and must not move if the title is edited; the title is read off it
+ * ("pay-them-off" -> "Pay them off") for the author to improve. Placed after the card's others.
+ */
+export function addNamedOutcome(session: ProjectSession, cardId: string, gameId: string):
+  { result: OpenResult; box: string; deck: string; outcome: string } | { error: string } {
+  if (!isValidGameId(gameId)) return { error: `"${gameId}" isn't a legal outcome name` };
+  for (const box of session.loaded.source!.boxes) {
+    for (const deck of box.decks) {
+      const card = deck.shard.cards.find((c) => c.id === cardId);
+      if (!card) continue;
+      if (card.outcomes.some((o) => effectiveGameId(o) === gameId)) return { error: `this card already has an outcome "${gameId}"` };
+      const words = gameId.replace(/-/g, " ");
+      const order = Math.max(-1, ...card.outcomes.map((o, i) => o.order ?? i)) + 1;
+      const outcome: Outcome<string> = { id: newId("o"), gameId, title: words.charAt(0).toUpperCase() + words.slice(1), order, changes: {} };
+      card.outcomes.push(outcome);
+      const result = commit(session, `Add outcome ${gameId}`, `struct:${structCounter++}`,
+        [deckFileState(session, deck, deckContent(deck))]);
+      return "error" in result ? result : { result, box: box.box.box.id, deck: deck.shard.deck.id, outcome: outcome.id };
+    }
+  }
+  return { error: `unknown card (id ${cardId})` };
+}
+
 export function createCard(session: ProjectSession, deckId: string): { result: OpenResult; cardId: string } | { error: string } {
   const found = locate(session, deckId);
   if (!found) return { error: `unknown deck (id ${deckId})` };

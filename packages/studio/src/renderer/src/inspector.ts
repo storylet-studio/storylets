@@ -30,7 +30,7 @@ import { shows } from "./play-ladder.js";
 import { hoistableProperties, hoistProperty } from "./tag-hoist.js";
 import type {
   BindingDto, BoxDto, BoxEdit, CardDto, CardEdit, ConditionProperty, DeckDto, DeckEdit,
-  FieldDeclDto, HandDetail, HandEdit, OutcomeEdit, PropertyDeclDto,
+  FieldDeclDto, HandDetail, HandEdit, OutcomeDto, OutcomeEdit, PropertyDeclDto,
   TagGroupDetail, TagGroupEdit, TemplateDetail, TemplateEdit, ValueDetail,
 } from "../../shared/api.js";
 
@@ -372,7 +372,8 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     ], tab, (next) => { setDocTab(tabKey, next); drawCentre(); }));
 
     if (tab === "outcomes") {
-      view.append(el("div", { className: "doc-panel" }, outcomeAccordion(edit, box.outcomeFields, catalogue, commit, setExpanded, h)));
+      view.append(el("div", { className: "doc-panel" }, outcomeAccordion(edit, box.outcomeFields, catalogue, commit, setExpanded, h,
+        new Map(card.outcomes.flatMap((o) => (o.patter ? [[o.id, o.patter] as const] : []))))));
       centre.replaceChildren(view);
       return;
     }
@@ -861,7 +862,9 @@ function commentBubble(on: string, count: number, open: (anchor: HTMLElement) =>
 
 // The outcomes accordion in the centre: a light row per outcome that expands in
 // place to its full (wide) editor. Only one is open at a time.
-function outcomeAccordion(edit: Required<CardEdit>, outcomeFields: FieldDeclDto[], catalogue: ConditionProperty[], commit: () => void, setExpanded: (id: string | undefined) => void, h: InspectorHost): HTMLElement {
+function outcomeAccordion(edit: Required<CardEdit>, outcomeFields: FieldDeclDto[], catalogue: ConditionProperty[], commit: () => void, setExpanded: (id: string | undefined) => void, h: InspectorHost,
+  /** How the card's paired Patter scene reaches each outcome, by outcome id (OutcomeDto.patter). */
+  patter: ReadonlyMap<string, PatterReach> = new Map()): HTMLElement {
   const list = el("div", { className: "cardedit-outcomes" });
   const duplicate = (o: OutcomeEdit): void => {
     const at = edit.outcomes.indexOf(o);
@@ -923,7 +926,7 @@ function outcomeAccordion(edit: Required<CardEdit>, outcomeFields: FieldDeclDto[
       ]);
     });
     item.append(header);
-    if (open) item.append(outcomeBody(o, outcomeFields, catalogue, commit, () => fillOutcomeHeader(header, o, true, catalogue), () => remove(o), h));
+    if (open) item.append(outcomeBody(o, outcomeFields, catalogue, commit, () => fillOutcomeHeader(header, o, true, catalogue), () => remove(o), h, patter.get(o.id)));
     list.append(item);
   }
   const add = el("button", { className: "insp-add", text: "+ Outcome" });
@@ -941,7 +944,9 @@ function outcomeAccordion(edit: Required<CardEdit>, outcomeFields: FieldDeclDto[
 
 // The expanded outcome's full editor - wide, inline in the centre. Field edits
 // commit and refresh the header (syncHeader) so its summary stays live.
-function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: ConditionProperty[], commit: () => void, syncHeader: () => void, remove: () => void, h: InspectorHost): HTMLElement {
+type PatterReach = NonNullable<OutcomeDto["patter"]>;
+
+function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: ConditionProperty[], commit: () => void, syncHeader: () => void, remove: () => void, h: InspectorHost, patter?: PatterReach): HTMLElement {
   const save = (): void => { commit(); syncHeader(); };
   const body = el("div", { className: "outcome-body" });
 
@@ -969,6 +974,14 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
   purpose.addEventListener("input", () => { o.purpose = purpose.value; commit(); });
   purpose.addEventListener("change", commit);
   body.append(purpose);
+
+  // How the card's Patter scene reaches this outcome, when the project is paired with a Patter
+  // project: read off its published bundle, so it says what the game will do. Quiet, like a
+  // note, because it is a fact about another file, and the scene is where it is changed.
+  if (patter) {
+    body.append(bare("In Patter", `how the scene “${patter.scene}” reaches it`,
+      ...patter.via.map((line) => el("div", { className: "outcome-patter", text: line }))));
+  }
 
   // The outcome's template data, straight after the paper and before the
   // machinery: an after-line is prose the author writes in the same breath as

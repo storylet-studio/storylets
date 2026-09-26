@@ -111,6 +111,7 @@ const api: StudioApi = {
   coverageInfo: () => ipcRenderer.invoke("coverage:info"),
   declareProperty: (scope, name, owner, guess) => ipcRenderer.invoke("problem:declareProperty", scope, name, owner, guess),
   repointTag: (holder, group, from, to) => ipcRenderer.invoke("problem:repointTag", holder, group, from, to),
+  addOutcome: (card, gameId) => ipcRenderer.invoke("problem:addOutcome", card, gameId),
   coverageOverlay: () => ipcRenderer.invoke("coverage:overlay"),
   onCoverageDone: (handler) => {
     const listener = (): void => handler();

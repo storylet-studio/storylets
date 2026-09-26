@@ -258,18 +258,10 @@ so the scene name stays put after that.
 
 ### Pairing the projects in Storyletter
 
-Tell Storyletter where the Patter project is and it runs most of the same check as you work.
-In **Project Settings ▸ General ▸ Patter project**, choose the `.patter` folder. The path is
-saved in the project, relative to it, so everyone who checks the game out gets the same pairing.
-
-Storyletter then reads the Patter project's published bundle (wherever Patterpad publishes it)
-and checks every card that has a scene of its name, putting what it finds in the problems bar.
-`storyletengine validate` does the same, so CI catches it too. It can't tell you a card is
-*missing* its scene, because only your game knows which boxes Patter performs; keep that part
-of the check in your build.
-
-Pairing also adds **Edit ▸ Edit Scene in Patterpad**, which opens Patterpad at the open card's
-scene. The first time, if Storyletter can't find Patterpad, it asks you to point to it once.
+Pair the two projects in Storyletter and it runs most of this check as you work, puts what it
+finds in the problems bar, and shows on each outcome how its scene reaches it. It can't tell you
+a card is missing its scene, since only your game knows which boxes Patter performs, so keep
+that part in your build. See [Working with Patter](/storyletter/patter/).
 
 ## The Hamlet on each engine
 

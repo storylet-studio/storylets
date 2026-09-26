@@ -277,6 +277,10 @@ export interface OutcomeDto {
   /** Template data the box's `outcomeFields` declares, shaped exactly as a
    *  card's `fields`: the values SET on this outcome, nothing for the rest. */
   fields: { name: string; value: string }[];
+  /** How the card's paired Patter scene reaches this outcome (the project's `patter`): the
+   *  scene's name, and one line per way in ("Option “Pay them off”"). Absent when the project
+   *  isn't paired, the card has no scene, or nothing in the scene reaches this outcome. */
+  patter?: { scene: string; via: string[] };
 }
 
 export interface CardDto {
@@ -1529,6 +1533,9 @@ export interface StudioApi {
    *  could read it; without it the declaration falls back to a number. */
   declareProperty(scope: string, name: string, owner: string, guess?: { type: PropertyType; default: ScalarValue }): Promise<OpenResult | { error: string }>;
   repointTag(holder: string, group: string, from: string, to: string): Promise<OpenResult | { error: string }>;
+  /** The Patter quick fix: give card `card` an outcome named `gameId`, which its paired scene
+   *  already names. Says where the new outcome is, so the editor can open it. */
+  addOutcome(card: string, gameId: string): Promise<{ result: OpenResult; box: string; deck: string; outcome: string } | { error: string }>;
   /** A sweep finished anywhere (it is run from the Coverage window): the editor
    *  re-reads the overlay so it is never showing the run before last. Returns
    *  its own unsubscribe. */

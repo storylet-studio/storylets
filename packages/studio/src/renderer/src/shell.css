@@ -584,6 +584,8 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .outcome-body .outcome-beat { font-family: var(--font-read); font-size: 14px; line-height: 1.45; color: var(--muted); border: 0; background: none; padding: 0; border-radius: 0; resize: vertical; }
 .outcome-body .outcome-beat:focus-visible { outline: 0; box-shadow: 0 1px 0 var(--line); }
 .outcome-remove { align-self: flex-start; }
+/* How a paired Patter scene reaches the outcome: one line per way in, read-only. */
+.outcome-patter { font-family: var(--font-read); font-size: 14px; line-height: 1.45; color: var(--ink); }
 .cardedit-outcomes .insp-add { margin-top: 2px; }
 .insp-muted, .insp-ro { color: var(--muted); font-size: 13.5px; }
 .insp-ro.insp-mono { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }

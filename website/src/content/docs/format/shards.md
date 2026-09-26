@@ -190,7 +190,7 @@ each folder above it, stopping at the root of your repository, so this is only f
 that search wouldn't reach. A path that doesn't exist is an error. Storyletter writes it for
 you when you share scopes into a folder outside the search. It never reaches the bundle.
 
-**`patter`** (optional) names the [Patter project](/play/with-patter/#pairing-the-projects-in-storyletter)
+**`patter`** (optional) names the [Patter project](/storyletter/patter/#pairing-the-projects)
 this one is paired with, relative to the folder holding the project file:
 `patter: "../story/the-hamlet.patter"`. With it, `validate` checks each card against the scene
 of the same name in that project's published bundle. A path that doesn't exist is a warning,

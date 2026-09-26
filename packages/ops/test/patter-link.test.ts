@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
 import type { ProjectShard } from "@storylet-studio/model";
 import { loadProject } from "../src/load.js";
-import { patterIssues, readPatterLink } from "../src/patter-link.js";
+import { patterIssues, patterOutcomeReports, readPatterLink } from "../src/patter-link.js";
 import { runValidate } from "../src/validate.js";
 
 const exampleDir = fileURLToPath(new URL("./fixtures/the-hamlet.storylets", import.meta.url));
@@ -67,6 +67,43 @@ const clean = (): Node[] => [
   scene("scn_men", "The Moneylender's Men", [option("o1", "pay-them-off"), option("o2", "stand-with-gareth"), option("o3", "walk-away")]),
 ];
 
+describe("patterOutcomeReports", () => {
+  const cardOf = (dir: string, id: string) =>
+    loadProject(dir).source!.boxes.flatMap((b) => b.decks.flatMap((d) => d.shard.cards)).find((c) => c.id === id)!;
+  const scenesOf = (dir: string) => readPatterLink(loadProject(dir)).link!.scenes!;
+
+  it("says which option reaches each outcome, in the option's words from the default locale", () => {
+    const withWords = { ...bundle(...clean()), locales: { default: "en" }, strings: { en: { o1_p: "Pay them what he owes", o3_p: "Walk away" } } };
+    const dir = game(withWords);
+    const r = patterOutcomeReports(cardOf(dir, "c_gareth_men"), scenesOf(dir))!;
+    expect(r.scene).toBe("The Moneylender's Men");
+    expect(Object.fromEntries(r.reports)).toEqual({
+      "pay-them-off": [{ kind: "option", text: "Pay them what he owes" }],
+      // No words in the bundle for this one: its id stands in.
+      "stand-with-gareth": [{ kind: "option", text: "o2" }],
+      "walk-away": [{ kind: "option", text: "Walk away" }],
+    });
+  });
+
+  it("credits a gameEvent over the option's label, and the ending for a lone outcome", () => {
+    const men = scene("scn_men", "The Moneylender's Men", [option("o1", "pay-them-off"), option("o2", "walk-away", [event("stand-with-gareth")]), option("o3", "walk-away"), event("pay-them-off")]);
+    const dir = game(bundle(men, scene("scn_market", "Market Bustle", [line()])));
+    const r = patterOutcomeReports(cardOf(dir, "c_gareth_men"), scenesOf(dir))!;
+    expect(Object.fromEntries(r.reports)).toEqual({
+      "pay-them-off": [{ kind: "option", text: "o1" }, { kind: "event" }],
+      "stand-with-gareth": [{ kind: "event", option: "o2" }],
+      "walk-away": [{ kind: "option", text: "o3" }],
+    });
+    const market = patterOutcomeReports(cardOf(dir, "c_amb_market"), scenesOf(dir))!;
+    expect(Object.fromEntries(market.reports)).toEqual({ continue: [{ kind: "ending" }] });
+  });
+
+  it("has nothing to say for a card with no scene", () => {
+    const dir = game(bundle(...clean()));
+    expect(patterOutcomeReports(cardOf(dir, "c_bryna"), scenesOf(dir))).toBeUndefined();
+  });
+});
+
 describe("readPatterLink", () => {
   it("is silent for a project that names no Patter project", () => {
     expect(patterIssues(loadProject(exampleDir))).toEqual([]);
@@ -117,12 +154,18 @@ describe("cards against their scenes", () => {
     expect(messages(game(bundle(byId, byAddress)))).toEqual([]);
   });
 
-  it("errors on an outcome the card doesn't have, anchored to the card", () => {
+  it("errors on an outcome the card doesn't have, anchored to the card, offering to add it", () => {
     const issues = patterIssues(loadProject(game(bundle(scene("scn_market", "Market Bustle", [option("o1", "haggle")])))));
     expect(issues).toEqual([{
       severity: "error", path: "village/decks/ambients.storyletdeck", where: "c_amb_market", field: "outcomes",
       message: 'its Patter scene names outcome "haggle", which this card doesn\'t have (it has continue)',
+      fix: { kind: "add-outcome", card: "c_amb_market", gameId: "haggle" },
     }]);
+  });
+
+  it("offers no fix for a name that can't be an outcome's address", () => {
+    const issues = patterIssues(loadProject(game(bundle(scene("scn_market", "Market Bustle", [option("o1", "Haggle Hard!")])))));
+    expect(issues[0]?.fix).toBeUndefined();
   });
 
   it("errors when a branch of a several-outcome card can't say which outcome it reached", () => {

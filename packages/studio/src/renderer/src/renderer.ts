@@ -1837,6 +1837,18 @@ function applyFix(problem: Problem, fix: NonNullable<Problem["fix"]>, anchor: HT
     })();
     return;
   }
+  // The Patter repair just happens, like the declaration: the scene already says what the
+  // outcome is called, so there is nothing to ask. Then to the new outcome, open.
+  if (fix.kind === "add-outcome") {
+    void (async () => {
+      const result = await studio.addOutcome(fix.card, fix.gameId);
+      if ("error" in result) { flashError(result.error); return; }
+      applyResult(result.result);
+      await revalidate();
+      goTo({ kind: "outcome", box: result.box, deck: result.deck, card: fix.card, outcome: result.outcome });
+    })();
+    return;
+  }
   // The tag repair ASKS, because there is no single right answer: the group has
   // several tags and only the author knows which was meant. The ellipsis on the
   // button already promised this.

@@ -23,11 +23,11 @@ import {
   createZone, setGroupSpatial, setZonePolygon, moveSitesOnMap,
   tagGroupDetail, templateDetail, undo, restackZone,
   moveComment, postComment, setCanvasFurniture, setCommentResolved,
-  declareProperty, deleteCommentMessage, repointTag,
+  declareProperty, deleteCommentMessage, repointTag, addNamedOutcome,
 } from "./mutate.js";
 import { parseSource } from "@storylet-studio/compiler";
 import type { MapShard, ViewShard } from "@storylet-studio/model";
-import { isSpatial, polygonOf, backgroundsOf, PLACE_GROUP } from "@storylet-studio/model";
+import { effectiveGameId, isSpatial, polygonOf, backgroundsOf, PLACE_GROUP } from "@storylet-studio/model";
 import { commentsOf, markOf } from "@storylet-studio/model";
 import type { Comment, TagGroup } from "@storylet-studio/model";
 import type { ProjectSession } from "./project.js";
@@ -2000,6 +2000,34 @@ describe("quick-fixes", () => {
     const session = scratchProject();
     expect(repointTag(session, "h_nothing", "g_nothing", "t_old", "t_new"))
       .toEqual({ error: "that tag reference has already gone" });
+  });
+});
+
+describe("addNamedOutcome (the Patter quick fix)", () => {
+  const firstCard = (session: ProjectSession) => session.loaded.source!.boxes[0]!.decks.find((d) => d.shard.cards.length > 0)!.shard.cards[0]!;
+
+  it("adds an outcome pinned to the scene's name, titled from it, after the card's others", () => {
+    const session = scratchProject();
+    const card = firstCard(session);
+    const before = card.outcomes.length;
+    const r = addNamedOutcome(session, card.id, "pay-them-off");
+    if ("error" in r) throw new Error(r.error);
+    const after = firstCard(session);
+    expect(after.outcomes).toHaveLength(before + 1);
+    const added = after.outcomes.find((o) => o.id === r.outcome)!;
+    expect(added).toMatchObject({ gameId: "pay-them-off", title: "Pay them off", changes: {} });
+    expect(added.order).toBe(Math.max(...after.outcomes.filter((o) => o !== added).map((o, i) => o.order ?? i)) + 1);
+    // One undo step takes it away again.
+    undo(session);
+    expect(firstCard(session).outcomes).toHaveLength(before);
+  });
+
+  it("refuses a name the card already has, and one that can't be an address", () => {
+    const session = scratchProject();
+    const card = firstCard(session);
+    const existing = effectiveGameId(card.outcomes[0]!);
+    expect(addNamedOutcome(session, card.id, existing)).toEqual({ error: `this card already has an outcome "${existing}"` });
+    expect(addNamedOutcome(session, card.id, "Not An Address")).toEqual({ error: '"Not An Address" isn\'t a legal outcome name' });
   });
 });
 

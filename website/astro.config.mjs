@@ -88,6 +88,7 @@ export default defineConfig({
             "storyletter/box-setup",
             "storyletter/maps",
             "storyletter/board",
+            "storyletter/patter",
             "storyletter/reviewing",
             "storyletter/shortcuts",
           ],

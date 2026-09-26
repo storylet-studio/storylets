@@ -6,9 +6,9 @@
 // ---------------------------------------------------------------------------
 
 import { basename, dirname, join } from "node:path";
-import { contractNotes, defaultGameScopesParent, loadProject, planShareScopes, runExport, runInit, runValidate } from "@storylet-studio/ops";
+import { contractNotes, defaultGameScopesParent, loadProject, patterOutcomeReports, planShareScopes, readPatterLink, runExport, runInit, runValidate } from "@storylet-studio/ops";
 import { mkdirSync } from "node:fs";
-import type { LoadedProject } from "@storylet-studio/ops";
+import type { LoadedProject, PatterReport, PatterScenes } from "@storylet-studio/ops";
 import { writeBinaryFile, writeTextFiles as vcWrite } from "@wildwinter/simple-vc-lib";
 import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, worldDeclarations } from "@storylet-studio/compiler";
 import { writeTextFiles } from "@wildwinter/simple-vc-lib";
@@ -77,36 +77,49 @@ const driverDtos = (drivers: Record<string, CoverageDriver> | undefined): Covera
     ref, kind: d.kind, ...(d.cadence !== undefined ? { cadence: d.cadence } : {}), values: [...d.values],
   }));
 
-const cardDto = (box: SourceBox, card: Card<string>): CardDto => ({
-  id: card.id,
-  gameId: effectiveGameId(card),
-  ...(!blank(card.gameId) ? { gameIdPinned: card.gameId } : {}),
-  ...(card.title !== undefined ? { title: card.title } : {}),
-  ...(card.purpose !== undefined ? { purpose: card.purpose } : {}),
-  ...(!blank(card.condition) ? { condition: card.condition } : {}),
-  priority: card.priority ?? 0,
-  redraw: String(card.redraw ?? "always"),
-  tags: chipValues(box, card.tags),
-  copies: card.copies === undefined || card.copies === 1 ? "" : String(card.copies),
-  ...(card.shared !== undefined ? { shared: card.shared } : {}),
-  sharedCopies: card.sharedCopies === undefined ? "" : String(card.sharedCopies),
-  ...(card.durable !== undefined ? { durable: card.durable } : {}),
-  // The deck's own flag, so the card page can say what inheriting means here
-  // rather than making an author open the deck to find out.
-  fields: Object.entries(card.fields ?? {}).map(([name, value]) => ({ name, value: typeof value === "string" ? value : JSON.stringify(value) })),
-  outcomes: byDisplay(card.outcomes ?? []).map((o) => ({
-    id: o.id,
-    gameId: effectiveGameId(o),
-    ...(!blank(o.gameId) ? { gameIdPinned: o.gameId } : {}),
-    ...(o.title !== undefined ? { title: o.title } : {}),
-    ...(o.purpose !== undefined ? { purpose: o.purpose } : {}),
-    ...(!blank(o.condition) ? { gate: o.condition } : {}),
-    changes: Object.entries(o.changes ?? {}).map(([target, src]) => `${target} ← ${src}`),
-    // The outcome's template data, read exactly as the card's above it: a
-    // non-string value shown as its source text, coerced back on save.
-    fields: Object.entries(o.fields ?? {}).map(([name, value]) => ({ name, value: typeof value === "string" ? value : JSON.stringify(value) })),
-  })),
-});
+/** One way a Patter scene reaches an outcome, as the outcome's page says it. */
+const reportLine = (r: PatterReport): string =>
+  r.kind === "option" ? `Option “${r.text}”`
+  : r.kind === "event" ? (r.option !== undefined ? `A gameEvent after option “${r.option}”` : "A gameEvent in the scene")
+  : "The scene ending (this card's only outcome)";
+
+const cardDto = (box: SourceBox, card: Card<string>, patter?: PatterScenes): CardDto => {
+  const reached = patter ? patterOutcomeReports(card, patter) : undefined;
+  return {
+    id: card.id,
+    gameId: effectiveGameId(card),
+    ...(!blank(card.gameId) ? { gameIdPinned: card.gameId } : {}),
+    ...(card.title !== undefined ? { title: card.title } : {}),
+    ...(card.purpose !== undefined ? { purpose: card.purpose } : {}),
+    ...(!blank(card.condition) ? { condition: card.condition } : {}),
+    priority: card.priority ?? 0,
+    redraw: String(card.redraw ?? "always"),
+    tags: chipValues(box, card.tags),
+    copies: card.copies === undefined || card.copies === 1 ? "" : String(card.copies),
+    ...(card.shared !== undefined ? { shared: card.shared } : {}),
+    sharedCopies: card.sharedCopies === undefined ? "" : String(card.sharedCopies),
+    ...(card.durable !== undefined ? { durable: card.durable } : {}),
+    // The deck's own flag, so the card page can say what inheriting means here
+    // rather than making an author open the deck to find out.
+    fields: Object.entries(card.fields ?? {}).map(([name, value]) => ({ name, value: typeof value === "string" ? value : JSON.stringify(value) })),
+    outcomes: byDisplay(card.outcomes ?? []).map((o) => ({
+      id: o.id,
+      gameId: effectiveGameId(o),
+      ...(!blank(o.gameId) ? { gameIdPinned: o.gameId } : {}),
+      ...(o.title !== undefined ? { title: o.title } : {}),
+      ...(o.purpose !== undefined ? { purpose: o.purpose } : {}),
+      ...(!blank(o.condition) ? { gate: o.condition } : {}),
+      changes: Object.entries(o.changes ?? {}).map(([target, src]) => `${target} ← ${src}`),
+      // The outcome's template data, read exactly as the card's above it: a
+      // non-string value shown as its source text, coerced back on save.
+      fields: Object.entries(o.fields ?? {}).map(([name, value]) => ({ name, value: typeof value === "string" ? value : JSON.stringify(value) })),
+      ...(() => {
+        const via = reached?.reports.get(effectiveGameId(o));
+        return reached && via ? { patter: { scene: reached.scene, via: via.map(reportLine) } } : {};
+      })(),
+    })),
+  };
+};
 
 /**
  * Display order for an id-sorted collection: the authored `order`, with array
@@ -149,6 +162,9 @@ export function toDto(loaded: LoadedProject): ProjectDto {
     const lines = venues.get(key);
     return lines === undefined ? undefined : lines.map((n) => n.line);
   };
+  // The paired Patter project's published scenes, when there are any: each outcome says how its
+  // card's scene reaches it. Read through ops' cache, so an unchanged bundle costs a stat.
+  const patterScenes = readPatterLink(loaded).link?.scenes;
   return {
     dir: loaded.dir,
     name: source.project.project.name,
@@ -199,7 +215,7 @@ export function toDto(loaded: LoadedProject): ProjectDto {
         cards: d.shard.cards
           .map((c, i) => ({ c, o: c.order ?? i }))
           .sort((a, b) => a.o - b.o)
-          .map(({ c }) => cardDto(box, c)),
+          .map(({ c }) => cardDto(box, c, patterScenes)),
       })),
       templates: byDisplay(box.hands.templates).map((t) => templateDto(box, t)),
       tagGroups: byDisplay(box.tags.groups).map((group) => ({

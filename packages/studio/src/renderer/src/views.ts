@@ -1056,6 +1056,7 @@ export function renderProblems(
 export function fixLabel(fix: NonNullable<Problem["fix"]>): string {
   if (fix.kind === "declare-property") return `Set up “@${fix.scope}.${fix.name}”`;
   if (fix.kind === "repoint-tag") return "Choose a tag…";
+  if (fix.kind === "add-outcome") return `Add outcome “${fix.gameId}”`;
   return "Fix";
 }
 
@@ -1067,8 +1068,8 @@ function fixButton(
   // and this bar's `.problembar-fix` were one rule twice.
   const button = el("button", {
     className: "stepbar-action", text: fixLabel(fix),
-    tip: fix.kind === "declare-property"
-      ? "Declare it, then take me to it"
+    tip: fix.kind === "declare-property" ? "Declare it, then take me to it"
+      : fix.kind === "add-outcome" ? "Give this card the outcome its Patter scene names, then open it"
       : "Point this at a tag that exists",
   });
   button.addEventListener("click", () => onFix(problem, fix, button));

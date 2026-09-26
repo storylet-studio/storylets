@@ -196,6 +196,8 @@ There's no writing status. Comments and the review walk exist, but there's no pe
 - [Maps](/storyletter/maps/): draw a tag group as zones and pin hands inside them.
 - [The Board](/storyletter/board/): play the project on the real runtime, and see why a
   card was or wasn't dealt.
+- [Working with Patter](/storyletter/patter/): pair the project with the Patter project that
+  holds its dialogue, and let Storyletter check each card against its scene.
 - [Reviewing](/storyletter/reviewing/): comments on any item, markers on a canvas, and the
   walk through open feedback.
 - [Keyboard shortcuts](/storyletter/shortcuts/): the full reference.

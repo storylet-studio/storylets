@@ -43,7 +43,10 @@ export type IssueFix =
        *  place that has them to hand: an editor offering the choice would
        *  otherwise have to go and find the group again to name three strings. */
       options: { id: string; label: string }[];
-    };
+    }
+  /** A paired Patter scene names an outcome its card doesn't have (ops `patter-link.ts`): give
+   *  the card an outcome by that name. `card` is the card's id, `gameId` the name the scene uses. */
+  | { kind: "add-outcome"; card: string; gameId: string };
 
 export interface Issue {
   /** A one-click repair, when one is canonical (storyletter.md section 4). */

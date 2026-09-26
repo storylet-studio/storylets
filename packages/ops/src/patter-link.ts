@@ -31,7 +31,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { parseSource } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
-import { effectiveGameId, gameIdify } from "@storylet-studio/model";
+import { effectiveGameId, gameIdify, isValidGameId } from "@storylet-studio/model";
+import type { Card } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
 
 /** The one Patter bundle schema this check reads. A newer one is reported, not guessed at. */
@@ -49,6 +50,9 @@ export interface PatterSceneShape {
 export interface PatterScenes {
   byId: ReadonlyMap<string, PatterSceneShape>;
   byAddress: ReadonlyMap<string, PatterSceneShape>;
+  /** The default locale's strings (string id -> text), for an option's words. Empty for a bundle
+   *  published with its strings left out (localisation by ids). */
+  text: ReadonlyMap<string, string>;
 }
 
 /** The scene a reference names: an internal id first, else an address (Patter's `resolveSceneRef`). */
@@ -132,9 +136,9 @@ function readScenes(bundlePath: string): PatterScenes | "unreadable" | { unknown
   try { stat = statSync(bundlePath); } catch { return "unreadable"; }
   const hit = bundleCache.get(bundlePath);
   if (hit && hit.mtimeMs === stat.mtimeMs && hit.size === stat.size) return hit.scenes;
-  let bundle: { schema?: unknown; scenes?: unknown };
+  let bundle: { schema?: unknown; scenes?: unknown; locales?: { default?: unknown }; strings?: unknown };
   try {
-    bundle = JSON.parse(readFileSync(bundlePath, "utf8")) as { schema?: unknown; scenes?: unknown };
+    bundle = JSON.parse(readFileSync(bundlePath, "utf8")) as typeof bundle;
   } catch {
     return "unreadable";
   }
@@ -147,7 +151,14 @@ function readScenes(bundlePath: string): PatterScenes | "unreadable" | { unknown
     byId.set(id, scene);
     byAddress.set(sceneAddress(scene), scene);
   }
-  const scenes: PatterScenes = { byId, byAddress };
+  const locale = typeof bundle.locales?.default === "string" ? bundle.locales.default : undefined;
+  const table = locale !== undefined && bundle.strings && typeof bundle.strings === "object"
+    ? (bundle.strings as Record<string, unknown>)[locale] : undefined;
+  const text = new Map<string, string>();
+  if (table && typeof table === "object") {
+    for (const [id, words] of Object.entries(table as Record<string, unknown>)) if (typeof words === "string") text.set(id, words);
+  }
+  const scenes: PatterScenes = { byId, byAddress, text };
   bundleCache.clear(); // one project's bundle at a time: the editor opens many projects in a session
   bundleCache.set(bundlePath, { mtimeMs: stat.mtimeMs, size: stat.size, scenes });
   return scenes;
@@ -166,17 +177,29 @@ export function outcomesReported(node: unknown): string[] {
   return found;
 }
 
+/** One choice option in a compiled scene. */
+export interface PatterOption {
+  id: string;
+  /** The string id of the words the player picks, when the option has any. */
+  promptId?: string;
+  /** The outcome the option labels itself with, if any. */
+  outcome: string | null;
+  /** The gameEvent outcomes its branch fires, which win over the label. */
+  overrides: string[];
+}
+
 /** Every choice option in a compiled scene (a group carrying a prompt): the outcome it labels
  *  itself with, and the gameEvent outcomes its branch fires, which would win over the label. */
-export function optionsOf(scene: unknown): { id: string; outcome: string | null; overrides: string[] }[] {
-  const found: { id: string; outcome: string | null; overrides: string[] }[] = [];
+export function optionsOf(scene: unknown): PatterOption[] {
+  const found: PatterOption[] = [];
   (function walk(n: unknown): void {
     if (Array.isArray(n)) { n.forEach(walk); return; }
     if (!n || typeof n !== "object") return;
-    const o = n as { type?: unknown; prompt?: unknown; id?: unknown; gameData?: { outcome?: unknown }; children?: unknown };
+    const o = n as { type?: unknown; prompt?: { id?: unknown }; id?: unknown; gameData?: { outcome?: unknown }; children?: unknown };
     if (o.type === "group" && o.prompt !== undefined) {
       found.push({
         id: String(o.id),
+        ...(typeof o.prompt?.id === "string" ? { promptId: o.prompt.id } : {}),
         outcome: typeof o.gameData?.outcome === "string" ? o.gameData.outcome : null,
         overrides: outcomesReported(o.children ?? []),
       });
@@ -215,7 +238,12 @@ export function patterPairingIssues(source: SourceProject, scenes: PatterScenes)
 
         for (const n of named) {
           if (!declared.includes(n)) {
-            issues.push(at("error", `its Patter scene names outcome "${n}", which this card doesn't have (it has ${declared.join(", ") || "none"})`));
+            // The generate direction: the scene already says what the outcome is called, so the
+            // repair is to give the card one by that name (when the name is a legal address).
+            issues.push({
+              ...at("error", `its Patter scene names outcome "${n}", which this card doesn't have (it has ${declared.join(", ") || "none"})`),
+              ...(isValidGameId(n) ? { fix: { kind: "add-outcome" as const, card: card.id, gameId: n } } : {}),
+            });
           }
         }
         if (declared.length > 1) {
@@ -240,6 +268,42 @@ export function patterPairingIssues(source: SourceProject, scenes: PatterScenes)
     }
   }
   return issues;
+}
+
+/** How a card's scene reaches one of its outcomes, in the words an author reads. */
+export type PatterReport =
+  /** The player picks this option, whose words are `text` (its id, when the bundle carries none). */
+  | { kind: "option"; text: string }
+  /** A gameEvent fires it: inside the branch of the option whose words are `option`, or, with no
+   *  `option`, elsewhere in the scene. */
+  | { kind: "event"; option?: string }
+  /** The card has one outcome and the scene names none: reaching the end reaches it. */
+  | { kind: "ending" };
+
+/**
+ * For each of a card's outcomes, how its Patter scene reaches it, by the host's rule (a gameEvent
+ * wins, else the option's label, else the only outcome). Undefined when the card has no scene.
+ * An outcome nothing reaches is absent: the check already says so.
+ */
+export function patterOutcomeReports(card: Card<unknown>, scenes: PatterScenes): { scene: string; reports: Map<string, PatterReport[]> } | undefined {
+  const scene = findScene(scenes, effectiveGameId(card));
+  if (!scene) return undefined;
+  const reports = new Map<string, PatterReport[]>();
+  const add = (outcome: string, report: PatterReport): void => { reports.set(outcome, [...(reports.get(outcome) ?? []), report]); };
+  const options = optionsOf(scene);
+  const words = (o: PatterOption): string => (o.promptId !== undefined ? scenes.text.get(o.promptId) : undefined) ?? o.id;
+  const insideOptions: string[] = [];
+  for (const o of options) {
+    insideOptions.push(...o.overrides);
+    if (o.overrides.length > 0) { for (const e of o.overrides) add(e, { kind: "event", option: words(o) }); }
+    else if (o.outcome) add(o.outcome, { kind: "option", text: words(o) });
+  }
+  // The events outside every option: the scene's own, not any one choice's.
+  const outside = [...outcomesReported(scene)];
+  for (const e of insideOptions) { const i = outside.indexOf(e); if (i >= 0) outside.splice(i, 1); }
+  for (const e of outside) add(e, { kind: "event" });
+  if (card.outcomes.length === 1 && reports.size === 0) add(effectiveGameId(card.outcomes[0]!), { kind: "ending" });
+  return { scene: scene.name, reports };
 }
 
 /** Everything `validate` says about the Patter pairing: the link's own problems, then the check. */

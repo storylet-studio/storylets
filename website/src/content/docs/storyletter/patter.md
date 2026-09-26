@@ -1,0 +1,98 @@
+---
+title: Working with Patter
+description: Pair a Storyletter project with the Patter project that holds its dialogue, and let Storyletter check that every card and its scene agree.
+sidebar:
+  label: Working with Patter
+---
+
+A common shape for a game is storylets choosing the beat and [Patter](https://patterkit.dev)
+performing it: the game deals a card, plays the Patter scene named after it, and plays the
+outcome the scene ends on. The two projects stay separate, one for Storyletter and one for
+Patterpad, and they're joined by names you already write.
+
+This page covers what Storyletter does to help. How the game wires the two engines together is
+in [Storylets with Patter](/play/with-patter/).
+
+## The names that join them
+
+- **A card's gameId is its scene's name.** The card `the-moneylenders-men` plays the Patter
+  scene `the-moneylenders-men`.
+- **An outcome's gameId is what the scene names.** Label a choice option with the outcome's
+  gameId in its Game Data, and taking that option reaches that outcome. A `gameEvent` naming
+  an outcome wins over the label, which is how dialogue *after* a choice can decide the result.
+- **A card with one outcome needs neither.** Reaching the end of the scene reaches it.
+
+## Pairing the projects
+
+Open **Project Settings ▸ General**, and under **Patter project** choose the `.patter` folder
+(or type its path). It's saved in the project as a path relative to it, so everyone who checks
+out the game gets the same pairing, and so does your build.
+
+Nothing about the pairing goes into the bundle your game loads.
+
+## What Storyletter checks
+
+Once the projects are paired, Storyletter reads the Patter project's **published** bundle, from
+wherever Patterpad's **Publish Bundle** writes it, and checks every card that has a scene of its
+name. What it finds goes in the problems bar, and `storyletengine validate` finds the same
+things, so CI does too.
+
+Errors, because the game would get it wrong:
+
+- The scene names an outcome the card doesn't have.
+- The card has several outcomes, and a branch of its scene doesn't say which one it reached:
+  an option with no label and no `gameEvent`, or a scene with neither at all.
+
+Warnings, because something can't be reached yet:
+
+- An outcome that no option and no `gameEvent` in the scene ever names.
+- A scene that matches no card, so nothing will ever deal it.
+
+If the Patter project hasn't been published yet, or the folder isn't where the path says, that's
+a warning and the check waits. Publish from Patterpad and it picks up the new bundle straight
+away.
+
+It can't tell you a card is *missing* its scene. Some boxes have dialogue and some don't, and
+only your game knows which, so keep that part of the check in your game's own build.
+
+### Adding the outcome a scene names
+
+When a scene names an outcome the card doesn't have, the problem comes with a fix:
+**Add outcome "…"**. It gives the card an outcome with exactly that gameId, titled from it
+(`slip-away` becomes "Slip away"), and opens it so you can write its purpose and changes. The
+gameId is pinned, so retitling the outcome won't break the link.
+
+## Seeing how a scene reaches each outcome
+
+Open a card's **Outcomes** tab and expand an outcome. When its scene reaches it, an **In Patter**
+section says how, in the scene's own words:
+
+- *Option "Walk away; it isn't your fight"*: the player picks that option.
+- *A gameEvent after option "…"*, or *A gameEvent in the scene*.
+- *The scene ending*: the card has one outcome, and the scene just finishes.
+
+It's read from the published bundle, so it tells you what the game will do, not what you've
+typed in Patterpad since you last published.
+
+## Opening the scene in Patterpad
+
+With a card open, **Edit ▸ Edit Scene in Patterpad** opens Patterpad at that card's scene. If
+Patterpad is already open on the project it jumps there. The menu item only appears once the
+projects are paired.
+
+The first time, if Storyletter can't find Patterpad, it asks you to point to it and remembers
+where it is. That's kept on your machine, not in the project, since everyone installs apps in
+different places.
+
+## Keeping names steady
+
+A gameId follows its title until the item is first published, and **Publish Bundle** pins it
+then. Patterpad does the same for scenes. So you can rename freely while you draft, and once a
+card has gone out, retitling it won't quietly break the scene named after it. To rename a
+pinned gameId on purpose, edit it with the gameId chip, and rename the scene to match.
+
+## Not yet
+
+The [Board](/storyletter/board/) doesn't play Patter scenes yet. It deals and plays cards as
+usual, and where a card's conditions name Patter's properties it uses the defaults the game's
+[shared scopes](/play/with-patter/#sharing-scopes-between-the-editors) declare.
