@@ -1316,6 +1316,14 @@ export interface ProjectShard {
    * since a writer may hold the cards without the dialogue.
    */
   patter?: string;
+  /**
+   * The boxes the game performs through the paired Patter project, by box id: every card in them
+   * plays the scene named after it. Authoring config, never compiled, and only meaningful beside
+   * `patter`. With it, `validate` checks only these boxes and also reports a card with no scene;
+   * Storyletter's Board plays their cards' scenes, and the playable export carries them.
+   * Absent, every card that has a scene is checked and none is required to have one.
+   */
+  patterBoxes?: string[];
   world: {
     properties: PropertyDecl[];
     registry?: unknown;

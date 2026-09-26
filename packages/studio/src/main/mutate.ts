@@ -1062,7 +1062,17 @@ export function saveBox(session: ProjectSession, boxId: string, edit: BoxEdit): 
     else delete b.outcomeFields;
   }
   if (edit.properties !== undefined) b.properties = edit.properties.map(declFromDto);
-  return commit(session, "Edit box", `box:${boxId}`, [{ path: boxFile(session, box), content: canonicalStringify(box.box) }]);
+  const writes: FileState[] = [{ path: boxFile(session, box), content: canonicalStringify(box.box) }];
+  // Performed by Patter lives on the PROJECT (`patterBoxes`, never compiled), so this one edit
+  // writes the project shard too, in the same undo step. Absent when no box is named.
+  if (edit.patterPerformed !== undefined) {
+    const source = session.loaded.source!;
+    const ids = new Set(source.project.patterBoxes ?? []);
+    if (edit.patterPerformed) ids.add(boxId); else ids.delete(boxId);
+    if (ids.size > 0) source.project.patterBoxes = [...ids].sort(); else delete source.project.patterBoxes;
+    writes.push({ path: join(session.loaded.dir, source.path), content: canonicalStringify(source.project) });
+  }
+  return commit(session, "Edit box", `box:${boxId}`, writes);
 }
 
 /** One binding row per tag group: fixed tag, hole, or unbound. */

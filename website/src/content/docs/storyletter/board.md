@@ -111,9 +111,17 @@ joins the snapshot list too).
 That's the same `.storyletsave` format a game writes, so a save from your game opens on
 the Board and a Board snapshot loads in your game.
 
+## Cards that play Patter scenes
+
+When the project is [paired with a Patter project](/storyletter/patter/) and a box is marked
+**Performed by Patter**, opening one of its cards plays the card's scene here: its lines, its
+choices, then the outcome it reached, with Continue. Patter runs on the Board beside the Storylet
+Engine, on the same properties, and with Patterpad's Live Link on, each save in Patterpad reaches
+the Board as you play. See [Playing scenes on the Board](/storyletter/patter/#playing-scenes-on-the-board).
+
 ## Cards that name another engine
 
-The Board runs the Storylet Engine on its own, so a card that reads `@patter.visits` or
+Where the Board isn't playing Patter's scenes itself, it runs the Storylet Engine on its own, so a card that reads `@patter.visits` or
 changes `@patter.gold` needs Patter's values from somewhere. Where the game
 [shares its scopes](/play/with-patter/#sharing-scopes-between-the-editors), the Board stands
 Patter in: every property its file declares starts at its declared default, and the State tab

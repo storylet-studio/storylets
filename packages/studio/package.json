@@ -24,7 +24,8 @@
     "publish:mac": "npm run build:mac-icons && electron-vite build && dotenv -e .env.local -- electron-builder --mac --publish always"
   },
   "dependencies": {
-    "electron-updater": "^6.3.9",
+    "@patterkit/play-helpers": "^0.7.1",
+    "@patterkit/runtime": "^0.14.0",
     "@storylet-studio/compiler": "0.0.0",
     "@storylet-studio/dialect": "0.3.0",
     "@storylet-studio/model": "0.7.0",
@@ -34,6 +35,7 @@
     "@wildwinter/expr-editor": "^0.16.0",
     "@wildwinter/scoperegistry": "^0.8.0",
     "@wildwinter/simple-vc-lib": "^0.4.1",
+    "electron-updater": "^6.3.9",
     "konva": "^10.3.0",
     "ws": "^8.21.3"
   },

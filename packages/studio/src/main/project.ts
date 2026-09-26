@@ -6,8 +6,8 @@
 // ---------------------------------------------------------------------------
 
 import { basename, dirname, join } from "node:path";
-import { contractNotes, defaultGameScopesParent, loadProject, patterOutcomeReports, planShareScopes, readPatterLink, runExport, runInit, runValidate } from "@storylet-studio/ops";
-import { mkdirSync } from "node:fs";
+import { contractNotes, defaultGameScopesParent, loadProject, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate } from "@storylet-studio/ops";
+import { mkdirSync, readFileSync, statSync } from "node:fs";
 import type { LoadedProject, PatterReport, PatterScenes } from "@storylet-studio/ops";
 import { writeBinaryFile, writeTextFiles as vcWrite } from "@wildwinter/simple-vc-lib";
 import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, worldDeclarations } from "@storylet-studio/compiler";
@@ -17,7 +17,7 @@ import type { Bundle, Card, CoverageDriver, HandTemplate, PlayRung, PropertyDecl
 import type { SourceBox } from "@storylet-studio/compiler";
 import { boardScopes, gameScopesDto, worldFileLabel } from "./game-scopes.js";
 import type {
-  BoardScopesDto, BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectSettingsDto,
+  BoardPatterDto, BoardScopesDto, BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectSettingsDto,
   PropertyDeclDto, RemoteDto, ShardVcDto, VcStatusDto,
 } from "../shared/api.js";
 import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
@@ -189,6 +189,7 @@ export function toDto(loaded: LoadedProject): ProjectDto {
       ...(box.box.box.title !== undefined ? { title: box.box.box.title } : {}),
       ...(box.box.box.purpose !== undefined ? { purpose: box.box.box.purpose } : {}),
       ranking: { specificity: box.box.box.ranking?.specificity ?? true },
+      ...(source.project.patter !== undefined ? { patter: { performed: (source.project.patterBoxes ?? []).includes(box.box.box.id) } } : {}),
       ...(noted(`box:${effectiveGameId(box.box.box)}`) !== undefined
         ? { contract: noted(`box:${effectiveGameId(box.box.box)}`)! } : {}),
       ...(box.box.box.turn !== undefined ? { turn: { seconds: box.box.box.turn.seconds } } : {}),
@@ -406,7 +407,32 @@ export function projectSettings(session: ProjectSession): ProjectSettingsDto {
 
 /** Compile the freshly re-read project to a bundle for the Board (files are
  *  the truth: the live session reflects the latest saved state). */
-export function compileBundle(session: ProjectSession): { bundle: Bundle; name: string; play: PlayRung; scopes?: BoardScopesDto } | { error: string } {
+/**
+ * What the Board plays Patter scenes from: the paired project's published bundle and the boxes
+ * the project says Patter performs. Undefined unless the project is paired, names at least one
+ * box, and the bundle is there and readable: then the Board plays those boxes as it always has.
+ */
+function boardPatter(loaded: LoadedProject): BoardPatterDto | undefined {
+  const source = loaded.source;
+  const performed = source ? performedBoxes(source) : undefined;
+  if (!source || !performed) return undefined;
+  const { link } = readPatterLink(loaded);
+  if (!link?.scenes) return undefined;
+  let bundle: unknown;
+  try { bundle = JSON.parse(readFileSync(link.bundlePath, "utf8")); } catch { return undefined; }
+  const boxes = source.boxes.filter((b) => performed.has(b.box.box.id)).map((b) => effectiveGameId(b.box.box));
+  return { bundle, boxes };
+}
+
+/** The Patter bundle's modification time, for the Board's out-of-date check: a republish from
+ *  Patterpad makes the Board stale as a save here does. Empty when there is none. */
+export function patterStamp(loaded: LoadedProject): string {
+  if (!loaded.source || !performedBoxes(loaded.source)) return "";
+  const { link } = readPatterLink(loaded);
+  try { return link ? String(statSync(link.bundlePath).mtimeMs) : ""; } catch { return ""; }
+}
+
+export function compileBundle(session: ProjectSession): { bundle: Bundle; name: string; play: PlayRung; stamp: string; scopes?: BoardScopesDto; patter?: BoardPatterDto } | { error: string } {
   const loaded = loadProject(session.loaded.dir);
   if (!loaded.source) {
     return { error: loaded.issues.map((i) => i.message).join("; ") || "not a storylets project" };
@@ -422,9 +448,12 @@ export function compileBundle(session: ProjectSession): { bundle: Bundle; name: 
   // The game's shared scopes ride beside it too, so the Board can stand the other engines
   // in when the content names one (patterkit design/shared-scopes.md, decision 4).
   const scopes = boardScopes(loaded.source);
+  const patter = boardPatter(loaded);
   return {
     bundle, name: loaded.source.project.project.name, play: playRungOf(loaded.source.project.settings),
+    stamp: boardStamp(bundle.content.hash, patter ? patterStamp(loaded) : ""),
     ...(scopes !== undefined ? { scopes } : {}),
+    ...(patter !== undefined ? { patter } : {}),
   };
 }
 
@@ -433,8 +462,12 @@ export function compileBundle(session: ProjectSession): { bundle: Bundle; name: 
  *  content.hash to know when it has gone out of date. */
 export function currentProjectHash(session: ProjectSession): string | null {
   const loaded = loadProject(session.loaded.dir);
-  return loaded.source ? projectHash(loaded.source) : null;
+  return loaded.source ? boardStamp(projectHash(loaded.source), patterStamp(loaded)) : null;
 }
+
+/** What the Board compares to know it is out of date: the project's content hash, and the paired
+ *  Patter bundle's modification time when the Board plays Patter scenes. */
+const boardStamp = (hash: string, patter: string): string => (patter ? `${hash}|${patter}` : hash);
 
 /** Compile and write the .storyletsc bundle to its declared path (through the
  *  VC layer; the bundle is committed with merge=ours). */

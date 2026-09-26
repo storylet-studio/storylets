@@ -27,6 +27,9 @@ import { createLiveRun } from "./live.js";   // Live Link: the game's run, rebui
 import type { LiveRun } from "./live.js";
 import type { BoardLogEntry, DealtView, LogEntry, NotDealt } from "./model.js";
 import type { BoardSaveFile } from "./model.js";
+import type { Performance } from "./performance.js";
+import { createDebugLink } from "@patterkit/play-helpers";
+import type { DebugLink } from "@patterkit/play-helpers";
 import { turnSpan } from "@storylet-studio/model";
 import type { BoxMapDto, LiveLinkStatus, ProjectMapDto, StudioApi } from "../../shared/api.js";
 import type { MountedBoardMap } from "./board-map.js";
@@ -38,12 +41,73 @@ const root = document.getElementById("table")!;
 let table: Table | undefined;
 let seed = 0;
 let name = "";
+/** What `projectHash()` returns while the built bundle is current (tableBundle's `stamp`). */
+let builtStamp = "";
+
+// --- Patterpad's Live Link, while the Board plays Patter scenes ---------------------------------
+//
+// The Board connects to Patterpad (ws://127.0.0.1:4471) as if it were a game: each save there
+// pushes the scenes, which the Board applies as it plays (words in place, structure by hot swap),
+// and the Board reports the line it is on, so Patterpad's playhead follows. Patter's own client
+// (play-helpers `createDebugLink`) connects once, so the Board tries again every few seconds until
+// Patterpad answers: it is usually opened after the Board, or not at all.
+
+let patterLink: DebugLink | undefined;
+/** The last scenes Patterpad pushed, kept across a rebuild (Restart, a stale refresh): Patterpad
+ *  pushes on every save and every publish, so the last push is never older than the published
+ *  bundle the rebuild reads, and dropping it would put the Board back on older lines. */
+let latestPatterPush: string | undefined;
+let patterConnected = false;
+let patterRetry: ReturnType<typeof setInterval> | undefined;
+
+/** A WebSocket that says whether it is open, so the Board knows when to try again. */
+class TrackedSocket extends WebSocket {
+  constructor(url: string) {
+    super(url);
+    this.addEventListener("open", () => { patterConnected = true; });
+    this.addEventListener("close", () => { patterConnected = false; });
+  }
+}
+
+function linkPatterpad(): void {
+  patterLink?.close();
+  patterLink = undefined;
+  patterConnected = false;
+  const t = table;
+  if (!t?.patter || !t.performer) return;
+  const link = createDebugLink({
+    build: t.patterBuild ?? "", project: name, WebSocket: TrackedSocket,
+    onBundle: ({ build, data }) => {
+      if (table !== t) return;   // the Board rebuilt since: this link is on its way out
+      let kind: "text" | "structure" | undefined;
+      try { kind = t.applyPatterBundle(data); } catch { return; }
+      if (kind === undefined) return;
+      latestPatterPush = data;
+      link.setBuild(build);
+      toast(kind === "text" ? "Patter's lines updated from Patterpad" : "Patter's scenes updated from Patterpad", "ok");
+      render();
+    },
+  });
+  patterLink = link;
+  t.performer.link = link;
+}
+
+/** Keep trying Patterpad while the Board plays Patter scenes; stop when it doesn't. */
+function watchPatterpad(): void {
+  if (patterRetry !== undefined) { clearInterval(patterRetry); patterRetry = undefined; }
+  if (!table?.patter) { patterLink?.close(); patterLink = undefined; return; }
+  linkPatterpad();
+  patterRetry = setInterval(() => { if (!patterConnected) linkPatterpad(); }, 10_000);
+}
 /** Board filters: tag group -> tag ("" = any). */
 const filters: Record<string, string> = {};
 /** The open card: its id and the hand it sits in. */
 let open: { card: string; hand: string } | undefined;
 /** The chosen-but-uncommitted outcome (the two-step commit). */
 let pending: string | undefined;
+/** The open card's Patter scene, while the Board performs it (performance.ts). Keyed to the card:
+ *  a different open card starts its own. */
+let performing: Performance | undefined;
 /** One-shot: focus Continue after the render that shows the confirm step. */
 let focusPending = false;
 let board: { hand: string; cards: DealtView[] }[] = [];
@@ -167,7 +231,7 @@ async function build(): Promise<void> {
   const result = await studio.tableBundle();
   // The Board shows the error where the table would be; the toast is the
   // family's voice for a failure in a tool window (parity row 19).
-  if ("error" in result) { loadError = result.error; table = undefined; toast(`The Board could not build the project: ${result.error}`, "error"); render(); return; }
+  if ("error" in result) { loadError = result.error; table = undefined; watchPatterpad(); toast(`The Board could not build the project: ${result.error}`, "error"); render(); return; }
   loadError = "";
   name = result.name;
   // The play ladder's rung (design/engine-server.md 4.10). It comes beside the
@@ -175,15 +239,22 @@ async function build(): Promise<void> {
   // setting, and this window has no other source for it.
   setPlayRung(result.play);
   // A refused project (boardRefusal says when) is shown where the table would be, like a build error.
-  try { table = new Table(result.bundle, seed, result.scopes); }
+  builtStamp = result.stamp;
+  performing = undefined;
+  try {
+    table = new Table(result.bundle, seed, result.scopes, result.patter);
+    if (latestPatterPush !== undefined && table.patter) table.applyPatterBundle(latestPatterPush);
+  }
   catch (e) {
     const why = e instanceof Error ? e.message : String(e);
     loadError = boardRefusal(why, result.scopes);
     table = undefined;
+    watchPatterpad();
     toast(`The Board could not play the project: ${why}`, "error");
     render();
     return;
   }
+  watchPatterpad();
   peekBox = table.boxes()[0]?.gameId ?? "";
   for (const k of Object.keys(criteria)) delete criteria[k];
   for (const k of Object.keys(filters)) delete filters[k];
@@ -242,13 +313,14 @@ async function loadMap(): Promise<void> {
 async function checkStale(): Promise<void> {
   if (!table || stale) return;
   const hash = await studio.projectHash();
-  if (hash && hash !== table.bundle.content.hash) { stale = true; render(); }
+  // The stamp, not the bundle's hash alone: it also moves when Patterpad republishes the scenes.
+  if (hash && hash !== builtStamp) { stale = true; render(); }
 }
 
 // A different project was opened underneath the Board: this table is dealing a
 // game from a bundle nobody has open any more. Say so at once rather than
 // waiting for the focus check, which was only ever about EDITS to the same one.
-studio.onProjectChanged(() => { if (table) { stale = true; render(); } });
+studio.onProjectChanged(() => { latestPatterPush = undefined; if (table) { stale = true; render(); } });
 
 // --- Live Link ------------------------------------------------------------------
 /** The run, wired to this bundle's labels (so a game's deals name their cards)
@@ -340,6 +412,7 @@ function playOpen(outcome: string): void {
   if (!table || !open) return;
   try {
     table.play(open.card, outcome, open.hand);
+    performing = undefined;
     // The running position, recorded before `open` is cleared: this hand is
     // where we are, and this card has now been seen for the rest of the run.
     marks.played(open.hand, open.card);
@@ -387,6 +460,7 @@ function restart(): void {
 function newRun(): void {
   if (!table) return;
   table.newRun();
+  performing = undefined;
   open = undefined; pending = undefined; snapPanel = undefined;
   peeked = []; notDealt = []; peekStamp = undefined;
   marks.reset();   // a new run: nowhere has been anywhere yet
@@ -711,6 +785,15 @@ function playPanel(): HTMLElement | null {
       el("button", { className: "btn ghost icon pp-close", tip: "Put it back", onClick: () => { open = undefined; pending = undefined; render(); } }, iconNode("close"))),
     held.purpose ? el("p", { className: "beat", text: held.purpose }) : null,
   );
+  // A card from a box Patter performs plays its scene instead of offering its outcomes: the
+  // scene decides. When it can't (no scene, or it ends without saying), the outcomes come back.
+  const box = table.boxOf(held.id);
+  if (table.performer && box !== undefined && table.performer.performs(box)) {
+    if (performing?.card !== held.id) performing = table.performer.start({ id: held.id, gameId: held.gameId }, box, outcomes);
+    const scene = scenePane(performing, outcomes);
+    panel.append(scene);
+    if (!performing.problem) return panel;
+  }
   const chosen = pending !== undefined ? outcomes.find((o) => o.gameId === pending) : undefined;
   if (chosen) {
     // Step two: what happens, then commit.
@@ -729,6 +812,40 @@ function playPanel(): HTMLElement | null {
       () => playOpen("")));
   }
   return panel;
+}
+
+/** The Patter scene in the open card's panel: what has been said, then the choice, or the outcome
+ *  the scene reached with Continue, or why it could not say. */
+function scenePane(p: Performance, outcomes: ReturnType<Table["outcomes"]>): HTMLElement {
+  const pane = el("div", { className: "pp-scene" },
+    el("span", { className: "caption", text: "Patter scene" }),
+    ...p.transcript.map((b) => b.kind === "chose"
+      ? el("p", { className: "pp-chose", text: b.text })
+      : el("p", { className: "pp-line" }, b.kind === "line" && b.who ? el("span", { className: "pp-who", text: b.who }) : null, b.text)));
+  if (p.options) {
+    pane.append(el("div", { className: "pp-options" }, ...p.options.map((o) => {
+      const b = el("button", {
+        className: "btn pp-option", text: o.text,
+        tip: o.enabled ? (o.outcome ? `Reaches ${o.outcome}` : "") : "Not open: Patter's condition, or the outcome it leads to, is shut",
+        onClick: () => { performing = table!.performer!.choose(p, o.id, outcomes); render(); },
+      }) as HTMLButtonElement;
+      // Shown greyed, not hidden: a player who can see the door they can't open is told something.
+      b.disabled = !o.enabled;
+      return b;
+    })));
+  } else if (p.outcome !== undefined) {
+    const reached = outcomes.find((o) => o.gameId === p.outcome);
+    pane.append(
+      el("div", { className: "pp-outcome" },
+        el("span", { className: "caption", text: "Outcome" }),
+        el("p", { className: "pp-otitle", text: reached?.title ?? p.outcome }),
+        reached?.purpose ? el("p", { className: "beat", text: reached.purpose }) : null),
+      el("div", { className: "pp-actions" },
+        el("button", { className: "btn primary", text: "Continue", onClick: () => playOpen(p.outcome!) })));
+  } else if (p.problem) {
+    pane.append(el("p", { className: "pp-problem", text: `${p.problem} Choose the outcome yourself:` }));
+  }
+  return pane;
 }
 
 /** The clocks, forward (design/board-legibility.md piece 4). Per-box clocks

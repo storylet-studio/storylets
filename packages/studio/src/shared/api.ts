@@ -466,6 +466,9 @@ export interface BoxDto {
   title?: string;
   purpose?: string;
   ranking: { specificity: boolean };
+  /** Present only when the project is paired with a Patter project (its `patter`): whether this
+   *  box is one the game performs through it (the project's `patterBoxes`). */
+  patter?: { performed: boolean };
   /** Set on a TIMED box (design/engine-server.md 4.8): a turn here is that
    *  many seconds of the run rather than a play. Absent is the ordinary box. */
   turn?: { seconds: number };
@@ -524,6 +527,13 @@ export interface GameScopesDto {
 
 /** What the Board needs to stand the other engines in (decision 4): the folder's merged
  *  spec and who declares each token, as plain data across the window boundary. */
+/** What the Board needs to play Patter scenes: the paired Patter project's PUBLISHED bundle, as
+ *  its JSON, and the gameIds of the boxes the project says Patter performs (`patterBoxes`). */
+export interface BoardPatterDto {
+  bundle: unknown;
+  boxes: string[];
+}
+
 export interface BoardScopesDto {
   spec: { version: number; scopes: { token: string; writable?: boolean; declarations?: { name: string; type: PropertyType; values?: string[]; stages?: string[]; default?: ScalarValue; writable?: boolean; purpose?: string }[] }[] };
   owners: Record<string, { owner: string; fileName: string }>;
@@ -742,6 +752,8 @@ export interface BoxEdit {
   gameId?: string;
   purpose?: string;
   ranking?: { specificity: boolean };
+  /** Performed by Patter: adds this box to, or takes it off, the project's `patterBoxes`. */
+  patterPerformed?: boolean;
   /** The Turns section: an object makes the box timed, `null` makes it count
    *  plays again. Absent leaves it as it was, like every other field here. */
   turn?: { seconds: number } | null;
@@ -1511,7 +1523,9 @@ export interface StudioApi {
    *  re-pinned; remembered bounds cleared (Patterpad's rescue). */
   resetWindows(): Promise<void>;
   /** Compile the (freshly re-read) project to a bundle for the Board. */
-  tableBundle(): Promise<{ bundle: Bundle; name: string; play: PlayRung; scopes?: BoardScopesDto } | { error: string }>;
+  /** `stamp` is what `projectHash()` returns while this bundle is current: the content hash, and
+   *  the Patter bundle's modification time when the Board plays Patter scenes. */
+  tableBundle(): Promise<{ bundle: Bundle; name: string; play: PlayRung; stamp: string; scopes?: BoardScopesDto; patter?: BoardPatterDto } | { error: string }>;
   /** The current source content hash (compare to a running bundle's
    *  content.hash to tell if the Board is out of date). Null if it won't load. */
   projectHash(): Promise<string | null>;

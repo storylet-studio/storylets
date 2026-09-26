@@ -7,12 +7,16 @@
 
 import { Engine } from "@storylet-studio/runtime";
 import type { Flow, LogEntry, TraceEvent, TraceVerdict } from "@storylet-studio/runtime";
-import { SAVEFILE_SCHEMA, effectiveGameId, valueAddresses } from "@storylet-studio/model";
+import { SAVEFILE_SCHEMA, effectiveGameId, gameIdify, valueAddresses } from "@storylet-studio/model";
 import type { Bundle, PropertyBag, PropertyDecl, SaveFile, ScalarValue } from "@storylet-studio/model";
 import { ENGINE_SCOPES } from "@storylet-studio/dialect";
 import { GAME_SCOPES_DIR, GAME_SCOPES_FILE, standInRegistry } from "@wildwinter/scoperegistry/scopes";
-import type { ScopeDeclaration, ScopeRegistry } from "@wildwinter/scoperegistry";
-import type { BoardScopesDto } from "../../shared/api.js";
+import { ScopeRegistry } from "@wildwinter/scoperegistry";
+import type { ScopeDeclaration } from "@wildwinter/scoperegistry";
+import { Engine as PatterEngine } from "@patterkit/runtime";
+import { applyLiveBundle } from "@patterkit/play-helpers";
+import type { BoardPatterDto, BoardScopesDto } from "../../shared/api.js";
+import { Performer } from "./performance.js";
 
 export type { LogEntry, TraceEvent } from "@storylet-studio/runtime";
 
@@ -197,10 +201,14 @@ export function boardRefusal(message: string, scopes?: BoardScopesDto): string {
  * Undefined otherwise, and the engine runs alone as it always has. (ops' `previewRegistry`
  * for the CLI, which the renderer cannot import, since ops reads files.)
  */
-export function boardRegistry(bundle: Bundle, scopes: BoardScopesDto | undefined): ScopeRegistry | undefined {
-  if (scopes === undefined || (bundle.externalScopes ?? []).length === 0) return undefined;
-  const merged = { spec: scopes.spec, owners: new Map(Object.entries(scopes.owners)), issues: [] };
-  const registry = standInRegistry(merged, { except: ["story"] });
+export function boardRegistry(bundle: Bundle, scopes: BoardScopesDto | undefined, withPatter = false): ScopeRegistry | undefined {
+  // With a real Patter engine on the Board, there is always one registry, the game's, and
+  // Patter registers @patter on it itself: so it is never stood in.
+  if (!withPatter && (scopes === undefined || (bundle.externalScopes ?? []).length === 0)) return undefined;
+  const except = withPatter ? ["story", "patter"] : ["story"];
+  const registry = scopes !== undefined
+    ? standInRegistry({ spec: scopes.spec, owners: new Map(Object.entries(scopes.owners)), issues: [] }, { except })
+    : new ScopeRegistry();
   if (!registry.has("world")) {
     registry.defineOwned("world", bundle.world.properties as unknown as ScopeDeclaration[],
       { normalise: (name) => name, pathPrefix: "world.", owner: "Game" });
@@ -212,7 +220,12 @@ export function boardRegistry(bundle: Bundle, scopes: BoardScopesDto | undefined
  *  when the Board built its engine on one. An engine given a registry leaves every property
  *  value out of `saveGame()` (the game saves the registry once), so the Board, being the game
  *  here, carries them itself. Any other reader of the file ignores the extra key. */
-export type BoardSaveFile = SaveFile & { registry?: Record<string, Record<string, ScalarValue>> };
+export type BoardSaveFile = SaveFile & {
+  registry?: Record<string, Record<string, ScalarValue>>;
+  /** Patter's part, when the Board plays Patter scenes: its flows, not its properties (those are
+   *  the registry's, above). The combined game's one save, `{ registry, patter, storylets }`. */
+  patter?: unknown;
+};
 
 export class Table {
   readonly engine: Engine;
@@ -237,17 +250,34 @@ export class Table {
    *  this engine's own and `@world` (which has rows of its own). Empty with no registry. */
   private readonly standIns: BoardScopesDto["spec"]["scopes"];
 
-  constructor(readonly bundle: Bundle, readonly seed: number, scopes?: BoardScopesDto) {
+  /** Patter, when the project is paired and names boxes Patter performs: the engine, on this
+   *  Board's registry, and what runs a card's scene. Undefined otherwise. */
+  patter: PatterEngine | undefined;
+  readonly performer: Performer | undefined;
+  /** The Patter bundle the engine is running, for a live refresh's comparison. */
+  private patterBundle: ConstructorParameters<typeof PatterEngine>[0] | undefined;
+  /** Patter's own properties as the run started, for New run to put back. */
+  private readonly patterStart: Record<string, ScalarValue>;
+
+  constructor(readonly bundle: Bundle, readonly seed: number, scopes?: BoardScopesDto, patter?: BoardPatterDto) {
     // The flow keeps its own retained log (the game-engine introspection
     // seam) - the window reads it rather than buffering the trace itself.
     // The Board is a HOST: one engine, one "main" flow (the flow tools come
     // later, design/flows.md), the engine self-backing @world, unless the
     // content names another engine and the game shares its scopes, when the
     // other engines (and @world) are stood in on a registry of the Board's.
-    this.registry = boardRegistry(bundle, scopes);
+    this.registry = boardRegistry(bundle, scopes, patter !== undefined);
     this.standIns = this.registry === undefined ? []
-      : (scopes?.spec.scopes ?? []).filter((x) => x.token !== "story" && x.token !== "world" && x.declarations !== undefined);
+      : (scopes?.spec.scopes ?? []).filter((x) => x.token !== "story" && x.token !== "world" && (patter === undefined || x.token !== "patter") && x.declarations !== undefined);
     this.engine = new Engine(bundle, { seed, log: { cap: 200 }, ...(this.registry ? { registry: this.registry } : {}) });
+    // Patter joins the same registry BEFORE the flow opens: the Storylet Engine refuses content
+    // naming @patter unless something provides it by then (the combined game's order).
+    this.patterBundle = patter?.bundle as ConstructorParameters<typeof PatterEngine>[0] | undefined;
+    this.patter = this.patterBundle !== undefined && this.registry !== undefined
+      ? new PatterEngine(this.patterBundle, { registry: this.registry, seed })
+      : undefined;
+    this.performer = this.patter ? new Performer(this.patter, new Set(patter!.boxes), (ref) => this.patterSceneId(ref)) : undefined;
+    this.patterStart = this.registry?.has("patter") ? { ...(this.registry.save()["patter"] ?? {}) } : {};
     this.session = this.engine.openFlow("main");
     for (const box of bundle.boxes) {
       for (const deck of box.decks) {
@@ -259,6 +289,33 @@ export class Table {
         }
       }
     }
+  }
+
+  /** A scene reference to its internal id, as Patter's runtime resolves one: id, then address. */
+  patterSceneId(ref: string): string | undefined {
+    const scenes = (this.patterBundle as { scenes?: Record<string, { name: string; gameId?: string }> } | undefined)?.scenes;
+    if (!scenes) return undefined;
+    if (scenes[ref]) return ref;
+    return Object.entries(scenes).find(([, s]) => (s.gameId?.trim() || gameIdify(s.name)) === ref)?.[0];
+  }
+
+  /** The build identity of the Patter bundle running, for Patterpad's Live Link. */
+  get patterBuild(): string | undefined {
+    return (this.patterBundle as { content?: { hash?: string } } | undefined)?.content?.hash;
+  }
+
+  /**
+   * Patterpad pushed a bundle over its Live Link (a save there): apply it, gently when only the
+   * words changed and by hot swap when the structure did, carrying the run over. The engine may
+   * be a new one afterwards, and the performer follows it.
+   */
+  applyPatterBundle(data: string): "text" | "structure" | undefined {
+    if (!this.patter || this.patterBundle === undefined) return undefined;
+    const r = applyLiveBundle(this.patter, this.patterBundle as Parameters<typeof applyLiveBundle>[1], data);
+    this.patter = r.engine;
+    this.patterBundle = r.bundle;
+    this.performer?.setEngine(r.engine);
+    return r.kind;
   }
 
   turn(boxGameId: string): number {
@@ -281,6 +338,7 @@ export class Table {
     return {
       schema: SAVEFILE_SCHEMA, engine: this.engine.saveGame(), world: this.worldValues(),
       ...(this.registry ? { registry: this.registry.save() } : {}),
+      ...(this.patter ? { patter: this.patter.saveGame() } : {}),
     };
   }
 
@@ -290,6 +348,9 @@ export class Table {
    *  belongs to the flow, and the flow is new. */
   loadFile(file: BoardSaveFile): void {
     this.engine.loadGame(file.engine);
+    // Patter's flows, when both the Board and the file have them; the registry below restores
+    // its properties with everyone else's.
+    if (this.patter && file.patter !== undefined) this.patter.loadGame(file.patter as Parameters<PatterEngine["loadGame"]>[0]);
     // On a stand-in registry the property values are the registry's, saved beside the
     // engine's part; loaded after it, so the reopened flows' bags are there to take them.
     if (this.registry && file.registry) this.registry.load(file.registry);
@@ -350,6 +411,12 @@ export class Table {
     }
     for (const [name, value] of Object.entries(world)) {
       try { this.engine.setProperty(`world.${name}`, value); } catch { /* an orphaned key: dropped */ }
+    }
+    // Patter starts the run over too: its flows close, and its own properties go back to where
+    // they began. @world stays the game's, as above.
+    this.performer?.reset();
+    for (const [name, value] of Object.entries(this.patterStart)) {
+      try { this.registry!.set("patter", name, value); } catch { /* declared away: dropped */ }
     }
     this.meddles = [];
   }

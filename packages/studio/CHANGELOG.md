@@ -10,6 +10,17 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **The Board plays Patter scenes.** On a paired project, tick **Performed by Patter** on a box's
+  Dealing tab, and opening one of its cards on the Board plays the card's scene: its lines, its
+  choices (greyed when Patter's condition or the card's outcome is shut), then the outcome it
+  reached, with Continue. Both engines share one set of properties, and a save or a restart
+  carries Patter's part too. With Live Link on in Patterpad, the Board connects to it like a game:
+  each save there updates the scenes it plays, and Patterpad's playhead follows the Board.
+- **Performed by Patter also sharpens the check.** Only those boxes are checked, and a card in one
+  with no scene of its name is an error.
+
 ## [0.12.0] - 2026-09-26
 
 ### Added

@@ -1272,6 +1272,12 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     view.append(el("div", { className: "doc-panel cfg-panel" },
       cfgRow("Rank by specificity", "More specific cards win ties. Off, priority alone breaks them.",
         cfgCheck(specificity, (v) => { specificity = v; h.saveBox(box.id, { ranking: { specificity: v } }); }))));
+    // Only once the project is paired with a Patter project: otherwise there is nothing to perform.
+    if (box.patter) {
+      view.append(el("div", { className: "doc-panel cfg-panel" },
+        cfgRow("Performed by Patter", "Every card in this box plays the Patter scene named after it. Storyletter checks each one has a scene, and the Board plays them.",
+          cfgCheck(box.patter.performed, (v) => { h.saveBox(box.id, { patterPerformed: v }); }))));
+    }
 
     // WHAT A TURN IS in this box (design/engine-server.md 4.8). Two answers,
     // and the second is a declaration rather than a policy: saying "every 60

@@ -221,14 +221,22 @@ export function optionsOf(scene: unknown): PatterOption[] {
  * outcome it reached); warnings for what merely can't be reached yet (an outcome no branch names,
  * a scene no card plays).
  */
-export function patterPairingIssues(source: SourceProject, scenes: PatterScenes): Issue[] {
+export function patterPairingIssues(source: SourceProject, scenes: PatterScenes, performed = performedBoxes(source)): Issue[] {
   const issues: Issue[] = [];
   const played = new Set<PatterSceneShape>();
   for (const box of source.boxes) {
+    // Named boxes, when the project names any: only those are Patter's, and in them a card with no
+    // scene is a card the game will try to perform and can't.
+    if (performed && !performed.has(box.box.box.id)) continue;
     for (const deck of box.decks) {
       for (const card of deck.shard.cards) {
         const scene = findScene(scenes, effectiveGameId(card));
-        if (!scene) continue;
+        if (!scene) {
+          if (performed) {
+            issues.push({ severity: "error", path: deck.path, where: card.id, message: `this box is performed by Patter, and the Patter project has no scene named "${effectiveGameId(card)}"` });
+          }
+          continue;
+        }
         played.add(scene);
         const at = (severity: Issue["severity"], message: string): Issue => ({ severity, path: deck.path, where: card.id, field: "outcomes", message });
         const declared = card.outcomes.map((o) => effectiveGameId(o));
@@ -306,9 +314,35 @@ export function patterOutcomeReports(card: Card<unknown>, scenes: PatterScenes):
   return { scene: scene.name, reports };
 }
 
+/**
+ * The boxes the project says Patter performs (`patterBoxes`), by id, or undefined when it names
+ * none: then every card with a scene is checked, and none has to have one.
+ */
+export function performedBoxes(source: SourceProject): Set<string> | undefined {
+  const ids = source.project.patterBoxes;
+  return Array.isArray(ids) && ids.length > 0 ? new Set(ids) : undefined;
+}
+
+/** Is this card in a box the project says Patter performs? False when the project names none. */
+export function isPerformed(source: SourceProject, cardId: string): boolean {
+  const performed = performedBoxes(source);
+  return performed !== undefined && source.boxes.some((b) => performed.has(b.box.box.id)
+    && b.decks.some((d) => d.shard.cards.some((c) => c.id === cardId)));
+}
+
 /** Everything `validate` says about the Patter pairing: the link's own problems, then the check. */
 export function patterIssues(loaded: LoadedProject): Issue[] {
   const { link, issues } = readPatterLink(loaded);
-  if (link?.scenes && loaded.source) issues.push(...patterPairingIssues(loaded.source, link.scenes));
+  const source = loaded.source;
+  if (source?.project.patterBoxes !== undefined) {
+    const known = new Set(source.boxes.map((b) => b.box.box.id));
+    for (const id of source.project.patterBoxes) {
+      if (!known.has(id)) issues.push({ severity: "warning", path: source.path, where: "patterBoxes", message: `patterBoxes names a box that doesn't exist (${id})` });
+    }
+    if (source.project.patter === undefined) {
+      issues.push({ severity: "warning", path: source.path, where: "patterBoxes", message: "patterBoxes names boxes for Patter, but the project isn't paired with a Patter project" });
+    }
+  }
+  if (link?.scenes && source) issues.push(...patterPairingIssues(source, link.scenes));
   return issues;
 }

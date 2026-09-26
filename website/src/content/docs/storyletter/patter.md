@@ -52,8 +52,17 @@ If the Patter project hasn't been published yet, or the folder isn't where the p
 a warning and the check waits. Publish from Patterpad and it picks up the new bundle straight
 away.
 
-It can't tell you a card is *missing* its scene. Some boxes have dialogue and some don't, and
-only your game knows which, so keep that part of the check in your game's own build.
+### Boxes Patter performs
+
+Some boxes have dialogue and some don't. On a box's **Dealing** tab, tick **Performed by Patter**
+for each box whose cards play Patter scenes (the option appears once the projects are paired).
+Then the check covers only those boxes, and a card in one with no scene of its name is an error,
+since the game will try to play a scene that isn't there. With no box ticked, every card that
+happens to have a scene is checked, and none is required to have one.
+
+The same setting tells the [Board](#playing-scenes-on-the-board) which cards to perform. It's
+saved in the project, and it never goes into the bundle: your game still decides for itself
+which boxes it plays through Patter.
 
 ### Adding the outcome a scene names
 
@@ -91,8 +100,18 @@ then. Patterpad does the same for scenes. So you can rename freely while you dra
 card has gone out, retitling it won't quietly break the scene named after it. To rename a
 pinned gameId on purpose, edit it with the gameId chip, and rename the scene to match.
 
-## Not yet
+## Playing scenes on the Board
 
-The [Board](/storyletter/board/) doesn't play Patter scenes yet. It deals and plays cards as
-usual, and where a card's conditions name Patter's properties it uses the defaults the game's
-[shared scopes](/play/with-patter/#sharing-scopes-between-the-editors) declare.
+Open a card from a box Patter performs on the [Board](/storyletter/board/) and, instead of its
+outcome buttons, you get its scene: the lines, then the choices, then the outcome the scene
+reached, with **Continue** to play it. An option is greyed when Patter's condition on it fails,
+or when the outcome it leads to is shut on the card, the same two gates your game has. Both
+engines run on one set of properties, so a line that sets `@world` or `@story` shows up in the
+next deal, and a card can deal on what a scene set.
+
+The Board plays the Patter project's published bundle. To have it follow your edits as you make
+them, turn on **Live Link** in Patterpad: the Board connects to it like a game, each save in
+Patterpad updates the scenes it plays, and Patterpad's playhead follows the line the Board is on.
+
+If a card has no scene, or its scene ends without saying which outcome it reached, the Board
+says so and gives you the outcome buttons instead, so you can carry on playing.

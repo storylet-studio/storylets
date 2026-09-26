@@ -220,6 +220,16 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
    compact row: two verbs, not a list of options. */
 .playpanel > .pp-actions:last-child:not(:has(.primary)) { flex-direction: column; align-items: stretch; }
 .playpanel > .pp-actions:last-child:not(:has(.primary)) > button { width: 100%; text-align: left; padding: 8px 12px; }
+/* A card performed by Patter: the scene's transcript, then its choice (the same full-width
+   column as outcomes), or the outcome it reached. */
+.pp-scene { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
+.pp-line { font-family: var(--font-read); font-size: 14.5px; line-height: 1.45; margin: 0; }
+.pp-who { font-family: var(--font-ui); font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin-right: 8px; }
+.pp-chose { font-family: var(--font-read); font-size: 14.5px; font-style: italic; color: var(--accent); margin: 0; }
+.pp-options { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.playpanel .pp-options > .pp-option { width: 100%; text-align: left; padding: 8px 12px; }
+.pp-options > .pp-option:disabled { opacity: 0.5; cursor: not-allowed; }
+.pp-problem { font-size: 13px; color: var(--danger); margin: 4px 0 0; }
 
 /* --- snapshots ------------------------------------------------------------------ */
 .snappanel {

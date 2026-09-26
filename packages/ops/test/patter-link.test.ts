@@ -38,12 +38,13 @@ const bundle = (...scenes: Node[]): Node =>
  * Patter project whose published bundle is `published` (none when undefined). `layout` lets a
  * test break one piece of that on purpose.
  */
-function game(published: Node | undefined, layout: { link?: unknown; noProjectFile?: boolean; exportBundle?: string } = {}): string {
+function game(published: Node | undefined, layout: { link?: unknown; noProjectFile?: boolean; exportBundle?: string; boxes?: string[] } = {}): string {
   const root = mkdtempSync(join(tmpdir(), "patter-link-"));
   const dir = join(root, "the-hamlet.storylets");
   cpSync(exampleDir, dir, { recursive: true });
   const project = parseSource(readFileSync(join(dir, PROJECT), "utf8")) as ProjectShard;
   (project as { patter?: unknown }).patter = "link" in layout ? layout.link : "../story.patter";
+  if (layout.boxes) project.patterBoxes = layout.boxes;
   writeFileSync(join(dir, PROJECT), canonicalStringify(project));
   mkdirSync(join(root, "story.patter"));
   if (!layout.noProjectFile) {
@@ -66,6 +67,24 @@ const clean = (): Node[] => [
   scene("scn_market", "Market Bustle", [line()]),
   scene("scn_men", "The Moneylender's Men", [option("o1", "pay-them-off"), option("o2", "stand-with-gareth"), option("o3", "walk-away")]),
 ];
+
+describe("performed boxes (patterBoxes)", () => {
+  it("requires every card in a performed box to have a scene, and checks only those boxes", () => {
+    // The fixture has one box, the village, so naming it makes every card Patter's.
+    const found = messages(game(bundle(...clean()), { boxes: ["b_village"] }));
+    const missing = found.filter((m) => m.includes("has no scene named"));
+    expect(missing.length).toBeGreaterThan(10);
+    expect(missing).toContain('error: this box is performed by Patter, and the Patter project has no scene named "answer-brynas-summons"');
+    // The two cards that do have scenes are answered cleanly, so nothing else is said about them.
+    expect(found.filter((m) => !m.includes("has no scene named"))).toEqual([]);
+  });
+
+  it("warns about a box id that doesn't exist, and about naming boxes with no Patter project", () => {
+    expect(messages(game(bundle(...clean()), { boxes: ["b_gone"] }))).toContain("warning: patterBoxes names a box that doesn't exist (b_gone)");
+    const unpaired = messages(game(undefined, { link: undefined, boxes: ["b_village"] }));
+    expect(unpaired).toContain("warning: patterBoxes names boxes for Patter, but the project isn't paired with a Patter project");
+  });
+});
 
 describe("patterOutcomeReports", () => {
   const cardOf = (dir: string, id: string) =>

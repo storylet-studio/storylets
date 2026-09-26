@@ -47,7 +47,7 @@ export type { ReplaceOptions, ReplaceHit, ReplaceField, ReplacePlan } from "./re
 // Pin on publish: the editor's Publish writes down every address still following its title
 export { planPins } from "./pin.js";
 // The paired Patter project: where it is, its published bundle, and cards against their scenes
-export { PATTER_BUNDLE_SCHEMA, findScene, readPatterLink, patterPairingIssues, patterIssues, patterOutcomeReports, optionsOf, outcomesReported } from "./patter-link.js";
+export { PATTER_BUNDLE_SCHEMA, findScene, isPerformed, performedBoxes, readPatterLink, patterPairingIssues, patterIssues, patterOutcomeReports, optionsOf, outcomesReported } from "./patter-link.js";
 export type { PatterLink, PatterOption, PatterReport, PatterScenes, PatterSceneShape } from "./patter-link.js";
 export type { PinnedName, PinPlan } from "./pin.js";
 export {
