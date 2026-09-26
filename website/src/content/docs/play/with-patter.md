@@ -87,6 +87,27 @@ address. A bigger project keeps one flow per box it performs. After a choice, ca
 `flow.choose(optionId)` and run the loop again, remembering the outcome that option named
 before you do, because by the end of the branch it's gone.
 
+### Or use the helper
+
+[`@storylet-studio/with-patter`](https://www.npmjs.com/package/@storylet-studio/with-patter) is this
+loop, packaged: the same code Storyletter's Board and the playable page run. It keeps one flow per
+box, applies the last-word rule, and greys an option when either gate is shut. You still deal,
+draw and play; it tells you what to draw.
+
+```ts
+import { Performer } from "@storylet-studio/with-patter";
+
+const performer = new Performer(patter, new Set(["village"]));   // the boxes you perform
+let p = performer.start(card, "village", storyFlow.outcomes(card.id, handId));
+// draw p.transcript, and while p.options is set, let the player pick one:
+p = performer.choose(p, optionId, storyFlow.outcomes(card.id, handId));
+// once p.ended: play p.outcome, or read p.problem for why the scene didn't say
+storyFlow.play(card.id, p.outcome!, handId);
+```
+
+It uses your Patter engine as it is, on your registry, and needs `@patterkit/runtime` 0.14 or later
+beside it.
+
 ### Two gates on one option
 
 An option can be shut by either engine, on state the other cannot see, so check both and let

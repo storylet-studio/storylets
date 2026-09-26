@@ -1,13 +1,15 @@
 {
   "name": "@storylet-studio/with-patter",
   "version": "0.1.0",
-  "private": true,
   "description": "Storylets with Patter: perform a dealt card as the Patter scene named after it, and take the outcome the scene reaches. DOM-free, for a game, the Board and the playable page alike.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/storylet-studio/storylets.git",
     "directory": "packages/with-patter"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "author": "Ian Thomas",
@@ -31,5 +33,13 @@
   },
   "peerDependencies": {
     "@patterkit/runtime": ">=0.14.0 <1.0.0"
-  }
+  },
+  "keywords": [
+    "storylets",
+    "patter",
+    "storylet-studio",
+    "patterkit",
+    "interactive-fiction",
+    "dialogue"
+  ]
 }
