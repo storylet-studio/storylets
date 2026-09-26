@@ -1,5 +1,11 @@
 # @storylet-studio/model
 
+## 0.7.0
+
+### Minor Changes
+
+- 4e4ca45: `ProjectShard.patter` optionally names the Patter project this one is paired with, as a `.patter` folder relative to the project file. It is authoring config and never compiled: with it, `validate` checks each card against the scene of the same name in that project's published bundle, and Storyletter can open Patterpad at a card's scene.
+
 ## 0.6.0
 
 ### Minor Changes
