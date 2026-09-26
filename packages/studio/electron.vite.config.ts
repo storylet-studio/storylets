@@ -13,6 +13,7 @@ const workspacePkgs = [
   "@storylet-studio/compiler",
   "@storylet-studio/runtime",
   "@storylet-studio/ops",
+  "@storylet-studio/with-patter",
   "@wildwinter/expr",
   "@wildwinter/toolkit",
   "@wildwinter/expr-specificity",
@@ -34,6 +35,7 @@ const aliases = {
   "@storylet-studio/compiler": here("../compiler/src/index.ts"),
   "@storylet-studio/runtime": here("../runtime/src/index.ts"),
   "@storylet-studio/ops": here("../ops/src/index.ts"),
+  "@storylet-studio/with-patter": here("../with-patter/src/index.ts"),
   ...(expr("expr") ? { "@wildwinter/expr": expr("expr")! } : {}),
   ...(expr("expr-specificity") ? { "@wildwinter/expr-specificity": expr("expr-specificity")! } : {}),
   // The subpath before the package, since an alias matches as a prefix. One copy of the
