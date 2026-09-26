@@ -1,5 +1,11 @@
 # @storylet-studio/model
 
+## 0.8.0
+
+### Minor Changes
+
+- c4d60b9: `ProjectShard.patterBoxes` optionally names, by box id, the boxes the game performs through the paired Patter project (`patter`). Authoring config, never compiled: `validate` then checks only those boxes and reports a card in one with no scene of its name, and Storyletter's Board plays their cards' scenes.
+
 ## 0.7.0
 
 ### Minor Changes

@@ -29,7 +29,7 @@
     "@patterkit/runtime": "^0.14.0",
     "@storylet-studio/compiler": "0.0.0",
     "@storylet-studio/dialect": "0.3.0",
-    "@storylet-studio/model": "0.7.0",
+    "@storylet-studio/model": "0.8.0",
     "@storylet-studio/ops": "0.0.0",
     "@storylet-studio/runtime": "0.8.0",
     "@storylet-studio/with-patter": "0.1.0",
