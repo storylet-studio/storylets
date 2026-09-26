@@ -7,6 +7,8 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-26
+
 ### Changed
 
 - **The handoff is `@storylet-studio/with-patter` now.** `performance.js` is gone: the page loads
