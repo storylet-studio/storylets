@@ -19,7 +19,7 @@
 // deals, draws what `start` and `choose` return, and plays the outcome.
 // ---------------------------------------------------------------------------
 
-import type { Bundle as PatterBundle, Engine as PatterEngine, Flow as PatterFlow, StepResult } from "@patterkit/runtime";
+import type { Bundle as PatterBundle, ChoiceOption, Engine as PatterEngine, Flow as PatterFlow, StepResult } from "@patterkit/runtime";
 
 /**
  * A card's scene reference (its gameId) to the scene's internal id, as Patter's runtime resolves a
@@ -43,6 +43,10 @@ export interface SceneOption {
   text: string;
   /** False when Patter's condition fails, or the outcome it names is gated shut. */
   enabled: boolean;
+  /** Why it isn't enabled, in a few plain words ("not available here" when Patter's condition
+   *  fails, "requirements not met" when the outcome is shut); absent when it is. A game will want
+   *  its own voice here; these say which engine said no. */
+  why?: string;
   /** The outcome the option names, when it names one. */
   outcome?: string;
 }
@@ -58,8 +62,9 @@ export interface Performance {
   options?: SceneOption[];
   /** True once the scene has run to its end. */
   ended: boolean;
-  /** The outcome the scene reached (last word wins); undefined until it ends, and after it
-   *  ends when nothing named one and the card has several. */
+  /** The outcome the scene reached (last word wins): "" for a card with no outcomes at all, which
+   *  is played with none. Undefined until it ends, and after it ends when nothing named one and
+   *  the card has several. */
   outcome?: string;
   /** Why the scene cannot be performed, or why it ended without an outcome. */
   problem?: string;
@@ -124,6 +129,22 @@ export class Performer {
     return this.run(p, flow, outcomes);
   }
 
+  /**
+   * Pick a performance back up after a load. Patter restores the flow's position itself, and a
+   * flow paused at a choice comes back still paused, so the options are read off it again. What
+   * the host supplies is `saved`, the Performance it stored: the transcript and the outcome settled
+   * so far are presentation and bookkeeping, which Patter hands over once and does not keep.
+   */
+  resume(saved: Performance, outcomes: readonly CardOutcome[]): Performance {
+    // Ended and not yet continued: nothing to ask Patter, but a save that kept only the bookkeeping
+    // (another host's, say) gets its outcome worked out again, by the same rule.
+    if (saved.ended) return saved.outcome !== undefined || saved.problem !== undefined ? saved : this.finish(saved, outcomes);
+    const flow = this.patter.getFlow(saved.box);
+    if (!flow) return { ...saved, ended: true, problem: `The save has no Patter flow "${saved.box}".` };
+    const options = flow.getChoices();
+    return { ...saved, options: optionsFor(options ?? [], outcomes) };
+  }
+
   /** The player picks an option; the scene runs on to its next choice or its end. */
   choose(p: Performance, optionId: string, outcomes: readonly CardOutcome[]): Performance {
     const flow = this.patter.getFlow(p.box);
@@ -159,13 +180,7 @@ export class Performer {
         const named = step.gameData?.["outcome"];
         if (typeof named === "string") p.lastEvent = named;
       } else if (step.type === "choice") {
-        p.options = step.options.map((o) => {
-          const named = o.gameData?.["outcome"];
-          const outcome = typeof named === "string" ? named : undefined;
-          // Two gates, each engine's own: Patter's condition, and ours on the outcome it names.
-          const shut = outcome !== undefined && outcomes.find((x) => x.gameId === outcome)?.available === false;
-          return { id: o.id, text: o.prompt?.text || o.id, enabled: o.eligible && !shut, ...(outcome !== undefined ? { outcome } : {}) };
-        });
+        p.options = optionsFor(step.options, outcomes);
         return p;
       } else {
         return this.finish(p, outcomes);
@@ -174,8 +189,10 @@ export class Performer {
     return { ...p, ended: true, problem: `The scene ran ${MAX_STEPS} steps without a choice or an end.` };
   }
 
-  /** Last word wins: an event, else the option's label, else the card's only outcome. */
+  /** Last word wins: an event, else the option's label, else the card's only outcome, and a card
+   *  with no outcomes at all is played with none (""). */
   private finish(p: Performance, outcomes: readonly CardOutcome[]): Performance {
+    if (p.lastEvent === undefined && p.lastLabel === undefined && outcomes.length === 0) return { ...p, ended: true, outcome: "" };
     const reached = p.lastEvent ?? p.lastLabel ?? (outcomes.length === 1 ? outcomes[0]!.gameId : undefined);
     if (reached === undefined) {
       return { ...p, ended: true, problem: "The scene ended without saying which outcome it reached." };
@@ -185,4 +202,19 @@ export class Performer {
     }
     return { ...p, ended: true, outcome: reached };
   }
+}
+
+/** A choice's options with both engines' gates applied: Patter's own condition (`eligible`), and
+ *  the Storylet Engine's on the outcome each option names. */
+function optionsFor(options: readonly ChoiceOption[], outcomes: readonly CardOutcome[]): SceneOption[] {
+  return options.map((o) => {
+    const named = o.gameData?.["outcome"];
+    const outcome = typeof named === "string" ? named : undefined;
+    const shut = outcome !== undefined && outcomes.find((x) => x.gameId === outcome)?.available === false;
+    const why = !o.eligible ? "not available here" : shut ? "requirements not met" : undefined;
+    return {
+      id: o.id, text: o.prompt?.text || o.id, enabled: o.eligible && !shut,
+      ...(outcome !== undefined ? { outcome } : {}), ...(why !== undefined ? { why } : {}),
+    };
+  });
 }

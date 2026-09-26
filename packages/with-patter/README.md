@@ -25,3 +25,19 @@ flow.play(card.gameId, p.outcome, "the-inn");
 One Patter flow per performed box, named after the box, entered with `goto` for each card, so
 Patter's memory (visits, shuffles) carries across the box's cards. An option is marked not
 `enabled` when Patter's condition on it fails or the outcome it leads to is gated shut.
+
+After a load, `performer.resume(savedPerformance, outcomes)` carries on: Patter restores the flow
+itself, and the Performance (plain JSON) is yours to save beside the two engines.
+
+## At build time
+
+`checkPairing(storyletBundle, patterBundle, ["village"])` compares the two published bundles and
+returns one readable line per problem: a card in a performed box with no scene, a scene no card
+plays, an outcome a scene names that its card doesn't declare, a branch that can't say which of
+several outcomes it reached. Run it in your build.
+
+## Without a bundler
+
+`@storylet-studio/with-patter/with-patter.min.js` is a browser drop-in: everything under a
+`StoryletsWithPatter` global, beside `patterplay.min.js` and `storyletengine.min.js`.
+

@@ -7,6 +7,15 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **The handoff is `@storylet-studio/with-patter` now.** `performance.js` is gone: the page loads
+  the helper's browser drop-in (`with-patter.min.js`) and plays each card through its `Performer`,
+  the same code as Storyletter's Board and playable page. The build checks the two bundles with
+  the helper's `checkPairing`; the `@world` check stays in `scripts/pairing.mjs`. Nothing a player
+  sees changes, and a save is the same shape on all four hosts, so one made here still resumes in
+  Godot, Unity and Unreal, and theirs here.
+
 ## [0.3.0] - 2026-09-24
 
 ### Changed

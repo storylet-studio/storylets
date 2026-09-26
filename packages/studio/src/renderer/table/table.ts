@@ -838,7 +838,8 @@ function scenePane(p: Performance, outcomes: ReturnType<Table["outcomes"]>): HTM
     pane.append(
       el("div", { className: "pp-outcome" },
         el("span", { className: "caption", text: "Outcome" }),
-        el("p", { className: "pp-otitle", text: reached?.title ?? p.outcome }),
+        // "" is a card with no outcomes, played with none.
+        el("p", { className: "pp-otitle", text: p.outcome === "" ? "None: this card has no outcomes" : reached?.title ?? p.outcome }),
         reached?.purpose ? el("p", { className: "beat", text: reached.purpose }) : null),
       el("div", { className: "pp-actions" },
         el("button", { className: "btn primary", text: "Continue", onClick: () => playOpen(p.outcome!) })));

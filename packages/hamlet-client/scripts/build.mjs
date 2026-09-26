@@ -1,7 +1,8 @@
 // Build the Hamlet client, which is nothing but COPYING: there is no bundler
 // and no compiler here. dist/ gets the page, its stylesheet, the three plain
-// scripts from src/, the two runtimes' browser files, and the two PUBLISHED
-// bundles. The one check is that the two bundles line up (pairing.mjs).
+// scripts from src/, the two runtimes' browser files, the with-patter helper's,
+// and the two PUBLISHED bundles. The one check is that the two bundles line up
+// (with-patter's checkPairing, and the @world check in pairing.mjs).
 //
 // The bundles are static files, published by Storyletter and Patterpad to each
 // editor's default place beside its project (examples/storylet-dist/the-hamlet
@@ -17,7 +18,8 @@
 import { mkdirSync, rmSync, readFileSync, writeFileSync, copyFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { checkPairing, checkWorld } from "./pairing.mjs";
+import { checkPairing } from "@storylet-studio/with-patter";
+import { checkWorld } from "./pairing.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = resolve(here, "..");
@@ -26,12 +28,14 @@ export const published = {
   storylets: join(root, "examples/storylet-dist/the-hamlet.storyletsc"),
   patter: join(root, "examples/patter-dist/the_hamlet.patterc"),
 };
-export const sources = ["world.js", "performance.js", "main.js"].map((f) => [f, join(pkg, "src", f)]);
+export const sources = ["world.js", "main.js"].map((f) => [f, join(pkg, "src", f)]);
 const out = join(pkg, "dist");
 
 const PATTER_JS_VERSION = "0.14.0";
 const patterMinUrl = `https://github.com/patterkit/patter/releases/download/play-js-v${PATTER_JS_VERSION}/patterplay.min.js`;
 const ourMin = join(root, "packages/play-helpers/dist/storyletengine.min.js");
+/** The Performer, the with-patter package's browser drop-in, built with the libraries. */
+const performerMin = join(root, "packages/with-patter/dist/with-patter.min.js");
 const patterMin = join(pkg, "vendor", `patterplay-${PATTER_JS_VERSION}.min.js`);
 
 /** The box this host performs through Patter. The host's decision, never the project's. */
@@ -65,6 +69,7 @@ export async function ensurePatterMin() {
 export async function buildHamlet() {
   const { bundle, patterBundle } = loadPublished();
   if (!existsSync(ourMin)) die(`no ${ourMin}: run \`npm run build\` at the repo root once (the play-helpers package builds the drop-in)`);
+  if (!existsSync(performerMin)) die(`no ${performerMin}: run \`npm run build\` at the repo root once (the with-patter package builds the drop-in)`);
   await ensurePatterMin();
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
@@ -72,6 +77,7 @@ export async function buildHamlet() {
   copyFileSync(published.patter, join(out, "hamlet.patterc"));
   copyFileSync(ourMin, join(out, "storyletengine.min.js"));
   copyFileSync(patterMin, join(out, "patterplay.min.js"));
+  copyFileSync(performerMin, join(out, "with-patter.min.js"));
   copyFileSync(join(pkg, "index.html"), join(out, "index.html"));
   copyFileSync(join(pkg, "hamlet.css"), join(out, "hamlet.css"));
   for (const [name, path] of sources) copyFileSync(path, join(out, name));

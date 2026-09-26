@@ -16,7 +16,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { JSDOM } from "jsdom";
-import { checkPairing, checkWorld, optionsOf } from "../scripts/pairing.mjs";
+import { checkPairing, optionsOf } from "@storylet-studio/with-patter";
+import { checkWorld } from "../scripts/pairing.mjs";
 
 const pkg = fileURLToPath(new URL("..", import.meta.url));
 const dist = join(pkg, "dist");
@@ -90,13 +91,6 @@ const arrive = (doc: Document): void => {
   click(byText(doc, ".card", "Arrive at the Village Gate"));
   click(byText(doc, ".continue", "Continue"));
 };
-
-/** The two plain functions the page's own scripts declare, which the harness reaches the
- *  way the page does: off the window. Named here so the test is typed, not indexed. */
-interface PageScripts {
-  resolveOutcome: (state: object, declared: string[], cardGameId: string) => string;
-  choicesFrom: (options: object[], open: Set<string>) => { id: string; text: string; outcome: string | null; enabled: boolean; why: string }[];
-}
 
 let linesByDay: string[] = [];
 
@@ -308,38 +302,13 @@ describe("the Hamlet client", () => {
 
   // The resolution rule, on its own. These are plain functions in the page's
   // scripts, so the harness reaches them the way the page does: off the window.
-  it("resolves the outcome by last word wins: a gameEvent, then the option's label, then the only one", async () => {
+  it("performs through with-patter's Performer, the page's third drop-in", async () => {
+    // The resolution rule and the two gates are the Performer's, and are tested with it
+    // (packages/with-patter/test). The other tests here play the page end to end on top of it.
     const { doc } = open();
     await settled(doc);
-    const w = doc.defaultView as unknown as PageScripts;
-    const state = (over: object) => ({ shown: [], choices: [], outcome: null, labelled: null, done: true, ...over });
-
-    // 1. an event beats the label the player's option carried
-    expect(w.resolveOutcome(state({ outcome: "changed-my-mind", labelled: "pay-them-off" }), ["a", "b"], "s")).toBe("changed-my-mind");
-    // 2. the label, when the scene fired no event
-    expect(w.resolveOutcome(state({ labelled: "pay-them-off" }), ["pay-them-off", "walk-away"], "s")).toBe("pay-them-off");
-    // 3. the only outcome the card has, when the scene said nothing at all
-    expect(w.resolveOutcome(state({}), ["continue"], "s")).toBe("continue");
-    // ...or none at all, "", when the card declares no outcomes
-    expect(w.resolveOutcome(state({}), [], "s")).toBe("");
-    // and loudly, rather than a guess, when nothing answers
-    expect(() => w.resolveOutcome(state({}), ["a", "b"], "the-scene")).toThrow(/the-scene.*declares 2/s);
-  });
-
-  it("greys an option whose outcome the storylet side has shut, and one Patter itself refuses", async () => {
-    const { doc } = open();
-    await settled(doc);
-    const w = doc.defaultView as unknown as PageScripts;
-    const options = [
-      { id: "o1", eligible: true, prompt: { text: "Pay them off" }, gameData: { outcome: "pay-them-off" } },
-      { id: "o2", eligible: true, prompt: { text: "Walk away" }, gameData: { outcome: "walk-away" } },
-      { id: "o3", eligible: false, prompt: { text: "Never spoken" } },
-      { id: "o4", eligible: true, prompt: { text: "Unlabelled" } },
-    ];
-    const choices = w.choicesFrom(options, new Set(["walk-away"])) as { id: string; enabled: boolean; why: string }[];
-    expect(choices.map((c) => [c.id, c.enabled])).toEqual([["o1", false], ["o2", true], ["o3", false], ["o4", true]]);
-    expect(choices[0]!.why, "the storylet side gates it").toBeTruthy();
-    expect(choices[2]!.why, "Patter gates it").toBeTruthy();
+    const w = doc.defaultView as unknown as { StoryletsWithPatter?: { Performer?: unknown } };
+    expect(typeof w.StoryletsWithPatter?.Performer).toBe("function");
   });
 
   it("fails the build when a branch leaves the host guessing, and lets a single-outcome scene say nothing", () => {

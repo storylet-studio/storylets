@@ -5,19 +5,21 @@
 //   Patter performs that beat's dialogue
 //   the host owns @world, and hands the SAME resolver to both
 //
-// Read it in that order. `world.ts` is the shared surface, `performance.ts` is
-// the handoff, and this file is the game around them.
+// Read it in that order. `world.js` is the shared surface, the handoff is
+// @storylet-studio/with-patter's Performer (the same code Storyletter's Board and
+// playable page run), and this file is the game around them.
 //
-// What is deliberately absent: neither engine is told the other exists. There
-// is no adapter, no bridge, no shared library between them. The only thing
-// joining them is a naming convention (Reboot.md 10) and the world object.
+// What is deliberately absent: neither engine is told the other exists. The
+// Performer drives Patter and hands back an outcome; the game plays it through
+// the Storylet Engine. What joins them is a naming convention (Reboot.md 10)
+// and the world object.
 // ---------------------------------------------------------------------------
 /// <reference lib="dom" />
-// No build step, no imports. Two classic scripts (storyletengine.min.js,
-// patterplay.min.js) define the two globals this page reads: `StoryletEngine`,
-// the runtime with its helpers on it, and `Patterplay`, Patter's. world.js and
-// performance.js are plain scripts loaded before this one, so `World`,
-// `perform`, `resume`, `answer` and `resolveOutcome` are already here.
+// No build step, no imports. Three classic scripts define the globals this page
+// reads: `StoryletEngine` (storyletengine.min.js, the runtime with its helpers),
+// `Patterplay` (patterplay.min.js, Patter's) and `StoryletsWithPatter`
+// (with-patter.min.js, the Performer). world.js is a plain script loaded before
+// this one, so `World` is already here.
 const { describeBundle, serializeState, deserializeState } = StoryletEngine;
 const { serializeState: patterSerialize, deserializeState: patterDeserialize } = Patterplay;
 const SAVE_KEY = "the-hamlet/save@1";
@@ -35,11 +37,13 @@ let at = null;
 /** The card being performed, and the Patter flow performing it. */
 /** `flow` is null once the scene has ended: the transcript stays on stage until
  *  the player continues, and an ended flow is nothing the host needs. */
-/** The one Patter flow for the box this host performs (`village`): opened once,
- *  found again after a load, entered per card with goto. Never re-opened. */
-let performance;
-/** The card being performed. `done` in the state means the scene has ended
- *  and its lines wait on the Continue button. */
+/** Performs a card as its Patter scene: ONE Patter flow for the box this host
+ *  performs (`village`), named after it, opened once, found again after a load,
+ *  and entered per card with goto. Never re-opened: a flow is Patter's memory. */
+let performer;
+/** The card being performed, and its Performance (with-patter): what has been
+ *  said, the choice on screen, and, once `ended`, the outcome it reached, whose
+ *  lines wait on the Continue button. */
 let playing = null;
 const log = [];
 async function boot() {
@@ -62,7 +66,8 @@ async function boot() {
     });
     patter = new Patterplay.Engine(patterBundle, { seed: SEED, world: world.resolver });
     story = storylets.openFlow(FLOW);
-    performance = patter.openFlow(BOX); // once; every card is a goto on it
+    patter.openFlow(BOX); // once; every card is a goto on it
+    performer = new StoryletsWithPatter.Performer(patter, new Set([BOX]));
     const about = describeBundle(storyletBundle);
     places = (storyletBundle.boxes[0].hands ?? []).map((h) => ({ gameId: h.gameId, title: h.title ?? h.gameId }));
     $("title").textContent = about.title ?? "The Hamlet";
@@ -90,21 +95,21 @@ function go(place) {
 /** Pick a card: the storylet side has chosen the beat, so Patter now performs
  *  it. The scene is found BY NAME - the card's own gameId - and nothing had to
  *  be declared to make that work. */
-/** The outcome ids the storylet side will accept for this card RIGHT NOW.
+/** The card's outcomes as the storylet side will accept them RIGHT NOW.
  *  Recomputed at every stop, because a scene can write @world mid-performance
  *  and change what is open under itself. */
-function openOutcomes(card) {
-    return new Set(story.outcomes(card.id, at).filter((o) => o.available).map((o) => o.gameId));
+function outcomesOf(card) {
+    return story.outcomes(card.id, at).map((o) => ({ gameId: o.gameId, available: o.available }));
 }
 function start(card) {
-    playing = { card, state: perform(performance, card.gameId, openOutcomes(card)) };
+    playing = { card, state: performer.start(card, BOX, outcomesOf(card)) };
     save(); // mid-scene is a savable moment, not just between cards
     render();
 }
 function choose(optionId) {
     if (!playing)
         return;
-    playing.state = answer(performance, playing.state, optionId, openOutcomes(playing.card));
+    playing.state = performer.choose(playing.state, optionId, outcomesOf(playing.card));
     save();
     render();
 }
@@ -115,13 +120,16 @@ function choose(optionId) {
  *  moment the scene ends: its closing lines, and the whole of a scene with no
  *  choice in it, would vanish under the redeal before anyone read them. */
 function finish() {
-    if (!playing || !playing.state.done)
+    if (!playing || !playing.state.ended)
         return;
     const { card, state } = playing;
     // An explicit gameEvent, else the option the player took, else the card's
-    // only outcome. Loud when none of the three answers, because guessing would
-    // move the world the wrong way (performance.js, resolveOutcome).
-    const outcome = resolveOutcome(state, story.outcomes(card.id, at).map((o) => o.gameId), card.gameId);
+    // only outcome, and "" for a card with none (the Performer's rule). Loud when
+    // none answers, because guessing would move the world the wrong way; the
+    // build's pairing check catches that shape before a player can.
+    if (state.outcome === undefined)
+        throw new Error(state.problem ?? `scene "${card.gameId}" ended without an outcome`);
+    const outcome = state.outcome;
     story.play(card.id, outcome, at);
     // A card with no outcomes is played with none (""), so there is none to name.
     log.unshift(outcome === "" ? `${card.title ?? card.gameId}` : `${card.title ?? card.gameId}: ${outcome}`);
@@ -166,13 +174,9 @@ function save() {
         // engine resumes itself, but nothing in either engine knows that the host
         // was in the middle of performing a card, or what had been said. Those two
         // are the host's, so the host saves them.
-        performing: playing && {
-            card: { id: playing.card.id, gameId: playing.card.gameId, title: playing.card.title },
-            shown: playing.state.shown,
-            outcome: playing.state.outcome,
-            labelled: playing.state.labelled,
-            done: playing.state.done,
-        },
+        // In the shape every Hamlet host writes and reads (a save made here resumes
+        // in Godot, Unity and Unreal), so the Performance is translated, not stored.
+        performing: playing && toEnvelope(playing),
     }));
 }
 function restore() {
@@ -198,25 +202,13 @@ function restore() {
         if (restored === undefined)
             throw new Error(`the save has no "${FLOW}" flow`);
         story = restored;
-        const perf = patter.getFlow(BOX);
-        if (!perf)
+        if (!patter.getFlow(BOX))
             throw new Error(`the save has no "${BOX}" Patter flow`);
-        performance = perf;
         at = s.at ?? null;
-        // Back into the conversation, if we were in one. `resume` reads the pending
-        // choice off the restored flow; the transcript comes from the envelope.
+        // Back into the conversation, if we were in one. The Performer reads the
+        // pending choice off the restored flow; the transcript comes from the save.
         if (s.performing) {
-            const shown = (s.performing.shown ?? []);
-            const outcome = s.performing.outcome ?? null;
-            const labelled = s.performing.labelled ?? null;
-            if (s.performing.done) {
-                // The scene had ended and the player had not yet continued: nothing
-                // to ask Patter for, the transcript and the outcome are the envelope's.
-                playing = { card: s.performing.card, state: { shown, choices: [], outcome, labelled, done: true } };
-            }
-            else {
-                playing = { card: s.performing.card, state: resume(performance, shown, outcome, labelled, openOutcomes(s.performing.card)) };
-            }
+            playing = { card: s.performing.card, state: performer.resume(fromEnvelope(s.performing), outcomesOf(s.performing.card)) };
         }
         return true;
     }
@@ -224,6 +216,27 @@ function restore() {
         localStorage.removeItem(SAVE_KEY);
         return false;
     }
+}
+/** The Performance in the envelope shape all four Hamlet hosts share: the lines
+ *  spoken (the player's own picks are the page's to show, not the save's), the
+ *  outcome a gameEvent named, the option's label, and whether it had ended. */
+function toEnvelope({ card, state }) {
+    return {
+        card: { id: card.id, gameId: card.gameId, title: card.title },
+        shown: state.transcript.filter((b) => b.kind !== "chose")
+            .map((b) => (b.kind === "line" ? { kind: "line", character: b.who ?? "", text: b.text } : { kind: "text", text: b.text })),
+        outcome: state.lastEvent ?? null,
+        labelled: state.lastLabel ?? null,
+        done: state.ended,
+    };
+}
+function fromEnvelope(p) {
+    return {
+        card: p.card.id, box: BOX, ended: Boolean(p.done),
+        transcript: (p.shown ?? []).map((s) => (s.kind === "line" ? { kind: "line", ...(s.character ? { who: s.character } : {}), text: s.text } : { kind: "text", text: s.text })),
+        ...(p.outcome ? { lastEvent: p.outcome } : {}),
+        ...(p.labelled ? { lastLabel: p.labelled } : {}),
+    };
 }
 // --- drawing ----------------------------------------------------------------
 function render() {
@@ -239,13 +252,13 @@ function render() {
     }));
     const stage = $("stage");
     if (playing) {
-        const lines = playing.state.shown.map((s) => {
+        const lines = playing.state.transcript.filter((b) => b.kind !== "chose").map((b) => {
             const d = document.createElement("p");
-            d.className = s.kind;
-            d.textContent = s.kind === "line" ? `${s.character}: ${s.text}` : s.text;
+            d.className = b.kind;
+            d.textContent = b.kind === "line" ? `${b.who ?? ""}: ${b.text}` : b.text;
             return d;
         });
-        const opts = playing.state.choices.map((c) => {
+        const opts = (playing.state.options ?? []).map((c) => {
             const b = document.createElement("button");
             b.textContent = c.enabled ? c.text : `${c.text}  (${c.why})`;
             b.className = c.enabled ? "option" : "option shut";
@@ -255,7 +268,7 @@ function render() {
             if (c.enabled) b.onclick = () => choose(c.id);
             return b;
         });
-        if (playing.state.done) {
+        if (playing.state.ended) {
             const b = document.createElement("button");
             b.textContent = "Continue";
             b.className = "option continue";

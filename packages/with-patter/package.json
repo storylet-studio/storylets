@@ -1,7 +1,7 @@
 {
   "name": "@storylet-studio/with-patter",
   "version": "0.1.0",
-  "description": "Storylets with Patter: perform a dealt card as the Patter scene named after it, and take the outcome the scene reaches. DOM-free, for a game, the Board and the playable page alike.",
+  "description": "Storylets with Patter: perform a dealt card as the Patter scene named after it, take the outcome the scene reaches, and check the cards and scenes line up. DOM-free, for a game, the Board and the playable page alike.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -13,6 +13,14 @@
   },
   "type": "module",
   "author": "Ian Thomas",
+  "keywords": [
+    "storylets",
+    "patter",
+    "storylet-studio",
+    "patterkit",
+    "interactive-fiction",
+    "dialogue"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,7 +29,8 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./with-patter.min.js": "./dist/with-patter.min.js"
   },
   "files": [
     "dist",
@@ -31,15 +40,10 @@
   "scripts": {
     "build": "tsup"
   },
+  "dependencies": {
+    "@storylet-studio/model": ">=0.1.0 <1.0.0"
+  },
   "peerDependencies": {
     "@patterkit/runtime": ">=0.14.0 <1.0.0"
-  },
-  "keywords": [
-    "storylets",
-    "patter",
-    "storylet-studio",
-    "patterkit",
-    "interactive-fiction",
-    "dialogue"
-  ]
+  }
 }

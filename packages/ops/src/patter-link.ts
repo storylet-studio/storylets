@@ -34,6 +34,8 @@ import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import { effectiveGameId, gameIdify, isValidGameId } from "@storylet-studio/model";
 import type { Card } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
+import { optionsOf, outcomesReported } from "@storylet-studio/with-patter";
+import type { BundleOption } from "@storylet-studio/with-patter";
 
 /** The one Patter bundle schema this check reads. A newer one is reported, not guessed at. */
 export const PATTER_BUNDLE_SCHEMA = "patter/bundle@0";
@@ -202,51 +204,11 @@ function readScenes(bundlePath: string): PatterScenes | "unreadable" | { unknown
   return scenes;
 }
 
-/** Every gameEvent outcome id anywhere under a compiled node, in document order. */
-export function outcomesReported(node: unknown): string[] {
-  const found: string[] = [];
-  (function walk(n: unknown): void {
-    if (Array.isArray(n)) { n.forEach(walk); return; }
-    if (!n || typeof n !== "object") return;
-    const o = n as { kind?: unknown; gameData?: { outcome?: unknown } };
-    if (o.kind === "gameEvent" && typeof o.gameData?.outcome === "string") found.push(o.gameData.outcome);
-    for (const v of Object.values(n)) walk(v);
-  })(node);
-  return found;
-}
-
-/** One choice option in a compiled scene. */
-export interface PatterOption {
-  id: string;
-  /** The string id of the words the player picks, when the option has any. */
-  promptId?: string;
-  /** The outcome the option labels itself with, if any. */
-  outcome: string | null;
-  /** The gameEvent outcomes its branch fires, which win over the label. */
-  overrides: string[];
-}
-
-/** Every choice option in a compiled scene (a group carrying a prompt): the outcome it labels
- *  itself with, and the gameEvent outcomes its branch fires, which would win over the label. */
-export function optionsOf(scene: unknown): PatterOption[] {
-  const found: PatterOption[] = [];
-  (function walk(n: unknown): void {
-    if (Array.isArray(n)) { n.forEach(walk); return; }
-    if (!n || typeof n !== "object") return;
-    const o = n as { type?: unknown; prompt?: { id?: unknown }; id?: unknown; gameData?: { outcome?: unknown }; children?: unknown };
-    if (o.type === "group" && o.prompt !== undefined) {
-      found.push({
-        id: String(o.id),
-        ...(typeof o.prompt?.id === "string" ? { promptId: o.prompt.id } : {}),
-        outcome: typeof o.gameData?.outcome === "string" ? o.gameData.outcome : null,
-        overrides: outcomesReported(o.children ?? []),
-      });
-    }
-    // The prompt is text, never structure: walking it could mistake a nested group for an option.
-    for (const [k, v] of Object.entries(n)) if (k !== "prompt") walk(v);
-  })(scene);
-  return found;
-}
+// The two walkers over a compiled Patter scene are the with-patter package's, so the game's
+// build-time check and this one read a scene the same way. Re-exported under the names ops has
+// always exported them by.
+export { optionsOf, outcomesReported };
+export type PatterOption = BundleOption;
 
 /**
  * Cards against their scenes. THE RESOLUTION RULE this enforces is the host's (the Hamlet's

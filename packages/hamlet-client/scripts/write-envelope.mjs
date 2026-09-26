@@ -39,7 +39,7 @@ if (mid) {
   console.log(`wrote ${out}: mid-scene at the inn, 2 choices pending`); process.exit(0);
 }
 // The resolution rule, as the client has it: an event wins, else the outcome
-// named on the option taken, else the card's only outcome (performance.js).
+// named on the option taken, else the card's only outcome (with-patter's Performer).
 let outcome = null, labelled = null;
 for (;;) { const s = flow.advance();
   if (s.type === "choice") {

@@ -284,7 +284,7 @@ const renderScene = (hand: string, card: DealtCard, p: Performance, outcomes: Ou
       const button = document.createElement("button");
       button.type = "button";
       button.className = "bd-outcome";
-      button.textContent = o.enabled ? o.text : `${o.text} (locked)`;
+      button.textContent = o.enabled ? o.text : `${o.text} (${o.why ?? "locked"})`;
       button.disabled = !o.enabled;
       button.addEventListener("click", () => {
         performing = performer!.choose(p, o.id, outcomes);
@@ -298,7 +298,8 @@ const renderScene = (hand: string, card: DealtCard, p: Performance, outcomes: Ou
     const button = document.createElement("button");
     button.type = "button";
     button.className = "bd-outcome";
-    button.textContent = `Continue (${named(reached?.title, p.outcome)})`;
+    // "" is a card with no outcomes, played with none: nothing to name.
+    button.textContent = p.outcome === "" ? "Continue" : `Continue (${named(reached?.title, p.outcome)})`;
     button.addEventListener("click", () => playOutcome(hand, card, reached));
     scene.append(button);
   } else if (p.problem) {
