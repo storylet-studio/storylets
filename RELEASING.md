@@ -89,6 +89,17 @@ ships any public package whose version is ahead of the registry, so they go out 
 Version Packages merge after the bump. Merge that PR after `bump:play`, so the model bump that
 the runtime needs and the runtime itself publish in one run.
 
+### The publish check
+
+`npm run release`, which the Release workflow runs to publish, checks npm before `changeset
+publish` (`scripts/check-published-manifests.mjs`, vendored from `expr/tooling`). For every public
+package whose version is already on npm, it compares the dependency fields with the repo's and
+refuses to publish anything while one differs: the fix is a new version for that package (a
+changeset, or `bump:play` for the runtime and the play helpers). It exists because a range can move
+in the repo under a version npm already has, and then npm serves the old range beside packages that
+need the new one (2026-09-27, the registry split). `npm run check:published` runs it by hand, and the
+changeset guard now counts a dependency change under an unchanged version as a change.
+
 ## The CLI: `cli-vX.Y.Z`
 
 ```sh

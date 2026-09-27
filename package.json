@@ -27,8 +27,9 @@
     "bump:cli": "node scripts/bump-app-version.mjs cli",
     "changeset": "changeset",
     "version-packages": "changeset version && npm install --package-lock-only --ignore-scripts",
-    "release": "npm run typecheck && npm run build:libs && npm test && changeset publish",
-    "release:guard": "node scripts/release-guard.mjs"
+    "release": "npm run typecheck && npm run build:libs && npm test && node scripts/check-published-manifests.mjs && changeset publish",
+    "release:guard": "node scripts/release-guard.mjs",
+    "check:published": "node scripts/check-published-manifests.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.1",
