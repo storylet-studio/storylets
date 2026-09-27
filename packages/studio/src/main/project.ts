@@ -337,14 +337,14 @@ export function validate(session: ProjectSession): Problem[] {
 }
 
 /** The kits New Project offers: the starter, and the starter with a Patter project beside it. */
-export type ProjectKit = "blank" | "with-patter" | "map-story";
+export type ProjectKit = "blank" | "with-patter" | "map-story" | "action-game";
 
 /** The Patter project folder the with-Patter kit creates beside `storyletsDir`. */
 export const patterFolderFor = (storyletsDir: string): string => storyletsDir.replace(/\.storylets$/, "") + ".patter";
 
 export function createProject(parentDir: string, name: string, kit: ProjectKit = "blank"): { path: string } | { error: string } {
   try {
-    const result = runInit({ dir: `${parentDir}/${name}`, name, ...(kit === "map-story" ? { kit: "map-story" as const } : {}) });
+    const result = runInit({ dir: `${parentDir}/${name}`, name, ...(kit === "map-story" || kit === "action-game" ? { kit } : {}) });
     const patterDir = patterFolderFor(result.dir);
     if (kit === "with-patter" && existsSync(patterDir)) return { error: `${basename(patterDir)} is already there` };
     const batch = writeTextFiles(result.writes.map((w) => ({ filePath: w.path, content: w.content })));

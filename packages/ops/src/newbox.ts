@@ -30,7 +30,7 @@ import { boxFolderWrites } from "./box-folder.js";
  *  it. It was written out separately in all three until 2026-08-29, which is
  *  why withdrawing `barks` was a four-file edit and why the CLI's usage line
  *  still offered two of the three afterwards. */
-export const BOX_KITS = ["blank", "rpg", "dialogue", "jobs", "stash", "codex", "news"] as const;
+export const BOX_KITS = ["blank", "rpg", "dialogue", "jobs", "stash", "codex", "news", "acts"] as const;
 
 export type BoxKit = typeof BOX_KITS[number];
 
@@ -453,8 +453,45 @@ function newsKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckSh
   return [headlines, events];
 }
 
+/** Story acts: a story told in three acts. Each act's beats wait for it, one
+ *  beat in each moves the story on, and the finale waits for the last. The act
+ *  is a QUALITY, an ordered ladder, so a beat asks for "rising or later"
+ *  rather than naming every act it may happen in. */
+function actsKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckShard {
+  void tags;
+  boxShard.box.purpose = "A story told in acts: beats wait for their act, and one beat in each act moves the story on.";
+  boxShard.box.properties = [{
+    name: "act", type: "quality", stages: ["opening", "rising", "finale"], default: "opening",
+    purpose: "How far the story has come. An ordered ladder: a beat asks for an act or later, and one beat in each act advances it.",
+  }];
+  hands.hands.push({
+    id: newId("h"), title: "What happens next",
+    purpose: "The story so far: deal it to see which beats the current act allows.",
+    rule: { bindings: {}, slots: 3 },
+  });
+  const beat = (order: number, title: string, purpose: string, condition: string, outcomes: Card<string>["outcomes"], redraw: Card<string>["redraw"] = "never"): Card<string> =>
+    ({ id: newId("c"), order, title, purpose, condition, priority: 1, redraw, outcomes });
+  const moveOn = (gameId: string, title: string) => [{ id: newId("o"), gameId, title, changes: { "@box.act": "advance(@box.act)" } }];
+  return {
+    schema: DECK_SCHEMA,
+    deck: { id: newId("k"), title: "Beats", purpose: "The story's beats, each waiting for its act.", properties: [] },
+    cards: [
+      beat(0, "A letter arrives", "The opening's turning point: reading it moves the story into its rising act.",
+        '@box.act == "opening"', moveOn("read-it", "Read it")),
+      beat(1, "Quiet days", "Filler for the opening: offered until the letter is read, and again whenever it comes round.",
+        '@box.act == "opening"', [{ id: newId("o"), gameId: "wait", title: "Let the days pass", changes: {} }], "always"),
+      beat(2, "A stranger's warning", "Only once the story is rising. Heeding it moves the story to its finale.",
+        '@box.act == "rising"', moveOn("heed-it", "Heed the warning")),
+      beat(3, "The road north", "Rising or later: a beat that stays available into the finale, since it asks for an act or later.",
+        '@box.act >= "rising"', [{ id: newId("o"), gameId: "take-the-road", title: "Take the road", changes: {} }]),
+      beat(4, "The reckoning", "The finale, waiting for the last act.",
+        '@box.act >= "finale"', [{ id: newId("o"), gameId: "face-it", title: "Face it", changes: {} }]),
+    ],
+  };
+}
+
 const KITS: Record<Exclude<BoxKit, "blank">, (b: BoxShard, t: TagsShard, h: HandsShard) => DeckShard | DeckShard[]> = {
-  rpg: rpgKit, dialogue: dialogueKit, jobs: jobsKit, stash: stashKit, codex: codexKit, news: newsKit,
+  rpg: rpgKit, dialogue: dialogueKit, jobs: jobsKit, stash: stashKit, codex: codexKit, news: newsKit, acts: actsKit,
 };
 
 /** Scaffold a new box into a loaded project, as planned writes. Throws when

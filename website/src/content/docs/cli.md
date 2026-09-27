@@ -36,8 +36,8 @@ current directory. You can point at the `.storylets` folder or anywhere inside i
 ## Every command
 
 ```
-storyletengine init [dir] [--name X] [--kit starter|map-story]
-storyletengine new box [path] [--kit blank|rpg|dialogue|jobs|stash|codex|news]
+storyletengine init [dir] [--name X] [--kit starter|map-story|action-game]
+storyletengine new box [path] [--kit blank|rpg|dialogue|jobs|stash|codex|news|acts]
 storyletengine validate [path]
 storyletengine format [path] [--check]            (alias: fmt)
 storyletengine export [path] [-o file] [--map|--no-map]
@@ -68,8 +68,8 @@ next: storyletengine export .../tavern.storylets
 It creates `<dir>.storylets` from a GAME KIT, plus the files that keep a project tidy in a
 repo: `.editorconfig`, `.gitattributes`, `.gitignore`, `.vscode/settings.json`, and
 `vcs-setup.md`. `--kit` is `starter` (the default: one box, one hand, two cards that show
-the loop) or `map-story` (a village on a drawn map, whose first scene opens the rest of
-it). Storyletter's New Project picker offers the same kits. See [the
+the loop), `map-story` (a village on a drawn map, whose first scene opens the rest of
+it), or `action-game` (five boxes on one city map, the story side of an action game). Storyletter's New Project picker offers the same kits. See [the
 walkthrough](/cli-walkthrough/#1-make-a-project).
 
 ## new box
@@ -84,9 +84,9 @@ $ storyletengine new box tavern.storylets --kit rpg
 added box "new-box" (rpg kit) in .../tavern.storylets
 ```
 
-`--kit` is `blank` (the default), `rpg`, `dialogue`, `jobs`, `stash`, `codex`, or `news`.
+`--kit` is `blank` (the default), `rpg`, `dialogue`, `jobs`, `stash`, `codex`, `news`, or `acts`.
 Every narrated box kit carries a purpose note on every piece. Storyletter's New Box picker
-offers the same seven and scaffolds identically.
+offers the same eight and scaffolds identically.
 
 ## validate
 

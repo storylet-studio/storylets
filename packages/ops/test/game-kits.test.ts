@@ -25,7 +25,7 @@ function fresh(kit: GameKit): ReturnType<typeof loadProject> {
 
 describe("the game kits", () => {
   it("offers the starter first", () => {
-    expect([...GAME_KITS]).toEqual(["starter", "map-story"]);
+    expect([...GAME_KITS]).toEqual(["starter", "map-story", "action-game"]);
   });
 
   for (const kit of GAME_KITS) {
@@ -76,5 +76,46 @@ describe("Map-based Story", () => {
     expect(dealt(handRef("The mill race"))).toEqual(["the-wheel-has-stopped"]);
     play("The mill race", "the-wheel-has-stopped", "free-the-wheel");
     expect(dealt(handRef("The mill race"))).toEqual(["the-millers-thanks"]);
+  });
+});
+
+describe("Action game", () => {
+  it("is five boxes on one shared district map, talking only through @story", () => {
+    const boxes = fresh("action-game").source!.boxes;
+    expect(boxes.map((b) => b.box.box.gameId).sort()).toEqual(["codex", "contracts", "encounters", "items", "news"]);
+    for (const b of boxes.filter((x) => x.box.box.gameId !== "codex")) {
+      const d = b.tags.groups.find((g) => g.gameId === "district")!;
+      expect(isSpatial(d), `${b.box.box.gameId} has no map`).toBe(true);
+      expect(d.tags.map((t) => t.gameId).sort()).toEqual(["docks", "old-town"]);
+    }
+  });
+
+  it("carries a job's consequences across the boxes: heat to the streets, the wire to the screens, the record to the codex", () => {
+    const loaded = fresh("action-game");
+    const flow = new Engine(compileProject(loaded.source!).bundle!, { seed: 1 }).openFlow("main");
+    const now = (hand: string): string[] => flow.deal(hand).map((c) => c.gameId).sort();
+    const play = (hand: string, card: string, outcome: string): void => {
+      const c = flow.deal(hand).find((x) => x.gameId === card);
+      expect(c, `${card} is not in ${hand}`).toBeDefined();
+      flow.play(c!.id, outcome, hand);
+    };
+
+    expect(now("codex")).toEqual(["the-city"]);
+    expect(now("dockside-streets")).toEqual(["pickpocket"]);
+    expect(now("dock-screen")).toEqual(["acid-drizzle-advisory"]);
+
+    play("dockside-board", "cold-delivery", "take-the-job");
+    play("old-town-board", "cold-delivery-the-handoff", "it-went-loud");
+    // Heat brings the checkpoint, which outranks the pickpocket for the street's one slot once dealt fresh.
+    expect(now("old-town-streets")).toEqual(["checkpoint"]);
+    // The wire puts the raid on every screen, over the chatter.
+    expect(now("dock-screen")).toEqual(["acid-drizzle-advisory", "container-yard-raided"]);
+    // The contracts board's record unlocks a codex entry; the stash's find unlocks another.
+    play("the-back-room", "a-clean-burner-phone", "pocket-it");
+    expect(now("codex")).toEqual(["burner-networks", "the-city", "the-syndicate"]);
+
+    // The news cycle: the GAME clears the wire and re-deals, and the story leaves the screens.
+    flow.setProperty("story.wire", []);
+    expect(now("dock-screen")).toEqual(["acid-drizzle-advisory"]);
   });
 });

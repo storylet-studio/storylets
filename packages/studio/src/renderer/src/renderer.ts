@@ -2372,16 +2372,22 @@ function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
         play: "Press Play: make something happen, then deal the screens again.",
         features: ["Screens around town", "Stories that react", "Background chatter"],
         lands: ["Two screens, drawn on the map", "Background chatter and two stories", "Two happenings standing in for the rest of your game"] },
+      { id: "acts", name: "Story acts",
+        blurb: "A story told in three acts. Each act's beats wait for it, one beat in each moves the story on, and the finale waits for the last.",
+        tile: "A story in three acts, each beat waiting for its moment.",
+        play: "Press Play: read the letter, and the story moves into its second act.",
+        features: ["Story acts", "Beats that wait their turn", "A finale"],
+        lands: ["The story's act, kept by the box", "Five beats across three acts", "One hand showing what can happen next"] },
     ] }],
     onPick: (kit) => onPick(kit),
   });
 }
 
 /** What New Project offers: the game kits, then the shipped examples. */
-type ProjectStart = "blank" | "with-patter" | "map-story" | `example:${string}`;
+type ProjectStart = "blank" | "with-patter" | "map-story" | "action-game" | `example:${string}`;
 
 /** The game kits, read by New Project and by the welcome's Start group. */
-const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter" | "map-story">[] = [
+const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter" | "map-story" | "action-game">[] = [
   // NOT "Empty project ... and nothing else", which was false: init lands a box,
   // a `whats-next` hand and two wired cards, so a new project plays immediately.
   { id: "blank", name: "Starter project",
@@ -2407,6 +2413,15 @@ const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter" | "map-story">[] = [
     play: "Press Play: arrive at the well, and the mill and the woods open to you.",
     features: ["Explorable map", "Places that open up", "Character conversations"],
     lands: ["One box on a drawn map of three zones", "A site in each: the well, the mill race, the woodcutter's hut", "Five scenes and conversations, one opening the rest", "A story act and the leads the scenes wait on"] },
+  // Port Meridian trimmed to a beginning (the author's specification, released
+  // 2026-09-27): five boxes on one district map, talking only through story
+  // state. ops/test/game-kits.test.ts plays the chain below.
+  { id: "action-game", name: "Action game",
+    blurb: "The story side of an action game: jobs to take, trouble in the streets, things to find, a codex and the news, all on one city map. What happens in one reaches the others: a job gone loud brings checkpoints and makes the news.",
+    tile: "An action game's jobs, streets, finds, codex and news.",
+    play: "Press Play: take the delivery, let it go loud, then watch the streets and the screens.",
+    features: ["Jobs", "Street encounters", "Found items", "A codex", "City news"],
+    lands: ["Five boxes on one shared city map", "A job with a next step, and heat when it goes loud", "Street trouble, with Moved on for walking away", "Finds, a codex that unlocks, and screens the game refreshes"] },
 ];
 
 /** The shipped examples as gallery items, for New Project and the welcome's Learn group. */
@@ -2442,7 +2457,7 @@ function openNewProject(initial?: ProjectStart): void {
     ],
     onPick: (start, { name }) => {
       if (start.startsWith("example:")) { void adopt(studio.openExample(start.slice("example:".length))); return; }
-      if (name !== undefined) void adopt(studio.createProject(name, start as "blank" | "with-patter" | "map-story"));
+      if (name !== undefined) void adopt(studio.createProject(name, start as "blank" | "with-patter" | "map-story" | "action-game"));
     },
   });
 }

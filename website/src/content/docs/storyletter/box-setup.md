@@ -116,8 +116,9 @@ There are two scales, and each says which it is. A box kit scaffolds one box, an
 | **Stash** (`stash`) | What exploring turns up: two hiding places, finds with a `value` field for your game's economy, and one find that only turns up once another points the way. |
 | **Codex** (`codex`) | Entries the game reads but never plays, unlocking as the player learns things. Two leads stand in for the rest of your game; point the conditions at your own state once it writes some. |
 | **News** (`news`) | Screens around town: background chatter, and stories that lead once something happens. Two happenings stand in for the rest of your game, as in the Codex kit. |
+| **Story acts** (`acts`) | A story in three acts: an ordered act the box keeps, beats that wait for their act, one beat in each act that moves the story on, and a finale. |
 
-The last four are cut from the Port Meridian example, each made to stand on its own.
+Job board, Stash, Codex and News are cut from the Port Meridian example, each made to stand on its own.
 Every narrated kit carries a purpose note on every piece, including the outcomes,
 explaining what it's for.
 

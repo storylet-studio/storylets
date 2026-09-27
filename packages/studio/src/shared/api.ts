@@ -1386,7 +1386,7 @@ export interface StudioApi {
   clearRecents(): Promise<void>;
   /** Scaffold a new project (runInit) under a chosen parent dir; null = cancelled. */
   /** `kit` "with-patter" also creates a Patter project beside it, paired, with a stub scene per card. */
-  createProject(name: string, kit?: "blank" | "with-patter" | "map-story"): Promise<OpenResult | { error: string } | null>;
+  createProject(name: string, kit?: "blank" | "with-patter" | "map-story" | "action-game"): Promise<OpenResult | { error: string } | null>;
   /** Copy a shipped worked example somewhere the author owns, and open it. Null
    *  when they cancel the folder picker. */
   openExample(name: string): Promise<OpenResult | { error: string } | null>;

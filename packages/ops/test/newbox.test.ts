@@ -28,7 +28,7 @@ import { compileProject } from "@storylet-studio/compiler";
 import { Engine } from "@storylet-studio/runtime";
 import type { PlannedWrite } from "../src/write.js";
 
-const KITS: BoxKit[] = ["blank", "rpg", "dialogue", "jobs", "stash", "codex", "news"];
+const KITS: BoxKit[] = ["blank", "rpg", "dialogue", "jobs", "stash", "codex", "news", "acts"];
 
 const commit = (writes: PlannedWrite[]): void => {
   for (const w of writes) {
@@ -223,5 +223,18 @@ describe("the Port Meridian kits, played", () => {
     play("what-happens", "the-lights-go-out", "black-out");
     expect(dealt("old-town-screen").sort()).toEqual(["acid-drizzle-advisory", "rolling-blackouts-hit-the-old-town"]);
     expect(dealt("dock-screen")).toEqual(["acid-drizzle-advisory"]);
+  });
+});
+
+describe("the Story acts kit, played", () => {
+  it("each act's beats wait for it, one beat moves the story on, and the finale waits for the last", () => {
+    const { flow, play } = playing("acts");
+    const hand = "what-happens-next";
+    const now = (): string[] => flow.deal(hand).map((c) => c.gameId).sort();
+    expect(now()).toEqual(["a-letter-arrives", "quiet-days"]);
+    play(hand, "a-letter-arrives", "read-it");
+    expect(now()).toEqual(["a-strangers-warning", "the-road-north"]);
+    play(hand, "a-strangers-warning", "heed-it");
+    expect(now()).toEqual(["the-reckoning", "the-road-north"]);
   });
 });
