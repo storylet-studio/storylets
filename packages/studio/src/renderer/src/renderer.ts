@@ -2378,10 +2378,10 @@ function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
 }
 
 /** What New Project offers: the game kits, then the shipped examples. */
-type ProjectStart = "blank" | "with-patter" | `example:${string}`;
+type ProjectStart = "blank" | "with-patter" | "map-story" | `example:${string}`;
 
 /** The game kits, read by New Project and by the welcome's Start group. */
-const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter">[] = [
+const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter" | "map-story">[] = [
   // NOT "Empty project ... and nothing else", which was false: init lands a box,
   // a `whats-next` hand and two wired cards, so a new project plays immediately.
   { id: "blank", name: "Starter project",
@@ -2398,6 +2398,15 @@ const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter">[] = [
     features: ["Written dialogue", "Playable at once"],
     play: "Press Play: the starter's two cards, each with a scene waiting for its lines.",
     lands: ["Everything the starter project has", "A Patter project beside it, paired, with a scene for each card"] },
+  // The Village's shape, small (the author's specification, 2026-08-29): what
+  // `runInit` writes for it is ops/src/init.ts, and ops/test/game-kits.test.ts
+  // plays the promise below.
+  { id: "map-story", name: "Map-based story",
+    blurb: "A village on a map. The story starts at the well in the square, and the mill and the woods open once it gets going. Scenes and conversations unfold across all three.",
+    tile: "A village on a map that opens up as the story goes.",
+    play: "Press Play: arrive at the well, and the mill and the woods open to you.",
+    features: ["Explorable map", "Places that open up", "Character conversations"],
+    lands: ["One box on a drawn map of three zones", "A site in each: the well, the mill race, the woodcutter's hut", "Five scenes and conversations, one opening the rest", "A story act and the leads the scenes wait on"] },
 ];
 
 /** The shipped examples as gallery items, for New Project and the welcome's Learn group. */
@@ -2423,7 +2432,7 @@ function openNewProject(initial?: ProjectStart): void {
   openKitGallery<ProjectStart>({
     title: "New project",
     what: "A project is one game's worth of storylets. It holds boxes of cards, the places they're dealt to, and the bundle your game loads.",
-    namePlaceholder: "The Village",
+    namePlaceholder: "Harbour Town",
     nameLabel: "Project name",
     ...(initial !== undefined ? { initial } : {}),
     sections: [
@@ -2433,7 +2442,7 @@ function openNewProject(initial?: ProjectStart): void {
     ],
     onPick: (start, { name }) => {
       if (start.startsWith("example:")) { void adopt(studio.openExample(start.slice("example:".length))); return; }
-      if (name !== undefined) void adopt(studio.createProject(name, start as "blank" | "with-patter"));
+      if (name !== undefined) void adopt(studio.createProject(name, start as "blank" | "with-patter" | "map-story"));
     },
   });
 }

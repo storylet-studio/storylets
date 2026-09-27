@@ -36,7 +36,7 @@ current directory. You can point at the `.storylets` folder or anywhere inside i
 ## Every command
 
 ```
-storyletengine init [dir] [--name X]
+storyletengine init [dir] [--name X] [--kit starter|map-story]
 storyletengine new box [path] [--kit blank|rpg|dialogue|jobs|stash|codex|news]
 storyletengine validate [path]
 storyletengine format [path] [--check]            (alias: fmt)
@@ -65,17 +65,19 @@ initialised "The Tavern" in .../tavern.storylets
 next: storyletengine export .../tavern.storylets
 ```
 
-It creates `<dir>.storylets` with a starter box (one hand, two cards that show the loop),
-plus the files that keep a project tidy in a repo: `.editorconfig`, `.gitattributes`,
-`.gitignore`, `.vscode/settings.json`, and `vcs-setup.md`. See [the
+It creates `<dir>.storylets` from a GAME KIT, plus the files that keep a project tidy in a
+repo: `.editorconfig`, `.gitattributes`, `.gitignore`, `.vscode/settings.json`, and
+`vcs-setup.md`. `--kit` is `starter` (the default: one box, one hand, two cards that show
+the loop) or `map-story` (a village on a drawn map, whose first scene opens the rest of
+it). Storyletter's New Project picker offers the same kits. See [the
 walkthrough](/cli-walkthrough/#1-make-a-project).
 
 ## new box
 
 Add a box, scaffolded from a BOX KIT. A box kit is a starting point you own, fully
 editable the moment it lands, with no kit reference left in the files. (The other scale
-is a GAME KIT, which starts a whole project; Storyletter's New Project picker offers
-those.)
+is a GAME KIT, which starts a whole project: `init --kit`, or Storyletter's New Project
+picker.)
 
 ```
 $ storyletengine new box tavern.storylets --kit rpg

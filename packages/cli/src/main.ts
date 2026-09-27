@@ -23,20 +23,22 @@ import {
   runExportXlsx, // export-xlsx: the readable workbook
   runExportHtml, bundleOutputPath, // export-html: the playable page
   BOX_KITS,                        // the one kit list; --kit validates from it
+  GAME_KITS,                       // the same for init's game kits
   planShareScopes, defaultGameScopesParent, // share-scopes: Storyletter's Share Scopes, from the terminal
 } from "@storylet-studio/ops";
-import type { BoxKit, Issue, PlannedWrite } from "@storylet-studio/ops";
+import type { BoxKit, GameKit, Issue, PlannedWrite } from "@storylet-studio/ops";
 import { contractPropertyPath, contractPropertyType, turnSpan } from "@storylet-studio/model";
 import pkg from "../package.json" with { type: "json" };
 
 export const USAGE = `storyletengine - Storylet Engine CLI
 
 Usage:
-  storyletengine init [dir]           Scaffold a new .storylets project (starter box,
-                 [--name X]           editor associations, git config)
+  storyletengine init [dir]           Scaffold a new .storylets project from a game
+                 [--name X]           kit, with editor associations and git config
+                 [--kit K]            K: ${GAME_KITS.join(", ")} (default starter)
   storyletengine new box [path]       Add a box to a project, scaffolded from a kit
-                 [--kit blank|rpg|dialogue]         (default blank; the others are
-                                      narrated starters, each teaching a chapter)
+                 [--kit K]            K: ${BOX_KITS.join(", ")}
+                                      (default blank; the others are narrated)
   storyletengine validate [path]      Validate a project: the publish gate, bundle
                                       staleness, canonical form
   storyletengine format [path]        Rewrite shards to canonical form, and move a
@@ -116,7 +118,7 @@ interface Io {
 }
 
 const FLAGS: Record<string, { boolean: string[]; valued: string[]; repeated: string[] }> = {
-  init: { boolean: [], valued: ["name"], repeated: [] },
+  init: { boolean: [], valued: ["name", "kit"], repeated: [] },
   new: { boolean: [], valued: ["kit"], repeated: [] },
   validate: { boolean: [], valued: [], repeated: [] },
   format: { boolean: ["check"], valued: [], repeated: [] },
@@ -181,6 +183,7 @@ export function parseArgs(command: string, args: string[]): ParsedArgs {
  *  the value narrows to BoxKit for the call below and the list stays the only
  *  place a kit is named. */
 const isBoxKit = (k: string): k is BoxKit => (BOX_KITS as readonly string[]).includes(k);
+const isGameKit = (k: string): k is GameKit => (GAME_KITS as readonly string[]).includes(k);
 
 function printIssues(issues: Issue[], io: Io): void {
   for (const issue of issues) {
@@ -250,9 +253,15 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
   switch (command) {
     case "init": {
       try {
+        const kit = flags["kit"];
+        if (kit !== undefined && (typeof kit !== "string" || !isGameKit(kit))) {
+          io.error(`usage: --kit is one of ${GAME_KITS.map((k) => `"${k}"`).join(", ")}, got "${String(kit)}"`);
+          return 2;
+        }
         const result = runInit({
           dir: positionals[0] ?? ".",
           ...(typeof flags["name"] === "string" ? { name: flags["name"] } : {}),
+          ...(kit !== undefined ? { kit } : {}),
         });
         if (!commitWrites(result.writes, io)) return 1;
         io.log(`initialised "${result.name}" in ${result.dir}`);

@@ -8,8 +8,8 @@ export {
   readGameFile, readGameScopes, staleScopesIssues, storyletsScopesText,
 } from "./game-scopes.js";
 export type { LoadedProject } from "./load.js";
-export { runInit, projectFolderName } from "./init.js";
-export type { InitOptions, InitResult } from "./init.js";
+export { runInit, projectFolderName, GAME_KITS } from "./init.js";
+export type { InitOptions, InitResult, GameKit } from "./init.js";
 export { runNewBox, BOX_KITS } from "./newbox.js";
 export { boxFolderWrites, boxFolderName } from "./box-folder.js";
 export type { BoxKit, NewBoxOptions, NewBoxResult } from "./newbox.js";
