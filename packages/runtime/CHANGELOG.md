@@ -8,6 +8,16 @@ section for it.
 
 ## [Unreleased]
 
+### Changed
+
+- **From npm, the runtime shares your game's registry.** It used to carry its own copy of
+  `@wildwinter/scoperegistry` inside it, built for the release zip and published to npm as well, so a
+  game installing from npm ran a registry fixed at the version this runtime was built with. The npm
+  package now takes `@wildwinter/scoperegistry` as a peer dependency: one copy in your install, for
+  your game and every engine in it. npm installs it for you; with a package manager that doesn't
+  install peer dependencies, add it yourself. The zip keeps a build with everything inside it, so
+  copying its folders into a project still needs nothing else.
+
 ## [0.8.1] - 2026-09-27
 
 ### Fixed

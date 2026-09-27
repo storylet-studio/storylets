@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Version bump only, to keep the four Storylet Engine runtimes in lockstep. The change in this release
+  is the JS runtime's: from npm it now shares your game's registry, as a peer dependency, instead of
+  carrying its own copy. Nothing in this runtime changed.
+
 ## [0.8.1] - 2026-09-27
 
 ### Changed

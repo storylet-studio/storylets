@@ -34,6 +34,12 @@
   "dependencies": {
     "@storylet-studio/model": ">=0.1.0 <1.0.0",
     "@storylet-studio/runtime": "0.8.1",
+    "@wildwinter/expr": "^0.5.0"
+  },
+  "peerDependencies": {
+    "@wildwinter/scoperegistry": ">=0.7.0 <1.0.0"
+  },
+  "devDependencies": {
     "@wildwinter/scoperegistry": ">=0.7.0 <1.0.0"
   }
 }

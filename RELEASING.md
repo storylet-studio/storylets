@@ -167,9 +167,11 @@ which is how Patter's dialect 0.2.0 tried to bump its runtime off the lockstep (
 `packages/runtime` carries the same ranges. Any internal dependency the runtime gains takes a wide
 range too, and the exact pin of the helpers on the runtime is rewritten by `bump:play`.
 
-`@wildwinter/scoperegistry` takes a wide range in both (`>=0.7.0 <1.0.0`), for a different reason: a
-game running this engine and Patter shares ONE registry, so every package in the install must resolve
-to the same copy. Runtime 0.8.0 shipped `^0.7.0` while Patter's packages needed 0.8, and a combined
+`@wildwinter/scoperegistry` is a **peer dependency** of both, with the wide range `>=0.7.0 <1.0.0`
+(and a dev dependency with the same range for building here), for a different reason: a game running
+this engine and Patter shares ONE registry, so an install must hold exactly one copy. The npm build
+(`dist/`) therefore leaves it external; the zip's build (`dist-zip/`, the same modules with every
+dependency inlined) is what the release zip carries, since nothing in the zip has npm behind it. Runtime 0.8.0 shipped `^0.7.0` while Patter's packages needed 0.8, and a combined
 game got two copies, so its `ScopeRegistry` was not the type this runtime used (fixed in 0.8.1). A 0.x
 caret splits the copies on every additive registry release.
 

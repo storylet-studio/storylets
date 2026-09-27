@@ -42,3 +42,6 @@ packages/hamlet-client/vendor/
 
 # a symlink named node_modules is a file to git; the trailing-slash rule above misses it
 node_modules
+
+# The zip-only library builds (packages/*/tsup.config.ts): dependencies inlined for the release zip.
+dist-zip/

@@ -29,7 +29,8 @@ Download the JavaScript zip from the [download page](/download/). It carries thr
 
 Each package folder has a `dist/` with `index.js` (ESM), `index.cjs` and `index.d.ts`. Copy
 the folders into your project and import from them with your bundler, or with a plain path
-import. Both are also on npm (`@storylet-studio/runtime`, `@storylet-studio/play-helpers`),
+import. The zip's builds carry everything they need inside them, so nothing else has to be
+installed. Both are also on npm (`@storylet-studio/runtime`, `@storylet-studio/play-helpers`),
 and the drop-in is on a CDN, straight from the npm package:
 
 ```html
@@ -39,6 +40,22 @@ and the drop-in is on a CDN, straight from the npm package:
 ```js
 import { Engine } from "@storylet-studio/runtime";
 ```
+
+### npm or the zip
+
+The two are built differently, for the one thing that differs between them: the registry, the
+store every engine in your game keeps its properties in (see
+[Running it with Patter](/play/with-patter/)).
+
+- **From npm**, the packages take `@wildwinter/scoperegistry` as a peer dependency, so your game
+  and every engine in it, Patter's included, share the one copy in your install. npm installs it
+  for you; with a package manager that doesn't install peer dependencies, add it yourself
+  (`npm install @wildwinter/scoperegistry`). If two packages ever need versions that can't be one
+  copy, the install stops and says so.
+- **From the zip**, and in the drop-in, each build carries its own registry inside it, because
+  there is no install to share one from. A game with only this engine won't notice. A game that
+  also runs Patter from its zip or its drop-in has one registry per engine, so for two engines
+  sharing one store, install both from npm.
 
 ## Load a bundle
 

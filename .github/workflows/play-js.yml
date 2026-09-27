@@ -63,14 +63,16 @@ jobs:
 
           # The three things play/javascript.md promises, under the names it uses,
           # so the folder a reader unzips matches the import they are told to write.
+          # The ZIP library builds (dist-zip/), with their dependencies inlined: nothing in the zip
+          # has npm behind it. The npm packages carry dist/, which leaves them external.
           mkdir -p "${out}/@storylet-studio/runtime/dist" "${out}/@storylet-studio/play-helpers/dist"
-          cp packages/runtime/dist/index.js packages/runtime/dist/index.cjs \
-             packages/runtime/dist/index.d.ts packages/runtime/dist/index.d.cts \
+          cp packages/runtime/dist-zip/index.js packages/runtime/dist-zip/index.cjs \
+             packages/runtime/dist-zip/index.d.ts packages/runtime/dist-zip/index.d.cts \
              "${out}/@storylet-studio/runtime/dist/"
           cp packages/runtime/package.json packages/runtime/README.md packages/runtime/CHANGELOG.md \
              "${out}/@storylet-studio/runtime/"
-          cp packages/play-helpers/dist/index.js packages/play-helpers/dist/index.cjs \
-             packages/play-helpers/dist/index.d.ts packages/play-helpers/dist/index.d.cts \
+          cp packages/play-helpers/dist-zip/index.js packages/play-helpers/dist-zip/index.cjs \
+             packages/play-helpers/dist-zip/index.d.ts packages/play-helpers/dist-zip/index.d.cts \
              "${out}/@storylet-studio/play-helpers/dist/"
           cp packages/play-helpers/package.json "${out}/@storylet-studio/play-helpers/"
 

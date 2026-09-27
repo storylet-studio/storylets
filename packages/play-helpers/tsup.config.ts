@@ -1,16 +1,24 @@
 import { defineConfig } from "tsup";
 
-// Same reasoning as the runtime's config: the release zip is the distribution,
-// so anything a consumer cannot resolve has to be inlined.
+// The same split as the runtime's config: an npm library with dependencies left
+// external (dist/), a zip library with them inlined (dist-zip/), and the drop-in.
 //
-// The ONE deliberate exception is `@storylet-studio/runtime`, which stays
-// external because the zip ships it as a sibling folder. That is not a size
+// The zip library's ONE deliberate exception is `@storylet-studio/runtime`, which
+// stays external because the zip ships it as a sibling folder. That is not a size
 // optimisation: play-helpers wraps a LIVE engine, so bundling its own private
 // copy would give the host two runtimes and a save written by one that the other
 // has never heard of.
 export default defineConfig([
   {
     entry: ["src/index.ts"],
+    format: ["esm", "cjs"],
+    dts: true,
+    clean: true,
+    sourcemap: true,
+  },
+  {
+    entry: ["src/index.ts"],
+    outDir: "dist-zip",
     format: ["esm", "cjs"],
     dts: true,
     clean: true,

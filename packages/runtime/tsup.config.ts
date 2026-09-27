@@ -1,17 +1,21 @@
 import { defineConfig } from "tsup";
 
-// Two artifacts from one source, Patter's runtime shape carried whole:
+// Three artifacts from one source, the same shape as Patter's runtime:
 //
-//   1. The library - ESM + CJS + types, dependencies left external, for anyone
-//      with a bundler or a Node process.
-//   2. The browser DROP-IN - a single self-contained minified IIFE with every
-//      dependency inlined, exposing `window.StoryletEngine`, for a plain HTML
-//      page with no build step at all.
+//   1. The npm library (dist/) - ESM + CJS + types, dependencies left EXTERNAL,
+//      so npm resolves them. `@wildwinter/scoperegistry` above all: it is a peer
+//      dependency, a game holds ONE registry that every engine in it shares, and
+//      a runtime carrying its own copy would not be on it.
+//   2. The zip library (dist-zip/) - the same modules with every dependency
+//      INLINED, for the release zip. play/javascript.md tells the reader to copy
+//      the zip's folders into their project and import from them, with no npm
+//      behind it, so anything they cannot resolve has to be inside. It carries its
+//      own registry as a result, which the docs say.
+//   3. The browser drop-in (storyletengine.min.js), built by play-helpers, the one
+//      package that depends on the runtime AND the helpers it carries.
 //
-// The second is not a nicety: play/javascript.md tells the reader the zip
-// carries "a browser drop-in for a plain HTML page with no build step", and
-// until this config existed that sentence described something the build could
-// not produce.
+// Until 2026-09-27 there was one library build, inlined for the zip and published
+// to npm as well, so npm users ran a private registry fixed at build time.
 export default defineConfig([
   {
     entry: ["src/index.ts"],
@@ -19,16 +23,14 @@ export default defineConfig([
     dts: true,
     clean: true,
     sourcemap: true,
-    // Dependencies are INLINED, which is where our npm decision reaches into the
-    // build. Patter can leave these external because `@patterkit/runtime` is
-    // published and `npm i` fetches its dependencies. Ours is not published: the
-    // release zip IS the distribution, and play/javascript.md tells the reader to
-    // copy the folders into their project and import from them. With externals
-    // left in, doing exactly that fails with ERR_MODULE_NOT_FOUND on
-    // `@wildwinter/expr` - the dependency is neither in the zip nor on any
-    // registry. Inlining is what makes the documented instruction true.
+  },
+  {
+    entry: ["src/index.ts"],
+    outDir: "dist-zip",
+    format: ["esm", "cjs"],
+    dts: true,
+    clean: true,
+    sourcemap: true,
     noExternal: [/^@storylet-studio\//, /^@wildwinter\//],
   },
-  // The browser drop-in (storyletengine.min.js) is built by play-helpers,
-  // the one package that depends on the runtime AND the helpers it carries.
 ]);
