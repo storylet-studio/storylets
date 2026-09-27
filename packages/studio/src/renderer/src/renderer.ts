@@ -31,6 +31,7 @@ import "@wildwinter/app-shell/comments.css";
 import "@wildwinter/app-shell/toast.css";
 import "@wildwinter/app-shell/updater.css";
 import "@wildwinter/app-shell/welcome.css";
+import "@wildwinter/app-shell/kit-gallery.css";
 import "@wildwinter/app-shell/link-status.css";
 import "@wildwinter/app-shell/job.css";
 import "@wildwinter/expr-editor/styles.css";
@@ -67,13 +68,12 @@ import { debounce, isEditableTarget, keyLabel, plural, tipWithKey } from "@wildw
 // The updater's view is the shell's (updater-view.ts): the renderer half its
 // main-process updater cannot run without, on the family's dialog frame.
 import { showUpdaterDialog, feedUpdaterDownloadProgress } from "@wildwinter/app-shell";
-import { mountWelcome } from "@wildwinter/app-shell";
+import { mountWelcome, openKitGallery } from "@wildwinter/app-shell";
 import { mountJobProgress } from "@wildwinter/app-shell";
 import type { MountedNodeView } from "./node-view.js";
 import type { MountedMapView } from "./map-view.js";
 import type { SearchSelection } from "./search.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
-import { openKitPicker } from "./kit-picker.js";
 import { EXAMPLES } from "../../shared/examples.js";
 import { STORYLETTER_WORDMARK } from "./wordmark.js";
 import type { ProblemNames } from "./problem-copy.js";
@@ -351,7 +351,8 @@ function renderWelcome(): void {
     groups: [{
       caption: "Learn from a finished project",
       note: "Each opens as your own copy, in a folder you choose.",
-      items: EXAMPLES.map((x) => ({ name: x.name, hint: x.hint, onOpen: () => void adopt(studio.openExample(x.file)) })),
+      // The welcome has no badge, so the badge rides at the end of the hint here.
+      items: EXAMPLES.map((x) => ({ name: x.name, hint: x.badge !== undefined ? `${x.hint} ${x.badge}.` : x.hint, onOpen: () => void adopt(studio.openExample(x.file)) })),
     }],
     // What the project CALLS itself, with the folder stem as the fallback for
     // an entry recorded before names were stored (app-shell 0.25.0). The path
@@ -2312,60 +2313,82 @@ setPropertyNavigator({
 // LAYERING idea it also names (the spatial map, story acts), and the pickable
 // thing is a game kit.
 //
-// The New Box kit picker: the new-document moment (Word / Photoshop). One
-// card per kit; Esc or a backdrop click cancels.
-/** New box: the kit picker, no name field - a box is named after the fact. */
+// Both are the shell's kit gallery (app-shell kit-gallery.ts): tiles on the
+// left, the chosen kit said in full on the right, one screen. It grew here as
+// kit-picker.ts and moved into the shell on 2026-09-27 (the kit gallery brief,
+// storylet-studio/design/kit-gallery.md), so Patterpad's New Project and New
+// Scene draw the same moment.
+//
+// Every line is written from what the ops actually write (`newBox`, `runInit`),
+// not from another description of them: use case first, then what Play shows,
+// then the model's parts (the brief, section 3).
+/** New box: no name field, since a box is named after the fact. */
 function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
-  openKitPicker<BoxKit>({
+  openKitGallery<BoxKit>({
     title: "New box",
-    what: "A box holds one self-contained set of cards, places, and tags, such as one region, one chapter, or one cast.",
-    sub: "A box kit is a starting point you own. It's fully editable the moment it lands.",
-    kits: [
-      // Use case first, then what Play shows, then the model's parts (the kit
-      // gallery brief, section 3). Each line is written from what `newBox`
-      // actually writes, not from another description of it.
+    what: "A box holds one self-contained set of cards, places, and tags, such as one region, one chapter, or one cast. A box kit is a starting point you own, fully editable the moment it lands.",
+    sections: [{ items: [
       { id: "blank", name: "Blank", blurb: "An empty box, for when you already know the shape you want." },
       { id: "rpg", name: "Encounters on a map",
         blurb: "Things that can happen in each part of a place. A tavern and a market, drawn on the box's map, and a tension that rises when the player takes a risk.",
         play: "Press Play: deal the tavern's hand, and a stranger offers you a wager.",
-        shows: "boxes, tags, the map, and what playing a card does." },
+        shows: "boxes, tags, the map, and what playing a card does.",
+        lands: ["An area tag group, drawn as two zones on the map", "An encounters-at hand template, and the tavern's hand", "An Encounters deck: one card, two outcomes", "A tension property on the box"] },
       { id: "dialogue", name: "Conversation topics",
         blurb: "What each character can bring up. Gareth and Mira each keep their own topics, and a rumour only one of them gets to tell you.",
         play: "Press Play: open a conversation with either of them and see what they offer.",
-        shows: "hands, exclusivity, and copies." },
-    ],
+        shows: "hands, exclusivity, and copies.",
+        lands: ["An npc tag group: Gareth and Mira", "A topics-for hand template, and a hand for each of them", "A Topics deck of four, one shared rumour among them"] },
+    ] }],
     onPick: (kit) => onPick(kit),
   });
 }
 
+/** What New Project offers: the game kits, then the shipped examples. */
+type ProjectStart = "blank" | "with-patter" | `example:${string}`;
+
 /**
- * New project: the same picker, one scale up, with a name.
+ * New project: the same gallery, one scale up, with a name, and the worked
+ * examples as its second shelf (the brief, section 5). Opening an example and
+ * making a project from a kit are already the same act, "your own copy in a
+ * folder you choose", so they sit side by side; each shelf says what its
+ * button does.
  *
  * The game kits are the author's to specify (2026-08-29: Empty, Map-based
- * Story, Action Game), and they arrive as content is built; the kit gallery
- * brief lists what is shipped and what waits. Inventing plausible ones here
- * would be putting content in front of a decision.
+ * Story, Action Game), and they arrive as content is built; the brief lists
+ * what is shipped and what waits. Inventing plausible ones here would be
+ * putting content in front of a decision.
  */
-function openNewProject(): void {
-  openKitPicker<"blank" | "with-patter">({
+function openNewProject(initial?: ProjectStart): void {
+  openKitGallery<ProjectStart>({
     title: "New project",
     what: "A project is one game's worth of storylets. It holds boxes of cards, the places they're dealt to, and the bundle your game loads.",
-    sub: "A game kit is a starting point you own. It's fully editable the moment it lands.",
     namePlaceholder: "The Village",
-    // NOT "Empty project ... and nothing else", which was false: init lands a box,
-    // a `whats-next` hand and two wired cards, so a new project plays immediately.
-    // The old blurb undersold the one thing that gets a newcomer to press Play.
-    kits: [
-      { id: "blank", name: "Starter project",
-        blurb: "One box, one place to deal to, and two cards that already work together. Add box kits to it as you go.",
-        play: "Press Play: one card, and playing it opens the next." },
-      // The two products together: dialogue written in Patterpad, dealt by storylets. Offered to
-      // everyone, since it only creates files; Patterpad is needed later, to write and publish them.
-      { id: "with-patter", name: "Starter project with Patter",
-        blurb: "The starter project, and a Patter project beside it for its dialogue: paired, with a scene for each card ready to write in Patterpad.",
-        play: "Press Play: the starter's two cards, each with a scene waiting for its lines." },
+    nameLabel: "Project name",
+    ...(initial !== undefined ? { initial } : {}),
+    sections: [
+      { caption: "Start from a kit", note: "A starting point you own, fully editable the moment it lands.", items: [
+        // NOT "Empty project ... and nothing else", which was false: init lands a box,
+        // a `whats-next` hand and two wired cards, so a new project plays immediately.
+        { id: "blank", name: "Starter project",
+          blurb: "One box, one place to deal to, and two cards that already work together. Add box kits to it as you go.",
+          play: "Press Play: one card, and playing it opens the next.",
+          lands: ["A main box", "A whats-next hand", "A starter deck: two cards, the first opening the second"] },
+        // The two products together: dialogue written in Patterpad, dealt by storylets. Offered to
+        // everyone, since it only creates files; Patterpad is needed later, to write and publish them.
+        { id: "with-patter", name: "Starter project with Patter",
+          blurb: "The starter project, and a Patter project beside it for its dialogue: paired, with a scene for each card ready to write in Patterpad.",
+          play: "Press Play: the starter's two cards, each with a scene waiting for its lines.",
+          lands: ["Everything the starter project has", "A Patter project beside it, paired, with a scene for each card"] },
+      ] },
+      { caption: "Learn from a finished project", note: "Each opens as your own copy, in a folder you choose.",
+        action: "Open a Copy", usesDetails: false,
+        items: EXAMPLES.map((x) => ({ id: `example:${x.file}` as const, name: x.name, blurb: x.hint, ...(x.badge !== undefined ? { badge: x.badge } : {}) })) },
     ],
-    onPick: (kit, name) => { if (name !== undefined) void adopt(studio.createProject(name, kit)); },
+    onPick: (start, { name }) => {
+      if (start.startsWith("example:")) { void adopt(studio.openExample(start.slice("example:".length))); return; }
+      if (name !== undefined) void adopt(studio.createProject(name, start as "blank" | "with-patter"));
+    },
   });
 }
 

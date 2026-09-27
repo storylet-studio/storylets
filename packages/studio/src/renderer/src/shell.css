@@ -43,7 +43,7 @@ body {
    defined; this only gives them the typography and the pointer the element
    rule used to hand them, in the same place in the cascade. */
 .nav-project, .nav-row, .nav-add, .listrow, .scard, .deck-card, .ctable-new, .doc-tab, .doc-collapsed,
-.outcome-row, .gid, .kit-card, .chip, .probstat, .stripbtn, .stripchip, .bgchip,
+.outcome-row, .gid, .chip, .probstat, .stripbtn, .stripchip, .bgchip,
 .insp-add, .settings-add, .mapside-row {
   font: inherit; cursor: pointer;
 }
@@ -374,13 +374,10 @@ button.pname:hover { color: var(--accent); }
 /* Where a server-backed project stands, beside its name: quieter again than the
    name, because it is a fact about the project and never a nag. */
 .pname-note { opacity: 0.7; }
-/* The new-thing picker (kit-picker.ts) sits on the shell's dialog frame
-   (app-shell dialog.css): panel, scrim, motion, title and actions row are the
-   frame's, the name field is the shell's `.field`. What is the picker's own is
-   its width and the reading face on the name. */
-.kit-dialog { --dialog-width: 560px; }
-.kit-name { display: block; width: 100%; margin: 6px 0 2px; font: 15px var(--font-read); }
-.kit-what { margin: 0 0 4px; font: 13.5px/1.5 var(--font-read); color: var(--ink); }
+/* The kit gallery (New Project, New Box) is the shell's (kit-gallery.css), on
+   its dialog frame. What stays ours is the reading face on the name, as every
+   name an author types here is set. */
+.kit-gallery-name { font: 15px var(--font-read); }
 .doc-explainer p { margin: 0 0 8px; font: 13.5px/1.5 var(--font-read); color: var(--ink); }
 .doc-explainer p:last-child { margin-bottom: 0; }
 .doc-purpose-label { font: 600 12.5px/1.2 var(--font-ui); color: var(--muted); margin-top: 2px; }
@@ -656,14 +653,6 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .vc-readonly input.vc-off, .vc-readonly textarea.vc-off, .vc-readonly select.vc-off { color: var(--muted); background: var(--surface); }
 .vc-readonly .doc-panel:focus-within { background: var(--card); border-color: var(--line-soft); box-shadow: none; }
 
-/* --- the New Box kit picker (the new-document moment) ------------------------ */
-.kit-sub { color: var(--muted); font-size: 13px; margin: 0 0 6px; }
-.kit-card { text-align: left; width: 100%; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: none; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }
-.kit-card:hover { border-color: var(--accent); background: var(--accent-soft); }
-.kit-card h3 { margin: 0; font-size: 15px; }
-.kit-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
-.kit-card p.kit-play { color: var(--ink); }
-.kit-card p.kit-shows { font-size: 12px; }
 
 /* --- the Where row (design/where-and-selectors.md Part A) -------------------
    One place answer per card. A place chip wears a house so the DIRECT form

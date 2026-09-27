@@ -14,11 +14,13 @@ export interface ShippedExample {
   name: string;
   /** Its size first, then what it shows. */
   hint: string;
+  /** A word or two drawn beside the name ("Start here"). */
+  badge?: string;
 }
 
 export const EXAMPLES: readonly ShippedExample[] = [
   { file: "the-hamlet.storylets", name: "The Hamlet",
-    hint: "Small. Places, hands and a deck to deal. Start here." },
+    hint: "Small. Places, hands and a deck to deal.", badge: "Start here" },
   { file: "the-village.storylets", name: "The Village",
     hint: "Full size. Thirteen decks, a drawn map, qualities at work." },
   { file: "port-meridian.storylets", name: "Port Meridian",
