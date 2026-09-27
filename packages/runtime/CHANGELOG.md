@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-27
+
 ### Fixed
 
 - **One copy of `@wildwinter/scoperegistry` in a game that also runs Patter.** 0.8.0 asked for

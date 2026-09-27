@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-27
+
 ### Changed
 
 - Version bump only, to keep the four Storylet Engine runtimes in lockstep. The change in this release
