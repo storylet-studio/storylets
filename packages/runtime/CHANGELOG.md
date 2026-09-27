@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-09-27
+
 ### Changed
 
 - **From npm, the runtime shares your game's registry.** It used to carry its own copy of
