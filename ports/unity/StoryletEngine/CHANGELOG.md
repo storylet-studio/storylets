@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Version bump only, to keep the four Storylet Engine runtimes in lockstep. The change in this release
+  is the JS runtime's: it accepts any `@wildwinter/scoperegistry` from 0.7.0 up to 1.0, so a game
+  running Patter as well no longer ends up with two copies of the registry. Nothing in this runtime
+  changed.
+
 ## [0.8.0] - 2026-09-24
 
 ### Changed

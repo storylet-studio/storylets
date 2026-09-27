@@ -8,9 +8,13 @@ section for it.
 
 ## [Unreleased]
 
-### Changed
+### Fixed
 
-- **`@wildwinter/scoperegistry` 0.8.0.** The runtime's registry is the same; the new release adds the editing tools' shared game scopes under a separate entry point, which the runtime doesn't load.
+- **One copy of `@wildwinter/scoperegistry` in a game that also runs Patter.** 0.8.0 asked for
+  `^0.7.0`, while Patter's packages ask for 0.8, so a game running both engines held two copies, and a
+  `ScopeRegistry` the game made was not the one this runtime used. The runtime and the play helpers
+  now accept any version from 0.7.0 up to 1.0, so they share whichever copy the rest of the install
+  has, and a later registry release cannot split it again. The runtime's behaviour is unchanged.
 
 ## [0.8.0] - 2026-09-24
 
