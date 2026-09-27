@@ -12,7 +12,7 @@ export interface ShippedExample {
   /** The folder under `examples/`, which is what `openExample` takes. */
   file: string;
   name: string;
-  /** Its size first, then what it shows. */
+  /** Its size first, then what the game is, as a player meets it (never the model: no "hands"). */
   hint: string;
   /** A word or two drawn beside the name ("Start here"). */
   badge?: string;
@@ -24,13 +24,15 @@ export interface ShippedExample {
 
 export const EXAMPLES: readonly ShippedExample[] = [
   { file: "the-hamlet.storylets", name: "The Hamlet",
-    hint: "Small. Places, hands and a deck to deal.", badge: "Start here",
+    hint: "Small. A village and the few people in it, each with a trouble of their own.", badge: "Start here",
+    tile: "A village and the few people in it.",
     features: ["Village life", "Character stories", "Night and day"] },
   { file: "the-village.storylets", name: "The Village",
-    hint: "Full size. Thirteen decks, a drawn map, qualities at work.",
+    hint: "Full size. A whole village on a map, with many storylines unfolding across it.",
+    tile: "A whole village on a map, with many storylines.",
     features: ["Explorable map", "Many storylines", "Story acts"] },
   { file: "port-meridian.storylets", name: "Port Meridian",
-    hint: "With a game attached. Five boxes driving contracts, encounters, items, codex and news.",
-    tile: "With a game attached, driven by five boxes.",
+    hint: "With a game attached. A port city of contracts to take, trouble in the streets, things to find, and news that follows what you did.",
+    tile: "A port city, with an action game attached.",
     features: ["Contracts", "Street encounters", "Found items", "City news"] },
 ];
