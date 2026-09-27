@@ -37,7 +37,7 @@ current directory. You can point at the `.storylets` folder or anywhere inside i
 
 ```
 storyletengine init [dir] [--name X]
-storyletengine new box [path] [--kit blank|rpg|dialogue]
+storyletengine new box [path] [--kit blank|rpg|dialogue|jobs|stash|codex|news]
 storyletengine validate [path]
 storyletengine format [path] [--check]            (alias: fmt)
 storyletengine export [path] [-o file] [--map|--no-map]
@@ -82,9 +82,9 @@ $ storyletengine new box tavern.storylets --kit rpg
 added box "new-box" (rpg kit) in .../tavern.storylets
 ```
 
-`--kit` is `blank` (the default), `rpg`, or `dialogue`. The two narrated box kits carry
-a purpose note on every piece, each teaching one part of the model. Storyletter's New Box
-picker offers the same three and scaffolds identically.
+`--kit` is `blank` (the default), `rpg`, `dialogue`, `jobs`, `stash`, `codex`, or `news`.
+Every narrated box kit carries a purpose note on every piece. Storyletter's New Box picker
+offers the same seven and scaffolds identically.
 
 ## validate
 

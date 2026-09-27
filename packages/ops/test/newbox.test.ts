@@ -24,9 +24,11 @@ import type { BoxKit } from "../src/newbox.js";
 import { runValidate } from "../src/validate.js";
 import { isSpatial, polygonOf } from "@storylet-studio/model";
 import { loadProject } from "../src/load.js";
+import { compileProject } from "@storylet-studio/compiler";
+import { Engine } from "@storylet-studio/runtime";
 import type { PlannedWrite } from "../src/write.js";
 
-const KITS: BoxKit[] = ["blank", "rpg", "dialogue"];
+const KITS: BoxKit[] = ["blank", "rpg", "dialogue", "jobs", "stash", "codex", "news"];
 
 const commit = (writes: PlannedWrite[]): void => {
   for (const w of writes) {
@@ -158,5 +160,68 @@ describe("the RPG kit's map", () => {
       expect(poly, `${tag.gameId} has no drawn zone`).toBeDefined();
       expect(poly!.length).toBe(4);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The four kits cut from Port Meridian, PLAYED: each tile promises something
+// that happens when you deal and play (the kit gallery brief, step 6), so each
+// promise is dealt and played through the real engine here, hand by hand.
+// ---------------------------------------------------------------------------
+
+/** A flow over a fresh project carrying one kit, with helpers that speak gameIds. */
+function playing(kit: BoxKit) {
+  const loaded = withKit(kit);
+  const bundle = compileProject(loaded.source!).bundle!;
+  const flow = new Engine(bundle, { seed: 1 }).openFlow("main");
+  const dealt = (hand: string): string[] => flow.deal(hand).map((c) => c.gameId);
+  const play = (hand: string, card: string, outcome: string): void => {
+    const c = flow.deal(hand).find((x) => x.gameId === card);
+    expect(c, `${card} is not in ${hand}`).toBeDefined();
+    flow.play(c!.id, outcome, hand);
+  };
+  return { flow, dealt, play };
+}
+
+describe("the Port Meridian kits, played", () => {
+  it("Job board: taking a job brings its handoff; finishing it loud brings heat, and lying low sheds it", () => {
+    const { dealt, play } = playing("jobs");
+    expect(dealt("dockside-board")).toEqual(["cold-delivery"]);
+    expect(dealt("old-town-board")).toEqual([]);
+    play("dockside-board", "cold-delivery", "take-the-job");
+    expect(dealt("dockside-board")).toEqual([]);
+    expect(dealt("old-town-board")).toEqual(["cold-delivery-the-handoff"]);
+    play("old-town-board", "cold-delivery-the-handoff", "it-went-loud");
+    expect(dealt("old-town-board")).toEqual(["lie-low-for-a-night"]);
+    play("old-town-board", "lie-low-for-a-night", "lie-low");
+    expect(dealt("old-town-board")).toEqual([]);
+  });
+
+  it("Stash: each place holds its find, and the decryptor turns up in the back room once the burner phone is taken", () => {
+    const { flow, dealt, play } = playing("stash");
+    expect(dealt("container-7")).toEqual(["a-dockside-cache"]);
+    expect(flow.deal("container-7")[0]!.fields).toEqual({ value: 40 });
+    expect(dealt("the-back-room")).toEqual(["a-clean-burner-phone"]);
+    play("the-back-room", "a-clean-burner-phone", "pocket-it");
+    expect(dealt("the-back-room")).toEqual(["a-military-decryptor"]);
+    expect(flow.deal("the-back-room")[0]!.fields).toEqual({ value: 120 });
+  });
+
+  it("Codex: the page starts with one entry and grows as leads are followed", () => {
+    const { dealt, play } = playing("codex");
+    expect(dealt("codex")).toEqual(["port-meridian"]);
+    play("leads", "listen-in-on-the-collective", "listen");
+    expect(dealt("codex").sort()).toEqual(["port-meridian", "the-grid-collective"]);
+    play("leads", "study-the-harbour-charts", "study-them");
+    expect(dealt("codex").sort()).toEqual(["port-meridian", "the-grid-collective", "the-harbour"]);
+  });
+
+  it("News: the screens run background chatter until something happens, then the story leads", () => {
+    const { dealt, play } = playing("news");
+    expect(dealt("dock-screen")).toEqual(["acid-drizzle-advisory"]);
+    expect(dealt("old-town-screen")).toEqual(["acid-drizzle-advisory"]);
+    play("what-happens", "the-lights-go-out", "black-out");
+    expect(dealt("old-town-screen").sort()).toEqual(["acid-drizzle-advisory", "rolling-blackouts-hit-the-old-town"]);
+    expect(dealt("dock-screen")).toEqual(["acid-drizzle-advisory"]);
   });
 });

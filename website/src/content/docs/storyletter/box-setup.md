@@ -112,8 +112,13 @@ There are two scales, and each says which it is. A box kit scaffolds one box, an
 | **Blank** | An empty box, for when you already know the shape you want. Add your own decks, tags, hand templates, and hands. |
 | **Encounters on a map** (`rpg` in the CLI) | Things that can happen in each part of a place: an area tag group **drawn as a map**, with the tavern and the market as zones you can redraw, an encounters-at template with one place already on the board, and an encounter whose outcome raises the box's `tension`. Teaches boxes, tags, maps, and what playing a card does. |
 | **Conversation topics** (`dialogue` in the CLI) | What each character can bring up: one hand of topics per NPC, including a shared rumour with a single copy, so whoever offers it first gets it. Teaches hands, copies, and how one card can be held by only one hand at a time. |
+| **Job board** (`jobs`) | Work on offer at boards around town: two boards drawn on the map, a delivery job whose handoff only turns up once it is taken, and heat that a job going loud raises and lying low brings down. |
+| **Stash** (`stash`) | What exploring turns up: two hiding places, finds with a `value` field for your game's economy, and one find that only turns up once another points the way. |
+| **Codex** (`codex`) | Entries the game reads but never plays, unlocking as the player learns things. Two leads stand in for the rest of your game; point the conditions at your own state once it writes some. |
+| **News** (`news`) | Screens around town: background chatter, and stories that lead once something happens. Two happenings stand in for the rest of your game, as in the Codex kit. |
 
-The two narrated kits carry a purpose note on every piece, including the outcomes,
+The last four are cut from the Port Meridian example, each made to stand on its own.
+Every narrated kit carries a purpose note on every piece, including the outcomes,
 explaining what it's for.
 
 Each teaches something the other doesn't, so working through both covers the model. RPG has

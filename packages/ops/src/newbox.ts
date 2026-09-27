@@ -30,7 +30,7 @@ import { boxFolderWrites } from "./box-folder.js";
  *  it. It was written out separately in all three until 2026-08-29, which is
  *  why withdrawing `barks` was a four-file edit and why the CLI's usage line
  *  still offered two of the three afterwards. */
-export const BOX_KITS = ["blank", "rpg", "dialogue"] as const;
+export const BOX_KITS = ["blank", "rpg", "dialogue", "jobs", "stash", "codex", "news"] as const;
 
 export type BoxKit = typeof BOX_KITS[number];
 
@@ -156,8 +156,305 @@ function dialogueKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): De
   };
 }
 
-const KITS: Record<Exclude<BoxKit, "blank">, (b: BoxShard, t: TagsShard, h: HandsShard) => DeckShard> = {
-  rpg: rpgKit, dialogue: dialogueKit,
+// ---------------------------------------------------------------------------
+// The four kits cut from Port Meridian as it stands (the kit gallery brief,
+// storylet-studio/design/kit-gallery.md, step 6; the author's go-ahead
+// 2026-09-27). Each is one of that demo's boxes made self-contained: a kit
+// writes only its own folder, so the state Port Meridian keeps in @story lives
+// in @box here, and every flag a condition reads is written by something in
+// the same box, or the problems bar would open with a dead-state warning.
+// Codex and News are boxes the game only READS; their unlocks come from the
+// rest of a real game, so each carries a small deck standing in for it.
+// ---------------------------------------------------------------------------
+
+/** A spatial district group with two zones drawn side by side, as the rpg kit
+ *  draws its areas: plain rectangles, meant to be redrawn. */
+function districts(purpose: string, a: string, b: string): { group: TagGroup; first: string; second: string } {
+  const first = newId("v"), second = newId("v");
+  return {
+    first, second,
+    group: {
+      id: newId("d"), gameId: "district", purpose,
+      tags: [
+        { id: first, gameId: a, templates: { [SPATIAL]: { polygon: rect(0, 0, 320, 240) } } },
+        { id: second, gameId: b, templates: { [SPATIAL]: { polygon: rect(320, 0, 320, 240) } } },
+      ],
+      templates: { [SPATIAL]: { map: true } },
+    },
+  };
+}
+
+/** Job board: work on offer at boards around town. A job is taken, then its
+ *  follow-up turns up, then it is done; how it went leaves heat behind. */
+function jobsKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckShard {
+  boxShard.box.purpose = "Jobs offered at boards around town: the player chooses one to take, and a taken job has a next step.";
+  boxShard.box.properties = [
+    {
+      name: "jobs", type: "flags", values: ["delivery_taken", "delivery_done"], default: [],
+      purpose: "Where each job stands. Taking one sets its first flag; finishing it sets the second, which retires its follow-up.",
+    },
+    {
+      name: "heat", type: "number", default: 0,
+      purpose: "How much attention the player has drawn. A job that goes loud raises it; lying low brings it down.",
+    },
+  ];
+  const d = districts("Where the boards are, drawn on the box's map. A job tagged with a district is posted there.", "docks", "old-town");
+  tags.groups.push(d.group);
+  const template: HandTemplate<string> = {
+    id: newId("t"), gameId: "job-board",
+    purpose: "A board jobs are posted on: what work is on offer here, now. One per district.",
+    chooses: [d.group.id], slots: 2, properties: [],
+  };
+  hands.templates.push(template);
+  hands.hands.push(
+    { id: newId("h"), title: "Dockside board", purpose: "The board at the docks: deal it when the player reads it.", template: template.id, chosen: { [d.group.id]: d.first } },
+    { id: newId("h"), title: "Old town board", purpose: "Where follow-ups and quieter work turn up.", template: template.id, chosen: { [d.group.id]: d.second } },
+  );
+  return {
+    schema: DECK_SCHEMA,
+    deck: { id: newId("k"), title: "Jobs", purpose: "Every job, and every next step of one. Conditions decide which step is on offer.", properties: [] },
+    cards: [
+      {
+        id: newId("c"), title: "Cold delivery", priority: 1, redraw: "never",
+        purpose: "The offer. Taking it is the whole act: the job moves on to its handoff, which appears on the old town board.",
+        tags: { [d.group.id]: [d.first] },
+        condition: "!check_flags(@box.jobs, +delivery_taken)",
+        outcomes: [{ id: newId("o"), gameId: "take-the-job", title: "Take the job", changes: { "@box.jobs": "set_flags(@box.jobs, +delivery_taken)" } }],
+      },
+      {
+        id: newId("c"), title: "Cold delivery: the handoff", priority: 2, redraw: "never",
+        purpose: "The follow-up: only on offer between taking the job and finishing it. Two ways it can end, and one of them costs heat.",
+        tags: { [d.group.id]: [d.second] },
+        condition: "check_flags(@box.jobs, +delivery_taken) && !check_flags(@box.jobs, +delivery_done)",
+        outcomes: [
+          { id: newId("o"), gameId: "delivered-clean", title: "Delivered clean", changes: { "@box.jobs": "set_flags(@box.jobs, +delivery_done)" } },
+          { id: newId("o"), gameId: "it-went-loud", title: "It went loud", changes: { "@box.jobs": "set_flags(@box.jobs, +delivery_done)", "@box.heat": "@box.heat + 1" } },
+        ],
+      },
+      {
+        id: newId("c"), title: "Lie low for a night", priority: 0, redraw: "always",
+        purpose: "Only offered once there is heat to shed. Comes back whenever it is needed.",
+        tags: { [d.group.id]: [d.first, d.second] },
+        condition: "@box.heat > 0",
+        outcomes: [{ id: newId("o"), gameId: "lie-low", title: "Stay off the streets", changes: { "@box.heat": "@box.heat - 1" } }],
+      },
+    ],
+  };
+}
+
+/** Stash: what exploring turns up. The value field is data for the game's own
+ *  economy; one find only turns up once another has pointed the way. */
+function stashKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckShard {
+  boxShard.box.purpose = "What exploring turns up, one find per hiding place. The game decides what a find is worth; the value field tells it.";
+  boxShard.box.fields = [{
+    name: "value", type: "number", default: 0,
+    purpose: "What the find is worth to the game's economy. The engine never reads it: fields are data for the game.",
+  }];
+  boxShard.box.properties = [{
+    name: "found", type: "flags", values: ["burner"], default: [],
+    purpose: "Finds that lead somewhere. The burner phone's contacts are what make the decryptor turn up in the back room.",
+  }];
+  const backRoom = newId("v"), container = newId("v");
+  const place: TagGroup = {
+    id: newId("d"), gameId: "hiding-place",
+    purpose: "Places the level marks as worth searching. A find tagged with one is what is tucked away there.",
+    tags: [{ id: backRoom, gameId: "back-room" }, { id: container, gameId: "container-7" }],
+  };
+  tags.groups.push(place);
+  const template: HandTemplate<string> = {
+    id: newId("t"), gameId: "stash",
+    purpose: "A hiding place: deal it when the player searches. One slot, so the best find there wins.",
+    chooses: [place.id], slots: 1, properties: [],
+  };
+  hands.templates.push(template);
+  hands.hands.push(
+    { id: newId("h"), title: "The back room", purpose: "A room behind a bar. Search it again once the burner phone is found: something else turns up.", template: template.id, chosen: { [place.id]: backRoom } },
+    { id: newId("h"), title: "Container 7", purpose: "A shipping container at the docks.", template: template.id, chosen: { [place.id]: container } },
+  );
+  return {
+    schema: DECK_SCHEMA,
+    deck: { id: newId("k"), title: "Finds", purpose: "Everything there is to find, and where.", properties: [] },
+    cards: [
+      {
+        id: newId("c"), title: "A clean burner phone", priority: 1, redraw: "never", fields: { value: 0 },
+        purpose: "Worth nothing to sell, and the contacts in it lead to something that is.",
+        tags: { [place.id]: [backRoom] },
+        outcomes: [{ id: newId("o"), gameId: "pocket-it", title: "Pocket it", changes: { "@box.found": "set_flags(@box.found, +burner)" } }],
+      },
+      {
+        id: newId("c"), title: "A dockside cache", priority: 1, redraw: "never", fields: { value: 40 },
+        purpose: "Somebody's rainy-day tin, taped under the container floor.",
+        tags: { [place.id]: [container] },
+        outcomes: [{ id: newId("o"), gameId: "crack-it-open", title: "Crack it open", changes: {} }],
+      },
+      {
+        id: newId("c"), title: "A military decryptor", priority: 2, redraw: "never", fields: { value: 120 },
+        purpose: "Only here once the burner phone has been found and taken: the back room's one slot is free again, and this is what fills it.",
+        tags: { [place.id]: [backRoom] },
+        condition: "check_flags(@box.found, +burner)",
+        outcomes: [{ id: newId("o"), gameId: "take-it", title: "Take it", changes: {} }],
+      },
+    ],
+  };
+}
+
+/** Codex: entries the game only reads. They unlock and accumulate, and are
+ *  never played; priority is the listing order. */
+function codexKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckShard[] {
+  boxShard.box.purpose = "The box the game only reads: entries unlock, accumulate and are never played. Priority is the listing order.";
+  boxShard.box.ranking = { specificity: false };
+  boxShard.box.fields = [{
+    name: "body", type: "string", default: "",
+    purpose: "The entry's text, for the game to show on its codex page.",
+  }];
+  boxShard.box.properties = [{
+    name: "learned", type: "flags", values: ["harbour", "collective"], default: [],
+    purpose: "What the player has found out. In a real game the rest of the game writes this; here the Leads deck stands in for it. Once your other boxes write it, move it to @story.",
+  }];
+  // A hand that chooses nothing deals from the whole box, so the page would list
+  // the leads too. One small group keeps the two kinds apart.
+  const entryTag = newId("v"), leadTag = newId("v");
+  const kind: TagGroup = {
+    id: newId("d"), gameId: "kind",
+    purpose: "Entries go on the codex page; leads are the stand-in for the rest of the game.",
+    tags: [{ id: entryTag, gameId: "entry" }, { id: leadTag, gameId: "lead" }],
+  };
+  tags.groups.push(kind);
+  const archive: HandTemplate<string> = {
+    id: newId("t"), gameId: "archive",
+    purpose: "The codex page: every unlocked entry, in priority order. Slots is the page size; grow it with the content.",
+    chooses: [], bindings: { [kind.id]: entryTag }, slots: 12, properties: [],
+  };
+  const leadsTemplate: HandTemplate<string> = {
+    id: newId("t"), gameId: "leads",
+    purpose: "Stand-in for the rest of the game: things the player can follow up, each of which teaches them something.",
+    chooses: [], bindings: { [kind.id]: leadTag }, slots: 2, properties: [],
+  };
+  hands.templates.push(archive, leadsTemplate);
+  hands.hands.push(
+    { id: newId("h"), title: "Codex", purpose: "The page itself. Never played from: the game reads it and lists what it holds.", template: archive.id, chosen: {} },
+    { id: newId("h"), title: "Leads", purpose: "Play one to learn something, and watch the codex grow.", template: leadsTemplate.id, chosen: {} },
+  );
+  const asEntry = { [kind.id]: [entryTag] }, asLead = { [kind.id]: [leadTag] };
+  const entries: DeckShard = {
+    schema: DECK_SCHEMA,
+    deck: { id: newId("k"), title: "Entries", purpose: "The codex's contents. Never played: an entry is on the page while its condition holds.", properties: [] },
+    cards: [
+      {
+        id: newId("c"), title: "Port Meridian", priority: 10, redraw: "never", outcomes: [], tags: asEntry,
+        fields: { body: "A freeport built on stilts and waivers. Three districts, one harbour, no questions at the waterline." },
+        purpose: "Known from the start: no condition, highest priority, so it heads the page.",
+      },
+      {
+        id: newId("c"), title: "The harbour", priority: 8, redraw: "never", outcomes: [], tags: asEntry, condition: "check_flags(@box.learned, +harbour)",
+        fields: { body: "Deep water, shallow paperwork. Anything can come ashore here if it arrives after midnight." },
+        purpose: "Unlocked by studying the harbour charts.",
+      },
+      {
+        id: newId("c"), title: "The Grid Collective", priority: 6, redraw: "never", outcomes: [], tags: asEntry, condition: "check_flags(@box.learned, +collective)",
+        fields: { body: "Nobody joins the Collective; you just notice you've been helping them for a while." },
+        purpose: "Unlocked by listening in on the Collective.",
+      },
+    ],
+  };
+  const leads: DeckShard = {
+    schema: DECK_SCHEMA,
+    deck: { id: newId("k"), title: "Leads", purpose: "Stand-in for the rest of your game, which is where unlocks really come from.", properties: [] },
+    cards: [
+      {
+        id: newId("c"), title: "Study the harbour charts", priority: 0, redraw: "never", fields: { body: "" }, tags: asLead,
+        purpose: "Playing it unlocks the harbour entry.",
+        outcomes: [{ id: newId("o"), gameId: "study-them", title: "Study them", changes: { "@box.learned": "set_flags(@box.learned, +harbour)" } }],
+      },
+      {
+        id: newId("c"), title: "Listen in on the Collective", priority: 0, redraw: "never", fields: { body: "" }, tags: asLead,
+        purpose: "Playing it unlocks the Collective's entry.",
+        outcomes: [{ id: newId("o"), gameId: "listen", title: "Listen", changes: { "@box.learned": "set_flags(@box.learned, +collective)" } }],
+      },
+    ],
+  };
+  return [entries, leads];
+}
+
+/** News: the city talking about what happened. Headlines are never played; a
+ *  screen shows its top story over background chatter, and stories whose
+ *  condition stops holding drop off at the next deal. */
+function newsKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckShard[] {
+  boxShard.box.purpose = "The city talking about what happened. Never played: a screen shows its top story over the background chatter.";
+  boxShard.box.ranking = { specificity: false };
+  boxShard.box.properties = [{
+    name: "wire", type: "flags", values: ["blackout", "raid"], default: [],
+    purpose: "What is in the news. In a real game the rest of the game writes this; here the Happenings deck stands in for it. Once your other boxes write it, move it to @story.",
+  }];
+  const d = districts("Where the screens are, drawn on the box's map. A headline tagged with a district runs there.", "docks", "old-town");
+  tags.groups.push(d.group);
+  // A card with no district runs everywhere, so the happenings would reach the
+  // screens. One small group keeps the news apart from what it reports.
+  const headlineTag = newId("v"), happeningTag = newId("v");
+  const feed: TagGroup = {
+    id: newId("d"), gameId: "feed",
+    purpose: "Headlines run on the screens; happenings are the stand-in for the rest of the game.",
+    tags: [{ id: headlineTag, gameId: "headline" }, { id: happeningTag, gameId: "happening" }],
+  };
+  tags.groups.push(feed);
+  const screen: HandTemplate<string> = {
+    id: newId("t"), gameId: "screen",
+    purpose: "A public screen: its top-priority story, with the background chatter underneath.",
+    chooses: [d.group.id], bindings: { [feed.id]: headlineTag }, slots: 2, properties: [],
+  };
+  const happenings: HandTemplate<string> = {
+    id: newId("t"), gameId: "happenings",
+    purpose: "Stand-in for the rest of the game: things that happen, which the news then reports.",
+    chooses: [], bindings: { [feed.id]: happeningTag }, slots: 2, properties: [],
+  };
+  hands.templates.push(screen, happenings);
+  hands.hands.push(
+    { id: newId("h"), title: "Dock screen", purpose: "The screen at the docks. Deal it again to refresh the news.", template: screen.id, chosen: { [d.group.id]: d.first } },
+    { id: newId("h"), title: "Old town screen", purpose: "The screen in the old town.", template: screen.id, chosen: { [d.group.id]: d.second } },
+    { id: newId("h"), title: "What happens", purpose: "Play one, then deal the screens again.", template: happenings.id, chosen: {} },
+  );
+  const both = { [d.group.id]: [d.first, d.second], [feed.id]: [headlineTag] };
+  const headlines: DeckShard = {
+    schema: DECK_SCHEMA,
+    deck: { id: newId("k"), title: "Headlines", purpose: "Every story the screens can run. Never played.", properties: [] },
+    cards: [
+      {
+        id: newId("c"), title: "Acid drizzle advisory", priority: 0, redraw: "never", copies: 2, outcomes: [], tags: both,
+        purpose: "Background chatter: no condition, lowest priority, two copies so both screens can run it at once.",
+      },
+      {
+        id: newId("c"), title: "Rolling blackouts hit the old town", priority: 3, redraw: "never", outcomes: [],
+        tags: { [d.group.id]: [d.second], [feed.id]: [headlineTag] }, condition: "check_flags(@box.wire, +blackout)",
+        purpose: "Runs once the blackout has happened, and outranks the chatter.",
+      },
+      {
+        id: newId("c"), title: "Port Authority raids the docks", priority: 3, redraw: "never", outcomes: [],
+        tags: { [d.group.id]: [d.first], [feed.id]: [headlineTag] }, condition: "check_flags(@box.wire, +raid)",
+        purpose: "Runs once the raid has happened.",
+      },
+    ],
+  };
+  const events: DeckShard = {
+    schema: DECK_SCHEMA,
+    deck: { id: newId("k"), title: "Happenings", purpose: "Stand-in for the rest of your game, which is where the news really comes from.", properties: [] },
+    cards: [
+      {
+        id: newId("c"), title: "The lights go out", priority: 0, redraw: "never", tags: { [feed.id]: [happeningTag] },
+        purpose: "Playing it puts the blackout on the wire.",
+        outcomes: [{ id: newId("o"), gameId: "black-out", title: "Kill the grid", changes: { "@box.wire": "set_flags(@box.wire, +blackout)" } }],
+      },
+      {
+        id: newId("c"), title: "Patrol boats at the docks", priority: 0, redraw: "never", tags: { [feed.id]: [happeningTag] },
+        purpose: "Playing it puts the raid on the wire.",
+        outcomes: [{ id: newId("o"), gameId: "raid", title: "Watch the raid", changes: { "@box.wire": "set_flags(@box.wire, +raid)" } }],
+      },
+    ],
+  };
+  return [headlines, events];
+}
+
+const KITS: Record<Exclude<BoxKit, "blank">, (b: BoxShard, t: TagsShard, h: HandsShard) => DeckShard | DeckShard[]> = {
+  rpg: rpgKit, dialogue: dialogueKit, jobs: jobsKit, stash: stashKit, codex: codexKit, news: newsKit,
 };
 
 /** Scaffold a new box into a loaded project, as planned writes. Throws when
@@ -177,7 +474,8 @@ export function runNewBox(opts: NewBoxOptions): NewBoxResult {
   };
   const tags: TagsShard = { schema: TAGS_SCHEMA, groups: [] };
   const hands: HandsShard = { schema: HANDS_SCHEMA, templates: [], hands: [] };
-  const deck = kit === "blank" ? undefined : KITS[kit](boxShard, tags, hands);
+  const made = kit === "blank" ? [] : KITS[kit](boxShard, tags, hands);
+  const decks = Array.isArray(made) ? made : [made];
 
   // Kit names are API (deal() and the play log speak them): applying the same
   // kit twice must not collide, so hand and card gameIds dedupe project-wide.
@@ -190,14 +488,14 @@ export function runNewBox(opts: NewBoxOptions): NewBoxResult {
     handNames.add(name);
   }
   const cardNames = new Set(source.boxes.flatMap((b) => b.decks.flatMap((d) => d.shard.cards.map((c) => effectiveGameId(c)))));
-  for (const card of deck?.cards ?? []) {
+  for (const card of decks.flatMap((k) => k.cards)) {
     const name = freeGameId(effectiveGameId(card), cardNames);
     if (name !== effectiveGameId(card)) card.gameId = name;
     cardNames.add(name);
   }
 
   const writes = boxFolderWrites(opts.loaded.dir, {
-    box: boxShard, tags, hands, decks: deck ? [deck] : [],
+    box: boxShard, tags, hands, decks,
   });
   return { writes, boxId, folder };
 }
