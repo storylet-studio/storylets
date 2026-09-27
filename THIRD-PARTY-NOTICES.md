@@ -81,7 +81,7 @@ Its build-time tree is larger and less uniform than the app's: it includes **`li
 static HTML, CSS and images; no part of them is copied into what the site serves, so their
 copyleft terms attach to nothing we publish.
 
-## 4. Fonts and the badge artwork
+## 4. Fonts, the badge artwork and the kit pictures
 
 The brand's typefaces are **Newsreader** and **IBM Plex Mono**, both under the **SIL Open Font
 License 1.1**. Their licence texts are at
@@ -96,6 +96,12 @@ The badge and icon labels are cut from **IBM Plex Mono Medium** at build time by
 using `fontkit` and emits outlines. The resulting SVG and PNG badges, distributed in the badge
 kit, therefore contain artwork derived from an OFL font. The OFL permits this: the outlines
 are not a font, are not sold as one, and carry no reserved font name.
+
+The pictures on Storyletter's kit tiles and welcome screen
+(`packages/studio/src/renderer/src/kit-art/`) are **public-domain or CC0 prints from
+Wikimedia Commons**, from the seventeenth century to 1883, converted to a single ink. None
+needs attribution; each is credited anyway, with its source, in
+[`kit-art/CREDITS.md`](./packages/studio/src/renderer/src/kit-art/CREDITS.md).
 
 ## 5. Reproducing this audit
 

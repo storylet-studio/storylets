@@ -76,6 +76,7 @@ import type { MountedMapView } from "./map-view.js";
 import type { SearchSelection } from "./search.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { EXAMPLES } from "../../shared/examples.js";
+import { KIT_ART, EXAMPLE_ART } from "./kit-art/index.js";
 import { STORYLETTER_WORDMARK } from "./wordmark.js";
 import type { ProblemNames } from "./problem-copy.js";
 // Live Link: the bottom-right connect chip is the shell's (link-status.ts);
@@ -347,12 +348,12 @@ function renderWelcome(): void {
     ],
     groups: [
       { caption: "Start from a kit", tiles: true,
-        items: PROJECT_KITS.map((k) => ({ name: k.name, hint: k.tile ?? k.blurb, onOpen: () => openNewProject(k.id) })) },
+        items: PROJECT_KITS.map((k) => ({ name: k.name, hint: k.tile ?? k.blurb, ...(k.image !== undefined ? { image: k.image } : {}), onOpen: () => openNewProject(k.id) })) },
       // An example is never opened in place (it lives inside the installed app,
       // which is read-only and replaced by the next update), so opening one asks
       // for a folder. Say so BEFORE the click.
       { caption: "Learn from a finished project", note: "Each opens as your own copy, in a folder you choose.", tiles: true,
-        items: EXAMPLE_KITS.map((k) => ({ name: k.name, hint: k.tile ?? k.blurb, ...(k.badge !== undefined ? { badge: k.badge } : {}), onOpen: () => openNewProject(k.id) })) },
+        items: EXAMPLE_KITS.map((k) => ({ name: k.name, hint: k.tile ?? k.blurb, ...(k.image !== undefined ? { image: k.image } : {}), ...(k.badge !== undefined ? { badge: k.badge } : {}), onOpen: () => openNewProject(k.id) })) },
     ],
     // What the project CALLS itself, with the folder stem as the fallback for
     // an entry recorded before names were stored (app-shell 0.25.0). The path
@@ -2328,16 +2329,18 @@ function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
     title: "New box",
     what: "A box holds one self-contained set of cards, places, and tags, such as one region, one chapter, or one cast. A box kit is a starting point you own, fully editable the moment it lands.",
     sections: [{ items: [
-      { id: "blank", name: "Blank", blurb: "An empty box, for when you already know the shape you want." },
+      { id: "blank", name: "Blank", blurb: "An empty box, for when you already know the shape you want.", image: KIT_ART.boxBlank },
       { id: "rpg", name: "Encounters on a map",
         blurb: "Things that can happen in each part of a place. A tavern and a market, drawn on the box's map, and a tension that rises when the player takes a risk.",
         tile: "Things that can happen in each part of a place, drawn on a map.",
+        image: KIT_ART.boxEncounters,
         play: "Press Play: deal the tavern's hand, and a stranger offers you a wager.",
         shows: "boxes, tags, the map, and what playing a card does.",
         lands: ["An area tag group, drawn as two zones on the map", "An encounters-at hand template, and the tavern's hand", "An Encounters deck: one card, two outcomes", "A tension property on the box"] },
       { id: "dialogue", name: "Conversation topics",
         blurb: "What each character can bring up. Gareth and Mira each keep their own topics, and a rumour only one of them gets to tell you.",
         tile: "What each character can bring up, and a rumour only one can tell.",
+        image: KIT_ART.boxConversation,
         play: "Press Play: open a conversation with either of them and see what they offer.",
         shows: "hands, exclusivity, and copies.",
         lands: ["An npc tag group: Gareth and Mira", "A topics-for hand template, and a hand for each of them", "A Topics deck of four, one shared rumour among them"] },
@@ -2356,6 +2359,7 @@ const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter">[] = [
   { id: "blank", name: "Starter project",
     blurb: "One box, one place to deal to, and two cards that already work together. Add box kits to it as you go.",
     tile: "Two cards that already work together, ready to play.",
+    image: KIT_ART.projectStarter,
     play: "Press Play: one card, and playing it opens the next.",
     lands: ["A main box", "A whats-next hand", "A starter deck: two cards, the first opening the second"] },
   // The two products together: dialogue written in Patterpad, dealt by storylets. Offered to
@@ -2363,6 +2367,7 @@ const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter">[] = [
   { id: "with-patter", name: "Starter project with Patter",
     blurb: "The starter project, and a Patter project beside it for its dialogue: paired, with a scene for each card ready to write in Patterpad.",
     tile: "The starter, with a Patter project beside it for the dialogue.",
+    image: KIT_ART.projectWithPatter,
     play: "Press Play: the starter's two cards, each with a scene waiting for its lines.",
     lands: ["Everything the starter project has", "A Patter project beside it, paired, with a scene for each card"] },
 ];
@@ -2371,6 +2376,7 @@ const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter">[] = [
 const EXAMPLE_KITS: KitGalleryItem<`example:${string}`>[] = EXAMPLES.map((x) => ({
   id: `example:${x.file}` as const, name: x.name, blurb: x.hint,
   ...(x.badge !== undefined ? { badge: x.badge } : {}), ...(x.tile !== undefined ? { tile: x.tile } : {}),
+  ...(EXAMPLE_ART[x.file] !== undefined ? { image: EXAMPLE_ART[x.file]! } : {}),
 }));
 
 /**
