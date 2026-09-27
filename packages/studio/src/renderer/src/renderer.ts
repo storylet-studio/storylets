@@ -74,6 +74,7 @@ import type { MountedMapView } from "./map-view.js";
 import type { SearchSelection } from "./search.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { openKitPicker } from "./kit-picker.js";
+import { EXAMPLES } from "../../shared/examples.js";
 import { STORYLETTER_WORDMARK } from "./wordmark.js";
 import type { ProblemNames } from "./problem-copy.js";
 // Live Link: the bottom-right connect chip is the shell's (link-status.ts);
@@ -333,14 +334,6 @@ function renderWelcome(): void {
   // kit gives you a starting shape; an example shows you a finished one, and
   // the concepts are learned from the finished one. Three sizes of teaching,
   // as rows in the shell's captioned group, the size said first in each hint.
-  const examples = [
-    { file: "the-hamlet.storylets", name: "The Hamlet",
-      hint: "Small. Places, hands and a deck to deal. Start here." },
-    { file: "the-village.storylets", name: "The Village",
-      hint: "Full size. Thirteen decks, a drawn map, qualities at work." },
-    { file: "port-meridian.storylets", name: "Port Meridian",
-      hint: "With a game attached. Five boxes driving contracts, encounters, items, codex and news." },
-  ];
   // The screen is the shell's (welcome.ts): the card, the drag region, the
   // actions, the captioned groups and the recents are one drawing for the
   // family. What is ours is the words and what each click does.
@@ -358,7 +351,7 @@ function renderWelcome(): void {
     groups: [{
       caption: "Learn from a finished project",
       note: "Each opens as your own copy, in a folder you choose.",
-      items: examples.map((x) => ({ name: x.name, hint: x.hint, onOpen: () => void adopt(studio.openExample(x.file)) })),
+      items: EXAMPLES.map((x) => ({ name: x.name, hint: x.hint, onOpen: () => void adopt(studio.openExample(x.file)) })),
     }],
     // What the project CALLS itself, with the folder stem as the fallback for
     // an entry recorded before names were stored (app-shell 0.25.0). The path
@@ -2328,9 +2321,18 @@ function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
     what: "A box holds one self-contained set of cards, places, and tags, such as one region, one chapter, or one cast.",
     sub: "A box kit is a starting point you own. It's fully editable the moment it lands.",
     kits: [
-      { id: "blank", name: "Blank", blurb: "An empty box. Add your own decks, tags, hand templates and hands." },
-      { id: "rpg", name: "RPG encounters", blurb: "The place-based starter. An area tag group, an encounters-at template with one place already on the board, and an encounter whose outcome raises the tension. It teaches boxes, tags, and what playing a card does." },
-      { id: "dialogue", name: "Dialogue topics", blurb: "One hand of topics per NPC, including a shared rumour with a single copy, which whoever offers it first claims. It teaches hands, exclusivity, and copies." },
+      // Use case first, then what Play shows, then the model's parts (the kit
+      // gallery brief, section 3). Each line is written from what `newBox`
+      // actually writes, not from another description of it.
+      { id: "blank", name: "Blank", blurb: "An empty box, for when you already know the shape you want." },
+      { id: "rpg", name: "Encounters on a map",
+        blurb: "Things that can happen in each part of a place. A tavern and a market, drawn on the box's map, and a tension that rises when the player takes a risk.",
+        play: "Press Play: deal the tavern's hand, and a stranger offers you a wager.",
+        shows: "boxes, tags, the map, and what playing a card does." },
+      { id: "dialogue", name: "Conversation topics",
+        blurb: "What each character can bring up. Gareth and Mira each keep their own topics, and a rumour only one of them gets to tell you.",
+        play: "Press Play: open a conversation with either of them and see what they offer.",
+        shows: "hands, exclusivity, and copies." },
     ],
     onPick: (kit) => onPick(kit),
   });
@@ -2339,11 +2341,10 @@ function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
 /**
  * New project: the same picker, one scale up, with a name.
  *
- * The kit LIST is deliberately one entry. A project kit library is wanted (the
- * design review's A5 says so, and it is why this is a picker rather than a
- * form), but nobody has specified what the shapes are, and inventing four
- * plausible ones would be putting content in front of a decision. The shape is
- * here; filling it is a content job.
+ * The game kits are the author's to specify (2026-08-29: Empty, Map-based
+ * Story, Action Game), and they arrive as content is built; the kit gallery
+ * brief lists what is shipped and what waits. Inventing plausible ones here
+ * would be putting content in front of a decision.
  */
 function openNewProject(): void {
   openKitPicker<"blank" | "with-patter">({
@@ -2355,10 +2356,14 @@ function openNewProject(): void {
     // a `whats-next` hand and two wired cards, so a new project plays immediately.
     // The old blurb undersold the one thing that gets a newcomer to press Play.
     kits: [
-      { id: "blank", name: "Starter project", blurb: "One box, one place to deal to, and two cards that already work together. Add kits to it as you go." },
+      { id: "blank", name: "Starter project",
+        blurb: "One box, one place to deal to, and two cards that already work together. Add box kits to it as you go.",
+        play: "Press Play: one card, and playing it opens the next." },
       // The two products together: dialogue written in Patterpad, dealt by storylets. Offered to
       // everyone, since it only creates files; Patterpad is needed later, to write and publish them.
-      { id: "with-patter", name: "Starter project with Patter", blurb: "The starter project, and a Patter project beside it for its dialogue: paired, with a scene for each card ready to write in Patterpad." },
+      { id: "with-patter", name: "Starter project with Patter",
+        blurb: "The starter project, and a Patter project beside it for its dialogue: paired, with a scene for each card ready to write in Patterpad.",
+        play: "Press Play: the starter's two cards, each with a scene waiting for its lines." },
     ],
     onPick: (kit, name) => { if (name !== undefined) void adopt(studio.createProject(name, kit)); },
   });
@@ -2945,6 +2950,8 @@ function onMenu(command: MenuCommand): void {
     case "save": if (project) void flushSaves(); break;
     case "go-up": if (project) goUp(); break;
     case "close-project": if (project) void closeProject(); break;
+    // Help > Open an Example: main asks before leaving an open project, then for a folder.
+    case "open-example": void adopt(studio.openExample(command.file)); break;
     case "nav-back": if (project) travel((c) => history.back(c)); break;
     case "nav-forward": if (project) travel((c) => history.forward(c)); break;
     case "project-overview": if (project) actions.focus({ kind: "project" }); break;

@@ -30,8 +30,17 @@ import { el } from "./dom.js";
 
 export interface KitChoice<T extends string> {
   id: T;
+  /** What you are making, in the author's terms, not the model's. */
   name: string;
+  /** What it is FOR. The use case leads (the kit gallery brief, section 3):
+   *  somebody deciding whether the tool fits their game reads this line, and
+   *  "it teaches hands" answers a question they have not asked yet. */
   blurb: string;
+  /** What pressing Play shows, said as a promise ("Press Play: ..."). The one
+   *  thing that makes a kit worth picking is that it runs. */
+  play?: string;
+  /** The model's parts it puts to work, second and quieter. */
+  shows?: string;
 }
 
 export interface KitPickerOptions<T extends string> {
@@ -91,7 +100,9 @@ export function openKitPicker<T extends string>(opts: KitPickerOptions<T>): void
     ...opts.kits.map((k) =>
       el("button", { className: "kit-card", onClick: () => pick(k.id) },
         el("h3", { text: k.name }),
-        el("p", { text: k.blurb }))),
+        el("p", { text: k.blurb }),
+        ...(k.play ? [el("p", { className: "kit-play", text: k.play })] : []),
+        ...(k.shows ? [el("p", { className: "kit-shows", text: `Shows: ${k.shows}` })] : []))),
   );
   const cancel = el("button", { className: "btn", text: "Cancel", onClick: close });
   cancel.type = "button";

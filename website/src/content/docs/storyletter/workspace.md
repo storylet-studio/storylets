@@ -178,7 +178,7 @@ show, on [Keyboard shortcuts](/storyletter/shortcuts/).
 | Review | Review Feedback (`Shift+Cmd+R`) · Next Feedback (`F8`) · Previous Feedback (`Shift+F8`) · Coverage… (`Shift+Cmd+C`) · Links… · Find Property Usage… · Show Resolved Comments |
 | Publish | Publish Playable HTML… · Publish Spreadsheet… · Publish Bundle (`Shift+Cmd+B`) · Auto Rebuild |
 | View | Show Navigator (`Cmd+1`) · Back · Forward · Up a Level (`Cmd+[`) · Project Overview · Reset View · Coverage Overlay · Colour Theme |
-| Help | Storyletter Documentation · Storylet Studio Documentation Home · Check for Updates… · About Storyletter (Windows and Linux) |
+| Help | Storyletter Documentation · Storylet Studio Documentation Home · Open an Example ▸ (The Hamlet, The Village, Port Meridian) · Check for Updates… · About Storyletter (Windows and Linux) |
 
 A few of these deserve a note. **Undo** and **Redo** reverse any edit to any kind of item,
 through the same version-control path a save takes, not just the text field you're in.

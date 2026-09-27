@@ -109,9 +109,9 @@ There are two scales, and each says which it is. A box kit scaffolds one box, an
 
 | Kit | What you get, and what it teaches |
 |---|---|
-| **Blank** | An empty box. Add your own decks, tags, hand templates, and hands. |
-| **RPG encounters** | The place-based starter: an area tag group **drawn as a map**, with the tavern and the market as zones you can redraw, an encounters-at template with one place already on the board, and an encounter whose outcome raises the box's `tension`. Teaches boxes, tags, maps, and what playing a card does. |
-| **Dialogue topics** | One hand of topics per NPC, including a shared rumour with a single copy, so whoever offers it first gets it. Teaches hands, copies, and how one card can be held by only one hand at a time. |
+| **Blank** | An empty box, for when you already know the shape you want. Add your own decks, tags, hand templates, and hands. |
+| **Encounters on a map** (`rpg` in the CLI) | Things that can happen in each part of a place: an area tag group **drawn as a map**, with the tavern and the market as zones you can redraw, an encounters-at template with one place already on the board, and an encounter whose outcome raises the box's `tension`. Teaches boxes, tags, maps, and what playing a card does. |
+| **Conversation topics** (`dialogue` in the CLI) | What each character can bring up: one hand of topics per NPC, including a shared rumour with a single copy, so whoever offers it first gets it. Teaches hands, copies, and how one card can be held by only one hand at a time. |
 
 The two narrated kits carry a purpose note on every piece, including the outcomes,
 explaining what it's for.

@@ -662,6 +662,8 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .kit-card:hover { border-color: var(--accent); background: var(--accent-soft); }
 .kit-card h3 { margin: 0; font-size: 15px; }
 .kit-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+.kit-card p.kit-play { color: var(--ink); }
+.kit-card p.kit-shows { font-size: 12px; }
 
 /* --- the Where row (design/where-and-selectors.md Part A) -------------------
    One place answer per card. A place chip wears a house so the DIRECT form

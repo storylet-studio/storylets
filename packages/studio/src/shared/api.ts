@@ -1328,6 +1328,7 @@ export type MenuCommand =
   | { cmd: "redo" }
   | { cmd: "table" }
   | { cmd: "new-project" }
+  | { cmd: "open-example"; file: string }
   | { cmd: "new-card" }
   | { cmd: "save" }
   | { cmd: "go-up" }
