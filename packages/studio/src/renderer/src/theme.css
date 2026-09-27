@@ -112,8 +112,6 @@
 /* Indigo, the dark default, as an explicit choice... */
 :root[data-theme="indigo"] {
   --bg: #131923;
-  /* Kit pictures: dark ink on a paper plate, never inverted (app-shell kit-gallery.css). */
-  --kit-art-plate: #c3cad4; --kit-art-ink: #1c2431;
   --surface: #1c2431;
   --card: #212a39;
   --ink: #e8ebef;
@@ -134,7 +132,6 @@
 /* Baize, the original green-felt dark palette, kept as an explicit choice. */
 :root[data-theme="baize"] {
   --bg: #151c1a;
-  --kit-art-plate: #c6cfca; --kit-art-ink: #1e2724;
   --surface: #1e2724;
   --card: #232e2a;
   --ink: #e9edeb;
@@ -156,7 +153,6 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     --bg: #131923;
-    --kit-art-plate: #c3cad4; --kit-art-ink: #1c2431;
     --surface: #1c2431;
     --card: #212a39;
     --ink: #e8ebef;
