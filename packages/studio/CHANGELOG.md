@@ -10,6 +10,37 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-27
+
+### Added
+
+- **New Project and New Box show their kits as a gallery.** Pick a tile and the panel beside it
+  says what the kit is for, what you'll see when you press Play, and what you get, before
+  anything is made. Each kit carries a few tags naming what its game has, such as *Rising
+  tension* or *City news*, so kits compare at a glance.
+- **Seven new kits.** In New Project: **Map-based story**, a village on a drawn map whose first
+  scene opens the rest of it, and **Action game**, five boxes on one city map (jobs, street
+  encounters, finds, a codex and the news) where a job gone loud brings checkpoints and makes
+  the news. In New Box: **Job board**, **Stash**, **Codex** and **News**, each cut from the Port
+  Meridian example to stand on its own, and **Story acts**, beats that wait for their act.
+- **The welcome screen shows the kits and the examples as tiles.** Pick one to open New Project
+  on it.
+- **Help ▸ Open an Example**, so the worked examples are a menu away from inside a project.
+- **The examples are in New Project too**, as a second group beside the kits, with **Open a
+  Copy** in place of Create.
+
+### Changed
+
+- **The box kits say what they are for.** RPG encounters is now **Encounters on a map**, and
+  Dialogue topics **Conversation topics**; each leads with its use rather than with the parts
+  of the model it teaches.
+
+### Fixed
+
+- **The Patter pairing's problems read as sentences.** "has a scene named ... but it hasn't been
+  published yet" was shown as an expression that "doesn't hold up"; it and the pairing's four
+  other problems now say what is wrong and what to do.
+
 ## [0.13.0] - 2026-09-26
 
 ### Added
