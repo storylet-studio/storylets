@@ -69,6 +69,7 @@ import { debounce, isEditableTarget, keyLabel, plural, tipWithKey } from "@wildw
 // main-process updater cannot run without, on the family's dialog frame.
 import { showUpdaterDialog, feedUpdaterDownloadProgress } from "@wildwinter/app-shell";
 import { mountWelcome, openKitGallery } from "@wildwinter/app-shell";
+import type { KitGalleryItem } from "@wildwinter/app-shell";
 import { mountJobProgress } from "@wildwinter/app-shell";
 import type { MountedNodeView } from "./node-view.js";
 import type { MountedMapView } from "./map-view.js";
@@ -328,15 +329,15 @@ function signalReady(): void {
 function renderWelcome(): void {
   signalReady();   // the welcome screen is up: safe to reveal the window
   liveLinkChip?.setVisible(false);   // Live Link: no project, no control
-  // THE WORKED EXAMPLES, which shipped in the repo and were never offered
-  // (design review 2026-08, B10). For an app whose main obstacle is its
-  // concepts, a finished project is the cheapest teaching surface there is. A
-  // kit gives you a starting shape; an example shows you a finished one, and
-  // the concepts are learned from the finished one. Three sizes of teaching,
-  // as rows in the shell's captioned group, the size said first in each hint.
-  // The screen is the shell's (welcome.ts): the card, the drag region, the
-  // actions, the captioned groups and the recents are one drawing for the
-  // family. What is ours is the words and what each click does.
+  // THREE JOBS, kept apart (2026-08-29): START, LEARN, RETURN. Since the kit
+  // gallery brief (section 6, 2026-09-27) the first two are the gallery's own
+  // tiles, so the welcome shows what the app is FOR before anything is chosen:
+  // the game kits to start from, and the worked examples to learn from (a kit
+  // gives you a starting shape; an example shows you a finished one, and the
+  // concepts are learned from the finished one). A tile opens New Project on
+  // that choice, so its full description and its button are one click on,
+  // never a surprise. The screen is the shell's (welcome.ts); what is ours is
+  // the words and what each click does.
   mountWelcome(app, {
     title: "Storyletter",
     sub: "Which story beat happens next? Open a project and deal a hand.",
@@ -344,16 +345,15 @@ function renderWelcome(): void {
       { label: "Open a project…", primary: true, onClick: () => void adopt(studio.openProjectDialog()) },
       { label: "New project…", onClick: () => openNewProject() },
     ],
-    // An example is never opened in place (it lives inside the installed app,
-    // which is read-only and replaced by the next update), so clicking one asks
-    // for a folder. Say so BEFORE the click: the folder chooser arriving
-    // unannounced reads as the wrong dialog rather than the second half of Open.
-    groups: [{
-      caption: "Learn from a finished project",
-      note: "Each opens as your own copy, in a folder you choose.",
-      // The welcome has no badge, so the badge rides at the end of the hint here.
-      items: EXAMPLES.map((x) => ({ name: x.name, hint: x.badge !== undefined ? `${x.hint} ${x.badge}.` : x.hint, onOpen: () => void adopt(studio.openExample(x.file)) })),
-    }],
+    groups: [
+      { caption: "Start from a kit", tiles: true,
+        items: PROJECT_KITS.map((k) => ({ name: k.name, hint: k.tile ?? k.blurb, onOpen: () => openNewProject(k.id) })) },
+      // An example is never opened in place (it lives inside the installed app,
+      // which is read-only and replaced by the next update), so opening one asks
+      // for a folder. Say so BEFORE the click.
+      { caption: "Learn from a finished project", note: "Each opens as your own copy, in a folder you choose.", tiles: true,
+        items: EXAMPLE_KITS.map((k) => ({ name: k.name, hint: k.tile ?? k.blurb, ...(k.badge !== undefined ? { badge: k.badge } : {}), onOpen: () => openNewProject(k.id) })) },
+    ],
     // What the project CALLS itself, with the folder stem as the fallback for
     // an entry recorded before names were stored (app-shell 0.25.0). The path
     // stays beside it: two projects may legitimately share a name, and the
@@ -2331,11 +2331,13 @@ function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
       { id: "blank", name: "Blank", blurb: "An empty box, for when you already know the shape you want." },
       { id: "rpg", name: "Encounters on a map",
         blurb: "Things that can happen in each part of a place. A tavern and a market, drawn on the box's map, and a tension that rises when the player takes a risk.",
+        tile: "Things that can happen in each part of a place, drawn on a map.",
         play: "Press Play: deal the tavern's hand, and a stranger offers you a wager.",
         shows: "boxes, tags, the map, and what playing a card does.",
         lands: ["An area tag group, drawn as two zones on the map", "An encounters-at hand template, and the tavern's hand", "An Encounters deck: one card, two outcomes", "A tension property on the box"] },
       { id: "dialogue", name: "Conversation topics",
         blurb: "What each character can bring up. Gareth and Mira each keep their own topics, and a rumour only one of them gets to tell you.",
+        tile: "What each character can bring up, and a rumour only one can tell.",
         play: "Press Play: open a conversation with either of them and see what they offer.",
         shows: "hands, exclusivity, and copies.",
         lands: ["An npc tag group: Gareth and Mira", "A topics-for hand template, and a hand for each of them", "A Topics deck of four, one shared rumour among them"] },
@@ -2346,6 +2348,30 @@ function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
 
 /** What New Project offers: the game kits, then the shipped examples. */
 type ProjectStart = "blank" | "with-patter" | `example:${string}`;
+
+/** The game kits, read by New Project and by the welcome's Start group. */
+const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter">[] = [
+  // NOT "Empty project ... and nothing else", which was false: init lands a box,
+  // a `whats-next` hand and two wired cards, so a new project plays immediately.
+  { id: "blank", name: "Starter project",
+    blurb: "One box, one place to deal to, and two cards that already work together. Add box kits to it as you go.",
+    tile: "Two cards that already work together, ready to play.",
+    play: "Press Play: one card, and playing it opens the next.",
+    lands: ["A main box", "A whats-next hand", "A starter deck: two cards, the first opening the second"] },
+  // The two products together: dialogue written in Patterpad, dealt by storylets. Offered to
+  // everyone, since it only creates files; Patterpad is needed later, to write and publish them.
+  { id: "with-patter", name: "Starter project with Patter",
+    blurb: "The starter project, and a Patter project beside it for its dialogue: paired, with a scene for each card ready to write in Patterpad.",
+    tile: "The starter, with a Patter project beside it for the dialogue.",
+    play: "Press Play: the starter's two cards, each with a scene waiting for its lines.",
+    lands: ["Everything the starter project has", "A Patter project beside it, paired, with a scene for each card"] },
+];
+
+/** The shipped examples as gallery items, for New Project and the welcome's Learn group. */
+const EXAMPLE_KITS: KitGalleryItem<`example:${string}`>[] = EXAMPLES.map((x) => ({
+  id: `example:${x.file}` as const, name: x.name, blurb: x.hint,
+  ...(x.badge !== undefined ? { badge: x.badge } : {}), ...(x.tile !== undefined ? { tile: x.tile } : {}),
+}));
 
 /**
  * New project: the same gallery, one scale up, with a name, and the worked
@@ -2367,23 +2393,9 @@ function openNewProject(initial?: ProjectStart): void {
     nameLabel: "Project name",
     ...(initial !== undefined ? { initial } : {}),
     sections: [
-      { caption: "Start from a kit", note: "A starting point you own, fully editable the moment it lands.", items: [
-        // NOT "Empty project ... and nothing else", which was false: init lands a box,
-        // a `whats-next` hand and two wired cards, so a new project plays immediately.
-        { id: "blank", name: "Starter project",
-          blurb: "One box, one place to deal to, and two cards that already work together. Add box kits to it as you go.",
-          play: "Press Play: one card, and playing it opens the next.",
-          lands: ["A main box", "A whats-next hand", "A starter deck: two cards, the first opening the second"] },
-        // The two products together: dialogue written in Patterpad, dealt by storylets. Offered to
-        // everyone, since it only creates files; Patterpad is needed later, to write and publish them.
-        { id: "with-patter", name: "Starter project with Patter",
-          blurb: "The starter project, and a Patter project beside it for its dialogue: paired, with a scene for each card ready to write in Patterpad.",
-          play: "Press Play: the starter's two cards, each with a scene waiting for its lines.",
-          lands: ["Everything the starter project has", "A Patter project beside it, paired, with a scene for each card"] },
-      ] },
+      { caption: "Start from a kit", note: "A starting point you own, fully editable the moment it lands.", items: PROJECT_KITS },
       { caption: "Learn from a finished project", note: "Each opens as your own copy, in a folder you choose.",
-        action: "Open a Copy", usesDetails: false,
-        items: EXAMPLES.map((x) => ({ id: `example:${x.file}` as const, name: x.name, blurb: x.hint, ...(x.badge !== undefined ? { badge: x.badge } : {}) })) },
+        action: "Open a Copy", usesDetails: false, items: EXAMPLE_KITS },
     ],
     onPick: (start, { name }) => {
       if (start.startsWith("example:")) { void adopt(studio.openExample(start.slice("example:".length))); return; }

@@ -23,12 +23,14 @@ signs your review comments, and you can skip the prompt. Change it at any time f
 **User Information…** (in the Storyletter app menu on macOS, or the File menu on Windows
 and Linux).
 
-From there you land on the **welcome screen**. Under **Start**, **Open a project…** opens one
-you already have, and **New project…** makes one (it asks for a name and a starting kit).
-Under **Learn from a finished project** are the three worked examples. *The Hamlet* is small,
-with places, hands, and a deck to deal. *The Village* is the full demo. *Port Meridian* is
-the engine beside an action game. Each is copied somewhere you choose, so you can take it
-apart. Your **Recent** projects are listed too.
+From there you land on the **welcome screen**. **Open a project…** opens one you already
+have, and **New project…** makes one. Under **Start from a kit** are the game kits you can
+start a project from, and under **Learn from a finished project** are the three worked
+examples. *The Hamlet* is small, with places, hands, and a deck to deal. *The Village* is the
+full demo. *Port Meridian* is the engine beside an action game. Click any of them to see what
+it holds and what pressing Play shows, before anything is made. A kit asks for a name; an
+example is copied somewhere you choose, so you can take it apart. Your **Recent** projects
+are listed too, and **Help ▸ Open an Example** reaches the examples from inside a project.
 
 The example project is the quickest way to learn the model. Open it, press **▶ Play**, and
 watch it deal.

@@ -16,6 +16,8 @@ export interface ShippedExample {
   hint: string;
   /** A word or two drawn beside the name ("Start here"). */
   badge?: string;
+  /** A shorter line for a tile, when the hint runs past three lines there. */
+  tile?: string;
 }
 
 export const EXAMPLES: readonly ShippedExample[] = [
@@ -24,5 +26,6 @@ export const EXAMPLES: readonly ShippedExample[] = [
   { file: "the-village.storylets", name: "The Village",
     hint: "Full size. Thirteen decks, a drawn map, qualities at work." },
   { file: "port-meridian.storylets", name: "Port Meridian",
-    hint: "With a game attached. Five boxes driving contracts, encounters, items, codex and news." },
+    hint: "With a game attached. Five boxes driving contracts, encounters, items, codex and news.",
+    tile: "With a game attached, driven by five boxes." },
 ];

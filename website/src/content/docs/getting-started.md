@@ -34,16 +34,18 @@ self-contained installer, nothing else needed. (The same page has the runtimes a
 
 ## 2. Open something
 
-Storyletter opens on a welcome screen with three groups: **Start**, **Learn from a
-finished project**, and **Recent**.
+Storyletter opens on a welcome screen with three groups: **Start from a kit**, **Learn from
+a finished project**, and **Recent**. Click a kit or an example to see what it holds and
+what pressing Play shows, before anything is made.
 
 Three example projects ship with the app, each copied somewhere you choose so you can pull
 it apart without worrying. **The Hamlet** is the small worked project, with places, hands,
 and decks to deal from, and the place to start, because the idea is much easier to read than
 to describe. **The Village** is the full demo, thirteen decks over a drawn map. **Port
 Meridian** shows the engine standing beside an action game, with five boxes driving
-contracts, street encounters, found items, a codex, and city news screens. **File ▸ Close
-Project** brings you back to this screen whenever you want another one.
+contracts, street encounters, found items, a codex, and city news screens. **Help ▸ Open an
+Example** opens another one from inside a project, and **File ▸ Close Project** brings you
+back to this screen.
 
 **New project…** starts a project of your own, asking for a name and a **game kit**. It isn't
 empty. You get one box, one hand called **What's next?**, and two sample cards that show the
