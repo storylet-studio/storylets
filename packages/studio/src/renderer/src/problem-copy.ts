@@ -110,6 +110,15 @@ const SHAPES: [RegExp, string][] = [
   [/^coverage driver ref must name a declared @world property/, "driver-ref"],
   [/^coverage driver kind must be "initial" or "recurring"$/, "driver-kind"],
   [/^coverage driver value .* does not match the property's type "/, "driver-value-type"],
+  // the Patter pairing (ops/src/patter-link.ts). Ahead of the expression
+  // catch-all below on purpose: "... hasn't been published yet: Publish Bundle
+  // in Patterpad" has a colon in it, and until 2026-09-27 it was read as an
+  // expression that "doesn't hold up".
+  [/^the Patter project has a scene named "[^"]*", but it hasn't been published yet/, "patter-unpublished"],
+  [/^this box is performed by Patter, and the Patter project has no scene named "/, "patter-no-scene"],
+  [/^Patter scene "[^"]*" \(.*\) matches no card, so nothing deals it$/, "patter-scene-unplayed"],
+  [/^patterBoxes names a box that doesn't exist \(/, "patter-boxes-unknown"],
+  [/^patterBoxes names boxes for Patter, but the project isn't paired/, "patter-boxes-unpaired"],
   // expressions: the compiler prefixes the field ("condition: ...", "change
   // @story.gold: ...") to whatever the expression validator said. An
   // unresolved reference is the one shape that has its own idea; the rest are
@@ -438,6 +447,28 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
   }),
   "driver-value-type": (p) => ({
     text: `A coverage driver sets ${spoken(pick(p, /^coverage driver value (.*) does not match/))}, which isn’t a ${pick(p, /property's type "([^"]*)"$/)}.`,
+  }),
+
+  // --- the Patter pairing -------------------------------------------------------
+  "patter-unpublished": (p) => ({
+    text: `${problemName(p)} has a scene written in the Patter project, ${quoted(pick(p, /scene named "([^"]*)"/))}, but it hasn’t been published yet.`,
+    next: "Publish Bundle in Patterpad.",
+  }),
+  "patter-no-scene": (p) => ({
+    text: `${problemName(p)} is in a box Patter performs, but the Patter project has no scene called ${quoted(pick(p, /no scene named "([^"]*)"/))}.`,
+    next: "Create the scene for it.",
+  }),
+  "patter-scene-unplayed": (p) => ({
+    text: `The Patter scene ${quoted(pick(p, /^Patter scene "([^"]*)"/))} matches no card, so nothing deals it.`,
+    next: "Give a card the scene’s address, or remove the scene.",
+  }),
+  "patter-boxes-unknown": (p) => ({
+    text: `The project’s list of boxes Patter performs names one that doesn’t exist (id ${pick(p, /\(([^)]*)\)$/)}).`,
+    next: "Remove it from the list.",
+  }),
+  "patter-boxes-unpaired": () => ({
+    text: "The project lists boxes for Patter to perform, but it isn’t paired with a Patter project.",
+    next: "Pair it with a Patter project, or clear the list.",
   }),
 
   // --- expressions -------------------------------------------------------------

@@ -70,6 +70,11 @@ const SAMPLES: Record<string, string> = {
   "dangling-template": "uses a hand template that is not in this box (id tpl_9)",
   "hand-hole-unfilled": 'nothing chosen for the tag group "zone": a hand fills every hole its template declares',
   "hand-choice-unasked": 'chooses a tag for "zone", which the template "street-hands" does not ask for',
+  "patter-unpublished": 'the Patter project has a scene named "the-moneylenders-men", but it hasn\'t been published yet: Publish Bundle in Patterpad',
+  "patter-no-scene": 'this box is performed by Patter, and the Patter project has no scene named "the-moneylenders-men"',
+  "patter-scene-unplayed": 'Patter scene "Night Settles" (night-settles) matches no card, so nothing deals it',
+  "patter-boxes-unknown": "patterBoxes names a box that doesn't exist (box_9)",
+  "patter-boxes-unpaired": "patterBoxes names boxes for Patter, but the project isn't paired with a Patter project",
   "play-ladder": "this project is set to solo play; the deck “Docks” is shared. Change Play in Project Settings, or drop shared from the deck",
   "driver-ref": "coverage driver ref must name a declared @world property (the host seam is the only drivable scope)",
   "driver-kind": 'coverage driver kind must be "initial" or "recurring"',
@@ -140,6 +145,17 @@ describe("problemText", () => {
   it("falls back to the raw message, titled, with the [where] tail stripped", () => {
     expect(problemText(problem("something entirely new [ambush]"), { title: "Ambush" })).toBe("Ambush: something entirely new");
     expect(problemText(problem("something entirely new"))).toBe("something entirely new");
+  });
+
+  it("says the Patter pairing's problems as sentences, not as expressions that don't hold up", () => {
+    expect(problemText(problem(SAMPLES["patter-unpublished"]!, { where: "c_gareth_men" }), { title: "The Moneylender's Men" }))
+      .toBe("“The Moneylender's Men” has a scene written in the Patter project, “the-moneylenders-men”, but it hasn’t been published yet. Publish Bundle in Patterpad.");
+    expect(problemText(problem(SAMPLES["patter-no-scene"]!), { title: "The Moneylender's Men" }))
+      .toBe("“The Moneylender's Men” is in a box Patter performs, but the Patter project has no scene called “the-moneylenders-men”. Create the scene for it.");
+    expect(problemText(problem(SAMPLES["patter-scene-unplayed"]!)))
+      .toBe("The Patter scene “Night Settles” matches no card, so nothing deals it. Give a card the scene’s address, or remove the scene.");
+    expect(problemText(problem(SAMPLES["patter-boxes-unknown"]!)))
+      .toBe("The project’s list of boxes Patter performs names one that doesn’t exist (id box_9). Remove it from the list.");
   });
 
   it("says what the expression validator said, on the field the editor names", () => {
