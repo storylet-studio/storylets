@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-09-28
+
 ### Fixed
 
 - **Buttons in a dialog over the welcome screen work.** Clicking Close in the About box did nothing
