@@ -10,6 +10,13 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Buttons in a dialog over the welcome screen work.** Clicking Close in the About box did nothing
+  while the welcome screen was showing; Escape worked. The welcome screen lets you drag the window
+  from anywhere on it, and those clicks were being taken as the start of a drag. Dialogs, menus and
+  popups are no longer part of that area, wherever they open.
+
 ## [0.14.0] - 2026-09-27
 
 ### Added
