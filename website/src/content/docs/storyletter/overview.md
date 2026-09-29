@@ -185,6 +185,21 @@ text-editor job today.
 There's no writing status. Comments and the review walk exist, but there's no per-card
 "draft / needs review / final" state to filter or report on.
 
+## Updates
+
+Storyletter keeps itself up to date. **Help ▸ Check for Updates…** looks for a new version,
+downloads it in the background, and asks to relaunch, saving your work first. It also checks
+by itself shortly after it starts.
+
+On a Mac, a small helper installs the update once Storyletter has closed. The first time that
+happens, macOS may show a notice that Storyletter is running in the background. Nothing of
+Storyletter keeps running. The helper replaces the app and quits within a few seconds, and only
+runs when an update is waiting.
+
+The helper is listed under **System Settings ▸ General ▸ Login Items & Extensions**, in
+**Allow in the Background**. If you switch it off, updates can't install when you quit, and
+you'll need to fetch new versions from the [download page](/download/) instead.
+
 ## Where to go next
 
 - [The workspace](/storyletter/workspace/): the navigator, the document and its tabs, the
