@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The Storylet Studio landing + docs site: a static Astro + Starlight build for storylet.studio.",
+  "description": "The Storylet Studio landing + docs site: a static Astro + Starlight build for storylets.dev.",
   "scripts": {
     "dev": "astro dev",
     "prebuild": "node scripts/build-village.mjs && node scripts/build-hamlet.mjs",

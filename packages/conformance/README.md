@@ -12,9 +12,9 @@ behaviour lands here as a case first, then in the implementations
 carries **compiled** forms only (`{ src, ast }` envelopes, whole bundles),
 so a runtime-only port consumes it with no parser or compiler. Four case
 kinds - `expressions`, `specificity`, `peek`, `scripted` - specified in
-[the compatibility contract](https://storylet.studio/compatibility/), with the
+[the compatibility contract](https://storylets.dev/compatibility/), with the
 dealing semantics they pin in
-[the bundle format](https://storylet.studio/format/bundle/).
+[the bundle format](https://storylets.dev/format/bundle/).
 
 ## PRNG
 
@@ -48,7 +48,7 @@ verify first are tabled in the design notes, section 3.
 ## The Live Link fixture
 
 [`live-link/`](./live-link/) is the contract for the Live Link client
-([Live Link](https://storylet.studio/play/live-link/)): the game-side WebSocket client every runtime carries
+([Live Link](https://storylets.dev/play/live-link/)): the game-side WebSocket client every runtime carries
 (`createLiveLink` in play-helpers, `StoryletLiveLink` in Unity and Godot,
 `FStoryletLiveLink` in Unreal). The corpus does not test the clients
 (network); this fixture does, and it is how the four stay in step. It is

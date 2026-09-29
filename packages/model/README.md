@@ -8,5 +8,5 @@ Entity shapes are generic over their expression representation: source
 shards carry plain `src` strings (`Card<string>`), the compiled bundle
 carries `{ src, ast }` envelopes (`Card<Expression>`).
 
-Authored against [the bundle format](https://storylet.studio/format/bundle/)
-and [the source format](https://storylet.studio/format/shards/).
+Authored against [the bundle format](https://storylets.dev/format/bundle/)
+and [the source format](https://storylets.dev/format/shards/).

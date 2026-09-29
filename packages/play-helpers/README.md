@@ -25,7 +25,7 @@ same name, so an integration reads the same in every engine
   run, and a save in the editor swaps the new bundle in underneath it without
   a restart. Attach the **engine**, not a flow: the link discovers your flows
   itself and announces them as they open and close.
-  &rarr; [Live Link](https://storylet.studio/play/live-link/)
+  &rarr; [Live Link](https://storylets.dev/play/live-link/)
 - **The examiners** - `createPropertyInspector`, `createBundleInspector`. A
   DOM panel showing live state, the run log and what a bundle offers. The web
   equivalent of the Runtime State window each engine port ships.
@@ -52,4 +52,4 @@ const saved = serializeState(engine);   // hand the string to your save system
 The demo in [`demo/`](./demo) wires all of it together against the Hamlet
 bundle and is the shortest complete example.
 
-&rarr; Full documentation: [storylet.studio/play/javascript](https://storylet.studio/play/javascript/)
+&rarr; Full documentation: [storylets.dev/play/javascript](https://storylets.dev/play/javascript/)

@@ -3017,7 +3017,7 @@ function onMenu(command: MenuCommand): void {
       // how it went unnoticed: only this one dialog was wrong.
       credits: "Part of Storylet Studio. Made by Ian Thomas.",
       links: [
-        { label: "storylet.studio", url: "https://storylet.studio" },
+        { label: "storylets.dev", url: "https://storylets.dev" },
         { label: "ian.wildwinter.net", url: "https://ian.wildwinter.net" },
       ],
       onOpenLink: (url: string) => void studio.openExternal(url),

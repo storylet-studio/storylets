@@ -73,7 +73,7 @@ If a graphic doesn't fit, a line of text is plenty. Copy any of these, no approv
 For in-game credits or a readme:
 
 ```text
-Story shaped with Storylet Studio - storylet.studio
+Story shaped with Storylet Studio - storylets.dev
 ```
 
 As a credits block:
@@ -81,13 +81,13 @@ As a credits block:
 ```text
 NARRATIVE TOOLS
 Story shaped with Storylet Studio
-storylet.studio
+storylets.dev
 ```
 
 For a website or itch.io footer:
 
 ```html
-<a href="https://storylet.studio">Story shaped with Storylet Studio</a>
+<a href="https://storylets.dev">Story shaped with Storylet Studio</a>
 ```
 
 ## Or use a badge

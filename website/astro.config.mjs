@@ -3,10 +3,10 @@ import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 
 // A fully STATIC build (Astro's default; no SSR adapter), served at the custom domain
-// storylet.studio from the site root. Nothing here talks to a server at build time or at
+// storylets.dev from the site root. Nothing here talks to a server at build time or at
 // runtime: the whole site is files.
 export default defineConfig({
-  site: "https://storylet.studio",
+  site: "https://storylets.dev",
   base: "/",
   // Pages that moved when the docs were reshaped into user-facing topics: the CLI, licensing
   // and conformance pages became top-level, merging became the version-control page in the new
@@ -60,11 +60,11 @@ export default defineConfig({
         { tag: "link", attrs: { rel: "apple-touch-icon", href: "/apple-touch-icon.png" } },
         // Link-preview card for every docs page (Starlight emits per-page title/description but
         // no image). og:image must be an ABSOLUTE url; the landing page sets its own.
-        { tag: "meta", attrs: { property: "og:image", content: "https://storylet.studio/social-card.png" } },
+        { tag: "meta", attrs: { property: "og:image", content: "https://storylets.dev/social-card.png" } },
         { tag: "meta", attrs: { property: "og:image:width", content: "1280" } },
         { tag: "meta", attrs: { property: "og:image:height", content: "640" } },
         { tag: "meta", attrs: { name: "twitter:card", content: "summary_large_image" } },
-        { tag: "meta", attrs: { name: "twitter:image", content: "https://storylet.studio/social-card.png" } },
+        { tag: "meta", attrs: { name: "twitter:image", content: "https://storylets.dev/social-card.png" } },
       ],
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/storylet-studio/storylets" }],
       // The family's agreed order, shared with the Patter site: everyone starts at the top,

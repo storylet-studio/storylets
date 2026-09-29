@@ -10,6 +10,11 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **The documentation has moved to [storylets.dev](https://storylets.dev).** The Help menu and the
+  About box open the new address. The old one still forwards, so a link you saved keeps working.
+
 ## [0.14.1] - 2026-09-28
 
 ### Fixed

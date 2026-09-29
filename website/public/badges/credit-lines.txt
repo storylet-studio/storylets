@@ -1,19 +1,19 @@
 Storylet Studio credit lines
-https://storylet.studio/licensing/
+https://storylets.dev/licensing/
 
 Voluntary, but appreciated! Use whichever fits.
 
 1. Single line (credits, readme)
-Story shaped with Storylet Studio - storylet.studio
+Story shaped with Storylet Studio - storylets.dev
 
 2. Credits block
 NARRATIVE TOOLS
 Story shaped with Storylet Studio
-storylet.studio
+storylets.dev
 
 3. HTML (website, itch.io footer)
-<a href="https://storylet.studio">Story shaped with Storylet Studio</a>
+<a href="https://storylets.dev">Story shaped with Storylet Studio</a>
 
 Storylet Studio is free and MIT-licensed. The name, the thread mark and these
-badges are not covered by that licence; see https://storylet.studio/licensing/ for
+badges are not covered by that licence; see https://storylets.dev/licensing/ for
 what you can and can't do with them.

@@ -10,7 +10,7 @@ One dialect drives runtime eval and publish-time validation (schema doc
 6.1). Runtime hosts supply the `StoryletsHost` callbacks (PRNG, play log)
 via `EvalContext.host`.
 
-Authored against [the bundle format](https://storylet.studio/format/bundle/),
+Authored against [the bundle format](https://storylets.dev/format/bundle/),
 section 6.
 
 `storyletsDialectWith(tokens)` is the same dialect accepting more game-wide

@@ -1,7 +1,7 @@
 # Storylets
 
 [![CI](https://github.com/storylet-studio/storylets/actions/workflows/ci.yml/badge.svg)](https://github.com/storylet-studio/storylets/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-storylet.studio-7b4b6e)](https://storylet.studio)
+[![Docs](https://img.shields.io/badge/docs-storylets.dev-7b4b6e)](https://storylets.dev)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Storylet Studio** is an open toolkit for building storylet-driven games: stories
@@ -13,7 +13,7 @@ plays inside your game. The same bundle plays identically on JavaScript, Unity,
 Unreal and Godot.
 
 Everything here is MIT-licensed. **Documentation lives at
-[storylet.studio](https://storylet.studio)**: a guided tour, per-role guides, and
+[storylets.dev](https://storylets.dev)**: a guided tour, per-role guides, and
 the format reference.
 
 ## What is in this repository
@@ -22,7 +22,7 @@ the format reference.
 |------|------------|
 | [`packages/`](packages) | The `@storylet-studio/*` npm workspaces (see below): model, compiler, runtime, ops, CLI, and the Storyletter app. |
 | [`ports/`](ports) | The native Storylet Engine runtimes: Unity (C#), Unreal (C++), Godot (GDScript), each with a demo and held to the shared corpus. |
-| [`website/`](website) | The [storylet.studio](https://storylet.studio) documentation site (Astro + Starlight). |
+| [`website/`](website) | The [storylets.dev](https://storylets.dev) documentation site (Astro + Starlight). |
 | [`examples/`](examples) | Worked example projects, from a 16-card slice to the full 86-card Village. |
 | [`branding/`](branding) | The app icon and document icons the build needs. |
 
@@ -94,7 +94,7 @@ node packages/cli/dist/cli.js export my-game
 
 ## Documentation
 
-- [storylet.studio](https://storylet.studio) - the full documentation site, also in
+- [storylets.dev](https://storylets.dev) - the full documentation site, also in
   this repo under [`website/`](website).
 - [The conformance corpus](packages/conformance) - the parity contract every runtime
   is held to.

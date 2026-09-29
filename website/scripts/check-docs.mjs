@@ -34,9 +34,12 @@
 //    truth, so it is.
 //
 // 5. A LINK TO A DOMAIN THAT IS NOT OURS. The Unreal plugin shipped a
-//    `storyletstudio.com` link (we are `storylet.studio`) in a README that goes
-//    out inside the released plugin, where nothing here would ever have seen
-//    it. One line to check, so it is checked repo-wide rather than in `dist/`.
+//    `storyletstudio.com` link in a README that goes out inside the released
+//    plugin, where nothing here would ever have seen it. One line to check, so
+//    it is checked repo-wide rather than in `dist/`. We are `storylets.dev`
+//    since 2026-09-29; `storylet.studio` was the address before that and still
+//    forwards, but it is on its way to other uses, so a link to it fails here
+//    like any other near miss.
 //
 // Runs as `postbuild`, so `npm run build` is the whole gate and there is nothing
 // separate to remember.
@@ -230,14 +233,22 @@ for (const file of walk(join(root, "src/content/docs"), [".md", ".mdx"])) {
 //
 // Checked over the shipped ports and packages too, not just the website: the
 // one that got through was inside a plugin README.
-const DOMAIN = /https?:\/\/(?!storylet\.studio)([a-z0-9-]*storylet[a-z0-9-]*\.[a-z.]+)/gi;
+//
+// A changelog is exempt: it records the address as it was on the day, and an
+// entry rewritten to the new one would be saying something that was not true.
+const DOMAIN = /https?:\/\/(?!storylets\.dev(?![a-z0-9.-]))([a-z0-9-]*storylet[a-z0-9-]*\.[a-z.]+)/gi;
 for (const dir of ["src/content/docs", "../packages", "../ports", "../design"]) {
   const base = join(root, dir);
   if (!existsSync(base)) continue;
   for (const file of walk(base, [".md", ".mdx"])) {
     if (file.includes("node_modules") || file.includes("/dist/")) continue;
+    if (file.endsWith("CHANGELOG.md")) continue;
+    // The Hamlet demo's addons are copies its build.sh makes and git ignores, so
+    // they are as old as the last local build. The addon they are copied FROM is
+    // checked above; a stale copy is not a fault in anything that ships.
+    if (file.includes("/HamletDemo/addons/")) continue;
     for (const m of readFileSync(file, "utf8").matchAll(DOMAIN)) {
-      problems.push(`${relative(repoRoot, file)}  links to ${m[1]}, which is not storylet.studio`);
+      problems.push(`${relative(repoRoot, file)}  links to ${m[1]}, which is not storylets.dev`);
     }
   }
 }

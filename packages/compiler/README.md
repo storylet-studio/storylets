@@ -5,7 +5,7 @@ The Storylet Engine compiler: `.storylets` shards in, validated
 
 - **`parseSource` / `canonicalStringify`**: JSON5 in, the canonical byte
   form out (the versioned contract of
-  [the source format](https://storylet.studio/format/shards/));
+  [the source format](https://storylets.dev/format/shards/));
   `serialiseBundle` emits the bundle's strict-JSON canonical bytes.
 - **`parseProjectFiles`**: `SourceFile[]` -> `SourceProject` (directory is
   the registry; structural issues reported, never thrown).

@@ -26,5 +26,5 @@ ripple into checkpoints, headlines and codex entries.
 
 The integrator's contract this example demonstrates (what "a turn" means per
 box, the world-hook naming discipline, how a game reacts to the spine) is
-covered by [World state](https://storylet.studio/play/world-state/) and
-[Dealing](https://storylet.studio/play/dealing/).
+covered by [World state](https://storylets.dev/play/world-state/) and
+[Dealing](https://storylets.dev/play/dealing/).

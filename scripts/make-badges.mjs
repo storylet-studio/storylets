@@ -32,7 +32,7 @@ const out = join(root, "website/public/badges");
 mkdirSync(out, { recursive: true });
 
 const CREDIT = "Story shaped with Storylet Studio";
-const URL_TEXT = "storylet.studio";
+const URL_TEXT = "storylets.dev";
 
 // --- the palette (branding/README.md) ------------------------------------------
 const PLUM = "#36284A";
@@ -184,7 +184,7 @@ for (const way of Object.keys(WAYS)) {
 
 // --- the copyable credit lines ------------------------------------------------------
 writeFileSync(join(out, "credit-lines.txt"), `Storylet Studio credit lines
-https://storylet.studio/licensing/
+https://storylets.dev/licensing/
 
 Voluntary, but appreciated! Use whichever fits.
 

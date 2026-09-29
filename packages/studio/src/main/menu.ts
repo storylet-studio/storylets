@@ -57,9 +57,9 @@ export function refreshMenu(
   // reaching for "Documentation Home" wants this family's front door.
   const NAMED = namedMenuItems({
     appName: "Storyletter",
-    docsUrl: "https://storylet.studio/storyletter/overview/",
+    docsUrl: "https://storylets.dev/storyletter/overview/",
     suiteName: "Storylet Studio",
-    suiteDocsUrl: "https://storylet.studio/",
+    suiteDocsUrl: "https://storylets.dev/",
   });
   /** An item whose destination does not exist yet: shown, and disabled. */
   const linkItem = (item: { label: string; accelerator?: string; url?: string; ready: boolean }): Electron.MenuItemConstructorOptions => {

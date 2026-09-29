@@ -97,7 +97,7 @@ diagnostic; never a silent pass, never a crash.
   `"world"` resolver you bind is your game's state and never saved. A token
   another engine already holds refuses the engine: `create` returns null and
   the error names the holder. See
-  [Running it with Patter](https://storylet.studio/play/with-patter/#one-registry).
+  [Running it with Patter](https://storylets.dev/play/with-patter/#one-registry).
 - **What a load would cost**: `load_game` returns a report of everything it
   dropped, defaulted or reset, and `preview_load(envelope)` computes the same
   report without applying anything. `save_flow(id)` and
@@ -123,7 +123,7 @@ diagnostic; never a silent pass, never a crash.
   `StoryletLiveLink.apply_live_bundle`). The link discovers your flows
   itself, so a multi-participant run needs nothing extra from the host; the
   Board follows one of them at a time. The demo is wired this way.
-  See [Live Link](https://storylet.studio/play/live-link/).
+  See [Live Link](https://storylets.dev/play/live-link/).
 - **State kernel**: `StoryletPropertyBag` and `StoryletScopeRegistry` are the
   shared properties implementer (the owned / foreign scope split for a host
   `@world`). Both are thin shims over sources shared with Patterplay

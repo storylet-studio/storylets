@@ -2494,7 +2494,7 @@ function watchInDev(win: BrowserWindow, name: string): void {
 }
 
 /** The About dialog's links: the only external URLs the renderer can open. */
-const ABOUT_LINKS = new Set(["https://storylet.studio", "https://ian.wildwinter.net"]);
+const ABOUT_LINKS = new Set(["https://storylets.dev", "https://ian.wildwinter.net"]);
 
 function createWindow(): void {
   window = new BrowserWindow({

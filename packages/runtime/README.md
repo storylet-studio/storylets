@@ -1,7 +1,7 @@
 # @storylet-studio/runtime
 
 The Storylet Engine **JS reference runtime**: the Engine and Flow surface of
-[the bundle format](https://storylet.studio/format/bundle/) section 5 -
+[the bundle format](https://storylets.dev/format/bundle/) section 5 -
 the engine (`openFlow` / `getFlow` / `flows` / `closeFlow` / `reset` /
 `saveGame` / `loadGame` / `saveFlow` / `previewLoad` / `previewFlowRestore` /
 `subscribeTrace` / `log` / `clearLog` /
@@ -24,4 +24,4 @@ game. Pass the game's as `new Engine(bundle, { registry })` to share it with any
 starting `storylets/`, `@world` is the game's to register, and `saveGame()` leaves the values
 to the game, which saves the registry once. Without one the engine makes its own registry, self-backs
 `@world`, and `saveGame()` carries every value, so one call is still the whole run. Version 1
-envelopes still load. See [Running it with Patter](https://storylet.studio/play/with-patter/#one-registry).
+envelopes still load. See [Running it with Patter](https://storylets.dev/play/with-patter/#one-registry).

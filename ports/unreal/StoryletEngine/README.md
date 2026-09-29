@@ -85,7 +85,7 @@ transliteration in C#; the three stay in lockstep.
   Patterplay's `UPatterEngine::CreateWithRegistry` takes, so a game running both hands one registry
   to each; include `Storylets/Kernel.h` where you make it, with `bEnableExceptions = true` in that
   module's Build.cs. Both plugins must be built from the same kernel (a mismatch is a compile error
-  naming the fix). See [Unreal](https://storylet.studio/play/unreal/#one-registry-per-game).
+  naming the fix). See [Unreal](https://storylets.dev/play/unreal/#one-registry-per-game).
 - **Live Link**: `FStoryletLiveLink` connects a running game to Storyletter
   (`ws://127.0.0.1:4472`): `Create(Bundle->GetBuildId(), Project)` then
   `Attach(Engine)` streams every flow's trace and board snapshots, each
@@ -97,7 +97,7 @@ transliteration in C#; the three stay in lockstep.
   carried across, then `SetBuild`. Compiles to no-ops in Shipping (the
   WebSockets dependency is dropped there). The frames it sends are held to
   the shared fixture `packages/conformance/live-link/` by the TestHost. See
-  [Live Link](https://storylet.studio/play/live-link/).
+  [Live Link](https://storylets.dev/play/live-link/).
 - **The examiner**: Window > Storylet Engine Runtime State (a nomad tab).
   Register engines with `RegisterForDebug("label")` (or
   `FStoryletDebug::Register`); the panel shows each live engine's shared
