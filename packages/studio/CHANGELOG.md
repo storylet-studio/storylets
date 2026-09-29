@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-29
+
 ### Changed
 
 - **The documentation has moved to [storylets.dev](https://storylets.dev).** The Help menu and the
@@ -31,6 +33,10 @@ here is part of shipping, not a courtesy.
   shows how many deals it had, and the caption says the counts are over all the runs. A run that
   goes to the turn cap now reads as **ran to the turn cap**, which is normal for a story with
   branches.
+
+### Fixed
+
+- **Opening Coverage or the Board no longer logs an error.** Each opened its window and then tried to hand the window itself back to the editor, which cannot be passed between processes, so every open left "An object could not be cloned" in the log. The windows opened regardless; now nothing is left behind.
 
 ## [0.14.1] - 2026-09-28
 
