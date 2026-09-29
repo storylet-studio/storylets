@@ -1,5 +1,11 @@
 # @storylet-studio/dialect
 
+## 0.3.1
+
+### Patch Changes
+
+- a7b7a7d: The README's documentation links go to storylets.dev, where the docs now live. No change to the code.
+
 ## 0.3.0
 
 ### Minor Changes

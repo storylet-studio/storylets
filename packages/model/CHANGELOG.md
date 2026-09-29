@@ -1,5 +1,11 @@
 # @storylet-studio/model
 
+## 0.8.1
+
+### Patch Changes
+
+- a7b7a7d: The README's documentation links go to storylets.dev, where the docs now live. No change to the code.
+
 ## 0.8.0
 
 ### Minor Changes
