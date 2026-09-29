@@ -28,7 +28,8 @@ import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import { previewRegistry } from "./game-scopes.js";
 import { Engine, makePrng } from "@storylet-studio/runtime";
 import type { Flow } from "@storylet-studio/runtime";
-import { PLACE_GROUP, effectiveGameId } from "@storylet-studio/model";
+import { PLACE_GROUP, effectiveGameId, isHoleRef } from "@storylet-studio/model";
+import { RARE_DEALT_PCT, rarelyDealt } from "./coverage-order.js";
 import type {
   AstNode, Box, Bundle, Card, CoverageConfig, CoverageDriver, Deck,
   Expression, Hand, ScalarValue,
@@ -69,12 +70,28 @@ export interface CardCoverage {
   gameId: string;
   title?: string;
   deck: string;
+  /** The owning deck as a reader knows it: its title, else its gameId. */
+  deckName: string;
   /** The owning box, so a reader can jump straight to the card. */
   box: string;
-  /** Times the card appeared in any hand. */
+  /** The owning box as a reader knows it: its title, else its gameId. */
+  boxName: string;
+  /** Times the card appeared in any hand, across all runs. A card that stays
+   *  in a hand counts again each turn, so this can exceed `runs`. */
   dealt: number;
-  /** Times an outcome of it was played. */
+  /** Times an outcome of it was played, across all runs. */
   played: number;
+  /** Runs that dealt it at least once: what "how easily does this come up"
+   *  is measured in, where `dealt` says how much it was seen. */
+  dealtRuns: number;
+  /** Runs that played it at least once. */
+  playedRuns: number;
+  /** Dealt, but in fewer than `rareThresholdPct`% of runs (`rarelyDealt`):
+   *  content that CAN come up but hangs on an unlikely route or a condition
+   *  that is nearly always false. Worth a look, not necessarily a fault (one
+   *  of many random picks is rare by design). Never set on a never-dealt
+   *  card, which has its own, louder flag. */
+  rare: boolean;
   /** Refs in its condition that no outcome writes and no driver drives -
    *  only reported on never-dealt cards (the honesty net). */
   unwrittenRefs?: string[];
@@ -95,13 +112,26 @@ export interface OutcomeCoverage {
 export interface HandCoverage {
   id: string;
   gameId: string;
+  /** The hand's display title, when it has one (a stripped bundle has none). */
+  title?: string;
   /** The owning box, so a reader can jump straight to the hand. */
   box: string;
+  /** The owning box as a reader knows it: its title, else its gameId. */
+  boxName: string;
   /** Total deals into this hand across all runs. */
   deals: number;
-  /** Distinct cards the hand held at least once. */
+  /** Cards that could come up at this hand, by tags and place alone (see
+   *  `handReach`): what the hand's coverage is out of. Conditions are not
+   *  considered, and a group bound at run time counts as a wildcard, so this
+   *  errs towards "could". Sorted ids. */
+  cardsPossible: string[];
+  /** Distinct cards the hand held at least once, across all runs. Normally a
+   *  subset of `cardsPossible`; a card dealt here that the static rule says
+   *  could not be is still listed, because the run is the evidence. */
   cardsDealt: string[];
-  /** Cards in the hand's box it never held (the per-hand gap list). */
+  /** Cards that could come up at this hand and never did in any run (the
+   *  per-hand gap list). A card pinned to another place, or tagged out of
+   *  this hand's slice, is not a gap here and is not listed. */
   cardsNeverDealt: string[];
 }
 
@@ -143,6 +173,21 @@ export interface ObservedEdge {
   count: number;
 }
 
+/** The report's headline counts, so every reader says the same thing. */
+export interface CoverageTotals {
+  cards: number;
+  /** Cards dealt in at least one run. */
+  dealt: number;
+  neverDealt: number;
+  /** Cards flagged `rare`: dealt, but in fewer than `rareThresholdPct`% of runs. */
+  rare: number;
+  /** Cards dealt at least once and never played. Only cards that HAVE
+   *  outcomes count: a card with none is dealt-only by design (the news and
+   *  codex pattern), and "never played" would be an accusation it cannot
+   *  answer. */
+  dealtNeverPlayed: number;
+}
+
 export interface CoverageReport {
   runs: number;
   seed: number;
@@ -160,7 +205,13 @@ export interface CoverageReport {
   turns: number;
   plays: number;
   terminations: Record<"exhausted" | "maxTurns" | "stuck", number>;
+  /** Every card, in deck order: box by box, deck by deck, as authored.
+   *  `leastReachedFirst` gives the order a reader should look in. */
   cards: CardCoverage[];
+  totals: CoverageTotals;
+  /** The share of runs below which a dealt card counts as rare
+   *  ({@link RARE_DEALT_PCT}). */
+  rareThresholdPct: number;
   outcomes: OutcomeCoverage[];
   hands: HandCoverage[];
   /** Refs conditions read that no outcome writes and no driver drives. */
@@ -306,6 +357,89 @@ function analyse(bundle: Bundle): Analysis {
   return { cardRefs, allRefs, written, writtenBy, pools };
 }
 
+// --- what could come up where (static) ------------------------------------------
+// Which cards a hand could ever be dealt, by tags and place alone: the runtime's
+// tag matching (engine.ts tagsMatch, schema 3.1 step 3) run over the bindings a
+// hand makes on every ask. A place-pinned card needs this hand among its
+// places; for every group the hand binds, the card lists the bound tag or omits
+// the group (a wildcard), unless the group is `required`.
+//
+// One copy of the rule, used by the composed-name net below (which hands ask a
+// card) and by the per-hand report (what a hand's coverage is out of), so the
+// two can never disagree about who can hold what.
+//
+// It errs towards "could". A group bound at run time stays UNBOUND here, which
+// is a wildcard: a `boundBy` group, and a chosen or rule binding that is a
+// property reference (a movable hole, `isHoleRef`). Conditions are dynamic and
+// are not considered at all. So it never calls a card impossible at a hand
+// that some run could legitimately deal it to.
+
+/** One binding a hand makes on every ask. */
+interface FixedBinding {
+  group: string;
+  tag: string;
+  /** Names its group in the @hand bag: chosen and rule bindings do, a
+   *  template's own fixed binding does not (the runtime's askNames). */
+  named: boolean;
+}
+
+interface HandReach {
+  /** The bindings a hand makes whatever the run does, movable holes left out. */
+  fixed(hand: Hand<Expression>): FixedBinding[];
+  /** The groups a hand fills from a property at ask time (its movable holes). */
+  holes(hand: Hand<Expression>): Set<string>;
+  /** Could this card ever come up at this hand, by tags and place alone? */
+  admits(card: Card<Expression>, hand: Hand<Expression>): boolean;
+}
+
+/** The static reach of every hand in one box. */
+function handReach(box: Box<Expression>): HandReach {
+  const required = new Set(box.tagGroups.filter((g) => g.required === true).map((g) => g.id));
+  const templatesById = new Map(box.handTemplates.map((t) => [t.id, t]));
+  const cache = new Map<string, { fixed: FixedBinding[]; holes: Set<string> }>();
+  // As the runtime composes an ask: a template instance takes its template's
+  // bindings and its own chosen tags, a standalone hand its rule's bindings.
+  const of = (hand: Hand<Expression>): { fixed: FixedBinding[]; holes: Set<string> } => {
+    const found = cache.get(hand.id);
+    if (found) return found;
+    const fixed: FixedBinding[] = [];
+    const holes = new Set<string>();
+    const add = (bindings: Record<string, string> | undefined, named: boolean): void => {
+      for (const [group, tag] of Object.entries(bindings ?? {})) {
+        if (isHoleRef(tag)) holes.add(group);
+        else fixed.push({ group, tag, named });
+      }
+    };
+    if (hand.template !== undefined) {
+      add(templatesById.get(hand.template)?.bindings, false);
+      add(hand.chosen, true);
+    } else {
+      add(hand.rule?.bindings, true);
+    }
+    const reach = { fixed, holes };
+    cache.set(hand.id, reach);
+    return reach;
+  };
+  return {
+    fixed: (hand) => of(hand).fixed,
+    holes: (hand) => of(hand).holes,
+    admits: (card, hand) => {
+      const home = card.tags?.[PLACE_GROUP];
+      if (home !== undefined && home.length > 0 && !home.includes(hand.id)) return false;
+      const { fixed, holes } = of(hand);
+      for (const { group, tag } of fixed) {
+        // The runtime binds place to the hand itself, whatever else says so,
+        // and a hole over the same group may rebind it at ask time.
+        if (group === PLACE_GROUP || holes.has(group)) continue;
+        const tags = card.tags?.[group];
+        if (tags === undefined) { if (required.has(group)) return false; continue; }
+        if (!tags.includes(tag)) return false;
+      }
+      return true;
+    },
+  };
+}
+
 // --- the composed-name net (static) --------------------------------------------
 // The class the Board's peek false alarm pointed at (design/board-legibility.md):
 // a card reading @hand.X that some hand which can legitimately ask it never
@@ -313,10 +447,10 @@ function analyse(bundle: Bundle): Analysis {
 // composes its template's (or its own) properties, the flattened properties of
 // every tag it binds, the NAMES of groups it chooses or rule-binds (askNames -
 // a fixed template binding does not name its group), and whatever a boundBy
-// group may bind at ask time (counted as composed, conservatively). A card's
-// asking hands are those whose bound tags its own tags admit (tag matching
-// runs before condition evaluation); a deck gate evaluates for EVERY ask of
-// the box, so its refs must be composed by every hand.
+// group or a movable hole may bind at ask time (counted as composed,
+// conservatively). A card's asking hands are those `handReach` admits (tag
+// matching runs before condition evaluation); a deck gate evaluates for EVERY
+// ask of the box, so its refs must be composed by every hand.
 
 const handRefsOf = (expr: Expression | undefined): string[] => {
   if (!expr) return [];
@@ -329,51 +463,40 @@ function findUnprovidedHandRefs(bundle: Bundle): UnprovidedHandRef[] {
   const out: UnprovidedHandRef[] = [];
   for (const box of bundle.boxes) {
     const groupsById = new Map(box.tagGroups.map((g) => [g.id, g]));
-    const required = new Set(box.tagGroups.filter((g) => g.required === true).map((g) => g.id));
     const templatesById = new Map(box.handTemplates.map((t) => [t.id, t]));
+    const reach = handReach(box);
 
     const composed = new Map<string, Set<string>>();
-    const bindings = new Map<string, Map<string, string>>();
     for (const hand of box.hands) {
       const names = new Set<string>();
-      const bind = new Map<string, string>();
+      const bound = new Set<string>();
       const template = hand.template !== undefined ? templatesById.get(hand.template) : undefined;
       for (const decl of template?.properties ?? hand.properties ?? []) names.add(decl.name);
-      const bindTag = (groupId: string, tagId: string, named: boolean): void => {
-        bind.set(groupId, tagId);
+      for (const { group: groupId, tag: tagId, named } of reach.fixed(hand)) {
+        bound.add(groupId);
         const group = groupsById.get(groupId);
         for (const decl of group?.tags.find((t) => t.id === tagId)?.properties ?? []) names.add(decl.name);
         if (named && group) names.add(effectiveGameId(group));
-      };
-      for (const [g, t] of Object.entries(template?.bindings ?? {})) bindTag(g, t, false);
-      for (const [g, t] of Object.entries(hand.rule?.bindings ?? {})) bindTag(g, t, true);
-      for (const [g, t] of Object.entries(hand.chosen ?? {})) bindTag(g, t, true);
+      }
+      const holes = reach.holes(hand);
       for (const group of box.tagGroups) {
-        if (group.boundBy === undefined || bind.has(group.id)) continue;
+        const movable = holes.has(group.id) || (group.boundBy !== undefined && !bound.has(group.id));
+        if (!movable) continue;
         names.add(effectiveGameId(group));
         for (const tag of group.tags) for (const decl of tag.properties ?? []) names.add(decl.name);
       }
       composed.set(hand.id, names);
-      bindings.set(hand.id, bind);
     }
 
-    const admits = (card: Card<Expression> | undefined, hand: Hand<Expression>): boolean => {
-      if (card === undefined) return true;   // a deck gate: every hand asks
-      const home = card.tags?.[PLACE_GROUP];
-      if (home !== undefined && home.length > 0 && !home.includes(hand.id)) return false;
-      for (const [groupId, tagId] of bindings.get(hand.id)!) {
-        const tags = card.tags?.[groupId];
-        if (tags === undefined) { if (required.has(groupId)) return false; continue; }
-        if (!tags.includes(tagId)) return false;
-      }
-      return true;
-    };
+    // A deck gate (no card): every hand asks it.
+    const asks = (card: Card<Expression> | undefined, hand: Hand<Expression>): boolean =>
+      card === undefined || reach.admits(card, hand);
 
     const check = (where: string, refs: string[], card: Card<Expression> | undefined): void => {
       for (const ref of refs) {
         const name = ref.slice("@hand.".length);
         const missing = box.hands
-          .filter((hand) => admits(card, hand) && !composed.get(hand.id)!.has(name))
+          .filter((hand) => asks(card, hand) && !composed.get(hand.id)!.has(name))
           .map((hand) => effectiveGameId(hand))
           .sort();
         if (missing.length > 0) out.push({ where, ref, hands: missing });
@@ -414,7 +537,9 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
   const empty: CoverageReport = {
     runs: 0, seed, maxTurns, drivers: drivenRefs, turns: 0, plays: 0,
     terminations: { exhausted: 0, maxTurns: 0, stuck: 0 },
-    cards: [], outcomes: [], hands: [], unwrittenInputs: [], unprovidedHandRefs: [], diagnostics: [], issues,
+    cards: [], totals: { cards: 0, dealt: 0, neverDealt: 0, rare: 0, dealtNeverPlayed: 0 },
+    rareThresholdPct: RARE_DEALT_PCT,
+    outcomes: [], hands: [], unwrittenInputs: [], unprovidedHandRefs: [], diagnostics: [], issues,
   };
   if (!bundle) return empty;
   // The sweep runs the Storylet Engine on its own, which refuses content that names another
@@ -453,6 +578,9 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
   // Tallies.
   const dealt = new Map<string, number>();
   const played = new Map<string, number>();
+  // Runs, not occurrences: each run adds at most one to a card's count.
+  const dealtRuns = new Map<string, number>();
+  const playedRuns = new Map<string, number>();
   const outcomePlayed = new Map<string, number>();
   const handDeals = new Map<string, number>();
   const handCards = new Map<string, Set<string>>();
@@ -612,6 +740,8 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
     else if (emptyTurns >= MAX_EMPTY_TURNS) terminations.stuck++;
     else terminations.exhausted++;
     unsubscribe();
+    for (const id of runDealt) dealtRuns.set(id, (dealtRuns.get(id) ?? 0) + 1);
+    for (const id of runPlayed) playedRuns.set(id, (playedRuns.get(id) ?? 0) + 1);
     for (const key of runDiags) {
       const found = diagCounts.get(key);
       if (found) found.runs++;
@@ -665,52 +795,81 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
     return [...writers].every(neverDealt);
   };
 
+  const cards: CardCoverage[] = allCards.map(({ card, deck, box }) => {
+    const cardReads = [...(analysis.cardRefs.get(card.id) ?? [])];
+    const refs = cardReads.filter(unwritten).sort();
+    // ...and the same list one hop out, minus anything the first net already
+    // names, so a ref is reported once and for the sharper reason.
+    const deadRefs = cardReads.filter((r) => !unwritten(r) && writtenOnlyByDeadCards(r)).sort()
+      // A flag key implies its property, so reporting both says the same
+      // thing twice and the vaguer half reads as a second problem.
+      .filter((r, _i, all) => r.includes(":") || !all.some((o) => o.startsWith(`${r}:`)));
+    const cardDealtRuns = dealtRuns.get(card.id) ?? 0;
+    return {
+      id: card.id,
+      gameId: effectiveGameId(card),
+      ...(card.title !== undefined ? { title: card.title } : {}),
+      deck: deck.id,
+      deckName: deck.title ?? effectiveGameId(deck),
+      box: box.id,
+      boxName: box.title ?? effectiveGameId(box),
+      dealt: dealt.get(card.id) ?? 0,
+      played: played.get(card.id) ?? 0,
+      dealtRuns: cardDealtRuns,
+      playedRuns: playedRuns.get(card.id) ?? 0,
+      rare: rarelyDealt(cardDealtRuns, runsDone),
+      ...(neverDealt(card.id) && refs.length > 0 ? { unwrittenRefs: refs } : {}),
+      ...(neverDealt(card.id) && deadRefs.length > 0
+        ? { refsWrittenOnlyByNeverDealtCards: deadRefs.map((ref) => ({
+            ref,
+            by: [...analysis.writtenBy.get(ref)!].sort(),
+          })) }
+        : {}),
+    };
+  });
+  const playable = new Set(allCards.filter((e) => e.card.outcomes.length > 0).map((e) => e.card.id));
+  const cardsDealt = cards.filter((c) => c.dealtRuns > 0).length;
+
   return {
     // The runs actually completed, not the runs asked for: a cancelled sweep
     // must not claim a sample size it never took.
     runs: runsDone, seed, maxTurns, ...(turnSeconds !== undefined ? { turnSeconds } : {}),
     drivers: drivenRefs, turns: totalTurns, plays: totalPlays, terminations,
-    cards: allCards.map(({ card, deck, box }) => {
-      const cardReads = [...(analysis.cardRefs.get(card.id) ?? [])];
-      const refs = cardReads.filter(unwritten).sort();
-      // ...and the same list one hop out, minus anything the first net already
-      // names, so a ref is reported once and for the sharper reason.
-      const deadRefs = cardReads.filter((r) => !unwritten(r) && writtenOnlyByDeadCards(r)).sort()
-        // A flag key implies its property, so reporting both says the same
-        // thing twice and the vaguer half reads as a second problem.
-        .filter((r, _i, all) => r.includes(":") || !all.some((o) => o.startsWith(`${r}:`)));
-      return {
-        id: card.id,
-        gameId: effectiveGameId(card),
-        ...(card.title !== undefined ? { title: card.title } : {}),
-        deck: deck.id,
-        box: box.id,
-        dealt: dealt.get(card.id) ?? 0,
-        played: played.get(card.id) ?? 0,
-        ...(neverDealt(card.id) && refs.length > 0 ? { unwrittenRefs: refs } : {}),
-        ...(neverDealt(card.id) && deadRefs.length > 0
-          ? { refsWrittenOnlyByNeverDealtCards: deadRefs.map((ref) => ({
-              ref,
-              by: [...analysis.writtenBy.get(ref)!].sort(),
-            })) }
-          : {}),
-      };
-    }),
+    cards,
+    totals: {
+      cards: cards.length,
+      dealt: cardsDealt,
+      neverDealt: cards.length - cardsDealt,
+      rare: cards.filter((c) => c.rare).length,
+      dealtNeverPlayed: cards.filter((c) => c.dealtRuns > 0 && c.playedRuns === 0 && playable.has(c.id)).length,
+    },
+    rareThresholdPct: RARE_DEALT_PCT,
     outcomes: allCards.flatMap(({ card }) => card.outcomes.map((o) => ({
       id: o.id, gameId: effectiveGameId(o), card: card.id, played: outcomePlayed.get(o.id) ?? 0,
     }))),
-    hands: bundle.boxes.flatMap((box) => box.hands.map((hand) => {
-      const dealtSet = handCards.get(hand.id) ?? new Set<string>();
-      const boxCards = box.decks.flatMap((d) => d.cards.map((c) => c.id));
-      return {
-        id: hand.id,
-        gameId: effectiveGameId(hand),
-        box: box.id,
-        deals: handDeals.get(hand.id) ?? 0,
-        cardsDealt: [...dealtSet].sort(),
-        cardsNeverDealt: boxCards.filter((id) => !dealtSet.has(id)).sort(),
-      };
-    })),
+    hands: bundle.boxes.flatMap((box) => {
+      // Out of what could come up HERE, not out of the whole box. Measured
+      // against the box, a place in the Village read "6/86": a near-empty bar
+      // over what was complete coverage, because most of the 86 are pinned to
+      // other places (the author, 2026-09-29). A short bar is now a real gap.
+      const reach = handReach(box);
+      const boxCards = box.decks.flatMap((d) => d.cards);
+      return box.hands.map((hand) => {
+        const dealtSet = handCards.get(hand.id) ?? new Set<string>();
+        const possible = boxCards.filter((c) => reach.admits(c, hand)).map((c) => c.id).sort();
+        return {
+          id: hand.id,
+          gameId: effectiveGameId(hand),
+          ...(hand.title !== undefined ? { title: hand.title } : {}),
+          box: box.id,
+          boxName: box.title ?? effectiveGameId(box),
+          deals: handDeals.get(hand.id) ?? 0,
+          cardsPossible: possible,
+          cardsDealt: [...dealtSet].sort(),
+          cardsNeverDealt: possible.filter((id) => !dealtSet.has(id)),
+        };
+      });
+    }),
     unwrittenInputs,
     unprovidedHandRefs: findUnprovidedHandRefs(bundle),
     diagnostics: [...diagCounts.values()].sort((a, b) => b.runs - a.runs || a.where.localeCompare(b.where)),

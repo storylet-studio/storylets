@@ -14,6 +14,23 @@ here is part of shipping, not a courtesy.
 
 - **The documentation has moved to [storylets.dev](https://storylets.dev).** The Help menu and the
   About box open the new address. The old one still forwards, so a link you saved keeps working.
+- **Coverage leads with the cards it reached least.** The Coverage window opens on a table of
+  every card, with the cards no run dealt at the top, then the rarest, down to the ones every run
+  deals. Its columns have headings, **Runs dealt**, **Times dealt**, and **Times played**, and each
+  explains itself on hover. A card is dealt before it's played, so the top of the window counts
+  three things worth a look: cards never dealt, cards rarely dealt, and cards dealt but never
+  played. A card dealt in fewer than 5% of runs is tagged **Rare**. A card dealt but never played
+  has a tint of its own, apart from the never dealt. A never-dealt card still says why, where
+  coverage can tell. A card with no outcomes shows **no outcomes** where the others show how often they were played.
+  A switch puts the table in **Deck order**, and the window remembers your choice.
+- **Coverage counts each hand out of the cards that could come up there.** The per-hand counts
+  now sit below the card table, folded away. They used to count out of every card in the hand's
+  box, so on the Village each place read something like 6/86, a nearly empty bar for coverage
+  that was complete. A card pinned to another place, or tagged for another hand, no longer counts
+  against this one, so a short bar is now a real gap. Each row names the hand by its title and
+  shows how many deals it had, and the caption says the counts are over all the runs. A run that
+  goes to the turn cap now reads as **ran to the turn cap**, which is normal for a story with
+  branches.
 
 ## [0.14.1] - 2026-09-28
 

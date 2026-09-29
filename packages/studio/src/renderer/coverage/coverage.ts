@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // The Coverage window: run seeded playthroughs (computed in main, off the UI
-// thread) and show the per-hand lens first - what each hand can hold, what
-// never gets dealt and why.
+// thread) and show every card, least reached first: what never gets dealt and
+// why, what is dealt only rarely, and what is dealt but never played. The
+// per-hand lens waits below, folded away (the author's ruling, 2026-09-29).
 //
 // A tool window, like the Board and Find: it STAYS OPEN while you edit, it
 // sites over the editor, and main caches the last report so reopening shows it
@@ -22,8 +23,10 @@ import { applyTheme } from "../src/theme.js";
 import { el } from "../src/dom.js";
 import { initTooltips, metaLine, mountJobProgress, plural, toast, toolWindowHead } from "@wildwinter/app-shell";
 import type { JobProgressView } from "@wildwinter/app-shell";
-import type { CoverageReport, SearchSelection, StudioApi } from "../../shared/api.js";
+import type { CoverageOrder, CoverageReport, SearchSelection, StudioApi } from "../../shared/api.js";
 import { turnSpan } from "@storylet-studio/model";
+import { handsBlock } from "./hands.js";
+import { cardsBlock, summaryBlock } from "./cards.js";
 
 declare global { interface Window { studio: StudioApi; } }
 const studio = window.studio;
@@ -37,6 +40,11 @@ let name = "";
 let driverCount = 0;
 let hasProject = false;
 let pinned = true;
+/** The card table's order, remembered in the app's state (main keeps it). */
+let order: CoverageOrder = "least";
+/** Whether the per-hand section is unfolded. Kept here because every render
+ *  rebuilds the body, and a sweep starting should not fold it back up. */
+let handsOpen = false;
 let error = "";
 let busy = false;
 /** The last report was cut short by Cancel, so it speaks for fewer runs. */
@@ -116,7 +124,7 @@ function render(): void {
   // Dim them: still readable, plainly not the thing being measured.
   const body = el("main", { className: busy ? "cbody stale" : "cbody" });
   if (error) body.append(el("pre", { className: "cerror", text: error }));
-  else if (!report) body.append(el("p", { className: "hint", text: "Run coverage to see what each hand can hold." }));
+  else if (!report) body.append(el("p", { className: "hint", text: "Run coverage to see how often each card comes up." }));
   // FILTERED: `results` returns nulls for the sections this report has nothing
   // to say about, and Element.append stringifies a null rather than skipping it,
   // so the window was printing "nullnullnull" under a clean run. `el()` filters
@@ -149,51 +157,40 @@ function openRow(className: string, selection: SearchSelection, ...children: (HT
   return row;
 }
 
-/** A gate ref as a link into Find: "gated on @world.raining - where else is
- *  that used?" is the question a reader has the moment they read the flag. */
-function gateRefs(refs: string[]): HTMLElement {
-  const span = el("span", { className: "hint" }, "gated on ");
-  refs.forEach((ref, i) => {
-    if (i > 0) span.append(", ");
-    const link = el("button", { className: "reflink", text: ref });
-    link.title = `Find where ${ref} is used`;
-    link.addEventListener("click", (event) => { event.stopPropagation(); void studio.openSearch({ mode: "property", query: ref }); });
-    span.append(link);
-  });
-  // "or drives" only when a driver could actually help: drivers feed @world,
-  // where @story and @hand state is the content's own to write.
-  span.append(refs.some((r) => r.startsWith("@world.")) ? ", which nothing writes or drives" : ", which nothing writes");
-  return span;
-}
-
 /** " (100 min)" beside a turn count, when the project's boxes all agree on
  *  what a turn lasts; nothing at all otherwise. */
 const asTime = (r: CoverageReport, turns: number): string =>
   r.turnSeconds === undefined ? "" : ` (${turnSpan(turns, r.turnSeconds)})`;
 
+/** How a run ends, for the terminations line's tip. */
+const TERMINATIONS_TIP =
+  "A run stops early once it has seen everything. " +
+  "Most runs of a story with branches go on to the turn cap, and that is normal. " +
+  "One run takes one path, and the other runs see the rest. " +
+  "A stuck run went 20 turns with nothing dealt.";
+
+/** Give an element a themed rollover (`tip` on `el`, for an element made elsewhere). */
+function withTip(node: HTMLElement, tip: string): HTMLElement {
+  node.dataset["tip"] = tip;
+  return node;
+}
+
 function results(r: CoverageReport): (HTMLElement | null)[] {
-  const cardsDealt = r.cards.filter((c) => c.dealt > 0).length;
-  const gaps = r.cards.filter((c) => c.dealt === 0);
-  const hasDriverGap = gaps.some((c) => c.unwrittenRefs && c.unwrittenRefs.length > 0);
-  // Dealt but never played: the card reaches the board and the player never
-  // has a reason (or a way) to take it. A distinct fault from never dealt,
-  // and invisible if you only count deals (the old system's diagnostic).
-  // A card with NO outcomes is none of this: dealt is its whole job (the
-  // news/codex pattern), so listing it here reads as "not selected", which
-  // misled a reader (2026-08-28).
-  const playable = new Set(r.outcomes.map((o) => o.card));
-  const unplayed = r.cards.filter((c) => c.dealt > 0 && c.played === 0 && playable.has(c.id));
-  const dealtOnly = r.cards.filter((c) => !playable.has(c.id)).length;
+  const hasDriverGap = r.cards.some((c) => c.dealtRuns === 0 && c.unwrittenRefs && c.unwrittenRefs.length > 0);
   const deadOutcomes = r.outcomes.filter((o) => o.played === 0);
   const cardById = new Map(r.cards.map((c) => [c.id, c]));
   const t = r.terminations;
 
+  // The hands, folded away under their own caption: still the contract
+  // between designer and programmer, but the cards answer the first question.
+  const hands = handsBlock(r, openRow);
+  hands.open = handsOpen;
+  hands.addEventListener("toggle", () => { handsOpen = hands.open; });
+
   return [
-    el("div", { className: "summary" },
-      el("span", { className: "big", text: `${cardsDealt}/${r.cards.length}` }),
-      el("span", { className: "sublabel" }, metaLine(["cards dealt", `${r.runs} runs`, `seed ${r.seed}`])),
-      partial ? el("span", { className: "partial", text: "stopped early" }) : null,
-    ),
+    // The headline, and how many cards want a look: never dealt, rarely
+    // dealt, dealt but never played. The table below says which.
+    summaryBlock(r, partial),
     // The run's own shape: how the playthroughs ended says whether the
     // numbers above are worth trusting. All "stuck" means the content jams.
     // Two drawn metadata lines, the run's size and how it ended, spaced by
@@ -203,59 +200,31 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
       // (design/engine-server.md 4.8); a mixed project cannot, and says
       // nothing rather than something misleading.
       metaLine([`${r.turns} turns${asTime(r, r.turns)}`, `${r.plays} plays`, `max ${r.maxTurns} turns per run${asTime(r, r.maxTurns)}`]),
-      metaLine([`${t.exhausted} exhausted`, `${t.maxTurns} hit the cap`, `${t.stuck} stuck`]),
+      // "Hit the cap" read as a fault, and on a branching story it is most
+      // runs: one playthrough takes one path, so it rarely sees everything on
+      // its own (the author, 2026-09-29). The words say so plainly and the
+      // longer sentence waits in the tip, where the density rule keeps it.
+      withTip(metaLine([`${t.exhausted} saw everything`, `${t.maxTurns} ran to the turn cap`, `${t.stuck} stuck`]),
+        TERMINATIONS_TIP),
     ),
 
-    // The per-hand lens - the writer/programmer contract, front and centre.
-    el("section", { className: "block" },
-      el("span", { className: "caption", text: "By hand" }),
-      ...r.hands.map((h) => {
-        const total = h.cardsDealt.length + h.cardsNeverDealt.length;
-        const full = h.cardsNeverDealt.length === 0;
-        const row = openRow(`qrow${full ? " full" : ""}`, { kind: "hand", box: h.box, hand: h.id },
-          el("span", { className: "qname", text: h.gameId }),
-          el("span", { className: "bar" }, el("i", { className: "fill" })),
-          el("span", { className: "count", text: `${h.cardsDealt.length}/${total}` }),
-        );
-        const fill = row.querySelector<HTMLElement>(".fill")!;
-        fill.style.width = total > 0 ? `${(h.cardsDealt.length / total) * 100}%` : "0%";
-        return row;
-      }),
-    ),
+    // Every card, least reached first unless the author chose deck order.
+    // The never dealt carry the honesty net's reason, so this table is also
+    // where "why is this never dealt?" is answered.
+    cardsBlock(r, {
+      order,
+      onOrderChange: (next) => { order = next; void studio.setCoverageOrder(next); },
+      onOpen: reveal,
+      onFindUsage: (ref) => { void studio.openSearch({ mode: "property", query: ref }); },
+    }),
 
-    // Never dealt, with the honesty-net hint.
-    gaps.length > 0
-      ? el("section", { className: "block" },
-          el("span", { className: "caption", text: `Never dealt (${gaps.length})` }),
-          ...gaps.map((c) => openRow("gap", { kind: "card", box: c.box, deck: c.deck, card: c.id },
-            el("span", { className: "gname", text: c.title ?? c.gameId }),
-            c.unwrittenRefs && c.unwrittenRefs.length > 0
-              ? gateRefs(c.unwrittenRefs)
-              // The honesty net's second hop: the gate IS written, just never
-              // by anything that happened. Naming the culprit turns two
-              // never-dealt cards from two mysteries into one.
-              : c.refsWrittenOnlyByNeverDealtCards && c.refsWrittenOnlyByNeverDealtCards.length > 0
-              ? el("span", { className: "hint", text: c.refsWrittenOnlyByNeverDealtCards
-                  .map((d) => `${d.ref} is only written by ${d.by
-                    .map((id) => r.cards.find((x) => x.id === id)?.title ?? r.cards.find((x) => x.id === id)?.gameId ?? id).join(", ")}, which never came up either`)
-                  .join("; ") })
-              : el("span", { className: "hint", text: "not reached in these runs" }),
-          )),
+    // The quick-fix: propose + add drivers for the host-gated gaps, right
+    // under the rows it would fix.
+    hasDriverGap
+      ? el("div", { className: "fixrow" },
+          el("span", { className: "hint", text: "Some content is gated on host state nothing sets." }),
+          el("button", { className: "btn", text: busy ? "Working…" : "Add coverage drivers", onClick: () => void addDrivers() }),
         )
-      : el("section", { className: "block" }, el("span", { className: "allgood", text: "Every card gets dealt." })),
-
-    unplayed.length > 0
-      ? el("section", { className: "block" },
-          el("span", { className: "caption", text: `Dealt but never played (${unplayed.length})` }),
-          el("p", { className: "hint", text: "These reach the board, but no outcome of theirs was ever taken. Check their outcome gates." }),
-          ...unplayed.map((c) => openRow("gap", { kind: "card", box: c.box, deck: c.deck, card: c.id },
-            el("span", { className: "gname", text: c.title ?? c.gameId }),
-            el("span", { className: "hint", text: `dealt ${c.dealt}×` }),
-          )),
-        )
-      : null,
-    dealtOnly > 0
-      ? el("p", { className: "hint", text: `${plural(dealtOnly, "card")} ${dealtOnly === 1 ? "has" : "have"} no outcomes. Being dealt is their whole job, so they're never counted as unplayed.` })
       : null,
 
     deadOutcomes.length > 0
@@ -287,13 +256,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
         )
       : null,
 
-    // The quick-fix: propose + add drivers for the host-gated gaps.
-    hasDriverGap
-      ? el("div", { className: "fixrow" },
-          el("span", { className: "hint", text: "Some content is gated on host state nothing sets." }),
-          el("button", { className: "btn", text: busy ? "Working…" : "Add coverage drivers", onClick: () => void addDrivers() }),
-        )
-      : null,
+    hands,
   ];
 }
 
@@ -327,6 +290,7 @@ async function refresh(): Promise<void> {
   name = info.name;
   driverCount = info.driverCount;
   pinned = info.pinned;
+  order = state.coverageOrder;
   report = info.last;
   render();
   // A cached report is the whole point of caching: don't spend a run redoing it.

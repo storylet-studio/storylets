@@ -94,7 +94,7 @@ declare global { interface Window { studio: StudioApi; } }
 const studio = window.studio;
 
 // --- state -------------------------------------------------------------------
-let state: StudioState = { theme: "system", recents: [], panes: { nav: true, inspector: true }, autoRebuild: false, viewMode: "node", boardPinned: true, boardFollow: false, boardView: "map", searchPinned: true, coveragePinned: true, linksPinned: true, showResolved: false, reviewWalk: false, coverageOverlay: false };
+let state: StudioState = { theme: "system", recents: [], panes: { nav: true, inspector: true }, autoRebuild: false, viewMode: "node", boardPinned: true, boardFollow: false, boardView: "map", searchPinned: true, coveragePinned: true, coverageOrder: "least", linksPinned: true, showResolved: false, reviewWalk: false, coverageOverlay: false };
 // navExpanded hydrates from state after getState() resolves (see boot).
 let project: ProjectDto | undefined;
 /** Where the open project came from, when it came from a server (9.1). Absent

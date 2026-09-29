@@ -33,6 +33,9 @@ export default defineConfig({
       "@storylet-studio/runtime": fileURLToPath(new URL("./packages/runtime/src/index.ts", import.meta.url)),
       "@storylet-studio/play-helpers": fileURLToPath(new URL("./packages/play-helpers/src/index.ts", import.meta.url)),
       "@storylet-studio/with-patter": fileURLToPath(new URL("./packages/with-patter/src/index.ts", import.meta.url)),
+      // The subpath BEFORE the package (see scoperegistry below): the one file of
+      // ops the Coverage window's renderer loads, since it cannot take the rest.
+      "@storylet-studio/ops/coverage-order": fileURLToPath(new URL("./packages/ops/src/coverage-order.ts", import.meta.url)),
       "@storylet-studio/ops": fileURLToPath(new URL("./packages/ops/src/index.ts", import.meta.url)),
       "@storylet-studio/conformance": fileURLToPath(new URL("./packages/conformance/src/index.ts", import.meta.url)),
       ...(expr("expr") ? { "@wildwinter/expr": expr("expr")! } : {}),

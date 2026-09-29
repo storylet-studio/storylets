@@ -30,7 +30,8 @@ storyletengine unpack FILE -o DIR        explode a .storyletpack into source sha
 storyletengine merge BASE OURS THEIRS    id-keyed 3-way merge (+ .storyletconflict sidecar)
     [-o out] [--path realfile] [--json]
 storyletengine coverage [path]           seeded playthroughs: per-hand and per-card coverage
-    [--runs N] [--max-turns M] [--seed S] [--json] [--fail-on-gap] [--propose]
+    [--runs N] [--max-turns M] [--seed S] [--order least|deck]
+    [--json] [--fail-on-gap] [--propose]
 ```
 
 Exit codes: 0 ok, 1 the operation found problems, 2 usage. `merge` alone maps a

@@ -67,7 +67,7 @@ import type { Bundle, Comment, Frame, PropertyDecl, SaveFile, ScalarValue, Stack
 import type { BackgroundEdit } from "./mutate.js";
 import { ASSET_SCHEME, assetUrl } from "../shared/api.js";
 import type {
-  BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOverlayDto, CoverageReport, DeckGraph, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, PackOffer, ContractBreakDto, LeavePromptDto, LeaveSettledDto, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
+  BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOrder, CoverageOverlayDto, CoverageReport, DeckGraph, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, PackOffer, ContractBreakDto, LeavePromptDto, LeaveSettledDto, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
 } from "../shared/api.js";
 import { JOB_PROGRESS_CHANNEL, MAP_CANVAS, PROJECT_CHANGED } from "../shared/api.js";
 import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
@@ -1331,7 +1331,9 @@ function wireIpc(): void {
   ipcMain.handle("edit:undo", (): OpenResult | null => (session ? undo(session) : null));
   ipcMain.handle("edit:redo", (): OpenResult | null => (session ? redo(session) : null));
 
-  ipcMain.handle("table:open", () => windows.open("board"));
+  // Braces, not an expression: `open` returns the window, which cannot cross
+  // IPC ("An object could not be cloned"), and the caller only waits for it.
+  ipcMain.handle("table:open", () => { windows.open("board"); });
   ipcMain.handle("board:setPin", (_e, on: boolean) => {
     store.window("board").setPinned(on);
     pinToolWindow(windows.get("board"), window, on);
@@ -1465,7 +1467,7 @@ function wireIpc(): void {
     };
   });
   ipcMain.handle("coverage:setOverlay", (_event, on: boolean) => { store.setCoverageOverlay(on); menu(); });
-  ipcMain.handle("coverage:open", () => windows.open("coverage"));
+  ipcMain.handle("coverage:open", () => { windows.open("coverage"); });
   // The window is a tool window: it stays open while you edit, so the last
   // report is cached here and shown again on reopen (Patterpad's coverage
   // window). Opening a different project clears it, in openAt.
@@ -1489,6 +1491,11 @@ function wireIpc(): void {
   ipcMain.handle("coverage:setPin", (_event, on: boolean) => {
     store.window("coverage").setPinned(on);
     pinToolWindow(windows.get("coverage"), window, on);
+  });
+  // The card table's order, kept with the app's other view choices so it
+  // survives closing the window and quitting (Patterpad remembers its own).
+  ipcMain.handle("coverage:setOrder", (_event, order: CoverageOrder) => {
+    store.setCoverageOrder(order === "deck" ? "deck" : "least");
   });
   // The Coverage window's "Coverage drivers..." button: bring the editor
   // forward with the settings dialog open where the drivers are edited.

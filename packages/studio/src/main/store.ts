@@ -17,7 +17,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createAppStore, resetWindows, windowSlice } from "@wildwinter/app-shell/app-store";
 import type { AppStore, WindowSlice } from "@wildwinter/app-shell/app-store";
-import type { LastPlace, PaneState, StudioState, ThemeChoice, ViewMode, WindowBounds } from "../shared/api.js";
+import type { CoverageOrder, LastPlace, PaneState, StudioState, ThemeChoice, ViewMode, WindowBounds } from "../shared/api.js";
 
 /** The settings that are OURS rather than the family's: everything the shell
  *  has no opinion about. */
@@ -38,6 +38,8 @@ interface StudioSlice {
   showResolved: boolean;
   reviewWalk: boolean;
   coverageOverlay: boolean;
+  /** The Coverage window's card table order ("least" reached first, or "deck"). */
+  coverageOrder: CoverageOrder;
   navExpanded?: string[];
   mapGroups?: Record<string, string>;
   canvasCameras?: Record<string, { x: number; y: number; scale: number }>;
@@ -105,7 +107,7 @@ function slotsOf(slots: ServerSlots | undefined): Partial<Record<ServerRole, Sto
 // leaving it alone is the answer that never overrules somebody.
 const DEFAULTS: StudioSlice = {
   theme: "system", autoRebuild: false, viewMode: "node", boardFollow: false, boardViews: {}, showResolved: false,
-  reviewWalk: false, coverageOverlay: false,
+  reviewWalk: false, coverageOverlay: false, coverageOrder: "least",
 };
 
 /** The helper windows, by the keys the shell stores them under. */
@@ -298,6 +300,7 @@ export class StudioStore {
   setShowResolved(on: boolean): void { this.store.patchApp({ showResolved: on }); }
   setReviewWalk(on: boolean): void { this.store.patchApp({ reviewWalk: on }); }
   setCoverageOverlay(on: boolean): void { this.store.patchApp({ coverageOverlay: on }); }
+  setCoverageOrder(order: CoverageOrder): void { this.store.patchApp({ coverageOrder: order }); }
 
   setNavExpanded(ids: string[]): void { this.store.patchApp({ navExpanded: ids }); }
   setMapGroups(groups: Record<string, string>): void { this.store.patchApp({ mapGroups: groups }); }

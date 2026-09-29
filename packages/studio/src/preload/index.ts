@@ -128,6 +128,7 @@ const api: StudioApi = {
     ipcRenderer.on(JOB_PROGRESS_CHANNEL, (_event, progress: JobProgress) => handler(progress));
   },
   setCoveragePinned: (on: boolean) => ipcRenderer.invoke("coverage:setPin", on),
+  setCoverageOrder: (order) => ipcRenderer.invoke("coverage:setOrder", order),
   openProjectSettings: (section: string) => ipcRenderer.invoke("settings:open", section),
   onProjectChanged: (handler: () => void) => {
     ipcRenderer.on(PROJECT_CHANGED, () => handler());

@@ -7,7 +7,7 @@
 
 import type { Bundle, PlayRung, PropertyType, SaveFile, ScalarValue } from "@storylet-studio/model";
 import type { JobProgress } from "@wildwinter/app-shell/job";
-import type { BoxKit, CoverageReport, PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
+import type { BoxKit, CoverageOrder, CoverageReport, PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
 import type { IssueFix } from "@storylet-studio/compiler";
 import type { TraceEvent } from "@storylet-studio/runtime";   // Live Link: the frames carry the runtime's own events
 
@@ -16,7 +16,7 @@ import type { TraceEvent } from "@storylet-studio/runtime";   // Live Link: the 
 import type { UpdaterDownloadProgress, UpdaterPromptOptions } from "@wildwinter/app-shell/updater";
 export type { UpdaterDownloadProgress, UpdaterPromptOptions };
 
-export type { CoverageReport } from "@storylet-studio/ops";
+export type { CoverageOrder, CoverageReport } from "@storylet-studio/ops";
 // Find: the Property and Replace tabs carry the ops types across unchanged.
 export type { PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
 export type { JobProgress } from "@wildwinter/app-shell/job";
@@ -101,6 +101,9 @@ export interface StudioState {
   searchPinned: boolean;
   /** The Coverage window's pin. Default true, like its siblings. */
   coveragePinned: boolean;
+  /** The Coverage window's card table: least reached first (the default) or
+   *  deck order. Remembered once the author switches, as Patterpad's is. */
+  coverageOrder: CoverageOrder;
   /** The Links window's pin. Default true, like its siblings. */
   linksPinned: boolean;
   /**
@@ -1743,6 +1746,8 @@ export interface StudioApi {
 
   /** Coverage window: float over the editor (Board + Find's pin). */
   setCoveragePinned(on: boolean): Promise<void>;
+  /** Coverage window: remember the card table's order. */
+  setCoverageOrder(order: CoverageOrder): Promise<void>;
   /** Coverage window: bring the editor forward with Project Settings open at
    *  a section ("world" for the drivers). */
   openProjectSettings(section: string): Promise<void>;

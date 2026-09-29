@@ -49,7 +49,7 @@ storyletengine resolve <query> [path]
 storyletengine contract show [installation] [path]
 storyletengine merge BASE OURS THEIRS [-o out] [--json] [--path realfile]
 storyletengine links [path] [--deck X | --box X | --card X] [--refs] [--json]
-storyletengine coverage [path] [--runs N] [--max-turns M] [--seed S] [--json] [--fail-on-gap] [--propose]
+storyletengine coverage [path] [--runs N] [--max-turns M] [--seed S] [--order least|deck] [--json] [--fail-on-gap] [--propose]
 storyletengine share-scopes [path] [--at DIR]
 storyletengine pack [path] -o FILE [--assets|--no-assets]
 storyletengine unpack FILE -o DIR [--merge --base SENT.storyletpack]
@@ -464,24 +464,50 @@ into other decks. Run it without `--deck` to see those.
 Seeded playthroughs that report what your content can actually reach.
 
 ```
-$ storyletengine coverage tavern.storylets --runs 20 --seed 1
+$ storyletengine coverage saltmarsh.storylets --runs 20 --seed 1
 coverage: 20 run(s), seed 1, max 100 turns/run, 2000 turns, 2000 plays
 no input drivers: content gated on @world reads as never dealt
-cards dealt 2/3, played 2/3; outcomes played 2/3
-hand whats-next: held 2/3 cards over 2000 deal(s)
-never dealt: market-rumours  ? gated on @world.market_day - nothing writes or drives it (add a coverage driver?)
-never played: market-rumours/listen
+runs ended: 0 saw everything, 20 ran to the turn cap, 0 stuck
+cards dealt 2/4, played 2/4; outcomes played 2/5
+never dealt 2, rarely dealt 0 (under 5% of runs), dealt but never played 0
+hand docks-street: saw 2/3 cards that can come up here, over 2051 deal(s) in all runs
+
+runs dealt = share of runs that dealt the card at least once; dealt, played = times across all runs; n/a = no outcomes
+‼ never dealt   ? never dealt, gated on state nothing sets   ~ rarely dealt (under 5% of runs)   ! dealt, never played
+
+least reached first
+    runs dealt   dealt  played  card
+  ?         0%       0       0  [Docks] ambush-at-the-ford
+        gated on @hand.danger, written only by ambush-at-the-ford, which never came up either
+        gated on @story.reputation, written only by ambush-at-the-ford, pickpocket, which never came up either
+  ‼         0%       0       0  [Market] pickpocket
+          100%      51      20  [Market] mysterious-stranger
+          100%    2000    1980  [Docks] rat-job
+
+never played: ambush-at-the-ford/flee
+never played: ambush-at-the-ford/stand-and-fight
+never played: pickpocket/caught
 ```
 
 The second line names the `@world` properties the run drove, or says that none were. A run
 with no drivers reports host-gated content as never dealt, which is true of the run, not of
-the content. Never-dealt cards are listed with a hint where one is knowable.
+the content.
+
+The table lists every card with its deck in brackets, least reached first. The never dealt
+lead, then the rarest, down to the ones every run deals. **runs dealt** is the share of runs that
+dealt the card at least once. **dealt** and **played** are times across all the runs, so they
+can be far more than the number of runs. A card with no outcomes reads `n/a` for played. The
+marks are `‼` never dealt, `?` never dealt with a reason on the lines under it, `~` dealt in
+fewer than 5% of runs, and `!` dealt but never played. `--order deck` lists the cards deck by
+deck, as authored, instead. See [Coverage testing](/production/coverage-testing/#reading-the-results)
+for how to read them.
 
 | Flag | Does |
 |---|---|
 | `--runs N` | How many playthroughs. |
 | `--max-turns M` | Cap the turns per run. |
 | `--seed S` | The seed. The same seed always reproduces the same run. |
+| `--order least\|deck` | Least reached first (the default), or deck by deck as authored. |
 | `--json` | The full report as JSON. |
 | `--fail-on-gap` | Exit 1 on any never-dealt card, unprovided `@hand` read, or runtime warning. The CI form. |
 | `--propose` | Print a proposed coverage block instead of running. |

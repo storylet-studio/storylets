@@ -157,13 +157,25 @@ what actually came up.
 $ storyletengine coverage tavern.storylets --runs 20 --seed 1
 coverage: 20 run(s), seed 1, max 100 turns/run, 2000 turns, 2000 plays
 no input drivers: content gated on @world reads as never dealt
+runs ended: 0 saw everything, 20 ran to the turn cap, 0 stuck
 cards dealt 2/3, played 2/3; outcomes played 2/3
-hand whats-next: held 2/3 cards over 2000 deal(s)
-never dealt: market-rumours  ? gated on @world.market_day - nothing writes
-  or drives it (add a coverage driver?)
+never dealt 1, rarely dealt 0 (under 5% of runs), dealt but never played 0
+hand whats-next: saw 2/3 cards that can come up here, over 2000 deal(s) in all runs
+
+runs dealt = share of runs that dealt the card at least once; dealt, played = times across all runs; n/a = no outcomes
+‼ never dealt   ? never dealt, gated on state nothing sets   ~ rarely dealt (under 5% of runs)   ! dealt, never played
+
+least reached first
+    runs dealt   dealt  played  card
+  ?         0%       0       0  [Starter] market-rumours
+        gated on @world.market_day, which nothing writes or drives (add a coverage driver?)
+          100%      20      20  [Starter] welcome
+          100%    1980    1980  [Starter] what-now
+
 never played: market-rumours/listen
 ```
 
+The table leads with the card that came up least, here the one that never came up at all.
 Exactly right. `@world` belongs to your game, and nothing in the content sets `market_day`,
 so coverage can't reach the card. It says so instead of calling the card dead. The fix is a
 driver, and the tool proposes one:
@@ -190,13 +202,24 @@ Paste that block into `the-tavern.storyletproj` before `export:`, then run it ag
 
 ```
 $ storyletengine coverage tavern.storylets --runs 20 --seed 1 --fail-on-gap
-coverage: 20 run(s), seed 1, max 100 turns/run, 21 turns, 21 plays
+coverage: 20 run(s), seed 1, max 100 turns/run, 158 turns, 158 plays
 inputs driven: @world.market_day
+runs ended: 20 saw everything, 0 ran to the turn cap, 0 stuck
 cards dealt 3/3, played 3/3; outcomes played 3/3
-hand whats-next: held 3/3 cards over 24 deal(s)
+never dealt 0, rarely dealt 0 (under 5% of runs), dealt but never played 0
+hand whats-next: saw 3/3 cards that can come up here, over 181 deal(s) in all runs
+
+runs dealt = share of runs that dealt the card at least once; dealt, played = times across all runs; n/a = no outcomes
+‼ never dealt   ? never dealt, gated on state nothing sets   ~ rarely dealt (under 5% of runs)   ! dealt, never played
+
+least reached first
+    runs dealt   dealt  played  card
+          100%      20      20  [Starter] welcome
+          100%      23      10  [Starter] market-rumours
+          100%     138     128  [Starter] what-now
 ```
 
-Full coverage. Notice the turn count dropping from 2000 to 21. Once every card has been
+Full coverage. Notice the turn count dropping from 2000 to 158. Once every card has been
 dealt and every card that only plays once has been played, there's nothing left to do and
 the run stops early. `--fail-on-gap` exits 1 on any never-dealt card, on any warning the
 runs raise, and on any `@hand` read some asking hand never composes, which makes this a CI

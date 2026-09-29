@@ -34,6 +34,10 @@ const aliases = {
   "@storylet-studio/dialect": here("../dialect/src/index.ts"),
   "@storylet-studio/compiler": here("../compiler/src/index.ts"),
   "@storylet-studio/runtime": here("../runtime/src/index.ts"),
+  // The subpath before the package, since an alias matches as a prefix: the one
+  // file of ops a renderer loads (coverage's reading rules, which the Coverage
+  // window shares with the CLI). The rest of ops is Node code, for main only.
+  "@storylet-studio/ops/coverage-order": here("../ops/src/coverage-order.ts"),
   "@storylet-studio/ops": here("../ops/src/index.ts"),
   "@storylet-studio/with-patter": here("../with-patter/src/index.ts"),
   ...(expr("expr") ? { "@wildwinter/expr": expr("expr")! } : {}),

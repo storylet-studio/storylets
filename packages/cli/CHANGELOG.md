@@ -20,6 +20,18 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Changed
+
+- **`coverage` leads with the cards it reached least.** After the summary, a table lists every
+  card under headed columns, **runs dealt**, **dealt**, and **played**, with the never dealt
+  first, then the rarest, down to the ones every run deals. `--order deck` lists them deck by
+  deck instead. A card dealt in fewer than 5% of runs is marked `~`, and one dealt but never
+  played is marked `!`. The reasons a never-dealt card gives now sit under its row. A new line
+  counts the never dealt, the rarely dealt, and the dealt but never played, and another says how
+  the runs ended. Each hand is counted out of the cards that could come up there, not out of its
+  whole box. `--json` gains `dealtRuns`, `playedRuns`, `rare`, `deckName`, and
+  `boxName` on each card, and `totals` and `rareThresholdPct` on the report.
+
 ## [0.11.0] - 2026-09-26
 
 ### Added

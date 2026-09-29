@@ -12,6 +12,7 @@ import type {
   CoverageConfig, Card, Hand, HandTemplate, PropertyDecl, TagGroup,
 } from "@storylet-studio/model";
 import { proposeCoverage, runCoverage, runCoverageAsync } from "../src/coverage.js";
+import { RARE_DEALT_PCT, leastReachedFirst, rarelyDealt, sharePct } from "../src/coverage-order.js";
 
 interface Fix {
   world?: PropertyDecl[];
@@ -456,6 +457,123 @@ describe("the composed-name net (unprovided @hand refs)", () => {
   });
 });
 
+// What each hand's coverage is out of: the cards that could come up there by
+// tags and place (the runtime's tag matching over the hand's fixed bindings),
+// not every card in its box. On the Village every place read like "6/86" for
+// what was complete coverage (the author, 2026-09-29).
+describe("per-hand coverage: what could come up here", () => {
+  const hand = (report: ReturnType<typeof runCoverage>, gameId: string) =>
+    report.hands.find((h) => h.gameId === gameId)!;
+  const zones = {
+    tagGroups: [{ id: "d_zone", gameId: "zone", tags: [
+      { id: "v_docks", gameId: "docks" }, { id: "v_strip", gameId: "strip" },
+    ] }] as TagGroup[],
+    hands: [
+      { id: "h_docks", gameId: "docks-h", rule: { bindings: { d_zone: "v_docks" }, slots: "unbounded" } },
+      { id: "h_strip", gameId: "strip-h", rule: { bindings: { d_zone: "v_strip" }, slots: "unbounded" } },
+    ] as Hand<string>[],
+  };
+
+  it("a pinned card counts only at its place, a wildcard card at every hand", () => {
+    const source = project({
+      hands: [
+        { id: "h_a", gameId: "a", rule: { bindings: {}, slots: "unbounded" } },
+        { id: "h_b", gameId: "b", rule: { bindings: {}, slots: "unbounded" } },
+      ],
+      cards: [{ id: "c_here", tags: { place: ["h_a"] } }, { id: "c_any" }],
+    });
+    const report = runCoverage(source, OPTS);
+    expect(hand(report, "a").cardsPossible).toEqual(["c_any", "c_here"]);
+    expect(hand(report, "b").cardsPossible).toEqual(["c_any"]);
+    // Everything that could come up did: no gap at either, though b never
+    // held the card pinned to a.
+    expect(hand(report, "a").cardsNeverDealt).toEqual([]);
+    expect(hand(report, "b").cardsNeverDealt).toEqual([]);
+  });
+
+  it("a bound group admits the bound tag and omission; a required group refuses omission", () => {
+    const cards = [{ id: "c_docks", tags: { d_zone: ["v_docks"] } }, { id: "c_strip", tags: { d_zone: ["v_strip"] } }, { id: "c_plain" }];
+    const open = runCoverage(project({ ...zones, cards }), OPTS);
+    expect(hand(open, "docks-h").cardsPossible).toEqual(["c_docks", "c_plain"]);
+    expect(hand(open, "strip-h").cardsPossible).toEqual(["c_plain", "c_strip"]);
+    const required = runCoverage(project({
+      ...zones, tagGroups: [{ ...zones.tagGroups[0]!, required: true }], cards,
+    }), OPTS);
+    expect(hand(required, "docks-h").cardsPossible).toEqual(["c_docks"]);
+    expect(hand(required, "strip-h").cardsPossible).toEqual(["c_strip"]);
+  });
+
+  it("a group bound at run time is a wildcard: a movable hole and a boundBy group", () => {
+    const source = project({
+      story: [{ name: "act", type: "string", default: "one" }],
+      tagGroups: [
+        ...zones.tagGroups,
+        { id: "d_act", gameId: "act", boundBy: "@story.act", tags: [{ id: "v_one", gameId: "one" }, { id: "v_two", gameId: "two" }] },
+      ],
+      templates: [{ id: "t_walk", gameId: "walk", chooses: ["d_zone"], slots: "unbounded",
+        properties: [{ name: "where", type: "string", default: "docks" }] }],
+      hands: [{ id: "h_walker", gameId: "walker", template: "t_walk", chosen: { d_zone: "@hand.where" } }],
+      cards: [
+        { id: "c_docks", tags: { d_zone: ["v_docks"] } },
+        { id: "c_strip", tags: { d_zone: ["v_strip"] } },
+        { id: "c_later", tags: { d_act: ["v_two"] } },
+      ],
+    });
+    const walker = hand(runCoverage(source, OPTS), "walker");
+    // Nothing moves the walker off the docks and nothing advances the act in
+    // these runs, but a run could: none of the three is impossible here.
+    expect(walker.cardsPossible).toEqual(["c_docks", "c_later", "c_strip"]);
+    expect(walker.cardsDealt).toEqual(["c_docks"]);
+    expect(walker.cardsNeverDealt).toEqual(["c_later", "c_strip"]);
+  });
+
+  it("the gap list is only what could come up here and never did", () => {
+    const source = project({
+      ...zones,
+      world: [{ name: "never", type: "boolean", default: false }],
+      cards: [
+        { id: "c_docks", tags: { d_zone: ["v_docks"] } },
+        { id: "c_locked", condition: "@world.never", tags: { d_zone: ["v_docks"] } },
+        { id: "c_strip", tags: { d_zone: ["v_strip"] } },
+      ],
+    });
+    const docks = hand(runCoverage(source, OPTS), "docks-h");
+    expect(docks.cardsPossible).toEqual(["c_docks", "c_locked"]);
+    expect(docks.cardsDealt).toEqual(["c_docks"]);
+    // The strip card could never come up at the docks, so it is not a gap here.
+    expect(docks.cardsNeverDealt).toEqual(["c_locked"]);
+  });
+
+  it("a hand nothing can reach has an empty possible set, and says which box it is in", () => {
+    const source = project({
+      ...zones,
+      tagGroups: [{ ...zones.tagGroups[0]!, required: true }],
+      cards: [{ id: "c_docks", tags: { d_zone: ["v_docks"] } }],
+    });
+    const strip = hand(runCoverage(source, OPTS), "strip-h");
+    expect(strip.cardsPossible).toEqual([]);
+    expect(strip.cardsNeverDealt).toEqual([]);
+    expect(strip.deals).toBe(0);
+    expect(strip.boxName).toBe("b1");
+  });
+
+  it("the composed-name net counts a movable hole as naming its group and every tag's properties", () => {
+    const source = project({
+      tagGroups: [{ id: "d_zone", gameId: "zone", tags: [
+        { id: "v_docks", gameId: "docks", properties: [{ name: "vibe", type: "number", default: 0 }] },
+        { id: "v_strip", gameId: "strip" },
+      ] }],
+      templates: [{ id: "t_walk", gameId: "walk", chooses: ["d_zone"], slots: "unbounded",
+        properties: [{ name: "where", type: "string", default: "docks" }] }],
+      hands: [{ id: "h_walker", gameId: "walker", template: "t_walk", chosen: { d_zone: "@hand.where" } }],
+      // Untagged, so the walker asks it wherever the hole points; vibe is
+      // composed whenever the hole lands on the docks, so it is not flagged.
+      cards: [{ id: "c_moody", condition: '@hand.vibe >= 0 and @hand.zone == "docks"' }],
+    });
+    expect(runCoverage(source, OPTS).unprovidedHandRefs).toEqual([]);
+  });
+});
+
 // The dynamic net: warnings that actually fired during the seeded runs used
 // to be swallowed entirely - even one firing in every run of a sweep.
 describe("runtime warnings in the report", () => {
@@ -606,5 +724,143 @@ describe("coverage: content that names another engine's scope", () => {
     expect(report.runs).toBe(0);
     expect(report.issues.filter((i) => i.severity === "error").map((i) => i.message))
       .toEqual(["this content names @patter, which no engine on this registry registered: give every engine the game's one registry"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Coverage leads with what it reached LEAST (patter 72c625f, ruled for
+// Storylets 2026-09-29). It used to flag only the never dealt, so a card dealt
+// in half a percent of runs looked as healthy as one dealt in all of them. Now
+// each card says how many RUNS dealt and played it, a dealt-but-rare card is
+// flagged, the report counts the three kinds worth a look, and both the CLI
+// and the window lead with the least reached.
+// ---------------------------------------------------------------------------
+
+describe("runs dealt and played, rare cards, and the totals", () => {
+  it("counts runs, not occurrences: a card in every run is dealt many times but in each run once", () => {
+    // The never-dealt card keeps every run from exhausting, so each goes on to
+    // the turn cap and deals c_a again and again.
+    const report = runCoverage(project({
+      world: [{ name: "never", type: "boolean", default: false }],
+      cards: [{ id: "c_a" }, { id: "c_gated", condition: "@world.never" }],
+    }), OPTS);
+    const a = cardRow(report, "c_a");
+    expect(a.dealt).toBeGreaterThan(OPTS.runs);
+    expect(a.played).toBeGreaterThan(OPTS.runs);
+    expect(a.dealtRuns).toBe(OPTS.runs);
+    expect(a.playedRuns).toBe(OPTS.runs);
+    expect(a.rare).toBe(false);
+  });
+
+  it("a never-dealt card has no runs at all, and is never called rare", () => {
+    const report = runCoverage(project({
+      world: [{ name: "never", type: "boolean", default: false }],
+      cards: [{ id: "c_a" }, { id: "c_gated", condition: "@world.never" }],
+    }), OPTS);
+    const gated = cardRow(report, "c_gated");
+    expect([gated.dealtRuns, gated.playedRuns, gated.rare]).toEqual([0, 0, false]);
+    expect(report.totals).toMatchObject({ cards: 2, dealt: 1, neverDealt: 1, rare: 0 });
+  });
+
+  it("the rare threshold at its edges: exactly 5% of runs is not rare, one run fewer is", () => {
+    expect(RARE_DEALT_PCT).toBe(5);
+    expect(rarelyDealt(5, 100)).toBe(false);
+    expect(rarelyDealt(4, 100)).toBe(true);
+    expect(rarelyDealt(10, 200)).toBe(false);
+    expect(rarelyDealt(9, 200)).toBe(true);
+    expect(rarelyDealt(1, 20)).toBe(false);
+    expect(rarelyDealt(1, 21)).toBe(true);
+    // Never dealt is its own, louder flag; and a sweep with no runs has none.
+    expect(rarelyDealt(0, 100)).toBe(false);
+    expect(rarelyDealt(0, 0)).toBe(false);
+  });
+
+  it("flags a card dealt in fewer than 5% of runs, and counts it", () => {
+    // One value in forty: the card comes up in about 2.5% of runs.
+    const report = runCoverage(project({
+      world: [{ name: "lucky", type: "boolean", default: false }],
+      coverage: { drivers: { "@world.lucky": { kind: "initial", values: [true, ...Array<boolean>(39).fill(false)] } } },
+      cards: [{ id: "c_a" }, { id: "c_lucky", condition: "@world.lucky" }],
+    }), { runs: 400, maxTurns: 10, seed: 0 });
+    expect(report.rareThresholdPct).toBe(RARE_DEALT_PCT);
+    const lucky = cardRow(report, "c_lucky");
+    expect(lucky.dealtRuns).toBeGreaterThan(0);
+    expect(lucky.dealtRuns * 100).toBeLessThan(RARE_DEALT_PCT * report.runs);
+    expect(lucky.rare).toBe(true);
+    expect(cardRow(report, "c_a").rare).toBe(false);
+    expect(report.totals.rare).toBe(1);
+    for (const c of report.cards) expect(c.rare).toBe(rarelyDealt(c.dealtRuns, report.runs));
+  });
+
+  it("counts dealt but never played, leaving out a card with no outcomes (dealt is its whole job)", () => {
+    const report = runCoverage(project({
+      world: [{ name: "never", type: "boolean", default: false }],
+      cards: [
+        { id: "c_a" },
+        { id: "c_shut", outcomes: [{ id: "o_shut", gameId: "shut", condition: "@world.never", changes: {} }] },
+        { id: "c_news", outcomes: [] },
+      ],
+    }), OPTS);
+    const shut = cardRow(report, "c_shut");
+    expect(shut.dealtRuns).toBe(OPTS.runs);
+    expect(shut.playedRuns).toBe(0);
+    const news = cardRow(report, "c_news");
+    expect(news.dealtRuns).toBe(OPTS.runs);
+    expect(news.playedRuns).toBe(0);
+    expect(report.totals).toEqual({ cards: 3, dealt: 3, neverDealt: 0, rare: 0, dealtNeverPlayed: 1 });
+  });
+
+  it("names each card's deck and box as a reader knows them", () => {
+    const report = runCoverage(project({ cards: [{ id: "c_a" }] }), OPTS);
+    expect(cardRow(report, "c_a")).toMatchObject({ deck: "k_1", deckName: "main", box: "b_1", boxName: "b1" });
+  });
+
+  it("an empty report still carries its totals and threshold", () => {
+    const report = runCoverage(project({ cards: [{ id: "c_a" }] }), { ...OPTS, runs: 0 });
+    expect(report.runs).toBe(0);
+    expect(report.rareThresholdPct).toBe(RARE_DEALT_PCT);
+    expect(report.totals).toEqual({ cards: 1, dealt: 0, neverDealt: 1, rare: 0, dealtNeverPlayed: 0 });
+  });
+});
+
+describe("leastReachedFirst", () => {
+  const row = (id: string, dealtRuns: number, dealt: number) => ({ id, dealtRuns, dealt });
+
+  it("puts the never dealt first, then by runs dealt, then by times dealt", () => {
+    const ordered = leastReachedFirst([row("all", 200, 900), row("some", 50, 60), row("none", 0, 0), row("rare", 3, 3)]);
+    expect(ordered.map((c) => c.id)).toEqual(["none", "rare", "some", "all"]);
+  });
+
+  it("breaks a tie on runs by times dealt, then keeps deck order", () => {
+    const ordered = leastReachedFirst([row("a", 10, 9), row("b", 10, 3), row("c", 10, 3), row("d", 2, 50), row("e", 0, 0), row("f", 0, 0)]);
+    expect(ordered.map((c) => c.id)).toEqual(["e", "f", "d", "b", "c", "a"]);
+  });
+
+  it("does not reorder the report's own list, which stays in deck order", () => {
+    const report = runCoverage(project({
+      world: [{ name: "never", type: "boolean", default: false }],
+      cards: [{ id: "c_a" }, { id: "c_gated", condition: "@world.never" }],
+    }), OPTS);
+    expect(leastReachedFirst(report.cards).map((c) => c.id)).toEqual(["c_gated", "c_a"]);
+    expect(report.cards.map((c) => c.id)).toEqual(["c_a", "c_gated"]);
+  });
+});
+
+describe("sharePct: the Runs dealt figure", () => {
+  it("never rounds a dealt card to 0% or a missed one to 100%", () => {
+    expect(sharePct(0, 200)).toBe("0%");
+    expect(sharePct(1, 5000)).toBe("<0.1%");
+    expect(sharePct(1, 200)).toBe("0.5%");
+    expect(sharePct(199, 200)).toBe(">99%");
+    expect(sharePct(200, 200)).toBe("100%");
+    expect(sharePct(0, 0)).toBe("0%");
+  });
+
+  it("keeps a tenth under 10%, rounded down, so a rare card never shows the threshold", () => {
+    expect(sharePct(9, 200)).toBe("4.5%");
+    expect(sharePct(99, 2000)).toBe("4.9%");
+    expect(sharePct(57, 1000)).toBe("5.7%");
+    expect(sharePct(10, 200)).toBe("5%");
+    expect(sharePct(101, 200)).toBe("51%");
   });
 });

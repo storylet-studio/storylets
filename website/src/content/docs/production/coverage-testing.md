@@ -1,6 +1,6 @@
 ---
 title: Coverage testing
-description: Run seeded playthroughs that report what your content can actually reach, per hand, in Storyletter and from the command line.
+description: Run seeded playthroughs that report what your content can actually reach, card by card, in Storyletter and from the command line.
 sidebar:
   label: Coverage testing
 ---
@@ -42,37 +42,82 @@ will read as never dealt."* Beside it, **Coverage drivers…** takes you straigh
 they're edited.
 
 <figure class="doc-shot">
-  <img src="/doc-images/Coverage.png" alt="The Coverage window after a run on the Hamlet example: runs 200, max turns 100, seed 0 across the top, a line saying '2 coverage drivers feeding @world', the headline 17/17 cards dealt with 200 runs and seed 0, the run shape (19729 turns, 19729 plays, max 100 turns per run, 4 exhausted, 196 hit the cap, 0 stuck), three By hand fill bars for the-forge, the-inn, and the-mystic-tree, the line 'Every card gets dealt.', and one warning about a card condition" />
-  <figcaption>The Coverage window after a clean sweep of the Hamlet: the headline, how the runs ended, the per-hand fill bars, and the line every project wants to read.</figcaption>
+  <img src="/doc-images/Coverage.png" alt="The Coverage window after a run on the Hamlet example: runs 200, max turns 100 and seed 0 across the top, then '2 coverage drivers feeding @world'. The headline reads 17 of 17 cards, 100% of cards dealt over 200 runs, with 0 never dealt, 1 rarely dealt, and 0 dealt but never played. Under it, 4 runs saw everything and 196 ran to the turn cap. The card table, captioned 'How often each card came up, over 200 runs' and set to Least reached first, has columns for card, deck, runs dealt, times dealt, and times played. Its first row is Gareth's Gratitude from Gareth's Debt, tagged Rare, dealt in 4.5% of runs, followed by cards dealt in half the runs or more and a long run of cards dealt in every run." />
+  <figcaption>The Coverage window after a run on the Hamlet: every card was dealt, and the one that came up in fewer than 5% of runs leads the table, tagged Rare.</figcaption>
 </figure>
 
-### What it tells you
+## Reading the results
 
-**The headline** is one number, cards dealt out of cards total, with the run count and seed
-beneath it. Then comes the shape of the runs themselves: turns, plays, and how the playthroughs
-ended, split between *exhausted* (everything was seen), *hit the cap*, and *stuck*. Glance at
-that split before you trust the numbers above it. Runs that mostly go **stuck** mean the
-content jams rather than that it was measured.
+**The numbers at the top.** The big count is cards dealt out of all your cards, with the share
+beside it, then the run count and the seed. Under it, three counts say how many cards want a
+look. **Never dealt** counts the cards no run dealt. **Rarely dealt** counts the cards that were
+dealt, but in fewer than 5% of runs. **Dealt, never played** counts the cards that reached a hand
+and never had an outcome played.
 
-**By hand** is the lens that matters, because a hand is the contract between your designer
-and your programmer. One row per hand with a fill bar and a count of how many of the cards
-that hand could ever hold were actually held. A full hand highlights.
+**How the runs ended.** Under the numbers, one line gives the turns and plays, and the next says
+how the playthroughs ended. A run that **saw everything** dealt every card and played every card
+that plays only once, so it stopped early. A run that **ran to the turn cap** went the full number
+of turns. That's normal for a story with branches, because one run takes one path and the other
+runs see the rest. A **stuck** run went 20 turns with nothing dealt. Runs that mostly go stuck
+mean the content jams rather than that it was measured. Hover the line for a reminder.
 
-**Never dealt** lists every card no run reached, with a reason where one is knowable:
+**The table.** Each row is one card: its title, its deck (with its box beneath, when the project
+has more than one), and three numbers:
 
-- *"gated on `@world.time_of_day`: nothing writes or drives it"* means the card depends on
+- **Runs dealt** is the share of runs that dealt the card at least once.
+- **Times dealt** is how many times it was dealt across all the runs together. A card that stays
+  in a hand counts again each turn it's there, so this is usually far more than the number of
+  runs.
+- **Times played** is how many times an outcome of it was played across all the runs. It can
+  also be more than the number of runs, when a card comes round again.
+
+Runs dealt says how easily a card comes up. The two times say how much it was seen once it did.
+A card with no outcomes (a news headline, a codex entry, content whose whole job is to be dealt
+and read) shows **no outcomes** in the played column instead of a 0.
+
+**Least reached first, or deck order.** The table opens **least reached first**. The cards no run
+dealt are at the top, then the rarest, down to the ones every run deals. That puts the rows worth
+a look where you see them first. Switch to **Deck order** for every card box by box and deck by
+deck, as you wrote them. The window remembers which you picked.
+
+The test plays at random, so how often a card comes up isn't how often a player will see it. Real
+players choose on purpose. Read the numbers as "can this happen, and how easily", not as a
+forecast.
+
+Every row is a way back into the work. Click a card, an outcome, or a hand and the editor opens
+it. Click a property named in one of the reasons below and Find opens on it, listing everywhere
+in the project that reads or writes it. That's usually the quickest way to tell a mistake from a
+missing driver.
+
+## What it flags
+
+**Never dealt.** A card no run dealt is tinted in the table, and says why where the reason is
+knowable:
+
+- *"gated on `@world.time_of_day`, which nothing writes or drives"* means the card depends on
   your game's state and nothing in the content sets it.
-- Otherwise the reason is *"not reached in these runs"*.
+- *"`@story.bridge_repaired` is only written by Mend the Bridge, which never came up either"*
+  means the state is set, but only by another card that was never dealt. Two silent cards turn
+  out to have one cause, and you know which to look at first.
 
-When every card gets dealt, the section is replaced by one line: "Every card gets dealt."
+A never-dealt card with neither line simply wasn't reached in these runs.
 
-**Dealt but never played** is the separate fault underneath it. These cards reach the board,
-and no outcome of theirs was ever taken. Usually an outcome's condition is the culprit. A card
-that's dealt a thousand times and never played is invisible if you only count deals. A card
-with **no outcomes at all** (a news headline, a codex entry, content whose whole job is to be
-dealt and read) isn't listed here and doesn't block a run from counting as exhausted.
-Your game may play one, with no outcome, but a coverage run never does, so "never played"
-would be an accusation it can't answer.
+**Dealt, never played** is a separate fault. These cards reach a hand, and no outcome of theirs
+is ever taken. Usually an outcome's condition is the culprit. A card that's dealt a thousand
+times and never played is invisible if you only count deals, so these rows have a tint of their
+own and say so under the title. A card with no outcomes is never counted here, and doesn't block
+a run from counting as exhausted. Your game may play one, with no outcome, but a coverage run
+never does, so "never played" would be an accusation it can't answer.
+
+### Rarely dealt
+
+A card tagged **Rare** was dealt, but in fewer than 5% of runs. It can happen, just not easily.
+Usually it sits behind an unlikely run of plays, or a condition that's nearly always false. That
+can be exactly what you meant, like one encounter among many, or a secret. It's worth a look when
+it isn't, like a card most players should see that hides behind a condition you thought was
+common.
+
+### Outcomes, warnings, and hands
 
 **Outcomes never played** finishes the sweep at the branch level. A card can be well covered
 while one of its outcomes is unreachable.
@@ -84,12 +129,19 @@ reading `@hand.something` that some hand able to ask it never composes faults at
 so the content silently never deals from that hand, and a plain gap count would have called
 it an ordinary miss.
 
-Every row is a way back into the work. Click a hand, a card, or an outcome and the editor
-opens it. Click a property named in one of those reasons and Find opens on it, listing everywhere in
-the project that reads or writes it. That's usually the quickest way to tell a mistake from a
-missing driver.
+**Cards seen in each hand, over 200 runs** sits at the bottom, folded away. Open it to see
+coverage hand by hand, which matters because a hand is the contract between your designer and
+your programmer. One row per hand, named as the navigator names it, with its game ID and its
+number of deals quietly beneath. The count is out of the cards that could ever come up in that
+hand, not out of every card in its box. A card pinned to another place, or tagged for a
+different slice, doesn't count against it. A card's conditions aren't considered, and a tag
+group chosen as the game runs counts as matching anything, so nothing a run could deal there is
+left out. A full hand highlights, and a short bar means cards that could come up in that hand
+never did in any run. A hand that no card's tags can reach says so instead of
+showing a bar. In a project with more than one box, the hands are grouped under their box's
+name.
 
-### On the canvases
+## On the canvases
 
 With **View ▸ Coverage Overlay** on, the node canvas and the map wear the last run. A card
 face carries a band reading **never dealt** or **never played**, a map site is haloed by how
@@ -140,20 +192,41 @@ gate:
 
 ```
 $ storyletengine coverage the-hamlet.storylets
-coverage: 200 run(s), seed 0, max 100 turns/run, 1313 turns, 1313 plays
-inputs driven: @world.time_of_day
-cards dealt 16/16, played 16/16; outcomes played 24/24
-hand the-forge: held 11/16 cards over 2154 deal(s)
-hand the-inn: held 12/16 cards over 2216 deal(s)
-hand the-mystic-tree: held 4/16 cards over 1313 deal(s)
+coverage: 200 run(s), seed 0, max 100 turns/run, 19729 turns, 19729 plays
+inputs driven: @world.knows_road, @world.time_of_day
+runs ended: 4 saw everything, 196 ran to the turn cap, 0 stuck
+cards dealt 17/17, played 17/17; outcomes played 25/25
+never dealt 0, rarely dealt 1 (under 5% of runs), dealt but never played 0
+hand the-forge: saw 9/9 cards that can come up here, over 30260 deal(s) in all runs
+hand the-inn: saw 8/8 cards that can come up here, over 13874 deal(s) in all runs
+hand the-mystic-tree: saw 5/5 cards that can come up here, over 19529 deal(s) in all runs
+
+runs dealt = share of runs that dealt the card at least once; dealt, played = times across all runs; n/a = no outcomes
+‼ never dealt   ? never dealt, gated on state nothing sets   ~ rarely dealt (under 5% of runs)   ! dealt, never played
+
+least reached first
+    runs dealt   dealt  played  card
+  ~       4.5%      27       9  [Gareth's Debt] gareths-gratitude
+           50%     431     100  [Mira's Secret] the-sealed-letter
+           54%     409     108  [The Calling Tree] the-tree-blooms
 ```
 
-Never-dealt cards are listed with the same hints the window shows:
+The table is the window's, least reached first, with each card's deck in brackets. `--order deck`
+lists it deck by deck instead, under a heading per deck that counts its gaps. Each hand's count
+is out of the cards that could come up there, as in the window.
+
+Never-dealt cards carry the same reasons the window shows, on the lines under them. Here is
+the Saltmarsh example, which has two:
 
 ```
-never dealt: market-rumours  ? gated on @world.market_day - nothing writes
-  or drives it (add a coverage driver?)
-never played: market-rumours/listen
+least reached first
+    runs dealt   dealt  played  card
+  ?         0%       0       0  [Docks] ambush-at-the-ford
+        gated on @hand.danger, written only by ambush-at-the-ford, which never came up either
+        gated on @story.reputation, written only by ambush-at-the-ford, pickpocket, which never came up either
+  ‼         0%       0       0  [Market] pickpocket
+          100%      51      20  [Market] mysterious-stranger
+          100%    2000    1980  [Docks] rat-job
 ```
 
 `--fail-on-gap` exits 1 on any never-dealt card, on any unprovided `@hand` read, and on any

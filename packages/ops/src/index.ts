@@ -33,8 +33,10 @@ export { runResolve, indexProject } from "./resolve.js";
 export type { ResolveEntry, ResolveKind } from "./resolve.js";
 export { runCoverage, runCoverageAsync, proposeCoverage } from "./coverage.js";
 export type {
-  CoverageOptions, CoverageReport, CardCoverage, OutcomeCoverage, HandCoverage,
+  CoverageOptions, CoverageReport, CoverageTotals, CardCoverage, OutcomeCoverage, HandCoverage,
 } from "./coverage.js";
+export { leastReachedFirst, rarelyDealt, sharePct, RARE_DEALT_PCT } from "./coverage-order.js";
+export type { CoverageOrder } from "./coverage-order.js";
 export {
   runMerge, detectMergeType, conflictSidecar, MergeInputError, CONFLICT_SIDECAR_EXTENSION,
 } from "./merge.js";

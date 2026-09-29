@@ -25,8 +25,9 @@ import {
   BOX_KITS,                        // the one kit list; --kit validates from it
   GAME_KITS,                       // the same for init's game kits
   planShareScopes, defaultGameScopesParent, // share-scopes: Storyletter's Share Scopes, from the terminal
+  leastReachedFirst, sharePct, // coverage: the order and the Runs dealt column, as the window has them
 } from "@storylet-studio/ops";
-import type { BoxKit, GameKit, Issue, PlannedWrite } from "@storylet-studio/ops";
+import type { BoxKit, CardCoverage, GameKit, Issue, PlannedWrite } from "@storylet-studio/ops";
 import { contractPropertyPath, contractPropertyType, turnSpan } from "@storylet-studio/model";
 import pkg from "../package.json" with { type: "json" };
 
@@ -102,6 +103,8 @@ Usage:
   storyletengine coverage [path]      Seeded random playthroughs: what can each
                  [--runs N] [--max-turns M] [--seed S]   hand deal, what never
                  [--json] [--fail-on-gap]                gets dealt or played?
+                 [--order least|deck] Least reached first (the default), or
+                                      deck by deck as authored
                  [--propose]          Print an auto-proposed coverage block
                                       (drivers + arg domains) instead of running
   storyletengine --version            Print the version and exit (also -v, version)
@@ -136,7 +139,7 @@ const FLAGS: Record<string, { boolean: string[]; valued: string[]; repeated: str
   unpack: { boolean: ["merge"], valued: ["o", "base"], repeated: [] },
   merge: { boolean: ["json"], valued: ["o", "path"], repeated: [] },
   links: { boolean: ["json", "refs"], valued: ["deck", "box", "card"], repeated: [] },
-  coverage: { boolean: ["json", "fail-on-gap", "propose"], valued: ["runs", "max-turns", "seed"], repeated: [] },
+  coverage: { boolean: ["json", "fail-on-gap", "propose"], valued: ["runs", "max-turns", "seed", "order"], repeated: [] },
   contract: { boolean: [], valued: [], repeated: [] },
 };
 
@@ -752,6 +755,11 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
           return 2;
         }
       }
+      const order = flags["order"] ?? "least";
+      if (order !== "least" && order !== "deck") {
+        io.error(`usage: --order must be least or deck`);
+        return 2;
+      }
       const runsFlag = num("runs");
       const maxTurnsFlag = num("max-turns");
       const seedFlag = num("seed");
@@ -765,13 +773,14 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
       if (flags["json"] === true) {
         io.log(JSON.stringify(report, null, 2));
       } else {
-        const cardsDealt = report.cards.filter((c) => c.dealt > 0).length;
         const cardsPlayed = report.cards.filter((c) => c.played > 0).length;
         const outcomesPlayed = report.outcomes.filter((o) => o.played > 0).length;
         // A card with no outcomes cannot be played: dealt is its whole job
         // (the news/codex pattern), so the played count answers over the
         // cards that COULD be.
-        const playable = new Set(report.outcomes.map((o) => o.card)).size;
+        const playableIds = new Set(report.outcomes.map((o) => o.card));
+        const playable = playableIds.size;
+        const t = report.totals;
         // A project whose every box is timed can have its turns read as time
         // (design/engine-server.md 4.8); a mixed project cannot, and says
         // nothing rather than something misleading.
@@ -781,32 +790,82 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
         io.log(report.drivers.length > 0
           ? `inputs driven: ${report.drivers.join(", ")}`
           : "no input drivers: content gated on @world reads as never dealt");
-        io.log(`cards dealt ${cardsDealt}/${report.cards.length}, played ${cardsPlayed}/${playable}${playable < report.cards.length ? " playable" : ""}; outcomes played ${outcomesPlayed}/${report.outcomes.length}`);
-        if (playable < report.cards.length) {
-          io.log(`dealt-only: ${report.cards.length - playable} card(s) with no outcomes - dealt is their whole job`);
+        // How the runs ended, in the window's words: running to the cap is
+        // what most runs of a branching story do, not a fault.
+        const term = report.terminations;
+        io.log(`runs ended: ${term.exhausted} saw everything, ${term.maxTurns} ran to the turn cap, ${term.stuck} stuck`);
+        io.log(`cards dealt ${t.dealt}/${t.cards}, played ${cardsPlayed}/${playable}${playable < t.cards ? " playable" : ""}; outcomes played ${outcomesPlayed}/${report.outcomes.length}`);
+        io.log(`never dealt ${t.neverDealt}, rarely dealt ${t.rare} (under ${report.rareThresholdPct}% of runs), dealt but never played ${t.dealtNeverPlayed}`);
+        if (playable < t.cards) {
+          io.log(`dealt-only: ${t.cards - playable} card(s) with no outcomes, so being dealt is their whole job`);
         }
+        // Out of the cards that could come up at the hand (by tags and place),
+        // not out of its whole box, so a short count is a real gap. Seen is
+        // counted from the gap list, so it can never exceed the possible.
         for (const h of report.hands) {
-          const total = h.cardsDealt.length + h.cardsNeverDealt.length;
-          io.log(`hand ${h.gameId}: held ${h.cardsDealt.length}/${total} cards over ${h.deals} deal(s)`);
+          const possible = h.cardsPossible.length;
+          io.log(possible === 0
+            ? `hand ${h.gameId}: no card's tags let it come up here (${h.deals} deal(s))`
+            : `hand ${h.gameId}: saw ${possible - h.cardsNeverDealt.length}/${possible} cards that can come up here, over ${h.deals} deal(s) in all runs`);
         }
-        for (const c of report.cards.filter((x) => x.dealt === 0)) {
+
+        // The card table, least reached first unless --order deck (patter
+        // coverage's shape after 72c625f): headed columns, and a mark that
+        // says which of the three faults a row is.
+        const boxes = new Set(report.cards.map((c) => c.box));
+        const deckLabel = (c: CardCoverage): string => (boxes.size > 1 ? `${c.boxName}/${c.deckName}` : c.deckName);
+        const heading = "    runs dealt   dealt  played  card";
+        const cardRow = (c: CardCoverage, withDeck: boolean): void => {
+          const hint = (c.unwrittenRefs?.length ?? 0) > 0 || (c.refsWrittenOnlyByNeverDealtCards?.length ?? 0) > 0;
+          const neverPlayed = c.dealtRuns > 0 && c.playedRuns === 0 && playableIds.has(c.id);
+          const mark = c.dealtRuns === 0 ? (hint ? "? " : "‼ ") : neverPlayed ? "! " : c.rare ? "~ " : "  ";
+          const played = playableIds.has(c.id) ? String(c.played) : "n/a";
+          io.log(`  ${mark}${sharePct(c.dealtRuns, report.runs).padStart(10)}  ${String(c.dealt).padStart(6)}  ${played.padStart(6)}  ${withDeck ? `[${deckLabel(c)}] ` : ""}${c.gameId}`);
           // The remedy depends on the scope: a driver feeds @world (the host
           // seam), so "add a driver" is only honest advice there. @story and
           // @hand state is the content's own to write, and a misspelt name
           // never gets this far (it is a compile error), so what is left is a
           // declared property no outcome writes.
-          const anyWorld = (c.unwrittenRefs ?? []).some((r) => r.startsWith("@world."));
-          const hint = c.unwrittenRefs
-            ? `  ? gated on ${c.unwrittenRefs.join(", ")} - nothing writes${anyWorld ? " or drives" : ""} it${anyWorld ? " (add a coverage driver?)" : ""}`
-            : "";
-          io.log(`never dealt: ${c.gameId}${hint}`);
+          if (c.unwrittenRefs) {
+            const anyWorld = c.unwrittenRefs.some((r) => r.startsWith("@world."));
+            io.log(`        gated on ${c.unwrittenRefs.join(", ")}, which nothing writes${anyWorld ? " or drives (add a coverage driver?)" : ""}`);
+          }
           // The second hop: a gate that IS written, but only by content that
           // never happened. Says where to look next rather than leaving two
           // never-dealt cards looking like two separate problems.
           for (const d of c.refsWrittenOnlyByNeverDealtCards ?? []) {
             const names = d.by.map((id) => report.cards.find((x) => x.id === id)?.gameId ?? id);
-            io.log(`  ? gated on ${d.ref} - written only by ${names.join(", ")}, which never came up either`);
+            io.log(`        gated on ${d.ref}, written only by ${names.join(", ")}, which never came up either`);
           }
+        };
+        if (report.cards.length > 0) {
+          io.log("");
+          io.log("runs dealt = share of runs that dealt the card at least once; dealt, played = times across all runs; n/a = no outcomes");
+          io.log(`‼ never dealt   ? never dealt, gated on state nothing sets   ~ rarely dealt (under ${report.rareThresholdPct}% of runs)   ! dealt, never played`);
+          if (order === "least") {
+            io.log("");
+            io.log("least reached first");
+            io.log(heading);
+            for (const c of leastReachedFirst(report.cards)) cardRow(c, true);
+          } else {
+            // Deck order: the report's own, box by box and deck by deck as
+            // authored, under a heading per deck that counts its faults.
+            const byDeck = new Map<string, CardCoverage[]>();
+            for (const c of report.cards) (byDeck.get(c.deck) ?? byDeck.set(c.deck, []).get(c.deck)!).push(c);
+            for (const cards of byDeck.values()) {
+              const never = cards.filter((c) => c.dealtRuns === 0).length;
+              const rare = cards.filter((c) => c.rare).length;
+              const unplayed = cards.filter((c) => c.dealtRuns > 0 && c.playedRuns === 0 && playableIds.has(c.id)).length;
+              const notes = [
+                never ? `${never} never dealt` : "", rare ? `${rare} rarely dealt` : "", unplayed ? `${unplayed} dealt, never played` : "",
+              ].filter(Boolean).join(", ");
+              io.log("");
+              io.log(`${deckLabel(cards[0]!)}${notes ? `  (${notes})` : ""}`);
+              io.log(heading);
+              for (const c of cards) cardRow(c, false);
+            }
+          }
+          io.log("");
         }
         for (const o of report.outcomes.filter((x) => x.played === 0)) {
           io.log(`never played: ${report.cards.find((c) => c.id === o.card)?.gameId}/${o.gameId}`);

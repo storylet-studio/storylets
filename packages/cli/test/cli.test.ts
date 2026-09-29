@@ -323,8 +323,49 @@ describe("coverage against the saltmarsh example", () => {
     const out = r.out.join("\n");
     // The ambush needs @hand.danger >= 2, and only its own outcome lowers
     // danger - nothing raises it, so it is honestly never dealt.
-    expect(out).toContain("never dealt: ambush-at-the-ford");
-    expect(out).toMatch(/hand docks-street: held 2\/4 cards/);
+    expect(out).toMatch(/^ {2}\? +0% +0 +0 {2}\[Docks\] ambush-at-the-ford$/m);
+    // Out of the three cards the hand's tags admit, not the box's four.
+    expect(out).toMatch(/hand docks-street: saw 2\/3 cards that can come up here, over \d+ deal\(s\) in all runs/);
+  });
+
+  it("counts the three kinds worth a look, and says how the runs ended", async () => {
+    const out = (await call("coverage", exampleDir, "--runs", "15", "--max-turns", "20", "--seed", "1")).out.join("\n");
+    expect(out).toContain("never dealt 2, rarely dealt 0 (under 5% of runs), dealt but never played 0");
+    expect(out).toMatch(/^runs ended: \d+ saw everything, \d+ ran to the turn cap, \d+ stuck$/m);
+  });
+
+  it("leads with the least reached, under headed columns and a key to the marks", async () => {
+    const lines = (await call("coverage", exampleDir, "--runs", "15", "--max-turns", "20", "--seed", "1")).out;
+    expect(lines).toContain("runs dealt = share of runs that dealt the card at least once; dealt, played = times across all runs; n/a = no outcomes");
+    expect(lines).toContain("‼ never dealt   ? never dealt, gated on state nothing sets   ~ rarely dealt (under 5% of runs)   ! dealt, never played");
+    const heading = lines.indexOf("    runs dealt   dealt  played  card");
+    expect(lines[heading - 1]).toBe("least reached first");
+    // Both never dealt first, in deck order between them; the ambush's gate
+    // lines follow it, since it waits on cards that never came up either.
+    expect(lines[heading + 1]).toMatch(/^ {2}\? +0% .*ambush-at-the-ford$/);
+    expect(lines[heading + 2]).toMatch(/^ {8}gated on @hand\.danger, written only by ambush-at-the-ford, which never came up either$/);
+    expect(lines[heading + 4]).toMatch(/^ {2}‼ +0% .*\[Market\] pickpocket$/);
+    expect(lines[heading + 5]).toMatch(/^ {4} +100% .*mysterious-stranger$/);
+    expect(lines[heading + 6]).toMatch(/^ {4} +100% .*rat-job$/);
+  });
+
+  it("--order deck lists the cards deck by deck, as authored, each deck counting its gaps", async () => {
+    const lines = (await call("coverage", exampleDir, "--runs", "15", "--max-turns", "20", "--seed", "1", "--order", "deck")).out;
+    expect(lines).not.toContain("least reached first");
+    const docks = lines.indexOf("Docks  (1 never dealt)");
+    const market = lines.indexOf("Market  (1 never dealt)");
+    expect(docks).toBeGreaterThan(0);
+    expect(market).toBeGreaterThan(docks);
+    expect(lines[docks + 1]).toBe("    runs dealt   dealt  played  card");
+    expect(lines[docks + 2]).toMatch(/ambush-at-the-ford$/);
+    expect(lines[market + 2]).toMatch(/^ {2}‼ .* pickpocket$/);
+    expect(lines[market + 3]).toMatch(/100% .* mysterious-stranger$/);
+  });
+
+  it("--order takes least or deck, and nothing else", async () => {
+    const r = await call("coverage", exampleDir, "--runs", "1", "--order", "script");
+    expect(r.code).toBe(2);
+    expect(r.err.join()).toContain("--order must be least or deck");
   });
 
   it("--fail-on-gap turns the gap into an exit code for CI", async () => {

@@ -18,7 +18,7 @@ what it deals.
 ## What you can find out
 
 - **[Coverage testing](/production/coverage-testing/)**: seeded playthroughs that report
-  what your content can reach, per hand, in the app or from the command line. A card
+  what your content can reach, card by card, in the app or from the command line. A card
   that's unreachable because nothing sets the state it needs is reported as a gap, not
   counted as covered.
 - **[A spreadsheet of the whole project](/storyletter/overview/#a-spreadsheet-of-the-whole-project)**:
