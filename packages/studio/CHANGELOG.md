@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-09-30
+
 ### Security
 
 - **Electron 42.11.10.** Storyletter runs on the latest Electron 42 release, which fixes several security
