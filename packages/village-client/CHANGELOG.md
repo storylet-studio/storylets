@@ -9,6 +9,8 @@ the release notes, and refuses a tag with no dated section for it.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-30
+
 ### Added
 
 - **The project is in the zip**, under `projects/the-village.storylets`, to open in Storyletter.

@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-30
+
 ### Added
 
 - **A fourth example, The Hamlet (Patter Version).** The Hamlet's cards paired with a Patter project that holds a scene for each, copied side by side, so the Board plays each card's scene, **Edit Scene in Patterpad** works straight away, and Patterpad's **Show Card in Storyletter** finds its way back. It's offered on the welcome screen too, beside the Hamlet you start with, which has no Patter in it.

@@ -7,6 +7,8 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-30
+
 ### Added
 
 - **The game plays the Patter version of the Hamlet**, `examples/the-hamlet-patter.storylets`: the same cards as the Hamlet, paired with `the-hamlet.patter`, publishing to `storylet-dist/the-hamlet-patter.storyletsc`, which the three engine demos copy too. The Hamlet itself, Storyletter's first example, stays free of Patter.
