@@ -1,0 +1,78 @@
+{
+  schema: "storylets/tags@0",
+  groups: [
+    {
+      gameId: "area",
+      id: "d_zone",
+      purpose: "Where in the world this beat belongs.",
+      tags: [
+        {
+          gameId: "forest",
+          id: "v_forest",
+          order: 1,
+          properties: [
+            {
+              default: 0,
+              name: "peril",
+              type: "number",
+            },
+          ],
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: 463,
+                  y: 168,
+                },
+                {
+                  x: 473,
+                  y: 249,
+                },
+                {
+                  x: 596,
+                  y: 267,
+                },
+                {
+                  x: 670,
+                  y: 144,
+                },
+              ],
+            },
+          },
+        },
+        {
+          gameId: "village",
+          id: "v_village",
+          order: 0,
+          templates: {
+            spatial: {
+              polygon: [
+                {
+                  x: 177,
+                  y: 95,
+                },
+                {
+                  x: 337,
+                  y: 95,
+                },
+                {
+                  x: 337,
+                  y: 255,
+                },
+                {
+                  x: 177,
+                  y: 255,
+                },
+              ],
+            },
+          },
+        },
+      ],
+      templates: {
+        spatial: {
+          map: true,
+        },
+      },
+    },
+  ],
+}

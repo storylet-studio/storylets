@@ -1,8 +1,9 @@
 # The Hamlet (Patter side)
 
 The dialogue half of the joint demo: the Storylet Engine chooses the beat, Patter
-performs it. The storylet half is `../the-hamlet.storylets`, and the design is in
-the workshop repo (`design/the-hamlet-patter-demo.md`, and Reboot.md section 10).
+performs it. The storylet half is `../the-hamlet-patter.storylets`, the Patter
+version of the Hamlet, and the design is in the workshop repo
+(`design/the-hamlet-patter-demo.md`, and Reboot.md section 10).
 
 **Every scene here is a STUB.** Each one has a single placeholder text beat and
 the outcome plumbing. The plumbing is real and tested; the words are not written

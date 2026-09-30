@@ -10,9 +10,12 @@ Storylet Engine decides which beat happens next, Patter plays the dialogue for i
 owns the world both of them read. Nothing in either project knows about the other. The join is a
 naming convention your game follows, and a build-time check keeps it honest.
 
-**The Hamlet** is the worked example (seventeen cards, seventeen scenes, one save). It is playable
+**The Hamlet (Patter Version)** is the worked example (seventeen cards, seventeen scenes, one
+save): the Hamlet's cards, paired with a Patter project that holds a scene for each. It is playable
 in your browser and ships as source for JavaScript, Godot, Unity, and Unreal, all from the
-[download page](/download/#the-hamlet-two-engines-in-one-game) once its first release is out.
+[download page](/download/#the-hamlet-patter-version-two-engines-in-one-game). The JavaScript zip also carries
+both projects, paired, so you can open them in Storyletter and Patterpad and follow the
+convention below from either side.
 
 ## The convention
 
@@ -27,7 +30,7 @@ Two names, both of which you already write:
 Which boxes get performed by Patter is your game's decision, not the project's. A box of ambient
 cards can stay text-only beside a box whose every card opens a conversation.
 
-In `the-hamlet.storylets`, the village card `settle-at-the-inn` has outcomes `ask-about-history`
+In `the-hamlet-patter.storylets`, the village card `settle-at-the-inn` has outcomes `ask-about-history`
 and `ask-about-the-road-north`. In `the-hamlet.patter`, the scene `settle-at-the-inn` offers two
 options, one carrying each of those names. That is the whole link.
 
@@ -306,7 +309,7 @@ Play. `HamletGame.cpp` makes two `Create` calls with one world,
 `UStoryletEngine::Create(Bundle, Seed, false, World)` and `UPatterEngine::Create(Bundle, World)`.
 
 Each ships with Patter's plugin from its pinned release, so the zip runs as downloaded. All
-four read the same two published bundles, `storylet-dist/the-hamlet.storyletsc` from
+four read the same two published bundles, `storylet-dist/the-hamlet-patter.storyletsc` from
 Storyletter and `patter-dist/the_hamlet.patterc` from Patterpad, each editor's default place
 beside its project, and committed. A game reads published bundles, and so does the demo.
 

@@ -13,6 +13,10 @@ Patterpad, and they're joined by names you already write.
 This page covers what Storyletter does to help. How the game wires the two engines together is
 in [Storylets with Patter](/play/with-patter/).
 
+To see a finished pair, choose **Help ▸ Open an Example ▸ The Hamlet (Patter Version)**. It
+copies the Hamlet's cards and their Patter project side by side, already paired, so everything
+on this page works on it straight away.
+
 ## The names that join them
 
 - **A card's gameId is its scene's name.** The card `the-moneylenders-men` plays the Patter

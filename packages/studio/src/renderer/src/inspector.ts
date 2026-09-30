@@ -286,10 +286,9 @@ function gameIdField(
       ? `Game id, pinned: editing the title no longer changes it${shut ? "" : " (click to edit)"}`
       : `Game id, following the title until the bundle is first published${shut ? "" : " (click to override)"}`;
     root.title = bound?.length ? [...bound, usual].join("\n") : usual;
-    root.replaceChildren(
-      el("span", { className: "gid-value", text: pinned || derived() || "(unnamed)" }),
-      el("span", { className: "gid-tag", text: pinned ? "Pinned" : "Auto" }),
-    );
+    // No "Pinned"/"Auto" word: Patterpad's manner, where a derived id reads muted
+    // (`.gid-auto`) and a pinned one plainly, and the tooltip says which.
+    root.replaceChildren(el("span", { className: "gid-value", text: pinned || derived() || "(unnamed)" }));
   };
   // Repainted from outside by `refreshGameIds`, which is how a chip learns it
   // has been disabled: the read-only pass runs after the document is drawn.

@@ -71,6 +71,7 @@ import type {
 } from "../shared/api.js";
 import { JOB_PROGRESS_CHANNEL, MAP_CANVAS, PROJECT_CHANGED } from "../shared/api.js";
 import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
+import { EXAMPLES } from "../shared/examples.js";
 
 // Chromium has to be told about a scheme BEFORE `whenReady`, or `protocol.handle`
 // serves a URL the renderer is not allowed to load: an unregistered scheme is
@@ -1158,22 +1159,31 @@ function wireIpc(): void {
     if (!(await mayLeaveProject("close"))) return null;
     const source = examplePath(name);
     if (source === undefined) return { error: `no example called "${name}" shipped with this build` };
+    // Its companions (the Hamlet's Patter project and published scenes) go beside
+    // it, so a pairing written as a relative path finds them in the copy too.
+    const companions = (EXAMPLES.find((x) => x.file === name)?.companions ?? [])
+      .map((c) => join(dirname(source), c)).filter((c) => existsSync(c));
     // `title` alone is INVISIBLE on macOS: the native open panel ignores it, so
     // the author saw a bare folder chooser and no reason for it. `message` is
     // the line macOS actually renders, and `buttonLabel` names the act - which
     // is Patterpad's convention on every dialog that asks for a folder.
     const picked = await dialog.showOpenDialog(window!, {
       title: "Where should your copy of the example go?",
-      message: `Choose a folder. A copy of "${basename(source)}" goes into it and opens, yours to change.`,
+      message: companions.length
+        ? `Choose a folder. A copy of "${basename(source)}" and its Patter project go into it, and it opens, yours to change.`
+        : `Choose a folder. A copy of "${basename(source)}" goes into it and opens, yours to change.`,
       buttonLabel: "Copy Here",
       properties: ["openDirectory", "createDirectory"],
     });
     const parent = picked.filePaths[0];
     if (picked.canceled || parent === undefined) return null;
     const target = join(parent, basename(source));
-    if (existsSync(target)) return { error: `there is already something called "${basename(source)}" there` };
+    for (const path of [source, ...companions]) {
+      if (existsSync(join(parent, basename(path)))) return { error: `there is already something called "${basename(path)}" there` };
+    }
     try {
       cpSync(source, target, { recursive: true });
+      for (const c of companions) cpSync(c, join(parent, basename(c)), { recursive: true });
     } catch (e) {
       return { error: `could not copy the example: ${e instanceof Error ? e.message : String(e)}` };
     }

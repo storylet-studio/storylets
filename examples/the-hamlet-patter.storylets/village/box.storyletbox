@@ -1,0 +1,21 @@
+{
+  schema: "storylets/box@0",
+  box: {
+    fields: [
+      {
+        default: "",
+        name: "music",
+        purpose: "A host cue: which music stem this beat wants. Fields are for the HOST to read, and this one is deliberately NOT the dialogue handoff - a card's gameId already names its Patter scene (Reboot.md 10).",
+        type: "string",
+      },
+    ],
+    gameId: "village",
+    id: "b_village",
+    properties: [],
+    purpose: "Every story beat in and around the village.",
+    ranking: {
+      specificity: true,
+    },
+    title: "Village",
+  },
+}

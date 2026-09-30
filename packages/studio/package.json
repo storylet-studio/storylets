@@ -70,6 +70,22 @@
         ]
       },
       {
+        "from": "../../examples/the-hamlet-patter.storylets",
+        "to": "examples/the-hamlet-patter.storylets",
+        "filter": [
+          "**/*",
+          "!dist/**"
+        ]
+      },
+      {
+        "from": "../../examples/the-hamlet.patter",
+        "to": "examples/the-hamlet.patter"
+      },
+      {
+        "from": "../../examples/patter-dist",
+        "to": "examples/patter-dist"
+      },
+      {
         "from": "../../examples/the-village.storylets",
         "to": "examples/the-village.storylets",
         "filter": [

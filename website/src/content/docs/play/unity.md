@@ -272,7 +272,7 @@ load the bundle, build an engine, open a flow, deal, read `Board()`. Everything 
 
 **The Hamlet on Unity** is the second demo, the same project with [Patter](https://patterkit.dev)
 performing each card's dialogue, two engines in one game. It ships as a project zip on the
-[download page](/download/#the-hamlet-two-engines-in-one-game); `Assets/Hamlet/HamletGame.cs` is the whole
+[download page](/download/#the-hamlet-patter-version-two-engines-in-one-game); `Assets/Hamlet/HamletGame.cs` is the whole
 integration, and [Running it with Patter](/play/with-patter/) explains the handoff.
 
 ## How it's built

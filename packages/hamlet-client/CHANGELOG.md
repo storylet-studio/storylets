@@ -7,6 +7,15 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+### Added
+
+- **The game plays the Patter version of the Hamlet**, `examples/the-hamlet-patter.storylets`: the same cards as the Hamlet, paired with `the-hamlet.patter`, publishing to `storylet-dist/the-hamlet-patter.storyletsc`, which the three engine demos copy too. The Hamlet itself, Storyletter's first example, stays free of Patter.
+- **Both source projects are in the zip**, under `projects/`: `the-hamlet-patter.storylets` for Storyletter and `the-hamlet.patter` for Patterpad, side by side, paired, with what each publishes. Open either and it finds the other with nothing to set up: Storyletter checks every card against its scene and plays the scenes on its Board, and each app jumps to the matching card or scene in the other.
+
+### Fixed
+
+- **The zip plays from a double-click.** 0.4.0 and earlier drew an empty frame when `dist/index.html` was opened from the folder, because the page fetched its own bundle and a browser refuses that on a page opened from disk. The build now also writes the data as a plain script beside the page, which a browser does run, and the page falls back on it only when that fetch is refused, so a served page still plays the files beside it. The `index.html` at the top of the zip now opens the game in `dist/` rather than being a page with no script beside it.
+
 ## [0.4.0] - 2026-09-26
 
 ### Changed

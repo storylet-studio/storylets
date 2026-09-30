@@ -340,16 +340,19 @@ export function refreshMenu(
     {
       role: "help",
       submenu: [
-        linkItem(NAMED.docs),
-        linkItem(NAMED.suiteDocs),
         // The worked examples, reachable from inside a project (the kit gallery
         // brief, section 5). Until 2026-09-27 the welcome screen was their only
-        // door, so a stuck author had to close their work to find them. Each
-        // item asks for a folder, so each carries the ellipsis.
+        // door, so a stuck author had to close their work to find them. FIRST in
+        // Help (2026-09-30), since Help is where a lost author looks for "how do
+        // I get to the demos?"; Patterpad's Open an Example sits in the same
+        // place. Each item asks for a folder, so each carries the ellipsis.
         {
           label: "Open an Example",
           submenu: EXAMPLES.map((x) => ({ label: `${x.name}\u2026`, click: send({ cmd: "open-example", file: x.file }) })),
         },
+        { type: "separator" },
+        linkItem(NAMED.docs),
+        linkItem(NAMED.suiteDocs),
         { type: "separator" },
         // CHECK FOR UPDATES is here, DISABLED, and this reverses a decision this
         // file used to state the other way round.

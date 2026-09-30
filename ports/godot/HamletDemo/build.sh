@@ -21,5 +21,5 @@ unzip -q "$tmp/$zip" -d "$tmp/unz"
 [ -f "$tmp/unz/patterplay/plugin.cfg" ] || { echo "build: $zip did not contain patterplay/plugin.cfg"; exit 1; }
 cp -R "$tmp/unz/patterplay" "$here/addons/patterplay"
 
-cp "$root/examples/storylet-dist/the-hamlet.storyletsc" "$here/hamlet.storyletsc"; cp "$root/examples/patter-dist/the_hamlet.patterc" "$here/hamlet.patterc"
+cp "$root/examples/storylet-dist/the-hamlet-patter.storyletsc" "$here/hamlet.storyletsc"; cp "$root/examples/patter-dist/the_hamlet.patterc" "$here/hamlet.patterc"
 echo "build: The Hamlet (Godot) is ready: addons/storyletengine, addons/patterplay $PATTER_GODOT_VERSION, both bundles"

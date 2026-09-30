@@ -1,8 +1,11 @@
 name: The Hamlet release
 
-# Tagging `hamlet-vX.Y.Z` builds the Hamlet and attaches FOUR zips to the matching GitHub
-# Release: the web client (`dist/` to open and play with no build step, `src/` to read),
-# and the Godot, Unity and Unreal projects to open in their editors.
+# Tagging `hamlet-vX.Y.Z` builds the Hamlet and attaches FIVE zips to the matching GitHub
+# Release. One is the plain Hamlet, Storyletter's first example: its project and the
+# playable page Storyletter exports from it, with no Patter anywhere. The other four are the
+# Hamlet (Patter Version), the game that runs both engines: the web client (`dist/` to play,
+# `src/` to read, `projects/` with both source projects, paired) and the Godot, Unity and
+# Unreal projects to open in their editors.
 #
 # The Village's arrangement, cloned, with one difference that matters: this one runs TWO
 # engines. Everything of Patter's comes from a PUBLISHED release, never a checkout of
@@ -67,18 +70,46 @@ jobs:
         working-directory: storylets
         run: npm run build -w @storylet-studio/hamlet-client
 
-      - name: Assemble the zip
+      - name: Assemble the plain Hamlet's zip (its project, and the page Storyletter exports)
         working-directory: storylets
         run: |
           version="${GITHUB_REF_NAME#hamlet-v}"
           pkg="the-hamlet-${version}"
           out="/tmp/${pkg}"
           mkdir -p "$out"
-          # dist/ to play, src/ to read, and the two files that explain both.
+          # Committed files only (git archive), never a local build's leftovers.
+          git archive --format=tar HEAD examples/the-hamlet.storylets | tar -x -C "$out" --strip-components=1
+          # The CLI is built by build:libs above; this is Publish Playable HTML, from the terminal.
+          node packages/cli/dist/cli.js export-html examples/the-hamlet.storylets -o "$out/The Hamlet.html"
+          cp packages/hamlet-client/plain/README.md LICENSE "$out/"
+          ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
+          echo "HAMLET_PLAIN_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"
+
+      - name: Assemble the Patter Version's web zip
+        working-directory: storylets
+        run: |
+          version="${GITHUB_REF_NAME#hamlet-v}"
+          pkg="the-hamlet-patter-${version}"
+          out="/tmp/${pkg}"
+          mkdir -p "$out"
+          # dist/ to play, src/ to read, and the two files that explain both. The
+          # index.html at the top only forwards into dist/, so whichever one a
+          # player double-clicks, the game opens (the page's own template, copied
+          # here until 0.3.x, was a frame with no script beside it).
           cp -R packages/hamlet-client/dist "$out/dist"
           cp -R packages/hamlet-client/src "$out/src"
-          cp packages/hamlet-client/README.md packages/hamlet-client/CHANGELOG.md \
-             packages/hamlet-client/hamlet.css packages/hamlet-client/index.html "$out/"
+          cp packages/hamlet-client/README.md packages/hamlet-client/CHANGELOG.md "$out/"
+          # projects/: both source projects, paired and side by side as the repo keeps
+          # them, with their published bundles, so the storylet project opens in
+          # Storyletter and the Patter one in Patterpad with nothing to set up.
+          # Committed files only (git archive), never a local build's leftovers.
+          mkdir -p "$out/projects"
+          git archive --format=tar HEAD examples/the-hamlet-patter.storylets examples/the-hamlet.patter \
+            examples/storylet-dist/the-hamlet-patter.storyletsc examples/patter-dist/the_hamlet.patterc \
+            | tar -x -C "$out/projects" --strip-components=1
+          printf '%s\n' '<!doctype html>' '<meta charset="utf-8">' \
+            '<meta http-equiv="refresh" content="0; url=dist/index.html">' \
+            '<title>The Hamlet (Patter Version)</title>' '<p><a href="dist/index.html">Play The Hamlet (Patter Version)</a></p>' > "$out/index.html"
           cp LICENSE "$out/"
           ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
           echo "HAMLET_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"
@@ -88,7 +119,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#hamlet-v}"
           bash ports/godot/HamletDemo/build.sh
-          pkg="the-hamlet-godot-${version}"
+          pkg="the-hamlet-patter-godot-${version}"
           rm -rf "/tmp/${pkg}"; mkdir -p "/tmp/${pkg}"
           # The project as it opens: source, both addons, both bundles. Not .godot/, not the save.
           ( cd ports/godot/HamletDemo && tar --exclude=.godot --exclude=envelope.json -cf - . ) | ( cd "/tmp/${pkg}" && tar -xf - )
@@ -101,7 +132,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#hamlet-v}"
           bash ports/unity/HamletDemo/build.sh
-          pkg="the-hamlet-unity-${version}"
+          pkg="the-hamlet-patter-unity-${version}"
           rm -rf "/tmp/${pkg}"; mkdir -p "/tmp/${pkg}"
           # The project as it opens: source, Patter's embedded package, both bundles; and OUR
           # package copied beside it, since the manifest's file: reference expects a sibling.
@@ -116,7 +147,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#hamlet-v}"
           bash ports/unreal/HamletDemo/build.sh
-          pkg="the-hamlet-unreal-${version}"
+          pkg="the-hamlet-patter-unreal-${version}"
           rm -rf "/tmp/${pkg}"; mkdir -p "/tmp/${pkg}"
           # Three siblings, as the .uproject expects: the project, our plugin, Patter's plugin.
           ( cd ports/unreal/HamletDemo && tar --exclude=Binaries --exclude=Intermediate --exclude=Saved --exclude=DerivedDataCache -cf - . ) | ( mkdir -p "/tmp/${pkg}/HamletDemo" && cd "/tmp/${pkg}/HamletDemo" && tar -xf - )
@@ -145,6 +176,7 @@ jobs:
           name: The Hamlet ${{ steps.relnotes.outputs.version }}
           body_path: ${{ runner.temp }}/release-notes.md
           files: |
+            ${{ env.HAMLET_PLAIN_ZIP }}
             ${{ env.HAMLET_ZIP }}
             ${{ env.HAMLET_GODOT_ZIP }}
             ${{ env.HAMLET_UNITY_ZIP }}

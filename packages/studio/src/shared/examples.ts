@@ -20,6 +20,10 @@ export interface ShippedExample {
   tile?: string;
   /** What the game has, as a player meets it, as pills on its tile. */
   features?: readonly string[];
+  /** Folders beside it under `examples/`, copied with it into the same place: the
+   *  paired Patter project and its published bundle, so the copy opens paired
+   *  (the `patter` path is relative, `../the-hamlet.patter`). */
+  companions?: readonly string[];
 }
 
 export const EXAMPLES: readonly ShippedExample[] = [
@@ -35,4 +39,9 @@ export const EXAMPLES: readonly ShippedExample[] = [
     hint: "With a game attached. A port city of contracts to take, trouble in the streets, things to find, and news that follows what you did.",
     tile: "A port city, with an action game attached.",
     features: ["Contracts", "Street encounters", "Found items", "City news"] },
+  { file: "the-hamlet-patter.storylets", name: "The Hamlet (Patter Version)",
+    hint: "The Hamlet with its dialogue. The same cards, each playing a scene written in Patterpad, whose project opens beside it.",
+    tile: "The Hamlet, with its dialogue written in Patterpad.",
+    features: ["Village life", "Character stories", "Written dialogue"],
+    companions: ["the-hamlet.patter", "patter-dist"] },
 ];

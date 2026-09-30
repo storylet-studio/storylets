@@ -11,7 +11,7 @@ import { Performer, checkPairing } from "../src/index.js";
 import type { CardOutcome } from "../src/index.js";
 
 const examples = fileURLToPath(new URL("../../../examples/", import.meta.url));
-const storyletBundle = JSON.parse(readFileSync(`${examples}storylet-dist/the-hamlet.storyletsc`, "utf8"));
+const storyletBundle = JSON.parse(readFileSync(`${examples}storylet-dist/the-hamlet-patter.storyletsc`, "utf8"));
 const patterBundle = JSON.parse(readFileSync(`${examples}patter-dist/the_hamlet.patterc`, "utf8"));
 
 /** Both engines on one host-owned @world, the Hamlet's arrangement. */

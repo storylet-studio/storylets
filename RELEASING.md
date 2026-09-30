@@ -14,6 +14,7 @@ whoever is shipping.
 | `cli-vX.Y.Z` | the standalone `storyletengine` binaries | `cli.yml` | built |
 | `play-<engine>-vX.Y.Z` | one of the four Storylet Engine runtimes | `play-<engine>.yml` | built |
 | `village-vX.Y.Z` | the Village browser client | `village.yml` | built |
+| `hamlet-vX.Y.Z` | the Hamlet: its project with a playable page, and the Patter Version's web, Godot, Unity and Unreal zips | `hamlet.yml` | built |
 
 **The seven `@storylet-studio/*` npm packages are deliberately not in that table.** They are
 the one deliverable not driven by a tag: Changesets publishes them when it notices a change.

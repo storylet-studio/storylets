@@ -55,10 +55,37 @@ const box = (): string => flow.listBoxes()[0]!.gameId;
 
 // --- the loop ---------------------------------------------------------------
 
+/** The bundle and the maps. Served, they are the two files beside the page, so
+ *  a bundle copied over them is what plays. Opened from a double-click, a
+ *  browser refuses that fetch, so the page falls back on `village-data.js`, the
+ *  same two written by the build as a script, which a browser does run. */
+async function loadData(): Promise<{ bundle: Bundle; maps: VillageMap[] }> {
+  try {
+    const [bundle, maps] = await Promise.all([
+      fetch("village.storyletsc").then((r) => r.json()) as Promise<Bundle>,
+      fetch("maps.json").then((r) => r.json()) as Promise<VillageMap[]>,
+    ]);
+    return { bundle, maps };
+  } catch {
+    const w = window as unknown as { VILLAGE_DATA?: { bundle: Bundle; maps: VillageMap[] } };
+    if (!w.VILLAGE_DATA) {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "village-data.js";
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("could not load village-data.js"));
+        document.head.append(script);
+      });
+    }
+    return w.VILLAGE_DATA!;
+  }
+}
+
 /** Start, or resume. Every visible thing follows from these five lines. */
 async function start(): Promise<void> {
-  const bundle = await fetch("village.storyletsc").then((r) => r.json()) as Bundle;
-  maps = await fetch("maps.json").then((r) => r.json()) as VillageMap[];
+  const data = await loadData();
+  const bundle = data.bundle;
+  maps = data.maps;
 
   engine = new Engine(bundle, {
     seed: SEED,

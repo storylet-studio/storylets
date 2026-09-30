@@ -52,9 +52,16 @@ beforeAll(async () => {
  *  Two accommodations, both because jsdom is not a browser: the script tag is
  *  inlined (jsdom loads no external resources by default) and `fetch` is
  *  answered from `dist/`, which is exactly what the static server does. */
-function open(storage?: Record<string, string>): { dom: JSDOM; doc: Document } {
-  const html = readFileSync(join(dist, "index.html"), "utf8")
-    .replace('<script src="village.js"></script>', `<script>${readFileSync(join(dist, "village.js"), "utf8")}</script>`);
+function open(storage?: Record<string, string>, fromDisk = false): { dom: JSDOM; doc: Document } {
+  const inline = (name: string): string => `<script>${readFileSync(join(dist, name), "utf8")}</script>`;
+  // Opened from a double-click: every fetch fails, as a browser refuses them on
+  // a file:// page, and the page falls back on village-data.js. jsdom loads no
+  // script by src, so that one is run up front, which is what its onload would
+  // do. (The URL stays http: jsdom, unlike a browser, has no localStorage on a
+  // file:// origin.)
+  let html = readFileSync(join(dist, "index.html"), "utf8")
+    .replace('<script src="village.js"></script>', inline("village.js"));
+  if (fromDisk) html = html.replace("<head>", `<head>${inline("village-data.js")}`);
   const dom = new JSDOM(html, {
     runScripts: "dangerously",
     url: "http://localhost/village/",
@@ -62,6 +69,7 @@ function open(storage?: Record<string, string>): { dom: JSDOM; doc: Document } {
       const w = window as unknown as Record<string, unknown>;
       w.structuredClone = structuredClone;
       w.fetch = (url: string) => {
+        if (fromDisk) return Promise.reject(new TypeError("Failed to fetch"));
         const file = join(dist, url.replace(/^.*\//, ""));
         if (!existsSync(file)) return Promise.reject(new Error(`no ${url}`));
         const text = readFileSync(file, "utf8");
@@ -109,6 +117,14 @@ describe("the Village client", () => {
     expect(art.every((h) => h!.startsWith("assets/"))).toBe(true);
     // And the bundle says which build this is, which is what a bug report needs.
     expect(text(doc, "#build")).toMatch(/^v\d+\.\d+\.\d+ · \w+ · 13 places$/);
+  });
+
+  it("plays from a double-click, where the browser refuses every fetch", async () => {
+    // The zip says open dist/index.html; 0.3.0 and earlier drew an empty frame
+    // there, because the page fetched its own bundle.
+    const { doc } = open(undefined, true);
+    await settled(doc);
+    expect(doc.querySelectorAll(".mapsvg .site")).toHaveLength(13);
   });
 
   it("plays a turn: arrive, choose, and the world moves", async () => {

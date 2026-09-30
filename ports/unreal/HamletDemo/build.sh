@@ -14,5 +14,5 @@ unzip -q "$tmp/$zip" -d "$tmp/unz"
 [ -f "$tmp/unz/Patterplay/Patterplay.uplugin" ] || { echo "build: $zip did not contain Patterplay/Patterplay.uplugin"; exit 1; }
 rm -rf "$here/../Patterplay"; cp -R "$tmp/unz/Patterplay" "$here/../Patterplay"
 mkdir -p "$here/Demos"
-cp "$root/examples/storylet-dist/the-hamlet.storyletsc" "$here/Demos/hamlet.storyletsc"; cp "$root/examples/patter-dist/the_hamlet.patterc" "$here/Demos/hamlet.patterc"
+cp "$root/examples/storylet-dist/the-hamlet-patter.storyletsc" "$here/Demos/hamlet.storyletsc"; cp "$root/examples/patter-dist/the_hamlet.patterc" "$here/Demos/hamlet.patterc"
 echo "build: The Hamlet (Unreal) is ready: ../StoryletEngine, ../Patterplay $PATTER_UNREAL_VERSION, both bundles in Demos/"

@@ -10,6 +10,15 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **A fourth example, The Hamlet (Patter Version).** The Hamlet's cards paired with a Patter project that holds a scene for each, copied side by side, so the Board plays each card's scene, **Edit Scene in Patterpad** works straight away, and Patterpad's **Show Card in Storyletter** finds its way back. It's offered on the welcome screen too, beside the Hamlet you start with, which has no Patter in it.
+
+### Changed
+
+- **Help ▸ Open an Example is first in Help**, above the documentation, since Help is where anyone looks for the demos. Patterpad's Open an Example sits in the same place.
+- **The gameId chip drops its "Pinned" and "Auto" label**, as Patterpad shows it: an id still following the title reads faded, a pinned one plainly, and hovering says which.
+
 ## [0.15.0] - 2026-09-29
 
 ### Changed

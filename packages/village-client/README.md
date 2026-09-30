@@ -12,6 +12,14 @@ npm run build -w @storylet-studio/village-client   # content + script -> dist/
 npm run serve -w @storylet-studio/village-client   # ...and serve it at :5180
 ```
 
+## In the zip
+
+- **`index.html`**: double-click it to play. No install and no server.
+- **`dist/`**: the game as it runs, the engine bundled into `village.js`.
+- **`src/`**: the game's code, the part worth reading.
+- **`projects/the-village.storylets`**: the project the game is compiled from.
+  Open it in Storyletter to see every card, deck and map behind what you play.
+
 ## What is the engine's, and what is the game's
 
 The line matters more than any single call, so the code is arranged along it.

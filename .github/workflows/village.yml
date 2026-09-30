@@ -59,11 +59,21 @@ jobs:
           pkg="the-village-${version}"
           out="/tmp/${pkg}"
           mkdir -p "$out"
-          # dist/ to play, src/ to read, and the two files that explain both.
+          # dist/ to play, src/ to read, and the two files that explain both. The
+          # index.html at the top only forwards into dist/, so whichever one a
+          # player double-clicks, the game opens (the page's own template, copied
+          # here until 0.3.x, was a frame with no script beside it).
           cp -R packages/village-client/dist "$out/dist"
           cp -R packages/village-client/src "$out/src"
-          cp packages/village-client/README.md packages/village-client/CHANGELOG.md \
-             packages/village-client/village.css packages/village-client/index.html "$out/"
+          cp packages/village-client/README.md packages/village-client/CHANGELOG.md "$out/"
+          # projects/: the storylet project the game is compiled from, to open in
+          # Storyletter. Committed files only (git archive).
+          mkdir -p "$out/projects"
+          git archive --format=tar HEAD examples/the-village.storylets \
+            | tar -x -C "$out/projects" --strip-components=1
+          printf '%s\n' '<!doctype html>' '<meta charset="utf-8">' \
+            '<meta http-equiv="refresh" content="0; url=dist/index.html">' \
+            '<title>The Village</title>' '<p><a href="dist/index.html">Play The Village</a></p>' > "$out/index.html"
           cp LICENSE "$out/"
           ( cd /tmp && zip -rq "${pkg}.zip" "${pkg}" )
           echo "VILLAGE_ZIP=/tmp/${pkg}.zip" >> "$GITHUB_ENV"

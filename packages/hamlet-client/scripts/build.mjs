@@ -5,8 +5,9 @@
 // (with-patter's checkPairing, and the @world check in pairing.mjs).
 //
 // The bundles are static files, published by Storyletter and Patterpad to each
-// editor's default place beside its project (examples/storylet-dist/the-hamlet
-// .storyletsc, examples/patter-dist/the_hamlet.patterc) and committed. Edit a
+// editor's default place beside its project (examples/storylet-dist/the-hamlet-patter
+// .storyletsc, from the Patter version of the Hamlet, and examples/patter-dist/
+// the_hamlet.patterc) and committed. Edit a
 // shard and forget to Publish, and the demo shows the old content, exactly as
 // a game would.
 //
@@ -25,7 +26,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const pkg = resolve(here, "..");
 const root = resolve(pkg, "../..");
 export const published = {
-  storylets: join(root, "examples/storylet-dist/the-hamlet.storyletsc"),
+  storylets: join(root, "examples/storylet-dist/the-hamlet-patter.storyletsc"),
   patter: join(root, "examples/patter-dist/the_hamlet.patterc"),
 };
 export const sources = ["world.js", "main.js"].map((f) => [f, join(pkg, "src", f)]);
@@ -66,6 +67,15 @@ export async function ensurePatterMin() {
   return patterMin;
 }
 
+/** The two published bundles as a plain script, which is what lets the page open
+ *  from a double-click: a browser refuses fetch() on a file:// page but runs a
+ *  <script src>. The page loads it only when that fetch fails; served, the bundle
+ *  files beside it are what plays, so a bundle copied over them is never shadowed. */
+export function dataScript() {
+  return "// Written by the build: both published bundles, so the page also plays from a double-click.\n"
+    + `window.HAMLET_DATA = { storylets: ${readFileSync(published.storylets, "utf8").trim()}, patter: ${readFileSync(published.patter, "utf8").trim()} };\n`;
+}
+
 export async function buildHamlet() {
   const { bundle, patterBundle } = loadPublished();
   if (!existsSync(ourMin)) die(`no ${ourMin}: run \`npm run build\` at the repo root once (the play-helpers package builds the drop-in)`);
@@ -75,6 +85,7 @@ export async function buildHamlet() {
   mkdirSync(out, { recursive: true });
   copyFileSync(published.storylets, join(out, "hamlet.storyletsc"));
   copyFileSync(published.patter, join(out, "hamlet.patterc"));
+  writeFileSync(join(out, "hamlet-data.js"), dataScript());
   copyFileSync(ourMin, join(out, "storyletengine.min.js"));
   copyFileSync(patterMin, join(out, "patterplay.min.js"));
   copyFileSync(performerMin, join(out, "with-patter.min.js"));

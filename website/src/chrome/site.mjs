@@ -188,8 +188,24 @@ export default {
           },
           {
             "name": "The zip",
-            "sub": "<code>dist/</code> to open offline, <code>src/</code> to read",
+            "sub": "The game to play, its code, and its project",
             "asset": "\\.zip$",
+            "label": "Download zip"
+          }
+        ]
+      },
+      "hamlet-plain": {
+        "kind": "release",
+        "tag": "^hamlet-v\\d",
+        "strip": "^hamlet-v",
+        "whenMissing": {
+          "message": "Coming with the next Hamlet release. Storyletter already carries it, under Help ▸ Open an Example."
+        },
+        "rows": [
+          {
+            "name": "The zip",
+            "sub": "Its project, and a page to play it",
+            "asset": "^the-hamlet-\\d[\\w.-]*\\.zip$",
             "label": "Download zip"
           }
         ]
@@ -210,8 +226,8 @@ export default {
           },
           {
             "name": "JavaScript client",
-            "sub": "<code>src/</code> and <code>dist/</code>",
-            "asset": "^the-hamlet-\\d[\\w.-]*\\.zip$",
+            "sub": "The game to play, its code, and both projects, paired",
+            "asset": "^the-hamlet-patter-\\d[\\w.-]*\\.zip$",
             "label": "Download zip",
             "drop": true
           },

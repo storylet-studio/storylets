@@ -48,20 +48,22 @@ beforeAll(async () => {
 
 function open(storage?: Record<string, string>): { doc: Document } {
   // No bundle to inline: the page is five classic scripts, each inlined from dist/ in order.
+  const inline = (src: string): string => `<script>${readFileSync(join(dist, src), "utf8")}</script>`;
+  // hamlet-data.js is what the page falls back on when its fetch is refused;
+  // jsdom loads no script by src, so it is run up front, as its onload would.
   const html = readFileSync(join(dist, "index.html"), "utf8")
-    .replace(/<script src="([^"]+)"><\/script>/g, (_m, src) => `<script>${readFileSync(join(dist, src), "utf8")}</script>`);
+    .replace(/<script src="([^"]+)"><\/script>/g, (_m, src) => inline(src))
+    .replace("<main>", `${inline("hamlet-data.js")}<main>`);
   const dom = new JSDOM(html, {
     runScripts: "dangerously",
     url: "http://localhost/hamlet/",
     beforeParse(window) {
       const w = window as unknown as Record<string, unknown>;
       w.structuredClone = structuredClone;
-      w.fetch = (url: string) => {
-        const file = join(dist, url.replace(/^.*\//, ""));
-        if (!existsSync(file)) return Promise.reject(new Error(`no ${url}`));
-        const text = readFileSync(file, "utf8");
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(JSON.parse(text)) });
-      };
+      // Every fetch fails, as a browser refuses them on a file:// page: the zip
+      // says open dist/index.html, and 0.4.0 and earlier drew an empty frame
+      // there. The fallback on hamlet-data.js is what the page plays.
+      w.fetch = () => Promise.reject(new TypeError("Failed to fetch"));
       for (const [k, v] of Object.entries(storage ?? {})) window.localStorage.setItem(k, v);
     },
   });

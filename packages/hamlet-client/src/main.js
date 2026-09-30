@@ -46,11 +46,32 @@ let performer;
  *  lines wait on the Continue button. */
 let playing = null;
 const log = [];
+/** The two published bundles. Served, they are the files beside the page, so a
+ *  bundle copied over one is what plays. Opened from a double-click, a browser
+ *  refuses that fetch, so the page falls back on `hamlet-data.js`, the same two
+ *  written by the build as a script, which a browser does run. */
+async function loadBundles() {
+    try {
+        return await Promise.all([
+            fetch("hamlet.storyletsc").then((r) => r.json()),
+            fetch("hamlet.patterc").then((r) => r.json()),
+        ]);
+    }
+    catch {
+        if (!window.HAMLET_DATA) {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement("script");
+                script.src = "hamlet-data.js";
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error("could not load hamlet-data.js"));
+                document.head.append(script);
+            });
+        }
+        return [window.HAMLET_DATA.storylets, window.HAMLET_DATA.patter];
+    }
+}
 async function boot() {
-    const [storyletBundle, patterBundle] = await Promise.all([
-        fetch("hamlet.storyletsc").then((r) => r.json()),
-        fetch("hamlet.patterc").then((r) => r.json()),
-    ]);
+    const [storyletBundle, patterBundle] = await loadBundles();
     // ONE world, handed to BOTH. This is the coexistence design, and it is a
     // single shared object rather than two copies kept in step, because two
     // copies kept in step is the bug this design exists to make impossible.

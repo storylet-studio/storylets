@@ -16,5 +16,5 @@ unzip -q "$tmp/$zip" -d "$tmp/unz"
 [ -f "$tmp/unz/Patterplay/package.json" ] || { echo "build: $zip did not contain Patterplay/package.json"; exit 1; }
 rm -rf "$here/Packages/Patterplay"; cp -R "$tmp/unz/Patterplay" "$here/Packages/Patterplay"
 mkdir -p "$here/Assets/StreamingAssets"
-cp "$root/examples/storylet-dist/the-hamlet.storyletsc" "$here/Assets/StreamingAssets/hamlet.storyletsc"; cp "$root/examples/patter-dist/the_hamlet.patterc" "$here/Assets/StreamingAssets/hamlet.patterc"
+cp "$root/examples/storylet-dist/the-hamlet-patter.storyletsc" "$here/Assets/StreamingAssets/hamlet.storyletsc"; cp "$root/examples/patter-dist/the_hamlet.patterc" "$here/Assets/StreamingAssets/hamlet.patterc"
 echo "build: The Hamlet (Unity) is ready: StoryletEngine via manifest, Patterplay $PATTER_UNITY_VERSION embedded, both bundles in StreamingAssets"

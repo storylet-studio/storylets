@@ -82,6 +82,13 @@ for (const box of loaded.source.boxes) {
 // --- 5. the page ------------------------------------------------------------
 writeFileSync(join(out, "village.storyletsc"), serialiseBundle(bundle));
 writeFileSync(join(out, "maps.json"), JSON.stringify(maps));
+// The same two again as a plain script, which is what lets the page open from a
+// double-click: a browser refuses fetch() on a file:// page but runs a <script
+// src>. The page loads it only when that fetch fails; served, the files above
+// are what plays, so a bundle copied over them is never shadowed by this one.
+writeFileSync(join(out, "village-data.js"),
+  "// Written by the build: the bundle and the maps, so the page also plays from a double-click.\n"
+  + `window.VILLAGE_DATA = { bundle: ${serialiseBundle(bundle)}, maps: ${JSON.stringify(maps)} };\n`);
 copyFileSync(join(pkg, "index.html"), join(out, "index.html"));
 copyFileSync(join(pkg, "village.css"), join(out, "village.css"));
 

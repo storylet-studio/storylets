@@ -23,8 +23,8 @@ Choose **More info ▸ Run anyway**. (macOS builds are signed and notarised.)
 
 ### Something to open
 
-New here? Storyletter ships three worked examples, and the welcome screen offers all
-three. Start with **The Hamlet**, the small one. It's copied somewhere you choose, so you can
+New here? Storyletter ships four worked examples, and the welcome screen offers all
+four. Start with **The Hamlet**, the small one. It's copied somewhere you choose, so you can
 take it apart without worrying. Start there rather than with an empty project, because the
 idea is much easier to read than to describe. [Getting started](/getting-started/) walks you
 through it.
@@ -59,9 +59,25 @@ The zip carries `dist/` to open offline and `src/` to read, under 500 lines of f
 TypeScript. If you want to know what building on the engine actually looks like, this is the
 shortest honest answer.
 
-## The Hamlet: two engines in one game
+The project it's made from is in the zip too, under `projects/`: open
+`the-village.storylets` in Storyletter to see every card behind what you play. Storyletter
+also carries it, under **Help ▸ Open an Example ▸ The Village**.
 
-The same idea with [Patter](https://patterkit.dev) in the room. The Storylet Engine decides which
+## The Hamlet: where to start
+
+The small worked example, and the one [Getting started](/getting-started/) walks through: a
+village and the few people in it, each with a trouble of their own. Seventeen cards across five
+decks, read in one sitting.
+
+<Downloads kind="hamlet-plain" />
+
+The zip holds the project, to open in Storyletter, and `The Hamlet.html`, the page Storyletter's
+**Publish ▸ Publish Playable HTML…** writes from it: double-click it to play. Storyletter also
+carries the project, under **Help ▸ Open an Example ▸ The Hamlet**.
+
+## The Hamlet (Patter Version): two engines in one game
+
+The same cards with [Patter](https://patterkit.dev) in the room. The Storylet Engine decides which
 beat happens, Patter performs its dialogue, and the game owns the world and hands one resolver to
 both. Seventeen cards, seventeen scenes, one save that restores both engines and a conversation
 paused mid-choice. The scenes are stubs, deliberately. The plumbing is real and the words are
@@ -69,11 +85,18 @@ placeholders.
 
 <Downloads kind="hamlet" />
 
-One release, four zips: the JavaScript client (`src/` to read, `dist/` to open offline) and the
-same game as a Godot, Unity, and Unreal project, each with Patter's plugin included. Read
-`src/world.js` first (the shared world), then `src/performance.js` (the handoff).
+Four zips: the JavaScript client, and the same game as a Godot, Unity, and Unreal project, each
+with Patter's plugin included. The JavaScript zip has `dist/` to play and `src/` to read: start
+with `src/world.js` (the world both engines share), then `src/main.js` (the game around them).
 [Running it with Patter](/play/with-patter/) explains how the two projects are joined and what
 the build checks.
+
+The JavaScript zip also carries both projects behind the game, under `projects/`, side by side
+and already paired: open `the-hamlet-patter.storylets` in Storyletter and `the-hamlet.patter` in
+[Patterpad](https://patterkit.dev), and each finds the other with nothing to set up.
+Storyletter checks every card against its scene and plays the scenes on its Board, and each
+app jumps to the matching card or scene in the other. In Storyletter, **Help ▸ Open an Example ▸
+The Hamlet (Patter Version)** copies the same pair.
 
 ## The CLI
 

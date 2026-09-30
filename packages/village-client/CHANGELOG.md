@@ -9,6 +9,14 @@ the release notes, and refuses a tag with no dated section for it.
 
 ## [Unreleased]
 
+### Added
+
+- **The project is in the zip**, under `projects/the-village.storylets`, to open in Storyletter.
+
+### Fixed
+
+- **The zip plays from a double-click.** 0.3.0 and earlier drew an empty frame when `dist/index.html` was opened from the folder, because the page fetched its own bundle and a browser refuses that on a page opened from disk. The build now also writes the data as a plain script beside the page, which a browser does run, and the page falls back on it only when that fetch is refused, so a served page still plays the files beside it. The `index.html` at the top of the zip now opens the game in `dist/` rather than being a page with no script beside it.
+
 ## [0.3.0] - 2026-09-24
 
 ### Changed

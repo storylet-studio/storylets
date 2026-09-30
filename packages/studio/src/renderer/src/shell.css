@@ -533,11 +533,11 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .insp-ohead { display: flex; align-items: center; gap: 8px; }
 .insp-ohead .insp-input { flex: 1; }
 /* a gameId reads as a quiet value, not a typed-in field: derived from the title
-   ("auto") until pinned. Click for the override popover. */
+   until pinned, and muted while it is (Patterpad's manner, no word for either).
+   Click for the override popover. */
 .gid { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; padding: 5px 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: none; cursor: pointer; }
 .gid:hover { border-color: var(--accent); background: var(--card); }
 .gid-value { font-family: var(--font-mono); font-size: 13px; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gid-tag { font: 600 11.5px var(--font-ui); color: var(--muted); flex: none; }
 .gid-auto .gid-value { color: var(--muted); font-style: italic; }
 /* the address a VENUE is bound to (design/engine-server.md 4.11): marked, never
    disabled. The refusal is the server's, on push; here it is a hint. */
