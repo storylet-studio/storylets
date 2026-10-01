@@ -57,7 +57,7 @@ const api: StudioApi = {
   handDetail: (boxId: string, handId: string) => ipcRenderer.invoke("hand:detail", boxId, handId),
   handCards: (boxId: string, handId: string) => ipcRenderer.invoke("hand:cards", boxId, handId),
   saveHand: (boxId: string, handId: string, edit: HandEdit) => ipcRenderer.invoke("hand:save", boxId, handId, edit),
-  createHand: (boxId: string, site?: { x: number; y: number }) => ipcRenderer.invoke("hand:create", boxId, site),
+  createHand: (boxId: string, site?: { x: number; y: number }, templateId?: string) => ipcRenderer.invoke("hand:create", boxId, site, templateId),
   deleteHand: (boxId: string, handId: string) => ipcRenderer.invoke("hand:delete", boxId, handId),
   templateDetail: (boxId: string, templateId: string) => ipcRenderer.invoke("template:detail", boxId, templateId),
   saveTemplate: (boxId: string, templateId: string, edit: TemplateEdit) => ipcRenderer.invoke("template:save", boxId, templateId, edit),
@@ -68,7 +68,7 @@ const api: StudioApi = {
   createTagGroup: (boxId: string) => ipcRenderer.invoke("tag-group:create", boxId),
   deleteTagGroup: (boxId: string, groupId: string) => ipcRenderer.invoke("tag-group:delete", boxId, groupId),
   saveCard: (deckId: string, cardId: string, edit: CardEdit) => ipcRenderer.invoke("card:save", deckId, cardId, edit),
-  createCard: (deckId: string, place?: string) => ipcRenderer.invoke("card:create", deckId, place),
+  createCard: (deckId: string, place?: string, zone?: string) => ipcRenderer.invoke("card:create", deckId, place, zone),
   duplicateCard: (deckId: string, cardId: string) => ipcRenderer.invoke("card:duplicate", deckId, cardId),
   moveCard: (deckId: string, cardId: string, targetId: string, before: boolean) => ipcRenderer.invoke("card:move", deckId, cardId, targetId, before),
   deleteCard: (deckId: string, cardId: string) => ipcRenderer.invoke("card:delete", deckId, cardId),
@@ -147,8 +147,8 @@ const api: StudioApi = {
   useProjectMap: (boxId: string, on: boolean, confirmed?: boolean) => ipcRenderer.invoke("map:use", boxId, on, confirmed),
   setBoxColour: (boxId: string, colour: number) => ipcRenderer.invoke("map:colour", boxId, colour),
   setGroupSpatial: (boxId: string, groupId: string, on: boolean) => ipcRenderer.invoke("map:setSpatial", boxId, groupId, on),
-  createZone: (boxId: string, groupId: string, polygon: { x: number; y: number }[]) =>
-    ipcRenderer.invoke("map:createZone", boxId, groupId, polygon),
+  createZone: (boxId: string, groupId: string, polygon: { x: number; y: number }[], name?: string) =>
+    ipcRenderer.invoke("map:createZone", boxId, groupId, polygon, name),
   addBackground: (
     boxId: string, groupId: string,
     place: { view: { width: number; height: number }; scale: number; at: { x: number; y: number } },

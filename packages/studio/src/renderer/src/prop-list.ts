@@ -24,6 +24,8 @@ import { defaultControl, labelled, mountPropertyList as mountShellPropertyList }
 import type { PropertyListHandle } from "@wildwinter/app-shell";
 import type { PropertyDeclDto } from "../../shared/api.js";
 import { shows } from "./play-ladder.js";
+import { shareLine } from "./zone-share.js";
+import type { ShareScope } from "./zone-share.js";
 
 /** The type-appropriate control for a property's VALUE: a stage picker for a
  *  quality, the value list for an enum, a true / false picker for a boolean, a
@@ -63,6 +65,11 @@ export interface PropListOptions {
    *  The switch writes the flag only when it DIFFERS from this, so a shard
    *  keeps saying what the author chose rather than what the app assumed. */
   sharedByDefault?: boolean;
+  /** Whose state each row is: a quiet sentence on the row's line saying who
+   *  shares its value (zone-share.ts `shareLine`), which follows the row's
+   *  Shared tick-box as it is ticked. Drawn where the sentence has something
+   *  to say: every scope at the Shared world rung and above, a zone always. */
+  shareScope?: ShareScope;
 }
 
 /** A labelled checkbox row for one of the declaration's flags. */
@@ -76,7 +83,7 @@ function flagRow(label: string, tip: string, checked: boolean, onChange: (on: bo
 }
 
 /** The switches this app's declarations carry, behind the row's disclosure. */
-function switches(p: PropertyDeclDto, opts: PropListOptions, changed: () => void): (HTMLElement | null)[] {
+function switches(p: PropertyDeclDto, opts: PropListOptions, changed: () => void, shareChanged: () => void): (HTMLElement | null)[] {
   const details: (HTMLElement | null)[] = [];
   if (opts.readOnlySwitch) {
     // Checked means writable: false. Unticking DELETES the key rather than
@@ -98,7 +105,7 @@ function switches(p: PropertyDeclDto, opts: PropListOptions, changed: () => void
           ? "One value for everyone playing, rather than a copy each. It's on by default for story state. Untick it for a value each playthrough keeps to itself."
           : "One value for everyone playing, rather than a copy each. A single-player game is unaffected.",
         p.shared ?? shareDefault,
-        (on) => { if (on === shareDefault) delete p.shared; else p.shared = on; changed(); }));
+        (on) => { if (on === shareDefault) delete p.shared; else p.shared = on; shareChanged(); changed(); }));
     }
     // A declaration that is ALREADY durable keeps its switch at every
     // rung. Hiding must not swallow content in use, and here it would
@@ -120,6 +127,23 @@ function switches(p: PropertyDeclDto, opts: PropListOptions, changed: () => void
 /** Mount the declaration list into `host`. Mutates `decls` in place. */
 export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], opts: PropListOptions = {}): PropertyListHandle {
   const changed = (): void => opts.onChange?.();
+  // Each row's whose-state sentence, kept by declaration so the Shared tick-box
+  // (built first, behind the row's disclosure) can repaint it in place.
+  const shareText = (decl: PropertyDeclDto): string | undefined => opts.shareScope === undefined ? undefined
+    : shareLine(opts.shareScope, decl.shared ?? opts.sharedByDefault === true, !shows("sharing"));
+  const shareSpans = new WeakMap<PropertyDeclDto, HTMLElement>();
+  const shareLineFor = (decl: PropertyDeclDto): HTMLElement | null => {
+    const text = shareText(decl);
+    if (text === undefined) return null;
+    const span = el("span", { className: "set-dim prop-share", text });
+    shareSpans.set(decl, span);
+    return span;
+  };
+  const repaintShare = (decl: PropertyDeclDto): void => {
+    const span = shareSpans.get(decl);
+    const text = shareText(decl);
+    if (span !== undefined && text !== undefined) span.textContent = text;
+  };
   // The noun the add button names ("+ Add property", "+ Field"), pluralised for the empty sentence.
   const noun = (opts.addLabel ?? "+ Add property").replace(/^\+\s*(Add\s+)?/i, "").toLowerCase();
   const emptyNoun = noun.endsWith("y") ? `${noun.slice(0, -1)}ies` : `${noun}s`;
@@ -129,7 +153,7 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
     emptyText: `No ${emptyNoun} yet. Add one below.`,
     // A new row starts as text, with the DTO's blank default already there.
     newDecl: () => ({ name: "", type: "string", default: "" }),
-    extraLine: (decl) => [opts.rowExtras?.(decl) ?? null],
-    extraDetails: (decl) => switches(decl, opts, changed),
+    extraLine: (decl) => [shareLineFor(decl), opts.rowExtras?.(decl) ?? null],
+    extraDetails: (decl) => switches(decl, opts, changed, () => repaintShare(decl)),
   });
 }

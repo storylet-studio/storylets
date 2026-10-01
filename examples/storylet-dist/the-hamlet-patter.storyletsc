@@ -1507,7 +1507,8 @@
           "id": "t_whats_happening",
           "properties": [],
           "purpose": "The main lens: which story beat happens at a place now. One hand per place.",
-          "slots": 3
+          "slots": 3,
+          "title": "Places in the hamlet"
         }
       ],
       "hands": [
@@ -1554,7 +1555,7 @@
     }
   ],
   "content": {
-    "hash": "0pjnwmm",
+    "hash": "05ldgst",
     "project": "proj_hamlet_patter",
     "version": "0.1.0"
   },

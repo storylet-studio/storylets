@@ -21,7 +21,7 @@ const SAMPLES: Record<string, string> = {
   "stray-file": "unexpected file in decks/ (not *.storyletdeck); ignored",
   "map-in-box": 'tag group "zone" in box "village" is a map: a map belongs to the project now; run `storyletengine format` to move it',
   "map-frames-in-box": "the map's frames belong to the project map now, and these are ignored; run `storyletengine format` to move them",
-  "map-pins-off-map": '3 hands are placed on the map, but box "news" is not on the project map, so no site of it ships; turn on "Uses the project map" or take them off the map',
+  "map-pins-off-map": '3 hands are placed on the map, but box "news" is not on the project map, so their pins are not drawn or shipped; turn on "Uses the project map" or take them off the map',
   "map-group-off-map": 'box "codex" is not on the project map, so it cannot use the zone group "district"; turn on "Uses the project map" or remove the reference',
   "duplicate-id": 'duplicate id "c_1" (also in encounters/decks/street.storyletdeck)',
   "duplicate-gameid": 'duplicate card gameId "ambush" (also in encounters/decks/street.storyletdeck)',
@@ -165,13 +165,21 @@ describe("problemText", () => {
   it("says a box's pins off the project map in the app's words, by the box's title, never as a site", () => {
     // W2, which every box of a project from before the project map raised raw.
     const text = problemText(problem(SAMPLES["map-pins-off-map"]!, { severity: "warning", path: "news/map" }), { title: "News" });
-    expect(text).toBe("“News” has 3 hands placed on the map, but isn’t on the project map, so those pins aren’t drawn or played. "
+    expect(text).toBe("“News” has 3 hands placed on the map, but isn’t on the project map, so those pins aren’t drawn or shipped. "
       + "Turn on Use the project map on the box’s page, or upgrade the project if it was made before maps belonged to the project.");
-    expect(problemText(problem('1 hand is placed on the map, but box "news" is not on the project map, so no site of it ships; turn on "Uses the project map" or take them off the map')))
+    expect(problemText(problem('1 hand is placed on the map, but box "news" is not on the project map, so its pin is not drawn or shipped; turn on "Uses the project map" or take them off the map')))
       .toMatch(/^“news” has a hand placed on the map, but isn’t on the project map, so that pin isn’t drawn/);
     for (const code of ["map-pins-off-map", "map-group-off-map", "dangling-place", "place-from-property"]) {
       expect(problemText(problem(SAMPLES[code]!), { title: "News" }), code).not.toMatch(/\bsites?\b|\ba place\b/);
     }
+  });
+
+  it("names the stages when two qualities of one @hand name climb different ladders", () => {
+    const message = "@hand.haunting is declared as quality with stages calm, eerie on area/docks and as quality with stages quiet, restless, screaming on group zone; @hand composes them into one name, so they must agree";
+    expect(problemCode(message)).toBe("hand-property-type-clash");
+    expect(problemText(problem(message)))
+      .toBe("@hand.haunting is a quality with stages calm, eerie on area/docks and a quality with stages quiet, restless, screaming on group zone. "
+        + "@hand composes them into one name, so make the two declarations agree.");
   });
 
   it("says what the expression validator said, on the field the editor names", () => {

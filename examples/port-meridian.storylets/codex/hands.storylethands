@@ -19,6 +19,7 @@
       properties: [],
       purpose: "The codex page: every unlocked entry, in priority order. Slots is the page size - grow it with the content.",
       slots: 12,
+      title: "The codex page",
     },
   ],
 }

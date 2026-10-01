@@ -25,6 +25,7 @@ import { canonicalStringify } from "./serialize.js";
 import { compileMaps } from "./maps.js";
 import { hash32 } from "./hash.js";
 import { gameTokens, sameDeclarations, scopesFilePath, sharedWorld } from "./game-scopes.js";
+import { describeDisagreement, propertyMeta, sameMeta } from "./declarations.js";
 
 export interface CompileResult {
   /** Present only when there are no error-severity issues. */
@@ -42,13 +43,7 @@ const sortRecord = <V>(record: Record<string, V>): Record<string, V> =>
 /** Empty or whitespace-only expression source means "no expression". */
 const blank = (src: string | undefined): boolean => src === undefined || src.trim() === "";
 
-const meta = (decl: PropertyDecl): PropertyMeta => ({
-  type: decl.type,
-  ...(decl.values !== undefined ? { enumValues: decl.values } : {}),
-  // A quality's ladder reaches expr's static validator this way, which is what
-  // makes `>= "tpyo"` a compile error rather than a runtime surprise.
-  ...(decl.stages !== undefined ? { stages: decl.stages } : {}),
-});
+const meta = propertyMeta;
 
 const bagSchema = (decls: PropertyDecl[]): Map<string, PropertyMeta> =>
   new Map(decls.map((d) => [d.name, meta(d)]));
@@ -65,14 +60,6 @@ const valueFits = (decl: PropertyDecl, v: ScalarValue): boolean => {
     default: return typeof v === "string";
   }
 };
-
-/** Do two declarations of one name describe the same property? Enum values and
- *  a quality's stages are part of the answer: same type, different ladder is
- *  still a disagreement, and for a quality it is the WHOLE disagreement. */
-const sameMeta = (a: PropertyMeta, b: PropertyMeta): boolean =>
-  a.type === b.type
-  && JSON.stringify(a.enumValues ?? null) === JSON.stringify(b.enumValues ?? null)
-  && JSON.stringify(a.stages ?? null) === JSON.stringify(b.stages ?? null);
 
 /** Every `@scope.name` an expression's AST reads or names, in the order met. */
 const scopedRefs = (node: unknown): { scope: string; name: string }[] => {
@@ -380,8 +367,9 @@ export function compileProject(source: SourceProject): CompileResult {
         if (!first) { firstSeen.set(decl.name, { meta: m, where }); out.set(decl.name, m); continue; }
         if (sameMeta(first.meta, m) || reported.has(decl.name)) continue;
         reported.add(decl.name);
+        const [was, now] = describeDisagreement(first.meta, m);
         report({ severity: "error", path, where,
-          message: `@hand.${decl.name} is declared as ${first.meta.type} on ${first.where} and as ${decl.type} on ${where}; @hand composes them into one name, so they must agree` });
+          message: `@hand.${decl.name} is declared as ${was} on ${first.where} and as ${now} on ${where}; @hand composes them into one name, so they must agree` });
       }
       return out;
     };
@@ -747,7 +735,7 @@ export function compileProject(source: SourceProject): CompileResult {
     const placed = Object.keys(boxMapOf(sourceBox)?.sites ?? {}).length;
     if (placed > 0 && !onMap) {
       report({ severity: "warning", path: `${sourceBox.path}/map`, where: effectiveGameId(boxDecl),
-        message: `${placed === 1 ? "1 hand is" : `${placed} hands are`} placed on the map, but box "${effectiveGameId(boxDecl)}" is not on the project map, so no site of it ships; turn on "Uses the project map" or take them off the map` });
+        message: `${placed === 1 ? "1 hand is" : `${placed} hands are`} placed on the map, but box "${effectiveGameId(boxDecl)}" is not on the project map, so ${placed === 1 ? "its pin is" : "their pins are"} not drawn or shipped; turn on "Uses the project map" or take them off the map` });
     }
     const frames = (sourceBox.map?.map as { frames?: unknown } | undefined)?.frames;
     // `format` can move them only to a project map that exists: with none, it

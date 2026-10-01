@@ -59,7 +59,7 @@ export { PATTER_BUNDLE_SCHEMA, findScene, isPerformed, performedBoxes, readPatte
 export type { PatterLink, PatterOption, PatterReport, PatterScenes, PatterSceneShape } from "./patter-link.js";
 export type { PinnedName, PinPlan } from "./pin.js";
 export {
-  ASSETS_DIR, assetPath, assetUse, freeAssetName, imageSize, isSafeAssetName, orphanAssetPaths,
+  ASSETS_DIR, assetPath, assetUse, freeAssetName, imageSize, isSafeAssetName, orphanAssetPaths, strayBoxAssetPaths,
 } from "./assets.js";
 export { contractIssues, contractNotes } from "./contract.js";
 export type { ContractNote } from "./contract.js";

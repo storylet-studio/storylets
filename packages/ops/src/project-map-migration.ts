@@ -42,7 +42,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { boxMapOf, canonicalStringify } from "@storylet-studio/compiler";
+import { boxMapOf, canonicalStringify, describeDeclarations, sameDeclaration } from "@storylet-studio/compiler";
 import type { Issue, SourceBox, SourceProject } from "@storylet-studio/compiler";
 import {
   MAP_SCHEMA, NOTES_SCHEMA, PROJECTMAP_SCHEMA, SHARD_EXTENSIONS, VIEW_SCHEMA,
@@ -162,7 +162,9 @@ const framesIn = (map: unknown): Frame[] => {
  *   - E4: a box tag with a zone's name, in any box, on the map or not
  *   - the composed `@hand` (4.1): a box with no copy that joins the map because
  *     it has hands placed on it gains the map's property declarations, and a
- *     box tag declaring one of those names as another type no longer compiles
+ *     box tag declaring one of those names differently (another type, other
+ *     stages, other values: the compiler's own `sameDeclaration`) no longer
+ *     compiles
  *
  * The rules the move cannot newly trip are left to the compiler, which already
  * reports them: "place" was reserved in a box before, ids are unique project-
@@ -172,10 +174,10 @@ function preflight(original: SourceProject, map: TagGroup): Issue[] {
   const out: Issue[] = [];
   const mapName = effectiveGameId(map);
   const zones = new Set(map.tags.map((t) => effectiveGameId(t)));
-  /** The map's own property declarations, name -> type, group then tags. */
-  const mapTypes = new Map<string, string>();
+  /** The map's own property declarations by name, group then tags, first wins. */
+  const mapDecls = new Map<string, PropertyDecl>();
   for (const decl of [...(map.properties ?? []), ...map.tags.flatMap((t) => t.properties ?? [])]) {
-    if (!mapTypes.has(decl.name)) mapTypes.set(decl.name, decl.type);
+    if (!mapDecls.has(decl.name)) mapDecls.set(decl.name, decl);
   }
   for (const box of original.boxes) {
     const boxName = effectiveGameId(box.box.box);
@@ -208,11 +210,12 @@ function preflight(original: SourceProject, map: TagGroup): Issue[] {
         ...(group.properties ?? []).map((d) => [d, `the group "${effectiveGameId(group)}"`] as const),
         ...group.tags.flatMap((t) => (t.properties ?? []).map((d) => [d, `"${effectiveGameId(group)}/${effectiveGameId(t)}"`] as const)),
       ]) {
-        const theirs = mapTypes.get(decl.name);
-        if (theirs === undefined || theirs === decl.type || said.has(decl.name)) continue;
+        const theirs = mapDecls.get(decl.name);
+        if (theirs === undefined || sameDeclaration(theirs, decl) || said.has(decl.name)) continue;
         said.add(decl.name);
+        const [mine, onMap] = describeDeclarations(decl, theirs);
         out.push({ severity: "error", path, where: decl.name,
-          message: `box "${boxName}" joins the project map because it has hands placed on it, and it declares @hand.${decl.name} as ${decl.type} on ${on} where the map declares it as ${theirs};`
+          message: `box "${boxName}" joins the project map because it has hands placed on it, and it declares @hand.${decl.name} as ${mine} on ${on} where the map declares it as ${onMap};`
             + ` rename the property in "${boxName}", or make the two agree, then run format again` });
       }
     }

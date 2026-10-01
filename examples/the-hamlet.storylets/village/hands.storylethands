@@ -45,6 +45,7 @@
       properties: [],
       purpose: "The main lens: which story beat happens at a place now. One hand per place.",
       slots: 3,
+      title: "Places in the hamlet",
     },
   ],
 }

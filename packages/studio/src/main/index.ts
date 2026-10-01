@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { BrowserWindow, app, dialog, ipcMain, protocol, safeStorage, shell } from "electron";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { hostname } from "node:os";
@@ -52,7 +52,7 @@ import { findPatterpad, launchPatterpad, patterpadExecutable } from "./patterpad
 import { createPatterScene } from "./patter-scene.js";
 import { planMapUpgrade, upgradeProjectMap } from "./map-upgrade.js";
 import { findScene, readPatterLink } from "@storylet-studio/ops";
-import { analyseInfluence, boxColourOf, canvasFurniture, cardNeighbourhood, cardPositions, clearCanonicalCache, describeContribution, mapSites, runCoverage, runCoverageAsync, projectFolderName, runPack, runUnpack, runUnpackMerge, PACK_EXTENSION, PROJECT_MAP_CANVAS, assetPath, orphanAssetPaths } from "@storylet-studio/ops";
+import { analyseInfluence, boxColourOf, canvasFurniture, cardNeighbourhood, cardPositions, clearCanonicalCache, describeContribution, mapSites, runCoverage, runCoverageAsync, projectFolderName, runPack, runUnpack, runUnpackMerge, PACK_EXTENSION, PROJECT_MAP_CANVAS, ASSETS_DIR, assetPath, orphanAssetPaths } from "@storylet-studio/ops";
 import { clearParseCache } from "@storylet-studio/compiler";
 import type { UnpackMergeResult } from "@storylet-studio/ops";
 import { createJobHost } from "@wildwinter/app-shell/job";
@@ -600,7 +600,9 @@ app.on("open-file", (event, path) => {
 });
 
 /**
- * Delete the assets no map uses any more.
+ * Delete the assets no map uses any more, and the stray copies of pictures an
+ * in-app upgrade to the project map left in a box's own folder for its undo
+ * (ops `strayBoxAssetPaths` says which: only once the project is on the map).
  *
  * Safe because of what the project folder IS: internal to the project, filled by
  * an import that COPIED somebody's file from somewhere else. An orphan here is a
@@ -620,6 +622,13 @@ function sweepOrphanAssets(ending: ProjectSession | undefined): void {
   const orphans = orphanAssetPaths(ending.loaded.dir, source);
   for (const path of orphans) {
     try { rmSync(path); } catch { /* gone already, or read-only: not worth a word */ }
+  }
+  // A box's own assets folder, emptied of an upgrade's stray copies, goes too;
+  // rmdir refuses a folder with anything left in it, which is the point.
+  const rootAssets = join(ending.loaded.dir, ASSETS_DIR);
+  for (const folder of new Set(orphans.map((path) => dirname(path)))) {
+    if (folder === rootAssets) continue;
+    try { rmdirSync(folder); } catch { /* something else is in it: leave it */ }
   }
   if (orphans.length > 0) {
     console.log(`swept ${plural(orphans.length, "unused asset")}`);
@@ -1266,8 +1275,8 @@ function wireIpc(): void {
 
   ipcMain.handle("card:save", (_event, deckId: string, cardId: string, edit: CardEdit) =>
     (session ? saveCard(session, deckId, cardId, edit) : { error: "no project open" }));
-  ipcMain.handle("card:create", (_event, deckId: string, place?: string) =>
-    (session ? createCard(session, deckId, place) : { error: "no project open" }));
+  ipcMain.handle("card:create", (_event, deckId: string, place?: string, zone?: string) =>
+    (session ? createCard(session, deckId, place, typeof zone === "string" ? zone : undefined) : { error: "no project open" }));
   ipcMain.handle("card:duplicate", (_event, deckId: string, cardId: string) =>
     (session ? duplicateCard(session, deckId, cardId) : { error: "no project open" }));
   ipcMain.handle("card:delete", (_event, deckId: string, cardId: string) =>
@@ -1313,8 +1322,8 @@ function wireIpc(): void {
     (session ? handCards(session, boxId, handId) : null));
   ipcMain.handle("hand:save", (_event, boxId: string, handId: string, edit: HandEdit) =>
     (session ? saveHand(session, boxId, handId, edit) : { error: "no project open" }));
-  ipcMain.handle("hand:create", (_event, boxId: string, site?: { x: number; y: number }) =>
-    (session ? createHand(session, boxId, site) : { error: "no project open" }));
+  ipcMain.handle("hand:create", (_event, boxId: string, site?: { x: number; y: number }, templateId?: string) =>
+    (session ? createHand(session, boxId, site, typeof templateId === "string" ? templateId : undefined) : { error: "no project open" }));
   ipcMain.handle("hand:delete", (_event, boxId: string, handId: string) =>
     (session ? deleteHand(session, boxId, handId) : { error: "no project open" }));
   ipcMain.handle("deck:duplicate", (_event, deckId: string) =>
@@ -1875,9 +1884,9 @@ function wireIpc(): void {
     if (!session) return { error: "no project open" };
     return setGroupSpatial(session, boxId, groupId, on);
   });
-  ipcMain.handle("map:createZone", (_event, boxId: string, groupId: string, polygon: { x: number; y: number }[]) => {
+  ipcMain.handle("map:createZone", (_event, boxId: string, groupId: string, polygon: { x: number; y: number }[], name?: string) => {
     if (!session) return { error: "no project open" };
-    return createZone(session, boxId, groupId, polygon);
+    return createZone(session, boxId, groupId, polygon, typeof name === "string" ? name : undefined);
   });
   ipcMain.handle("map:addBackground", async (
     _event, boxId: string, groupId: string,

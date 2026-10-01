@@ -13,7 +13,7 @@ import type { NotesShard, ProjectMapShard, ViewShard } from "@storylet-studio/mo
 import { openProject, toDto } from "./project.js";
 import type { ProjectSession } from "./project.js";
 import {
-  createHand, createZone, handCards, mapZoneDetail, moveBox, moveSitesOnMap, postComment, projectMapView, setBoxColour, setCommentResolved,
+  createCard, createHand, createZone, handCards, mapZoneDetail, moveBox, moveSitesOnMap, postComment, projectMapView, setBoxColour, setCommentResolved,
   setZonePolygon, undo, useProjectMap,
 } from "./mutate.js";
 import { COLOUR_ORDER, nextColour } from "./box-colours.js";
@@ -70,6 +70,21 @@ describe("the project map page", () => {
     expect(createZone(s, "", "d_nope", shape)).toHaveProperty("error");
   });
 
+  it("names a zone as it is drawn, slugged, and falls back to new-zone rather than lose the shape", () => {
+    const s = scratch();
+    const shape = [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 50 }];
+    const named = createZone(s, "", GROUP, shape, "The Study");
+    if ("error" in named) throw new Error(named.error);
+    const tag = (id: string): string | undefined => rootMap(s).group.tags.find((t) => t.id === id)?.gameId;
+    expect(tag(named.tagId)).toBe("the-study");
+    const again = createZone(s, "", GROUP, shape, "the-study");
+    if ("error" in again) throw new Error(again.error);
+    expect(tag(again.tagId)).toBe("the-study-2");
+    const blank = createZone(s, "", GROUP, shape, "  ");
+    if ("error" in blank) throw new Error(blank.error);
+    expect(tag(blank.tagId)).toBe("new-zone");
+  });
+
   it("makes a site in the active box: the hand, its pin and its zone in ONE undo step", () => {
     const s = scratch();
     const docks = polygonOf(s.loaded.source!.map!.group.tags.find((t) => t.id === DOCKS)!)!;
@@ -105,6 +120,46 @@ describe("the project map page", () => {
       },
     });
     expect(box(s, "b_news").box.box.usesMap).toBe(true);
+  });
+
+  it("lets a box leave whose @hand reads a name it declares itself, and only a map-sourced name holds it", () => {
+    const s = scratch();
+    expect(useProjectMap(s, "b_codex", true)).not.toHaveProperty("error");
+    const codex = box(s, "b_codex");
+    const deck = codex.decks[0]!.shard;
+    deck.cards[0]!.condition = "@hand.patrolled";
+    // Without a declaration of its own, `patrolled` is the map's: refused.
+    expect(useProjectMap(s, "b_codex", false, true)).toMatchObject({ refused: { body: expect.stringContaining("@hand.patrolled") } });
+    // Its own tag group declaring `patrolled` (Saltmarsh's `area/docks` shape):
+    // off the map the name resolves to that, so the box may leave.
+    codex.tags.groups.push({ id: "d_lore", gameId: "lore", tags: [{ id: "v_lore_old", gameId: "old", properties: [{ name: "patrolled", type: "boolean", default: false }] }] });
+    expect(useProjectMap(s, "b_codex", false, true)).not.toHaveProperty("refused");
+  });
+
+  it("makes a hand of a picked template from the map, its zone hole filled by the pin", () => {
+    const s = scratch();
+    const docks = polygonOf(s.loaded.source!.map!.group.tags.find((t) => t.id === DOCKS)!)!;
+    const inside = { x: (docks[0]!.x + docks[2]!.x) / 2, y: (docks[0]!.y + docks[2]!.y) / 2 };
+    const layer = projectMapView(s).layers.find((l) => l.box === "b_news")!;
+    expect(layer.templates).toEqual([{ id: "t_screen", title: "Public screens" }]);
+    const made = createHand(s, "b_news", inside, "t_screen");
+    if ("error" in made) throw new Error(made.error);
+    const hand = box(s, "b_news").hands.hands.find((h) => h.id === made.handId)!;
+    expect(hand.template).toBe("t_screen");
+    expect(hand.rule).toBeUndefined();
+    expect(hand.chosen?.[GROUP]).toBe(DOCKS);
+    expect(createHand(s, "b_news", inside, "t_nope")).toHaveProperty("error");
+  });
+
+  it("files a new card to a zone from the zone's panel, and only in a box on the map", () => {
+    const s = scratch();
+    const deck = box(s, "b_news").decks[0]!.shard.deck.id;
+    const made = createCard(s, deck, undefined, DOCKS);
+    if ("error" in made) throw new Error(made.error);
+    const card = box(s, "b_news").decks[0]!.shard.cards.find((c) => c.id === made.cardId)!;
+    expect(card.tags).toEqual({ [GROUP]: [DOCKS] });
+    const codexDeck = box(s, "b_codex").decks[0]!.shard.deck.id;
+    expect(createCard(s, codexDeck, undefined, DOCKS)).toHaveProperty("error");
   });
 
   it("deletes the box's emptied map shard in the same step as leaving", () => {

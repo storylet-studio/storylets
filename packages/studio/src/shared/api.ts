@@ -1222,6 +1222,9 @@ export interface ProjectMapLayerDto {
   sites: ProjectMapSiteDto[];
   /** The box's hands with no site yet. */
   unplaced: { id: string; gameId: string; title?: string }[];
+  /** The box's hand templates, by the designer's word for each (its title, or
+   *  its gameId when it has none), for "+ Hand" to offer. */
+  templates: { id: string; title: string }[];
 }
 
 /** The project map: zones and pictures once, every box on it as a layer. */
@@ -1680,7 +1683,9 @@ export interface StudioApi {
   saveHand(boxId: string, handId: string, edit: HandEdit): Promise<OpenResult | { error: string }>;
   /** A new standalone hand. `site` also pins it on the project map there, in
    *  the same undo step, binding the zone it lands in: the map's "+ Site". */
-  createHand(boxId: string, site?: { x: number; y: number }): Promise<{ result: OpenResult; handId: string } | { error: string }>;
+  /** A new hand: standalone, or an instance of `templateId` (the map's
+   *  "+ Hand" menu); pinned at `site` when given, in one undo step. */
+  createHand(boxId: string, site?: { x: number; y: number }, templateId?: string): Promise<{ result: OpenResult; handId: string } | { error: string }>;
   deleteHand(boxId: string, handId: string): Promise<OpenResult | { error: string }>;
   tagGroupDetail(boxId: string, groupId: string): Promise<TagGroupDetail | null>;
   saveTagGroup(boxId: string, groupId: string, edit: TagGroupEdit): Promise<OpenResult | { error: string }>;
@@ -1693,7 +1698,9 @@ export interface StudioApi {
   /** Add a new card to a deck; the result carries the new card's id. */
   /** A new card in a deck. `place` is a hand id the card is made AT (the hand
    *  page's "+ New card here"), written as its place tag. */
-  createCard(deckId: string, place?: string): Promise<{ result: OpenResult; cardId: string } | { error: string }>;
+  /** A new card in `deckId`: made at a hand (`place`, a hand id) or filed to a
+   *  project map zone (`zone`, its tag id), or neither. */
+  createCard(deckId: string, place?: string, zone?: string): Promise<{ result: OpenResult; cardId: string } | { error: string }>;
   /** Clone a card (fresh id, deduped gameId), inserted after the original. */
   duplicateCard(deckId: string, cardId: string): Promise<{ result: OpenResult; cardId: string } | { error: string }>;
   deleteCard(deckId: string, cardId: string): Promise<OpenResult | { error: string }>;
@@ -1854,10 +1861,11 @@ export interface StudioApi {
   setBoxColour(boxId: string, colour: number): Promise<OpenResult | { error: string }>;
   /** Mark a tag group spatial, or stop. Geometry already traced is left alone. */
   setGroupSpatial(boxId: string, groupId: string, on: boolean): Promise<OpenResult | { error: string }>;
-  /** A traced outline for a zone that does not exist yet: declares the tag and
-   *  gives it the shape in one undo step. */
+  /** A traced outline for a zone that does not exist yet: declares the tag,
+   *  named as the author named it when drawn ("new-zone" when not), and gives
+   *  it the shape in one undo step. */
   createZone(
-    boxId: string, groupId: string, polygon: { x: number; y: number }[],
+    boxId: string, groupId: string, polygon: { x: number; y: number }[], name?: string,
   ): Promise<{ result: OpenResult; tagId: string } | { error: string }>;
   /** Set or clear a zone's outline: one undo step per shape. */
   /** Import a picture behind a map: opens a picker, copies the file into the

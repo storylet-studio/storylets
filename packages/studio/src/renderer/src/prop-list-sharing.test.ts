@@ -85,3 +85,28 @@ describe("Shared and Durable on a declaration", () => {
     expect(box(host, "Read-only"), "the world list keeps its own switch").not.toBeNull();
   });
 });
+
+describe("the whose-state sentence on a row", () => {
+  const sentence = (host: HTMLElement): string[] => [...host.querySelectorAll(".prop-share")].map((n) => n.textContent ?? "");
+
+  it("is absent on Solo and present at the Shared world rung, worded for the scope", () => {
+    setPlayRung("solo");
+    expect(sentence(mount([{ name: "gold", type: "number", default: "0" }], { sharedByDefault: true, shareScope: "story" }))).toEqual([]);
+    setPlayRung("shared");
+    // @story is shared unless it says otherwise: the trap the row now names.
+    expect(sentence(mount([{ name: "gold", type: "number", default: "0" }], { sharedByDefault: true, shareScope: "story" })))
+      .toEqual(["One value for every guest."]);
+    expect(sentence(mount([{ name: "heat", type: "number", default: "0" }], { shareScope: "deck" })))
+      .toEqual(["Each guest has their own."]);
+  });
+
+  it("follows the Shared tick-box as it is ticked", () => {
+    setPlayRung("shared");
+    const host = mount([{ name: "rel_innkeeper", type: "number", default: "0" }], { sharedByDefault: true, shareScope: "story" });
+    const shared = box(host, "Shared")!;
+    shared.checked = false; shared.dispatchEvent(new Event("change"));
+    expect(sentence(host)).toEqual(["Each guest has their own."]);
+    shared.checked = true; shared.dispatchEvent(new Event("change"));
+    expect(sentence(host)).toEqual(["One value for every guest."]);
+  });
+});

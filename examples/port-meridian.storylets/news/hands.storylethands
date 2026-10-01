@@ -45,6 +45,7 @@
       properties: [],
       purpose: "A public screen: shows its top-priority story, keeps the ambient strip underneath.",
       slots: 2,
+      title: "Public screens",
     },
   ],
 }

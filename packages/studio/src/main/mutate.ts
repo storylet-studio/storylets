@@ -404,9 +404,18 @@ export function addNamedOutcome(session: ProjectSession, cardId: string, gameId:
   return { error: `unknown card (id ${cardId})` };
 }
 
-export function createCard(session: ProjectSession, deckId: string, place?: string): { result: OpenResult; cardId: string } | { error: string } {
+export function createCard(
+  session: ProjectSession, deckId: string, place?: string,
+  /** Filed to a zone of the project map instead (the zone panel's "+ New card
+   *  here"): tagged with it, so it can come up anywhere in that zone. */
+  zone?: string,
+): { result: OpenResult; cardId: string } | { error: string } {
   const found = locate(session, deckId);
   if (!found) return { error: `unknown deck (id ${deckId})` };
+  const map = session.loaded.source!.map;
+  if (zone !== undefined && (map === undefined || found.box.box.box.usesMap !== true || !map.group.tags.some((t) => t.id === zone))) {
+    return { error: `this deck's box has no zone (id ${zone}) on the project map` };
+  }
   // Made AT a hand (its page's "+ New card here"): the hand has to be one this
   // deck's box deals to, since a hand deals only from its own box's decks and a
   // place naming another box's hand is a card that can never come up.
@@ -418,6 +427,7 @@ export function createCard(session: ProjectSession, deckId: string, place?: stri
   // placeholder title so freshly-made cards start valid and unique.
   const card = newCard(session);
   if (place !== undefined) card.tags = tagsToComeUpAt(session, found.box, found.box.hands.hands.find((h) => h.id === place)!);
+  else if (zone !== undefined) card.tags = { [map!.group.id]: [zone] };
   found.deck.shard.cards.push(card);
   const result = commit(session, "New card", `struct:${structCounter++}`,
     [deckFileState(session, found.deck, deckContent(found.deck))]);
@@ -1561,6 +1571,7 @@ export function projectMapView(session: ProjectSession | undefined): ProjectMapV
         // Stored by ensureBoxColours above, so every layer has one.
         colour: boxColourOf(box) ?? 0,
         sites, unplaced,
+        templates: byDisplay(box.hands.templates).map((t) => ({ id: t.id, title: t.title ?? effectiveGameId(t) })),
       };
     });
   return {
@@ -1690,18 +1701,25 @@ export function saveHand(session: ProjectSession, boxId: string, handId: string,
 
 export function createHand(
   session: ProjectSession, boxId: string, site?: { x: number; y: number },
+  /** An instance of this template rather than a standalone hand: the map's
+   *  "+ Hand" menu offers the box's templates by title (the sign-off round). */
+  templateId?: string,
 ): { result: OpenResult; handId: string } | { error: string } {
   const box = locateBox(session, boxId);
   if (!box) return { error: `unknown box (id ${boxId})` };
+  const template = templateId === undefined ? undefined : box.hands.templates.find((t) => t.id === templateId);
+  if (templateId !== undefined && template === undefined) return { error: `unknown hand template (id ${templateId})` };
   const map = session.loaded.source!.map;
   if (site !== undefined && (map === undefined || box.box.box.usesMap !== true)) {
     return { error: "this box is not on the project map" };
   }
   const taken = new Set(box.hands.hands.map((h) => effectiveGameId(h)));
   const title = freeTitle("New hand", taken);
-  // Standalone by default (an empty rule pulls the whole stock); pick a
-  // template in the editor to instance one instead.
-  const hand: Hand<string> = { id: newId("h"), title, rule: { slots: "unbounded" } };
+  // Standalone by default (an empty rule pulls the whole stock); an instance
+  // when a template was picked, its zone hole filled by the pin below.
+  const hand: Hand<string> = template !== undefined
+    ? { id: newId("h"), title, template: template.id }
+    : { id: newId("h"), title, rule: { slots: "unbounded" } };
   box.hands.hands.push(hand);
   if (site === undefined) {
     const result = commit(session, "New hand", `struct:${structCounter++}`, [{ path: handsFile(session, box), content: canonicalStringify(box.hands) }]);
@@ -1865,11 +1883,22 @@ function mapExpressionReference(source: SourceProject, box: SourceBox, group: Ta
     ...box.decks.flatMap((d) => d.shard.deck.properties ?? []),
     ...box.hands.templates.flatMap((t) => t.properties ?? []), ...box.hands.hands.flatMap((h) => h.properties ?? []),
   ].map((p) => p.name));
+  // What the box's OWN @hand bag declares: its own groups (by name, and their
+  // and their tags' properties), its templates' and hands' properties. Off the
+  // map `@hand.<name>` still resolves to these, so only a map-sourced name
+  // counts (the antagonist's sign-off, 3.2: Saltmarsh's `area/docks` declares
+  // `danger` itself).
+  const ownGroups = box.tags.groups.filter((g) => g.id !== group.id && !isSpatial(g));
+  const ownHand = new Set([
+    ...ownGroups.map((g) => effectiveGameId(g)),
+    ...[...ownGroups.flatMap((g) => [...(g.properties ?? []), ...g.tags.flatMap((t) => t.properties ?? [])]),
+      ...box.hands.templates.flatMap((t) => t.properties ?? []), ...box.hands.hands.flatMap((h) => h.properties ?? [])].map((p) => p.name),
+  ]);
   const esc = (x: string): string => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const zones = group.tags.map((t) => effectiveGameId(t));
   const tests: { re: RegExp; said: (m: RegExpExecArray) => string }[] = [
-    { re: /@hand\.([A-Za-z_][A-Za-z0-9_-]*)/g, said: (m) => (handNames.has(m[1]!) ? `@hand.${m[1]}` : "") },
-    { re: /@([A-Za-z_][A-Za-z0-9_-]*)(?![.\w])/g, said: (m) => (handNames.has(m[1]!) && !elsewhere.has(m[1]!) ? `@${m[1]}` : "") },
+    { re: /@hand\.([A-Za-z_][A-Za-z0-9_-]*)/g, said: (m) => (handNames.has(m[1]!) && !ownHand.has(m[1]!) ? `@hand.${m[1]}` : "") },
+    { re: /@([A-Za-z_][A-Za-z0-9_-]*)(?![.\w])/g, said: (m) => (handNames.has(m[1]!) && !elsewhere.has(m[1]!) && !ownHand.has(m[1]!) ? `@${m[1]}` : "") },
     { re: new RegExp(`\\b(count_played_in|turns_since_played_in)\\(\\s*["']${esc(groupName)}["']`, "g"), said: (m) => `${m[1]}("${groupName}")` },
     ...(zones.length > 0
       ? [{ re: new RegExp(`\\bvalue\\.(${zones.map(esc).join("|")})\\.`, "g"), said: (m: RegExpExecArray) => `value.${m[1]}.` }]
@@ -2088,12 +2117,17 @@ export function setGroupSpatial(
  */
 export function createZone(
   session: ProjectSession, boxId: string, groupId: string, polygon: { x: number; y: number }[],
+  /** What the author called it as it was drawn (the sign-off round: eight rooms
+   *  were eight renames of `new-zone`). Slugged here; blank or unusable falls
+   *  back to "new-zone", so a shape is never lost to its name. */
+  name?: string,
 ): { result: OpenResult; tagId: string } | { error: string } {
   const home = mapGroupHome(session, boxId, groupId);
   const group = home?.group;
   if (!home || !group) return { error: `unknown tag group (id ${groupId})` };
   const taken = new Set(group.tags.map((v) => effectiveGameId(v)));
-  const gameId = freeGameId("new-zone", taken);
+  const asked = gameIdify(name ?? "");
+  const gameId = freeGameId(isValidGameId(asked) ? asked : "new-zone", taken);
   const tag: Tag = { id: newId("v"), gameId };
   const templates = withPolygon(tag, polygon);
   if (templates !== undefined) tag.templates = templates;

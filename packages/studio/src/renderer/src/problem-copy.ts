@@ -66,7 +66,7 @@ const SHAPES: [RegExp, string][] = [
   [/^quality "[^"]*" defaults to .*, which is not one of its stages$/, "quality-bad-default"],
   [/^property name "[^"]*" cannot be used \(/, "reserved-property-name"],
   [/^@world\.\w+ declares "(shared|durable)"/, "world-flag"],
-  [/^@hand\.\w+ is declared as \w+ on .* and as \w+ on /, "hand-property-type-clash"],
+  [/^@hand\.\w+ is declared as \w+(?: with [\w, -]*?)? on .* and as \w+(?: with [\w, -]*?)? on /, "hand-property-type-clash"],
   [/^turn\.seconds must be an integer >= 1/, "turn-seconds"],
   // tags
   [/^"place" is the reserved tag group/, "reserved-tag-group"],
@@ -224,7 +224,7 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
   "map-pins-off-map": (p) => {
     const n = pick(p, /^(\d+) hands? (?:is|are) placed/);
     return {
-      text: `${p.title ? problemName(p) : quoted(pick(p, /but box "([^"]*)"/))} has ${n === "1" ? "a hand" : `${n} hands`} placed on the map, but isn’t on the project map, so ${n === "1" ? "that pin isn’t" : "those pins aren’t"} drawn or played.`,
+      text: `${p.title ? problemName(p) : quoted(pick(p, /but box "([^"]*)"/))} has ${n === "1" ? "a hand" : `${n} hands`} placed on the map, but isn’t on the project map, so ${n === "1" ? "that pin isn’t" : "those pins aren’t"} drawn or shipped.`,
       next: "Turn on Use the project map on the box’s page, or upgrade the project if it was made before maps belonged to the project.",
     };
   },
@@ -277,10 +277,16 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
     text: `@world.${pick(p, /^@world\.(\w+)/)} is marked ${pick(p, /declares "(\w+)"/)}, but @world is the game’s own state and doesn’t take that flag.`,
     next: "Remove it; the flag belongs on @story, box, deck, hand or tag properties.",
   }),
-  "hand-property-type-clash": (p) => ({
-    text: `@hand.${pick(p, /^@hand\.(\w+)/)} is a ${pick(p, /declared as (\w+) on/)} on ${pick(p, /declared as \w+ on (.*) and as/)} and a ${pick(p, /and as (\w+) on/)} on ${pick(p, /and as \w+ on (.*);/)}.`,
-    next: "@hand composes them into one name, so give both the same type.",
-  }),
+  "hand-property-type-clash": (p) => {
+    // "as number", or "as quality with stages calm, eerie" when the type agrees
+    // and the ladder (or an enum's values) is what parts them.
+    const clash = /declared as (\w+(?: with [\w, -]*?)?) on (.*?) and as (\w+(?: with [\w, -]*?)?) on (.*);/.exec(p.message);
+    const a = (what: string): string => `${/^[aeiou]/.test(what) ? "an" : "a"} ${what}`;
+    return {
+      text: `@hand.${pick(p, /^@hand\.(\w+)/)} is ${a(clash?.[1] ?? "")} on ${clash?.[2] ?? ""} and ${a(clash?.[3] ?? "")} on ${clash?.[4] ?? ""}.`,
+      next: "@hand composes them into one name, so make the two declarations agree.",
+    };
+  },
   "turn-seconds": (p) => ({
     text: `The turn length on ${problemName(p)} must be a whole number of seconds, at least 1.`,
   }),

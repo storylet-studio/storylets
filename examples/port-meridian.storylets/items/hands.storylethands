@@ -45,6 +45,7 @@
       properties: [],
       purpose: "A hiding place the level marks: what's tucked away there, if anything.",
       slots: 1,
+      title: "Hiding places",
     },
   ],
 }

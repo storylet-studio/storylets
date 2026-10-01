@@ -62,6 +62,8 @@ import {
 import type { Detail, Inspected, InspectorHost } from "./inspector.js";
 import { createProjectSettings } from "./project-settings.js";
 import { mountPropertyList } from "./prop-list.js";
+import { askZoneName } from "./zone-name.js";
+import { setSettingsOpener } from "./solo-pointer.js";
 import { revealRowWhenReady } from "@wildwinter/app-shell";
 import { setPlayRung } from "./play-ladder.js";
 import { setGameScopes, setPropertyNavigator } from "./expr-panels.js";
@@ -1925,6 +1927,18 @@ function renderMapCentre(host: HTMLElement): void {
         setDocTab(`card:${deck}/${created.cardId}`, "dealing");
         arriveFrom("Map", backToMap(hand.id), () => actions.inspectCard(box, deck, created.cardId));
       })(),
+      mapBoxes: () => users,
+      // Filed to the zone rather than made at a hand; the way back is the map
+      // with the zone still selected.
+      newCardInZone: (box, deck, zone) => void (async () => {
+        await flushSaves();
+        const created = await studio.createCard(deck, undefined, zone.id);
+        if (!ok(created)) return;
+        applyResult(created.result);
+        pendingFocusTitle = true;
+        setDocTab(`card:${deck}/${created.cardId}`, "dealing");
+        arriveFrom("Map", backToMap(zone.id), () => actions.inspectCard(box, deck, created.cardId));
+      })(),
       // The zones' page is a tag group page, which is a box's: any box on the
       // map shows the project's zone group (main's `groupHome`).
       editZones: () => { if (users[0]) arriveFrom("Map", backToMap(), () => actions.inspectTagGroup(users[0]!.id, group)); },
@@ -1940,7 +1954,8 @@ function renderMapCentre(host: HTMLElement): void {
         redraw(shaped.result);
       })(),
       newZone: (polygon) => void (async () => {
-        const created = await studio.createZone("", group, polygon);
+        const name = await askZoneName(viewHost);
+        const created = await studio.createZone("", group, polygon, name);
         if ("error" in created) { flashError(created.error); return; }
         redraw(created.result);
       })(),
@@ -1981,8 +1996,8 @@ function renderMapCentre(host: HTMLElement): void {
         quiet(moved.result);
         mapView?.rebound(moved.rebound);
       })(),
-      newSite: (box, at) => void (async () => {
-        const created = await studio.createHand(box, at);
+      newSite: (box, at, template) => void (async () => {
+        const created = await studio.createHand(box, at, template);
         if ("error" in created) { flashError(created.error); return; }
         mapSelect = created.handId;
         redraw(created.result);
@@ -2042,7 +2057,7 @@ function renderStoryCentre(host: HTMLElement): void {
     // the property itself: a quiet uses chip per row, opening Find's property
     // mode. Counts fill in asynchronously (one usage scan per declaration).
     const useBtns = new Map<string, HTMLButtonElement>();
-    mountPropertyList(list, dto.story, { onChange: save, sharedByDefault: true, rowExtras: (decl) => {
+    mountPropertyList(list, dto.story, { onChange: save, sharedByDefault: true, shareScope: "story", rowExtras: (decl) => {
       const b = el("button", { className: "set-uses", text: "uses",
         tip: `Find every read and write of @story.${decl.name}`,
         onClick: () => void studio.openSearch({ mode: "property", query: `@story.${decl.name}` }) });
@@ -2395,6 +2410,7 @@ const projectSettingsPanel = createProjectSettings(
   // read, not typed into (design/engine-server.md 9.1).
   () => remote?.role === "author",
 );
+setSettingsOpener((section) => { if (project) projectSettingsPanel.open(section); });
 
 // Right-click on a property pill: Go to definition / Find usages (the ruling
 // of 2026-08-26, with the Story page). A box or deck ref names no owner, and

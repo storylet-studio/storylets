@@ -17,7 +17,8 @@ import { iconNode, metaLine, openAnchoredPanel, openGameIdEditor, plural } from 
 import { currentDocTab, setDocTab } from "./doc-tab-memory.js";
 import { isAnywhere, placeGroupsOf, whereModel, whereWarning } from "./where.js";
 import { NEVER_LABEL, anywhereLine, gateLabel, movingNote, tierCount, tierLabel } from "./hand-tiers.js";
-import { zoneShareLine } from "./zone-share.js";
+import { soloSharePointer } from "./solo-pointer.js";
+import type { ShareScope } from "./zone-share.js";
 // The DERIVED address, computed for placeholders and previews. From the model
 // rather than the shell: this is the same rule the compiler and the CLI use, and
 // model/test/id-parity.test.ts holds the two copies to each other.
@@ -26,6 +27,7 @@ import { el } from "./dom.js";
 
 import { openContextMenu, openPopover } from "@wildwinter/app-shell/context-menu";
 import { chipDot } from "./views.js";
+import { boxColour } from "./box-tint.js";
 import { mountChanges, mountCondition, previewCondition } from "./expr-panels.js";
 import { mountPropertyList, valueControl } from "./prop-list.js";
 import { shows } from "./play-ladder.js";
@@ -173,6 +175,47 @@ export function openDeckPickerFor(anchor: HTMLElement, box: BoxDto, pick: (deckI
       } });
     if (focus === undefined || deck.id === last) focus = opt;
     panel.body.append(opt);
+  }
+  focus?.focus();
+}
+
+/**
+ * "Which deck" across several boxes: the zone panel's "+ New card here", where
+ * every box on the map can file a card to the zone. One box is the ordinary
+ * picker; several list their decks under each box's name, the same one-choice
+ * list with a caption per box, rather than a box step and then a deck step.
+ */
+export function openDeckPickerAcross(anchor: HTMLElement, boxes: BoxDto[], pick: (boxId: string, deckId: string) => void): void {
+  const withDecks = boxes.filter((b) => b.decks.length > 0);
+  if (boxes.length === 1 || withDecks.length === 1) {
+    const only = withDecks[0] ?? boxes[0]!;
+    openDeckPickerFor(anchor, only, (deck) => pick(only.id, deck));
+    return;
+  }
+  const panel = openAnchoredPanel({ anchor, className: "deckpick", title: "Which deck", width: 260, prefer: "below" });
+  if (!panel) return;
+  panel.body.classList.add("deckpick-list");
+  if (withDecks.length === 0) {
+    panel.body.append(el("p", { className: "doc-tab-note", text: "No box on the map has a deck yet. Make one first, from the navigator's + deck." }));
+    return;
+  }
+  let focus: HTMLElement | undefined;
+  for (const box of withDecks) {
+    // The box's own map colour, as its pins wear it.
+    const dot = el("i");
+    dot.style.background = boxColour(box.id);
+    panel.body.append(el("div", { className: "deckpick-box" }, dot, box.title ?? box.gameId));
+    const last = lastDeckFor.get(box.id);
+    for (const deck of box.decks) {
+      const opt = el("button", { className: `deckpick-opt indent${deck.id === last ? " sel" : ""}`, text: deck.title ?? deck.gameId,
+        onClick: () => {
+          panel.close();
+          lastDeckFor.set(box.id, deck.id);
+          pick(box.id, deck.id);
+        } });
+      if (focus === undefined) focus = opt;
+      panel.body.append(opt);
+    }
   }
   focus?.focus();
 }
@@ -876,7 +919,7 @@ function propList(
   /** A card TEMPLATE's fields, which are data for the host and carry no state:
    *  neither sharing axis applies to them. `rowExtras` hangs a line's worth at
    *  each row's end (prop-list.ts). */
-  opts: { sharingSwitches?: boolean; rowExtras?: (decl: PropertyDeclDto) => HTMLElement | null } = {},
+  opts: { sharingSwitches?: boolean; rowExtras?: (decl: PropertyDeclDto) => HTMLElement | null; shareScope?: ShareScope } = {},
 ): HTMLElement {
   const host = el("div", { className: "prop-list" });
   mountPropertyList(host, decls, { onChange, addLabel, ...opts });
@@ -1478,7 +1521,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
 
     if (tab === "properties") {
       if (standalone()) {
-        view.append(el("div", { className: `doc-panel${(edit.properties ?? []).length === 0 ? " empty" : ""}` }, propList(edit.properties ?? [], commit, "+ Property")),
+        view.append(el("div", { className: `doc-panel${(edit.properties ?? []).length === 0 ? " empty" : ""}` }, propList(edit.properties ?? [], commit, "+ Property", { shareScope: "hand" })),
           el("p", { className: "doc-tab-note", text: "Properties this hand carries for its cards, as @hand." }));
       } else {
         view.append(el("p", { className: "doc-tab-note", text: "These come from this hand's template. Edit them there and every hand of that kind follows." }));
@@ -1684,7 +1727,7 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
       el("p", { className: "doc-tab-note", text: "The fields every outcome in this box can carry. They're handed to the game with the press." }));
   } else {
     const properties: PropertyDeclDto[] = box.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
-    view.append(el("div", { className: `doc-panel${properties.length === 0 ? " empty" : ""}` }, propList(properties, () => h.saveBox(box.id, { properties }), "+ Property")),
+    view.append(el("div", { className: `doc-panel${properties.length === 0 ? " empty" : ""}` }, propList(properties, () => h.saveBox(box.id, { properties }), "+ Property", { shareScope: "box" })),
       el("p", { className: "doc-tab-note", text: "Properties the whole box carries, as @box." }));
   }
   centre.replaceChildren(view);
@@ -1728,7 +1771,7 @@ export function renderDeckTabBody(host: HTMLElement, box: BoxDto, deck: DeckDto,
     if (deckRows.length > 0) view.append(el("div", { className: "doc-panel cfg-panel" }, ...deckRows));
   } else {
     const properties: PropertyDeclDto[] = deck.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
-    view.append(el("div", { className: `doc-panel${properties.length === 0 ? " empty" : ""}` }, propList(properties, () => h.saveDeckConfig(deck.id, { properties }), "+ Property")),
+    view.append(el("div", { className: `doc-panel${properties.length === 0 ? " empty" : ""}` }, propList(properties, () => h.saveDeckConfig(deck.id, { properties }), "+ Property", { shareScope: "deck" })),
       el("p", { className: "doc-tab-note", text: "Properties this deck carries for its cards, as @deck." }));
   }
   host.replaceChildren(view);
@@ -1805,7 +1848,7 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
     }
 
     if (tab === "properties") {
-      view.append(el("div", { className: `doc-panel${edit.properties.length === 0 ? " empty" : ""}` }, propList(edit.properties, commit, "+ Property")),
+      view.append(el("div", { className: `doc-panel${edit.properties.length === 0 ? " empty" : ""}` }, propList(edit.properties, commit, "+ Property", { shareScope: "hand" })),
         el("p", { className: "doc-tab-note", text: "Properties every hand of this kind carries as @hand, each with its own values." }));
       centre.replaceChildren(view);
       return;
@@ -1898,7 +1941,7 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
       down.disabled = i === edit.values.length - 1;
       block.append(el("div", { className: "insp-ohead" }, el("span", { className: "insp-kv" }, chipDot(v.gameId), name),
         el("span", { className: "insp-moves" }, up, down, del)));
-      block.append(bare("Tag properties", "When a hand with this tag is dealt to, these values appear as @hand.<name>.", propList(v.properties, commit, "+ Property")));
+      block.append(bare("Tag properties", "When a hand with this tag is dealt to, these values appear as @hand.<name>.", propList(v.properties, commit, "+ Property", { shareScope: detail.projectMap === true ? "zone" : "tag" })));
       // What the GROUP declares, this tag's own starting value for each. One
       // row per declaration, using the same control the declaration's own
       // default uses, so a quality offers its stages here too.
@@ -1939,14 +1982,14 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
         el("button", { className: "insp-add small", text: "Move it here", onClick: () => {
           hoistProperty(edit, name); commit(); redraw();
         } })));
-    // The project map's zones: each property says who shares its value, and
-    // follows its own Shared tick-box as it is ticked (zone-share.ts, the
-    // round-3 ruling). A box's own group says nothing: its tags are its own.
-    const shareLine = detail.projectMap === true
-      ? (decl: PropertyDeclDto): HTMLElement => el("span", { className: "set-dim zone-share", text: zoneShareLine(decl.shared === true, !shows("sharing")) })
-      : undefined;
+    // Each property says who shares its value, and follows its own Shared
+    // tick-box as it is ticked (zone-share.ts: the round-3 ruling for the
+    // project map's zones, every scope since the sign-off round). On Solo a
+    // zone's properties also say where a value every guest shares comes from.
+    const soloPointer = detail.projectMap === true && !shows("sharing")
+      ? [soloSharePointer("doc-tab-note")] : [];
     view.append(section("Properties", detail.projectMap === true ? "every zone on the map has these" : "every tag in this group has these",
-      propList(edit.properties, () => { commit(); redraw(); }, "+ Property", { ...(shareLine !== undefined ? { rowExtras: shareLine } : {}) }), ...nudge));
+      propList(edit.properties, () => { commit(); redraw(); }, "+ Property", { shareScope: detail.projectMap === true ? "zone" : "tag" }), ...soloPointer, ...nudge));
     view.append(section("Tags", "declared, not freeform", ...valBody, add));
 
     // The spatial template of play: this group is a map, so its tags carry outlines

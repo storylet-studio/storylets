@@ -15,9 +15,9 @@
 // check the unpack path learnt to make.
 // ---------------------------------------------------------------------------
 
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { backgroundsOf } from "@storylet-studio/model";
+import { backgroundsOf, isSpatial } from "@storylet-studio/model";
 import type { SourceProject } from "@storylet-studio/compiler";
 
 /** The folder a project keeps its assets in, relative to the project root. */
@@ -149,14 +149,67 @@ export function assetUse(dir: string, source: SourceProject): { used: string[]; 
 }
 
 /**
- * Every orphaned asset in a project, as absolute paths.
+ * Every orphaned asset in a project, as absolute paths: the project folder's
+ * own, and the stray copies an upgrade left in a box's (`strayBoxAssetPaths`).
  *
  * Ops describes, the caller acts: this walks and reports, and deleting is the
  * host's business (the studio sweeps at the end of a session, when the undo chain
  * that was the only reason to keep them is being discarded anyway).
  */
 export function orphanAssetPaths(dir: string, source: SourceProject): string[] {
-  return assetUse(dir, source).orphans.map((name) => join(dir, ASSETS_DIR, name)).sort();
+  return [
+    ...assetUse(dir, source).orphans.map((name) => join(dir, ASSETS_DIR, name)),
+    ...strayBoxAssetPaths(dir, source),
+  ].sort();
+}
+
+/** The plain files in one folder, dotfiles aside; none when there is no folder. */
+const filesIn = (folder: string): string[] => {
+  try {
+    return readdirSync(folder, { withFileTypes: true })
+      .filter((e) => e.isFile() && !e.name.startsWith("."))
+      .map((e) => e.name);
+  } catch {
+    return [];
+  }
+};
+
+const sameBytes = (a: string, b: string): boolean => {
+  try { return readFileSync(a).equals(readFileSync(b)); } catch { return false; }
+};
+
+/**
+ * The pictures left behind in a box's own `assets/` folder by an upgrade to the
+ * project map, as absolute paths.
+ *
+ * The in-app upgrade COPIES each picture to the project's `assets/` rather than
+ * moving it, so one Undo finds the old map's pictures where they always were
+ * (studio `map-upgrade.ts`). Once that undo chain has ended the box's copy is a
+ * duplicate nothing reads: per-box asset folders were retired with the project
+ * map. So a file here is stray when all of these hold, and kept otherwise:
+ *
+ *   - the project is on the project map, and no box still carries a map group
+ *     of its own (an upgrade undone, or never made, still reads these files);
+ *   - no group in that box names it as a background;
+ *   - the project's `assets/` holds the same name with the same bytes, so it
+ *     is a copy by construction. A picture the upgrade did NOT take (a second
+ *     copy's, which the planner says stays in the box) has no twin there and
+ *     is left alone.
+ */
+export function strayBoxAssetPaths(dir: string, source: SourceProject): string[] {
+  if (source.map === undefined) return [];
+  if (source.boxes.some((box) => box.tags.groups.some((g) => isSpatial(g)))) return [];
+  const out: string[] = [];
+  for (const box of source.boxes) {
+    const named = new Set(box.tags.groups.flatMap((g) => backgroundsOf(g).map((b) => b.file)));
+    const folder = join(dir, box.path, ASSETS_DIR);
+    for (const name of filesIn(folder)) {
+      if (named.has(name)) continue;
+      const path = join(folder, name);
+      if (sameBytes(path, join(dir, ASSETS_DIR, name))) out.push(path);
+    }
+  }
+  return out.sort();
 }
 
 /** A name nobody in `taken` is using: "plan.png", then "plan-2.png". The same

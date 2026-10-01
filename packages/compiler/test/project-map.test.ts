@@ -317,7 +317,7 @@ describe("the project map's warnings", () => {
       ],
     }));
     expect(warnings(issues)).toEqual([
-      '1 hand is placed on the map, but box "news" is not on the project map, so no site of it ships; turn on "Uses the project map" or take them off the map',
+      '1 hand is placed on the map, but box "news" is not on the project map, so its pin is not drawn or shipped; turn on "Uses the project map" or take them off the map',
     ]);
     expect(issues[0]!.path).toBe("news/map");
   });
@@ -386,6 +386,19 @@ describe("the project map in an opted-in box's @hand", () => {
     }));
     expect(errors(issues)).toEqual([
       "@hand.danger is declared as string on mood/grim and as number on group district; @hand composes them into one name, so they must agree",
+    ]);
+  });
+
+  it("names the stages when two qualities of one name climb different ladders", () => {
+    const { issues } = compile(project({
+      map: projectMap({ ...DISTRICT, properties: [...DISTRICT.properties, { name: "haunting", type: "quality", stages: ["quiet", "restless", "screaming"], default: "quiet" }] }),
+      boxes: [{
+        folder: "news", id: "b_news", usesMap: true,
+        groups: [{ id: "d_area", gameId: "area", tags: [{ id: "v_docks", gameId: "docks", properties: [{ name: "haunting", type: "quality", stages: ["calm", "eerie"], default: "calm" }] }] }],
+      }],
+    }));
+    expect(errors(issues)).toEqual([
+      "@hand.haunting is declared as quality with stages calm, eerie on area/docks and as quality with stages quiet, restless, screaming on group district; @hand composes them into one name, so they must agree",
     ]);
   });
 });

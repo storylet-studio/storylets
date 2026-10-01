@@ -260,6 +260,17 @@ export interface CanvasSurface<T extends CanvasItem> {
   select: (ids: string[]) => void;
   /** Frame everything: the "I am lost" command. */
   fitAll: () => void;
+  /**
+   * The OPENING frame for a view whose labels vanish below a zoom (the map's
+   * LABEL_FLOOR): everything if that fits at `floor` or above; otherwise the
+   * `focus` items framed, and never below `floor`, centred on them. The
+   * sign-off round's complaint was the Village opening at 24% with every pin
+   * nameless. Labels are held to a screen size, so a lower floor would only
+   * pile them on one another, and nothing here avoids collisions; opening
+   * where they read is the cheaper truth. Fit everything (Home) still frames
+   * everything.
+   */
+  fitReadable: (floor: number, focus: () => T[]) => void;
   /** Bring the selection into view and centre it, keeping the author's zoom if
    *  the whole selection already fits at it. Does nothing with no selection. */
   showSelection: () => void;
@@ -1165,7 +1176,23 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
    *  stay there. */
   let pendingFit = false;
 
-  function fitAll(): void { frame(items, { magnify: false, keepZoomIfItFits: false }); }
+  /** A readable opening asked for before the surface had a size. */
+  let pendingFloor: { floor: number; focus: () => T[] } | undefined;
+
+  function fitAll(): void { pendingFloor = undefined; frame(items, { magnify: false, keepZoomIfItFits: false }); }
+
+  function fitReadable(floor: number, focus: () => T[]): void {
+    if (stage.width() <= 1 || stage.height() <= 1) { pendingFit = true; pendingFloor = { floor, focus }; return; }
+    fitAll();
+    if (stage.scaleX() >= floor) return;
+    const subject = focus();
+    const bounds = contentBounds(subject);
+    if (!bounds) return;
+    frame(subject, { magnify: false, keepZoomIfItFits: false });
+    if (stage.scaleX() >= floor) return;
+    stage.scale({ x: floor, y: floor });
+    centreWorld({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 });
+  }
 
   /** Centre the selection. The zoom is left alone when the selection already fits
    *  at it: the author chose that zoom, and "show me what I selected" is a
@@ -1307,7 +1334,9 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     stage.height(height);
     if (pendingFit && width > 1 && height > 1) {
       pendingFit = false;
-      fitAll();
+      const readable = pendingFloor;
+      if (readable !== undefined) fitReadable(readable.floor, readable.focus);
+      else fitAll();
       return;
     }
     // NOT a zoom: a resize changes how much you can see, never how big anything
@@ -1351,6 +1380,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     selection: () => [...selected],
     select: (ids) => setSelection(ids),
     fitAll,
+    fitReadable,
     showSelection,
     revealIfOffscreen(ids) {
       const subject = items.filter((i) => ids.includes(i.id));
@@ -1372,6 +1402,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
       stage.position({ x: camera.x, y: camera.y });
       // A restored camera counts as a fit: nothing is pending any more.
       pendingFit = false;
+      pendingFloor = undefined;
       afterCamera();
     },
     centreOn(id) {

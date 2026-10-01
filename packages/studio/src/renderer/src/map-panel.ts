@@ -19,9 +19,10 @@
 import { iconNode } from "@wildwinter/app-shell";
 import { el } from "./dom.js";
 import { boxColour, boxPin } from "./box-tint.js";
-import { handCardRow, openDeckPickerFor } from "./inspector.js";
+import { handCardRow, openDeckPickerAcross, openDeckPickerFor } from "./inspector.js";
 import { NEVER_LABEL, anywhereLine, movingNote, tierLabel } from "./hand-tiers.js";
 import { zoneShareLine } from "./zone-share.js";
+import { soloSharePointer } from "./solo-pointer.js";
 import { shows } from "./play-ladder.js";
 import { chipDot } from "./views.js";
 import type {
@@ -44,6 +45,11 @@ export interface MapPanelHost {
   newCardAt: (box: string, deck: string, hand: { id: string; title: string }) => void;
   /** The zone group's page, where every zone's properties are declared. */
   editZones: () => void;
+  /** The boxes on the project map, in project order: every one of them can
+   *  file a card to a zone. */
+  mapBoxes: () => BoxDto[];
+  /** Make a card in `deck` filed to this zone (anywhere in it), and open it. */
+  newCardInZone: (box: string, deck: string, zone: { id: string; gameId: string }) => void;
 }
 
 /** Which request is the panel's latest, so a slow answer for a hand the author
@@ -157,8 +163,10 @@ export function paintZonePanel(
     const cats = await catalogues(h, refs);
     if (ticket !== painting || !host.isConnected) return;
 
+    // Neutral, as the zone is on the map: only pins wear a colour, a box's, and
+    // a tag colour here read "docks" as one of Contracts' things.
     const head = el("div", { className: "mapside-headrow" },
-      el("h3", { className: "mapside-h" }, chipDot(zone.gameId), zone.gameId));
+      el("h3", { className: "mapside-h" }, el("i", { className: "mapside-dot zone" }), zone.gameId));
     const visible = zone.byBox.filter((b) => !hidden.has(b.box));
     const away = zone.byBox.filter((b) => hidden.has(b.box));
     // Used by: the boxes with something here, hidden ones included, since this
@@ -172,7 +180,9 @@ export function paintZonePanel(
       ...(zone.properties.length > 0
         ? [el("div", { className: "mapzone-props" }, ...zone.properties.map(propertyRow)),
             el("p", { className: "mapside-note", text: "Declared once, for every zone on the map." })]
-        : [el("p", { className: "mapside-none", text: "None declared." })]));
+        : [el("p", { className: "mapside-none", text: "None declared." })]),
+      // On Solo there is no Shared tick-box, so say once where one comes from.
+      ...(!shows("sharing") ? [soloSharePointer("mapside-note")] : []));
 
     const sites = el("div", { className: "mapside-tier" },
       el("div", { className: "mapside-cap" }, el("span", { text: `Hands in ${zone.gameId}` })),
@@ -197,6 +207,16 @@ export function paintZonePanel(
         ];
       }),
       ...(visible.every((b) => b.cards.length === 0) ? [el("p", { className: "mapside-none", text: "None." })] : []));
+    // "+ New card here", as a hand's panel has it: filed to the zone, so it can
+    // come up at any hand in it. Any box on the map can; the shown layers are
+    // offered, since a card made in a hidden one would land out of sight.
+    const filers = h.mapBoxes().filter((b) => !hidden.has(b.id));
+    if (filers.length > 0) {
+      const add = el("button", { className: "listrow ghost", text: "+ New card here" });
+      add.addEventListener("click", () => openDeckPickerAcross(add, filers,
+        (box, deck) => h.newCardInZone(box, deck, { id: tagId, gameId: zone.gameId })));
+      cards.append(add);
+    }
 
     // The hidden layers' share, as one quiet line that brings them back.
     const awayCount = away.reduce((n, b) => n + b.sites.length + b.cards.length, 0);

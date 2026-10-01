@@ -45,6 +45,7 @@
       properties: [],
       purpose: "A place jobs are posted: what work is on offer here, now.",
       slots: 2,
+      title: "Job boards",
     },
   ],
 }

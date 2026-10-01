@@ -102,8 +102,9 @@ export interface MapViewActions {
    *  that turns out to be, and therefore which hands are rebound, is decided in
    *  main from the position over the geometry: one rule, one place (mutate.ts). */
   movedSites: (box: string, moves: { id: string; x: number; y: number }[]) => void;
-  /** "+ Hand": a new hand in `box`, pinned here, in one undo step. */
-  newSite: (box: string, at: { x: number; y: number }) => void;
+  /** "+ Hand": a new hand in `box`, pinned here, in one undo step: an
+   *  instance of `template` when one was picked, standalone otherwise. */
+  newSite: (box: string, at: { x: number; y: number }, template?: string) => void;
   /** Take a hand off the map. The hand itself stays; only its pin goes. */
   removeSite: (box: string, handId: string) => void;
   /** The author picked a colour for a box's layer from its swatch. */
@@ -369,11 +370,12 @@ export function mountMapView(
     paintStrip();
   }
 
-  /** "+ Hand": a new hand in the ACTIVE layer's box, made where the click lands. */
-  function newSite(): void {
+  /** "+ Hand": a new hand in the ACTIVE layer's box, made where the click lands,
+   *  of the template picked from the button's menu (or standalone). */
+  function newSite(template?: { id: string; title: string }): void {
     const box = activeBox(prefs, boxIds);
     if (box === undefined) return;
-    busy = { label: `a new hand for ${layerName(layerOf.get(box)!)}`, drawing: false };
+    busy = { label: template !== undefined ? `a new hand in ${template.title}` : `a new hand for ${layerName(layerOf.get(box)!)}`, drawing: false };
     surface.setTool({
       cursor: "crosshair",
       onClick: (at) => {
@@ -381,11 +383,36 @@ export function mountMapView(
         // Into a hidden layer, the layer is shown: the new hand appears where
         // it was put, rather than being made out of sight.
         if (!isShown(prefs, box)) keep(showLayer(prefs, box));
-        actions.newSite(box, { x: Math.round(at.x), y: Math.round(at.y) });
+        actions.newSite(box, { x: Math.round(at.x), y: Math.round(at.y) }, template?.id);
       },
       onCancel: () => stopTool(),
     });
     paintStrip();
+  }
+
+  /**
+   * "+ Hand ▸": the active box's hand templates by the designer's own word for
+   * each ("Places in the village", "People you can talk to"), then Standalone,
+   * the hand that pulls from the whole box. The immersive designer's sign-off
+   * point: the author's word belongs where hands are MADE, not only under a
+   * hand once it exists. The deck picker's shape (inspector.ts). A box with no
+   * templates has nothing to choose between, so the button goes straight on.
+   */
+  function pickHandKind(anchor: HTMLElement): void {
+    const box = activeBox(prefs, boxIds);
+    const templates = box === undefined ? [] : layerOf.get(box)?.templates ?? [];
+    if (templates.length === 0) { newSite(); return; }
+    const panel = openAnchoredPanel({ anchor, className: "deckpick", title: "Which kind of hand", width: 240, prefer: "below" });
+    if (!panel) return;
+    panel.body.classList.add("deckpick-list");
+    const option = (text: string, tip: string, go: () => void): HTMLElement => {
+      const b = el("button", { className: "deckpick-opt", text, tip, onClick: () => { panel.close(); go(); } });
+      panel.body.append(b);
+      return b;
+    };
+    const first = templates.map((t) => option(t.title, `A new hand of this kind. Click where it goes.`, () => newSite(t)))[0];
+    option("Standalone", "A hand of no template, pulling from the whole box. Click where it goes.", () => newSite());
+    first?.focus();
   }
 
   // --- the side panel ------------------------------------------------------------
@@ -715,8 +742,14 @@ export function mountMapView(
         el("button", { className: "stripbtn", tip: "Trace a new zone on the map", onClick: () => trace(undefined, "New zone") },
           iconNode("add", 12), "Zone"),
         ...(activeLayer
-          ? [el("button", { className: "stripbtn", tip: `A new hand for ${layerName(activeLayer)}, the active layer. Click where it goes.`, onClick: () => newSite() },
-              iconNode("add", 12), "Hand", siteDot, el("span", { className: "stripbtn-sub", text: layerName(activeLayer) }))]
+          ? [el("button", {
+              className: "stripbtn",
+              tip: activeLayer.templates.length > 0
+                ? `A new hand for ${layerName(activeLayer)}, the active layer: pick its kind, then click where it goes.`
+                : `A new hand for ${layerName(activeLayer)}, the active layer. Click where it goes.`,
+              onClick: (e: MouseEvent) => pickHandKind(e.currentTarget as HTMLElement),
+            }, iconNode("add", 12), "Hand", siteDot, el("span", { className: "stripbtn-sub", text: layerName(activeLayer) }),
+              ...(activeLayer.templates.length > 0 ? [iconNode("dropdown", 10)] : []))]
           : []),
         el("button", {
           className: "stripbtn",
@@ -1088,8 +1121,9 @@ export function mountMapView(
   surface.setItems(items);
   repaint();
   const remembered = recallCamera(cameraKey);
+  // First visit: open where the hands' names show (canvas-surface `fitReadable`).
   if (remembered) surface.setCamera(remembered);
-  else surface.fitAll();
+  else surface.fitReadable(LABEL_FLOOR, () => items.filter((i) => i.kind === "site"));
   paintStrip();
 
   const unwatch = watchCanvasTokens((next) => { tokens = next; surface.setTokens(next); repaint(); });

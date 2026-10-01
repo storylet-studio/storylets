@@ -454,6 +454,24 @@ describe("the pre-flight refuses a move that would break the compile (round-3 re
     ]);
   });
 
+  it("a box joining the map declaring a map property with other stages: the compiler's whole-declaration rule, not the type alone", () => {
+    const haunted = districtCopy("con") as { properties: unknown[] };
+    haunted.properties.push({ name: "haunting", type: "quality", stages: ["quiet", "restless", "screaming"], default: "quiet" });
+    const dir = project([
+      { folder: "contracts", id: "b_con", p: "con", group: haunted },
+      { folder: "items", id: "b_items", p: "items", sites: { h_items_any: { x: 3, y: 3 } } },
+    ]);
+    addGroup(dir, "items", {
+      id: "d_items_area", gameId: "area",
+      tags: [{ id: "v_items_docks", gameId: "docks", properties: [{ name: "haunting", type: "quality", stages: ["calm", "eerie"], default: "calm" }] }],
+    });
+    expect(refused(dir)).toEqual([
+      'box "items" joins the project map because it has hands placed on it, and it declares @hand.haunting as quality with stages calm, eerie on "area/docks"'
+        + ' where the map declares it as quality with stages quiet, restless, screaming;'
+        + ' rename the property in "items", or make the two agree, then run format again',
+    ]);
+  });
+
   it("refuses every clash at once, and alongside a differing copy", () => {
     const dir = project([
       { folder: "contracts", id: "b_con", p: "con", group: districtCopy("con") },

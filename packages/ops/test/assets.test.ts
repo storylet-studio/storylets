@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  ASSETS_DIR, assetPath, assetUse, freeAssetName, imageSize, isSafeAssetName, orphanAssetPaths,
+  ASSETS_DIR, assetPath, assetUse, freeAssetName, imageSize, isSafeAssetName, orphanAssetPaths, strayBoxAssetPaths,
 } from "../src/assets.js";
 
 describe("resolving an asset", () => {
@@ -232,5 +232,51 @@ describe("sweeping orphans", () => {
     const dir = mkdtempSync(join(tmpdir(), "sweep-none-"));
     const source = { boxes: [{ path: "village", tags: { groups: [] } }] } as unknown as SourceProject;
     expect(orphanAssetPaths(dir, source)).toEqual([]);
+  });
+});
+
+describe("stray copies an upgrade left in a box's assets folder", () => {
+  // The in-app upgrade copies a box's pictures up to the project's folder and
+  // leaves the box's for its one Undo; once the session ends they are swept.
+  const zone = (spatial: boolean, ...files: string[]): unknown => ({
+    id: "d_zone", gameId: "zone", tags: [],
+    ...(spatial || files.length > 0 ? { templates: { spatial: { map: spatial, backgrounds: files.map((file, i) => ({ id: `g_${i}`, file, x: 0, y: 0, width: 10, height: 10 })) } } } : {}),
+  });
+  const project = (onMap: boolean, boxGroups: unknown[] = []): SourceProject => ({
+    ...(onMap ? { map: { schema: "storylets/projectmap@0", group: zone(true, "lair.jpg") } } : {}),
+    boxes: [{ path: "village", tags: { schema: "storylets/tags@0", groups: boxGroups } }],
+  } as unknown as SourceProject);
+
+  let dir = "";
+  const box = (name: string): string => join(dir, "village", ASSETS_DIR, name);
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "stray-"));
+    mkdirSync(join(dir, ASSETS_DIR), { recursive: true });
+    mkdirSync(join(dir, "village", ASSETS_DIR), { recursive: true });
+    writeFileSync(join(dir, ASSETS_DIR, "lair.jpg"), "lair");
+    writeFileSync(box("lair.jpg"), "lair");            // the upgrade's copy
+    writeFileSync(box("other.jpg"), "a losing copy's"); // never taken up
+    writeFileSync(join(dir, ASSETS_DIR, "same-name.jpg"), "root bytes");
+    writeFileSync(box("same-name.jpg"), "box bytes");  // a name clash, not a copy
+  });
+
+  it("names a box's copy of a picture the project's folder holds byte for byte, once the project is on the map", () => {
+    expect(strayBoxAssetPaths(dir, project(true))).toEqual([box("lair.jpg")]);
+    expect(orphanAssetPaths(dir, project(true))).toContain(box("lair.jpg"));
+  });
+
+  it("keeps everything while the project is not on the map, or a box still has a map of its own (an upgrade undone)", () => {
+    expect(strayBoxAssetPaths(dir, project(false))).toEqual([]);
+    expect(strayBoxAssetPaths(dir, project(true, [zone(true, "lair.jpg")]))).toEqual([]);
+  });
+
+  it("keeps a copy a group in the box still names", () => {
+    expect(strayBoxAssetPaths(dir, project(true, [zone(false, "lair.jpg")]))).toEqual([]);
+  });
+
+  it("leaves a picture with no twin at the root, and one whose twin differs", () => {
+    const stray = strayBoxAssetPaths(dir, project(true));
+    expect(stray).not.toContain(box("other.jpg"));
+    expect(stray).not.toContain(box("same-name.jpg"));
   });
 });
