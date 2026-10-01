@@ -13,8 +13,13 @@
 // standing hands; each box has its own turn counter (turn.b_x); the place
 // group pins cards to hands. The new families cite their SandboxStories
 // ids.
+//
+// Corpus 10 (2026-10-01): the project map (design/project-map-contract.md
+// section 6). Its cases are marked PM1 to PM22 as the contract numbers them,
+// spread over the peek and scripted families and the new load family.
 // ---------------------------------------------------------------------------
 
+import { PROJECT_SCAFFOLD } from "./build.js";
 import type { Fixtures } from "./types.js";
 
 export const fixtures: Fixtures = {
@@ -345,6 +350,60 @@ export const fixtures: Fixtures = {
       otherBox: { cards: [{ id: "c_yplain", tags: { zone: ["docks"] } }] },
       criteria: { zone: "docks" },
       expect: ["c_xcalm"] },
+
+    // --- the project map (design/project-map-contract.md 6.3) ----------------
+    // One map per project: its zones are ONE tag group, declared above the
+    // boxes and carried in `bundle.map`, which a box opts in to with
+    // `usesMap`. An opted-in box sees one namespace of group names, its own
+    // groups plus the project group (3.1), so a peek may name a zone exactly
+    // as it names a box group. Every list below separates its cards by
+    // priority or by specificity, so no expectation draws on the PRNG (6.1).
+    { name: "peek criteria name a project zone in an opted-in box",   // PM2
+      // The name "district" is in no box's `tagGroups`: it resolves through
+      // the box's opt-in to the project group (3.1). The zone filters like any
+      // group and the untagged card is the usual wildcard.
+      projectMap: true, uses: true,
+      cards: [
+        { id: "c_quay", priority: 2, tags: { district: ["quay"] } },
+        { id: "c_hill", priority: 1, tags: { district: ["hill"] } },
+        { id: "c_any", priority: 0 },
+      ],
+      criteria: { district: "quay" },
+      expect: ["c_quay", "c_any"] },
+
+    { name: "a box group and the project group coexist in one box, one namespace",   // PM17
+      // b_x keeps its scaffold `d_zone` ("zone") beside the project's
+      // "district": both filter, both surface by name in @hand (layer 3,
+      // schema 3.6), and neither shadows the other. c_named is untagged, so
+      // it is there on its condition alone, which reads BOTH names.
+      projectMap: true, uses: true,
+      cards: [
+        { id: "c_named", priority: 5, condition: '@hand.district == "quay" and @hand.zone == "market"' },
+        { id: "c_docks", priority: 4, tags: { zone: ["docks"] } },
+        { id: "c_both", priority: 3, tags: { zone: ["market"], district: ["quay"] } },
+        { id: "c_market", priority: 2, tags: { zone: ["market"] } },
+        { id: "c_hill", priority: 1, tags: { district: ["hill"] } },
+        { id: "c_free", priority: 0 },
+      ],
+      criteria: { zone: "market", district: "quay" },
+      expect: ["c_named", "c_both", "c_market", "c_free"] },
+
+    { name: "specificity counts a project zone's constraints beside a box group's",   // PM18
+      // Every card at priority 0, so the ranking is specificity alone: 3, 2,
+      // 1, 0 matched constraints, no tie run longer than one. `@hand.danger`
+      // is the bound zone's property (quay's 0; market declares none), and
+      // `@hand.district` the zone's name. The `specificity` case kind has no
+      // bundle and cannot know where a @hand name came from, so this is where
+      // the change can be seen (6.3, "On specificity").
+      projectMap: true, uses: true,
+      cards: [
+        { id: "c_three", condition: '@hand.danger == 0 and @hand.zone == "market" and @hand.district == "quay"' },
+        { id: "c_two", condition: '@hand.zone == "market" and @hand.district == "quay"' },
+        { id: "c_one", condition: '@hand.zone == "market"' },
+        { id: "c_zero" },
+      ],
+      criteria: { zone: "market", district: "quay" },
+      expect: ["c_three", "c_two", "c_one", "c_zero"] },
   ],
 
   // --- Family SC - scripted ------------------------------------------------------
@@ -2516,5 +2575,430 @@ export const fixtures: Fixtures = {
           expectDiagnostic: "value.other/docks.danger" },
         { op: "assertState", expect: { "value.other/docks.danger": 6 } },
       ] },
+
+    // --- the project map (design/project-map-contract.md 6.3) ----------------
+    //
+    // A project has at most one map. Its zones are one tag group declared
+    // above the boxes (`bundle.map.group`, in no box's `tagGroups`), and a box
+    // OPTS IN (`usesMap`); an opted-in box's hands may bind the zones and its
+    // cards may be tagged with them. What is shared is the zone's VALUE: one
+    // bag per zone, whichever box's hand is dealt to it (3.3), addressed
+    // `value.<zone>.<name>` with no box-qualified form (3.4). What is NOT
+    // shared is the box's own stock and the box's own history: a hand still
+    // deals only from its own box's decks (3.2), and play history stays
+    // box-specific (D7, ruled).
+    //
+    // The scaffold's own `d_zone` and `d_zone_y` are untouched, box groups
+    // with their repeated "docks", so the box-scoping and box-qualified cases
+    // above read exactly as before, and several cases here assert that beside
+    // the new behaviour (6.1). Every list separates its cards by priority or
+    // specificity: no expectation here draws on the PRNG. A batch deal still
+    // shuffles its HAND order, but no two hands below compete for one card,
+    // so the order cannot change what any hand holds.
+
+    { name: "a card tagged with a project zone deals to its own box's hand bound to it",   // PM1
+      projectMap: true, uses: true,
+      cards: [
+        { id: "c_quay", priority: 2, tags: { district: ["quay"] } },
+        { id: "c_hill", priority: 1, tags: { district: ["hill"] } },
+        { id: "c_any", priority: 0 },
+      ],
+      hands: [{ id: "h_xq", rule: { bindings: { district: "quay" } } }],
+      script: [
+        // The binding is by the project group's id, exactly as a box group's
+        // is (2.3); only where the group lives has changed.
+        { op: "deal", hands: ["h_xq"], expectBoard: { h_xq: ["c_quay", "c_any"] },
+          expectVerdicts: { hill: "tags" } },
+      ] },
+
+    { name: "another box's hand on the same zone deals only its own box's cards",   // PM3
+      // Two boxes, one zone, one tag on both boxes' cards. The zone is shared;
+      // the stock is not. The lists are checked WHOLE, so c_xquay turning up
+      // in h_yq (or c_yquay in h_xq) fails rather than passing as an extra.
+      projectMap: true, uses: true,
+      cards: [{ id: "c_xquay", priority: 5, tags: { district: ["quay"] } }],
+      hands: [{ id: "h_xq", rule: { bindings: { district: "quay" } } }],
+      otherBox: {
+        uses: true,
+        cards: [
+          { id: "c_yquay", priority: 2, tags: { district: ["quay"] } },
+          { id: "c_yhill", priority: 1, tags: { district: ["hill"] } },
+        ],
+        hands: [{ id: "h_yq", rule: { bindings: { district: "quay" } } }],
+      },
+      script: [
+        { op: "deal", hands: ["h_xq", "h_yq"],
+          expectBoard: { h_xq: ["c_xquay"], h_yq: ["c_yquay"] } },
+      ] },
+
+    { name: "one zone value: written by one box's outcome, read through @hand by another box's deal",   // PM4
+      // The whole point of the change. Today each box had its own copy of the
+      // district and so its own `danger`; now b_x's outcome writes quay's ONE
+      // bag and b_y's next deal composes it (@hand layer 1, schema 3.6).
+      projectMap: true, uses: true,
+      cards: [{ id: "c_xstir", tags: { district: ["quay"] }, outcomes: [
+        { id: "o_stir", changes: { "@hand.danger": "@hand.danger + 2" } },
+      ] }],
+      hands: [{ id: "h_xq", rule: { bindings: { district: "quay" } } }],
+      otherBox: {
+        uses: true,
+        cards: [
+          { id: "c_ycalm", priority: 1, condition: "@hand.danger == 0" },
+          { id: "c_yriot", priority: 2, condition: "@hand.danger >= 2" },
+        ],
+        hands: [{ id: "h_yq", rule: { bindings: { district: "quay" } } }],
+      },
+      script: [
+        { op: "deal", hands: ["h_yq"], expectBoard: { h_yq: ["c_ycalm"] } },
+        { op: "deal", hands: ["h_xq"], expectBoard: { h_xq: ["c_xstir"] } },
+        // The write lands at the zone's short address, the only one it has.
+        { op: "play", card: "c_xstir", outcome: "stir", from: "h_xq",
+          expectTrace: ["write @hand.danger value.quay.danger"] },
+        { op: "assertState", expect: { "value.quay.danger": 2 } },
+        // The eviction pass drops c_ycalm on its condition and the refill
+        // brings c_yriot: b_y saw b_x's write.
+        { op: "deal", hands: ["h_yq"], expectBoard: { h_yq: ["c_yriot"] },
+          expectVerdicts: { ycalm: "condition" } },
+      ] },
+
+    { name: "two boxes' writes to one zone land in play order",   // PM5
+      // There is no "same turn" in the engine to define (3.7, Q10): two plays
+      // are two plays, each write lands and is traced in turn, and the second
+      // reads what the first left.
+      projectMap: true, uses: true,
+      cards: [{ id: "c_xstir", tags: { district: ["quay"] }, outcomes: [
+        { id: "o_stir", changes: { "@hand.danger": "@hand.danger + 1" } },
+      ] }],
+      hands: [{ id: "h_xq", rule: { bindings: { district: "quay" } } }],
+      otherBox: {
+        uses: true,
+        cards: [{ id: "c_ystir", tags: { district: ["quay"] }, outcomes: [
+          { id: "o_stir", changes: { "@hand.danger": "@hand.danger + 1" } },
+        ] }],
+        hands: [{ id: "h_yq", rule: { bindings: { district: "quay" } } }],
+      },
+      script: [
+        { op: "deal", hands: ["h_xq", "h_yq"],
+          expectBoard: { h_xq: ["c_xstir"], h_yq: ["c_ystir"] } },
+        { op: "play", card: "c_xstir", outcome: "stir", from: "h_xq",
+          expectTrace: ["write @hand.danger value.quay.danger"] },
+        { op: "assertState", expect: { "value.quay.danger": 1 } },
+        { op: "play", card: "c_ystir", outcome: "stir", from: "h_yq",
+          expectTrace: ["write @hand.danger value.quay.danger"] },
+        { op: "assertState", expect: { "value.quay.danger": 2 } },
+      ] },
+
+    { name: "a zone keeps the short address with two boxes on it, and box tags keep their rule",   // PM6
+      // Both scaffold zone groups are present, so the BOX tag "docks" repeats
+      // and keeps the qualified rule unchanged (3.4), while the zone "quay",
+      // used by two boxes, is never repeated: it belongs to neither.
+      projectMap: true, uses: true,
+      cards: [{ id: "c_xstir", tags: { district: ["quay"] }, outcomes: [
+        { id: "o_stir", changes: { "@hand.danger": "@hand.danger + 1" } },
+      ] }],
+      hands: [{ id: "h_xq", rule: { bindings: { district: "quay" } } }],
+      otherBox: { uses: true },
+      script: [
+        { op: "setState", value: { quay: { danger: 3 } } },
+        { op: "assertState", expect: { "value.quay.danger": 3 } },
+        { op: "setState", value: { docks: { danger: 1 } },
+          expectRefused: ["value.box/docks.danger", "value.other/docks.danger"] },
+        { op: "setState", value: { "box/docks": { danger: 1 } } },
+        { op: "assertState", expect: {
+          "value.box/docks.danger": 1, "value.other/docks.danger": 0, "value.quay.danger": 3 } },
+        // And the engine PRINTS the zone short, even with two boxes on it.
+        { op: "deal", hands: ["h_xq"], expectBoard: { h_xq: ["c_xstir"] } },
+        { op: "play", card: "c_xstir", outcome: "stir", from: "h_xq",
+          expectTrace: ["write @hand.danger value.quay.danger"] },
+        { op: "assertState", expect: { "value.quay.danger": 4 } },
+      ] },
+
+    { name: "the box-qualified form of a project zone is refused, naming the short form",   // PM7
+      // A zone has no box, so `value.box/quay` asserts something false. It is
+      // refused through the channel every unknown owner already uses, and the
+      // refusal names the address that works (3.4). Not accepted for a
+      // release: there is no old project whose zone addresses were qualified.
+      // The internal-id form keeps the existing legacy rule: it resolves for
+      // this release, and the diagnostic names the short form.
+      projectMap: true, uses: true,
+      cards: [{ id: "c_xplain" }],
+      otherBox: { uses: true, cards: [{ id: "c_yplain" }] },
+      script: [
+        { op: "setState", value: { "box/quay": { danger: 9 } }, expectRefused: ["value.quay.danger"] },
+        { op: "setState", value: { "other/quay": { danger: 9 } }, expectRefused: ["value.quay.danger"] },
+        // Nothing landed.
+        { op: "assertState", expect: { "value.quay.danger": 0 } },
+        { op: "setState", value: { v_quay: { danger: 6 } }, expectDiagnostic: "value.quay.danger" },
+        { op: "assertState", expect: { "value.quay.danger": 6 } },
+      ] },
+
+    { name: "per-flow and shared zone properties across two flows and two boxes",   // PM8
+      // "Across boxes" is now always true for a zone (one bag); "across
+      // flows" is still the property's `shared` flag (3.5). `danger` is per
+      // flow, `alarm` shared. Flow b is opened BEFORE the write, so the case
+      // also pins that a per-flow write does not reach a flow already open.
+      // Flow a is opened by its first deal rather than by an `openFlow` op,
+      // because the reference runner reads the trace only from the flows it
+      // opens itself, and the play below asserts on the trace.
+      projectMap: true, uses: true,
+      cards: [{ id: "c_xraise", tags: { district: ["quay"] }, outcomes: [
+        { id: "o_raise", changes: { "@hand.danger": "@hand.danger + 1", "@hand.alarm": "@hand.alarm + 1" } },
+      ] }],
+      hands: [{ id: "h_xq", rule: { bindings: { district: "quay" } } }],
+      otherBox: {
+        uses: true,
+        cards: [
+          { id: "c_ydanger", priority: 3, condition: "@hand.danger >= 1" },
+          { id: "c_yalarm", priority: 2, condition: "@hand.alarm >= 1" },
+          { id: "c_ycalm", priority: 1 },
+        ],
+        hands: [{ id: "h_yq", rule: { bindings: { district: "quay" } } }],
+      },
+      script: [
+        { op: "openFlow", flow: "b" },
+        { op: "deal", flow: "a", hands: ["h_xq"], expectBoard: { h_xq: ["c_xraise"] } },
+        { op: "play", flow: "a", card: "c_xraise", outcome: "raise", from: "h_xq",
+          expectTrace: ["write @hand.danger value.quay.danger", "write @hand.alarm value.quay.alarm"] },
+        { op: "assertState", flow: "a", expect: { "value.quay.danger": 1, "value.quay.alarm": 1 } },
+        { op: "assertState", flow: "b", expect: { "value.quay.danger": 0, "value.quay.alarm": 1 } },
+        // The engine-level read rule is unchanged: a shared value answers, a
+        // per-flow one throws rather than answering with some flow's copy.
+        { op: "assertEngineRead", path: "value.quay.alarm", expect: 1 },
+        { op: "assertEngineRead", path: "value.quay.danger", expectError: true },
+        // b_y in flow a sees a's danger and the shared alarm; in flow b only
+        // the alarm.
+        { op: "deal", flow: "a", hands: ["h_yq"], expectBoard: { h_yq: ["c_ydanger", "c_yalarm", "c_ycalm"] } },
+        { op: "deal", flow: "b", hands: ["h_yq"], expectBoard: { h_yq: ["c_yalarm", "c_ycalm"] } },
+      ] },
+
+    { name: "a movable hole in another box names a project zone (the roaming character)",   // PM9
+      // The hand that moves (4.6), across the map: b_y's Elder fills her
+      // district hole from her own `zone` property, so walking her from the
+      // quay to the hill is setProperty and nothing else. She deals from b_y's
+      // stock only (c_xquay, at priority 9, never reaches her), and @hand.danger
+      // follows her to whichever zone she stands in.
+      projectMap: true, uses: true,
+      cards: [{ id: "c_xquay", priority: 9, tags: { district: ["quay"] } }],
+      hands: [{ id: "h_xq", rule: { bindings: { district: "quay" } } }],
+      otherBox: {
+        uses: true,
+        templates: [{ id: "t_npc", chooses: ["district"], properties: [
+          { name: "zone", type: "enum", values: ["quay", "hill"], default: "quay" },
+        ] }],
+        hands: [{ id: "h_elder", template: "t_npc", chosen: { district: "@hand.zone" } }],
+        cards: [
+          { id: "c_ywary", priority: 4, condition: "@hand.danger >= 1" },
+          { id: "c_yquay", priority: 3, tags: { district: ["quay"] } },
+          { id: "c_yhill", priority: 2, tags: { district: ["hill"] } },
+          { id: "c_yany", priority: 1 },
+        ],
+      },
+      script: [
+        { op: "setState", value: { hill: { danger: 1 } } },
+        // At the quay: quay's danger is 0, so c_ywary is refused.
+        { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_yquay", "c_yany"] } },
+        { op: "setState", hand: { elder: { zone: "hill" } } },
+        // At the hill: c_yquay is evicted on its tags, c_yany keeps its seat,
+        // and the newcomers follow it in rank order (c_ywary now passes on the
+        // hill's danger 1).
+        { op: "deal", hands: ["h_elder"],
+          expectBoard: { h_elder: ["c_yany", "c_ywary", "c_yhill"] },
+          expectVerdicts: { yquay: "tags" } },
+        { op: "assertState", expect: { "hand.elder.zone": "hill" } },
+      ] },
+
+    { name: "a box not on the map is unaffected, and cannot name the zones",   // PM10
+      // b_y has not opted in: its own groups behave exactly as today, and the
+      // project group's NAME is not in its namespace, so asking it about
+      // "district" is the existing unknown-group refusal (3.1). The value
+      // scope is the engine's, not a box's, so the zone reads the same
+      // whoever asks.
+      projectMap: true, uses: true,
+      cards: [{ id: "c_xquay", priority: 1, tags: { district: ["quay"] } }],
+      otherBox: {
+        cards: [
+          { id: "c_ydocks", priority: 2, tags: { zone: ["docks"] } },
+          { id: "c_yplain", priority: 1 },
+        ],
+      },
+      script: [
+        { op: "peek", box: "other", criteria: { zone: "docks" }, expect: ["c_ydocks", "c_yplain"] },
+        { op: "peek", box: "other", criteria: { district: "quay" }, expectError: true },
+        { op: "peek", box: "box", criteria: { district: "quay" }, expect: ["c_xquay"] },
+        { op: "assertState", expect: { "value.quay.danger": 0 } },
+      ] },
+
+    { name: "zone values survive a save and a parked flow",   // PM19
+      // No save format change (3.6): a zone is one id, so one key, whichever
+      // boxes use it. Pinned anyway, because "it falls out" is exactly the
+      // claim a corpus exists to check. `alarm` is shared, so the parked flow
+      // sees it without carrying it; `danger` is per flow, so the parked
+      // flow's 5 comes back with it and main's 3 is untouched.
+      projectMap: true, uses: true,
+      otherBox: {
+        uses: true,
+        cards: [
+          { id: "c_yriot", priority: 2, condition: "@hand.danger == 3" },
+          { id: "c_ycalm", priority: 1 },
+        ],
+        hands: [{ id: "h_yq", rule: { bindings: { district: "quay" } } }],
+      },
+      script: [
+        { op: "setState", value: { quay: { danger: 3, alarm: 2 } } },
+        { op: "saveLoad", expectReport: { exact: true } },
+        { op: "assertState", expect: { "value.quay.danger": 3, "value.quay.alarm": 2 } },
+        { op: "deal", hands: ["h_yq"], expectBoard: { h_yq: ["c_yriot", "c_ycalm"] } },
+        { op: "openFlow", flow: "v" },
+        { op: "setState", flow: "v", value: { quay: { danger: 5 } } },
+        { op: "parkFlow", flow: "v" },
+        { op: "resumeFlow", flow: "v" },
+        { op: "assertState", flow: "v", expect: { "value.quay.danger": 5, "value.quay.alarm": 2 } },
+        { op: "assertState", expect: { "value.quay.danger": 3 } },
+      ] },
+
+    { name: "per-box copies collapsed into the map: the kept copy's values restore, the dropped copy's are reported",   // PM20
+      // The migration's save story (3.6, 4.2 step 3, Q11): the FIRST box's
+      // copy survives with its ids, so a save keyed by `v_docks` restores
+      // into the project zone untouched, and the second box's copy, whose id
+      // `v_docks_y` no longer exists, is reported dropped in the id form, as
+      // any vanished owner is. No re-keying. Bundle A is today's shape, a
+      // "zone" group in each box; bundle B is that project after `format`.
+      hands: [{ id: "h_xd", rule: { bindings: { zone: "docks" } } }],
+      otherBox: { hands: [{ id: "h_yd", rule: { bindings: { zone: "docks" } } }] },
+      bundleB: {
+        projectMap: { id: "d_zone", gameId: "zone", tags: [
+          { id: "v_docks", gameId: "docks", properties: [{ name: "danger", type: "number", default: 0 }] },
+          { id: "v_market", gameId: "market" },
+        ] },
+        uses: true, scaffoldZone: false,
+        hands: [{ id: "h_xd", rule: { bindings: { zone: "docks" } } }],
+        otherBox: { uses: true, scaffoldZone: false,
+          hands: [{ id: "h_yd", rule: { bindings: { zone: "docks" } } }] },
+      },
+      script: [
+        { op: "setState", value: { "box/docks": { danger: 1 }, "other/docks": { danger: 5 } } },
+        { op: "saveLoad", into: "B", expectReport: {
+          droppedProperties: [{ flow: "main", path: "value.v_docks_y.danger" }] } },
+        // The kept copy's value, at the zone's short address.
+        { op: "assertState", expect: { "value.docks.danger": 1 } },
+      ] },
+
+    { name: "play history on a shared zone stays box-specific (D7, ruled)",   // PM21
+      // Zone PROPERTIES are shared across boxes; zone HISTORY is not. The
+      // condition asks "has an encounter happened here recently?", and a play
+      // in another box is not one of this box's encounters. So b_y's probe,
+      // naming the same zone, never counts b_x's play (b_y's own history is
+      // empty), while b_x's probe counts its own. Both directions pinned.
+      //
+      // c_xquay is `redraw: "never"` so the last deal is about the probe and
+      // nothing else: h_xp's rule binds nothing, so an untagged ask is a
+      // wildcard over the district and would otherwise deal c_xquay again.
+      projectMap: true, uses: true,
+      cards: [
+        { id: "c_xquay", redraw: "never", tags: { district: ["quay"] }, outcomes: [{ id: "o_go" }] },
+        { id: "c_xprobe", condition: 'count_played_in("district", "quay") >= 1' },
+      ],
+      hands: [
+        { id: "h_xq", rule: { bindings: { district: "quay" } } },
+        { id: "h_xp", rule: {} },
+      ],
+      otherBox: {
+        uses: true,
+        cards: [{ id: "c_yprobe", condition: 'count_played_in("district", "quay") >= 1' }],
+        hands: [{ id: "h_yp", rule: {} }],
+      },
+      script: [
+        { op: "deal", hands: ["h_yp"], expectBoard: { h_yp: [] } },
+        { op: "deal", hands: ["h_xq"], expectBoard: { h_xq: ["c_xquay"] } },
+        { op: "play", card: "c_xquay", outcome: "go", from: "h_xq" },
+        // b_x's play is not b_y's history.
+        { op: "deal", hands: ["h_yp"], expectBoard: { h_yp: [] } },
+        // b_x's own play counts.
+        { op: "deal", hands: ["h_xp"], expectBoard: { h_xp: ["c_xprobe"] } },
+      ] },
+
+    { name: "a project group bound by state binds in every opted-in box",   // PM22
+      // `boundBy` on the project group means what it means on any group (D8),
+      // applied in every box that uses the map: one story property moves
+      // every box's ungated hand from the quay to the hill at once.
+      story: [{ name: "where", type: "string", default: "quay" }],
+      projectMap: { ...PROJECT_SCAFFOLD, boundBy: "@story.where" }, uses: true,
+      cards: [
+        { id: "c_xquay", priority: 2, tags: { district: ["quay"] } },
+        { id: "c_xhill", priority: 1, tags: { district: ["hill"] } },
+      ],
+      hands: [{ id: "h_x", rule: {} }],
+      otherBox: {
+        uses: true,
+        cards: [
+          { id: "c_yquay", priority: 2, tags: { district: ["quay"] } },
+          { id: "c_yhill", priority: 1, tags: { district: ["hill"] } },
+        ],
+        hands: [{ id: "h_y", rule: {} }],
+      },
+      script: [
+        { op: "deal", hands: ["h_x", "h_y"], expectBoard: { h_x: ["c_xquay"], h_y: ["c_yquay"] } },
+        { op: "setState", story: { where: "hill" } },
+        { op: "deal", hands: ["h_x", "h_y"],
+          expectBoard: { h_x: ["c_xhill"], h_y: ["c_yhill"] },
+          expectVerdicts: { xquay: "tags", yquay: "tags" } },
+      ] },
+  ],
+
+  // --- Family L - load ---------------------------------------------------------
+  // Bundles the engine must REFUSE at construction (design/project-map-contract.md
+  // 3.8, D5). The compiler refuses every one of these first; the engine refuses
+  // them too because it cannot tell a hand-built or stale bundle from a
+  // compiled one, and the alternative is the silent half-working this family
+  // exists to stop: a hand whose bound group is looked up in its own box,
+  // not found, and quietly dealt as if unbound. Each refusal must name what is
+  // at fault, the box and the group or tag, so a host reading it knows which
+  // part of the bundle to look at. The builder resolves names against the
+  // project group whatever `uses` says, which is what lets a case build these.
+  load: [
+    { name: "a box not on the map with a card tagged by a zone is refused at load",   // PM11
+      projectMap: true, uses: true,
+      otherBox: { cards: [{ id: "c_yquay", tags: { district: ["quay"] } }] },
+      expectRefused: ["other", "district"] },
+
+    { name: "a box not on the map with a hand bound to a zone is refused at load",   // PM12
+      // The template's `chooses` and the instance's `chosen` both name the
+      // project group from a box that has not opted in: the hole a reader
+      // that looks only in the hand's own box would silently lose.
+      projectMap: true, uses: true,
+      otherBox: {
+        templates: [{ id: "t_npc", chooses: ["district"], properties: [
+          { name: "zone", type: "string", default: "quay" },
+        ] }],
+        hands: [{ id: "h_y", template: "t_npc", chosen: { district: "@hand.zone" } }],
+      },
+      expectRefused: ["other", "district"] },
+
+    { name: "a box on the map may not declare a group named like the map's",   // PM13
+      // An opted-in box sees one namespace of group names (3.1); two groups
+      // called "district" in it would make every name-based path a guess.
+      projectMap: true, uses: true,
+      groups: [{ id: "d_district_x", gameId: "district", tags: [{ id: "v_lane" }] }],
+      expectRefused: ["box", "district"] },
+
+    { name: "a zone may not share a tag gameId with a box tag",   // PM14
+      // A zone's address is `value.<zone>.<name>` with no qualified form to
+      // fall back on (3.4), so a box tag "docks" anywhere would make
+      // `value.docks` ambiguous. The scaffold's `d_zone` has "docks".
+      projectMap: { id: "d_area", gameId: "area", tags: [{ id: "v_docks_p", gameId: "docks" }] },
+      uses: true,
+      expectRefused: ["docks"] },
+
+    { name: "a box that uses the map needs a map",   // PM15
+      uses: true,
+      expectRefused: ["box"] },
+
+    { name: "an unknown bundle schema is refused",   // PM16
+      // D4: the runtimes accept `storylets/bundle@0` and `@1` and refuse
+      // anything else, so the next break is marked for a runtime and not only
+      // for a person reading the tag.
+      schema: "storylets/bundle@9",
+      cards: [{ id: "c_any" }],
+      expectRefused: ["storylets/bundle@9"] },
   ],
 };

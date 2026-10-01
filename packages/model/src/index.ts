@@ -160,23 +160,40 @@ export function effectiveGameId(entity: { gameId?: string; title?: string; id: s
 // while the engine builds them from its own index, and an address the editor
 // shows that the engine will not take is the fault 4.4 was fixing.
 
-/** The three answers a value address needs, all derived from the bundle. */
+// A ZONE of the project map (design/project-map-contract.md 3.4) is the one
+// tag with no qualified form: it belongs to no box, so it prints and is
+// accepted as `value.<zoneGameId>.<name>` whichever boxes use it. Nothing can
+// make that ambiguous, because no box tag may share a zone's gameId (refused
+// by the compiler and again by the engine at load). A box-qualified form that
+// names a zone is REFUSED rather than accepted for old times' sake: there is
+// no old project to be kind to, and the qualified form would assert a box the
+// zone does not have.
+
+/** The answers a value address needs, all derived from the bundle. */
 export interface ValueAddresses {
   /** Tag internal id -> the owner segment an address PRINTS for it. */
   print: Map<string, string>;
   /** Every owner segment a value address ACCEPTS -> the tag's internal id.
-   *  Holds the qualified form for every tag and the short form only for a
-   *  gameId no other tag shares. */
+   *  Holds the qualified form for every box tag, the short form only for a
+   *  gameId no other box tag shares, and the short form of every zone. */
   accept: Map<string, string>;
   /** A tag gameId more than one box uses -> its qualified forms, in bundle
    *  order. Empty for the overwhelming majority of projects, and what a
-   *  refusal lists. */
+   *  refusal lists. Never holds a zone. */
   repeated: Map<string, string[]>;
+  /** A box-qualified segment that names a project-map zone
+   *  (`"box/quay"`) -> the zone's own segment (`"quay"`), the one an
+   *  address must use instead. One entry per box and zone, so a refusal can
+   *  name the address that works without working it out again. Empty when
+   *  the bundle has no map. */
+  zoneQualified: Map<string, string>;
 }
 
-/** The owner segment of every tag in the bundle, both ways round. */
+/** The owner segment of every tag in the bundle, both ways round: the boxes'
+ *  tags, then the project map's zones. */
 export function valueAddresses(bundle: {
   boxes: readonly { id: string; gameId?: string; title?: string; tagGroups: readonly TagGroup[] }[];
+  map?: { group: TagGroup };
 }): ValueAddresses {
   const tags: { id: string; gameId: string; qualified: string }[] = [];
   for (const box of bundle.boxes) {
@@ -208,6 +225,7 @@ export function valueAddresses(bundle: {
   const print = new Map<string, string>();
   const accept = new Map<string, string>();
   const repeated = new Map<string, string[]>();
+  const zoneQualified = new Map<string, string>();
   for (const tag of tags) {
     const candidates = forms.get(tag.gameId) ?? [tag.qualified];
     const ambiguous = candidates.length > 1;
@@ -216,7 +234,26 @@ export function valueAddresses(bundle: {
     if (!ambiguous && !accept.has(tag.gameId)) accept.set(tag.gameId, tag.id);
     if (ambiguous) repeated.set(tag.gameId, candidates);
   }
-  return { print, accept, repeated };
+  // The zones, after the box tags and never in `repeated`. A zone whose
+  // gameId a box tag also uses is a bundle the engine refuses at load; should
+  // one reach here anyway (the Board reads bundles the engine never loaded),
+  // the box tag keeps the short form it already had and the zone does not
+  // take it over silently.
+  for (const tag of bundle.map?.group.tags ?? []) {
+    const gameId = effectiveGameId(tag);
+    print.set(tag.id, gameId);
+    if (!accept.has(gameId)) accept.set(gameId, tag.id);
+    for (const box of bundle.boxes) zoneQualified.set(`${effectiveGameId(box)}/${gameId}`, gameId);
+  }
+  return { print, accept, repeated, zoneQualified };
+}
+
+/** What a box-qualified address naming a project-map zone is told: why the
+ *  form is wrong, and the address that works (design/project-map-contract.md
+ *  3.4). */
+export function zoneQualifiedValueAddressMessage(segment: string, zone: string, name: string): string {
+  return `"value.${segment}.${name}": "${zone}" is a zone of the project map, which belongs to no box; `
+    + `write "value.${zone}.${name}"`;
 }
 
 /** What an ambiguous short-form value address is told: the candidates, in
@@ -655,6 +692,21 @@ export interface Box<E> {
    *  byte what it was. */
   outcomeFields?: FieldDecl[];
   properties: PropertyDecl[];
+  /**
+   * The box has opted in to the PROJECT MAP (design/project-map-contract.md
+   * 1.2, 2.2): its hands may bind the map's zone group and its cards may be
+   * tagged with it, and it sees the group's name beside its own groups' names.
+   * Absent is "not on the map", and a box that is not may not reference the
+   * group at all: the engine refuses such a bundle at load.
+   *
+   * Opting in changes nothing about what the box deals FROM: a hand still
+   * deals only from its own box's decks. What the boxes on the map share is
+   * the zones' values (one bag per zone), never their cards or their history.
+   */
+  usesMap?: true;
+  /** The box's OWN tag groups. The project map's group is never here, even in
+   *  a box that uses it: it is the bundle's, in `Bundle.map` (`groupsOfBox`
+   *  gives the two together). */
   tagGroups: TagGroup[];
   decks: Deck<E>[];
   handTemplates: HandTemplate<E>[];
@@ -663,7 +715,23 @@ export interface Box<E> {
 
 // --- the compiled bundle (.storyletsc) ---------------------------------------
 
-export const BUNDLE_SCHEMA = "storylets/bundle@0";
+/**
+ * The bundle schema this build of the format writes: @1 since the project map
+ * (design/project-map-contract.md 2.4), the bundle that can carry `map` and
+ * `Box.usesMap`.
+ *
+ * Every runtime READS @0 and @1 and refuses anything else, by name. Reading @0
+ * is not a compatibility branch: an @0 bundle cannot carry a map, so it is the
+ * same shape with less in it. The check exists so that from this release on a
+ * runtime meeting a schema it does not know says so, rather than half-working
+ * the way an @0 runtime does on a map bundle (tag matching is by id, so its
+ * deals look right while every zone value is missing).
+ */
+export const BUNDLE_SCHEMA = "storylets/bundle@1";
+/** The schema before the project map, still read by every runtime. */
+export const BUNDLE_SCHEMA_V0 = "storylets/bundle@0";
+/** Every bundle schema a runtime accepts. */
+export const BUNDLE_SCHEMAS: readonly string[] = [BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA];
 
 /** Binds bundles to shards (staleness gate) and saves to bundles. */
 export interface BundleContent {
@@ -705,53 +773,50 @@ export interface ProjectSettings extends BundleSettings {
 }
 
 /**
- * A map that a bundle was asked to carry: one spatial tag group's geometry,
- * flattened for a host to draw (design/graphical-views.md 2, "The map MAY ship").
+ * The PROJECT MAP (design/project-map-contract.md 2.1): at most one per project,
+ * above the boxes. Two halves, on purpose.
  *
- * INERT PAYLOAD. Nothing in the engine reads this and nothing ever will: the
- * runtime deals in tag names. It is here so a host that wants an in-game map does
- * not have to invent its own export, and it is absent unless the project asked
- * for it (`export.map`), so a build that does not want a map carries no bytes.
+ * `group` is SEMANTIC and always ships when the project declares a map: the zone
+ * group, compiled exactly as a box's group is (the group's properties flattened
+ * onto each tag), which opted-in boxes' hands bind and cards are tagged with BY
+ * ID, as with any group. It is in no box's `tagGroups`. Each zone is one tag and
+ * so one value bag, whichever boxes' hands are dealt to it.
  *
- * GAME IDS throughout, never internal ids. Internal ids are authoring identity
- * and mean nothing outside the project; a host matches these against the same
- * names it passes to `peek`. There is nothing here to strip either, which is why
- * `metadata: "stripped"` needs no special case: no titles, no purposes.
+ * `geometry` is INERT PAYLOAD, as the per-box map block before it was: nothing
+ * in the engine reads it, and it is absent unless the project asked for it
+ * (`export.map`), so a shipping build carries no shapes. GAME IDS throughout,
+ * because a host matches these against the names it passes to `peek`.
  *
- * SITES ARE HERE, which reverses a ruling. Until 2026-09-05 this comment said
- * they were deliberately not: a site was where an author parked a hand while
- * working, held in the view sidecar precisely because it was not content, and a
- * host that wanted to place a hand had its zone from the compiled binding. That
- * held for a game, where a hand's zone is its only real-world meaning. It does
- * not hold for a physical experience (design/engine-server.md 4.3), where the
- * position IS content: it is where the kiosk stands, and a producer's map is
- * simply wrong without it. The alternative was a second file beside the bundle,
- * which would cost a format the inspectors do not read and would put the view
- * sidecar in the shipping path by the back door.
+ * SITES ARE CONTENT. Until 2026-09-05 they were deliberately left out: a site
+ * was where an author parked a hand while working. That held for a game, where a
+ * hand's zone is its only real-world meaning; it does not hold for a physical
+ * experience (design/engine-server.md 4.3), where the position is where the kiosk
+ * stands. They stay per box, because a hand belongs to one box.
  */
-export interface BundleMap {
-  /** The owning box, by gameId (tag groups are box-scoped). */
-  box: string;
-  /** The tag group this is a map of, by gameId. */
-  group: string;
-  /** One entry per zone that has been drawn; a tag with no polygon is not a
-   *  place yet and is left out rather than shipped as an empty shape. */
-  zones: { tag: string; polygon: ViewPoint[] }[];
-  /** Background pictures, back to front, as bundle-relative paths. Hidden ones
-   *  do not ship: what an author put away is not something to spring on a host. */
-  backgrounds?: BundleBackground[];
-  /** Where the placed hands stand on this map, by hand gameId, sorted by that
-   *  gameId so the bytes do not depend on authoring order. A hand nobody has
-   *  placed has no entry, and a map with no placed hand has no key at all. The
-   *  zone a site sits in is NOT repeated here: the hand's own binding is what
-   *  the runtime deals from, and a second copy could only go on to disagree. */
-  sites?: { hand: string; x: number; y: number }[];
+export interface ProjectMap {
+  /** The zone group. The engine reads this. */
+  group: TagGroup;
+  /** Drawing data, only under `export.map`. The engine never reads it. */
+  geometry?: {
+    /** Drawn zones only, by tag gameId, in group order. A tag with no polygon
+     *  is not a place yet and is left out rather than shipped as an empty
+     *  shape. */
+    zones: { tag: string; polygon: ViewPoint[] }[];
+    /** Visible background pictures, back to front, as bundle-relative paths. */
+    backgrounds?: BundleBackground[];
+    /** Box gameId -> where that box's placed hands stand, sorted by hand
+     *  gameId so the bytes do not depend on authoring order. Only opted-in
+     *  boxes; a box with no site has no key, and no key at all when nothing
+     *  is placed. The zone a site sits in is NOT repeated: the hand's own
+     *  binding is what the runtime deals from. */
+    sites?: Record<string, { hand: string; x: number; y: number }[]>;
+  };
 }
 
 /** One shipped picture. `locked` and `hidden` are authoring state and do not
  *  travel; the draw order is the array order. */
 export interface BundleBackground {
-  /** Where the file sits relative to the bundle ("assets/<box>/<file>"). */
+  /** Where the file sits relative to the bundle ("assets/<file>"). */
   file: string;
   x: number;
   y: number;
@@ -761,7 +826,7 @@ export interface BundleBackground {
 }
 
 export interface Bundle {
-  schema: typeof BUNDLE_SCHEMA;
+  schema: typeof BUNDLE_SCHEMA | typeof BUNDLE_SCHEMA_V0;
   content: BundleContent;
   metadata: "full" | "stripped";
   settings: BundleSettings;
@@ -775,12 +840,105 @@ export interface Bundle {
     properties: PropertyDecl[];
   };
   boxes: Box<Expression>[];
-  /** Maps, when the project asked for them. Absent is the normal state. */
-  maps?: BundleMap[];
+  /** The project map, when the project declares one (see `ProjectMap`). The
+   *  per-box `maps` array it replaces is gone, not kept as a one-element list:
+   *  zones are no longer a box's. */
+  map?: ProjectMap;
   /** Other engines' game-wide scopes the content names (`patter`), sorted: the
    *  family's shared vocabulary, let through unchecked by the compiler. The
    *  engine reports when the game has not registered one. Absent when none. */
   externalScopes?: string[];
+}
+
+// --- reading the project map (design/project-map-contract.md 5, Q12) ---------
+//
+// The questions every reader of a bundle asks once a group may live outside the
+// box that uses it, answered once here beside `valueAddresses`, because the
+// engine, `describeBundle`, the Board and the server each looked a bound group up
+// in the hand's own box and silently lost the project one. Pure field access.
+
+/** The tag groups a box sees, by NAME as well as by id: its own groups, then the
+ *  project map's group when the box has opted in. The engine resolves a group
+ *  name in a box against exactly this list, own groups first (a bundle the
+ *  engine loads never has a box group sharing the project group's name, so the
+ *  order decides nothing; it is stated for determinism). */
+export function groupsOfBox<E>(
+  bundle: { map?: { group: TagGroup } },
+  box: Pick<Box<E>, "tagGroups" | "usesMap">,
+): TagGroup[] {
+  return box.usesMap === true && bundle.map !== undefined
+    ? [...box.tagGroups, bundle.map.group]
+    : box.tagGroups;
+}
+
+/** A tag group by internal id, wherever it lives: in a box (`box` set) or on the
+ *  project map (`box` absent). Ids are project-unique, so this is bundle-wide;
+ *  whether the box asking may USE the group is `groupsOfBox`'s question. */
+export function groupById<E>(
+  bundle: { boxes: readonly Box<E>[]; map?: { group: TagGroup } },
+  id: string,
+): { group: TagGroup; box?: Box<E> } | undefined {
+  for (const box of bundle.boxes) {
+    const group = box.tagGroups.find((g) => g.id === id);
+    if (group !== undefined) return { group, box };
+  }
+  return bundle.map?.group.id === id ? { group: bundle.map.group } : undefined;
+}
+
+/** Every tag group in the bundle, each once: the boxes' groups in bundle order,
+ *  then the project map's. What a walk over every value bag wants. */
+export function allTagGroups<E>(bundle: { boxes: readonly Box<E>[]; map?: { group: TagGroup } }): TagGroup[] {
+  const groups = bundle.boxes.flatMap((box) => box.tagGroups);
+  return bundle.map !== undefined ? [...groups, bundle.map.group] : groups;
+}
+
+/** One declared owned property, as an address prints it. */
+export interface PropertyAddress {
+  /** The engine address, `<scope>.<owner segment>.<name>`, exactly as
+   *  `listProperties` prints it and `setProperty` accepts it. */
+  path: string;
+  scope: "box" | "deck" | "hand" | "value";
+  /** The owner's internal id: what the stores and the save are keyed by. */
+  owner: string;
+  decl: PropertyDecl;
+}
+
+/**
+ * Every declared box, deck, hand and tag property in the bundle, by the address
+ * a runtime prints for it: boxes in bundle order (the box, its decks, its hands,
+ * its tags), then the project map's zones, ONCE, whichever boxes use them. A hand
+ * instance carries its template's declarations, as the engine's bags do.
+ *
+ * The owner segments are `valueAddresses`' for tags, so a zone prints
+ * `value.<zone>.<name>` and a repeated box tag its qualified form.
+ */
+export function propertyAddresses(bundle: {
+  boxes: readonly Box<unknown>[];
+  map?: { group: TagGroup };
+}): PropertyAddress[] {
+  const values = valueAddresses(bundle);
+  const out: PropertyAddress[] = [];
+  const push = (scope: PropertyAddress["scope"], owner: string, segment: string, decls: readonly PropertyDecl[]): void => {
+    for (const decl of decls) out.push({ path: `${scope}.${segment}.${decl.name}`, scope, owner, decl });
+  };
+  const tagsOf = (group: TagGroup): void => {
+    for (const tag of group.tags) {
+      push("value", tag.id, values.print.get(tag.id) ?? effectiveGameId(tag), tag.properties ?? []);
+    }
+  };
+  for (const box of bundle.boxes) {
+    push("box", box.id, effectiveGameId(box), box.properties);
+    for (const deck of box.decks) push("deck", deck.id, effectiveGameId(deck), deck.properties);
+    for (const hand of box.hands) {
+      const decls = hand.template !== undefined
+        ? box.handTemplates.find((t) => t.id === hand.template)?.properties ?? []
+        : hand.properties ?? [];
+      push("hand", hand.id, effectiveGameId(hand), decls);
+    }
+    for (const group of box.tagGroups) tagsOf(group);
+  }
+  if (bundle.map !== undefined) tagsOf(bundle.map.group);
+  return out;
 }
 
 // --- the save envelope --------------------------------------------------------
@@ -1001,11 +1159,11 @@ export const BUNDLE_EXTENSION = ".storyletsc";
  *
  * One function so the compiler (which writes the name into the bundle) and the
  * export op (which writes the bytes) cannot drift apart: a path agreed in two
- * places is a path that eventually disagrees. Per BOX, because two boxes may
- * each have their own `plan.png` and a build must not silently keep one of them.
+ * places is a path that eventually disagrees. One folder for the project, as
+ * the source has (`<project>/assets/`), since the project map is the only thing
+ * with pictures and there is one of it (design/project-map-contract.md 1.4).
  */
-export const bundleAssetPath = (boxGameId: string, file: string): string =>
-  `assets/${boxGameId}/${file}`;
+export const bundleAssetPath = (file: string): string => `assets/${file}`;
 /** Per-type shard extensions, JSON5 inside (source doc section 2). */
 export const SHARD_EXTENSIONS = {
   project: ".storyletproj",
@@ -1019,12 +1177,15 @@ export const SHARD_EXTENSIONS = {
    *  content does not, so a designer arranging and a writer editing never
    *  collide on one file (design/graphical-views.md section 1.2). */
   view: ".storyletview",
-  /** The DESIGNER's map: where a box's hands stand in space, and the furniture
-   *  round them. One per box, beside the view shard.
+  /** The DESIGNER's map, in two places told apart by schema tag. At the
+   *  project root (`map.storyletmap`, `PROJECTMAP_SCHEMA`) it is the PROJECT
+   *  MAP: the zone group and the map's furniture, once for the project
+   *  (design/project-map-contract.md 1.1). In a box folder (`MAP_SCHEMA`) it is
+   *  that box's SITES: where its hands stand on the project map.
    *
    *  Split out of the view shard on 2026-09-06 (design/engine-server.md 9.1
    *  point 5) because the two halves stopped having one owner. A hand's
-   *  position ships in the bundle's `maps` block (4.3) and is where a venue's
+   *  position ships in the bundle's `map.geometry` (4.3) and is where a venue's
    *  kiosk stands, so it is SHAPE, which a server's author key may not change;
    *  the canvases are the author's own working drawing and never leave the
    *  project folder. One file could not be both. */
@@ -1057,6 +1218,10 @@ export const HANDS_SCHEMA = "storylets/hands@0";
 export const DECK_SCHEMA = "storylets/deck@0";
 export const VIEW_SCHEMA = "storylets/view@0";
 export const MAP_SCHEMA = "storylets/map@0";
+/** The project map shard's schema: the root `map.storyletmap`, beside the
+ *  project shard (design/project-map-contract.md 1.1). The same extension as a
+ *  box's map shard, told apart by this tag and by sitting at depth one. */
+export const PROJECTMAP_SCHEMA = "storylets/projectmap@0";
 /** The comment sidecar's schema. Still called "notes" on disk: the file already
  *  held both, and renaming it would break every project for no gain. */
 export const NOTES_SCHEMA = "storylets/notes@0";
@@ -1195,10 +1360,15 @@ export interface DeckCanvas extends CanvasFurniture {
   cards?: Record<string, ViewPoint>;
 }
 
-/** The box's map: where its hands sit in space, and the furniture around them.
+/** The box's map: where its hands stand on the PROJECT map, and nothing else.
  *  Carried by the MAP shard since 2026-09-06; `ViewShard.map` is the old
- *  address, read for one release and never written. */
-export interface BoxMap extends CanvasFurniture {
+ *  address, read for one release and never written.
+ *
+ *  No furniture since the project map (design/project-map-contract.md 1.3): the
+ *  frames belong to the one map, in `ProjectMapShard`. A box map shard that
+ *  still carries `frames` is warned about and read for nothing until
+ *  `storyletengine format` moves them. */
+export interface BoxMap {
   /** Keyed by HAND id. WHERE a site is, and nothing else.
    *
    *  Which zone it is IN is not recorded here, and deliberately (2026-08-06,
@@ -1237,14 +1407,14 @@ export interface ViewShard {
   map?: BoxMap;
 }
 
-/** The DESIGNER's map for one box: where its hands stand in space.
+/** The DESIGNER's map for one box: where its hands stand on the project map.
  *
  *  Split out of the view shard on 2026-09-06 (design/engine-server.md 9.1 point
  *  5). The two halves had stopped sharing an owner: a hand's position ships in
- *  the bundle's `maps` block (4.3), which makes it the thing a venue provisions
- *  its kiosks against, while a deck's canvas is a working drawing that never
- *  leaves the folder. A server's author key may change the canvases and not
- *  this.
+ *  the bundle's `map.geometry.sites` (4.3), which makes it the thing a venue
+ *  provisions its kiosks against, while a deck's canvas is a working drawing
+ *  that never leaves the folder. A server's author key may change the canvases
+ *  and not this.
  *
  *  The map is NESTED under `map` rather than flattened to the top level, and
  *  deliberately: the block's bytes are then exactly what the view shard held, so
@@ -1253,10 +1423,31 @@ export interface ViewShard {
  *  places is one expression (`box.map?.map ?? box.view?.map`).
  *
  *  Source-only in the sense the view shard is not: `compileMaps` reads the
- *  positions for the bundle's `maps` block, under `export.map`. */
+ *  positions for the bundle's `map.geometry`, under `export.map`, for a box that
+ *  has opted in to the project map. */
 export interface MapShard {
   schema: typeof MAP_SCHEMA;
   map: BoxMap;
+}
+
+/**
+ * The PROJECT MAP's shard: the root `map.storyletmap` (design/project-map-contract.md
+ * 1.1). At most one per project, above the boxes.
+ *
+ * `group` is the zone group, a `TagGroup` byte for byte the shape a box's tags
+ * shard holds, so every reader of a group (the spatial marker, polygons,
+ * backgrounds, group-level property declarations) carries over unchanged. It is
+ * compiled exactly as a box's group is and ships as the bundle's `map.group`. A
+ * box opts in with `usesMap` on its box shard; only an opted-in box's cards and
+ * hands may reference it.
+ *
+ * `frames` is the map's furniture, moved here from every box's map shard:
+ * arrangement, never compiled. Sites stay per box, in each box's own map shard,
+ * because a hand belongs to one box.
+ */
+export interface ProjectMapShard extends CanvasFurniture {
+  schema: typeof PROJECTMAP_SCHEMA;
+  group: TagGroup;
 }
 
 /** A coverage input driver: during a coverage run the harness feeds a
@@ -1338,7 +1529,8 @@ export interface ProjectShard {
     bundle: string;
     metadata: "full" | "stripped";
     /**
-     * Does a `.storyletpack` carry the boxes' binary assets (background images)?
+     * Does a `.storyletpack` carry the project's binary assets (the project
+     * map's background images, in its root `assets/` folder)?
      *
      * Default false, and a project-level DEFAULT rather than a rule: a pack is a
      * delivery, so the caller can override it per pack (2026-08-07). Some
@@ -1350,8 +1542,10 @@ export interface ProjectShard {
      */
     packAssets?: boolean;
     /**
-     * Does the compiled bundle carry the maps (zone shapes and background
-     * pictures)?
+     * Does the compiled bundle carry the project map's GEOMETRY (zone shapes,
+     * background pictures and each opted-in box's sites, `map.geometry`)? The
+     * zone group itself always ships when there is a project map: the engine
+     * reads it.
      *
      * Default false, and the default matters: geometry is authoring data, the
      * runtime deals in tag names, and a shipping build should carry nothing it
@@ -1387,10 +1581,18 @@ export interface BoxShard {
      *  declares none. */
     outcomeFields?: FieldDecl[];
     properties: PropertyDecl[];
+    /** The box has opted in to the PROJECT MAP (design/project-map-contract.md
+     *  1.2): its hands may bind the map's zones and its cards may be tagged
+     *  with them. Absent is "not on the map"; never written false. Compiled
+     *  through to `Box.usesMap`. */
+    usesMap?: true;
   };
 }
 
-/** The box's tag groups: how its cards are filed. */
+/** The box's OWN tag groups: how its cards are filed. Never the project map's
+ *  zone group, which lives in the root map shard and which a box may not
+ *  declare a copy of (a spatial group here is a compile error naming
+ *  `storyletengine format`). */
 export interface TagsShard {
   schema: typeof TAGS_SCHEMA;
   groups: TagGroup[];

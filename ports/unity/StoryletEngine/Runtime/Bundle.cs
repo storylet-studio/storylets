@@ -1,9 +1,10 @@
 // The compiled bundle model + save envelope. Port of @storylet-studio/model
-// (packages/model/src/index.ts): the bundle schema "storylets/bundle@0"
+// (packages/model/src/index.ts): the bundle schema "storylets/bundle@1"
 // (world/story property decls, boxes with decks/cards/outcomes/tag groups/
-// hands/hand templates, ranking, fields, redraw, copies, the home group),
-// SaveEnvelope ("storylets/save@1"), and the gameId derivation rules
-// (gameIdify / effectiveGameId). No behaviour lives here.
+// hands/hand templates, ranking, fields, redraw, copies, the home group, the
+// project map), SaveEnvelope ("storylets/save@2"), the gameId derivation rules
+// (gameIdify / effectiveGameId) and the project map's reading helpers
+// (GroupsOfBox / GroupById / AllTagGroups). No behaviour lives here.
 
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
@@ -22,7 +23,22 @@ namespace StoryletStudio.StoryletEngine
 
     public static class Model
     {
-        public const string BUNDLE_SCHEMA = "storylets/bundle@0";
+        /// <summary>The bundle schema this build of the format writes: @1 since
+        /// the project map (design/project-map-contract.md 2.4), the bundle that
+        /// can carry Bundle.Map and Box.UsesMap.
+        ///
+        /// Every runtime READS @0 and @1 and refuses anything else, by name.
+        /// Reading @0 is not a compatibility branch: an @0 bundle cannot carry a
+        /// map, so it is the same shape with less in it. The check exists so
+        /// that from this release on a runtime meeting a schema it does not know
+        /// says so, rather than half-working the way an @0 runtime does on a map
+        /// bundle (tag matching is by id, so its deals look right while every
+        /// zone value is missing).</summary>
+        public const string BUNDLE_SCHEMA = "storylets/bundle@1";
+        /// <summary>The schema before the project map, still read.</summary>
+        public const string BUNDLE_SCHEMA_V0 = "storylets/bundle@0";
+        /// <summary>Every bundle schema a runtime accepts.</summary>
+        public static readonly IReadOnlyList<string> BUNDLE_SCHEMAS = new[] { BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA };
         /// <summary>The engine's save envelope, version 2 (the one-registry
         /// model): property values are the game's ScopeRegistry's, so the
         /// envelope holds what is NOT a property, plus the registry's values
@@ -102,6 +118,54 @@ namespace StoryletStudio.StoryletEngine
             if (!string.IsNullOrEmpty(pinned)) return pinned;
             var fromTitle = entity.Title != null ? GameIdify(entity.Title) : "";
             return fromTitle != "" ? fromTitle : entity.Id;
+        }
+
+        // --- reading the project map (design/project-map-contract.md 5, Q12) ---
+        //
+        // The questions every reader of a bundle asks once a group may live
+        // outside the box that uses it, answered once here, because the engine,
+        // DescribeBundle and the inspector each looked a bound group up in the
+        // hand's own box and silently lost the project one. Pure field access.
+
+        /// <summary>The tag groups a box sees, by NAME as well as by id: its own
+        /// groups, then the project map's group when the box has opted in. The
+        /// engine resolves a group name in a box against exactly this list, own
+        /// groups first (a bundle the engine loads never has a box group sharing
+        /// the project group's name, so the order decides nothing; it is stated
+        /// for determinism).</summary>
+        public static List<TagGroup> GroupsOfBox(Bundle bundle, Box box)
+        {
+            if (!box.UsesMap || bundle?.Map?.Group == null) return box.TagGroups;
+            var groups = new List<TagGroup>(box.TagGroups);
+            groups.Add(bundle.Map.Group);
+            return groups;
+        }
+
+        /// <summary>A tag group by internal id, wherever it lives: in a box
+        /// (`box` set) or on the project map (`box` null). Ids are
+        /// project-unique, so this is bundle-wide; whether the box asking may USE
+        /// the group is GroupsOfBox's question. Null when no group has the
+        /// id.</summary>
+        public static TagGroup GroupById(Bundle bundle, string id, out Box box)
+        {
+            foreach (var candidate in bundle.Boxes)
+            {
+                var group = candidate.TagGroups.Find(g => g.Id == id);
+                if (group != null) { box = candidate; return group; }
+            }
+            box = null;
+            return bundle.Map?.Group != null && bundle.Map.Group.Id == id ? bundle.Map.Group : null;
+        }
+
+        /// <summary>Every tag group in the bundle, each once: the boxes' groups
+        /// in bundle order, then the project map's. What a walk over every value
+        /// bag wants.</summary>
+        public static List<TagGroup> AllTagGroups(Bundle bundle)
+        {
+            var groups = new List<TagGroup>();
+            foreach (var box in bundle.Boxes) groups.AddRange(box.TagGroups);
+            if (bundle.Map?.Group != null) groups.Add(bundle.Map.Group);
+            return groups;
         }
     }
 
@@ -337,6 +401,21 @@ namespace StoryletStudio.StoryletEngine
         /// byte for byte what it was.</summary>
         public List<FieldDecl> OutcomeFields = new List<FieldDecl>();
         public List<PropertyDecl> Properties = new List<PropertyDecl>();
+        /// <summary>The box has opted in to the PROJECT MAP
+        /// (design/project-map-contract.md 1.2, 2.2): its hands may bind the
+        /// map's zone group and its cards may be tagged with it, and it sees the
+        /// group's name beside its own groups' names. False is "not on the map",
+        /// and a box that is not may not reference the group at all: the engine
+        /// refuses such a bundle at construction.
+        ///
+        /// Opting in changes nothing about what the box deals FROM: a hand still
+        /// deals only from its own box's decks. What the boxes on the map share
+        /// is the zones' values (one bag per zone), never their cards or their
+        /// history.</summary>
+        public bool UsesMap;
+        /// <summary>The box's OWN tag groups. The project map's group is never
+        /// here, even in a box that uses it: it is the bundle's, in Bundle.Map
+        /// (Model.GroupsOfBox gives the two together).</summary>
         public List<TagGroup> TagGroups = new List<TagGroup>();
         public List<Deck> Decks = new List<Deck>();
         public List<HandTemplate> HandTemplates = new List<HandTemplate>();
@@ -382,7 +461,7 @@ namespace StoryletStudio.StoryletEngine
     public sealed class MapBackground
     {
         /// <summary>Where the file sits relative to the bundle
-        /// ("assets/&lt;box&gt;/&lt;file&gt;").</summary>
+        /// ("assets/&lt;file&gt;").</summary>
         public string File;
         public double X;
         public double Y;
@@ -409,26 +488,46 @@ namespace StoryletStudio.StoryletEngine
         public double Y;
     }
 
-    /// <summary>
-    /// A map the build was asked to carry: one spatial tag group's geometry
-    /// (design/graphical-views.md 2, "The map MAY ship with a bundle").
-    ///
-    /// INERT PAYLOAD. Nothing in the engine reads this, and nothing will: the
-    /// runtime deals in tag names. It is parsed and handed over so a host that
-    /// wants to draw an in-game map does not have to re-parse the asset itself,
-    /// which is the whole reason the export option exists.
-    /// </summary>
-    public sealed class BundleMap
+    /// <summary>The drawing half of the project map: INERT PAYLOAD, as the
+    /// per-box map block before it was. Nothing in the engine reads it, and it
+    /// is absent unless the project asked for it (`export.map`), so a shipping
+    /// build carries no shapes. GAME IDS throughout, because a host matches
+    /// these against the names it passes to Peek().</summary>
+    public sealed class MapGeometry
     {
-        /// <summary>The owning box, by gameId.</summary>
-        public string Box;
-        /// <summary>The tag group this is a map of, by gameId.</summary>
-        public string Group;
+        /// <summary>Drawn zones only, by tag gameId, in group order. A tag with
+        /// no polygon is not a place yet and is left out.</summary>
         public List<MapZone> Zones = new List<MapZone>();
+        /// <summary>Visible background pictures, back to front.</summary>
         public List<MapBackground> Backgrounds = new List<MapBackground>();
-        /// <summary>Where the placed hands stand: empty when nobody put a hand
-        /// on this map.</summary>
-        public List<MapSite> Sites = new List<MapSite>();
+        /// <summary>Box gameId -> where that box's placed hands stand, sorted by
+        /// hand gameId. Only opted-in boxes; a box with no site has no key, and
+        /// the map is empty when nothing is placed. Sites stay per box because a
+        /// hand belongs to one box. The zone a site sits in is NOT repeated: the
+        /// hand's own binding is what the runtime deals from.</summary>
+        public OrderedMap<string, List<MapSite>> Sites = new OrderedMap<string, List<MapSite>>();
+    }
+
+    /// <summary>
+    /// The PROJECT MAP (design/project-map-contract.md 2.1): at most one per
+    /// project, above the boxes. Two halves, on purpose.
+    ///
+    /// Group is SEMANTIC and always ships when the project declares a map: the
+    /// zone group, compiled exactly as a box's group is (the group's properties
+    /// flattened onto each tag), which opted-in boxes' hands bind and cards are
+    /// tagged with BY ID, as with any group. It is in no box's TagGroups. Each
+    /// zone is one tag and so one value bag, whichever boxes' hands are dealt
+    /// to it.
+    ///
+    /// Geometry is the drawing, and the engine never reads it. Null when the
+    /// build did not ask for it.
+    /// </summary>
+    public sealed class ProjectMap
+    {
+        /// <summary>The zone group. The engine reads this.</summary>
+        public TagGroup Group;
+        /// <summary>Drawing data, only under `export.map`; null otherwise.</summary>
+        public MapGeometry Geometry;
     }
 
     public sealed class Bundle
@@ -440,9 +539,10 @@ namespace StoryletStudio.StoryletEngine
         public WorldSection World = new WorldSection();
         public StorySection Story = new StorySection();
         public List<Box> Boxes = new List<Box>();
-        /// <summary>Maps, when the build carried them. Empty is the normal
-        /// state and costs nothing.</summary>
-        public List<BundleMap> Maps = new List<BundleMap>();
+        /// <summary>The project map, when the project declares one; null
+        /// otherwise. The per-box map list it replaces is gone, not kept as a
+        /// one-element list: zones are no longer a box's.</summary>
+        public ProjectMap Map;
         /// <summary>Other engines' game-wide scopes the content names
         /// (`patter`), sorted: the family's shared vocabulary, let through
         /// unchecked by the compiler. The engine reports when the game has not

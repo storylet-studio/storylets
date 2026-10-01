@@ -5,7 +5,7 @@
 // store both feed this same shape.
 // ---------------------------------------------------------------------------
 
-import type { BoxMap, BoxShard, ContractShard, DeckShard, HandsShard, MapShard, ProjectShard, PropertyDecl, ScalarValue, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
+import type { BoxMap, BoxShard, ContractShard, DeckShard, HandsShard, MapShard, ProjectMapShard, ProjectShard, PropertyDecl, ScalarValue, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
 import type { MergedScopes, ScopesIssue } from "@wildwinter/scoperegistry/scopes";
 
 /** One shard as text: `path` is project-relative, posix separators. */
@@ -87,9 +87,9 @@ export interface SourceBox {
    *  that honestly also means nothing which ignores arrangement (the compiler, the
    *  runtime, coverage, influence, every hand-built fixture) has to mention it. */
   view?: ViewShard;
-  /** The designer's map, when the box has one. Optional for the same reason the
-   *  view shard is, and read from the same box folder: a box that nobody has put
-   *  a hand on the map of has no file here. */
+  /** The box's SITES on the project map, when it has placed any. Optional for
+   *  the same reason the view shard is, and read from the same box folder: a box
+   *  that nobody has put a hand on the map of has no file here. */
   map?: MapShard;
   /** Documentation notes, when the box has any. Optional for the same reason the
    *  view sidecar is: most boxes have none, and nothing which ignores notes (the
@@ -107,11 +107,19 @@ export interface SourceBox {
  * `parseProjectFiles` warns about.
  *
  * Exported because three layers ask the same question - the compiler for the
- * bundle's `maps` block, ops for the editor's writes, and the formatter for the
+ * bundle's sites, ops for the editor's writes, and the formatter for the
  * migration - and a second copy of this expression is how the two locations
  * start disagreeing.
+ *
+ * Only the SITES are a box's since the project map (design/project-map-contract.md
+ * 1.3). A shard written before it may still carry `frames`, which are the
+ * project map's now: they are here to be moved by `storyletengine format`, and
+ * nothing else reads them.
  */
 export const boxMapOf = (box: SourceBox): BoxMap | undefined => box.map?.map ?? box.view?.map;
+
+/** Has this box opted in to the project map (its box shard's `usesMap`)? */
+export const usesProjectMap = (box: SourceBox): boolean => box.box.box.usesMap === true;
 
 /** One installation contract, as it sits in `contracts/`. */
 export interface SourceContract {
@@ -144,6 +152,15 @@ export interface SourceProject {
   path: string;
   project: ProjectShard;
   boxes: SourceBox[];
+  /** The PROJECT MAP (design/project-map-contract.md 1.1): the root
+   *  `map.storyletmap`, when the project has one. Absent on every project that
+   *  draws no map, and on one written before the project map, whose zones still
+   *  sit in a box until `storyletengine format` moves them. */
+  map?: ProjectMapShard;
+  /** The comment sidecar at the project root: threads about the project map
+   *  itself and its zones, on canvas `map` (1.1). A thread about a SITE stays in
+   *  its box's notes, because a hand belongs to a box. */
+  notes?: NotesShard;
   /** The venues this project is installed at (design/engine-server.md 4.11).
    *  Empty on every project that has never met a server, which is all of them
    *  until one is built. Not compiled: `validate` and the editor read it. */

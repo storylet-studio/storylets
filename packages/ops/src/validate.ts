@@ -8,7 +8,7 @@ import { sidecarIssues } from "./merge.js";
 import { existsSync, readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { bundleIsFresh, canonicalStringify, compileProject, parseSource } from "@storylet-studio/compiler";
-import type { Issue, SourceBox, SourceProject } from "@storylet-studio/compiler";
+import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import { backgroundsOf, effectiveGameId, isSpatial, polygonOf, SPATIAL } from "@storylet-studio/model";
 import type { Bundle, TagGroup } from "@storylet-studio/model";
 import { ASSETS_DIR, assetPath } from "./assets.js";
@@ -144,31 +144,36 @@ export function runValidate(loaded: LoadedProject, opts: ValidateOptions = {}): 
  */
 function spatialIssues(source: SourceProject, dir: string): Issue[] {
   const issues: Issue[] = [];
-  for (const box of source.boxes) {
-    const path = `${box.path}/tags`;
-    for (const group of box.tags.groups) {
-      const spatial = isSpatial(group);
-      if (spatial) issues.push(...backgroundIssues(box, group, dir, path));
-      for (const tag of group.tags) {
-        const where = `${effectiveGameId(group)}.${effectiveGameId(tag)}`;
-        const raw = (tag.templates?.[SPATIAL] as { polygon?: unknown } | undefined)?.polygon;
-        if (raw === undefined) continue;
-        // Geometry on a tag whose group is not a map: harmless, and almost
-        // certainly a group that lost its marker in a merge, so worth saying.
-        if (!spatial) {
-          issues.push({
-            severity: "warning", path, where,
-            message: `has a zone outline but "${effectiveGameId(group)}" is not a spatial group, so no map will show it`,
-          });
-        }
-        if (polygonOf(tag) === undefined) {
-          issues.push({
-            severity: "warning", path, where,
-            message: Array.isArray(raw) && raw.length < 3
-              ? `zone outline needs at least 3 points, not ${raw.length}`
-              : "zone outline is not a list of {x, y} numbers and will not be drawn",
-          });
-        }
+  // Every group with a path to anchor to: the boxes' own, then the project
+  // map's, which is a map whether or not it carries the marker (its outlines
+  // and pictures are the only ones anything draws; a box group still marked is
+  // a compile error naming the formatter, and its pictures are not checked).
+  const groups: { group: TagGroup; path: string; project: boolean }[] = [
+    ...source.boxes.flatMap((box) => box.tags.groups.map((group) => ({ group, path: `${box.path}/tags`, project: false }))),
+    ...(source.map !== undefined && Array.isArray(source.map.group?.tags) ? [{ group: source.map.group, path: "map", project: true }] : []),
+  ];
+  for (const { group, path, project } of groups) {
+    const spatial = project || isSpatial(group);
+    if (project) issues.push(...backgroundIssues(group, dir, path));
+    for (const tag of group.tags) {
+      const where = `${effectiveGameId(group)}.${effectiveGameId(tag)}`;
+      const raw = (tag.templates?.[SPATIAL] as { polygon?: unknown } | undefined)?.polygon;
+      if (raw === undefined) continue;
+      // Geometry on a tag whose group is not a map: harmless, and almost
+      // certainly a group that lost its marker in a merge, so worth saying.
+      if (!spatial) {
+        issues.push({
+          severity: "warning", path, where,
+          message: `has a zone outline but "${effectiveGameId(group)}" is not a spatial group, so no map will show it`,
+        });
+      }
+      if (polygonOf(tag) === undefined) {
+        issues.push({
+          severity: "warning", path, where,
+          message: Array.isArray(raw) && raw.length < 3
+            ? `zone outline needs at least 3 points, not ${raw.length}`
+            : "zone outline is not a list of {x, y} numbers and will not be drawn",
+        });
       }
     }
   }
@@ -186,7 +191,7 @@ function spatialIssues(source: SourceProject, dir: string): Issue[] {
  * travelled without its assets (they are opt-in), a file renamed outside the app,
  * a merge that brought somebody's placement without their picture.
  */
-function backgroundIssues(box: SourceBox, group: TagGroup, dir: string, path: string): Issue[] {
+function backgroundIssues(group: TagGroup, dir: string, path: string): Issue[] {
   const issues: Issue[] = [];
   const where = effectiveGameId(group);
   const bag = group.templates?.[SPATIAL] as { backgrounds?: unknown } | undefined;
@@ -216,7 +221,7 @@ function backgroundIssues(box: SourceBox, group: TagGroup, dir: string, path: st
     seen.add(id);
 
     const file = (entry as { file: string }).file;
-    const resolved = assetPath(dir, box, file);
+    const resolved = assetPath(dir, file);
     if (resolved === undefined) {
       issues.push({
         severity: "warning", path, where,
@@ -227,7 +232,7 @@ function backgroundIssues(box: SourceBox, group: TagGroup, dir: string, path: st
     if (!existsSync(resolved)) {
       issues.push({
         severity: "warning", path, where,
-        message: `background "${file}" is not in this box's ${ASSETS_DIR} folder, so nothing will be drawn where it sits`,
+        message: `background "${file}" is not in the project's ${ASSETS_DIR} folder, so nothing will be drawn where it sits`,
       });
     }
   });

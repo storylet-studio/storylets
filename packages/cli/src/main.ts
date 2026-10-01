@@ -11,7 +11,7 @@
 // conventions, carried whole.)
 // ---------------------------------------------------------------------------
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { deleteFile, writeBinaryFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
 import {
@@ -43,14 +43,18 @@ Usage:
   storyletengine validate [path]      Validate a project: the publish gate, bundle
                                       staleness, canonical form
   storyletengine format [path]        Rewrite shards to canonical form, and move a
-                                     box map out of an old view shard (alias: fmt)
+                                     project from before the project map onto it
+                                     (zones to the root map.storyletmap, pictures
+                                     to the root assets/), refusing copies of a
+                                     map that disagree (alias: fmt)
                  [--check]            Report what would change; write nothing (for CI)
   storyletengine export [path]        Compile to the .storyletsc bundle (the project's
                  [-o file]            declared path, or -o; -o - for stdout), and bring
                                       game-scopes/storylets.scopes.json up to date
                                       when the game shares its scopes
-                 [--map|--no-map]     Carry the maps (zone shapes and background
-                                      pictures), overriding the project setting
+                 [--map|--no-map]     Carry the project map's geometry (zone shapes,
+                                      pictures and sites), overriding the project
+                                      setting
   storyletengine export-html [path]   One self-contained, playable .html (runtime,
                  [-o file]            board and bundle inlined; send it to anyone,
                                       opens in any browser; default: the bundle's
@@ -316,21 +320,36 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
       const result = runFormat(loaded);
       printIssues(result.issues, io);
       if (result.issues.some((i) => i.severity === "error")) return 1;
-      if (result.changed.length === 0 && result.removed.length === 0) {
+      if (result.changed.length === 0 && result.removed.length === 0 && result.moved.length === 0) {
         io.log("all shards canonical");
         return 0;
       }
       if (flags["check"] === true) {
         for (const w of result.changed) io.error(`not canonical: ${w.path}`);
-        for (const stale of result.removed) io.error(`not canonical: ${stale} (its map belongs in a map shard)`);
+        for (const stale of result.removed) io.error(`not canonical: ${stale} (what it held belongs elsewhere now)`);
+        for (const move of result.moved) io.error(`not canonical: ${move.from} (belongs in the project's assets folder)`);
         return 1;
       }
+      // The project map's pictures first, to the project's one folder, so a
+      // picture that cannot be copied stops the format before any shard names
+      // it at its new address. The old copies are deleted only once the shards
+      // that pointed at them have been rewritten.
+      for (const move of result.moved) {
+        mkdirSync(dirname(move.to), { recursive: true });
+        if (!commitBinary(move.to, readFileSync(move.from), io)) return 1;
+      }
       if (!commitWrites(result.changed, io)) return 1;
-      // A view shard the migration emptied. Deleted through the VC layer, like
+      // A shard the migration emptied. Deleted through the VC layer, like
       // every other write, so a checked-in read-only file is checked out first.
       for (const path of result.removed) deleteFile(path);
+      for (const move of result.moved) {
+        deleteFile(move.from);
+        const folder = dirname(move.from);
+        try { if (readdirSync(folder).length === 0) rmdirSync(folder); } catch { /* not ours to insist on */ }
+      }
+      for (const line of result.migrated) io.log(line);
       const touched = result.changed.length + result.removed.length;
-      io.log(`formatted ${touched} shard(s)`);
+      io.log(`formatted ${touched} shard(s)${result.moved.length > 0 ? `, moved ${result.moved.length} picture(s)` : ""}`);
       return 0;
     }
     case "export": {

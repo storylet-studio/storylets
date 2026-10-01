@@ -18,11 +18,11 @@ storyletengine coverage the-village.storylets --runs 40 --seed 1
   where playing one opens the next.
 - **Both ways a card reaches a place, at volume.** 68 cards belong to exactly
   one place, 4 to two places, 14 to a whole region.
-- **A map with five regions**, each carrying its real outline from the original,
-  each with its background picture from the original demo game behind it
-  (`village/assets/`), and all thirteen sites standing where they stood in the
-  original (`village/map.storyletmap`), so the map reads as the world rather than as
-  five empty rectangles.
+- **A map with five regions**, the project map (`map.storyletmap`), each region
+  carrying its real outline from the original, each with its background picture
+  from the original demo game behind it (`assets/`), and all thirteen sites
+  standing where they stood in the original (`village/map.storyletmap`), so the
+  map reads as the world rather than as five empty rectangles.
 - **Acts as deck gates.** Every deck is single-act, so the old model's `actId`
   needs no concept of its own here: 13 deck conditions replace what would have
   been 86 per-card ones.

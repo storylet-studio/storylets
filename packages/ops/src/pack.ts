@@ -52,7 +52,7 @@ export interface PackManifest {
 
 export interface PackOptions {
   /**
-   * Carry the boxes' binary assets (background images).
+   * Carry the project's binary assets (the project map's background images).
    *
    * Undefined means "ask the project", whose export block holds the default. A
    * pack is a DELIVERY, though, and the same project might send a designer the
@@ -155,11 +155,9 @@ function referencedAssets(root: string): { abs: string; rel: string }[] {
   const loaded = loadProject(root);
   if (!loaded.source) return [];
   const out: { abs: string; rel: string }[] = [];
-  for (const box of loaded.source.boxes) {
-    for (const name of assetUse(root, box).used) {
-      const abs = join(root, box.path, ASSETS_DIR, name);
-      out.push({ abs, rel: relative(root, abs).split(sep).join("/") });
-    }
+  for (const name of assetUse(root, loaded.source).used) {
+    const abs = join(root, ASSETS_DIR, name);
+    out.push({ abs, rel: relative(root, abs).split(sep).join("/") });
   }
   return out.sort((a, b) => a.rel.localeCompare(b.rel));
 }

@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Conformance corpus types (design/conformance.md - the parity contract).
 //
-// The corpus is a language-agnostic JSON document. Four case kinds:
+// The corpus is a language-agnostic JSON document. Five case kinds:
 //   - expressions: compiled `ast` + `scopes` (+ optional PRNG `seed`) ->
 //     `expected` scalar or `expectError`.
 //   - specificity: compiled `ast` + `scopes` -> integer matched-constraint
@@ -10,6 +10,8 @@
 //     ordered top of the stock. A peek registers nothing; peek cases also
 //     pin that (the runner peeks twice and expects identity).
 //   - scripted: a compiled `bundle` + ops (deals, plays, turns, save/load).
+//   - load: a compiled `bundle` the engine must REFUSE at construction, and
+//     the strings the refusal must name (corpus version 10, the project map).
 //
 // Cases carry COMPILED artifacts (ast / bundle), so a runtime-only port
 // consumes the corpus without a parser or compiler. Fixture (source) forms
@@ -34,7 +36,13 @@ export type ScopeBag = Record<string, ScalarValue>;
  *  qualified form is accepted whether or not the short one is ambiguous; the
  *  short one is REFUSED when it is, naming both ways out (see
  *  `expectRefused`). The slash sits inside the owner segment, so an address
- *  keeps its three dots and every parser keeps its shape. */
+ *  keeps its three dots and every parser keeps its shape.
+ *
+ *  A zone of the PROJECT MAP is the exception that has no qualified form: it
+ *  belongs to no box, so it is always `value.<zoneGameId>.<name>`, whichever
+ *  boxes use it, and `"<box>/<zone>"` is REFUSED, naming the short form
+ *  (design/project-map-contract.md 3.4). No box tag may share a zone's
+ *  gameId, so the short form is never ambiguous. */
 export interface StateSelector {
   story?: ScopeBag;
   world?: ScopeBag;
@@ -248,12 +256,33 @@ export interface ScriptedCase {
   script: ScriptOp[];
 }
 
+/** A bundle the engine must refuse at construction (design/project-map-contract.md
+ *  3.8). The runner constructs the engine from `bundle`; construction must
+ *  FAIL through the runtime's own construction-refusal channel (JS, C# and
+ *  C++ throw; Godot's `create` returns null with `push_error`), and the
+ *  refusal must contain every `expectRefused` string. Nothing else is asked:
+ *  no flow is opened and no op runs, because a bundle that half-loads is the
+ *  fault these cases exist to stop.
+ *
+ *  Why the engine refuses at all, when the compiler refuses the same bundles
+ *  first: a runtime cannot tell a hand-built or stale bundle from a compiled
+ *  one, and the alternative is a hand whose bound group is looked up in the
+ *  wrong place and silently comes back empty. The strings are substrings, as
+ *  everywhere else in the corpus: the message is prose an author reads, and
+ *  what is pinned is that it names the box and the group or tag at fault. */
+export interface LoadCase {
+  name: string;
+  bundle: Bundle;
+  expectRefused: string[];
+}
+
 export interface Corpus {
   version: number;
   expressions: ExpressionCase[];
   specificity: SpecificityCase[];
   peek: PeekCase[];
   scripted: ScriptedCase[];
+  load: LoadCase[];
 }
 
 // --- Authoring fixtures (source form, compiled into the corpus) -------------
@@ -382,6 +411,13 @@ export interface OtherBoxFixture {
   /** Makes `b_y` a TIMED box (design/engine-server.md 4.8), so a case can pin
    *  that one box being timed leaves the other counting plays as before. */
   turn?: { seconds: number };
+  /** `b_y` opts in to the project map (`usesMap: true`). See
+   *  BundleFixture.projectMap for what that does and does not change in the
+   *  fixture's own name resolution. */
+  uses?: true;
+  /** false drops `b_y`'s scaffold group `d_zone_y` (its `d_weather_y` stays):
+   *  the collapsed-copies case needs a box whose "zone" is the project's. */
+  scaffoldZone?: false;
 }
 
 /** An extra tag group beyond the scaffold's `d_zone`, for the cases that pin
@@ -430,6 +466,26 @@ export interface BundleFixture {
   groups?: GroupFixture[];
   /** A second box in the same bundle (see OtherBoxFixture). */
   otherBox?: OtherBoxFixture;
+  /** The PROJECT MAP (design/project-map-contract.md 6.2). `true` is the
+   *  project scaffold: group `d_district` (gameId "district") with tags
+   *  `v_quay` ("quay") and `v_hill` ("hill"), each carrying `danger` (number,
+   *  default 0, per flow) and `alarm` (number, default 0, `shared: true`),
+   *  flattened onto the tag as the compiler flattens a group-level
+   *  declaration. A GroupFixture is a custom group, ids as given. Absent is a
+   *  bundle with no map, exactly as before.
+   *
+   *  The builder resolves every box's group and tag NAMES against that box's
+   *  own groups plus the project group, WHATEVER `uses` says: a fixture must
+   *  be able to build the bundle a compiler would refuse, because the load
+   *  cases are the engine refusing it. `uses` only sets the box's `usesMap`.
+   *  A bundle with a map, or a box that says it uses one, is written at
+   *  schema `storylets/bundle@1`; every other bundle stays at @0, so the
+   *  corpus pins that a runtime takes both. */
+  projectMap?: true | GroupFixture;
+  /** `b_x` opts in to the project map (`usesMap: true`). */
+  uses?: true;
+  /** false drops the scaffold's `d_zone` from `b_x`. */
+  scaffoldZone?: false;
 }
 
 export interface PeekFixture extends BundleFixture {
@@ -452,9 +508,20 @@ export interface ScriptedFixture extends BundleFixture {
   script: ScriptOp[];
 }
 
+/** Kind 5: a bundle the engine must refuse at construction (see LoadCase). */
+export interface LoadFixture extends BundleFixture {
+  name: string;
+  /** Override the bundle's schema tag. Only the unknown-schema case uses it:
+   *  every other refusal is about the bundle's content, not its label. */
+  schema?: string;
+  /** Every string must appear in the refusal. */
+  expectRefused: string[];
+}
+
 export interface Fixtures {
   expressions: ExpressionFixture[];
   specificity: SpecificityFixture[];
   peek: PeekFixture[];
   scripted: ScriptedFixture[];
+  load: LoadFixture[];
 }

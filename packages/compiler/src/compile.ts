@@ -16,8 +16,9 @@ import { referenceNote, scopesSchema } from "@wildwinter/scoperegistry/scopes";
 import type {
   Box, Bundle, Card, Deck, Hand, HandTemplate, Outcome, PropertyDecl, ScalarValue, TagGroup,
 } from "@storylet-studio/model";
-import { BUNDLE_SCHEMA, PLACE_GROUP, effectiveGameId, isHoleRef, isValidGameId,
+import { BUNDLE_SCHEMA, PLACE_GROUP, effectiveGameId, isHoleRef, isSpatial, isValidGameId,
   isValidPropertyName, parseHoleRef, propertyNameify, RESERVED_PROPERTY_NAMES, byDisplayOrder, inferDeclFromWrite } from "@storylet-studio/model";
+import { boxMapOf, usesProjectMap } from "./project.js";
 import type { Issue, SourceBox, SourceProject } from "./project.js";
 import { contentAboveRung, ladderWarning, playRungOf } from "./play-ladder.js";
 import { canonicalStringify } from "./serialize.js";
@@ -96,6 +97,10 @@ export function projectHash(source: SourceProject): string {
   const world = sharedWorld(source)?.decls;
   return hash32(canonicalStringify({
     ...(world !== undefined ? { sharedWorld: world } : {}),
+    // The project map's zone group is content (it ships as `map.group`), and
+    // only it: the map's frames are arrangement, as a box's view shard is. A
+    // project with no map hashes exactly as it always has.
+    ...(source.map !== undefined ? { projectMap: source.map.group } : {}),
     project: source.project,
     boxes: source.boxes.map((b) => ({
       path: b.path,
@@ -355,6 +360,11 @@ export function compileProject(source: SourceProject): CompileResult {
    * misspelt @hand name compiled clean, validated ok, and silently never
    * dealt.
    */
+  /** A box's own groups plus, when it is on the project map and there is one,
+   *  the map's zone group, in source shape. */
+  const handGroupsOf = (box: SourceBox): TagGroup[] =>
+    usesProjectMap(box) && mapGroup !== undefined && source.map !== undefined
+      ? [...box.tags.groups, source.map.group] : box.tags.groups;
   const handSchemaCache = new Map<string, Map<string, PropertyMeta>>();
   const handSchemaFor = (box: SourceBox): Map<string, PropertyMeta> => {
     const cached = handSchemaCache.get(box.path);
@@ -377,7 +387,12 @@ export function compileProject(source: SourceProject): CompileResult {
     };
 
     const tagsPath = `${box.path}/tags`;
-    const tagDecls = box.tags.groups.flatMap((group) => [
+    // The groups whose names and properties this box's @hand composes: its own,
+    // then the project map's zone group when the box is on the map, SOURCE
+    // shape (group-level declarations not yet flattened), exactly as the
+    // runtime's `groupsOfBox` lists them (design/project-map-contract.md 4.1).
+    const groups = handGroupsOf(box);
+    const tagDecls = groups.flatMap((group) => [
       // Declared once on the group: unambiguous by construction, and the same
       // name on one of its tags is refused, so these never fight each other.
       ...(group.properties ?? []).map((decl) => ({ decl, where: `group ${effectiveGameId(group)}` })),
@@ -400,7 +415,7 @@ export function compileProject(source: SourceProject): CompileResult {
       ...layer(handDecls, handsPath),
     ]);
     // Layer 3 last, so a group name wins the way it does at runtime.
-    for (const group of box.tags.groups) {
+    for (const group of groups) {
       out.set(effectiveGameId(group), {
         type: "enum",
         enumValues: group.tags.map((t) => effectiveGameId(t)),
@@ -486,6 +501,135 @@ export function compileProject(source: SourceProject): CompileResult {
     return compileExpr(src, dialect);
   };
 
+  // --- tag groups ---------------------------------------------------------------
+  /**
+   * One tag group's own checks and its compiled form: what a box's group and the
+   * PROJECT MAP's zone group have in common (design/project-map-contract.md 4.1,
+   * E8: "the group checks a box group gets today, applied to the project
+   * group"). The rules that are about a BOX - a group name unique within it, a
+   * tag name unique across its groups - stay with the box, through `onTag`.
+   */
+  const compileGroup = (group: TagGroup, path: string, onTag?: (tag: TagGroup["tags"][number]) => void): TagGroup => {
+    claimId(group.id, path, effectiveGameId(group));
+    checkGameId("tag group", group, path);
+    if (effectiveGameId(group) === PLACE_GROUP) {
+      report({ severity: "error", path, where: PLACE_GROUP, message: `"${PLACE_GROUP}" is the reserved tag group and cannot be declared` });
+    }
+    const tagGameIds = new Map<string, string>();
+    for (const tag of group.tags) {
+      claimId(tag.id, path, effectiveGameId(tag));
+      checkGameId("tag", tag, path);
+      uniqueGameIds(`tag (group "${effectiveGameId(group)}")`, tagGameIds, effectiveGameId(tag), path);
+      onTag?.(tag);
+      // A tag's own properties feed the composed @hand, so they fold too.
+      legalPropertyName("hand", tag.properties, path);
+    }
+    // A state-bound group names a @world or @story property that must exist
+    // and must be able to hold a tag's gameId. Caught here rather than at
+    // runtime: a group bound to nothing silently wildcards, so every card in
+    // the axis becomes available and the fault reads as content, not config.
+    if (group.boundBy !== undefined) {
+      const ref = /^@(world|story)\.([a-z][a-z0-9_-]*)$/.exec(group.boundBy);
+      if (!ref) {
+        report({ severity: "error", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" must be a @world or @story property reference` });
+      } else {
+        const decls = ref[1] === "world" ? worldDecls : source.project.story?.properties;
+        const decl = (decls ?? []).find((d) => d.name === ref[2]);
+        if (!decl) {
+          report({ severity: "error", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" is not a declared ${ref[1]} property` });
+        } else if (decl.type !== "string" && decl.type !== "enum") {
+          report({ severity: "error", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" is a ${decl.type} property; a state-bound group needs a string or enum, whose value names one of its tags` });
+        } else if (decl.type === "enum" && decl.values !== undefined) {
+          // An enum's whole point is a closed set, so a value that can never
+          // name a tag is a mistake worth naming at publish time.
+          const names = new Set(group.tags.map((t) => effectiveGameId(t)));
+          const stray = decl.values.filter((v) => !names.has(v));
+          if (stray.length === decl.values.length) {
+            report({ severity: "error", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" can never name a tag in this group (its values are ${decl.values.join(", ")})` });
+          } else if (stray.length > 0) {
+            report({ severity: "warning", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" may hold ${stray.join(", ")}, which name no tag here; the group goes unbound then, so every card in the axis is eligible` });
+          }
+        }
+      }
+    }
+    // A name declared both on the group and on one of its tags: the flatten
+    // would put two of it on that tag, and there is no honest winner.
+    for (const decl of group.properties ?? []) {
+      for (const t of group.tags) {
+        if ((t.properties ?? []).some((own) => own.name === decl.name)) {
+          report({ severity: "error", path, where: `${effectiveGameId(group)}/${effectiveGameId(t)}`,
+            message: `"${decl.name}" is declared both on the group "${effectiveGameId(group)}" and on its tag "${effectiveGameId(t)}"; declare it once, on the group if every tag has it` });
+        }
+      }
+    }
+    // A starting value needs something to be the value OF, and has to fit it.
+    for (const t of group.tags) {
+      for (const [name, v] of Object.entries(t.values ?? {})) {
+        const decl = (group.properties ?? []).find((d) => d.name === name);
+        if (!decl) {
+          report({ severity: "error", path, where: `${effectiveGameId(group)}/${effectiveGameId(t)}`,
+            message: `"${name}" has a value here but the group "${effectiveGameId(group)}" declares no such property; a tag sets values, its group declares them` });
+        } else if (!valueFits(decl, v)) {
+          report({ severity: "error", path, where: `${effectiveGameId(group)}/${effectiveGameId(t)}`,
+            message: `"${name}" is ${decl.type} on the group, so ${JSON.stringify(v)} is not a value it can start at` });
+        }
+      }
+    }
+    legalPropertyName("hand", group.properties, path);
+
+    const compiled: TagGroup = {
+      id: group.id,
+      gameId: effectiveGameId(group),
+      ...(title(group.purpose) !== undefined ? { purpose: group.purpose } : {}),
+      // The axis's own configuration, unlike `templates` (source-only): the
+      // runtime needs both to bind the group and to refuse untagged cards.
+      ...(group.boundBy !== undefined ? { boundBy: group.boundBy } : {}),
+      ...(group.required === true ? { required: true } : {}),
+      // Template-of-play extras (`templates`) are source-only: never compiled.
+      // Group-level declarations are FLATTENED onto every tag here
+      // (design/hand-typing.md step B), each carrying that tag's own
+      // starting value when it set one. The bundle therefore keeps exactly
+      // the per-tag shape every runtime already reads, and the DRY source
+      // costs nothing downstream.
+      tags: byId(group.tags.map((t) => {
+        const own = t.properties ?? [];
+        const fromGroup = (group.properties ?? []).map((decl) => {
+          const v = t.values?.[decl.name];
+          return v === undefined ? decl : { ...decl, default: v };
+        });
+        const properties = [...own, ...fromGroup];
+        return {
+          id: t.id,
+          gameId: t.gameId,
+          ...(properties.length > 0 ? { properties } : {}),
+        };
+      })),
+    };
+    return compiled;
+  };
+
+  // --- the project map (design/project-map-contract.md) ---------------------------
+  // One zone group above the boxes, compiled exactly as a box's group is and
+  // shipped once, as `bundle.map.group`. Its ids join the same project-wide pool
+  // as everything else; whether a box may USE it is the box's `usesMap`, checked
+  // where each box references it.
+  const MAP_PATH = "map";
+  const mapSource = source.map;
+  let mapGroup: TagGroup | undefined;
+  if (mapSource !== undefined) {
+    const raw = mapSource.group as TagGroup | undefined;
+    if (typeof raw !== "object" || raw === null || typeof raw.id !== "string" || !Array.isArray(raw.tags)) {
+      report({ severity: "error", path: MAP_PATH, field: "group",
+        message: "the project map has no zone group: it needs a `group` with an id and a list of tags" });
+    } else {
+      mapGroup = compileGroup(raw, MAP_PATH);
+    }
+  }
+  const mapName = mapGroup !== undefined ? effectiveGameId(mapGroup) : undefined;
+  /** Zone tag gameId -> the zone, for the bundle-wide name rule (E4). */
+  const zoneNames = new Set((mapGroup?.tags ?? []).map((t) => effectiveGameId(t)));
+  let boxesOnMap = 0;
+
   // --- per-box assembly ------------------------------------------------------------
   const boxes: Box<Expression>[] = [];
   for (const sourceBox of source.boxes) {
@@ -517,19 +661,26 @@ export function compileProject(source: SourceProject): CompileResult {
      *  A tag's own uniqueness is per group, one map down; this one is the
      *  box-wide rule the value address needs (see the check itself). */
     const tagGameIdsInBox = new Map<string, string>();
+    const onMap = usesProjectMap(sourceBox);
     for (const group of sourceBox.tags.groups) {
       const path = `${sourceBox.path}/tags`;
-      claimId(group.id, path, effectiveGameId(group));
-      checkGameId("tag group", group, path);
       uniqueGameIds(`tag group (box "${effectiveGameId(boxDecl)}")`, groupGameIds, effectiveGameId(group), path);
-      if (effectiveGameId(group) === PLACE_GROUP) {
-        report({ severity: "error", path, where: PLACE_GROUP, message: `"${PLACE_GROUP}" is the reserved tag group and cannot be declared` });
+      // A map is the project's now (E2): there is one, and it sits above the
+      // boxes. A box group still carrying the marker is a project from before,
+      // and the formatter is what moves it; the compiler never writes.
+      if (isSpatial(group)) {
+        report({ severity: "error", path, where: effectiveGameId(group),
+          message: `tag group "${effectiveGameId(group)}" in box "${effectiveGameId(boxDecl)}" is a map: a map belongs to the project now; run \`storyletengine format\` to move it` });
       }
-      const tagGameIds = new Map<string, string>();
-      for (const tag of group.tags) {
-        claimId(tag.id, path, effectiveGameId(tag));
-        checkGameId("tag", tag, path);
-        uniqueGameIds(`tag (group "${effectiveGameId(group)}")`, tagGameIds, effectiveGameId(tag), path);
+      // One namespace of group names in an opted-in box, and a host or a
+      // server resolving the name anywhere must find one thing: so the project
+      // group's name is reserved in EVERY box, opted in or not (E3, D9), and a
+      // box that opts in later can never become a compile error by doing so.
+      if (mapName !== undefined && effectiveGameId(group) === mapName) {
+        report({ severity: "error", path, where: effectiveGameId(group),
+          message: `tag group "${mapName}" in box "${effectiveGameId(boxDecl)}" has the name of the project map's zone group; a group name means one thing across the project, so rename one of them` });
+      }
+      const compiled = compileGroup(group, path, (tag) => {
         // ...and a tag gameId is unique within its BOX as well, across all of
         // that box's groups (design/engine-server.md 4.4, question 16 ruled
         // 2026-09-06). The value scope's address qualifies by box and stops
@@ -558,92 +709,49 @@ export function compileProject(source: SourceProject): CompileResult {
               + " A warning in this release, and an error in the next.",
           });
         }
-        // A tag's own properties feed the composed @hand, so they fold too.
-        legalPropertyName("hand", tag.properties, path);
-      }
-      // A state-bound group names a @world or @story property that must exist
-      // and must be able to hold a tag's gameId. Caught here rather than at
-      // runtime: a group bound to nothing silently wildcards, so every card in
-      // the axis becomes available and the fault reads as content, not config.
-      if (group.boundBy !== undefined) {
-        const ref = /^@(world|story)\.([a-z][a-z0-9_-]*)$/.exec(group.boundBy);
-        if (!ref) {
-          report({ severity: "error", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" must be a @world or @story property reference` });
-        } else {
-          const decls = ref[1] === "world" ? worldDecls : source.project.story?.properties;
-          const decl = (decls ?? []).find((d) => d.name === ref[2]);
-          if (!decl) {
-            report({ severity: "error", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" is not a declared ${ref[1]} property` });
-          } else if (decl.type !== "string" && decl.type !== "enum") {
-            report({ severity: "error", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" is a ${decl.type} property; a state-bound group needs a string or enum, whose value names one of its tags` });
-          } else if (decl.type === "enum" && decl.values !== undefined) {
-            // An enum's whole point is a closed set, so a value that can never
-            // name a tag is a mistake worth naming at publish time.
-            const names = new Set(group.tags.map((t) => effectiveGameId(t)));
-            const stray = decl.values.filter((v) => !names.has(v));
-            if (stray.length === decl.values.length) {
-              report({ severity: "error", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" can never name a tag in this group (its values are ${decl.values.join(", ")})` });
-            } else if (stray.length > 0) {
-              report({ severity: "warning", path, where: effectiveGameId(group), message: `boundBy "${group.boundBy}" may hold ${stray.join(", ")}, which name no tag here; the group goes unbound then, so every card in the axis is eligible` });
-            }
-          }
+        // A zone's value address is the bare `value.<zone>.<name>` with no
+        // qualified form to fall back on (3.4), so no box tag anywhere may
+        // share a zone's name (E4, D9).
+        if (zoneNames.has(effectiveGameId(tag))) {
+          report({ severity: "error", path, where: effectiveGameId(tag),
+            message: `tag "${effectiveGameId(tag)}" in box "${effectiveGameId(boxDecl)}" has the name of a zone of the project map, so "value.${effectiveGameId(tag)}.<property>" would name both; rename one of them` });
         }
-      }
-      // A name declared both on the group and on one of its tags: the flatten
-      // would put two of it on that tag, and there is no honest winner.
-      for (const decl of group.properties ?? []) {
-        for (const t of group.tags) {
-          if ((t.properties ?? []).some((own) => own.name === decl.name)) {
-            report({ severity: "error", path, where: `${effectiveGameId(group)}/${effectiveGameId(t)}`,
-              message: `"${decl.name}" is declared both on the group "${effectiveGameId(group)}" and on its tag "${effectiveGameId(t)}"; declare it once, on the group if every tag has it` });
-          }
-        }
-      }
-      // A starting value needs something to be the value OF, and has to fit it.
-      for (const t of group.tags) {
-        for (const [name, v] of Object.entries(t.values ?? {})) {
-          const decl = (group.properties ?? []).find((d) => d.name === name);
-          if (!decl) {
-            report({ severity: "error", path, where: `${effectiveGameId(group)}/${effectiveGameId(t)}`,
-              message: `"${name}" has a value here but the group "${effectiveGameId(group)}" declares no such property; a tag sets values, its group declares them` });
-          } else if (!valueFits(decl, v)) {
-            report({ severity: "error", path, where: `${effectiveGameId(group)}/${effectiveGameId(t)}`,
-              message: `"${name}" is ${decl.type} on the group, so ${JSON.stringify(v)} is not a value it can start at` });
-          }
-        }
-      }
-      legalPropertyName("hand", group.properties, path);
-
-      const compiled: TagGroup = {
-        id: group.id,
-        gameId: effectiveGameId(group),
-        ...(title(group.purpose) !== undefined ? { purpose: group.purpose } : {}),
-        // The axis's own configuration, unlike `templates` (source-only): the
-        // runtime needs both to bind the group and to refuse untagged cards.
-        ...(group.boundBy !== undefined ? { boundBy: group.boundBy } : {}),
-        ...(group.required === true ? { required: true } : {}),
-        // Template-of-play extras (`templates`) are source-only: never compiled.
-        // Group-level declarations are FLATTENED onto every tag here
-        // (design/hand-typing.md step B), each carrying that tag's own
-        // starting value when it set one. The bundle therefore keeps exactly
-        // the per-tag shape every runtime already reads, and the DRY source
-        // costs nothing downstream.
-        tags: byId(group.tags.map((t) => {
-          const own = t.properties ?? [];
-          const fromGroup = (group.properties ?? []).map((decl) => {
-            const v = t.values?.[decl.name];
-            return v === undefined ? decl : { ...decl, default: v };
-          });
-          const properties = [...own, ...fromGroup];
-          return {
-            id: t.id,
-            gameId: t.gameId,
-            ...(properties.length > 0 ? { properties } : {}),
-          };
-        })),
-      };
+      });
       tagGroups.push(compiled);
       groupsById.set(group.id, compiled);
+    }
+    // The project map, for a box that has opted in: its group joins the box's
+    // own for every reference below, exactly as if declared here, and no box
+    // that has not opted in may name it at all (E6, E7).
+    if (onMap) {
+      boxesOnMap++;
+      if (mapGroup !== undefined) groupsById.set(mapGroup.id, mapGroup);
+      else {
+        report({ severity: "error", path: boxPath, where: effectiveGameId(boxDecl), field: "usesMap",
+          message: `box "${effectiveGameId(boxDecl)}" uses the project map, and the project has none; draw one, or turn "Uses the project map" off` });
+      }
+    }
+    /** Is this group the project map's, named from a box that is not on it?
+     *  Says so (E6) and answers true, so the caller skips the reference rather
+     *  than adding a second, vaguer "not in this box" about the same thing. */
+    const offMap = (groupId: string, path: string, where: string, field?: string): boolean => {
+      if (onMap || mapGroup === undefined || groupId !== mapGroup.id) return false;
+      report({ severity: "error", path, where, ...(field !== undefined ? { field } : {}),
+        message: `box "${effectiveGameId(boxDecl)}" is not on the project map, so it cannot use the zone group "${mapName}"; turn on "Uses the project map" or remove the reference` });
+      return true;
+    };
+    // A box's sites ship only when it is on the map (W2), and the map's frames
+    // are the project's now (W3): both read for nothing, and both named, so a
+    // hand that falls off the map is never silent.
+    const placed = Object.keys(boxMapOf(sourceBox)?.sites ?? {}).length;
+    if (placed > 0 && !onMap) {
+      report({ severity: "warning", path: `${sourceBox.path}/map`, where: effectiveGameId(boxDecl),
+        message: `${placed === 1 ? "1 hand is" : `${placed} hands are`} placed on the map, but box "${effectiveGameId(boxDecl)}" is not on the project map, so no site of it ships; turn on "Uses the project map" or take them off the map` });
+    }
+    const frames = (sourceBox.map?.map as { frames?: unknown } | undefined)?.frames;
+    if (Array.isArray(frames) && frames.length > 0) {
+      report({ severity: "warning", path: `${sourceBox.path}/map`, where: effectiveGameId(boxDecl), field: "frames",
+        message: "the map's frames belong to the project map now, and these are ignored; run `storyletengine format` to move them" });
     }
     // Hand ids, up front: card home tags reference them (schema 2.4).
     const handIds = new Set(sourceBox.hands.hands.map((h) => h.id));
@@ -661,6 +769,7 @@ export function compileProject(source: SourceProject): CompileResult {
           }
           continue;
         }
+        if (offMap(groupId, path, where, "tags")) continue;
         const group = groupsById.get(groupId);
         if (!group) {
           report({ severity: "error", path, where, field: "tags", message: `points at a tag group that is not in this box (id ${groupId})` });
@@ -801,7 +910,7 @@ export function compileProject(source: SourceProject): CompileResult {
               // TAG: it is what the ask asked for, not state, and the runtime
               // has always thrown on the write. Now publish says so first.
               const name = target.slice(1).split(".")[1]!;
-              const group = sourceBox.tags.groups.find((g) => effectiveGameId(g) === name);
+              const group = handGroupsOf(sourceBox).find((g) => effectiveGameId(g) === name);
               if (group) {
                 report({ severity: "error", path, where: `${effectiveGameId(card)}/${effectiveGameId(outcome)}`, field: "changes",
                   message: `change target "${target}" is the chosen tag of group "${name}", which cannot be written: it is what the hand asked for, not state it carries` });
@@ -925,6 +1034,7 @@ export function compileProject(source: SourceProject): CompileResult {
         bad(`"${PLACE_GROUP}" cannot be filled from a property: it is the hand's own name, not an axis`);
         return;
       }
+      if (offMap(groupId, handsPath, where)) return;
       const group = groupsById.get(groupId);
       if (!group) {
         bad(`binds a tag group that is not in this box (id ${groupId})`);
@@ -980,6 +1090,7 @@ export function compileProject(source: SourceProject): CompileResult {
           checkHoleRef(where, groupId, tagId, handDecls);
           continue;
         }
+        if (offMap(groupId, handsPath, where)) continue;
         const group = groupsById.get(groupId);
         if (!group) {
           report({ severity: "error", path: handsPath, where, message: `binds a tag group that is not in this box (id ${groupId})` });
@@ -997,6 +1108,7 @@ export function compileProject(source: SourceProject): CompileResult {
       checkBindings(effectiveGameId(template), template.bindings);
       legalPropertyName("hand", template.properties, handsPath);
       for (const groupId of template.chooses ?? []) {
+        if (offMap(groupId, handsPath, effectiveGameId(template))) continue;
         if (!groupsById.has(groupId)) {
           report({ severity: "error", path: handsPath, where: effectiveGameId(template), message: `asks each hand to choose from a tag group that is not in this box (id ${groupId})` });
         } else if (template.bindings?.[groupId] !== undefined) {
@@ -1034,6 +1146,8 @@ export function compileProject(source: SourceProject): CompileResult {
           continue;
         }
         for (const groupId of template.chooses ?? []) {
+          // Said once, on the template that asks for it.
+          if (!onMap && groupId === mapGroup?.id) continue;
           const tagId = hand.chosen?.[groupId];
           const group = groupsById.get(groupId);
           if (tagId !== undefined && isHoleRef(tagId)) {
@@ -1112,11 +1226,19 @@ export function compileProject(source: SourceProject): CompileResult {
       // stays byte for byte what it was.
       ...((boxDecl.outcomeFields ?? []).length > 0 ? { outcomeFields: boxDecl.outcomeFields } : {}),
       properties: boxDecl.properties ?? [],
+      ...(onMap ? { usesMap: true as const } : {}),
       tagGroups: byId(tagGroups),
       decks: byId(decks),
       handTemplates: byId(handTemplates),
       hands: byId(hands),
     });
+  }
+
+  // A map nothing uses (W1): it ships its group and is never dealt to, which
+  // is almost always a box somebody forgot to put on it.
+  if (mapGroup !== undefined && boxesOnMap === 0) {
+    report({ severity: "warning", path: MAP_PATH, where: mapName,
+      message: `no box uses the project map, so nothing is ever dealt to its zones; turn on "Uses the project map" on the boxes that belong on it` });
   }
 
   // The play ladder (design/engine-server.md 4.10). The editor refuses a move
@@ -1165,7 +1287,7 @@ export function compileProject(source: SourceProject): CompileResult {
   }
   // Authoring geometry, carried only when the project asked for it (maps.ts
   // explains why this is the one exception to "templates are source-only").
-  const maps = source.project.export?.map === true ? compileMaps(source) : undefined;
+  const geometry = mapGroup !== undefined && source.project.export?.map === true ? compileMaps(source) : undefined;
   const bundle: Bundle = {
     schema: BUNDLE_SCHEMA,
     content: {
@@ -1181,7 +1303,9 @@ export function compileProject(source: SourceProject): CompileResult {
     },
     story: { properties: source.project.story?.properties ?? [] },
     boxes: byId(boxes),
-    ...(maps !== undefined ? { maps } : {}),
+    // The project map's zone group always ships when there is one: hands and
+    // cards reference it by id. Its geometry only under `export.map`.
+    ...(mapGroup !== undefined ? { map: { group: mapGroup, ...(geometry !== undefined ? { geometry } : {}) } } : {}),
     ...(externalUsed.size > 0 ? { externalScopes: [...externalUsed].sort() } : {}),
   };
   return { bundle, issues };

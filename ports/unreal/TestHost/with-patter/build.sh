@@ -23,6 +23,15 @@ here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../../../.." && pwd)"
 patter="${PATTER_ROOT:-$root/../patter}"
 storylets_public="$root/ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public"
+
+# On a Mac whose OS is newer than the selected Xcode, clang finds the Command Line Tools'
+# newer SDK but links with Xcode's older ld, which cannot read that SDK's stubs (macOS 27
+# with Xcode 26.6: "arm64e.x1"). Unreal 5.7 refuses Xcode 27, so the fix is to compile
+# against the SELECTED Xcode's own SDK. A caller's SDKROOT wins; Linux CI never gets here.
+if [[ "$(uname)" == "Darwin" && -z "${SDKROOT:-}" ]] && command -v xcode-select >/dev/null; then
+  xcode_sdk="$(xcode-select -p)/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+  if [[ -d "$xcode_sdk" ]]; then export SDKROOT="$xcode_sdk"; fi
+fi
 patter_public="$patter/ports/unreal/Patterplay/Source/PatterplayRuntime/Public"
 
 if [ ! -f "$patter_public/Patter/Engine.h" ]; then

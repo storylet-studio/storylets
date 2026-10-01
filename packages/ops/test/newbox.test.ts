@@ -128,10 +128,13 @@ describe("the starter kits", () => {
   it("names every hole it leaves for the author to fill", () => {
     // The rpg kit deliberately instances one of its two areas, so the template
     // has a hole. A hole nobody mentions reads as an oversight, so whatever tag
-    // has no hand must be spoken about somewhere an author will read.
-    const box = kitBox("rpg");
+    // has no hand must be spoken about somewhere an author will read. The areas
+    // are the project map's once the kit lands, so the map's tags count too.
+    const source = withKit("rpg").source!;
+    const box = source.boxes.at(-1)!;
+    const groups = [...box.tags.groups, ...(source.map !== undefined ? [source.map.group] : [])];
     const chosen = new Set(box.hands.hands.flatMap((h) => Object.values(h.chosen ?? {})));
-    const orphans = box.tags.groups.flatMap((g) => g.tags.filter((t) => !chosen.has(t.id)));
+    const orphans = groups.flatMap((g) => g.tags.filter((t) => !chosen.has(t.id)));
     expect(orphans.length, "the rpg kit is meant to leave one area unseated").toBeGreaterThan(0);
     const prose = [
       ...box.hands.templates.map((t) => t.purpose ?? ""),
@@ -148,9 +151,14 @@ describe("the RPG kit's map", () => {
   it("declares a SPATIAL area group with both zones drawn", () => {
     // A place-based kit whose places are an abstract list teaches half the idea:
     // the Map tab is where an author sees where a card can be dealt, and a kit
-    // that leaves the map empty teaches that the feature does nothing.
-    const box = kitBox("rpg");
-    const area = box.tags.groups.find((g) => g.gameId === "area")!;
+    // that leaves the map empty teaches that the feature does nothing. A project
+    // with no map yet takes the kit's areas AS its map, and the box joins it.
+    const source = withKit("rpg").source!;
+    const box = source.boxes.at(-1)!;
+    expect(box.box.box.usesMap).toBe(true);
+    expect(box.tags.groups.some((g) => isSpatial(g))).toBe(false);
+    const area = source.map!.group;
+    expect(area.gameId).toBe("area");
     expect(isSpatial(area)).toBe(true);
     // Set-wise: storage is id-sorted (rule 5) and these tags carry no authored
     // `order`, so the stored order is whatever their generated ids sort to.
@@ -160,6 +168,32 @@ describe("the RPG kit's map", () => {
       expect(poly, `${tag.gameId} has no drawn zone`).toBeDefined();
       expect(poly!.length).toBe(4);
     }
+  });
+
+  it("joins the map a project already has, and adds nothing to it", () => {
+    // One map per project. A second place-based kit puts its box on the map it
+    // finds and leaves the tagging to the author, rather than drawing a second
+    // set of areas nobody asked for.
+    const dir = fresh("rpg-twice");
+    commit(runNewBox({ loaded: loadProject(dir), kit: "rpg" }).writes);
+    const before = loadProject(dir).source!.map;
+    const writes = runNewBox({ loaded: loadProject(dir), kit: "rpg" }).writes;
+    expect(writes.some((w) => w.path === join(dir, "map.storyletmap"))).toBe(false);
+    commit(writes);
+    const loaded = loadProject(dir);
+    expect(loaded.source!.map).toEqual(before);
+    const second = loaded.source!.boxes.at(-1)!;
+    expect(second.box.box.usesMap).toBe(true);
+    // Its own references to the areas it did not get to draw are gone: every
+    // group it still names is one of its own.
+    const own = new Set(second.tags.groups.map((g) => g.id));
+    const named = [
+      ...second.hands.templates.flatMap((t) => t.chooses ?? []),
+      ...second.hands.hands.flatMap((h) => Object.keys(h.chosen ?? {})),
+      ...second.decks.flatMap((d) => d.shard.cards.flatMap((c) => Object.keys(c.tags ?? {}))),
+    ];
+    expect(named.filter((g) => !own.has(g))).toEqual([]);
+    expect(runValidate(loaded, { checkBundle: false }).issues.filter((i) => i.severity === "error")).toEqual([]);
   });
 });
 

@@ -1,12 +1,14 @@
 // ---------------------------------------------------------------------------
-// Maps in the bundle: the geometry opt-in (design/graphical-views.md 2, "The map
-// MAY ship with a bundle, if asked").
+// The project map's geometry in the bundle: the opt-in (design/graphical-views.md
+// 2, "The map MAY ship with a bundle, if asked"; design/project-map-contract.md
+// 2.1, `map.geometry`).
 //
 // This is the ONE exception to the compiler's standing rule that templates bags
 // are source-only, and it is deliberately shaped as an exception: a separate
 // module, off unless the project asked, producing a self-contained block that
 // nothing else in the bundle refers to. The runtime never reads it. Take the
-// flag away and the bundle is byte-for-byte what it was.
+// flag away and the bundle is byte-for-byte what it was. (The zone GROUP is not
+// geometry: it always ships, in `map.group`, because the engine deals with it.)
 //
 // It flattens rather than copies. A source zone is a tag whose `templates.spatial`
 // bag happens to hold a polygon, which is the right shape for an editor and the
@@ -17,29 +19,23 @@
 // ---------------------------------------------------------------------------
 
 import {
-  backgroundsOf, bundleAssetPath, effectiveGameId, isSpatial, polygonOf,
+  backgroundsOf, bundleAssetPath, effectiveGameId, polygonOf,
 } from "@storylet-studio/model";
-import type { BundleBackground, BundleMap } from "@storylet-studio/model";
-import { boxMapOf } from "./project.js";
-import type { SourceProject } from "./project.js";
+import type { BundleBackground, ProjectMap, TagGroup } from "@storylet-studio/model";
+import { boxMapOf, usesProjectMap } from "./project.js";
+import type { SourceBox, SourceProject } from "./project.js";
 
-/** One spatial group with something drawn on it: the walk both map builders
- *  do, done once.
+/** The project map with something drawn on it: the walk both map builders do,
+ *  done once.
  *
- *  The bundle's maps and the playable page's maps flatten the same source in
- *  the same order by the same rules - a spatial group, its zones' polygons, its
- *  visible backgrounds, and the "declared and never drew" skip. They differ
- *  only in where a background's PICTURE comes from: the bundle names a path,
- *  the playable page inlines a data URI. So the walk lives here and the two
- *  callers supply the ending.
- *
- *  export-html's copy had drifted to citing this file for the skip rule in a
- *  comment ("compileMaps' own rule") while re-implementing it, which is the
- *  form this kind of duplication takes just before the two stop agreeing. */
-export interface SpatialGroup {
-  box: SourceProject["boxes"][number];
-  boxGameId: string;
-  group: SourceProject["boxes"][number]["tags"]["groups"][number];
+ *  The bundle's geometry and the playable page's map flatten the same source in
+ *  the same order by the same rules - the zones' polygons, the visible
+ *  backgrounds, and the "declared and never drew" skip. They differ only in
+ *  where a background's PICTURE comes from: the bundle names a path, the
+ *  playable page inlines a data URI. So the walk lives here and the two callers
+ *  supply the ending. */
+export interface MapDrawing {
+  group: TagGroup;
   groupGameId: string;
   /** Tags that have a drawn polygon, in group order. A tag without one is not
    *  a place yet: shipping an empty shape would make a host draw nothing at
@@ -47,56 +43,57 @@ export interface SpatialGroup {
   zones: { tag: string; polygon: { x: number; y: number }[] }[];
   /** The group's backgrounds with the hidden ones dropped, raw. */
   backgrounds: ReturnType<typeof backgroundsOf>;
+  /** The boxes on the map, in project order. */
+  boxes: SourceBox[];
 }
 
-/** Every spatial group worth drawing, in box then group order. A group with
- *  neither zones nor visible backgrounds is a map somebody declared and never
- *  drew, and is not returned. */
-export function spatialGroups(source: SourceProject): SpatialGroup[] {
-  const out: SpatialGroup[] = [];
-  for (const box of source.boxes) {
-    const boxGameId = effectiveGameId(box.box.box);
-    for (const group of box.tags.groups) {
-      if (!isSpatial(group)) continue;
-      const zones: SpatialGroup["zones"] = [];
-      for (const tag of group.tags) {
-        const polygon = polygonOf(tag);   // already refuses anything under 3 points
-        if (polygon === undefined) continue;
-        zones.push({ tag: effectiveGameId(tag), polygon: polygon.map((p) => ({ x: p.x, y: p.y })) });
-      }
-      const backgrounds = backgroundsOf(group).filter((b) => b.hidden !== true);
-      if (zones.length === 0 && backgrounds.length === 0) continue;
-      out.push({ box, boxGameId, group, groupGameId: effectiveGameId(group), zones, backgrounds });
-    }
+/** The project map, when there is one worth drawing. A map with neither zones
+ *  nor visible backgrounds is one somebody declared and never drew, and is not
+ *  returned. */
+export function mapDrawing(source: SourceProject): MapDrawing | undefined {
+  const group = source.map?.group;
+  if (group === undefined || !Array.isArray(group.tags)) return undefined;
+  const zones: MapDrawing["zones"] = [];
+  for (const tag of group.tags) {
+    const polygon = polygonOf(tag);   // already refuses anything under 3 points
+    if (polygon === undefined) continue;
+    zones.push({ tag: effectiveGameId(tag), polygon: polygon.map((p) => ({ x: p.x, y: p.y })) });
   }
-  return out;
+  const backgrounds = backgroundsOf(group).filter((b) => b.hidden !== true);
+  if (zones.length === 0 && backgrounds.length === 0) return undefined;
+  return {
+    group, groupGameId: effectiveGameId(group), zones, backgrounds,
+    boxes: source.boxes.filter(usesProjectMap),
+  };
 }
 
 /**
- * Every map the project has, flattened for the bundle, in box then group order.
+ * The project map's geometry, flattened for the bundle: zones, pictures, and
+ * each opted-in box's sites.
  *
- * Returns undefined rather than an empty array when there is nothing to ship, so
- * a project that turns the flag on before drawing anything gets no `maps` key at
- * all instead of an empty one that reads like a broken export.
+ * Returns undefined rather than an empty block when there is nothing to ship,
+ * so a project that turns the flag on before drawing anything gets no
+ * `geometry` key at all instead of an empty one that reads like a broken export.
  */
-export function compileMaps(source: SourceProject): BundleMap[] | undefined {
-  const maps: BundleMap[] = spatialGroups(source).map((g) => {
-    const backgrounds: BundleBackground[] = g.backgrounds.map((b) => ({
-      file: bundleAssetPath(g.boxGameId, b.file),
-      x: b.x, y: b.y, width: b.width, height: b.height,
-      ...(b.opacity !== undefined ? { opacity: b.opacity } : {}),
-    }));
-    const sites = compileSites(g.box);
-    return {
-      box: g.boxGameId,
-      group: g.groupGameId,
-      zones: g.zones,
-      ...(backgrounds.length > 0 ? { backgrounds } : {}),
-      ...(sites.length > 0 ? { sites } : {}),
-    };
-  });
-
-  return maps.length > 0 ? maps : undefined;
+export function compileMaps(source: SourceProject): ProjectMap["geometry"] | undefined {
+  const drawing = mapDrawing(source);
+  const sites: NonNullable<NonNullable<ProjectMap["geometry"]>["sites"]> = {};
+  for (const box of source.boxes.filter(usesProjectMap)) {
+    const placed = compileSites(box);
+    if (placed.length > 0) sites[effectiveGameId(box.box.box)] = placed;
+  }
+  const backgrounds: BundleBackground[] = (drawing?.backgrounds ?? []).map((b) => ({
+    file: bundleAssetPath(b.file),
+    x: b.x, y: b.y, width: b.width, height: b.height,
+    ...(b.opacity !== undefined ? { opacity: b.opacity } : {}),
+  }));
+  const zones = drawing?.zones ?? [];
+  if (zones.length === 0 && backgrounds.length === 0 && Object.keys(sites).length === 0) return undefined;
+  return {
+    zones,
+    ...(backgrounds.length > 0 ? { backgrounds } : {}),
+    ...(Object.keys(sites).length > 0 ? { sites: Object.fromEntries(Object.entries(sites).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) } : {}),
+  };
 }
 
 /**
@@ -106,18 +103,14 @@ export function compileMaps(source: SourceProject): BundleMap[] | undefined {
  * Read from the box's MAP SHARD (and, for one release, from the view shard that
  * used to hold it: `boxMapOf` is the single reader that knows both addresses),
  * and translated to gameIds on the way out like everything else in this block.
- *
- * Per BOX, not per group, because that is where the positions live: a box has one
- * set of sites and draws them on whichever of its maps is open, which is the rule
- * the editor and the playable page already follow. A box with two spatial groups
- * therefore ships the same sites on both, and that is the honest answer rather
- * than an invented split.
+ * Only for a box on the project map: a box that is not has nothing to stand on,
+ * and the compiler says so rather than ship them.
  *
  * Sorted by hand gameId so the bytes do not move when somebody reorders a shard.
  */
-function compileSites(box: SourceProject["boxes"][number]): NonNullable<BundleMap["sites"]> {
+function compileSites(box: SourceBox): { hand: string; x: number; y: number }[] {
   const placed = boxMapOf(box)?.sites ?? {};
-  const sites: NonNullable<BundleMap["sites"]> = [];
+  const sites: { hand: string; x: number; y: number }[] = [];
   for (const hand of box.hands.hands) {
     const at = placed[hand.id];
     if (at === undefined) continue;

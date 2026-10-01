@@ -9,8 +9,8 @@
 
 import { basename, join, resolve } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
-import { BUNDLE_EXTENSION, PROJECT_FOLDER_EXTENSION, SHARD_EXTENSIONS, SPATIAL } from "@storylet-studio/model";
-import type { BoxShard, DeckShard, HandsShard, ProjectShard, PropertyDecl, TagGroup, TagsShard } from "@storylet-studio/model";
+import { BUNDLE_EXTENSION, MAP_SCHEMA, PLACE_GROUP, PROJECTMAP_SCHEMA, PROJECT_FOLDER_EXTENSION, SHARD_EXTENSIONS, SPATIAL } from "@storylet-studio/model";
+import type { BoxShard, DeckShard, HandsShard, MapShard, ProjectMapShard, ProjectShard, PropertyDecl, TagGroup, TagsShard } from "@storylet-studio/model";
 import { canonicalStringify } from "@storylet-studio/compiler";
 import { newId, slug } from "./ids.js";
 import type { PlannedWrite } from "./write.js";
@@ -85,15 +85,19 @@ export function runInit(opts: InitOptions): InitResult {
     // it. Patterpad's own default, `../patter-dist/<name>.patterc`, name for name.
     export: { bundle: `../storylet-dist/${stem}${BUNDLE_EXTENSION}`, metadata: "full" },
   };
-  const boxes = kit === "map-story" ? [mapStoryParts()] : kit === "action-game" ? actionGameParts() : [starterParts()];
+  const parts: KitParts = kit === "map-story" ? mapStoryParts() : kit === "action-game" ? actionGameParts() : { boxes: [starterParts()] };
   const projectFile = join(dir, `${stem}${SHARD_EXTENSIONS.project}`);
   const writes: PlannedWrite[] = [
     { path: projectFile, content: canonicalStringify(project) },
-    ...boxes.flatMap((parts) => [
-      { path: join(dir, parts.folder, `box${SHARD_EXTENSIONS.box}`), content: canonicalStringify(parts.box) },
-      { path: join(dir, parts.folder, `tags${SHARD_EXTENSIONS.tags}`), content: canonicalStringify(parts.tags) },
-      { path: join(dir, parts.folder, `hands${SHARD_EXTENSIONS.hands}`), content: canonicalStringify(parts.hands) },
-      { path: join(dir, parts.folder, "decks", `${parts.deckFile}${SHARD_EXTENSIONS.deck}`), content: canonicalStringify(parts.deck) },
+    // The project map, for a kit that draws one: at the root, above the boxes
+    // (design/project-map-contract.md 1.1), which opt in on their own shards.
+    ...(parts.map !== undefined ? [{ path: join(dir, `map${SHARD_EXTENSIONS.map}`), content: canonicalStringify(parts.map) }] : []),
+    ...parts.boxes.flatMap((box) => [
+      { path: join(dir, box.folder, `box${SHARD_EXTENSIONS.box}`), content: canonicalStringify(box.box) },
+      { path: join(dir, box.folder, `tags${SHARD_EXTENSIONS.tags}`), content: canonicalStringify(box.tags) },
+      { path: join(dir, box.folder, `hands${SHARD_EXTENSIONS.hands}`), content: canonicalStringify(box.hands) },
+      { path: join(dir, box.folder, "decks", `${box.deckFile}${SHARD_EXTENSIONS.deck}`), content: canonicalStringify(box.deck) },
+      ...(box.sites !== undefined ? [{ path: join(dir, box.folder, `map${SHARD_EXTENSIONS.map}`), content: canonicalStringify(box.sites) }] : []),
     ]),
     { path: join(dir, ".editorconfig"), content: EDITORCONFIG },
     { path: join(dir, ".gitattributes"), content: GITATTRIBUTES },
@@ -109,7 +113,17 @@ export function runInit(opts: InitOptions): InitResult {
   return { writes, dir, projectFile, name };
 }
 
-interface BoxParts { folder: string; deckFile: string; box: BoxShard; tags: TagsShard; hands: HandsShard; deck: DeckShard }
+interface BoxParts {
+  folder: string; deckFile: string; box: BoxShard; tags: TagsShard; hands: HandsShard; deck: DeckShard;
+  /** Where the box's hands stand on the project map, when the kit places them. */
+  sites?: MapShard;
+}
+
+/** A kit's whole project: its boxes and, for a kit that draws one, the map. */
+interface KitParts { boxes: BoxParts[]; map?: ProjectMapShard }
+
+/** A project map shard holding one zone group. */
+const projectMapOf = (group: TagGroup): ProjectMapShard => ({ schema: PROJECTMAP_SCHEMA, group });
 
 /** The starter: one box, one hand, and two cards that already work together. */
 function starterParts(): BoxParts {
@@ -168,18 +182,20 @@ function starterParts(): BoxParts {
 
 // ---------------------------------------------------------------------------
 // Map-based Story: the Village's shape, small (the author's specification,
-// 2026-08-29; built as step 6 of the kit gallery brief). One box on a drawn
-// map, three zones, a site in each; ONE starting site whose first scene opens
-// the story's second act, and every other site gated on that act by its hand
-// template, as the Village gates its wilds. Each card is a scene or a
-// conversation with somebody who lives there, and the leads one conversation
-// turns up are what the next site's scenes wait on.
+// 2026-08-29; built as step 6 of the kit gallery brief; re-cut on the project
+// map, 2026-10-01). A PLACE is a hand, standing on the map where it is; a
+// REGION is a zone of the project map, which the places sit in. A scene that
+// happens at one place is tagged with that place; a scene that could happen
+// anywhere in a region is tagged with the region. ONE starting place whose
+// first scene opens the story's second act, and every other place gated on
+// that act by its hand template, as the Village gates its wilds. The leads one
+// conversation turns up are what the next place's scenes wait on.
 // ---------------------------------------------------------------------------
 
 const MAP_STORY_PROPERTIES: PropertyDecl[] = [
   {
     name: "act", type: "quality", stages: ["arrival", "exploring"], default: "arrival",
-    purpose: "How far the story has come. Arriving opens the rest of the map: every place beyond the square waits for exploring.",
+    purpose: "How far the story has come. Arriving opens the rest of the map: every place beyond the well waits for exploring.",
   },
   {
     name: "leads", type: "flags", values: ["mill_rumour", "wheel_freed"], default: [],
@@ -191,15 +207,14 @@ const MAP_STORY_PROPERTIES: PropertyDecl[] = [
 const rect = (x: number, y: number, w: number, h: number): { x: number; y: number }[] =>
   [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
 
-function mapStoryParts(): BoxParts {
-  const square = newId("v"), mill = newId("v"), woods = newId("v");
-  const zone: TagGroup = {
-    id: newId("d"), gameId: "zone",
-    purpose: "Where the player is, drawn on the box's map. A scene tagged with a zone happens there.",
+function mapStoryParts(): KitParts {
+  const village = newId("v"), woods = newId("v");
+  const region: TagGroup = {
+    id: newId("d"), gameId: "region",
+    purpose: "The regions of the map. A place stands in one; a scene tagged with a region can happen at any place in it.",
     tags: [
-      { id: square, gameId: "square", order: 0, templates: { [SPATIAL]: { polygon: rect(0, 0, 320, 240) } } },
-      { id: mill, gameId: "mill", order: 1, templates: { [SPATIAL]: { polygon: rect(320, 0, 320, 240) } } },
-      { id: woods, gameId: "woods", order: 2, templates: { [SPATIAL]: { polygon: rect(0, 240, 640, 200) } } },
+      { id: village, gameId: "village", order: 0, templates: { [SPATIAL]: { polygon: rect(0, 0, 640, 240) } } },
+      { id: woods, gameId: "woods", order: 1, templates: { [SPATIAL]: { polygon: rect(0, 240, 640, 200) } } },
     ],
     templates: { [SPATIAL]: { map: true } },
   };
@@ -207,49 +222,56 @@ function mapStoryParts(): BoxParts {
     schema: "storylets/box@0",
     box: {
       id: newId("b"), gameId: "riverside",
-      title: "Riverside", purpose: "A village on a map. The story starts in the square, and the rest of the map opens once it gets going.",
+      title: "Riverside", purpose: "A village on a map. The story starts at the well, and the rest of the map opens once it gets going.",
       ranking: { specificity: true },
       fields: [],
       properties: [],
+      usesMap: true,
     },
   };
-  const inSquare = newId("t"), beyond = newId("t");
+  const first = newId("t"), beyond = newId("t");
+  const well = newId("h"), mill = newId("h"), hut = newId("h");
   const hands: HandsShard = {
     schema: "storylets/hands@0",
     templates: [
       {
-        id: inSquare, gameId: "place-in-the-square",
-        purpose: "A place in the square, which is open from the start.",
-        chooses: [zone.id], slots: 3, properties: [],
+        id: first, gameId: "starting-place",
+        purpose: "The place the story starts, open from the start.",
+        chooses: [region.id], slots: 3, properties: [],
       },
       {
-        id: beyond, gameId: "place-beyond-the-square",
-        purpose: "A place beyond the square. Closed until the story reaches exploring, so every one of these waits for the arrival scene.",
-        chooses: [zone.id], condition: '@story.act >= "exploring"', slots: 3, properties: [],
+        id: beyond, gameId: "place-beyond-the-well",
+        purpose: "A place beyond the well. Closed until the story reaches exploring, so every one of these waits for the arrival scene.",
+        chooses: [region.id], condition: '@story.act >= "exploring"', slots: 3, properties: [],
       },
     ],
     hands: [
-      { id: newId("h"), order: 0, title: "The well", purpose: "The starting place: deal it first.", template: inSquare, chosen: { [zone.id]: square } },
-      { id: newId("h"), order: 1, title: "The mill race", purpose: "Opens once the story reaches exploring.", template: beyond, chosen: { [zone.id]: mill } },
-      { id: newId("h"), order: 2, title: "The woodcutter's hut", purpose: "Opens once the story reaches exploring.", template: beyond, chosen: { [zone.id]: woods } },
+      { id: well, order: 0, title: "The well", purpose: "The starting place: deal it first.", template: first, chosen: { [region.id]: village } },
+      { id: mill, order: 1, title: "The mill race", purpose: "Opens once the story reaches exploring.", template: beyond, chosen: { [region.id]: village } },
+      { id: hut, order: 2, title: "The woodcutter's hut", purpose: "Opens once the story reaches exploring.", template: beyond, chosen: { [region.id]: woods } },
     ],
   };
-  const at = (z: string): Record<string, string[]> => ({ [zone.id]: [z] });
+  // Where each place stands: inside the region its hand chooses.
+  const sites: MapShard = {
+    schema: MAP_SCHEMA,
+    map: { sites: { [well]: { x: 160, y: 120 }, [mill]: { x: 480, y: 120 }, [hut]: { x: 320, y: 340 } } },
+  };
+  const at = (place: string): Record<string, string[]> => ({ [PLACE_GROUP]: [place] });
   const deck: DeckShard = {
     schema: "storylets/deck@0",
     deck: {
       id: newId("k"), gameId: "scenes",
-      title: "Scenes", purpose: "Every scene and conversation, filed by the zone it happens in.",
+      title: "Scenes", purpose: "Every scene and conversation, filed by the place it happens at, or the region it could happen anywhere in.",
       properties: [],
     },
     cards: [
       {
-        id: newId("c"), order: 0, title: "Arrival at the well", priority: 2, redraw: "never", tags: at(square),
+        id: newId("c"), order: 0, title: "Arrival at the well", priority: 2, redraw: "never", tags: at(well),
         purpose: "The first scene, and the one that opens the map: playing it moves the story on to exploring.",
         outcomes: [{ id: newId("o"), gameId: "look-around", title: "Look around", changes: { "@story.act": "advance(@story.act)" } }],
       },
       {
-        id: newId("c"), order: 1, title: "Old Nell at the well", priority: 1, redraw: "never", tags: at(square),
+        id: newId("c"), order: 1, title: "Old Nell at the well", priority: 1, redraw: "never", tags: at(well),
         condition: '@story.act >= "exploring"',
         purpose: "A conversation. Asking about the mill turns up the rumour its scenes wait on; chatting changes nothing.",
         outcomes: [
@@ -270,8 +292,8 @@ function mapStoryParts(): BoxParts {
         outcomes: [{ id: newId("o"), gameId: "accept", title: "Accept a sack of flour", changes: {} }],
       },
       {
-        id: newId("c"), order: 4, title: "Lights in the woods", priority: 0, redraw: "never", tags: at(woods),
-        purpose: "A scene of its own, waiting for whoever goes looking. Write where the lights lead.",
+        id: newId("c"), order: 4, title: "Lights in the woods", priority: 0, redraw: "never", tags: { [region.id]: [woods] },
+        purpose: "Anywhere in the woods: a region, not a place, so any place that stands there can deal it. Write where the lights lead.",
         outcomes: [
           { id: newId("o"), gameId: "follow-them", title: "Follow them", changes: {} },
           { id: newId("o"), gameId: "turn-back", title: "Turn back", changes: {} },
@@ -279,7 +301,10 @@ function mapStoryParts(): BoxParts {
       },
     ],
   };
-  return { folder: "riverside", deckFile: "scenes", box, tags: { schema: "storylets/tags@0", groups: [zone] }, hands, deck };
+  return {
+    map: projectMapOf(region),
+    boxes: [{ folder: "riverside", deckFile: "scenes", box, tags: { schema: "storylets/tags@0", groups: [] }, hands, deck, sites }],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -315,14 +340,16 @@ const ACTION_GAME_PROPERTIES: PropertyDecl[] = [
   },
 ];
 
-/** The district map every box shares: the same two zones, drawn the same, in each box. */
-function sharedDistricts(order0 = 0): { group: TagGroup; docks: string; oldTown: string } {
+/** The district map: the project's, which every box but the codex is on. One
+ *  group, so one set of districts and one value of each district property,
+ *  whichever box's hand is standing in it. */
+function cityDistricts(): { group: TagGroup; docks: string; oldTown: string } {
   const docks = newId("v"), oldTown = newId("v");
   return {
     docks, oldTown,
     group: {
-      id: newId("d"), gameId: "district", order: order0,
-      purpose: "Where it is in the city, drawn on this box's map. Every box shares the same districts, drawn the same.",
+      id: newId("d"), gameId: "district",
+      purpose: "Where it is in the city, drawn on the project map. Every box on the map shares the same districts.",
       tags: [
         { id: docks, gameId: "docks", order: 0, templates: { [SPATIAL]: { polygon: rect(0, 0, 320, 240) } } },
         { id: oldTown, gameId: "old-town", order: 1, templates: { [SPATIAL]: { polygon: rect(320, 0, 320, 240) } } },
@@ -332,24 +359,30 @@ function sharedDistricts(order0 = 0): { group: TagGroup; docks: string; oldTown:
   };
 }
 
-function actionBox(order: number, gameId: string, title: string, purpose: string, specificity: boolean, fields: BoxShard["box"]["fields"] = []): BoxShard {
-  return { schema: "storylets/box@0", box: { id: newId("b"), gameId, order, title, purpose, ranking: { specificity }, fields, properties: [] } };
+function actionBox(
+  order: number, gameId: string, title: string, purpose: string, specificity: boolean,
+  fields: BoxShard["box"]["fields"] = [], onMap = true,
+): BoxShard {
+  return {
+    schema: "storylets/box@0",
+    box: { id: newId("b"), gameId, order, title, purpose, ranking: { specificity }, fields, properties: [], ...(onMap ? { usesMap: true as const } : {}) },
+  };
 }
 
-function actionGameParts(): BoxParts[] {
+function actionGameParts(): KitParts {
+  const d = cityDistricts();
   // Contracts: OFFERED. The player chooses to take a job; a taken job has a next step.
-  const c = sharedDistricts();
   const board = newId("t");
   const contracts: BoxParts = {
     folder: "contracts", deckFile: "jobs",
     box: actionBox(0, "contracts", "Contracts", "Jobs on offer at boards around the city: the player chooses one to take.", true),
-    tags: { schema: "storylets/tags@0", groups: [c.group] },
+    tags: { schema: "storylets/tags@0", groups: [] },
     hands: {
       schema: "storylets/hands@0",
-      templates: [{ id: board, gameId: "job-board", purpose: "A board jobs are posted on: what work is on offer here, now.", chooses: [c.group.id], slots: 2, properties: [] }],
+      templates: [{ id: board, gameId: "job-board", purpose: "A board jobs are posted on: what work is on offer here, now.", chooses: [d.group.id], slots: 2, properties: [] }],
       hands: [
-        { id: newId("h"), order: 0, title: "Dockside board", template: board, chosen: { [c.group.id]: c.docks } },
-        { id: newId("h"), order: 1, title: "Old town board", template: board, chosen: { [c.group.id]: c.oldTown } },
+        { id: newId("h"), order: 0, title: "Dockside board", template: board, chosen: { [d.group.id]: d.docks } },
+        { id: newId("h"), order: 1, title: "Old town board", template: board, chosen: { [d.group.id]: d.oldTown } },
       ],
     },
     deck: {
@@ -357,13 +390,13 @@ function actionGameParts(): BoxParts[] {
       deck: { id: newId("k"), gameId: "jobs", title: "Jobs", purpose: "Every job and every next step of one.", properties: [] },
       cards: [
         {
-          id: newId("c"), order: 0, title: "Cold delivery", priority: 1, redraw: "never", tags: { [c.group.id]: [c.docks] },
+          id: newId("c"), order: 0, title: "Cold delivery", priority: 1, redraw: "never", tags: { [d.group.id]: [d.docks] },
           condition: "!check_flags(@story.jobs, +delivery_taken)",
           purpose: "The offer. Taking it moves the job on to its handoff in the old town.",
           outcomes: [{ id: newId("o"), gameId: "take-the-job", title: "Take the job", changes: { "@story.jobs": "set_flags(@story.jobs, +delivery_taken)" } }],
         },
         {
-          id: newId("c"), order: 1, title: "Cold delivery: the handoff", priority: 2, redraw: "never", tags: { [c.group.id]: [c.oldTown] },
+          id: newId("c"), order: 1, title: "Cold delivery: the handoff", priority: 2, redraw: "never", tags: { [d.group.id]: [d.oldTown] },
           condition: "check_flags(@story.jobs, +delivery_taken) && !check_flags(@story.jobs, +delivery_done)",
           purpose: "The follow-up. Going loud raises heat and puts a raid on the wire, which the news then reports.",
           outcomes: [
@@ -380,19 +413,18 @@ function actionGameParts(): BoxParts[] {
 
   // Encounters: FORCED. The game imposes them as the player moves; Moved on is
   // the outcome the game plays when the player walks away.
-  const e = sharedDistricts();
   const street = newId("t");
   const movedOn = () => ({ id: newId("o"), gameId: "moved-on", title: "Moved on", purpose: "Played by the game, not the player, when they walk away.", changes: {} });
   const encounters: BoxParts = {
     folder: "encounters", deckFile: "street",
     box: actionBox(1, "encounters", "Encounters", "Trouble the game imposes as the player moves through the city.", true),
-    tags: { schema: "storylets/tags@0", groups: [e.group] },
+    tags: { schema: "storylets/tags@0", groups: [] },
     hands: {
       schema: "storylets/hands@0",
-      templates: [{ id: street, gameId: "street", purpose: "The street the player is on: what trouble finds them here, now.", chooses: [e.group.id], slots: 1, properties: [] }],
+      templates: [{ id: street, gameId: "street", purpose: "The street the player is on: what trouble finds them here, now.", chooses: [d.group.id], slots: 1, properties: [] }],
       hands: [
-        { id: newId("h"), order: 0, title: "Dockside streets", template: street, chosen: { [e.group.id]: e.docks } },
-        { id: newId("h"), order: 1, title: "Old town streets", template: street, chosen: { [e.group.id]: e.oldTown } },
+        { id: newId("h"), order: 0, title: "Dockside streets", template: street, chosen: { [d.group.id]: d.docks } },
+        { id: newId("h"), order: 1, title: "Old town streets", template: street, chosen: { [d.group.id]: d.oldTown } },
       ],
     },
     deck: {
@@ -400,12 +432,12 @@ function actionGameParts(): BoxParts[] {
       deck: { id: newId("k"), gameId: "street", title: "Street", purpose: "What the city throws at the player.", properties: [] },
       cards: [
         {
-          id: newId("c"), order: 0, title: "Pickpocket", priority: 1, redraw: "always", tags: { [e.group.id]: [e.docks, e.oldTown] },
+          id: newId("c"), order: 0, title: "Pickpocket", priority: 1, redraw: "always", tags: { [d.group.id]: [d.docks, d.oldTown] },
           purpose: "Anywhere, any time: the filler the streets fall back on.",
           outcomes: [{ id: newId("o"), gameId: "caught-their-wrist", title: "Caught their wrist", changes: {} }, movedOn()],
         },
         {
-          id: newId("c"), order: 1, title: "Checkpoint", priority: 2, redraw: "always", tags: { [e.group.id]: [e.docks, e.oldTown] },
+          id: newId("c"), order: 1, title: "Checkpoint", priority: 2, redraw: "always", tags: { [d.group.id]: [d.docks, d.oldTown] },
           condition: '@story.heat >= "watched"',
           purpose: "Only once the player is watched: heat from a job gone loud is what brings it.",
           outcomes: [{ id: newId("o"), gameId: "talk-through-it", title: "Talk through it", changes: {} }, movedOn()],
@@ -415,19 +447,18 @@ function actionGameParts(): BoxParts[] {
   };
 
   // Items: HIDDEN. Found by exploring; the value field is for the game's economy.
-  const i = sharedDistricts();
   const stash = newId("t");
   const items: BoxParts = {
     folder: "items", deckFile: "finds",
     box: actionBox(2, "items", "Items", "What exploring turns up. The value field is for the game's economy; the engine never reads it.", true,
       [{ name: "value", type: "number", default: 0, purpose: "What the find is worth to the game's economy." }]),
-    tags: { schema: "storylets/tags@0", groups: [i.group] },
+    tags: { schema: "storylets/tags@0", groups: [] },
     hands: {
       schema: "storylets/hands@0",
-      templates: [{ id: stash, gameId: "stash", purpose: "A hiding place the level marks: what is tucked away there, if anything.", chooses: [i.group.id], slots: 1, properties: [] }],
+      templates: [{ id: stash, gameId: "stash", purpose: "A hiding place the level marks: what is tucked away there, if anything.", chooses: [d.group.id], slots: 1, properties: [] }],
       hands: [
-        { id: newId("h"), order: 0, title: "Container 7", template: stash, chosen: { [i.group.id]: i.docks } },
-        { id: newId("h"), order: 1, title: "The back room", template: stash, chosen: { [i.group.id]: i.oldTown } },
+        { id: newId("h"), order: 0, title: "Container 7", template: stash, chosen: { [d.group.id]: d.docks } },
+        { id: newId("h"), order: 1, title: "The back room", template: stash, chosen: { [d.group.id]: d.oldTown } },
       ],
     },
     deck: {
@@ -435,12 +466,12 @@ function actionGameParts(): BoxParts[] {
       deck: { id: newId("k"), gameId: "finds", title: "Finds", purpose: "Everything there is to find, and where.", properties: [] },
       cards: [
         {
-          id: newId("c"), order: 0, title: "A dockside cache", priority: 1, redraw: "never", fields: { value: 40 }, tags: { [i.group.id]: [i.docks] },
+          id: newId("c"), order: 0, title: "A dockside cache", priority: 1, redraw: "never", fields: { value: 40 }, tags: { [d.group.id]: [d.docks] },
           purpose: "Somebody's rainy-day tin, taped under the container floor.",
           outcomes: [{ id: newId("o"), gameId: "crack-it-open", title: "Crack it open", changes: {} }],
         },
         {
-          id: newId("c"), order: 1, title: "A clean burner phone", priority: 1, redraw: "never", fields: { value: 0 }, tags: { [i.group.id]: [i.oldTown] },
+          id: newId("c"), order: 1, title: "A clean burner phone", priority: 1, redraw: "never", fields: { value: 0 }, tags: { [d.group.id]: [d.oldTown] },
           purpose: "Worth nothing to sell, and the codex has something to say about it once it is found.",
           outcomes: [{ id: newId("o"), gameId: "pocket-it", title: "Pocket it", changes: { "@story.found": "set_flags(@story.found, +burner)" } }],
         },
@@ -453,8 +484,9 @@ function actionGameParts(): BoxParts[] {
   const archive = newId("t");
   const codex: BoxParts = {
     folder: "codex", deckFile: "entries",
+    // Not on the map: an entry is about the city as a whole, not a district.
     box: actionBox(3, "codex", "Codex", "The box the game only reads: entries unlock from what the rest of the game did, and are never played.", false,
-      [{ name: "body", type: "string", default: "", purpose: "The entry's text, for the game's codex page." }]),
+      [{ name: "body", type: "string", default: "", purpose: "The entry's text, for the game's codex page." }], false),
     tags: { schema: "storylets/tags@0", groups: [] },
     hands: {
       schema: "storylets/hands@0",
@@ -488,18 +520,17 @@ function actionGameParts(): BoxParts[] {
 
   // News: BROADCAST. Never played; a screen shows the wire's story over the
   // background chatter, and the game clears the wire each news cycle.
-  const n = sharedDistricts();
   const screen = newId("t");
   const news: BoxParts = {
     folder: "news", deckFile: "headlines",
     box: actionBox(4, "news", "News", "The city talking about what just happened. Never played: the game clears the wire each news cycle and re-deals the screens.", false),
-    tags: { schema: "storylets/tags@0", groups: [n.group] },
+    tags: { schema: "storylets/tags@0", groups: [] },
     hands: {
       schema: "storylets/hands@0",
-      templates: [{ id: screen, gameId: "screen", purpose: "A public screen: the story of the moment, over the background chatter.", chooses: [n.group.id], slots: 2, properties: [] }],
+      templates: [{ id: screen, gameId: "screen", purpose: "A public screen: the story of the moment, over the background chatter.", chooses: [d.group.id], slots: 2, properties: [] }],
       hands: [
-        { id: newId("h"), order: 0, title: "Dock screen", template: screen, chosen: { [n.group.id]: n.docks } },
-        { id: newId("h"), order: 1, title: "Old town screen", template: screen, chosen: { [n.group.id]: n.oldTown } },
+        { id: newId("h"), order: 0, title: "Dock screen", template: screen, chosen: { [d.group.id]: d.docks } },
+        { id: newId("h"), order: 1, title: "Old town screen", template: screen, chosen: { [d.group.id]: d.oldTown } },
       ],
     },
     deck: {
@@ -508,18 +539,18 @@ function actionGameParts(): BoxParts[] {
       cards: [
         {
           id: newId("c"), order: 0, title: "Acid drizzle advisory", priority: 0, redraw: "never", copies: 2, outcomes: [],
-          tags: { [n.group.id]: [n.docks, n.oldTown] },
+          tags: { [d.group.id]: [d.docks, d.oldTown] },
           purpose: "Background chatter: always there, two copies so both screens can run it.",
         },
         {
           id: newId("c"), order: 1, title: "Container yard raided", priority: 3, redraw: "never", outcomes: [],
-          tags: { [n.group.id]: [n.docks, n.oldTown] }, condition: "check_flags(@story.wire, +raid)",
+          tags: { [d.group.id]: [d.docks, d.oldTown] }, condition: "check_flags(@story.wire, +raid)",
           purpose: "Wire-driven: runs for the one news cycle after a job goes loud, then the game clears the wire.",
         },
       ],
     },
   };
-  return [contracts, encounters, items, codex, news];
+  return { map: projectMapOf(d.group), boxes: [contracts, encounters, items, codex, news] };
 }
 
 // --- emitted file bodies (the extension ruling + merge hygiene) --------------

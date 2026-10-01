@@ -271,7 +271,8 @@ struct FStoryletBundleIdentity
 {
 	GENERATED_BODY()
 
-	/** The bundle schema tag ("storylets/bundle@0"). */
+	/** The bundle schema tag ("storylets/bundle@1", or "@0" from before the
+	 *  project map). */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Schema;
 
@@ -395,6 +396,12 @@ struct FStoryletBoxSummary
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Title;
 
+	/** The box is on the project map (design/project-map-contract.md 3.7): it
+	 *  may name the map's group in Peek() criteria beside its own TagGroups,
+	 *  which list the box's OWN groups only. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	bool bUsesMap = false;
+
 	/** The only per-box ranking policy (Reboot 2.2). */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	bool bRankingSpecificity = true;
@@ -466,7 +473,9 @@ enum class EStoryletScopeKind : uint8
 };
 
 /** One scope's declared properties. Owner is the owning entity's gameId (empty
- *  for World / Story); Box names its box; Group names a tag's group. */
+ *  for World / Story); Box names its box; Group names a tag's group. A zone of
+ *  the project map is a Tag scope with a Group and an empty Box: it belongs to
+ *  none. */
 USTRUCT(BlueprintType)
 struct FStoryletPropertyScope
 {
@@ -493,32 +502,54 @@ struct FStoryletPropertyScope
 	FString Label;
 };
 
-/** One map the bundle was asked to carry. Counts rather than the geometry: an
- *  inspector answers "what is in here", and a host that wants the polygons
- *  reads the parsed bundle directly. */
+/** How many placed hands one box has standing on the project map: where its
+ *  kiosks are (design/engine-server.md 4.3). */
+USTRUCT(BlueprintType)
+struct FStoryletMapSites
+{
+	GENERATED_BODY()
+
+	/** The box, by gameId. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Box;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	int32 Sites = 0;
+};
+
+/** The project map (design/project-map-contract.md 3.7): its group, which boxes
+ *  are on it, and how much geometry the bundle carries. Counts rather than the
+ *  geometry: an inspector answers "what is in here", and a host that wants the
+ *  polygons reads the parsed bundle directly. The geometry counts are zero when
+ *  the build did not ask for geometry; the group is there regardless, because
+ *  hands and cards reference it. */
 USTRUCT(BlueprintType)
 struct FStoryletMapSummary
 {
 	GENERATED_BODY()
 
-	/** The owning box, by gameId. */
-	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
-	FString Box;
-
-	/** The tag group this is a map of, by gameId. */
+	/** The zone group's gameId: the name an opted-in box's Peek() criteria use. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Group;
 
+	/** Its tags (the zones), by gameId. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FString> Tags;
+
+	/** The opted-in boxes, by gameId, in bundle order. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FString> Boxes;
+
+	/** Drawn zones in the carried geometry. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	int32 Zones = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	int32 Backgrounds = 0;
 
-	/** Placed hands standing on this map: where the kiosks are
-	 *  (design/engine-server.md 4.3). */
+	/** Placed hands per box, in bundle order; only boxes with a site appear. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
-	int32 Sites = 0;
+	TArray<FStoryletMapSites> Sites;
 };
 
 /** What a bundle offers a host, read from the asset alone: no session, no
@@ -541,13 +572,17 @@ struct FStoryletBundleDescription
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FStoryletHandSummary> Hands;
 
-	/** World, Story, then per box: the box, its decks, its hands, its tags.
-	 *  Scopes that declare nothing are omitted (World and Story always show). */
+	/** World, Story, then per box: the box, its decks, its hands, its tags;
+	 *  then the project map's zones, once. Scopes that declare nothing are
+	 *  omitted (World and Story always show). */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FStoryletPropertyScope> Properties;
 
-	/** Maps carried as inert payload, when the build asked for them. Empty is
-	 *  the normal state. */
+	/** True when the bundle has a project map; Map is empty otherwise. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
-	TArray<FStoryletMapSummary> Maps;
+	bool bHasMap = false;
+
+	/** The project map, when bHasMap. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FStoryletMapSummary Map;
 };

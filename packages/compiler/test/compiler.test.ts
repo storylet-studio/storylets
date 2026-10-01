@@ -154,18 +154,29 @@ describe("templates of play are source-only", () => {
   // explicit field list, so this test is what stops a future convenience spread
   // ({ ...tag }) from quietly shipping map geometry to every game that loads a
   // bundle.
-  const withGeometry = (input: SourceFile[]): SourceFile[] => input.map((file) => {
-    if (!file.path.endsWith("tags.storylettags")) return file;
-    const shard = parseSource(file.text) as {
-      groups: { templates?: unknown; tags: { templates?: unknown }[] }[];
-    };
-    const group = shard.groups[0]!;
-    group.templates = { spatial: { map: true } };
-    group.tags[0]!.templates = { spatial: { polygon: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] } };
-    return { path: file.path, text: canonicalStringify(shard) };
-  });
+  const withGeometry = (input: SourceFile[]): SourceFile[] => [
+    ...input.map((file) => {
+      if (!file.path.endsWith("box.storyletbox")) return file;
+      const shard = parseSource(file.text) as { box: { usesMap?: true } };
+      shard.box.usesMap = true;
+      return { path: file.path, text: canonicalStringify(shard) };
+    }),
+    // The project map: the zone group with its marker, an outline and a
+    // picture, every one of them template-of-play data.
+    {
+      path: "map.storyletmap",
+      text: canonicalStringify({
+        schema: "storylets/projectmap@0",
+        group: {
+          gameId: "ward", id: "d_ward",
+          tags: [{ gameId: "quay", id: "v_quay", templates: { spatial: { polygon: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] } } }],
+          templates: { spatial: { map: true, backgrounds: [{ id: "g_1", file: "plan.png", x: 0, y: 0, width: 10, height: 10 }] } },
+        },
+      }),
+    },
+  ];
 
-  it("compiles a spatial group without complaint and without its geometry", () => {
+  it("compiles the project map's zones without complaint and without their geometry", () => {
     const source = parseOk(withGeometry(files));
     // The fixture has to have actually carried geometry in, or this proves nothing.
     expect(JSON.stringify(source)).toContain("polygon");
@@ -182,16 +193,17 @@ describe("templates of play are source-only", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Hand positions in the bundle's `maps` block (design/engine-server.md 4.3),
-// which reverses the ruling that kept sites out of it. A synthetic project
-// rather than the example's, because this is about ONE derivation - the view
-// sidecar, translated to gameIds and sorted - and the example has no sidecar.
+// Hand positions in the bundle's `map.geometry.sites` (design/engine-server.md
+// 4.3; design/project-map-contract.md 2.1), keyed by the box that placed them.
+// A synthetic project rather than the example's, because this is about ONE
+// derivation - each opted-in box's map shard, translated to gameIds and sorted.
 // ---------------------------------------------------------------------------
-describe("the maps block carries where the hands stand", () => {
+describe("the map's geometry carries where the hands stand", () => {
   const file = (path: string, value: unknown): SourceFile => ({ path, text: canonicalStringify(value) });
 
-  /** A box with one drawn zone and two hands, ordered so that sorting by id and
-   *  sorting by gameId disagree: "well" is h_1 and "forge" is h_2.
+  /** A project map with one drawn zone and a box on it with two hands, ordered
+   *  so that sorting by id and sorting by gameId disagree: "well" is h_1 and
+   *  "forge" is h_2.
    *
    *  `where` is the compatibility window (design/engine-server.md 9.1 point 5):
    *  "map" is the shard the positions live in now, "view" the one every project
@@ -209,23 +221,23 @@ describe("the maps block carries where the hands stand", () => {
       templates: {},
       export: { bundle: "dist/p.storyletsc", map: true, metadata: "full" },
     }),
-    file("b/box.storyletbox", {
-      schema: "storylets/box@0",
-      box: { fields: [], gameId: "b1", id: "b_1", properties: [], ranking: { specificity: true } },
-    }),
-    file("b/tags.storylettags", {
-      schema: "storylets/tags@0",
-      groups: [{
+    file("map.storyletmap", {
+      schema: "storylets/projectmap@0",
+      group: {
         gameId: "zone", id: "g_1",
         tags: [{ gameId: "docks", id: "v_1", templates: { spatial: { polygon: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] } } }],
         templates: { spatial: { map: true } },
-      }],
+      },
+    }),
+    file("b/box.storyletbox", {
+      schema: "storylets/box@0",
+      box: { fields: [], gameId: "b1", id: "b_1", properties: [], ranking: { specificity: true }, usesMap: true },
     }),
     file("b/hands.storylethands", {
       schema: "storylets/hands@0",
       hands: [
-        { gameId: "well", id: "h_1", slots: 1 },
-        { gameId: "forge", id: "h_2", slots: 1 },
+        { gameId: "well", id: "h_1", rule: {} },
+        { gameId: "forge", id: "h_2", rule: {} },
       ],
       templates: [],
     }),
@@ -235,22 +247,23 @@ describe("the maps block carries where the hands stand", () => {
         : [file("b/view.storyletview", { schema: "storylets/view@0", map: { sites } })]),
   ]);
 
-  it("names each placed hand by gameId, sorted by that gameId", () => {
-    const maps = compileMaps(drawn({ h_1: { x: 7, y: 8 }, h_2: { x: 5, y: 6 } }));
-    expect(maps).toHaveLength(1);
+  it("names each placed hand by gameId, sorted by that gameId, under its box", () => {
+    const geometry = compileMaps(drawn({ h_1: { x: 7, y: 8 }, h_2: { x: 5, y: 6 } }));
     // Sorted, so the bytes do not move when somebody reorders the shard.
-    expect(maps![0]!.sites).toEqual([
-      { hand: "forge", x: 5, y: 6 },
-      { hand: "well", x: 7, y: 8 },
-    ]);
+    expect(geometry!.sites).toEqual({
+      b1: [
+        { hand: "forge", x: 5, y: 6 },
+        { hand: "well", x: 7, y: 8 },
+      ],
+    });
     // No internal ids, like everything else in the block.
-    expect(JSON.stringify(maps![0]!.sites)).not.toContain("h_");
+    expect(JSON.stringify(geometry!.sites)).not.toContain("h_");
   });
 
   it("carries no key at all when nothing has been placed", () => {
-    expect(compileMaps(drawn())![0]!.sites).toBeUndefined();
+    expect(compileMaps(drawn())!.sites).toBeUndefined();
     // A map shard that exists but has placed nobody is the same answer.
-    expect(compileMaps(drawn({}))![0]!.sites).toBeUndefined();
+    expect(compileMaps(drawn({}))!.sites).toBeUndefined();
   });
 
   it("compiles the same block from a map still living in the view shard", () => {
@@ -262,8 +275,21 @@ describe("the maps block carries where the hands stand", () => {
   });
 
   it("leaves out a hand nobody has placed", () => {
-    const maps = compileMaps(drawn({ h_2: { x: 5, y: 6 } }));
-    expect(maps![0]!.sites).toEqual([{ hand: "forge", x: 5, y: 6 }]);
+    expect(compileMaps(drawn({ h_2: { x: 5, y: 6 } }))!.sites).toEqual({ b1: [{ hand: "forge", x: 5, y: 6 }] });
+  });
+
+  it("ships in the bundle as map.geometry, beside the group the engine reads", () => {
+    const { bundle, issues } = compileProject(drawn({ h_1: { x: 7, y: 8 } }));
+    expect(errors(issues)).toEqual([]);
+    expect(bundle!.schema).toBe("storylets/bundle@1");
+    expect(bundle!.map!.group).toEqual({ id: "g_1", gameId: "zone", tags: [{ id: "v_1", gameId: "docks" }] });
+    expect(bundle!.map!.geometry).toEqual({
+      zones: [{ tag: "docks", polygon: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] }],
+      sites: { b1: [{ hand: "well", x: 7, y: 8 }] },
+    });
+    expect(bundle!.boxes[0]!.usesMap).toBe(true);
+    expect(bundle!.boxes[0]!.tagGroups).toEqual([]);
+    expect(JSON.stringify(bundle)).not.toContain("\"maps\"");
   });
 });
 

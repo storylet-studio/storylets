@@ -126,29 +126,46 @@ describe("createBundleInspector", () => {
   });
 });
 
-describe("a shipped map", () => {
-  const withMap = {
-    ...bundle,
-    maps: [{
-      box: "box", group: "zone",
-      zones: [{ tag: "docks", polygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }] }],
-      backgrounds: [{ file: "assets/box/plan.png", x: 0, y: 0, width: 4, height: 4 }],
-      sites: [{ hand: "well", x: 1, y: 2 }, { hand: "forge", x: 3, y: 4 }],
-    }],
+describe("a project map", () => {
+  const withMap = expandBundle({
+    projectMap: true,
+    uses: true,
+    cards: [{ id: "c_a", tags: { district: ["quay"] } }],
+    hands: [{ id: "h_well", rule: { bindings: { district: "quay" } }, slots: 1 }],
+  });
+  const withGeometry = {
+    ...withMap,
+    map: {
+      ...withMap.map!,
+      geometry: {
+        zones: [{ tag: "quay", polygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }] }],
+        backgrounds: [{ file: "assets/plan.png", x: 0, y: 0, width: 4, height: 4 }],
+        sites: { box: [{ hand: "well", x: 1, y: 2 }, { hand: "forge", x: 3, y: 4 }] },
+      },
+    },
   };
 
-  it("gets a section of its own, saying the engine ignores it", () => {
+  it("gets a section of its own: the group, its zones and the boxes on it", () => {
     const insp = createBundleInspector(withMap);
     const lines = text(insp.el, ".sl-maps .sl-line").join("\n");
-    expect(lines).toContain("The engine ignores it");
-    expect(lines).toContain("box - zone: zones 1, pictures 1, sites 2");
+    expect(lines).toContain("district: quay, hill");
+    expect(lines).toContain("boxes on the map: box");
+    expect(lines).toContain("zones 0, pictures 0, sites 0");
+    insp.destroy();
+  });
+
+  it("counts carried geometry, saying the engine ignores it", () => {
+    const insp = createBundleInspector(withGeometry);
+    const lines = text(insp.el, ".sl-maps .sl-line").join("\n");
+    expect(lines).toContain("The engine ignores it".toLowerCase());
+    expect(lines).toContain("zones 1, pictures 1, sites box 2");
     insp.destroy();
   });
 
   it("shows no section at all on an ordinary bundle", () => {
     const insp = createBundleInspector(bundle);
     expect(insp.el.querySelector(".sl-maps")).toBeNull();
-    expect(insp.el.textContent).not.toContain("Maps");
+    expect(insp.el.textContent).not.toContain("Project map");
     insp.destroy();
   });
 });

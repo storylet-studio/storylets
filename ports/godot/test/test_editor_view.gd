@@ -56,25 +56,36 @@ func _run() -> void:
 	view.set_bundle_resource(plain)
 	var plain_text := _text_of(view)
 	_check("the view renders a bundle", plain_text.contains("HANDS (DEAL)"), plain_text.substr(0, 80))
-	_check("no map section on a bundle without one", not plain_text.contains("MAPS"))
+	_check("no map section on a bundle without one", not plain_text.contains("PROJECT MAP"))
 
-	# The same bundle with a map bolted on: the section appears and says what is
-	# in it, and says out loud that the engine does not read it.
+	# The same bundle with a project map bolted on (design/project-map-contract.md
+	# 2.1): the section appears, names the group, its zones and the boxes on it,
+	# and counts the geometry, saying out loud that the engine does not read it.
 	var mapped: Dictionary = JSON.parse_string(text)
-	mapped["maps"] = [{
-		"box": "village", "group": "zone",
-		"zones": [{"tag": "tavern", "polygon": [
-			{"x": 0, "y": 0}, {"x": 4, "y": 0}, {"x": 4, "y": 3}]}],
-		"backgrounds": [{"file": "assets/village/plan.png",
-			"x": 1, "y": 2, "width": 8, "height": 6}],
-		"sites": [{"hand": "the-forge", "x": 5, "y": 6}, {"hand": "the-well", "x": 7, "y": 8}],
-	}]
+	mapped["schema"] = StoryletBundle.BUNDLE_SCHEMA
+	mapped["boxes"][0]["usesMap"] = true
+	var box_name := StoryletBundle.effective_game_id(mapped["boxes"][0])
+	var sites := {}
+	sites[box_name] = [{"hand": "the-forge", "x": 5, "y": 6}, {"hand": "the-well", "x": 7, "y": 8}]
+	mapped["map"] = {
+		"group": {"id": "d_district", "gameId": "district",
+			"tags": [{"id": "v_quay", "gameId": "quay"}, {"id": "v_hill", "gameId": "hill"}]},
+		"geometry": {
+			"zones": [{"tag": "quay", "polygon": [
+				{"x": 0, "y": 0}, {"x": 4, "y": 0}, {"x": 4, "y": 3}]}],
+			"backgrounds": [{"file": "assets/plan.png",
+				"x": 1, "y": 2, "width": 8, "height": 6}],
+			"sites": sites,
+		},
+	}
 	view.set_bundle_resource(StoryletBundleResource.from_json_text(JSON.stringify(mapped)))
 	var mapped_text := _text_of(view)
-	_check("the map section appears", mapped_text.contains("MAPS (CARRIED, NOT READ)"))
-	_check("it counts what is in the map", mapped_text.contains("village - zone: zones 1, pictures 1, sites 2"),
+	_check("the project map section appears", mapped_text.contains("PROJECT MAP"))
+	_check("it names the group and its zones", mapped_text.contains("district: quay, hill"),
 		mapped_text.substr(0, 120))
-	_check("it says the engine ignores it", mapped_text.contains("The engine ignores it"))
+	_check("it names the boxes on the map", mapped_text.contains("boxes on the map: " + box_name))
+	_check("it counts the geometry and says the engine ignores it",
+		mapped_text.contains("geometry carried (the engine ignores it): zones 1, pictures 1, sites %s 2" % box_name))
 
 
 	# The two states the SHARED frame owns (expr/bundle_view.gd), rather than

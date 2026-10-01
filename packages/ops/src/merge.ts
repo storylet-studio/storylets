@@ -20,7 +20,7 @@
 import { canonicalStringify } from "@storylet-studio/compiler";
 import type { Issue } from "@storylet-studio/compiler";
 
-export type MergeFileType = "project" | "box" | "tags" | "hands" | "deck" | "view" | "map" | "notes" | "contract";
+export type MergeFileType = "project" | "box" | "tags" | "hands" | "deck" | "view" | "map" | "projectmap" | "notes" | "contract";
 
 export type ConflictKind =
   | "both-changed"      // both sides changed the same value differently
@@ -89,6 +89,7 @@ export function detectMergeType(file: { schema?: unknown }): MergeFileType {
   if (s.startsWith("storylets/deck")) return "deck";
   if (s.startsWith("storylets/view")) return "view";
   if (s.startsWith("storylets/map")) return "map";
+  if (s.startsWith("storylets/projectmap")) return "projectmap";
   if (s.startsWith("storylets/notes")) return "notes";
   if (s.startsWith("storylets/contract")) return "contract";
   throw new MergeInputError(`cannot detect a storylets merge type from schema '${s}'`);
@@ -182,6 +183,13 @@ export const MERGE_SPECS: Record<MergeFileType, Strategy> = {
   // designer's position and half of another's is a place neither chose.
   map: object({
     map: object({ sites: RECORD, frames: keyed("id", object({})) }),
+  }),
+  // The PROJECT map shard (design/project-map-contract.md 1.1): designer shape,
+  // like a box's map shard. Its group merges exactly as a group in a tags shard
+  // does, tag by tag, and its frames as a canvas's.
+  projectmap: object({
+    group: object({ tags: keyed("id", object({ properties: DECLS, templates: RECORD })) }),
+    frames: keyed("id", object({})),
   }),
   // The comment sidecar. Threads are keyed by id, so two reviewers annotating
   // the same box keep both sets of threads - which is the whole point of a

@@ -1,15 +1,29 @@
 @tool   # editor-reachable: the bundle inspector plugin resolves bundles in the
         # editor, where a non-tool script loads as a placeholder
 # The compiled bundle model + loader. Port of @storylet-studio/model
-# (packages/model/src/index.ts): the "storylets/bundle@0" schema constants,
-# the gameId derivation rules (game_idify / effective_game_id) and the home
-# group. The bundle stays a parsed JSON Dictionary - raw JSON is the
+# (packages/model/src/index.ts): the bundle schema constants, the gameId
+# derivation rules (game_idify / effective_game_id), the home group and the
+# project map's reading helpers (groups_of_box / all_tag_groups). The bundle stays a parsed JSON Dictionary - raw JSON is the
 # cross-runtime contract, never re-serialised into engine-native shapes -
 # and the session reads it as-is (expressions are compiled lazily into a
 # "__node" cache key on each {src, ast} envelope, idempotently).
 class_name StoryletBundle
 
-const BUNDLE_SCHEMA := "storylets/bundle@0"
+## The bundle schema this build of the format writes: @1 since the project map
+## (design/project-map-contract.md 2.4), the bundle that can carry "map" and a
+## box's "usesMap".
+##
+## The runtime READS @0 and @1 and refuses anything else, by name. Reading @0 is
+## not a compatibility branch: an @0 bundle cannot carry a map, so it is the
+## same shape with less in it. The check exists so that a runtime meeting a
+## schema it does not know says so, rather than half-working the way an @0
+## runtime does on a map bundle (tag matching is by id, so its deals look right
+## while every zone value is missing).
+const BUNDLE_SCHEMA := "storylets/bundle@1"
+## The schema before the project map, still read.
+const BUNDLE_SCHEMA_V0 := "storylets/bundle@0"
+## Every bundle schema this runtime accepts.
+const BUNDLE_SCHEMAS := [BUNDLE_SCHEMA_V0, BUNDLE_SCHEMA]
 ## The engine's save envelope. Version 2 is the one-registry model: property
 ## values are the registry's, so the envelope holds what is NOT a property, plus
 ## the engine's own registry's values under "registry" when it made that
@@ -111,8 +125,9 @@ static func load_from_string(json_text: String) -> Dictionary:
 ## Validate an already-parsed bundle Dictionary (same result shape as
 ## load_from_string).
 static func load_from_dict(bundle: Dictionary) -> Dictionary:
-	if bundle.get("schema") != BUNDLE_SCHEMA:
-		return {"ok": false, "error": "not a %s bundle (schema: %s)" % [BUNDLE_SCHEMA, str(bundle.get("schema"))]}
+	var refused := schema_error(bundle)
+	if refused != "":
+		return {"ok": false, "error": refused}
 	if not (bundle.get("content") is Dictionary) or not (bundle["content"].get("project") is String):
 		return {"ok": false, "error": "bundle has no content.project"}
 	if not (bundle.get("settings") is Dictionary):
@@ -130,6 +145,46 @@ static func load_from_dict(bundle: Dictionary) -> Dictionary:
 		if not ok:
 			return {"ok": false, "error": "bundle externalScopes must be an array of scope tokens"}
 	return {"ok": true, "bundle": bundle}
+
+
+## What is wrong with a bundle's schema tag, or "" when this runtime reads it
+## (D4). The engine asks this first at construction too, so a hand-built
+## bundle that never came through the loader is held to the same rule.
+static func schema_error(bundle: Dictionary) -> String:
+	var schema = bundle.get("schema")
+	if schema is String and BUNDLE_SCHEMAS.has(schema):
+		return ""
+	return "unsupported bundle schema: %s (this runtime reads %s)" % [str(schema), " and ".join(BUNDLE_SCHEMAS)]
+
+
+# --- reading the project map (design/project-map-contract.md 5, Q12) ---------
+#
+# A group may now live outside the box that uses it: the project map's zone
+# group is in bundle["map"]["group"] and in no box's "tagGroups". These answer
+# the two questions every reader asks once, as the model's helpers do.
+
+## The tag groups a box sees, by NAME as well as by id: its own groups, then
+## the project map's group when the box has opted in ("usesMap"). Own groups
+## first is stated for determinism only: a bundle the engine loads never has a
+## box group sharing the project group's name.
+static func groups_of_box(bundle: Dictionary, box: Dictionary) -> Array:
+	var own: Array = box.get("tagGroups", [])
+	var map = bundle.get("map")
+	if box.get("usesMap", false) == true and map is Dictionary:
+		return own + [map["group"]]
+	return own
+
+
+## Every tag group in the bundle, each once: the boxes' groups in bundle order,
+## then the project map's. What a walk over every value bag wants.
+static func all_tag_groups(bundle: Dictionary) -> Array:
+	var out: Array = []
+	for box in bundle.get("boxes", []):
+		out.append_array(box.get("tagGroups", []))
+	var map = bundle.get("map")
+	if map is Dictionary:
+		out.append(map["group"])
+	return out
 
 
 ## Other engines' game-wide scopes the content names (`patter`), sorted, from

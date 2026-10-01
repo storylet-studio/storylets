@@ -59,7 +59,12 @@ export { contractIssues, contractNotes } from "./contract.js";
 export type { ContractNote } from "./contract.js";
 export { canvasFurniture, cardPositions, deckCanvas, planCanvasFurniture, planCardPositions, planForgetCanvas, viewPath } from "./view.js";
 export type { CanvasRef } from "./view.js";
-export { boxMap, mapPath, mapSites, planForgetSites, planMapFurniture, planMapMigration, planMapSites } from "./map.js";
+export {
+  boxMap, boxesOnMap, mapPath, mapSites, planForgetSites, planMapMigration, planMapSites,
+  planProjectMapFrames, planProjectMapGroup, projectMapGroup, projectMapPath,
+} from "./map.js";
+export { PROJECT_MAP_CANVAS, planProjectMapMigration } from "./project-map-migration.js";
+export type { PlannedMove, ProjectMapMigration } from "./project-map-migration.js";
 export { notesPath, planComments } from "./comments.js";
 export { layoutByDependency } from "./layout.js";
 export type { LayoutEdge, LayoutOptions, LayoutResult } from "./layout.js";
@@ -78,7 +83,5 @@ export type { MergeFileType, MergeResult, Conflict, Warning, ConflictKind } from
 export { findConflictSidecars } from "./load.js";
 export type { Issue } from "@storylet-studio/compiler";
 export { parseSource, canonicalStringify } from "@storylet-studio/compiler";
-export { sharedSpaces } from "./spaces.js";
-export type { SharedSpace } from "./spaces.js";
 
 export { reachabilityIssues } from "./reachability.js";

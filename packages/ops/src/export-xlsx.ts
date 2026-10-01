@@ -83,7 +83,12 @@ const outcomeLine = (outcome: Outcome<string>): string => {
  *  to gameIds (the home group's values), templates by id. */
 class BoxLookup {
   readonly title: string;
+  /** The groups the box's cards and hands can name: its own, then the project
+   *  map's zone group when the box is on the map. */
   readonly groups: TagGroup[];
+  /** The box's own groups, for the Tag groups sheet, which lists the project
+   *  map's once rather than once per box on it. */
+  readonly ownGroups: TagGroup[];
   readonly fields: FieldDecl[];
   /** The outcome half of the card template (2026-09-13). Empty for a box that
    *  declares none, which is every box that predates the key. */
@@ -92,9 +97,11 @@ class BoxLookup {
   private readonly tagNames = new Map<string, string>();
   private readonly handNames = new Map<string, string>();
 
-  constructor(readonly box: SourceBox) {
+  constructor(readonly box: SourceBox, projectMap?: TagGroup) {
     this.title = label(box.box.box);
-    this.groups = box.tags.groups;
+    this.ownGroups = box.tags.groups;
+    this.groups = box.box.box.usesMap === true && projectMap !== undefined
+      ? [...box.tags.groups, projectMap] : box.tags.groups;
     this.fields = box.box.box.fields ?? [];
     this.outcomeFields = box.box.box.outcomeFields ?? [];
     this.templates = new Map(box.hands.templates.map((t) => [t.id, t]));
@@ -131,7 +138,7 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
   const wb = new ExcelJS.Workbook();
   wb.creator = "storyletengine";
 
-  const boxes = authored(source.boxes, (b) => b.box.box.order).map((b) => new BoxLookup(b));
+  const boxes = authored(source.boxes, (b) => b.box.box.order).map((b) => new BoxLookup(b, source.map?.group));
   const manyBoxes = boxes.length > 1;
   const boxColumn = manyBoxes ? [{ header: "Box", key: "box", width: 16 }] : [];
   const bold = (ws: import("exceljs").Worksheet): void => {
@@ -314,19 +321,24 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
     { header: "Purpose", key: "purpose", width: 48 },
   ];
   bold(tags);
-  for (const lookup of boxes) {
-    for (const group of lookup.groups) {
-      counts.tagGroups++;
-      const groupName = effectiveGameId(group);
-      if (group.tags.length === 0) {
-        tags.addRow({ box: lookup.title, group: groupName, tag: "", properties: "", purpose: group.purpose ?? "" });
-      }
-      for (const tag of group.tags) {
-        tags.addRow({
-          box: lookup.title, group: groupName, tag: effectiveGameId(tag),
-          properties: properties(tag.properties), purpose: group.purpose ?? "",
-        });
-      }
+  // The project map's zone group once, under the name it has in the editor,
+  // then every box's own.
+  const projectMap = source.map?.group;
+  const groupRows: { box: string; group: TagGroup }[] = [
+    ...(projectMap !== undefined && Array.isArray(projectMap.tags) ? [{ box: "Project map", group: projectMap }] : []),
+    ...boxes.flatMap((lookup) => lookup.ownGroups.map((group) => ({ box: lookup.title, group }))),
+  ];
+  for (const { box: boxTitle, group } of groupRows) {
+    counts.tagGroups++;
+    const groupName = effectiveGameId(group);
+    if (group.tags.length === 0) {
+      tags.addRow({ box: boxTitle, group: groupName, tag: "", properties: "", purpose: group.purpose ?? "" });
+    }
+    for (const tag of group.tags) {
+      tags.addRow({
+        box: boxTitle, group: groupName, tag: effectiveGameId(tag),
+        properties: properties(tag.properties), purpose: group.purpose ?? "",
+      });
     }
   }
 

@@ -10,21 +10,30 @@
 // gameId "zone": group names are box-scoped, so the same name in two boxes
 // is ordinary authoring. Expectations pass through UNTOUCHED - they are the
 // hand-written contract.
+//
+// A fixture's `projectMap` adds the PROJECT MAP (design/project-map-contract.md
+// 6.2): one zone group above the boxes, in `bundle.map.group` and in no box's
+// `tagGroups`, which a box opts in to with `usesMap`. Its scaffold is
+// PROJECT_SCAFFOLD below, whose gameIds collide with nothing in the box
+// scaffold.
 // ---------------------------------------------------------------------------
 
 import { compile } from "@wildwinter/expr";
 import type { Expression } from "@wildwinter/expr";
 import { storyletsDialect } from "@storylet-studio/dialect";
-import { PLACE_GROUP } from "@storylet-studio/model";
+import { BUNDLE_SCHEMA, BUNDLE_SCHEMA_V0, PLACE_GROUP } from "@storylet-studio/model";
 import type {
-  Bundle, Box, Card, Deck, Hand, HandTemplate, Outcome, TagGroup,
+  Bundle, Box, Card, Deck, Hand, HandTemplate, Outcome, PropertyDecl, TagGroup,
 } from "@storylet-studio/model";
 import type {
   BundleFixture, CardFixture, Corpus, DeckFixture, Fixtures,
-  HandFixture, OutcomeFixture, PeekCase, ScriptedCase, TemplateFixture,
+  GroupFixture, HandFixture, LoadCase, OutcomeFixture, PeekCase, ScriptedCase, TemplateFixture,
 } from "./types.js";
 
-export const CORPUS_VERSION = 9;
+/** 10: the project map (design/project-map-contract.md 2.4): the fixture
+ *  fields, `bundle.map`, `box.usesMap`, the @1 schema tag on the bundles that
+ *  carry them, and the `load` case kind. No earlier expectation changed. */
+export const CORPUS_VERSION = 10;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>
@@ -81,6 +90,40 @@ const otherGroups: TagGroup[] = [
     ],
   },
 ];
+
+/** The PROJECT SCAFFOLD (design/project-map-contract.md 6.2), what
+ *  `projectMap: true` means. Exported so a case can spread it and add a
+ *  `boundBy` without restating the tags. The group-level declarations are
+ *  written already FLATTENED onto each tag, which is the shape the compiler
+ *  ships: `danger` per flow, `alarm` shared between flows. A zone property is
+ *  one value seen by every box on the map; `shared` still decides per flow
+ *  against one for the engine (3.5). */
+const zoneProperties: PropertyDecl[] = [
+  { name: "danger", type: "number", default: 0 },
+  { name: "alarm", type: "number", default: 0, shared: true },
+];
+export const PROJECT_SCAFFOLD: GroupFixture = {
+  id: "d_district", gameId: "district",
+  tags: [
+    { id: "v_quay", properties: zoneProperties },
+    { id: "v_hill", properties: zoneProperties },
+  ],
+};
+
+/** A GroupFixture compiled to the bundle's TagGroup: gameIds from ids where
+ *  not given, `boundBy` / `required` only when set. Shared by the extra box
+ *  groups and the project group, because the contract compiles the project
+ *  group "exactly as a box group is". */
+const expandGroup = (g: GroupFixture): TagGroup => ({
+  id: g.id,
+  gameId: g.gameId ?? gameId(g.id),
+  tags: g.tags.map((t) => ({
+    id: t.id, gameId: t.gameId ?? gameId(t.id),
+    ...(t.properties !== undefined ? { properties: t.properties } : {}),
+  })),
+  ...(g.boundBy !== undefined ? { boundBy: g.boundBy } : {}),
+  ...(g.required === true ? { required: true } : {}),
+});
 
 const OTHER_BOX_ID = "b_y";
 const OTHER_BOX_GAME_ID = "other";
@@ -199,27 +242,27 @@ export function expandBundle(f: BundleFixture): Bundle {
   // A case may declare extra groups beside the scaffold's `d_zone` (the
   // state-bound and required cases need one); they join the scaffold so the
   // fixture's own bindings and card tags resolve against both.
-  const extra: TagGroup[] = (f.groups ?? []).map((g) => ({
-    id: g.id,
-    gameId: g.gameId ?? gameId(g.id),
-    tags: g.tags.map((t) => ({
-      id: t.id, gameId: t.gameId ?? gameId(t.id),
-      ...(t.properties !== undefined ? { properties: t.properties } : {}),
-    })),
-    ...(g.boundBy !== undefined ? { boundBy: g.boundBy } : {}),
-    ...(g.required === true ? { required: true } : {}),
-  }));
-  const allGroups = [...scaffoldGroups, ...extra];
-  const scaffold = extra.length > 0 ? scaffoldFor('box "box"', allGroups) : boxScaffold;
+  const extra: TagGroup[] = (f.groups ?? []).map(expandGroup);
+  const ownGroups = [...(f.scaffoldZone === false ? [] : scaffoldGroups), ...extra];
+  // The project map, when the fixture declares one. Its group is added to
+  // EVERY box's name resolution, opted in or not (the builder rule, 6.2): a
+  // load case has to be able to build the bundle a compiler refuses. It is
+  // never added to a box's `tagGroups`; the bundle carries it once, in `map`.
+  const project: TagGroup | undefined = f.projectMap === undefined ? undefined
+    : expandGroup(f.projectMap === true ? PROJECT_SCAFFOLD : f.projectMap);
+  const withProject = (groups: TagGroup[]): TagGroup[] => project ? [...groups, project] : groups;
+  const scaffold = extra.length > 0 || f.scaffoldZone === false || project
+    ? scaffoldFor('box "box"', withProject(ownGroups)) : boxScaffold;
   const box: Box<Expression> = {
     id: "b_x",
     gameId: "box",
     ranking: f.ranking ?? { specificity: true },
     ...(f.turn !== undefined ? { turn: f.turn } : {}),
+    ...(f.uses === true ? { usesMap: true as const } : {}),
     fields: f.fields ?? [],
     ...(f.outcomeFields !== undefined ? { outcomeFields: f.outcomeFields } : {}),
     properties: f.boxProperties ?? [],
-    tagGroups: byId(allGroups),
+    tagGroups: byId(ownGroups),
     decks: byId(decks.map((d) => expandDeck(d, strip, scaffold))),
     handTemplates: byId((f.templates ?? []).map((t) => expandTemplate(t, scaffold))),
     hands: byId((f.hands ?? []).map((h) => expandHand(h, scaffold))),
@@ -228,21 +271,31 @@ export function expandBundle(f: BundleFixture): Bundle {
   if (f.otherBox) {
     const o = f.otherBox;
     const otherDecks: DeckFixture[] = o.decks ?? [{ id: "k_ymain", cards: o.cards ?? [] }];
+    const otherOwn = o.scaffoldZone === false ? otherGroups.filter((g) => g.id !== "d_zone_y") : otherGroups;
+    const otherScope = o.scaffoldZone === false || project
+      ? scaffoldFor(`box "${OTHER_BOX_GAME_ID}"`, withProject(otherOwn)) : otherScaffold;
     boxes.push({
       id: OTHER_BOX_ID,
       gameId: OTHER_BOX_GAME_ID,
       ranking: o.ranking ?? { specificity: true },
       ...(o.turn !== undefined ? { turn: o.turn } : {}),
+      ...(o.uses === true ? { usesMap: true as const } : {}),
       fields: [],
       properties: o.properties ?? [],
-      tagGroups: byId(otherGroups),
-      decks: byId(otherDecks.map((d) => expandDeck(d, strip, otherScaffold))),
-      handTemplates: byId((o.templates ?? []).map((t) => expandTemplate(t, otherScaffold))),
-      hands: byId((o.hands ?? []).map((h) => expandHand(h, otherScaffold))),
+      tagGroups: byId(otherOwn),
+      decks: byId(otherDecks.map((d) => expandDeck(d, strip, otherScope))),
+      handTemplates: byId((o.templates ?? []).map((t) => expandTemplate(t, otherScope))),
+      hands: byId((o.hands ?? []).map((h) => expandHand(h, otherScope))),
     });
   }
+  // @1 is the schema of a bundle that carries the map or says it uses one,
+  // which includes the box that opts in with no map to use (a load case).
+  // Bundles without either keep @0 (2.4): a runtime accepts both, and an @0
+  // bundle cannot carry a map, so it is the same shape and not a
+  // compatibility path. It also keeps every earlier case byte-identical.
+  const mapShaped = project !== undefined || f.uses === true || f.otherBox?.uses === true;
   return {
-    schema: "storylets/bundle@0",
+    schema: mapShaped ? BUNDLE_SCHEMA : BUNDLE_SCHEMA_V0,
     content: {
       project: f.content?.project ?? "conf",
       version: f.content?.version ?? "0.0.0",
@@ -253,6 +306,7 @@ export function expandBundle(f: BundleFixture): Bundle {
     world: { properties: f.world ?? [] },
     story: { properties: f.story ?? [] },
     boxes: byId(boxes),
+    ...(project !== undefined ? { map: { group: project } } : {}),
   };
 }
 
@@ -291,5 +345,13 @@ export function buildCorpus(fixtures: Fixtures): Corpus {
       ...(f.seed !== undefined ? { seed: f.seed } : {}),
       script: f.script,
     })),
+    load: fixtures.load.map((f): LoadCase => {
+      const bundle = expandBundle(f);
+      return {
+        name: f.name,
+        bundle: f.schema === undefined ? bundle : ({ ...bundle, schema: f.schema } as Bundle),
+        expectRefused: f.expectRefused,
+      };
+    }),
   };
 }

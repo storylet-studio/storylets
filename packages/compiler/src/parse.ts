@@ -6,11 +6,11 @@
 // ---------------------------------------------------------------------------
 
 import {
-  BOX_SCHEMA, CONTRACTS_DIR, CONTRACT_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, MAP_SCHEMA, PROJECT_SCHEMA, NOTES_SCHEMA,
-  SHARD_EXTENSIONS, TAGS_SCHEMA, VIEW_SCHEMA,
+  BOX_SCHEMA, CONTRACTS_DIR, CONTRACT_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, MAP_SCHEMA, PROJECT_SCHEMA, PROJECTMAP_SCHEMA,
+  NOTES_SCHEMA, SHARD_EXTENSIONS, TAGS_SCHEMA, VIEW_SCHEMA,
   isCaseOnlyPropertyName,
 } from "@storylet-studio/model";
-import type { BoxShard, ContractShard, DeckShard, HandsShard, MapShard, ProjectShard, PropertyDecl, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
+import type { BoxShard, ContractShard, DeckShard, HandsShard, MapShard, ProjectMapShard, ProjectShard, PropertyDecl, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
 import { parseSource } from "./serialize.js";
 import type { Issue, SourceBox, SourceContract, SourceFile, SourceProject } from "./project.js";
 
@@ -94,6 +94,19 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
   }
   const projectParsed = parseShard(projectFiles[0]!, PROJECT_SCHEMA, issues);
   if (!projectParsed) return { issues };
+
+  // The PROJECT MAP and its comments, beside the project shard
+  // (design/project-map-contract.md 1.1). Depth one is unambiguous: a box's own
+  // map and notes shards sit at depth two, in its folder. The map's schema tag
+  // is what says it is the project's rather than a box's, so a box map shard
+  // dropped at the root is refused by name (E1) rather than read as the wrong
+  // thing. A shard that fails to parse is reported and the project is still
+  // returned without it, as a box's broken view shard costs only that box.
+  const rootFile = (name: string): SourceFile | undefined => files.find((f) => f.path === name);
+  const projectMapFile = rootFile(`map${SHARD_EXTENSIONS.map}`);
+  const projectMapParsed = projectMapFile ? parseShard(projectMapFile, PROJECTMAP_SCHEMA, issues) : undefined;
+  const rootNotesFile = rootFile(`notes${SHARD_EXTENSIONS.notes}`);
+  const rootNotesParsed = rootNotesFile ? parseShard(rootNotesFile, NOTES_SCHEMA, issues) : undefined;
 
   // The venue's contracts, in their own folder at the root. The directory is the
   // registry here as it is for decks: a contract exists because its file exists,
@@ -232,6 +245,8 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
     path: projectFiles[0]!.path,
     project: projectParsed.value as unknown as ProjectShard,
     boxes,
+    ...(projectMapParsed ? { map: projectMapParsed.value as unknown as ProjectMapShard } : {}),
+    ...(rootNotesParsed ? { notes: rootNotesParsed.value as unknown as NotesShard } : {}),
     contracts,
   };
   foldCaseOnlyPropertyNames(project);
@@ -265,4 +280,5 @@ function foldCaseOnlyPropertyNames(project: SourceProject): void {
     for (const template of box.hands.templates) fold(template.properties);
     for (const deck of box.decks) fold(deck.shard.deck.properties);
   }
+  for (const tag of project.map?.group?.tags ?? []) fold(tag.properties);
 }

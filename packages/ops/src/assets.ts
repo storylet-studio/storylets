@@ -1,10 +1,12 @@
 // ---------------------------------------------------------------------------
-// Where a box keeps its binary assets, and the one rule about their names.
+// Where a project keeps its binary assets, and the one rule about their names.
 //
 // Assets are a first for this project: everything else it writes is text a human
-// can read and git can merge. They live in `<box>/assets/` and belong to their
-// box, so a shard records a NAME and never a path - a box that moves takes its
-// pictures with it, and nothing in a shard can point outside the project.
+// can read and git can merge. They live in the project's root `assets/`, one
+// folder, because the project map is the one thing with pictures and there is one
+// of it (design/project-map-contract.md 1.4; until then each box had its own). A
+// shard records a NAME and never a path, so nothing in a shard can point outside
+// the project.
 //
 // That last part is not a nicety. A name arriving from a shard is untrusted
 // input: a pack, a merge or a hand edit can put anything in that field, and
@@ -16,9 +18,9 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { backgroundsOf } from "@storylet-studio/model";
-import type { SourceBox } from "@storylet-studio/compiler";
+import type { SourceProject } from "@storylet-studio/compiler";
 
-/** The folder a box keeps its assets in, project-relative. */
+/** The folder a project keeps its assets in, relative to the project root. */
 export const ASSETS_DIR = "assets";
 
 /** Is this a plain filename we are willing to resolve? No separators, no
@@ -35,11 +37,11 @@ export function isSafeAssetName(name: string): boolean {
   return true;
 }
 
-/** Where one of a box's assets sits on disk, or undefined when the name is not a
- *  name we will resolve (see the note above: shard fields are untrusted). */
-export function assetPath(dir: string, box: SourceBox, file: string): string | undefined {
+/** Where one of the project's assets sits on disk, or undefined when the name is
+ *  not a name we will resolve (see the note above: shard fields are untrusted). */
+export function assetPath(dir: string, file: string): string | undefined {
   if (!isSafeAssetName(file)) return undefined;
-  return join(dir, box.path, ASSETS_DIR, file);
+  return join(dir, ASSETS_DIR, file);
 }
 
 /**
@@ -111,8 +113,8 @@ export function imageSize(bytes: Uint8Array): { width: number; height: number } 
 }
 
 /**
- * Which of a box's asset files are REFERENCED by one of its maps, and which are
- * orphans.
+ * Which of the project's asset files are REFERENCED by the project map, and which
+ * are orphans.
  *
  * Orphans are made by ordinary work rather than by mistakes: undoing an import
  * keeps the file, removing a background leaves its bytes behind, and a merge can
@@ -126,12 +128,12 @@ export function imageSize(bytes: Uint8Array): { width: number; height: number } 
  * - undo an import and the file has to still be there - and that chain does not
  * outlive the session, which is exactly when they are swept.
  */
-export function assetUse(dir: string, box: SourceBox): { used: string[]; orphans: string[] } {
+export function assetUse(dir: string, source: SourceProject): { used: string[]; orphans: string[] } {
   const referenced = new Set<string>();
-  for (const group of box.tags.groups) {
-    for (const background of backgroundsOf(group)) referenced.add(background.file);
+  if (source.map !== undefined) {
+    for (const background of backgroundsOf(source.map.group)) referenced.add(background.file);
   }
-  const folder = join(dir, box.path, ASSETS_DIR);
+  const folder = join(dir, ASSETS_DIR);
   let onDisk: string[] = [];
   try {
     onDisk = readdirSync(folder, { withFileTypes: true })
@@ -153,12 +155,8 @@ export function assetUse(dir: string, box: SourceBox): { used: string[]; orphans
  * host's business (the studio sweeps at the end of a session, when the undo chain
  * that was the only reason to keep them is being discarded anyway).
  */
-export function orphanAssetPaths(dir: string, boxes: readonly SourceBox[]): string[] {
-  const out: string[] = [];
-  for (const box of boxes) {
-    for (const name of assetUse(dir, box).orphans) out.push(join(dir, box.path, ASSETS_DIR, name));
-  }
-  return out.sort();
+export function orphanAssetPaths(dir: string, source: SourceProject): string[] {
+  return assetUse(dir, source).orphans.map((name) => join(dir, ASSETS_DIR, name)).sort();
 }
 
 /** A name nobody in `taken` is using: "plan.png", then "plan-2.png". The same

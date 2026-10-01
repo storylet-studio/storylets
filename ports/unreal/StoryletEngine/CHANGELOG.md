@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The project map** (design/project-map-contract.md). A bundle may carry one zone group above the boxes, `Bundle::map` (a `ProjectMap`: the `group`, always, and inert `geometry` with zones, pictures and sites keyed by box, only when the build asked for it), and a box opts in with `Box::usesMap`. An opted-in box sees the map's group name beside its own groups' names, in peek criteria, `boundBy`, and `count_played_in` / `turns_since_played_in`; its hands bind zones and its cards are tagged with them by id, as with any group. Each zone is ONE value bag, so a zone property written by one box's outcome is the value every opted-in box reads through `@hand`; the `shared` flag still decides per flow against one for the engine. A zone's address is `value.<zone>.<name>` whichever boxes use it, and the box-qualified form is refused naming that address (`"value.box/quay.danger": "quay" is a zone of the project map, which belongs to no box; write "value.quay.danger"`). A hand still deals only from its own box's decks, and play history stays the asking box's own: a play of another box's card at the same zone does not count. `GroupsOfBox(bundle, box)` and `AllTagGroups(bundle)` in `Storylets/Bundle.h` answer which groups a box sees and which groups own value bags.
+- **The engine refuses, at construction, a bundle it cannot read faithfully**, throwing one `StoryletError` that starts `bundle refused: ` and names every problem: a box not on the map that names the map's group (card tags, template bindings or chooses, a hand's chosen tags, a rule's bindings), a box on the map in a bundle with no map, a box on the map with its own group of the map's name, a zone sharing a tag name with any box tag, and a map group called `place`. `UStoryletEngine::Create` returns null and logs it, as it does any refused construction.
+- **`describeBundle` reports the map**: `BundleDescription::map` (the group, its zones, the opted-in boxes, and the geometry counted, sites per box), `BoxSummary::usesMap`, each zone's declarations once as a tag scope with a group and no box, the project group counted once in `totals.tagGroups`, and a movable hole on a zone reported rather than skipped. The UE description carries it as `bHasMap` and `Map` (`FStoryletMapSummary`, with `FStoryletMapSites` per box) and `FStoryletBoxSummary::bUsesMap`; the bundle's Details panel shows a "Project map" section when there is one.
+
+### Changed
+
+- **The bundle schema is `storylets/bundle@1`**, and this runtime reads `@0` and `@1` and refuses any other, by name, at construction and as an asset (`UStoryletBundle` now accepts either). A bundle with no schema tag is refused rather than read as the current one.
+- **`Bundle::maps` is gone**, replaced by `Bundle::map`; `BundleMap` with it, and `MapSummary` and `FStoryletMapSummary` have the new shape. Nothing in the engine read the old block.
+
 ## [0.8.2] - 2026-09-27
 
 ### Changed

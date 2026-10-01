@@ -195,37 +195,66 @@ describe("describeBundle: the declared property scopes", () => {
   });
 });
 
-// Maps are inert payload: the engine never reads them, which is exactly why the
-// inspector has to say they are there. A bundle that silently carried a map
-// would fail the one promise this API makes ("what is in here").
-describe("describeBundle and a shipped map", () => {
-  it("reports nothing when the build carried none", () => {
-    expect(describeBundle(bundle).maps).toEqual([]);
+// The project map (design/project-map-contract.md 3.7). Not in the corpus:
+// describeBundle is session-less and each runtime pins it in its own describe
+// tests. Built from the conformance PROJECT SCAFFOLD: group "district", zones
+// "quay" and "hill", each declaring `danger` (per flow) and `alarm` (shared).
+const onMap = expandBundle({
+  projectMap: true,
+  uses: true,
+  cards: [{ id: "c_q", tags: { district: ["quay"] } }],
+  templates: [{ id: "t_npc", chooses: ["district"], slots: 1,
+    properties: [{ name: "zone", type: "string", default: "quay" }] }],
+  hands: [{ id: "h_elder", template: "t_npc", chosen: { district: "@hand.zone" } }],
+  otherBox: { cards: [{ id: "c_y" }] },
+});
+
+describe("describeBundle and the project map", () => {
+  it("reports no map on a bundle without one", () => {
+    expect(describeBundle(bundle).map).toBeUndefined();
+    expect(describeBundle(bundle).boxes[0]!.usesMap).toBeUndefined();
   });
 
-  it("names the box and group, and counts what is in each", () => {
-    const withMap = {
-      ...bundle,
-      maps: [{
-        box: "box", group: "zone",
-        zones: [
-          { tag: "docks", polygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }] },
-          { tag: "market", polygon: [{ x: 2, y: 2 }, { x: 3, y: 2 }, { x: 3, y: 3 }] },
-        ],
-        backgrounds: [{ file: "assets/box/plan.png", x: 0, y: 0, width: 4, height: 4 }],
-        sites: [{ hand: "well", x: 1, y: 2 }],
-      }],
-    };
-    expect(describeBundle(withMap).maps).toEqual([
-      { box: "box", group: "zone", zones: 2, backgrounds: 1, sites: 1 },
-    ]);
+  it("marks the opted-in box, and keeps its own groups apart from the map's", () => {
+    const d = describeBundle(onMap);
+    expect(d.boxes.map((b) => [b.gameId, b.usesMap])).toEqual([["box", true], ["other", undefined]]);
+    // A box's tagGroups are its OWN: the map's group is reported once, below.
+    expect(d.boxes[0]!.tagGroups.map((g) => g.gameId)).toEqual(["zone"]);
+    // The scaffold's `zone` in each box, `weather` in the other, and the
+    // project group counted ONCE however many boxes use it.
+    expect(d.totals.tagGroups).toBe(4);
   });
 
-  it("counts a map with no pictures as a map with no pictures", () => {
-    const withMap = {
-      ...bundle,
-      maps: [{ box: "box", group: "zone", zones: [{ tag: "docks", polygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }] }] }],
+  it("summarises the map: group, zones, the boxes on it, and no geometry unless carried", () => {
+    expect(describeBundle(onMap).map).toEqual({
+      group: "district", tags: ["quay", "hill"], boxes: ["box"],
+      zones: 0, backgrounds: 0, sites: {},
+    });
+    const withGeometry = {
+      ...onMap,
+      map: {
+        ...onMap.map!,
+        geometry: {
+          zones: [{ tag: "quay", polygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }] }],
+          backgrounds: [{ file: "assets/plan.png", x: 0, y: 0, width: 4, height: 4 }],
+          sites: { box: [{ hand: "elder", x: 1, y: 2 }] },
+        },
+      },
     };
-    expect(describeBundle(withMap).maps[0]).toEqual({ box: "box", group: "zone", zones: 1, backgrounds: 0, sites: 0 });
+    expect(describeBundle(withGeometry).map).toEqual({
+      group: "district", tags: ["quay", "hill"], boxes: ["box"],
+      zones: 1, backgrounds: 1, sites: { box: 1 },
+    });
+  });
+
+  it("lists each zone's properties once, as a tag scope with a group and no box", () => {
+    const zones = describeBundle(onMap).properties.filter((p) => p.group === "district");
+    expect(zones.map((p) => [p.scope, p.owner, p.box])).toEqual([["tag", "quay", undefined], ["tag", "hill", undefined]]);
+    expect(zones[0]!.properties.map((p) => p.name)).toEqual(["danger", "alarm"]);
+  });
+
+  it("reports a movable hole that names the map's group rather than skipping it", () => {
+    expect(describeBundle(onMap).hands.find((h) => h.gameId === "elder")!.movable)
+      .toEqual([{ group: "district", from: "@hand.zone" }]);
   });
 });

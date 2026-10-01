@@ -7,8 +7,8 @@
 
 import { Engine } from "@storylet-studio/runtime";
 import type { Flow, LogEntry, TraceEvent, TraceVerdict } from "@storylet-studio/runtime";
-import { SAVEFILE_SCHEMA, effectiveGameId, valueAddresses } from "@storylet-studio/model";
-import type { Bundle, PropertyBag, PropertyDecl, SaveFile, ScalarValue } from "@storylet-studio/model";
+import { SAVEFILE_SCHEMA, effectiveGameId, groupsOfBox, valueAddresses } from "@storylet-studio/model";
+import type { Bundle, PropertyBag, PropertyDecl, SaveFile, ScalarValue, TagGroup } from "@storylet-studio/model";
 import { ENGINE_SCOPES } from "@storylet-studio/dialect";
 import { GAME_SCOPES_DIR, GAME_SCOPES_FILE, standInRegistry } from "@wildwinter/scoperegistry/scopes";
 import { ScopeRegistry } from "@wildwinter/scoperegistry";
@@ -142,6 +142,10 @@ export function durablePropertyPaths(bundle: Bundle): string[] {
         push(`value.${values.print.get(tag.id) ?? effectiveGameId(tag)}.`, tag.properties);
       }
     }
+  }
+  // The project map's zones, once: they belong to no box.
+  for (const tag of bundle.map?.group.tags ?? []) {
+    push(`value.${values.print.get(tag.id) ?? effectiveGameId(tag)}.`, tag.properties);
   }
   return out;
 }
@@ -451,7 +455,9 @@ export class Table {
     return this.bundle.boxes.map((box) => ({
       gameId: box.gameId ?? box.id,
       ...(box.title !== undefined ? { title: box.title } : {}),
-      groups: box.tagGroups.map((g) => ({
+      // The groups the box can peek by: its own, and the project map's when
+      // it is on the map (design/project-map-contract.md 3.1).
+      groups: groupsOfBox(this.bundle, box).map((g) => ({
         gameId: g.gameId ?? g.id,
         values: g.tags.map((t) => t.gameId ?? t.id),
       })),
@@ -525,8 +531,9 @@ export class Table {
     const out: HandView[] = [];
     for (const box of this.bundle.boxes) {
       const templatesById = new Map(box.handTemplates.map((t) => [t.id, t]));
-      const tagNames = new Map(box.tagGroups.flatMap((g) => g.tags.map((t) => [t.id, t.gameId ?? t.id] as const)));
-      const groupNames = new Map(box.tagGroups.map((g) => [g.id, g.gameId ?? g.id]));
+      const groups = groupsOfBox(this.bundle, box);
+      const tagNames = new Map(groups.flatMap((g) => g.tags.map((t) => [t.id, t.gameId ?? t.id] as const)));
+      const groupNames = new Map(groups.map((g) => [g.id, g.gameId ?? g.id]));
       for (const hand of box.hands) {
         const template = hand.template !== undefined ? templatesById.get(hand.template) : undefined;
         // The hand's whole slice, by name: the template's fixed bindings (or
@@ -696,15 +703,19 @@ export class Table {
     // what the strip shows is an address the engine would accept, which is the
     // whole point of one grammar.
     const values = valueAddresses(this.bundle);
-    for (const box of this.bundle.boxes) {
-      for (const group of box.tagGroups) {
-        for (const tag of group.tags) {
-          const owner = values.print.get(tag.id) ?? effectiveGameId(tag);
-          for (const decl of tag.properties ?? []) {
-            push(`value.${owner}.${decl.name}`, `${owner}.${decl.name}`, group.gameId ?? group.id, decl);
-          }
+    const tagRows = (group: TagGroup): void => {
+      for (const tag of group.tags) {
+        const owner = values.print.get(tag.id) ?? effectiveGameId(tag);
+        for (const decl of tag.properties ?? []) {
+          push(`value.${owner}.${decl.name}`, `${owner}.${decl.name}`, group.gameId ?? group.id, decl);
         }
       }
+    };
+    // The project map's zones once, first: one value each, whichever boxes'
+    // hands stand in them (design/project-map-contract.md 3.3).
+    if (this.bundle.map !== undefined) tagRows(this.bundle.map.group);
+    for (const box of this.bundle.boxes) {
+      for (const group of box.tagGroups) tagRows(group);
       // Deck QUALITIES join the strip: a spine is exactly the state a tester
       // jumps around ("what do the late cards look like at 'resolved'?"),
       // where a deck's booleans are latches that play sets, and listing all

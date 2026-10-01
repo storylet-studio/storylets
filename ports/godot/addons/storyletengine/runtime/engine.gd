@@ -29,6 +29,17 @@
 #     and a closed flow's handle is INERT - every verb refuses.
 #   - engine-level get_property serves world.* and shared refs only; a ref
 #     that resolves per-flow is refused, naming the fix.
+#   - the PROJECT MAP (design/project-map-contract.md 3) is one zone group
+#     above the boxes, in bundle["map"]["group"] and in no box's "tagGroups".
+#     A box that opts in ("usesMap") sees its name beside its own groups', so
+#     its hands bind zones and its cards are tagged with them by id exactly as
+#     with a box group. Each zone is ONE value bag, keyed by the tag's id like
+#     any tag's, so a zone property is one value whichever box's hand is dealt
+#     to it; the `shared` flag still decides per-flow against one for the
+#     engine. What the boxes on a map do NOT share: a hand deals only from its
+#     own box's decks, and play history stays the asking box's (D7). A bundle
+#     that breaks the map's rules is refused at construction (3.8) rather than
+#     half-played.
 class_name StoryletEngine
 extends RefCounted
 
@@ -67,7 +78,9 @@ var _boxes_by_game_id: Dictionary = {}
 var _hands_by_id: Dictionary = {}       # id -> {"hand", "box"}
 var _hands_by_game_id: Dictionary = {}
 var _templates_by_id: Dictionary = {}
-var _groups_by_id: Dictionary = {}      # id -> {"group", "box"}
+# id -> {"group", "box"}; "box" is absent for the project map's group, which
+# belongs to no box.
+var _groups_by_id: Dictionary = {}
 var _required_groups: Dictionary = {}   # id -> true
 
 # The owner segment of a property address, both ways round (design change 4.4).
@@ -84,9 +97,16 @@ var _required_groups: Dictionary = {}   # id -> true
 # "value.<boxGameId>/<tagGameId>.<name>", wherever a gameId repeats, and the
 # short form is REFUSED there rather than resolved to the first in bundle order.
 # The third map is what such a refusal names.
+#
+# A ZONE of the project map is the one tag with no qualified form: it belongs to
+# no box, so it prints and is accepted as "value.<zoneGameId>.<name>" whichever
+# boxes use it. The fourth map holds the box-qualified forms that name a zone,
+# "<box>/<zone>" -> "<zone>", which are REFUSED, naming the short form
+# (design/project-map-contract.md 3.4).
 var _owner_game_ids: Dictionary = {"box": {}, "deck": {}, "hand": {}, "value": {}}
 var _owner_ids: Dictionary = {"box": {}, "deck": {}, "hand": {}, "value": {}}
 var _owner_repeated: Dictionary = {"box": {}, "deck": {}, "hand": {}, "value": {}}
+var _owner_zone_qualified: Dictionary = {"box": {}, "deck": {}, "hand": {}, "value": {}}
 
 # Quality ladders (quality.md), declaration-level so partition-blind.
 var _world_ladders: Dictionary = {}
@@ -185,7 +205,8 @@ func _index_owner(kind: String, entity: Dictionary) -> void:
 
 
 ## @internal - the value scope's index, whole: the segment each tag PRINTS,
-## every segment an address ACCEPTS, and the gameIds that need qualifying.
+## every segment an address ACCEPTS, the gameIds that need qualifying, and the
+## box-qualified forms of the project map's zones, which are refused.
 ##
 ## Built from the whole bundle rather than tag by tag, because whether a tag's
 ## own gameId is enough is a question about the OTHER boxes. The qualified form
@@ -229,6 +250,20 @@ func _index_value_owners(bundle: Dictionary) -> void:
 			by_segment[game_ids[i]] = ids[i]
 		if ambiguous:
 			repeated[game_ids[i]] = candidates
+	# The zones, after the box tags and never in `repeated`. A zone whose gameId
+	# a box tag also uses is a bundle refused at construction, so the "first in
+	# wins" below decides nothing in a bundle that loads; it keeps the box tag's
+	# short form rather than letting the zone take it over silently.
+	var map = bundle.get("map")
+	if map is Dictionary:
+		var zone_qualified: Dictionary = _owner_zone_qualified["value"]
+		for tag in map["group"]["tags"]:
+			var game_id := StoryletBundle.effective_game_id(tag)
+			by_id[str(tag["id"])] = game_id
+			if not by_segment.has(game_id):
+				by_segment[game_id] = str(tag["id"])
+			for box in bundle["boxes"]:
+				zone_qualified["%s/%s" % [StoryletBundle.effective_game_id(box), game_id]] = game_id
 
 
 ## @internal - one owned property owner's ADDRESS, segment and all:
@@ -249,7 +284,9 @@ func address_of(kind: String, id: String) -> String:
 ## the stores are keyed by: {"id", "legacy"}, or {} when the segment names no
 ## owner at all (which is the caller's "no <kind> store" refusal), or
 ## {"ambiguous": [candidates]} for a short-form value segment more than one box
-## answers to (which the caller REFUSES, naming them). "legacy" says the caller
+## answers to (which the caller REFUSES, naming them), or {"zone": zone} for
+## a box-qualified value segment naming a project-map zone (refused too, naming
+## the short form). "legacy" says the caller
 ## used the pre-4.4 form - an internal id where a gameId belongs - which
 ## resolves for THIS release and earns a diagnostic; the next lockstep release
 ## refuses it, in every scope including "value".
@@ -260,6 +297,11 @@ func resolve_owner(kind: String, segment: String) -> Dictionary:
 	var candidates = (_owner_repeated[kind] as Dictionary).get(segment)
 	if candidates != null:
 		return {"ambiguous": candidates}
+	# A box-qualified form of a project-map zone: never accepted, because the
+	# zone belongs to no box (design/project-map-contract.md 3.4).
+	var zone = (_owner_zone_qualified[kind] as Dictionary).get(segment)
+	if zone != null:
+		return {"zone": str(zone)}
 	var by_game_id = (_owner_ids[kind] as Dictionary).get(segment)
 	if by_game_id != null:
 		return {"id": str(by_game_id), "legacy": false}
@@ -283,6 +325,13 @@ func ambiguous_address_message(segment: String, name: String, candidates: Array)
 	elif forms.size() > 1:
 		list = ", ".join(forms.slice(0, forms.size() - 1)) + " or " + forms[forms.size() - 1]
 	return '"value.%s.%s" names a tag in %d boxes; write %s' % [segment, name, candidates.size(), list]
+
+
+## @internal - what a box-qualified address naming a project-map zone is told:
+## why the form is wrong, and the address that works.
+func zone_qualified_address_message(segment: String, zone: String, name: String) -> String:
+	return '"value.%s.%s": "%s" is a zone of the project map, which belongs to no box; write "value.%s.%s"' \
+		% [segment, name, zone, zone, name]
 
 
 ## @internal - what a legacy address is told. It NAMES the address to move to,
@@ -312,7 +361,10 @@ func legacy_address_message(kind: String, segment: String, name: String) -> Stri
 ## passes both engines the same one.
 ##
 ## A token another engine already holds in that registry refuses the engine:
-## null with push_error naming the holder, and the registry left as it was.
+## null with push_error naming the holder, and the registry left as it was. So
+## does a bundle this engine cannot read faithfully: a schema tag it does not
+## know, or a project map whose rules the bundle breaks
+## (design/project-map-contract.md 3.8; see _unreadable_bundle_error).
 static func create(bundle: Dictionary, opts: Dictionary = {}) -> StoryletEngine:
 	var bad := _options_error(opts)
 	if bad != "":
@@ -323,6 +375,88 @@ static func create(bundle: Dictionary, opts: Dictionary = {}) -> StoryletEngine:
 		push_error("StoryletEngine.create: " + engine._init_error)
 		return null
 	return engine
+
+
+## @internal - why this engine cannot read `bundle` faithfully, or "" when it
+## can (design/project-map-contract.md 3.8). One message naming every problem
+## found, each naming the box and the group or tag at fault, starting
+## "bundle refused: "; the schema tag is checked alone and first.
+##
+## The compiler refuses all of these first. The engine checks again because it
+## cannot tell a hand-built or stale bundle from a compiled one, and the
+## alternative is the silent half-working the server audit found twice: a hand
+## whose bound group is looked up in the wrong place comes back empty, and an
+## old runtime given a map bundle deals plausibly while every zone value is
+## missing. Only what would make the engine's OWN resolution ambiguous or
+## wrong is refused here; the compiler's bundle-wide group-name rule is
+## stricter.
+static func _unreadable_bundle_error(bundle: Dictionary) -> String:
+	# The schema tag (D4). Alone and first: a bundle of a schema this runtime
+	# does not know may not have any of the shape the rest reads.
+	var schema_refused := StoryletBundle.schema_error(bundle)
+	if schema_refused != "":
+		return schema_refused
+	var problems: Array[String] = []
+	var map = bundle.get("map")
+	var group = map["group"] if map is Dictionary else null
+	var map_name := StoryletBundle.effective_game_id(group) if group != null else ""
+	if group != null and map_name == StoryletBundle.PLACE_GROUP:
+		problems.append('the project map\'s tag group is called "%s", which is reserved for a box\'s own hands' % StoryletBundle.PLACE_GROUP)
+	# Every box tag gameId, for the zone-name rule: a zone's address has no
+	# qualified form to fall back on (3.4), so any box tag sharing it anywhere
+	# makes "value.<zone>.<name>" ambiguous. The first box and group in bundle
+	# order is the one named.
+	var box_tags: Dictionary = {}
+	for box in bundle.get("boxes", []):
+		for g in box.get("tagGroups", []):
+			for tag in g.get("tags", []):
+				var game_id := StoryletBundle.effective_game_id(tag)
+				if not box_tags.has(game_id):
+					box_tags[game_id] = {"box": StoryletBundle.effective_game_id(box), "group": StoryletBundle.effective_game_id(g)}
+	if group != null:
+		for tag in group.get("tags", []):
+			var zone := StoryletBundle.effective_game_id(tag)
+			var clash = box_tags.get(zone)
+			if clash != null:
+				problems.append('the project map\'s zone "%s" has the name of tag "%s" in box "%s", group "%s", so "value.%s.<name>" would name two things' \
+					% [zone, zone, clash["box"], clash["group"], zone])
+	for box in bundle.get("boxes", []):
+		var box_name := StoryletBundle.effective_game_id(box)
+		if box.get("usesMap", false) == true:
+			if group == null:
+				problems.append('box "%s" uses the project map, but the bundle has no map' % box_name)
+				continue
+			# One namespace in an opted-in box (3.1): a box group with the map's
+			# name would make every name-based lookup there a coin toss.
+			for g in box.get("tagGroups", []):
+				if StoryletBundle.effective_game_id(g) == map_name:
+					problems.append('box "%s" uses the project map and declares its own tag group "%s", the map\'s name' % [box_name, map_name])
+					break
+			continue
+		if group == null:
+			continue
+		# A box NOT on the map may not reference its group at all: every route a
+		# reference takes, card tags, template bindings and choices, a hand's
+		# chosen tags and a rule's bindings, by the group's id as written.
+		var map_id: String = group["id"]
+		var where: Array[String] = []
+		for deck in box.get("decks", []):
+			for card in deck.get("cards", []):
+				if (card.get("tags", {}) as Dictionary).has(map_id):
+					where.append('card "%s"' % StoryletBundle.effective_game_id(card))
+		for template in box.get("handTemplates", []):
+			if (template.get("bindings", {}) as Dictionary).has(map_id) or (template.get("chooses", []) as Array).has(map_id):
+				where.append('hand template "%s"' % StoryletBundle.effective_game_id(template))
+		for hand in box.get("hands", []):
+			var rule = hand.get("rule")
+			var rule_binds: bool = rule is Dictionary and (rule.get("bindings", {}) as Dictionary).has(map_id)
+			if (hand.get("chosen", {}) as Dictionary).has(map_id) or rule_binds:
+				where.append('hand "%s"' % StoryletBundle.effective_game_id(hand))
+		for w in where:
+			problems.append('box "%s" is not on the project map, but %s names the map\'s tag group "%s"' % [box_name, w, map_name])
+	if problems.is_empty():
+		return ""
+	return "bundle refused: " + "; ".join(problems)
 
 
 ## What is wrong with create's options, or "" when nothing is.
@@ -357,6 +491,12 @@ static func _is_registry(r) -> bool:
 func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 	_creation_options = opts
 	_bundle = bundle
+	# First, before anything is indexed or registered: a bundle this engine
+	# cannot read faithfully is refused whole (design/project-map-contract.md
+	# 3.8), and a refusal must leave the game's registry untouched.
+	_init_error = _unreadable_bundle_error(bundle)
+	if _init_error != "":
+		return
 	_external_scopes = StoryletBundle.external_scopes(bundle)
 	_seed = int(opts.get("seed", 0))
 	var log_opt = opts.get("log", false)
@@ -405,6 +545,16 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 			_hands_by_id[hand["id"]] = {"hand": hand, "box": box}
 			_hands_by_game_id[StoryletBundle.effective_game_id(hand)] = {"hand": hand, "box": box}
 			_index_owner("hand", hand)
+	# The project map's group: by id like any group, so a hand's binding, a
+	# filled hole and tag matching need no logic of their own for it. Which
+	# boxes may NAME it is the flow's _group_in_box (3.1); which may reference
+	# it at all was settled by the refusal above.
+	var map = _bundle.get("map")
+	if map is Dictionary:
+		var map_group: Dictionary = map["group"]
+		_groups_by_id[map_group["id"]] = {"group": map_group}
+		if map_group.get("required", false):
+			_required_groups[map_group["id"]] = true
 	_init_ladders()
 
 	# Both halves, precomputed once (a bundle never changes): each open_flow
@@ -423,10 +573,13 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 		for hand in box["hands"]:
 			fd["hand"][hand["id"]] = _half("hand", hand_decls(hand), false)
 			sd["hand"][hand["id"]] = _half("hand", hand_decls(hand), true)
-		for group in box["tagGroups"]:
-			for tag in group["tags"]:
-				fd["value"][tag["id"]] = _half("value", tag.get("properties", []), false)
-				sd["value"][tag["id"]] = _half("value", tag.get("properties", []), true)
+	# Every box's tags, then the project map's zones ONCE (design/project-map-
+	# contract.md 3.3): a zone is one bag per partition, whichever boxes' hands
+	# are dealt to it.
+	for group in StoryletBundle.all_tag_groups(_bundle):
+		for tag in group["tags"]:
+			fd["value"][tag["id"]] = _half("value", tag.get("properties", []), false)
+			sd["value"][tag["id"]] = _half("value", tag.get("properties", []), true)
 	_flow_decls = fd
 	_shared_decls = sd
 
@@ -451,9 +604,10 @@ func _init_shared() -> void:
 			shared["deck"][deck["id"]] = _bag_from_decls(_shared_decls["deck"][deck["id"]], at.call("deck", deck["id"]))
 		for hand in box["hands"]:
 			shared["hand"][hand["id"]] = _bag_from_decls(_shared_decls["hand"][hand["id"]], at.call("hand", hand["id"]))
-		for group in box["tagGroups"]:
-			for tag in group["tags"]:
-				shared["value"][tag["id"]] = _bag_from_decls(_shared_decls["value"][tag["id"]], at.call("value", tag["id"]))
+	# The zones once, after the boxes' tags (3.3).
+	for group in StoryletBundle.all_tag_groups(_bundle):
+		for tag in group["tags"]:
+			shared["value"][tag["id"]] = _bag_from_decls(_shared_decls["value"][tag["id"]], at.call("value", tag["id"]))
 	_shared = shared
 	var world_decls: Array = _bundle["world"].get("properties", [])
 	# Built in a static function, so the lambda holds no reference to this engine:
@@ -624,6 +778,11 @@ func _init_ladders() -> void:
 				_value_ladders[tag["id"]] = grab.call(tag.get("properties", []))
 		for hand in box.get("hands", []):
 			_hand_ladders[hand["id"]] = grab.call(hand_decls(hand))
+	# The zones, once, keyed by tag id like every other tag (3.3).
+	var map = _bundle.get("map")
+	if map is Dictionary:
+		for tag in map["group"].get("tags", []):
+			_value_ladders[tag["id"]] = grab.call(tag.get("properties", []))
 	_has_qualities = not (_world_ladders.is_empty() and _story_ladders.is_empty())
 	for owners in [_box_ladders, _deck_ladders, _value_ladders, _hand_ladders]:
 		if _has_qualities:
@@ -919,6 +1078,8 @@ func _resolve_shared(path: String) -> Dictionary:
 		var owner := resolve_owner(kind, segment)
 		if owner.has("ambiguous"):
 			return {"error": ambiguous_address_message(segment, name, owner["ambiguous"])}
+		if owner.has("zone"):
+			return {"error": zone_qualified_address_message(segment, owner["zone"], name)}
 		if owner.is_empty():
 			return {"error": 'no %s store "%s"' % [kind, segment]}
 		if owner["legacy"]:

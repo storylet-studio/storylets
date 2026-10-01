@@ -135,32 +135,31 @@ describe("lifecycle: init -> draw -> export -> validate -> format", () => {
   // ways. The picture has to land BESIDE the bundle at the path the bundle
   // names, which is the half a unit test of the op cannot see.
   it("export --map carries the map and writes its pictures beside the bundle", async () => {
-    const tags = join(dir, "new-box", "tags.storylettags");
-    writeFileSync(tags, JSON.stringify({
-      schema: "storylets/tags@0",
-      groups: [{
-        id: "d_zone", gameId: "zone",
-        tags: [{ id: "v_yard", gameId: "yard", templates: { spatial: { polygon: [{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 4 }] } } }],
-        templates: { spatial: { map: true, backgrounds: [{ id: "g_1", file: "plan.png", x: 0, y: 0, width: 8, height: 8 }] } },
-      }],
-    }));
-    mkdirSync(join(dir, "new-box", "assets"), { recursive: true });
-    writeFileSync(join(dir, "new-box", "assets", "plan.png"), Buffer.from("89504e470d0a1a0a", "hex"));
+    // The rpg kit made this project's map (the kit's zones, at the root). A
+    // picture goes behind it, in the project's one assets folder.
+    const mapPath = join(dir, "map.storyletmap");
+    const map = parseSource(readFileSync(mapPath, "utf8")) as { group: { templates: { spatial: Record<string, unknown> } } };
+    map.group.templates.spatial["backgrounds"] = [{ id: "g_1", file: "plan.png", x: 0, y: 0, width: 8, height: 8 }];
+    writeFileSync(mapPath, canonicalStringify(map));
+    mkdirSync(join(dir, "assets"), { recursive: true });
+    writeFileSync(join(dir, "assets", "plan.png"), Buffer.from("89504e470d0a1a0a", "hex"));
 
     const off = (await call("export", dir));
     expect(off.code).toBe(0);
     const bundlePath = join(dir, "..", "storylet-dist", "demo.storyletsc");
-    expect(JSON.parse(readFileSync(bundlePath, "utf8")).maps).toBeUndefined();
+    const plain = JSON.parse(readFileSync(bundlePath, "utf8"));
+    expect(plain.map.group.gameId).toBe("area");
+    expect(plain.map.geometry).toBeUndefined();
     expect(existsSync(join(dir, "..", "storylet-dist", "assets"))).toBe(false);
 
     const on = (await call("export", dir, "--map"));
     expect(on.err).toEqual([]);
     expect(on.code).toBe(0);
     expect(on.out.join("\n")).toContain("1 map picture(s)");
-    const maps = JSON.parse(readFileSync(bundlePath, "utf8")).maps;
-    expect(maps[0].group).toBe("zone");
-    expect(maps[0].backgrounds[0].file).toBe("assets/new-box/plan.png");
-    expect(existsSync(join(dir, "..", "storylet-dist", "assets", "new-box", "plan.png"))).toBe(true);
+    const geometry = JSON.parse(readFileSync(bundlePath, "utf8")).map.geometry;
+    expect(geometry.zones.map((z: { tag: string }) => z.tag).sort()).toEqual(["market", "tavern"]);
+    expect(geometry.backgrounds[0].file).toBe("assets/plan.png");
+    expect(existsSync(join(dir, "..", "storylet-dist", "assets", "plan.png"))).toBe(true);
 
     // Put the project back the way the rest of this lifecycle expects it.
     (await call("export", dir));
@@ -186,6 +185,45 @@ describe("lifecycle: init -> draw -> export -> validate -> format", () => {
     expect((await call("format", dir)).code).toBe(0);
     expect(readFileSync(boxPath, "utf8")).toBe(canonical);
     expect((await call("format", dir, "--check")).code).toBe(0);
+  });
+});
+
+// The project map migration from the terminal (design/project-map-contract.md
+// 4.2): an old project's map group and its picture move to the root, which is
+// the one thing a planned write cannot do on its own (the picture is bytes).
+describe("format moves a project from before the project map onto it", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "storyletengine-pm-"));
+  const dir = join(tmp, "old.storylets");
+
+  it("is refused by export until format has run, then moves the map and its picture", async () => {
+    expect((await call("init", dir)).code).toBe(0);
+    writeFileSync(join(dir, "main", "tags.storylettags"), canonicalStringify({
+      schema: "storylets/tags@0",
+      groups: [{
+        id: "d_zone", gameId: "zone",
+        tags: [{ id: "v_yard", gameId: "yard", templates: { spatial: { polygon: [{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 4 }] } } }],
+        templates: { spatial: { map: true, backgrounds: [{ id: "g_1", file: "plan.png", x: 0, y: 0, width: 8, height: 8 }] } },
+      }],
+    }));
+    mkdirSync(join(dir, "main", "assets"), { recursive: true });
+    writeFileSync(join(dir, "main", "assets", "plan.png"), Buffer.from("89504e470d0a1a0a", "hex"));
+
+    const refused = await call("export", dir);
+    expect(refused.code).toBe(1);
+    expect(refused.err.join("\n")).toContain("run `storyletengine format` to move it");
+    expect((await call("format", dir, "--check")).code).toBe(1);
+
+    const moved = await call("format", dir);
+    expect(moved.err).toEqual([]);
+    expect(moved.code).toBe(0);
+    expect(moved.out).toContain('the map of "main" is the project map ("zone", 1 zones)');
+    expect(moved.out.at(-1)).toBe("formatted 3 shard(s), moved 1 picture(s)");
+    expect(existsSync(join(dir, "map.storyletmap"))).toBe(true);
+    expect(existsSync(join(dir, "assets", "plan.png"))).toBe(true);
+    expect(existsSync(join(dir, "main", "assets"))).toBe(false);
+
+    expect((await call("format", dir, "--check")).code).toBe(0);
+    expect((await call("export", dir, "--map")).code).toBe(0);
   });
 });
 

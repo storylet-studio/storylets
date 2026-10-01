@@ -3,7 +3,7 @@
   hands: [
     {
       chosen: {
-        d_news_district: "v_news_docks",
+        d_con_district: "v_con_docks",
       },
       gameId: "dock-screen",
       id: "h_dock_screen",
@@ -14,7 +14,7 @@
     },
     {
       chosen: {
-        d_news_district: "v_news_oldgrid",
+        d_con_district: "v_con_oldgrid",
       },
       gameId: "grid-screen",
       id: "h_grid_screen",
@@ -25,7 +25,7 @@
     },
     {
       chosen: {
-        d_news_district: "v_news_strip",
+        d_con_district: "v_con_strip",
       },
       gameId: "strip-screen",
       id: "h_strip_screen",
@@ -38,7 +38,7 @@
   templates: [
     {
       chooses: [
-        "d_news_district",
+        "d_con_district",
       ],
       gameId: "screen",
       id: "t_screen",

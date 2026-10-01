@@ -51,7 +51,7 @@ import { pinForPublish } from "./pin.js";
 import { findPatterpad, launchPatterpad, patterpadExecutable } from "./patterpad.js";
 import { createPatterScene } from "./patter-scene.js";
 import { findScene, readPatterLink } from "@storylet-studio/ops";
-import { analyseInfluence, canvasFurniture, cardNeighbourhood, cardPositions, clearCanonicalCache, describeContribution, mapSites, runCoverage, runCoverageAsync, projectFolderName, runPack, runUnpack, runUnpackMerge, sharedSpaces, PACK_EXTENSION, assetPath, orphanAssetPaths } from "@storylet-studio/ops";
+import { analyseInfluence, canvasFurniture, cardNeighbourhood, cardPositions, clearCanonicalCache, describeContribution, mapSites, runCoverage, runCoverageAsync, projectFolderName, runPack, runUnpack, runUnpackMerge, PACK_EXTENSION, PROJECT_MAP_CANVAS, assetPath, orphanAssetPaths } from "@storylet-studio/ops";
 import { clearParseCache } from "@storylet-studio/compiler";
 import type { UnpackMergeResult } from "@storylet-studio/ops";
 import { createJobHost } from "@wildwinter/app-shell/job";
@@ -616,7 +616,7 @@ app.on("open-file", (event, path) => {
 function sweepOrphanAssets(ending: ProjectSession | undefined): void {
   const source = ending?.loaded.source;
   if (!ending || !source) return;
-  const orphans = orphanAssetPaths(ending.loaded.dir, source.boxes);
+  const orphans = orphanAssetPaths(ending.loaded.dir, source);
   for (const path of orphans) {
     try { rmSync(path); } catch { /* gone already, or read-only: not worth a word */ }
   }
@@ -1762,7 +1762,15 @@ function wireIpc(): void {
     const box = source?.boxes.find((b) => b.box.box.id === boxId);
     if (!source || !box) return base;
 
-    const spatial = box.tags.groups.filter(isSpatial);
+    // The map a box shows is the PROJECT map, when the box is on it
+    // (design/project-map-contract.md): its zones and pictures once for the
+    // project, the box's own sites on them. A box group still marked as a map
+    // is a project from before, which the compiler refuses until `format` has
+    // moved it; it is still drawn here so the author can see what will move.
+    const spatial = [
+      ...(box.box.box.usesMap === true && source.map !== undefined ? [source.map.group] : []),
+      ...box.tags.groups.filter(isSpatial),
+    ];
     const groups = spatial.map((g) => ({ id: g.id, gameId: effectiveGameId(g) }));
     // The group asked for, else the box's first: opening the view should show a map
     // rather than ask which one before showing anything.
@@ -1781,7 +1789,7 @@ function wireIpc(): void {
     // The pictures behind the map, already in draw order and already checked
     // against the disk: a view should draw a placeholder, not discover a 404.
     const backgrounds: MapBackgroundDto[] = backgroundsOf(group).map((b) => {
-      const full = assetPath(session!.loaded.dir, box, b.file);
+      const full = assetPath(session!.loaded.dir, b.file);
       return {
         id: b.id, file: b.file, url: assetUrl(box.box.box.id, b.file),
         x: b.x, y: b.y, width: b.width, height: b.height,
@@ -1817,32 +1825,23 @@ function wireIpc(): void {
 
     return {
       hasProject: true, groups, groupId: group.id, zones: drawn, undrawn, backgrounds, sites, unplaced,
-      furniture: furnitureDto(canvasFurniture(box, { kind: "map" })),
+      furniture: furnitureDto(canvasFurniture(box, { kind: "map" }, source.map)),
     };
   });
 
   ipcMain.handle("map:project", (): ProjectMapDto[] => {
     const source = session?.loaded.source;
-    if (!source) return [];
-    // Boxes carrying the same place (ops sharedSpaces) get a shared stamp, so
-    // the Board can draw the place ONCE with every member's hands on it.
-    const spaces = sharedSpaces(source);
-    const spaceOf = new Map<string, number>();
-    spaces.forEach((space, i) => {
-      for (const b of space.boxes) spaceOf.set(`${b}|${space.group}`, i);
-    });
-    const maps: ProjectMapDto[] = [];
-    for (const box of source.boxes) {
-      for (const group of box.tags.groups.filter(isSpatial)) {
-        const space = spaceOf.get(`${effectiveGameId(box.box.box)}|${effectiveGameId(group)}`);
-        maps.push({
-          box: box.box.box.id, boxGameId: effectiveGameId(box.box.box),
-          group: group.id, groupGameId: effectiveGameId(group),
-          ...(space !== undefined ? { space } : {}),
-        });
-      }
-    }
-    return maps;
+    if (!source || source.map === undefined) return [];
+    // One map, the project's, seen from each box on it. With more than one box
+    // on it they are stamped as one space, so the Board draws the place ONCE
+    // with every box's hands on it, as it drew shared copies before.
+    const group = source.map.group;
+    const on = source.boxes.filter((b) => b.box.box.usesMap === true);
+    return on.map((box) => ({
+      box: box.box.box.id, boxGameId: effectiveGameId(box.box.box),
+      group: group.id, groupGameId: effectiveGameId(group),
+      ...(on.length > 1 ? { space: 0 } : {}),
+    }));
   });
 
   ipcMain.handle("map:setSpatial", (_event, boxId: string, groupId: string, on: boolean) => {
@@ -2040,8 +2039,18 @@ function wireIpc(): void {
     const source = session?.loaded.source;
     if (!source) return [];
     const out: CommentMarkerDto[] = [];
+    // A box's map canvas also shows the threads `storyletengine format` moved
+    // onto the project map's canvas, `map`, that stayed in the box because they
+    // are about one of its sites (design/project-map-contract.md 1.1). Threads
+    // about the map itself now sit in the project's root notes, which this
+    // editor does not read yet.
+    const mapOf = canvas.startsWith(MAP_CANVAS) ? canvas.slice(MAP_CANVAS.length) : undefined;
     for (const box of source.boxes) {
-      for (const thread of marksOn(box.notes, canvas)) {
+      const onCanvas = [
+        ...marksOn(box.notes, canvas),
+        ...(mapOf === box.box.box.id ? marksOn(box.notes, PROJECT_MAP_CANVAS) : []),
+      ];
+      for (const thread of onCanvas) {
         const at = markOf(thread);
         if (!at) continue;
         // The first message that still SAYS something, and a count of the same:
@@ -2579,7 +2588,9 @@ function createWindow(): void {
  * `storylet-asset://<boxId>/<file>`, and both halves are checked against the
  * OPEN PROJECT: an unknown box, a name that is not a plain file name, or no
  * project at all, and nothing is served. So a renderer (or anything that gets to
- * run in one) can reach a box's own pictures and nothing else on the disk.
+ * run in one) can reach the project's own pictures and nothing else on the disk.
+ * The box names the map being viewed; the file is served from the project's one
+ * assets folder (design/project-map-contract.md 1.4).
  */
 function serveAssets(): void {
   protocol.handle(ASSET_SCHEME, async (request) => {
@@ -2591,7 +2602,7 @@ function serveAssets(): void {
     const source = session?.loaded.source;
     const box = source?.boxes.find((b) => b.box.box.id === boxId);
     if (!session || !box) return new Response("no such box", { status: 404 });
-    const full = assetPath(session.loaded.dir, box, file);
+    const full = assetPath(session.loaded.dir, file);
     if (full === undefined) return new Response("not a file name", { status: 400 });
     try {
       const bytes = await readFile(full);

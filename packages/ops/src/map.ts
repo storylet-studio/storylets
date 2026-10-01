@@ -1,12 +1,15 @@
 // ---------------------------------------------------------------------------
-// The box map: reading and writing a box's `.storyletmap` shard.
+// The maps on disk: the PROJECT map (the root `map.storyletmap`: the zone group
+// and the map's frames, design/project-map-contract.md 1.1) and each box's own
+// `.storyletmap` (its SITES, 1.3).
 //
-// Where a box's HANDS stand in space, and the furniture drawn round them. Split
-// out of the view shard on 2026-09-06 (design/engine-server.md 9.1 point 5):
-// a hand's position ships in the bundle's `maps` block (4.3), which makes it the
-// thing a venue provisions its kiosks against, so the map is the DESIGNER's
-// shape, while the deck canvases next door stay the author's. One file could not
-// be both, and the server's two keys are what made that matter.
+// Where a box's HANDS stand in space. Split out of the view shard on 2026-09-06
+// (design/engine-server.md 9.1 point 5): a hand's position ships in the bundle's
+// `map.geometry.sites` (4.3), which makes it the thing a venue provisions its
+// kiosks against, so the map is the DESIGNER's shape, while the deck canvases
+// next door stay the author's. One file could not be both, and the server's two
+// keys are what made that matter. The furniture drawn round the sites is the
+// project map's since the project map: there is one map, so one set of frames.
 //
 // Sparse and forgiving, exactly as view.ts is, and for the same reason: the map
 // answers to content that moves underneath it. A hand with no site has not been
@@ -26,10 +29,49 @@
 
 import { join } from "node:path";
 import { boxMapOf, canonicalStringify } from "@storylet-studio/compiler";
-import type { SourceBox } from "@storylet-studio/compiler";
-import { MAP_SCHEMA, SHARD_EXTENSIONS, VIEW_SCHEMA } from "@storylet-studio/model";
-import type { BoxMap, MapShard, ViewPoint, ViewShard } from "@storylet-studio/model";
+import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
+import { MAP_SCHEMA, PROJECTMAP_SCHEMA, SHARD_EXTENSIONS, VIEW_SCHEMA } from "@storylet-studio/model";
+import type { BoxMap, Frame, MapShard, ProjectMapShard, TagGroup, ViewPoint, ViewShard } from "@storylet-studio/model";
 import type { PlannedWrite } from "./write.js";
+
+// --- the project map -------------------------------------------------------------
+
+/** Where the project keeps its map: the root, beside the project shard. */
+export function projectMapPath(dir: string): string {
+  return join(dir, `map${SHARD_EXTENSIONS.map}`);
+}
+
+/** The project map's zone group, or undefined when the project has no map. */
+export function projectMapGroup(source: SourceProject): TagGroup | undefined {
+  return source.map?.group;
+}
+
+/** The boxes on the project map, in project order. */
+export function boxesOnMap(source: SourceProject): SourceBox[] {
+  return source.boxes.filter((box) => box.box.box.usesMap === true);
+}
+
+/**
+ * Plan the write that records the project map with `group` as its zone group,
+ * keeping the frames it already has. The shard is created when the project had
+ * none: the one act that makes a project have a map.
+ */
+export function planProjectMapGroup(dir: string, source: SourceProject, group: TagGroup): PlannedWrite {
+  const shard: ProjectMapShard = { ...source.map, schema: PROJECTMAP_SCHEMA, group };
+  return { path: projectMapPath(dir), content: canonicalStringify(shard) };
+}
+
+/** Plan the write that records the project map's frames, the whole list (the
+ *  reason `planCanvasFurniture` gives). Nothing to plan for a project with no
+ *  map: there is nothing to draw them on. */
+export function planProjectMapFrames(dir: string, source: SourceProject, frames: Frame[]): PlannedWrite[] {
+  if (source.map === undefined) return [];
+  const shard: ProjectMapShard = { ...source.map, schema: PROJECTMAP_SCHEMA };
+  if (frames.length > 0) shard.frames = frames; else delete shard.frames;
+  return [{ path: projectMapPath(dir), content: canonicalStringify(shard) }];
+}
+
+// --- a box's sites ---------------------------------------------------------------
 
 /** Where the box keeps its map. */
 export function mapPath(dir: string, box: SourceBox): string {
@@ -42,7 +84,10 @@ export function mapPath(dir: string, box: SourceBox): string {
 const viewShardPath = (dir: string, box: SourceBox): string =>
   join(dir, box.path, `view${SHARD_EXTENSIONS.view}`);
 
-/** The box's map as recorded, wherever it is recorded, or an empty one. */
+/** The box's map as recorded, wherever it is recorded, or an empty one. Its
+ *  sites, that is: frames a shard from before the project map still carries are
+ *  read by nothing but the formatter, and are kept as they are by every write
+ *  here until it moves them. */
 export function boxMap(box: SourceBox): BoxMap {
   return boxMapOf(box) ?? {};
 }
@@ -169,12 +214,3 @@ export function planForgetSites(dir: string, box: SourceBox, handIds: string[]):
   return [...mapWrite(dir, box, map), ...viewDrop(dir, box)];
 }
 
-/** Plan the writes that record the map's own furniture. The whole list, for the
- *  reason `planCanvasFurniture` gives; this is the map half of it. */
-export function planMapFurniture(
-  dir: string, box: SourceBox, frames: NonNullable<BoxMap["frames"]>,
-): PlannedWrite[] {
-  const map: BoxMap = { ...boxMap(box) };
-  if (frames.length > 0) map.frames = frames; else delete map.frames;
-  return [...mapWrite(dir, box, map), ...viewDrop(dir, box)];
-}

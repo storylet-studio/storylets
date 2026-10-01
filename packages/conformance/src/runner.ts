@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // The reference runners: one per case kind, driven from the compiled corpus.
-// A port re-implements these four in its own language and drives them from
+// A port re-implements these five in its own language and drives them from
 // corpus.json; this file documents the exact obligations.
 //
 // Scripted/draw runners return a list of FAILURE strings (empty = pass) so a
@@ -14,7 +14,7 @@ import { storyletsDialect } from "@storylet-studio/dialect";
 import { Engine, Flow, makePrng } from "@storylet-studio/runtime";
 import { effectiveGameId } from "@storylet-studio/model";
 import type { Bundle, FlowSave, LoadProperty, LoadReport } from "@storylet-studio/model";
-import type { ExpressionCase, PeekCase, ScriptedCase, SpecificityCase, StateSelector } from "./types.js";
+import type { ExpressionCase, LoadCase, PeekCase, ScriptedCase, SpecificityCase, StateSelector } from "./types.js";
 
 /** Truthiness for a bare condition; mirrors the runtime's `conditionPasses`,
  *  and Patterplay's `truthy`, which it was aligned with on 2026-09-01. */
@@ -519,4 +519,25 @@ export function runScriptedCase(c: ScriptedCase): string[] {
     }
   });
   return failures;
+}
+
+/** Construct an engine from a bundle that must be REFUSED
+ *  (design/project-map-contract.md 3.8). The obligation is the whole of it:
+ *  construction fails through the runtime's construction-refusal channel
+ *  (here, the constructor throws), and the refusal names every
+ *  `expectRefused` string. An engine that constructs is a failure even if it
+ *  would refuse later, at a deal: the point of refusing at load is that a
+ *  half-working bundle never gets as far as a hand. Returns failures; empty
+ *  = pass. */
+export function runLoadCase(c: LoadCase): string[] {
+  let error: string | undefined;
+  try {
+    new Engine(c.bundle, { seed: 0 });
+  } catch (e) {
+    error = String(e);
+  }
+  if (error === undefined) return ["expected the engine to refuse the bundle at construction, it was accepted"];
+  return c.expectRefused
+    .filter((want) => !error!.includes(want))
+    .map((want) => `expected the refusal to name "${want}", got ${show(error)}`);
 }

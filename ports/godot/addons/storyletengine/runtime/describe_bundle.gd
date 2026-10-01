@@ -40,17 +40,23 @@ const SCOPE_TAG := "tag"
 ## Returns {
 ##   "identity": {"schema", "project", "version", "hash", "metadata"},
 ##   "totals": {"boxes", "decks", "cards", "hands", "templates", "tagGroups"},
-##   "boxes": [{"gameId", "title"?, "ranking": {"specificity"},
+##   "boxes": [{"gameId", "title"?, "usesMap"?: true (on the project map),
+##              "ranking": {"specificity"},
 ##              "turn"?: {"seconds"} (a TIMED box, 4.8),
 ##              "durableCards"?: int (cards whose never-spend outlives a run, 4.2),
-##              "tagGroups": [{"gameId", "tags": [gameId]}],
+##              "tagGroups": [{"gameId", "tags": [gameId]}] (the box's OWN groups),
 ##              "counts": {"decks", "cards", "hands", "templates", "tagGroups"}}],
 ##   "hands": [{"gameId", "title"?, "box", "slots" (INF = unbounded), "template"?,
 ##              "movable"?: [{"group", "from"}]}],
 ##   "properties": [{"scope", "owner", "box"?, "group"?,
 ##                   "properties": [{"name", "type", "default", "values"?,
 ##                                   "durable"? (true only, 4.2), "purpose"?}]}],
+##   "map"?: {"group", "tags": [gameId], "boxes": [gameId], "zones", "backgrounds",
+##            "sites": {boxGameId: int}} (absent when the bundle has no project map),
 ## }
+##
+## A zone of the project map is a "tag" scope with "group" and NO "box": it
+## belongs to none. totals.tagGroups counts the project group once.
 static func describe_bundle(bundle: Dictionary) -> Dictionary:
 	var content: Dictionary = bundle.get("content", {})
 	var identity := {
@@ -100,6 +106,11 @@ static func describe_bundle(bundle: Dictionary) -> Dictionary:
 		var summary := {"gameId": box_game_id}
 		if box.has("title"):
 			summary["title"] = str(box["title"])
+		# On the project map (design/project-map-contract.md 3.7): the box may
+		# name the map's group in peek criteria beside its own "tagGroups",
+		# which list the box's OWN groups only. Absent is "not on the map".
+		if box.get("usesMap", false) == true:
+			summary["usesMap"] = true
 		summary["ranking"] = {"specificity": bool(box.get("ranking", {}).get("specificity", true))}
 		# Present on a TIMED box (design/engine-server.md 4.8): how long one of
 		# its turns lasts, so an integrator knows which boxes their host must
@@ -136,7 +147,7 @@ static func describe_bundle(bundle: Dictionary) -> Dictionary:
 			row["slots"] = _hand_slots(hand, template)
 			if template != null:
 				row["template"] = StoryletBundle.effective_game_id(template)
-			var movable := _movable_holes(hand, groups)
+			var movable := _movable_holes(hand, StoryletBundle.groups_of_box(bundle, box))
 			if not movable.is_empty():
 				row["movable"] = movable
 			hands.append(row)
@@ -156,29 +167,53 @@ static func describe_bundle(bundle: Dictionary) -> Dictionary:
 				_push(properties, SCOPE_TAG, StoryletBundle.effective_game_id(tag), box_game_id,
 					group_game_id, tag.get("properties", []))
 
-	# Maps are inert payload: nothing in the engine reads them, which is exactly
-	# why the inspector has to say they are there. A host that wants the polygons
-	# reads bundle["maps"] directly - the parsed Dictionary IS the bundle here,
-	# so the geometry needs no accessor of its own.
-	var maps: Array = []
-	for map in bundle.get("maps", []):
-		maps.append({
-			"box": str(map.get("box", "")),
-			"group": str(map.get("group", "")),
-			"zones": (map.get("zones", []) as Array).size(),
-			"backgrounds": (map.get("backgrounds", []) as Array).size(),
-			# Placed hands: where the kiosks stand (design/engine-server.md 4.3).
-			"sites": (map.get("sites", []) as Array).size(),
-		})
-
-	return {
+	# The project map (design/project-map-contract.md 3.7): its zones' property
+	# scopes ONCE and after every box, whichever boxes use them, in the order the
+	# engine's value bags are built; a "tag" scope with no "box", because a zone
+	# belongs to none. Then the summary: the group, which boxes are on it, and
+	# how much geometry the bundle carries. The geometry is inert payload that
+	# nothing in the engine reads, which is exactly why the inspector has to say
+	# it is there; a host that wants the polygons reads
+	# bundle["map"]["geometry"] directly. The counts are zero when the build did
+	# not ask for geometry; the group is there regardless, because hands and
+	# cards reference it.
+	var out := {
 		"identity": identity,
 		"totals": totals,
 		"boxes": boxes,
 		"hands": hands,
 		"properties": properties,
-		"maps": maps,
 	}
+	var map = bundle.get("map")
+	if map is Dictionary:
+		var map_group: Dictionary = map.get("group", {})
+		var map_game_id := StoryletBundle.effective_game_id(map_group)
+		var zone_names: Array = []
+		for tag in map_group.get("tags", []):
+			zone_names.append(StoryletBundle.effective_game_id(tag))
+			_push(properties, SCOPE_TAG, StoryletBundle.effective_game_id(tag), "",
+				map_game_id, tag.get("properties", []))
+		totals["tagGroups"] += 1
+		var on_map: Array = []
+		for box in bundle.get("boxes", []):
+			if box.get("usesMap", false) == true:
+				on_map.append(StoryletBundle.effective_game_id(box))
+		var geometry: Dictionary = map.get("geometry", {})
+		# Placed hands per box: where the kiosks stand (design/engine-server.md
+		# 4.3). Only boxes with a site have a key.
+		var sites := {}
+		var by_box: Dictionary = geometry.get("sites", {})
+		for box_game_id in by_box:
+			sites[str(box_game_id)] = (by_box[box_game_id] as Array).size()
+		out["map"] = {
+			"group": map_game_id,
+			"tags": zone_names,
+			"boxes": on_map,
+			"zones": (geometry.get("zones", []) as Array).size(),
+			"backgrounds": (geometry.get("backgrounds", []) as Array).size(),
+			"sites": sites,
+		}
+	return out
 
 
 ## The slot cap as the inspectors show it ("unbounded" for the uncapped hand).
@@ -238,7 +273,10 @@ static func _push(out: Array, scope: String, owner: String, box: String, group: 
 		decls: Variant) -> void:
 	if not (decls is Array) or (decls as Array).is_empty():
 		return
-	var row := {"scope": scope, "owner": owner, "box": box}
+	# A zone of the project map passes no box: it belongs to none.
+	var row := {"scope": scope, "owner": owner}
+	if box != "":
+		row["box"] = box
 	if group != "":
 		row["group"] = group
 	row["properties"] = _summarise(decls)
@@ -268,7 +306,10 @@ static func _hand_decls(hand: Dictionary, templates: Array) -> Variant:
 ## rule-binding value that is a property reference rather than a tag (4.6).
 ## Absent from the row when there are none, which is the ordinary case; it is
 ## the one thing about a hand its name cannot say, because writing that
-## property MOVES the hand and set_property is the whole verb.
+## property MOVES the hand and set_property is the whole verb. `groups` is what
+## the engine resolves the group in: the box's own groups and, for a box on the
+## project map, the map's group, so the roaming character whose hole names a
+## zone is reported rather than lost (design/project-map-contract.md 3.7).
 static func _movable_holes(hand: Dictionary, groups: Array) -> Array:
 	var filled: Dictionary = hand.get("chosen", {}) if hand.has("template") \
 		else (hand.get("rule", {}) as Dictionary).get("bindings", {})

@@ -6,6 +6,25 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking: the project map** (2026-10-01). A project has at most one map, above the boxes:
+  `bundle.map` is a `ProjectMap` whose `group` is the zone tag group (read by the engine) and whose
+  `geometry` is the inert drawing (zones, pictures, and sites keyed by box gameId), present only when
+  the build asked for it. `bundle.maps` is gone. A box that opts in has `usesMap: true`; it sees the
+  map's group name beside its own groups, and its hands and cards reference the zones by id as with
+  any group. Each zone is one value bag whichever boxes use it, addressed `value.<zone>.<name>`; a
+  box-qualified address naming a zone is refused, naming the short form. Play history
+  (`count_played_in`, `turns_since_played_in`) stays box-specific. `describe_bundle` gains
+  `usesMap` on each box and `map` (replacing `maps`), lists each zone's properties once with no box,
+  and resolves a movable hole that names a zone. Bundle schema `storylets/bundle@1`; `@0` is still
+  read.
+- **The engine refuses an unreadable bundle at construction**: a schema other than
+  `storylets/bundle@0` or `@1`, or a bundle that breaks the project map's rules (a box off the map
+  referencing its group, a box on it with no map or with a group of the map's name, a zone sharing a
+  box tag's name, a map group called `place`). `StoryletEngine.create` returns null and reports one error starting `bundle refused: ` names every
+  problem. Corpus version 10.
+
 ## [0.8.2] - 2026-09-27
 
 ### Changed

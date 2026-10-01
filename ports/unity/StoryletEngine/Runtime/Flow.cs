@@ -315,11 +315,19 @@ namespace StoryletStudio.StoryletEngine
         /// the same way (schema 1 - boxes namespace their groups), so a name is
         /// only ever resolved inside the box being asked, never bundle-wide.
         /// Ids are project-unique and accepted here too, still confined to the
-        /// box.</summary>
-        private static TagGroup GroupInBox(Box box, string reference)
+        /// box.
+        ///
+        /// A box on the project map sees ONE namespace: its own groups, then
+        /// the map's group (design/project-map-contract.md 3.1). A box that has
+        /// not opted in does not see the map's name at all, so a peek naming it
+        /// there is the ordinary unknown-group refusal. Own groups first is
+        /// stated for determinism only: a bundle that loads never has the two
+        /// share a name.</summary>
+        private TagGroup GroupInBox(Box box, string reference)
         {
-            return box.TagGroups.Find(g => Model.EffectiveGameId(g) == reference)
-                ?? box.TagGroups.Find(g => g.Id == reference);
+            var groups = Model.GroupsOfBox(_engine._bundle, box);
+            return groups.Find(g => Model.EffectiveGameId(g) == reference)
+                ?? groups.Find(g => g.Id == reference);
         }
 
         /// <summary>A count out of one of the play indexes, 0 when absent.
@@ -330,11 +338,22 @@ namespace StoryletStudio.StoryletEngine
             return map.TryGetValue(key, out n) ? n : 0;
         }
 
-        /// <summary>The play-history indexes' key for one (group, tag) pair. A
-        /// unit separator (U+001F) joins them: ids are letters, digits and
+        /// <summary>The play-history indexes' key for one (box, group, tag)
+        /// triple.
+        ///
+        /// The BOX is in it because play history is box-specific
+        /// (design/project-map-contract.md 3.7, D7, ruled 2026-10-01):
+        /// count_played_in asks about the asking box's own plays. A box group
+        /// was already box-unique, so its key never needed the box; a
+        /// project-map zone is one tag every opted-in box tags its cards with,
+        /// and without the box a play of a newspaper at the quay in one box
+        /// would count as an encounter at the quay in another.
+        ///
+        /// A unit separator (U+001F) joins them: ids are letters, digits and
         /// underscores, so a control character cannot occur in one and two
-        /// pairs can never collide into one key.</summary>
-        private static string TagKey(string groupId, string tagId) => groupId + "\u001f" + tagId;
+        /// triples can never collide into one key.</summary>
+        private static string TagKey(string boxId, string groupId, string tagId) =>
+            boxId + "\u001f" + groupId + "\u001f" + tagId;
 
         /// <summary>Fold one play into the indexes. O(the card's tags), not
         /// O(the log).</summary>
@@ -348,7 +367,8 @@ namespace StoryletStudio.StoryletEngine
             {
                 foreach (var tagId in pair.Value)
                 {
-                    var key = TagKey(pair.Key, tagId);
+                    // Keyed by the PLAYED card's box: history is box-specific (D7).
+                    var key = TagKey(entry.Box.Id, pair.Key, tagId);
                     _tagPlayCount[key] = CountAt(_tagPlayCount, key) + 1;
                     _lastPlayInTag[key] = record;
                 }
@@ -368,8 +388,10 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary><paramref name="box"/> is the box whose ask is being
         /// evaluated: the play-history functions take a bare group name, so it
-        /// resolves there (a card's tags reference its own box's group, which
-        /// keeps the counts box-local).</summary>
+        /// resolves there, and they count only that box's own plays (the box is
+        /// in the index key). That was automatic while every group was a box's;
+        /// a project-map zone is shared, and its history is still not
+        /// (design/project-map-contract.md 3.7, D7).</summary>
         /// <summary>One host per box, built once. The delegates below read
         /// _playCount, _turnCounts and the rest LIVE, so a cached host answers
         /// with current state - which is what makes caching safe rather than a
@@ -392,14 +414,15 @@ namespace StoryletStudio.StoryletEngine
         private StoryletsHost MakeHost(Box box)
         {
             // A group NAME and tag name resolved in THIS box, as the index's
-            // key; null when either is unknown here, which is the old
+            // key, with this box in it: a zone's plays in another box are not
+            // this box's history. Null when either is unknown here, which is the old
             // per-record `false` and reads as "never". Resolved once per call,
             // where InTag used to resolve it again for every log record.
             string KeyOf(string group, string tag)
             {
                 var found = GroupInBox(box, group);
                 var t = found?.Tags.Find(v => v.GameId == tag);
-                return found == null || t == null ? null : TagKey(found.Id, t.Id);
+                return found == null || t == null ? null : TagKey(box.Id, found.Id, t.Id);
             }
             // Turns-since is measured on the played card's box's clock (3.4).
             double Since(PlayRecord record)
@@ -705,7 +728,9 @@ namespace StoryletStudio.StoryletEngine
         /// reads as content that does not exist.</summary>
         private void BindStateGroups(Box box, OrderedMap<string, string> boundTags, OrderedMap<string, string> askNames)
         {
-            foreach (var group in box.TagGroups)
+            // The box's own groups and, when it is on the project map, the
+            // map's group: a BoundBy there binds in every opted-in box (3.2).
+            foreach (var group in Model.GroupsOfBox(_engine._bundle, box))
             {
                 if (string.IsNullOrEmpty(group.BoundBy) || boundTags.GetOrDefault(group.Id) != null) continue;
                 var match = System.Text.RegularExpressions.Regex.Match(group.BoundBy, @"^@(world|story)\.([a-z][a-z0-9_-]*)$");

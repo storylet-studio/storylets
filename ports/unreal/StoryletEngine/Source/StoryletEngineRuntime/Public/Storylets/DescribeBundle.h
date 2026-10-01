@@ -34,7 +34,8 @@ namespace storylets
     /** What bundle this is: the staleness/identity triple plus the schema tag. */
     struct BundleIdentity
     {
-        /** The bundle schema tag ("storylets/bundle@0"). */
+        /** The bundle schema tag ("storylets/bundle@1", or "@0" from before
+         *  the project map). */
         std::string schema;
         /** content.project - the project name a save must agree with. */
         std::string project;
@@ -99,6 +100,10 @@ namespace storylets
         std::string gameId;
         /** Empty when the box has no title. */
         std::string title;
+        /** The box is on the project map (design/project-map-contract.md
+         *  3.7): it may name the map's group in peek criteria beside its own
+         *  tagGroups, which list the box's OWN groups only. */
+        bool usesMap = false;
         /** The only per-box ranking policy (Reboot 2.2). */
         bool rankingSpecificity = true;
         /** Set on a TIMED box (design/engine-server.md 4.8): how long one of its
@@ -142,7 +147,9 @@ namespace storylets
     }
 
     /** One scope's declared properties. owner is the owning entity's gameId
-     *  (empty for world / story); box names its box; group names a tag's group. */
+     *  (empty for world / story); box names its box; group names a tag's group.
+     *  A zone of the project map is a tag scope with a group and NO box: it
+     *  belongs to none. */
     struct PropertyScopeSummary
     {
         std::string scope;
@@ -165,20 +172,31 @@ namespace storylets
         int tagGroups = 0;
     };
 
-    /** What a bundle offers a host, read from the asset alone. */
-    /** One map the bundle was asked to carry. Counts rather than the geometry:
-     *  an inspector answers "what is in here", and a host that wants the
-     *  polygons reads Bundle::maps directly. */
+    /** The project map (design/project-map-contract.md 3.7): its group,
+     *  which boxes are on it, and how much geometry the bundle carries.
+     *
+     *  Counts rather than the geometry itself: an inspector answers "what is
+     *  in here", and a host that wants the polygons reads
+     *  Bundle::map->geometry directly. The geometry counts are zero when the
+     *  build did not ask for geometry (`export.map`); the group is there
+     *  regardless, because hands and cards reference it. */
     struct MapSummary
     {
-        std::string box;                        // the owning box, by gameId
-        std::string group;                      // the tag group, by gameId
+        /** The zone group's gameId: the name an opted-in box's peek criteria use. */
+        std::string group;
+        /** Its tags (the zones), by gameId. */
+        std::vector<std::string> tags;
+        /** The opted-in boxes, by gameId, in bundle order. */
+        std::vector<std::string> boxes;
+        /** Drawn zones in the carried geometry. */
         int zones = 0;
         int backgrounds = 0;
-        /** Placed hands standing on this map: where the kiosks are
-         *  (design/engine-server.md 4.3). */
-        int sites = 0;
+        /** Box gameId -> placed hands standing on the map: where the kiosks
+         *  are (design/engine-server.md 4.3). Only boxes with a site have a key. */
+        OrderedMap<std::string, int> sites;
     };
+
+    /** What a bundle offers a host, read from the asset alone. */
 
     struct BundleDescription
     {
@@ -187,13 +205,14 @@ namespace storylets
         std::vector<BoxSummary> boxes;
         /** Every hand in the bundle, box by box: the deal() surface. */
         std::vector<HandSummary> hands;
-        /** world, story, then per box: the box, its decks, its hands, its tags.
-         *  Scopes that declare nothing are omitted (world and story always
-         *  show, so their absence reads as "this bundle declares none"). */
+        /** world, story, then per box: the box, its decks, its hands, its tags;
+         *  then the project map's zones, once. Scopes that declare nothing are
+         *  omitted (world and story always show, so their absence reads as
+         *  "this bundle declares none"). */
         std::vector<PropertyScopeSummary> properties;
-        /** Maps carried as inert payload, when the build asked for them. Empty
-         *  is the normal state. */
-        std::vector<MapSummary> maps;
+        /** The project map, when the bundle has one. Empty is the bundle with
+         *  no map at all. */
+        std::optional<MapSummary> map;
     };
 
     /** The slot cap as the inspectors show it ("unbounded" for the uncapped
@@ -277,9 +296,14 @@ namespace storylets
 
         /** The hand's movable holes, in the bundle's own key order: every
          *  `chosen` / rule-binding value that is a property reference rather
-         *  than a tag (4.6). A group id the bundle does not carry is skipped:
+         *  than a tag (4.6). The group is looked up where the engine looks it
+         *  up: the box's own groups and, for a box on the project map, the
+         *  map's group, so the roaming character whose hole names a zone is
+         *  reported rather than lost (design/project-map-contract.md 3.7). A
+         *  group id neither place holds is a bundle the engine refuses or
+         *  cannot bind, and is skipped rather than reported under its raw id:
          *  the description speaks gameIds throughout. */
-        inline std::vector<MovableHole> MovableHoles(const Hand& hand, const Box& box)
+        inline std::vector<MovableHole> MovableHoles(const Bundle& bundle, const Hand& hand, const Box& box)
         {
             std::vector<MovableHole> holes;
             const OrderedMap<std::string, std::string>* filled = nullptr;
@@ -290,7 +314,7 @@ namespace storylets
             {
                 if (!IsHoleRef(pair.second)) continue;
                 const TagGroup* group = nullptr;
-                for (const TagGroup& g : box.tagGroups) { if (g.id == pair.first) { group = &g; break; } }
+                for (const TagGroup* g : GroupsOfBox(bundle, box)) { if (g->id == pair.first) { group = g; break; } }
                 if (!group) continue;
                 MovableHole hole;
                 hole.group = EffectiveGameId(*group);
@@ -353,19 +377,6 @@ namespace storylets
         story.properties = describedetail::Summarise(bundle.story.properties);
         d.properties.push_back(std::move(story));
 
-        // Inert payload, and therefore worth saying out loud: a bundle that
-        // silently carried a map would fail the promise this API makes.
-        for (const BundleMap& map : bundle.maps)
-        {
-            MapSummary summary;
-            summary.box = map.box;
-            summary.group = map.group;
-            summary.zones = static_cast<int>(map.zones.size());
-            summary.backgrounds = static_cast<int>(map.backgrounds.size());
-            summary.sites = static_cast<int>(map.sites.size());
-            d.maps.push_back(std::move(summary));
-        }
-
         for (const Box& box : bundle.boxes)
         {
             const std::string boxGameId = EffectiveGameId(box);
@@ -385,6 +396,7 @@ namespace storylets
             BoxSummary summary;
             summary.gameId = boxGameId;
             summary.title = box.title;
+            summary.usesMap = box.usesMap;
             summary.rankingSpecificity = box.ranking.specificity;
             summary.turnSeconds = box.turnSeconds;
             summary.durableCards = durableCards;
@@ -418,7 +430,7 @@ namespace storylets
                 h.box = boxGameId;
                 h.slots = describedetail::HandSlots(hand, templatePtr);
                 if (templatePtr) h.templateGameId = EffectiveGameId(*templatePtr);
-                h.movable = describedetail::MovableHoles(hand, box);
+                h.movable = describedetail::MovableHoles(bundle, hand, box);
                 d.hands.push_back(std::move(h));
             }
 
@@ -444,6 +456,36 @@ namespace storylets
                         tag.properties);
                 }
             }
+        }
+
+        // The project map's zones, ONCE and after every box, whichever boxes
+        // use them: the same order the engine's value bags are built in. A tag
+        // scope with no box, because a zone belongs to none.
+        if (bundle.map.has_value())
+        {
+            const ProjectMap& map = *bundle.map;
+            MapSummary summary;
+            summary.group = EffectiveGameId(map.group);
+            for (const Tag& tag : map.group.tags)
+            {
+                summary.tags.push_back(EffectiveGameId(tag));
+                describedetail::Push(d, scopekind::Tag, EffectiveGameId(tag), "", summary.group, tag.properties);
+            }
+            for (const Box& box : bundle.boxes)
+            {
+                if (box.usesMap) summary.boxes.push_back(EffectiveGameId(box));
+            }
+            if (map.geometry.has_value())
+            {
+                summary.zones = static_cast<int>(map.geometry->zones.size());
+                summary.backgrounds = static_cast<int>(map.geometry->backgrounds.size());
+                for (const auto& pair : map.geometry->sites)
+                {
+                    summary.sites.set(pair.first, static_cast<int>(pair.second.size()));
+                }
+            }
+            d.totals.tagGroups += 1;
+            d.map = std::move(summary);
         }
         return d;
     }

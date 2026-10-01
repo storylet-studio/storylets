@@ -17,5 +17,6 @@
       specificity: true,
     },
     title: "Items",
+    usesMap: true,
   },
 }

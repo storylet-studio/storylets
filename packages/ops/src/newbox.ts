@@ -10,14 +10,15 @@
 
 import { join } from "node:path";
 import {
-  BOX_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, SHARD_EXTENSIONS, SPATIAL, TAGS_SCHEMA, effectiveGameId, freeGameId, freeTitle, gameIdify,
+  BOX_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, SPATIAL, TAGS_SCHEMA, effectiveGameId, freeGameId, freeTitle, gameIdify, isSpatial,
 } from "@storylet-studio/model";
 import type { BoxShard, Card, DeckShard, HandsShard, HandTemplate, TagGroup, TagsShard } from "@storylet-studio/model";
-import { canonicalStringify } from "@storylet-studio/compiler";
+import type { SourceProject } from "@storylet-studio/compiler";
 import { newId } from "./ids.js";
 import type { LoadedProject } from "./load.js";
 import type { PlannedWrite } from "./write.js";
 import { boxFolderWrites } from "./box-folder.js";
+import { planProjectMapGroup } from "./map.js";
 
 /** A box kit: the scaffold a new box copies. Blank is always present; the
  *  narrated starters each teach a chapter of the model (A10): RPG teaches
@@ -63,16 +64,17 @@ function rpgKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckSha
   }];
   const tavern = newId("v");
   // A SPATIAL group, with the two areas drawn as zones. A place-based kit whose
-  // places are an abstract list teaches half the idea: the Map tab is where an
+  // places are an abstract list teaches half the idea: the map is where an
   // author sees where a card can be dealt, and a kit that leaves the map empty
-  // is a kit whose first lesson is "this feature does nothing".
+  // is a kit whose first lesson is "this feature does nothing". It becomes the
+  // PROJECT map when the project has none (`onProjectMap` below says how).
   //
   // Two touching rectangles, in the same coordinate space the map editor uses.
   // Deliberately plain: the author is meant to redraw them, and a hand-drawn
   // coastline here would read as content rather than as scaffold.
   const zone: TagGroup = {
     id: newId("d"), gameId: "area",
-    purpose: "Where the player is, drawn on the box's map. Cards tagged with an area deal there.",
+    purpose: "Where the player is, drawn on the project map. Cards tagged with an area deal there.",
     tags: [
       { id: tavern, gameId: "tavern", templates: { [SPATIAL]: { polygon: rect(0, 0, 320, 240) } } },
       { id: newId("v"), gameId: "market", templates: { [SPATIAL]: { polygon: rect(320, 0, 320, 240) } } },
@@ -198,7 +200,7 @@ function jobsKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckSh
       purpose: "How much attention the player has drawn. A job that goes loud raises it; lying low brings it down.",
     },
   ];
-  const d = districts("Where the boards are, drawn on the box's map. A job tagged with a district is posted there.", "docks", "old-town");
+  const d = districts("Where the boards are, drawn on the project map. A job tagged with a district is posted there.", "docks", "old-town");
   tags.groups.push(d.group);
   const template: HandTemplate<string> = {
     id: newId("t"), gameId: "job-board",
@@ -386,7 +388,7 @@ function newsKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckSh
     name: "wire", type: "flags", values: ["blackout", "raid"], default: [],
     purpose: "What is in the news. In a real game the rest of the game writes this; here the Happenings deck stands in for it. Once your other boxes write it, move it to @story.",
   }];
-  const d = districts("Where the screens are, drawn on the box's map. A headline tagged with a district runs there.", "docks", "old-town");
+  const d = districts("Where the screens are, drawn on the project map. A headline tagged with a district runs there.", "docks", "old-town");
   tags.groups.push(d.group);
   // A card with no district runs everywhere, so the happenings would reach the
   // screens. One small group keeps the news apart from what it reports.
@@ -531,8 +533,61 @@ export function runNewBox(opts: NewBoxOptions): NewBoxResult {
     cardNames.add(name);
   }
 
-  const writes = boxFolderWrites(opts.loaded.dir, {
-    box: boxShard, tags, hands, decks,
-  });
+  const map = onProjectMap(source, boxShard, tags, hands, decks);
+  const writes = [
+    ...boxFolderWrites(opts.loaded.dir, { box: boxShard, tags, hands, decks }),
+    ...(map !== undefined ? [planProjectMapGroup(opts.loaded.dir, source, map)] : []),
+  ];
   return { writes, boxId, folder };
+}
+
+/**
+ * A place-based kit on the PROJECT map (design/project-map-contract.md 8, D10).
+ *
+ * A kit draws its zones as a box group, the shape every kit is written in, and
+ * this lifts that group out of the box, because a map belongs to the project
+ * now. The box opts in either way. When the project has no map yet the kit's
+ * zones BECOME the project map, named clear of every group and tag the project
+ * already has (a zone's name is reserved project-wide); this is the one place a
+ * kit writes outside its own folder, and deliberately. When the project already
+ * has a map, the kit adds nothing to it and leaves the tagging to the author:
+ * the kit's references to its own zones are taken off its cards and hands, so
+ * the box deals from everything until somebody tags it.
+ *
+ * Returns the zone group to write as the project map, or undefined.
+ */
+function onProjectMap(
+  source: SourceProject, boxShard: BoxShard, tags: TagsShard, hands: HandsShard, decks: DeckShard[],
+): TagGroup | undefined {
+  const zones = tags.groups.find(isSpatial);
+  if (zones === undefined) return undefined;
+  tags.groups = tags.groups.filter((g) => g !== zones);
+  boxShard.box.usesMap = true;
+  if (source.map === undefined) {
+    const groupNames = new Set(source.boxes.flatMap((b) => b.tags.groups.map((g) => effectiveGameId(g))));
+    const tagNames = new Set(source.boxes.flatMap((b) => b.tags.groups.flatMap((g) => g.tags.map((t) => effectiveGameId(t)))));
+    const name = freeGameId(effectiveGameId(zones), groupNames);
+    if (name !== effectiveGameId(zones)) zones.gameId = name;
+    for (const tag of zones.tags) {
+      const zone = freeGameId(effectiveGameId(tag), tagNames);
+      if (zone !== effectiveGameId(tag)) tag.gameId = zone;
+      tagNames.add(zone);
+    }
+    return zones;
+  }
+  const id = zones.id;
+  for (const card of decks.flatMap((k) => k.cards)) {
+    if (card.tags?.[id] === undefined) continue;
+    delete card.tags[id];
+    if (Object.keys(card.tags).length === 0) delete card.tags;
+  }
+  for (const template of hands.templates) {
+    if (template.chooses !== undefined) template.chooses = template.chooses.filter((g) => g !== id);
+    if (template.bindings?.[id] !== undefined) delete template.bindings[id];
+  }
+  for (const hand of hands.hands) {
+    if (hand.chosen?.[id] !== undefined) delete hand.chosen[id];
+    if (hand.rule?.bindings?.[id] !== undefined) delete hand.rule.bindings[id];
+  }
+  return undefined;
 }

@@ -97,8 +97,8 @@ export function restack<T extends Stacked>(items: T[], id: string, move: StackMo
 export interface SpatialBackground {
   /** Stable id, so two authors adding images do not collide. */
   id: string;
-  /** The file's name inside the box's `assets/` folder. A NAME, not a path:
-   *  assets belong to their box and travel with it. */
+  /** The file's name inside the project's root `assets/` folder. A NAME, not a
+   *  path: nothing in a shard can point outside the project. */
   file: string;
   /** Where it sits, in map units. Placement and scale in one rectangle, because
    *  a separate scale factor is a second thing to reason about and there is no

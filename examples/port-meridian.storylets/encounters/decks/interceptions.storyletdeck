@@ -44,8 +44,8 @@
       purpose: "Two riders who know exactly what's in the crate. Somebody at the dockside board talks.",
       redraw: "never",
       tags: {
-        d_enc_district: [
-          "v_enc_strip",
+        d_con_district: [
+          "v_con_strip",
         ],
       },
       title: "Cold Interception",
@@ -77,8 +77,8 @@
       purpose: "Someone in a grey coat has matched your pace for three blocks of the Old Grid. They're not Syndicate.",
       redraw: "never",
       tags: {
-        d_enc_district: [
-          "v_enc_oldgrid",
+        d_con_district: [
+          "v_con_oldgrid",
         ],
       },
       title: "Collective Tail",

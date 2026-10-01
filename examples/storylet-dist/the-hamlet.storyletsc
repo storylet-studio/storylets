@@ -1,5 +1,5 @@
 {
-  "schema": "storylets/bundle@0",
+  "schema": "storylets/bundle@1",
   "boxes": [
     {
       "decks": [
@@ -1548,37 +1548,39 @@
       "ranking": {
         "specificity": true
       },
-      "tagGroups": [
-        {
-          "gameId": "area",
-          "id": "d_zone",
-          "purpose": "Where in the world this beat belongs.",
-          "tags": [
-            {
-              "gameId": "forest",
-              "id": "v_forest",
-              "properties": [
-                {
-                  "default": 0,
-                  "name": "peril",
-                  "type": "number"
-                }
-              ]
-            },
-            {
-              "gameId": "village",
-              "id": "v_village"
-            }
-          ]
-        }
-      ],
-      "title": "Village"
+      "tagGroups": [],
+      "title": "Village",
+      "usesMap": true
     }
   ],
   "content": {
-    "hash": "1tft0wf",
+    "hash": "1k87pmw",
     "project": "proj_village",
     "version": "0.1.0"
+  },
+  "map": {
+    "group": {
+      "gameId": "area",
+      "id": "d_zone",
+      "purpose": "Where in the world this beat belongs.",
+      "tags": [
+        {
+          "gameId": "forest",
+          "id": "v_forest",
+          "properties": [
+            {
+              "default": 0,
+              "name": "peril",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "gameId": "village",
+          "id": "v_village"
+        }
+      ]
+    }
   },
   "metadata": "full",
   "settings": {

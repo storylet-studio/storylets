@@ -5,6 +5,11 @@
 // the runtime deals in tag names, so a bundle that grew a map by accident would
 // be a silent regression in every shipping build - which is why the first test
 // here is that turning the flag off leaves the bundle byte-for-byte unchanged.
+//
+// The map is the PROJECT's (design/project-map-contract.md): its group is in the
+// root `map.storyletmap`, its pictures in the root `assets/`, and a box joins it
+// with `usesMap`. The zone group itself always ships (`bundle.map.group`), since
+// the runtime deals from it; what the flag adds is `bundle.map.geometry`.
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
@@ -13,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { canonicalStringify, parseSource, serialiseBundle } from "@storylet-studio/compiler";
+import type { Bundle } from "@storylet-studio/model";
 import { runExport } from "../src/export.js";
 import { loadProject } from "../src/load.js";
 
@@ -30,13 +36,30 @@ function scratch(): string {
   return dir;
 }
 
-/** Draw a map on the box's first tag group: two zones and a picture. */
-function drawMap(dir: string, opts: { hiddenPicture?: boolean } = {}): void {
+type Group = { id: string; gameId?: string; tags: { id: string; gameId?: string; templates?: Record<string, unknown> }[]; templates?: Record<string, unknown> };
+
+/** Make the box's first tag group the PROJECT map, and put the box on it, with
+ *  nothing drawn yet: the shape a project has before anybody traces a zone. */
+function liftMap(dir: string): void {
   const tags = join(dir, "encounters", "tags.storylettags");
-  const shard = parseSource(readFileSync(tags, "utf8")) as {
-    groups: { id: string; gameId?: string; tags: { id: string; gameId?: string; templates?: Record<string, unknown> }[]; templates?: Record<string, unknown> }[];
-  };
-  const group = shard.groups[0]!;
+  const shard = parseSource(readFileSync(tags, "utf8")) as { groups: Group[] };
+  const group = shard.groups.shift()!;
+  group.templates = { ...group.templates, spatial: { map: true } };
+  writeFileSync(tags, canonicalStringify(shard));
+  writeFileSync(join(dir, "map.storyletmap"), canonicalStringify({ schema: "storylets/projectmap@0", group }));
+
+  const boxFile = join(dir, "encounters", "box.storyletbox");
+  const box = parseSource(readFileSync(boxFile, "utf8")) as { box: Record<string, unknown> };
+  box.box["usesMap"] = true;
+  writeFileSync(boxFile, canonicalStringify(box));
+}
+
+/** Draw the project map: two zones and a picture. */
+function drawMap(dir: string, opts: { hiddenPicture?: boolean } = {}): void {
+  liftMap(dir);
+  const file = join(dir, "map.storyletmap");
+  const shard = parseSource(readFileSync(file, "utf8")) as { group: Group };
+  const group = shard.group;
   group.templates = {
     ...group.templates,
     spatial: {
@@ -54,7 +77,7 @@ function drawMap(dir: string, opts: { hiddenPicture?: boolean } = {}): void {
   group.tags[0]!.templates = {
     spatial: { polygon: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] },
   };
-  writeFileSync(tags, canonicalStringify(shard));
+  writeFileSync(file, canonicalStringify(shard));
 }
 
 function askForMaps(dir: string): void {
@@ -63,21 +86,27 @@ function askForMaps(dir: string): void {
   writeFileSync(projFile, text.replace(/export: \{/, "export: {\n    map: true,"));
 }
 
-/** Put the box's one hand on the map, in the view sidecar where a drag records
- *  it. `docks-street` is `h_docks` in the example. */
+/** Put the box's one hand on the map, in the box's map shard where a drag
+ *  records it. `docks-street` is `h_docks` in the example. */
 function placeHand(dir: string, sites: Record<string, { x: number; y: number }> = { h_docks: { x: 12, y: 34 } }): void {
-  writeFileSync(join(dir, "encounters", "view.storyletview"),
-    canonicalStringify({ schema: "storylets/view@0", map: { sites } }));
+  writeFileSync(join(dir, "encounters", "map.storyletmap"),
+    canonicalStringify({ schema: "storylets/map@0", map: { sites } }));
 }
 
 function withPicture(dir: string, name = "site-plan.png"): void {
-  mkdirSync(join(dir, "encounters", "assets"), { recursive: true });
-  writeFileSync(join(dir, "encounters", "assets", name), PNG);
+  mkdirSync(join(dir, "assets"), { recursive: true });
+  writeFileSync(join(dir, "assets", name), PNG);
 }
+
+/** What the flag adds: the map's geometry, or undefined when none shipped. */
+const geometryOf = (bundle: Bundle | undefined) => bundle?.map?.geometry;
 
 describe("a bundle that was not asked for a map", () => {
   it("carries none, and is unchanged by geometry existing", () => {
+    // Both on the project map; only one of them DRAWN. The zone group ships in
+    // both, because the runtime deals from it; what must not ship is the drawing.
     const plain = scratch();
+    liftMap(plain);
     const drawn = scratch();
     drawMap(drawn);
     withPicture(drawn);
@@ -85,9 +114,10 @@ describe("a bundle that was not asked for a map", () => {
     const before = runExport(loadProject(plain), "-");
     const after = runExport(loadProject(drawn), "-");
 
-    expect(after.bundle?.maps).toBeUndefined();
-    // Not just "no maps key": the whole payload is the same. Drawing a map must
-    // not perturb a shipping build in any way.
+    expect(after.bundle!.map?.group.gameId).toBe("area");
+    expect(geometryOf(after.bundle)).toBeUndefined();
+    // Not just "no geometry key": the whole payload is the same. Drawing a map
+    // must not perturb a shipping build in any way.
     //
     // Except the content HASH, which is right to differ and is asserted so
     // separately rather than waved away: the hash covers the source shards, the
@@ -116,12 +146,12 @@ describe("a bundle that was", () => {
     withPicture(dir);
     askForMaps(dir);
 
-    const maps = runExport(loadProject(dir), "-").bundle?.maps;
-    expect(maps).toHaveLength(1);
-    const map = maps![0]!;
-    expect(map.box).toBe("encounters");
+    const bundle = runExport(loadProject(dir), "-").bundle!;
+    expect(bundle.boxes.find((b) => b.gameId === "encounters")!.usesMap).toBe(true);
+    const map = geometryOf(bundle)!;
     // One zone, not two: the tag with no polygon is not a place yet.
     expect(map.zones).toHaveLength(1);
+    expect(map.zones[0]!.tag).toBe("docks");
     expect(map.zones[0]!.polygon).toEqual([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }]);
     expect(JSON.stringify(map)).not.toContain("d_");    // no group/tag ids
     expect(JSON.stringify(map)).not.toContain("v_");
@@ -134,13 +164,13 @@ describe("a bundle that was", () => {
     askForMaps(dir);
 
     const result = runExport(loadProject(dir));
-    const background = result.bundle!.maps![0]!.backgrounds![0]!;
-    expect(background.file).toBe("assets/encounters/site-plan.png");
+    const background = geometryOf(result.bundle)!.backgrounds![0]!;
+    expect(background.file).toBe("assets/site-plan.png");
     expect(background).toMatchObject({ x: 10, y: 20, width: 300, height: 200, opacity: 0.6 });
 
     expect(result.assets).toHaveLength(1);
     // Beside the bundle, at exactly the path the bundle names.
-    expect(result.assets[0]!.path).toBe(join(dir, "..", "storylet-dist", "assets", "encounters", "site-plan.png"));   // beside the bundle, beside the project
+    expect(result.assets[0]!.path).toBe(join(dir, "..", "storylet-dist", "assets", "site-plan.png"));   // beside the bundle, beside the project
     expect(Buffer.from(result.assets[0]!.bytes)).toEqual(PNG);
   });
 
@@ -153,10 +183,10 @@ describe("a bundle that was", () => {
 
     const result = runExport(loadProject(dir));
     // A hidden picture is one the author put away: not shipped, not copied.
-    expect(result.bundle!.maps![0]!.backgrounds).toHaveLength(1);
+    expect(geometryOf(result.bundle)!.backgrounds).toHaveLength(1);
     expect(result.assets).toHaveLength(1);
     // And no lock/hide/stacking survives into the bundle.
-    const text = JSON.stringify(result.bundle!.maps);
+    const text = JSON.stringify(geometryOf(result.bundle));
     for (const key of ["locked", "hidden", "\"z\"", "\"id\""]) expect(text).not.toContain(key);
   });
 
@@ -165,7 +195,7 @@ describe("a bundle that was", () => {
     drawMap(dir);            // references site-plan.png
     askForMaps(dir);         // ...which was never put on disk
     const result = runExport(loadProject(dir));
-    expect(result.bundle!.maps![0]!.backgrounds).toHaveLength(1);
+    expect(geometryOf(result.bundle)!.backgrounds).toHaveLength(1);
     expect(result.assets).toEqual([]);
   });
 
@@ -176,8 +206,9 @@ describe("a bundle that was", () => {
     placeHand(dir);
     askForMaps(dir);
 
-    const map = runExport(loadProject(dir), "-").bundle!.maps![0]!;
-    expect(map.sites).toEqual([{ hand: "docks-street", x: 12, y: 34 }]);
+    const map = geometryOf(runExport(loadProject(dir), "-").bundle)!;
+    // Keyed by the box's gameId: one map, so each box's hands under its own name.
+    expect(map.sites).toEqual({ encounters: [{ hand: "docks-street", x: 12, y: 34 }] });
     // The site's ZONE is not repeated here: the hand's own binding is what the
     // runtime deals from, and a second copy could only go on to disagree.
     expect(JSON.stringify(map.sites)).not.toContain("v_docks");
@@ -188,13 +219,13 @@ describe("a bundle that was", () => {
     drawMap(dir);
     withPicture(dir);
     askForMaps(dir);
-    expect(runExport(loadProject(dir), "-").bundle!.maps![0]!.sites).toBeUndefined();
+    expect(geometryOf(runExport(loadProject(dir), "-").bundle)!.sites).toBeUndefined();
   });
 
   it("says nothing at all when the map was never drawn", () => {
     const dir = scratch();
     askForMaps(dir);
-    expect(runExport(loadProject(dir), "-").bundle?.maps).toBeUndefined();
+    expect(runExport(loadProject(dir), "-").bundle!.map).toBeUndefined();
   });
 });
 
@@ -203,7 +234,7 @@ describe("the per-export override", () => {
     const dir = scratch();
     drawMap(dir);
     withPicture(dir);
-    expect(runExport(loadProject(dir), "-", { map: true }).bundle?.maps).toHaveLength(1);
+    expect(geometryOf(runExport(loadProject(dir), "-", { map: true }).bundle)?.zones).toHaveLength(1);
   });
 
   it("takes one away from a project that does", () => {
@@ -212,7 +243,7 @@ describe("the per-export override", () => {
     withPicture(dir);
     askForMaps(dir);
     const result = runExport(loadProject(dir), undefined, { map: false });
-    expect(result.bundle?.maps).toBeUndefined();
+    expect(geometryOf(result.bundle)).toBeUndefined();
     expect(result.assets).toEqual([]);
   });
 });

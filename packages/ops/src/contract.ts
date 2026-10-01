@@ -70,10 +70,12 @@ function declarations(source: SourceProject): Map<string, { decl: PropertyDecl; 
     return gameId === entity.id ? [gameId] : [gameId, entity.id];
   };
   // The value scope's segments, from the same helper the engine and the Board
-  // build theirs with: the qualified form for every tag, the short one only
-  // where no other box uses that gameId.
+  // build theirs with: the qualified form for every box tag, the short one only
+  // where no other box uses that gameId, and the short form of every zone of
+  // the project map, which has no other (design/project-map-contract.md 3.4).
   const values = valueAddresses({
     boxes: source.boxes.map((box) => ({ ...box.box.box, tagGroups: box.tags.groups })),
+    ...(source.map !== undefined ? { map: { group: source.map.group } } : {}),
   });
   const valueOwners = (tag: { id: string }): string[] => {
     const out: string[] = [];
@@ -101,6 +103,12 @@ function declarations(source: SourceProject): Map<string, { decl: PropertyDecl; 
         add("value", valueOwners(tag), group.properties, `${box.path}/tags`, where);
       }
     }
+  }
+  const zones = source.map?.group;
+  for (const tag of zones?.tags ?? []) {
+    const where = `${effectiveGameId(zones!)}.${effectiveGameId(tag)}`;
+    add("value", valueOwners(tag), tag.properties, "map", where);
+    add("value", valueOwners(tag), zones!.properties, "map", where);
   }
   return out;
 }

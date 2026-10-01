@@ -28,7 +28,7 @@ import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import { previewRegistry } from "./game-scopes.js";
 import { Engine, makePrng } from "@storylet-studio/runtime";
 import type { Flow } from "@storylet-studio/runtime";
-import { PLACE_GROUP, effectiveGameId, isHoleRef } from "@storylet-studio/model";
+import { PLACE_GROUP, effectiveGameId, groupsOfBox, isHoleRef } from "@storylet-studio/model";
 import { RARE_DEALT_PCT, rarelyDealt } from "./coverage-order.js";
 import type {
   AstNode, Box, Bundle, Card, CoverageConfig, CoverageDriver, Deck,
@@ -392,9 +392,11 @@ interface HandReach {
   admits(card: Card<Expression>, hand: Hand<Expression>): boolean;
 }
 
-/** The static reach of every hand in one box. */
-function handReach(box: Box<Expression>): HandReach {
-  const required = new Set(box.tagGroups.filter((g) => g.required === true).map((g) => g.id));
+/** The static reach of every hand in one box. The groups are the box's own and,
+ *  when it is on the project map, the map's zone group: a `required` zone group
+ *  refuses an untagged card exactly as a box's own would. */
+function handReach(bundle: Bundle, box: Box<Expression>): HandReach {
+  const required = new Set(groupsOfBox(bundle, box).filter((g) => g.required === true).map((g) => g.id));
   const templatesById = new Map(box.handTemplates.map((t) => [t.id, t]));
   const cache = new Map<string, { fixed: FixedBinding[]; holes: Set<string> }>();
   // As the runtime composes an ask: a template instance takes its template's
@@ -462,9 +464,10 @@ const handRefsOf = (expr: Expression | undefined): string[] => {
 function findUnprovidedHandRefs(bundle: Bundle): UnprovidedHandRef[] {
   const out: UnprovidedHandRef[] = [];
   for (const box of bundle.boxes) {
-    const groupsById = new Map(box.tagGroups.map((g) => [g.id, g]));
+    const groups = groupsOfBox(bundle, box);
+    const groupsById = new Map(groups.map((g) => [g.id, g]));
     const templatesById = new Map(box.handTemplates.map((t) => [t.id, t]));
-    const reach = handReach(box);
+    const reach = handReach(bundle, box);
 
     const composed = new Map<string, Set<string>>();
     for (const hand of box.hands) {
@@ -479,7 +482,7 @@ function findUnprovidedHandRefs(bundle: Bundle): UnprovidedHandRef[] {
         if (named && group) names.add(effectiveGameId(group));
       }
       const holes = reach.holes(hand);
-      for (const group of box.tagGroups) {
+      for (const group of groups) {
         const movable = holes.has(group.id) || (group.boundBy !== undefined && !bound.has(group.id));
         if (!movable) continue;
         names.add(effectiveGameId(group));
@@ -763,7 +766,7 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
   // hands, while a tag or hand property's default never varies unless some
   // outcome writes it (then `written` clears it) or a driver drives it.
   const composedNames = new Set<string>(
-    bundle.boxes.flatMap((b) => b.tagGroups.map((g) => effectiveGameId(g))));
+    bundle.boxes.flatMap((b) => groupsOfBox(bundle, b).map((g) => effectiveGameId(g))));
   const unwritten = (ref: string): boolean => {
     if (ref.includes(":")) return false;   // a flag key: the second hop's business, not this one's
     if (analysis.written.has(ref) || driven.has(ref)) return false;
@@ -852,7 +855,7 @@ function* sweep(source: SourceProject, opts: CoverageOptions = {}): Generator<nu
       // against the box, a place in the Village read "6/86": a near-empty bar
       // over what was complete coverage, because most of the 86 are pinned to
       // other places (the author, 2026-09-29). A short bar is now a real gap.
-      const reach = handReach(box);
+      const reach = handReach(bundle, box);
       const boxCards = box.decks.flatMap((d) => d.cards);
       return box.hands.map((hand) => {
         const dealtSet = handCards.get(hand.id) ?? new Set<string>();

@@ -41,8 +41,8 @@
       purpose: "Natural expiry: its own condition ends at dawn, no wire needed.",
       redraw: "never",
       tags: {
-        d_news_district: [
-          "v_news_strip",
+        d_con_district: [
+          "v_con_strip",
         ],
       },
       title: "Nightlife Roundup",

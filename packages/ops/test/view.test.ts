@@ -19,7 +19,7 @@
 import { describe, expect, it } from "vitest";
 import { compileProject } from "@storylet-studio/compiler";
 import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
-import { NOTES_SCHEMA, VIEW_SCHEMA, commentsOf, markOf, marksOn, openThreadCounts, threadsFor } from "@storylet-studio/model";
+import { NOTES_SCHEMA, PROJECTMAP_SCHEMA, VIEW_SCHEMA, commentsOf, markOf, marksOn, openThreadCounts, threadsFor } from "@storylet-studio/model";
 import type { Comment, NotesShard, ViewPoint, ViewShard } from "@storylet-studio/model";
 import { parseSource } from "@storylet-studio/compiler";
 import { planComments } from "../src/comments.js";
@@ -185,8 +185,18 @@ describe("the sidecar never reaches the bundle", () => {
       canvases: { k_arrival: { cards: { c_gate: { x: 20, y: 40 }, c_inn: { x: 220, y: 40 } } } },
       map: { sites: { h_all: { x: 5, y: 6 } } },
     };
-    const plain = compileProject(project(box()));
-    const arranged = compileProject(project(box(view)));
+    // On the project map, both of them, so the sites are ones that COULD ship:
+    // a box off the map is warned about for placing hands at all. They ship only
+    // under `export.map`, which this project does not ask for.
+    const onMap = (b: SourceBox): SourceProject => ({
+      ...project({ ...b, box: { ...b.box, box: { ...b.box.box, usesMap: true } } }),
+      map: {
+        schema: PROJECTMAP_SCHEMA,
+        group: { id: "d_zone", gameId: "zone", templates: { spatial: { map: true } }, tags: [{ id: "t_docks", gameId: "docks" }] },
+      },
+    });
+    const plain = compileProject(onMap(box()));
+    const arranged = compileProject(onMap(box(view)));
     expect(arranged.issues).toEqual(plain.issues);
     expect(JSON.stringify(arranged.bundle)).toBe(JSON.stringify(plain.bundle));
   });

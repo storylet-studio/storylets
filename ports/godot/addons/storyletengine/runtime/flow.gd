@@ -237,19 +237,28 @@ func clear_log() -> void:
 # (schema 1 - boxes namespace their groups), so a name is only ever resolved
 # inside the box being asked, never bundle-wide. Ids are project-unique and
 # accepted here too, still confined to the box.
-static func _group_in_box(box: Dictionary, reference: String) -> Variant:
-	for group in box["tagGroups"]:
+#
+# A box on the project map sees ONE namespace: its own groups, then the map's
+# group (design/project-map-contract.md 3.1). A box that has not opted in does
+# not see the map's name at all, so a peek naming it there is the ordinary
+# unknown-group refusal. Own groups first is stated for determinism only: a
+# bundle that loads never has the two share a name.
+func _group_in_box(box: Dictionary, reference: String) -> Variant:
+	var groups := StoryletBundle.groups_of_box(_engine._bundle, box)
+	for group in groups:
 		if StoryletBundle.effective_game_id(group) == reference:
 			return group
-	for group in box["tagGroups"]:
+	for group in groups:
 		if group["id"] == reference:
 			return group
 	return null
 
 
 # `box` is the box whose ask is being evaluated: the play-history functions
-# take a bare group name, so it resolves there (a card's tags reference its own
-# box's group, which keeps the counts box-local).
+# take a bare group name, so it resolves there, and they count only that box's
+# own plays (the box is in the index key). That was automatic while every group
+# was a box's; a project-map zone is shared, and its history is still not
+# (design/project-map-contract.md 3.7, D7).
 ## One host per box, built once. The Callables below read _play_count,
 ## _turn_counts and the rest LIVE, so a cached host answers with current state -
 ## which is what makes caching safe rather than a snapshot bug. Unreal did this
@@ -301,8 +310,9 @@ func _host_turns_since_played_in(box: Dictionary, group: String, tag: String) ->
 	return _since(last) if last != null else StoryletDialect.NEVER_PLAYED
 
 
-## A group NAME and tag name resolved in THIS box, as the index's key; null
-## when either is unknown here, which is the old per-record "false" and reads
+## A group NAME and tag name resolved in THIS box, as the index's key, with
+## this box in it: a zone's plays in another box are not this box's history.
+## Null when either is unknown here, which is the old per-record "false" and reads
 ## as "never". Resolved once per call, where _in_tag used to resolve it again
 ## for every record in the log.
 func _tag_key_in(box: Dictionary, group: String, tag: String) -> Variant:
@@ -311,16 +321,25 @@ func _tag_key_in(box: Dictionary, group: String, tag: String) -> Variant:
 		return null
 	for v in found["tags"]:
 		if v.get("gameId") == tag:
-			return _tag_key(found["id"], v["id"])
+			return _tag_key(box["id"], found["id"], v["id"])
 	return null
 
 
-## The key for one (group, tag) pair. A UNIT SEPARATOR (U+001F) joins them:
-## ids are letters, digits and underscores, so a control character cannot occur
-## in one and two pairs can never collide into one key. Not NUL, which GDScript
-## will not carry in a string (it substitutes U+FFFD and warns on every parse).
-static func _tag_key(group_id: String, tag_id: String) -> String:
-	return "%s\u001f%s" % [group_id, tag_id]
+## The key for one (box, group, tag) triple.
+##
+## The BOX is in it because play history is box-specific
+## (design/project-map-contract.md 3.7, D7, ruled 2026-10-01): count_played_in
+## asks about the asking box's own plays. A box group was already box-unique,
+## so its key never needed the box; a project-map zone is one tag every
+## opted-in box tags its cards with, and without the box a play of a newspaper
+## at the quay in one box would count as an encounter at the quay in another.
+##
+## A UNIT SEPARATOR (U+001F) joins them: ids are letters, digits and
+## underscores, so a control character cannot occur in one and two triples can
+## never collide into one key. Not NUL, which GDScript will not carry in a
+## string (it substitutes U+FFFD and warns on every parse).
+static func _tag_key(box_id: String, group_id: String, tag_id: String) -> String:
+	return "%s\u001f%s\u001f%s" % [box_id, group_id, tag_id]
 
 
 ## Fold one play into the indexes. O(the card's tags), not O(the log).
@@ -334,7 +353,8 @@ func _index_play(record: Dictionary) -> void:
 	var tags: Dictionary = entry["card"]["tags"] if entry["card"].has("tags") else _NO_TAGS
 	for group_id in tags:
 		for tag_id in tags[group_id]:
-			var key := _tag_key(group_id, tag_id)
+			# Keyed by the PLAYED card's box: history is box-specific (D7).
+			var key := _tag_key(entry["box"]["id"], group_id, tag_id)
 			_tag_play_count[key] = int(_tag_play_count.get(key, 0)) + 1
 			_last_play_in_tag[key] = record
 
@@ -605,7 +625,9 @@ func _fill_hole_from_property(hand: Dictionary, group_id: String, ref: String,
 # with a diagnostic, because a silently empty hand reads as content that does
 # not exist.
 func _bind_state_groups(box: Dictionary, bound_tags: Dictionary, ask_names: Dictionary) -> void:
-	for group in box.get("tagGroups", []):
+	# The box's own groups and, when it is on the project map, the map's group:
+	# a `boundBy` there binds in every opted-in box (3.2).
+	for group in StoryletBundle.groups_of_box(_engine._bundle, box):
 		var bound_by = group.get("boundBy")
 		if bound_by == null or str(bound_by).is_empty() or bound_tags.has(group["id"]):
 			continue
@@ -1607,13 +1629,17 @@ func set_property(path: String, value) -> String:
 # keyed by: {"id", "legacy"}, {} when it names no owner (the caller's "no <kind>
 # store" refusal), or {"error": message} for a short-form value segment that
 # names a tag in more than one box, which is refused with the qualified
-# addresses to write instead. The pre-4.4 form - an internal id where a gameId
-# belongs - resolves for this release and SAYS SO on the trace, so a host can
-# find its old addresses before the next lockstep release refuses them.
+# addresses to write instead, or for a box-qualified one naming a project-map
+# zone, which is refused with the short form. The pre-4.4 form - an internal
+# id where a gameId belongs - resolves for this release and SAYS SO on the
+# trace, so a host can find its old addresses before the next lockstep release
+# refuses them.
 func _resolve_owner(kind: String, segment: String, name: String) -> Dictionary:
 	var owner := _engine.resolve_owner(kind, segment)
 	if owner.has("ambiguous"):
 		return {"error": _engine.ambiguous_address_message(segment, name, owner["ambiguous"])}
+	if owner.has("zone"):
+		return {"error": _engine.zone_qualified_address_message(segment, owner["zone"], name)}
 	if owner.is_empty():
 		return owner
 	if owner["legacy"] and _tracing():

@@ -3,7 +3,7 @@
   hands: [
     {
       chosen: {
-        d_enc_district: "v_enc_docks",
+        d_con_district: "v_con_docks",
       },
       gameId: "docks-alleys",
       id: "h_docks_alleys",
@@ -14,7 +14,7 @@
     },
     {
       chosen: {
-        d_enc_district: "v_enc_oldgrid",
+        d_con_district: "v_con_oldgrid",
       },
       gameId: "grid-tunnels",
       id: "h_grid_tunnels",
@@ -25,7 +25,7 @@
     },
     {
       chosen: {
-        d_enc_district: "v_enc_strip",
+        d_con_district: "v_con_strip",
       },
       gameId: "strip-crowds",
       id: "h_strip_crowds",
@@ -38,7 +38,7 @@
   templates: [
     {
       chooses: [
-        "d_enc_district",
+        "d_con_district",
       ],
       gameId: "street",
       id: "t_street",

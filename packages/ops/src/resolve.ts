@@ -94,6 +94,17 @@ export function indexProject(loaded: LoadedProject): ResolveEntry[] {
       out.push({ id: g.id, kind: "tagGroup", gameId: effectiveGameId(g), location: trail, box: b.id, file: tagsFile });
     }
   }
+  // The project map's zone group, once. It belongs to no box, so it opens from
+  // the first box on the map, which sees it beside its own groups; a map no box
+  // is on has nowhere to open and is left out.
+  const group = source.map?.group;
+  const first = source.boxes.find((box) => box.box.box.usesMap === true);
+  if (group !== undefined && first !== undefined) {
+    out.push({
+      id: group.id, kind: "tagGroup", gameId: effectiveGameId(group), location: [label(first.box.box)],
+      box: first.box.box.id, file: `map${SHARD_EXTENSIONS.map}`,
+    });
+  }
   return out;
 }
 

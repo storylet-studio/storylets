@@ -1065,23 +1065,23 @@ export interface SiteRebinding {
  */
 export const ASSET_SCHEME = "storylet-asset";
 
-/** The URL for one of a box's assets. */
+/** The URL for one of the project's assets, as a box's map view asks for it. */
 export const assetUrl = (boxId: string, file: string): string =>
   `${ASSET_SCHEME}://${encodeURIComponent(boxId)}/${encodeURIComponent(file)}`;
 
-/** One map in the project: a box, and one of its spatial tag groups.
+/** The project map as one box on it sees it: one entry per box on the map.
  *
- *  The Board needs this and cannot work it out for itself: it holds a compiled
- *  bundle, and a group's spatial marker is source-only (Reboot 6, geometry never
- *  compiles), so nothing in the bundle says which group is a map. */
+ *  The Board reads this rather than the bundle's `map` block because it needs
+ *  the box ids the map view is fetched by, which a bundle (gameIds only) does
+ *  not carry; the group is the same one, `bundle.map.group`. */
 export interface ProjectMapDto {
   box: string;
   boxGameId: string;
   group: string;
   groupGameId: string;
-  /** Maps stamped with the same space number are ONE PLACE carried by several
-   *  boxes (ops sharedSpaces: identical group and geometry). The Board draws
-   *  a space once, on Everything, with every member box's hands pinned. */
+  /** Maps stamped with the same space number are ONE PLACE seen by several
+   *  boxes: the project map, with more than one box on it. The Board draws a
+   *  space once, on Everything, with every member box's hands pinned. */
   space?: number;
 }
 
@@ -1609,7 +1609,7 @@ export interface StudioApi {
   ): Promise<{ result: OpenResult; tagId: string } | { error: string }>;
   /** Set or clear a zone's outline: one undo step per shape. */
   /** Import a picture behind a map: opens a picker, copies the file into the
-   *  box's assets folder, and places it by the drop rule. Null when the author
+   *  project's assets folder, and places it by the drop rule. Null when the author
    *  cancelled. `place` is the CAMERA at the moment of the ask, so the picture
    *  arrives at a size comfortable to grab at whatever zoom is showing. */
   addBackground(

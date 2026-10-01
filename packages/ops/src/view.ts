@@ -22,12 +22,12 @@
 // ---------------------------------------------------------------------------
 
 import { join } from "node:path";
-import { boxMapOf, canonicalStringify } from "@storylet-studio/compiler";
-import type { SourceBox } from "@storylet-studio/compiler";
+import { canonicalStringify } from "@storylet-studio/compiler";
+import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS, VIEW_SCHEMA } from "@storylet-studio/model";
 import { framesOf } from "@storylet-studio/model";
-import type { CanvasFurniture, DeckCanvas, Frame, ViewPoint, ViewShard } from "@storylet-studio/model";
-import { planMapFurniture } from "./map.js";
+import type { CanvasFurniture, DeckCanvas, Frame, ProjectMapShard, ViewPoint, ViewShard } from "@storylet-studio/model";
+import { planProjectMapFrames } from "./map.js";
 import type { PlannedWrite } from "./write.js";
 
 /** One card's new home on a canvas. */
@@ -111,18 +111,19 @@ export function planForgetCanvas(dir: string, box: SourceBox, deckId: string): P
 //
 // Frames, on either canvas. One pair of functions rather than two, because the
 // two canvases differ only in WHERE their furniture sits: a deck's under
-// `canvases[deckId]` in this shard, a box map's in the map shard next door. The
+// `canvases[deckId]` in this shard, the map's in the PROJECT map shard at the
+// root (design/project-map-contract.md 1.1: one map, one set of frames). The
 // author draws the same thought on either, so the API stays one; which file it
 // lands in is this module's business and not the caller's.
 
-/** Which canvas: one deck's node canvas, or the box's map. */
+/** Which canvas: one deck's node canvas, or the project map. */
 export type CanvasRef = { kind: "deck"; deck: string } | { kind: "map" };
 
-/** The furniture recorded for a canvas, forgiving and in draw order. */
-export function canvasFurniture(box: SourceBox, ref: CanvasRef): CanvasFurniture {
-  const canvas: CanvasFurniture | undefined = ref.kind === "deck"
-    ? box.view?.canvases?.[ref.deck]
-    : boxMapOf(box);
+/** The furniture recorded for a canvas, forgiving and in draw order. The map's
+ *  is the project map's, which is `map`; a box map shard from before the
+ *  project map is not read for frames. */
+export function canvasFurniture(box: SourceBox, ref: CanvasRef, map?: ProjectMapShard): CanvasFurniture {
+  const canvas: CanvasFurniture | undefined = ref.kind === "deck" ? box.view?.canvases?.[ref.deck] : map;
   return { frames: framesOf(canvas) };
 }
 
@@ -140,16 +141,14 @@ export function canvasFurniture(box: SourceBox, ref: CanvasRef): CanvasFurniture
  * leaves no husk, exactly as the map's `planForgetSites` does for an unplaced hand.
  */
 export function planCanvasFurniture(
-  dir: string, box: SourceBox, ref: CanvasRef, furniture: CanvasFurniture,
+  dir: string, box: SourceBox, ref: CanvasRef, furniture: CanvasFurniture, source?: SourceProject,
 ): PlannedWrite[] {
-  const before = canvasFurniture(box, ref);
+  const before = canvasFurniture(box, ref, source?.map);
   const frames = framesOf(furniture).map(tidyFrame);
   if (canonicalStringify(before.frames) === canonicalStringify(frames)) return [];
 
-  // The map's furniture belongs to the map shard, and moving it there can move
-  // the whole block out of a pre-split view shard, so that half plans a PAIR of
-  // writes and this one hands the job over whole.
-  if (ref.kind === "map") return planMapFurniture(dir, box, frames);
+  // The map's furniture belongs to the project map shard, which map.ts writes.
+  if (ref.kind === "map") return source !== undefined ? planProjectMapFrames(dir, source, frames) : [];
 
   const canvas = { ...deckCanvas(box, ref.deck) };
   if (frames.length > 0) canvas.frames = frames; else delete canvas.frames;

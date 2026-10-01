@@ -123,7 +123,11 @@ namespace StoryletStudio.StoryletEngine
         {
             var bundle = new Bundle
             {
-                Schema = b.Value<string>("schema") ?? Model.BUNDLE_SCHEMA,
+                // Carried as written, absent included: whether this runtime
+                // can read it is the engine's question at construction
+                // (design/project-map-contract.md 2.4, D4), not the loader's
+                // to paper over with a default.
+                Schema = b.Value<string>("schema"),
                 Metadata = b.Value<string>("metadata") ?? "full",
             };
             var content = b["content"] as JObject;
@@ -154,23 +158,22 @@ namespace StoryletStudio.StoryletEngine
                 bundle.ExternalScopes = new List<string>();
                 foreach (var token in external) bundle.ExternalScopes.Add(token.Value<string>());
             }
-            if (b["maps"] is JArray maps)
-            {
-                foreach (var map in maps) bundle.Maps.Add(ParseMap((JObject)map));
-            }
+            if (b["map"] is JObject map) bundle.Map = ParseProjectMap(map);
             return bundle;
         }
 
-        /// <summary>One shipped map. Absent on almost every bundle: geometry
-        /// ships only when the build asked for it.</summary>
-        private static BundleMap ParseMap(JObject o)
+        /// <summary>The project map (design/project-map-contract.md 2.1): the
+        /// zone group, which the engine reads, and the geometry, which it never
+        /// does and which ships only when the build asked for it.</summary>
+        private static ProjectMap ParseProjectMap(JObject o)
         {
-            var map = new BundleMap
+            var map = new ProjectMap
             {
-                Box = o.Value<string>("box"),
-                Group = o.Value<string>("group"),
+                Group = o["group"] is JObject group ? ParseTagGroup(group) : null,
             };
-            if (o["zones"] is JArray zones)
+            if (!(o["geometry"] is JObject g)) return map;
+            var geometry = new MapGeometry();
+            if (g["zones"] is JArray zones)
             {
                 foreach (JObject z in zones)
                 {
@@ -182,36 +185,47 @@ namespace StoryletStudio.StoryletEngine
                             zone.Polygon.Add(new MapPoint { X = p.Value<double>("x"), Y = p.Value<double>("y") });
                         }
                     }
-                    map.Zones.Add(zone);
+                    geometry.Zones.Add(zone);
                 }
             }
-            if (o["backgrounds"] is JArray backgrounds)
+            if (g["backgrounds"] is JArray backgrounds)
             {
-                foreach (JObject g in backgrounds)
+                foreach (JObject bg in backgrounds)
                 {
-                    map.Backgrounds.Add(new MapBackground
+                    geometry.Backgrounds.Add(new MapBackground
                     {
-                        File = g.Value<string>("file"),
-                        X = g.Value<double>("x"),
-                        Y = g.Value<double>("y"),
-                        Width = g.Value<double>("width"),
-                        Height = g.Value<double>("height"),
-                        Opacity = g["opacity"] != null ? g.Value<double>("opacity") : 1,
+                        File = bg.Value<string>("file"),
+                        X = bg.Value<double>("x"),
+                        Y = bg.Value<double>("y"),
+                        Width = bg.Value<double>("width"),
+                        Height = bg.Value<double>("height"),
+                        Opacity = bg["opacity"] != null ? bg.Value<double>("opacity") : 1,
                     });
                 }
             }
-            if (o["sites"] is JArray sites)
+            // Box gameId -> that box's placed hands, in the bundle's own key
+            // order (sites stay per box: a hand belongs to one).
+            if (g["sites"] is JObject sites)
             {
-                foreach (JObject s in sites)
+                foreach (var pair in sites)
                 {
-                    map.Sites.Add(new MapSite
+                    var list = new List<MapSite>();
+                    if (pair.Value is JArray placed)
                     {
-                        Hand = s.Value<string>("hand"),
-                        X = s.Value<double>("x"),
-                        Y = s.Value<double>("y"),
-                    });
+                        foreach (JObject s in placed)
+                        {
+                            list.Add(new MapSite
+                            {
+                                Hand = s.Value<string>("hand"),
+                                X = s.Value<double>("x"),
+                                Y = s.Value<double>("y"),
+                            });
+                        }
+                    }
+                    geometry.Sites.Set(pair.Key, list);
                 }
             }
+            map.Geometry = geometry;
             return map;
         }
 
@@ -224,6 +238,9 @@ namespace StoryletStudio.StoryletEngine
                 Title = o.Value<string>("title"),
                 Purpose = o.Value<string>("purpose"),
             };
+            // On the project map (design/project-map-contract.md 2.2). Absent
+            // is "not on the map".
+            box.UsesMap = o["usesMap"]?.Type == JTokenType.Boolean && o.Value<bool>("usesMap");
             var ranking = o["ranking"] as JObject;
             if (ranking != null) box.Ranking.Specificity = ranking.Value<bool>("specificity");
             var turn = o["turn"] as JObject;

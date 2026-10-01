@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking: the project map** (2026-10-01, design/project-map-contract.md). A project has at most
+  one map, above the boxes: `Bundle.Map` is a `ProjectMap` whose `Group` is the zone tag group (read
+  by the engine) and whose `Geometry` is the inert drawing (zones, pictures, and sites keyed by box
+  gameId), null unless the build asked for it. `Bundle.Maps` and `BundleMap` are gone. A box that
+  opts in has `Box.UsesMap`; it sees the map's group name beside its own groups, and its hands and
+  cards reference the zones by id as with any group. Each zone is one value bag whichever boxes use
+  it, addressed `value.<zone>.<name>`; a box-qualified address naming a zone is refused, naming the
+  short form. Play history stays box-specific. `Model.GroupsOfBox`, `GroupById` and `AllTagGroups`
+  answer where a group lives. `DescribeBundle` gains `BoxSummary.UsesMap` and `BundleDescription.Map`
+  (replacing `Maps`), lists each zone's properties once with no box, and resolves a movable hole
+  that names a zone; the bundle inspector shows a Project map section. Bundle schema
+  `storylets/bundle@1`.
+- **The engine refuses an unreadable bundle at construction**: a schema other than
+  `storylets/bundle@0` or `@1`, or a bundle that breaks the project map's rules (a box off the map
+  referencing its group, a box on it with no map or with a group of the map's name, a zone sharing a
+  box tag's name, a map group called `place`). One `StoryletError` starting `bundle refused: ` names
+  every problem. Corpus version 10.
+
 ## [0.8.2] - 2026-09-27
 
 ### Changed

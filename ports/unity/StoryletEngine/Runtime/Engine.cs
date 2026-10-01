@@ -9,6 +9,17 @@
 // is the only way in, an existing id is REPLACED, closed handles are
 // INERT, and engine-level reads of per-flow refs throw the teaching error.
 //
+// The PROJECT MAP (design/project-map-contract.md 3) is one zone group above
+// the boxes, in Bundle.Map.Group and in no box's TagGroups. A box that opts in
+// (UsesMap) sees its name beside its own groups', so its hands bind zones and
+// its cards are tagged with them by id exactly as with a box group. Each zone
+// is ONE value bag, keyed by the tag's id like any tag's, so a zone property
+// is one value whichever box's hand is dealt to it; the Shared flag still
+// decides per-flow against one for the engine. What the boxes on a map do NOT
+// share: a hand deals only from its own box's decks, and play history stays
+// the asking box's (D7). A bundle that breaks the map's rules is refused at
+// construction (3.8) rather than half-played.
+//
 // One registry per game (patterkit design/one-registry-handover.md): every
 // property bag lives in ONE ScopeRegistry, the game's (EngineOptions.Registry)
 // or, when the game passes none, the engine's own, and the engine then acts
@@ -119,6 +130,13 @@ namespace StoryletStudio.StoryletEngine
         /// have one (a tag's gameId is unique within its group alone), and it
         /// is REFUSED rather than resolved to the first.</summary>
         public readonly Dictionary<string, List<string>> Repeated = new Dictionary<string, List<string>>();
+        /// <summary>A box-qualified segment that names a project-map zone
+        /// ("box/quay") -> the zone's own segment ("quay"), the one an address
+        /// must use instead. Value scope only, and REFUSED: the zone belongs to
+        /// no box (design/project-map-contract.md 3.4). One entry per box and
+        /// zone, so a refusal names the address that works without working it
+        /// out again.</summary>
+        public readonly Dictionary<string, string> ZoneQualified = new Dictionary<string, string>();
 
         public void Add(string id, string gameId)
         {
@@ -436,6 +454,8 @@ namespace StoryletStudio.StoryletEngine
         internal readonly OrderedMap<string, HandInBox> _handsById = new OrderedMap<string, HandInBox>();
         internal readonly OrderedMap<string, HandInBox> _handsByGameId = new OrderedMap<string, HandInBox>();
         internal readonly OrderedMap<string, HandTemplate> _templatesById = new OrderedMap<string, HandTemplate>();
+        /// <summary>Every group by internal id. Box is null for the project
+        /// map's group, which belongs to no box.</summary>
         internal readonly OrderedMap<string, (TagGroup Group, Box Box)> _groupsById = new OrderedMap<string, (TagGroup, Box)>();
         internal readonly HashSet<string> requiredGroups = new HashSet<string>();
 
@@ -506,6 +526,14 @@ namespace StoryletStudio.StoryletEngine
             {
                 throw new StoryletError(AmbiguousAddressMessage(segment, name, candidates));
             }
+            // A box-qualified form of a project-map zone: never accepted,
+            // because the zone belongs to no box (design/project-map-contract.md
+            // 3.4).
+            string zone;
+            if (Owners(kind).ZoneQualified.TryGetValue(segment, out zone))
+            {
+                throw new StoryletError(ZoneQualifiedAddressMessage(segment, zone, name));
+            }
             string id;
             if (!TryResolveOwner(kind, segment, out id, out legacy))
             {
@@ -528,9 +556,19 @@ namespace StoryletStudio.StoryletEngine
             return $"\"value.{segment}.{name}\" names a tag in {candidates.Count} boxes; write {list}";
         }
 
+        /// <summary>What a box-qualified address naming a project-map zone is
+        /// told: why the form is wrong, and the address that works
+        /// (design/project-map-contract.md 3.4).</summary>
+        internal static string ZoneQualifiedAddressMessage(string segment, string zone, string name)
+        {
+            return $"\"value.{segment}.{name}\": \"{zone}\" is a zone of the project map, which belongs to no box; "
+                + $"write \"value.{zone}.{name}\"";
+        }
+
         /// <summary>The value scope's index, whole: the segment each tag
-        /// PRINTS, every segment an address ACCEPTS, and the gameIds that need
-        /// qualifying.
+        /// PRINTS, every segment an address ACCEPTS, the gameIds that need
+        /// qualifying, and the box-qualified forms of the project map's zones,
+        /// which are refused.
         ///
         /// Every other owned scope names its owner with a gameId that is unique
         /// across the bundle. A TAG's is unique only within its group, and a
@@ -590,6 +628,23 @@ namespace StoryletStudio.StoryletEngine
                 if (!_valueOwners.Id.ContainsKey(qualified[i])) _valueOwners.Id[qualified[i]] = ids[i];
                 if (!ambiguous && !_valueOwners.Id.ContainsKey(gameIds[i])) _valueOwners.Id[gameIds[i]] = ids[i];
                 if (ambiguous) _valueOwners.Repeated[gameIds[i]] = candidates;
+            }
+            // The zones, after the box tags and never in Repeated: a zone has
+            // no qualified form, so it prints and is accepted as
+            // "value.<zone>.<name>" whichever boxes use it. A zone whose gameId
+            // a box tag also uses is a bundle refused at construction, so the
+            // "first wins" guard below never decides anything for a bundle
+            // that loads.
+            if (bundle.Map?.Group == null) return;
+            foreach (var tag in bundle.Map.Group.Tags)
+            {
+                var gameId = Model.EffectiveGameId(tag);
+                _valueOwners.GameId[tag.Id] = gameId;
+                if (!_valueOwners.Id.ContainsKey(gameId)) _valueOwners.Id[gameId] = tag.Id;
+                foreach (var box in bundle.Boxes)
+                {
+                    _valueOwners.ZoneQualified[Model.EffectiveGameId(box) + "/" + gameId] = gameId;
+                }
             }
         }
 
@@ -750,8 +805,129 @@ namespace StoryletStudio.StoryletEngine
             public ExprValue Get(string name) => Owner.WorldGet(name);
         }
 
+        /// <summary>
+        /// Refuse, at construction, a bundle this engine cannot read faithfully
+        /// (design/project-map-contract.md 3.8). Throws one StoryletError naming
+        /// every problem found, each naming the box and the group or tag at
+        /// fault.
+        ///
+        /// The compiler refuses all of these first. The engine checks again
+        /// because it cannot tell a hand-built or stale bundle from a compiled
+        /// one, and the alternative is the silent half-working the server audit
+        /// found twice: a hand whose bound group is looked up in the wrong place
+        /// comes back empty, and an old runtime given a map bundle deals
+        /// plausibly while every zone value is missing. Only what would make the
+        /// engine's OWN resolution ambiguous or wrong is refused here; the
+        /// compiler's bundle-wide group-name rule is stricter.
+        /// </summary>
+        private static void RefuseUnreadableBundle(Bundle bundle)
+        {
+            // The schema tag (D4). Checked alone and first: a bundle of a schema
+            // this runtime does not know may not have any of the shape the rest
+            // reads.
+            var schema = bundle.Schema;
+            if (schema == null || !Model.BUNDLE_SCHEMAS.Contains(schema))
+            {
+                throw new StoryletError($"unsupported bundle schema: {schema ?? "undefined"} "
+                    + $"(this runtime reads {string.Join(" and ", Model.BUNDLE_SCHEMAS)})");
+            }
+            var problems = new List<string>();
+            var map = bundle.Map?.Group;
+            var mapName = map != null ? Model.EffectiveGameId(map) : null;
+            if (map != null && mapName == Model.PLACE_GROUP)
+            {
+                problems.Add($"the project map's tag group is called \"{Model.PLACE_GROUP}\", which is reserved for a box's own hands");
+            }
+            // Every box tag gameId, for the zone-name rule: a zone's address has
+            // no qualified form to fall back on (3.4), so any box tag sharing it
+            // anywhere makes "value.<zone>.<name>" ambiguous. First in bundle
+            // order is the one named.
+            var boxTags = new Dictionary<string, (string Box, string Group)>();
+            foreach (var box in bundle.Boxes)
+            {
+                foreach (var group in box.TagGroups)
+                {
+                    foreach (var tag in group.Tags)
+                    {
+                        var gameId = Model.EffectiveGameId(tag);
+                        if (!boxTags.ContainsKey(gameId)) boxTags[gameId] = (Model.EffectiveGameId(box), Model.EffectiveGameId(group));
+                    }
+                }
+            }
+            if (map != null)
+            {
+                foreach (var tag in map.Tags)
+                {
+                    var zone = Model.EffectiveGameId(tag);
+                    if (boxTags.TryGetValue(zone, out var clash))
+                    {
+                        problems.Add($"the project map's zone \"{zone}\" has the name of tag \"{zone}\" in box \"{clash.Box}\", group \"{clash.Group}\", "
+                            + $"so \"value.{zone}.<name>\" would name two things");
+                    }
+                }
+            }
+            foreach (var box in bundle.Boxes)
+            {
+                var boxName = Model.EffectiveGameId(box);
+                if (box.UsesMap)
+                {
+                    if (map == null)
+                    {
+                        problems.Add($"box \"{boxName}\" uses the project map, but the bundle has no map");
+                        continue;
+                    }
+                    // One namespace in an opted-in box (3.1): a box group with
+                    // the map's name would make every name-based lookup there a
+                    // coin toss.
+                    if (box.TagGroups.Exists(g => Model.EffectiveGameId(g) == mapName))
+                    {
+                        problems.Add($"box \"{boxName}\" uses the project map and declares its own tag group \"{mapName}\", the map's name");
+                    }
+                    continue;
+                }
+                if (map == null) continue;
+                // A box NOT on the map may not reference its group at all: every
+                // route a reference takes, card tags, template bindings and
+                // holes, a hand's chosen tags and a rule's bindings, by the
+                // group's id as written.
+                void Names(string where)
+                {
+                    problems.Add($"box \"{boxName}\" is not on the project map, but {where} names the map's tag group \"{mapName}\"");
+                }
+                foreach (var deck in box.Decks)
+                {
+                    foreach (var card in deck.Cards)
+                    {
+                        if (card.Tags != null && card.Tags.ContainsKey(map.Id)) Names($"card \"{Model.EffectiveGameId(card)}\"");
+                    }
+                }
+                foreach (var template in box.HandTemplates)
+                {
+                    if ((template.Bindings != null && template.Bindings.ContainsKey(map.Id))
+                        || (template.Chooses != null && template.Chooses.Contains(map.Id)))
+                    {
+                        Names($"hand template \"{Model.EffectiveGameId(template)}\"");
+                    }
+                }
+                foreach (var hand in box.Hands)
+                {
+                    if ((hand.Chosen != null && hand.Chosen.ContainsKey(map.Id))
+                        || (hand.Rule?.Bindings != null && hand.Rule.Bindings.ContainsKey(map.Id)))
+                    {
+                        Names($"hand \"{Model.EffectiveGameId(hand)}\"");
+                    }
+                }
+            }
+            if (problems.Count > 0) throw new StoryletError("bundle refused: " + string.Join("; ", problems));
+        }
+
         public Engine(Bundle bundle, EngineOptions opts = null)
         {
+            // First, before anything is indexed or registered: a bundle this
+            // engine cannot read faithfully is refused whole
+            // (design/project-map-contract.md 3.8), and a refusal must leave the
+            // game's registry untouched.
+            RefuseUnreadableBundle(bundle);
             opts = opts ?? new EngineOptions();
             _creationOptions = opts.Copy();
             _bundle = bundle;
@@ -796,6 +972,15 @@ namespace StoryletStudio.StoryletEngine
                     _handOwners.Add(hand.Id, Model.EffectiveGameId(hand));
                 }
             }
+            // The project map's group: by id like any group, so a hand's
+            // binding, a filled hole and tag matching need no logic of their own
+            // for it. Which boxes may NAME it is GroupInBox's business (3.1);
+            // which may reference it at all was settled by the refusal above.
+            if (bundle.Map?.Group != null)
+            {
+                _groupsById.Set(bundle.Map.Group.Id, (bundle.Map.Group, null));
+                if (bundle.Map.Group.Required) requiredGroups.Add(bundle.Map.Group.Id);
+            }
             InitLadders();
             // Both halves, precomputed once (a bundle's declarations never
             // change): each OpenFlow builds its bags from the per-flow half, and
@@ -817,13 +1002,16 @@ namespace StoryletStudio.StoryletEngine
                     _flowDecls.Hand.Set(hand.Id, Half("hand", HandDecls(hand), false));
                     _sharedDecls.Hand.Set(hand.Id, Half("hand", HandDecls(hand), true));
                 }
-                foreach (var group in box.TagGroups)
+            }
+            // Every box's tags, then the project map's zones ONCE
+            // (design/project-map-contract.md 3.3): a zone is one bag per
+            // partition, whichever boxes' hands are dealt to it.
+            foreach (var group in Model.AllTagGroups(bundle))
+            {
+                foreach (var tag in group.Tags)
                 {
-                    foreach (var tag in group.Tags)
-                    {
-                        _flowDecls.Value.Set(tag.Id, Half("value", tag.Properties ?? new List<PropertyDecl>(), false));
-                        _sharedDecls.Value.Set(tag.Id, Half("value", tag.Properties ?? new List<PropertyDecl>(), true));
-                    }
+                    _flowDecls.Value.Set(tag.Id, Half("value", tag.Properties ?? new List<PropertyDecl>(), false));
+                    _sharedDecls.Value.Set(tag.Id, Half("value", tag.Properties ?? new List<PropertyDecl>(), true));
                 }
             }
             WorldScope = new WorldSource { Owner = this };
@@ -962,6 +1150,11 @@ namespace StoryletStudio.StoryletEngine
                     foreach (var tag in group.Tags) _valueLadders[tag.Id] = Grab(tag.Properties);
                 }
                 foreach (var hand in box.Hands) _handLadders[hand.Id] = Grab(HandDecls(hand));
+            }
+            // The zones, once, keyed by tag id like every other tag (3.3).
+            if (_bundle.Map?.Group != null)
+            {
+                foreach (var tag in _bundle.Map.Group.Tags) _valueLadders[tag.Id] = Grab(tag.Properties);
             }
         }
 

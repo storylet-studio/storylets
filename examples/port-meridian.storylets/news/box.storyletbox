@@ -11,5 +11,6 @@
       specificity: false,
     },
     title: "News",
+    usesMap: true,
   },
 }

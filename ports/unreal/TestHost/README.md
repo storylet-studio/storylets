@@ -19,7 +19,8 @@ path as its first argument:
 ports/unreal/TestHost/storyletengine_testhost path/to/corpus.json
 ```
 
-It prints a per-family summary (expressions / specificity / peek / scripted),
+It prints a per-family summary (expressions / specificity / peek / scripted /
+load, the last a bundle the engine must refuse at construction),
 the Live Link fixture result (`live-link/script.json` beside the corpus,
 replayed through the std-only client in `Storylets/LiveLink.h` against a
 recording sink and compared with `frames.json` byte for byte, compact JSON;

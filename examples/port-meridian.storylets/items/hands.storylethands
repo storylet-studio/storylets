@@ -3,7 +3,7 @@
   hands: [
     {
       chosen: {
-        d_itm_district: "v_itm_strip",
+        d_con_district: "v_con_strip",
       },
       gameId: "back-room",
       id: "h_back_room",
@@ -14,7 +14,7 @@
     },
     {
       chosen: {
-        d_itm_district: "v_itm_docks",
+        d_con_district: "v_con_docks",
       },
       gameId: "container-7",
       id: "h_container_7",
@@ -25,7 +25,7 @@
     },
     {
       chosen: {
-        d_itm_district: "v_itm_oldgrid",
+        d_con_district: "v_con_oldgrid",
       },
       gameId: "service-duct",
       id: "h_service_duct",
@@ -38,7 +38,7 @@
   templates: [
     {
       chooses: [
-        "d_itm_district",
+        "d_con_district",
       ],
       gameId: "stash",
       id: "t_stash",

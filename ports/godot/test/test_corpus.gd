@@ -11,7 +11,9 @@
 #
 # Families: expressions (evaluator + dialect), specificity (matched-constraint
 # scorer), peek (bundle + one ask, asked TWICE - a peek registers nothing),
-# scripted (deals, plays, turns, save/load incl. into the edited bundle B). Then
+# scripted (deals, plays, turns, save/load incl. into the edited bundle B),
+# load (a bundle the engine must refuse at construction: create returns null,
+# and _init_error, the reason it push_errors, names each expected string). Then
 # the two corpora vendored from ../expr beside it: expr-corpus.json (the
 # evaluator's) and registry-corpus.json (the ScopeRegistry's, run by the shared
 # runner in registry_corpus.gd). Last, the one-registry checks
@@ -91,6 +93,7 @@ func _run_all() -> void:
 	var specificity: Array = root["specificity"]
 	var peek: Array = root["peek"]
 	var scripted: Array = root["scripted"]
+	var load: Array = root["load"]
 
 	_runner_finished = false
 	var e := _run_expressions(expressions)
@@ -104,10 +107,13 @@ func _run_all() -> void:
 	_runner_finished = false
 	var s := _run_scripted(scripted)
 	_check_runner("scripted")
+	_runner_finished = false
+	var l := _run_load(load)
+	_check_runner("load")
 
 	print("corpus version %d" % int(root["version"]))
-	print("expressions: %d/%d  specificity: %d/%d  peek: %d/%d  scripted: %d/%d" % [
-		e, expressions.size(), sp, specificity.size(), p, peek.size(), s, scripted.size()])
+	print("expressions: %d/%d  specificity: %d/%d  peek: %d/%d  scripted: %d/%d  load: %d/%d" % [
+		e, expressions.size(), sp, specificity.size(), p, peek.size(), s, scripted.size(), l, load.size()])
 	# The expr parity corpus sits beside ours, vendored from ../expr. Absent is a
 	# FAILURE, not a skip: a parity gate that quietly does nothing when its fixture
 	# is missing is the shape of check this codebase has been bitten by.
@@ -465,6 +471,34 @@ func _run_peek(cases: Array) -> int:
 		if not _same_list(second, first):
 			_fail("peek", name, "second peek diverged (a peek must register nothing): %s then %s" % [_show_list(first), _show_list(second)])
 			ok = false
+		if ok:
+			pass_count += 1
+	_runner_finished = true
+	return pass_count
+
+
+# -- load -----------------------------------------------------------------------------
+
+# A bundle the engine must refuse at construction (design/project-map-contract.md
+# 3.8; runner.ts runLoadCase). GDScript has no exceptions: create() returns null
+# and push_errors the reason, which is the engine's _init_error, so the case
+# asks create() for the null and a probe built with new() for the reason, the
+# way the one-registry checks read a refused registration. Each expected string
+# must appear in that reason.
+func _run_load(cases: Array) -> int:
+	var pass_count := 0
+	for c in cases:
+		var name: String = c["name"]
+		var bundle: Dictionary = c["bundle"]
+		if StoryletEngine.create(bundle, {"seed": 0}) != null:
+			_fail("load", name, "expected the engine to refuse the bundle at construction, it was accepted")
+			continue
+		var reason: String = StoryletEngine.new(bundle, {"seed": 0})._init_error
+		var ok := true
+		for want in c["expectRefused"]:
+			if not reason.contains(str(want)):
+				_fail("load", name, 'expected the refusal to name "%s", got "%s"' % [str(want), reason])
+				ok = false
 		if ok:
 			pass_count += 1
 	_runner_finished = true

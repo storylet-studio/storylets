@@ -150,18 +150,22 @@ export function createBundleInspector(
     }
   }
 
-  // --- maps: inert payload, and therefore worth saying out loud -----------
+  // --- the project map: which boxes are on it, and any geometry carried ---
   //
-  // Only when there ARE some. An empty section on every ordinary bundle would
+  // Only when there IS one. An empty section on every ordinary bundle would
   // teach the reader to skip a section that only ever matters when it is not
-  // empty, and most bundles carry no geometry at all.
-  if (description.maps.length > 0) {
-    const mapsBody = fold(el, "Maps (carried, not read)", open);
-    mapsBody.className = "sl-maps";
-    line(mapsBody, "Geometry the build was asked to carry. The engine ignores it.", "sl-line sl-note");
-    for (const map of description.maps) {
-      line(mapsBody, `${map.box} - ${map.group}: zones ${map.zones}, pictures ${map.backgrounds}, sites ${map.sites}`);
-    }
+  // empty. The zones themselves are already under Properties and the opted-in
+  // boxes' peek criteria; this says where they live and what the build carried
+  // besides, since the geometry is inert and would otherwise go unmentioned.
+  const map = description.map;
+  if (map !== undefined) {
+    const mapBody = fold(el, "Project map", open);
+    mapBody.className = "sl-maps";
+    line(mapBody, `${map.group}: ${map.tags.join(", ")}`);
+    line(mapBody, `boxes on the map: ${map.boxes.length > 0 ? map.boxes.join(", ") : "none"}`);
+    const sites = Object.entries(map.sites).map(([box, n]) => `${box} ${n}`).join(", ");
+    line(mapBody, `geometry carried (the engine ignores it): zones ${map.zones}, pictures ${map.backgrounds}`
+      + `, sites ${sites === "" ? "0" : sites}`, "sl-line sl-note");
   }
 
   // --- counts: orientation, not inventory ---------------------------------

@@ -12,7 +12,7 @@ import type { SourceBox, SourceDeck } from "@storylet-studio/compiler";
 import {
   analyseInfluence, ASSETS_DIR, contractNotes, freeAssetName, imageSize, isSafeAssetName, layoutByDependency, mapSites, newId,
   planCanvasFurniture, planCardPositions, planComments, planForgetSites, planMapSites, proposeCoverage, runNewBox,
-  boxFolderWrites,
+  boxFolderWrites, projectMapPath,
 } from "@storylet-studio/ops";
 import type { CanvasRef, CardPlacement } from "@storylet-studio/ops";
 import { gameWorldWrite, otherToolsCatalogue, withGameScopes } from "./game-scopes.js";
@@ -84,12 +84,12 @@ function bindSitesToZones(
   return changed;
 }
 import {
-  DECK_SCHEMA, PLACE_GROUP, SHARD_EXTENSIONS, backgroundsOf, bindHand, droppedRect, effectiveGameId, freeGameId, freeTitle, isHoleRef, isValidGameId, gameIdify,
+  DECK_SCHEMA, PLACE_GROUP, PROJECTMAP_SCHEMA, SHARD_EXTENSIONS, backgroundsOf, bindHand, droppedRect, effectiveGameId, freeGameId, freeTitle, isHoleRef, isValidGameId, gameIdify,
   handBinding, isSpatial, polygonOf, restack, unbindHand, withBackgrounds, withPolygon, withSpatialGroup, withZ,
   zOf, zoneAt,
 } from "@storylet-studio/model";
 import type {
-  BoxShard, CoverageConfig, CoverageDriver, Hand, HandsShard, HandTemplate, Polygon, ProjectShard, PropertyDecl,
+  BoxShard, CoverageConfig, CoverageDriver, Hand, HandsShard, HandTemplate, Polygon, ProjectMapShard, ProjectShard, PropertyDecl,
   SpatialBackground, StackMove, Tag, TagGroup, TagsShard } from "@storylet-studio/model";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { applyStates, captureBefore } from "./history.js";
@@ -100,7 +100,7 @@ import type { CanvasFurniture, Card, Comment, CommentMark, DeckShard, Outcome, R
 import { MAP_CANVAS } from "../shared/api.js";
 import type { BindingDto, BoxEdit, BoxKit, CardEdit, ConditionProperty, CoverageDriverDto, DeckEdit, HandDetail, HandEdit, ProjectSettingsDto, PropertyDeclDto, TagGroupDetail, TagGroupEdit, TemplateDetail, TemplateEdit } from "../shared/api.js";
 import type { ProjectSession } from "./project.js";
-import { byDisplay, toDto } from "./project.js";
+import { boxWithMap, byDisplay, toDto } from "./project.js";
 import { validate } from "./project.js";
 import type { OpenResult } from "../shared/api.js";
 import { openResult } from "./project.js";
@@ -328,7 +328,7 @@ export function saveCard(session: ProjectSession, deckId: string, cardId: string
   if (!found) return { error: `unknown deck (id ${deckId})` };
   const index = found.deck.shard.cards.findIndex((c) => c.id === cardId);
   if (index < 0) return { error: `unknown card (id ${cardId})` };
-  const updated = applyEdit(found.box, found.deck.shard.cards[index]!, edit);
+  const updated = applyEdit(boxWithMap(session.loaded.source, found.box), found.deck.shard.cards[index]!, edit);
   found.deck.shard.cards[index] = updated;
   // Consecutive edits to one card coalesce into a single undo step.
   return commit(session, `Edit ${updated.gameId}`, `card:${cardId}`,
@@ -572,6 +572,34 @@ export function deleteCard(session: ProjectSession, deckId: string, cardId: stri
 
 function locateBox(session: ProjectSession, boxId: string): SourceBox | undefined {
   return session.loaded.source!.boxes.find((b) => b.box.box.id === boxId);
+}
+
+/** The box with the project map's zone group beside its own when it is on the
+ *  map (project.ts `boxWithMap`), for the pages that READ a box's groups and
+ *  write only its hands, decks or box shard. Never for a tags shard write. */
+function locateBoxSeen(session: ProjectSession, boxId: string): SourceBox | undefined {
+  const box = locateBox(session, boxId);
+  return box === undefined ? undefined : boxWithMap(session.loaded.source, box);
+}
+
+/**
+ * A tag group the box can see, and the write that records it: a box's own group
+ * lives in its tags shard, the PROJECT MAP's zone group in the root map shard
+ * (design/project-map-contract.md 1.1). Every page that edits a group in place
+ * (its tags, its zones, its pictures) writes through here, so an edit to the
+ * project map from any box lands in the one file it belongs to.
+ */
+function groupHome(
+  session: ProjectSession, box: SourceBox | undefined, groupId: string,
+): { group: TagGroup; project: boolean; write: () => FileState } | undefined {
+  if (box === undefined) return undefined;
+  const own = box.tags.groups.find((g) => g.id === groupId);
+  if (own !== undefined) {
+    return { group: own, project: false, write: () => ({ path: tagsFile(session, box), content: canonicalStringify(box.tags) }) };
+  }
+  const map = session.loaded.source!.map;
+  if (map === undefined || map.group.id !== groupId || box.box.box.usesMap !== true) return undefined;
+  return { group: map.group, project: true, write: () => ({ path: projectMapPath(session.loaded.dir), content: canonicalStringify(map) }) };
 }
 
 /**
@@ -918,13 +946,13 @@ export function addCoverageDrivers(session: ProjectSession): { result: OpenResul
 export function cardCatalogue(session: ProjectSession, deckId: string): ConditionProperty[] {
   const found = locate(session, deckId);
   if (!found) return [];
-  return catalogueFor(session, found.box, found.deck);
+  return catalogueFor(session, boxWithMap(session.loaded.source, found.box), found.deck);
 }
 
 /** The box-scoped catalogue (no @deck feeder): query conditions and other
  *  box-level expressions edit against this. */
 export function boxCatalogue(session: ProjectSession, boxId: string): ConditionProperty[] {
-  const box = locateBox(session, boxId);
+  const box = locateBoxSeen(session, boxId);
   return box ? catalogueFor(session, box, undefined) : [];
 }
 
@@ -1112,7 +1140,7 @@ function resolveBindingRows(box: SourceBox, rows: BindingDto[], allowRefs = fals
 }
 
 export function templateDetail(session: ProjectSession, boxId: string, templateId: string): TemplateDetail | null {
-  const box = locateBox(session, boxId);
+  const box = locateBoxSeen(session, boxId);
   const template = box?.hands.templates.find((t) => t.id === templateId);
   if (!box || !template) return null;
   return {
@@ -1128,7 +1156,7 @@ export function templateDetail(session: ProjectSession, boxId: string, templateI
 }
 
 export function saveTemplate(session: ProjectSession, boxId: string, templateId: string, edit: TemplateEdit): OpenResult | { error: string } {
-  const box = locateBox(session, boxId);
+  const box = locateBoxSeen(session, boxId);
   const template = box?.hands.templates.find((t) => t.id === templateId);
   if (!box || !template) return { error: `unknown hand template (id ${templateId})` };
   if (edit.gameId !== undefined) { const g = gameIdify(edit.gameId); if (g) template.gameId = g; else delete template.gameId; }
@@ -1235,7 +1263,7 @@ export function duplicateTagGroup(session: ProjectSession, boxId: string, groupI
 // its templates in the box's hands shard.
 
 export function handDetail(session: ProjectSession, boxId: string, handId: string): HandDetail | null {
-  const box = locateBox(session, boxId);
+  const box = locateBoxSeen(session, boxId);
   const hand = box?.hands.hands.find((h) => h.id === handId);
   if (!box || !hand) return null;
   const groups = byDisplay(box.tags.groups).map((d) => ({
@@ -1307,7 +1335,7 @@ export function handDetail(session: ProjectSession, boxId: string, handId: strin
 }
 
 export function saveHand(session: ProjectSession, boxId: string, handId: string, edit: HandEdit): OpenResult | { error: string } {
-  const box = locateBox(session, boxId);
+  const box = locateBoxSeen(session, boxId);
   const hand = box?.hands.hands.find((h) => h.id === handId);
   if (!box || !hand) return { error: `unknown hand (id ${handId})` };
   if (edit.gameId !== undefined) { const g = gameIdify(edit.gameId); if (g) hand.gameId = g; else delete hand.gameId; }
@@ -1395,7 +1423,7 @@ export function deleteTemplate(session: ProjectSession, boxId: string, templateI
 
 export function tagGroupDetail(session: ProjectSession, boxId: string, groupId: string): TagGroupDetail | null {
   const box = locateBox(session, boxId);
-  const group = box?.tags.groups.find((d) => d.id === groupId);
+  const group = groupHome(session, box, groupId)?.group;
   if (!box || !group) return null;
   const asString = (v: unknown): string => (typeof v === "string" ? v : JSON.stringify(v));
   const declDtoOf = (p: PropertyDecl): PropertyDeclDto => ({
@@ -1423,8 +1451,9 @@ export function tagGroupDetail(session: ProjectSession, boxId: string, groupId: 
 
 export function saveTagGroup(session: ProjectSession, boxId: string, groupId: string, edit: TagGroupEdit): OpenResult | { error: string } {
   const box = locateBox(session, boxId);
-  const group = box?.tags.groups.find((d) => d.id === groupId);
-  if (!box || !group) return { error: `unknown tag group (id ${groupId})` };
+  const home = groupHome(session, box, groupId);
+  const group = home?.group;
+  if (!box || !home || !group) return { error: `unknown tag group (id ${groupId})` };
   if (edit.gameId !== undefined) { const g = gameIdify(edit.gameId); if (g) group.gameId = g; else delete group.gameId; }
   if (edit.purpose !== undefined) { if (edit.purpose.trim()) group.purpose = edit.purpose; else delete group.purpose; }
   if (edit.properties !== undefined) {
@@ -1458,7 +1487,7 @@ export function saveTagGroup(session: ProjectSession, boxId: string, groupId: st
       return tag;
     });
   }
-  return commit(session, "Edit tag group", `group:${groupId}`, [{ path: tagsFile(session, box), content: canonicalStringify(box.tags) }]);
+  return commit(session, "Edit tag group", `group:${groupId}`, [home.write()]);
 }
 
 /**
@@ -1468,18 +1497,58 @@ export function saveTagGroup(session: ProjectSession, boxId: string, groupId: st
  * the author may be toggling to compare, so throwing away geometry here would be
  * the most expensive undo in the app; validation says the outlines are currently
  * unshown, which is the honest report.
+ *
+ * A map is the PROJECT's since the project map (design/project-map-contract.md):
+ * one per project, at the root, which boxes opt in to. So "make a map" of a box's
+ * group LIFTS it there and puts the box on it, in one undo step, when the project
+ * has no map yet, and is refused when it has one. "Stop being a map" moves the
+ * group back into the box, which only the one box on the map may do: with others
+ * on it, it is their map too. The minimal bridge until the editor has a project
+ * map surface of its own.
  */
 export function setGroupSpatial(
   session: ProjectSession, boxId: string, groupId: string, on: boolean,
 ): OpenResult | { error: string } {
   const box = locateBox(session, boxId);
-  const group = box?.tags.groups.find((g) => g.id === groupId);
-  if (!box || !group) return { error: `unknown tag group (id ${groupId})` };
+  const home = groupHome(session, box, groupId);
+  const group = home?.group;
+  if (!box || !home || !group) return { error: `unknown tag group (id ${groupId})` };
+  const source = session.loaded.source!;
+  const boxShard = (): FileState => ({ path: boxFile(session, box), content: canonicalStringify(box.box) });
+  if (on && !home.project) {
+    if (source.map !== undefined) {
+      return { error: `this project has a map already ("${effectiveGameId(source.map.group)}"), and a project has one map` };
+    }
+    box.tags.groups = box.tags.groups.filter((g) => g.id !== groupId);
+    group.templates = withSpatialGroup(group, true)!;
+    box.box.box.usesMap = true;
+    const map: ProjectMapShard = { schema: PROJECTMAP_SCHEMA, group };
+    return commit(session, "Make a map", `group:${groupId}`, [
+      { path: tagsFile(session, box), content: canonicalStringify(box.tags) },
+      boxShard(),
+      { path: projectMapPath(session.loaded.dir), content: canonicalStringify(map) },
+    ]);
+  }
+  if (!on && home.project) {
+    const others = source.boxes.filter((b) => b !== box && b.box.box.usesMap === true);
+    if (others.length > 0) {
+      return { error: `${others.map((b) => `"${effectiveGameId(b.box.box)}"`).join(", ")} ${others.length === 1 ? "is" : "are"} on the map too, so it cannot become this box's own group` };
+    }
+    const templates = withSpatialGroup(group, false);
+    if (templates === undefined) delete group.templates;
+    else group.templates = templates;
+    box.tags.groups.push(group);
+    delete box.box.box.usesMap;
+    return commit(session, "Stop being a map", `group:${groupId}`, [
+      { path: tagsFile(session, box), content: canonicalStringify(box.tags) },
+      boxShard(),
+      { path: projectMapPath(session.loaded.dir), content: null },
+    ]);
+  }
   const templates = withSpatialGroup(group, on);
   if (templates === undefined) delete group.templates;
   else group.templates = templates;
-  return commit(session, on ? "Make a map" : "Stop being a map", `group:${groupId}`,
-    [{ path: tagsFile(session, box), content: canonicalStringify(box.tags) }]);
+  return commit(session, on ? "Make a map" : "Stop being a map", `group:${groupId}`, [home.write()]);
 }
 
 /**
@@ -1494,8 +1563,9 @@ export function createZone(
   session: ProjectSession, boxId: string, groupId: string, polygon: { x: number; y: number }[],
 ): { result: OpenResult; tagId: string } | { error: string } {
   const box = locateBox(session, boxId);
-  const group = box?.tags.groups.find((g) => g.id === groupId);
-  if (!box || !group) return { error: `unknown tag group (id ${groupId})` };
+  const home = groupHome(session, box, groupId);
+  const group = home?.group;
+  if (!box || !home || !group) return { error: `unknown tag group (id ${groupId})` };
   const taken = new Set(group.tags.map((v) => effectiveGameId(v)));
   const gameId = freeGameId("new-zone", taken);
   const tag: Tag = { id: newId("v"), gameId };
@@ -1505,7 +1575,7 @@ export function createZone(
   // The tags shard and nothing else: a new outline drawn over existing sites
   // takes nobody in (see `bindSitesToZones`).
   const result = commit(session, "Draw a zone", `struct:${structCounter++}`, [
-    { path: tagsFile(session, box), content: canonicalStringify(box.tags) },
+    home.write(),
   ]);
   return "error" in result ? result : { result, tagId: tag.id };
 }
@@ -1527,16 +1597,17 @@ export function setZonePolygon(
   polygon: { x: number; y: number }[] | undefined,
 ): { result: OpenResult } | { error: string } {
   const box = locateBox(session, boxId);
-  const group = box?.tags.groups.find((g) => g.id === groupId);
+  const home = groupHome(session, box, groupId);
+  const group = home?.group;
   const tag = group?.tags.find((t) => t.id === tagId);
-  if (!box || !group || !tag) return { error: `unknown zone (id ${tagId})` };
+  if (!box || !home || !group || !tag) return { error: `unknown zone (id ${tagId})` };
   const templates = withPolygon(tag, polygon);
   if (templates === undefined) delete tag.templates;
   else tag.templates = templates;
   // Keyed per zone, so dragging one shape's vertices coalesces into one step while
   // moving a different zone starts a new one.
   const result = commit(session, polygon === undefined ? "Clear a zone" : "Shape a zone", `zone:${tagId}`, [
-    { path: tagsFile(session, box), content: canonicalStringify(box.tags) },
+    home.write(),
   ]);
   return "error" in result ? result : { result };
 }
@@ -1556,9 +1627,10 @@ export function restackZone(
   session: ProjectSession, boxId: string, groupId: string, tagId: string, move: StackMove,
 ): { result: OpenResult } | { error: string } {
   const box = locateBox(session, boxId);
-  const group = box?.tags.groups.find((g) => g.id === groupId);
+  const home = groupHome(session, box, groupId);
+  const group = home?.group;
   const tag = group?.tags.find((t) => t.id === tagId);
-  if (!box || !group || !tag) return { error: `unknown zone (id ${tagId})` };
+  if (!box || !home || !group || !tag) return { error: `unknown zone (id ${tagId})` };
 
   // Only DRAWN zones are in the stack: an undrawn tag has no place in a picture.
   const drawn = group.tags.filter((t) => polygonOf(t) !== undefined)
@@ -1573,7 +1645,7 @@ export function restackZone(
   // menu. Sharing the key made "bring to front" undo the reshaping that happened
   // before it, which is not what anybody pressing undo once is asking for.
   const result = commit(session, "Restack a zone", `struct:${structCounter++}`, [
-    { path: tagsFile(session, box), content: canonicalStringify(box.tags) },
+    home.write(),
   ]);
   return "error" in result ? result : { result };
 }
@@ -1601,11 +1673,13 @@ export function addBackground(
   place: { view: { width: number; height: number }; scale: number; at: { x: number; y: number } },
 ): { result: OpenResult; file: string } | { error: string } {
   const box = locateBox(session, boxId);
-  const group = box?.tags.groups.find((g) => g.id === groupId);
-  if (!box || !group) return { error: `unknown tag group (id ${groupId})` };
-  if (!isSpatial(group)) return { error: `"${effectiveGameId(group)}" is not a map` };
+  const home = groupHome(session, box, groupId);
+  const group = home?.group;
+  if (!box || !home || !group) return { error: `unknown tag group (id ${groupId})` };
+  if (!home.project && !isSpatial(group)) return { error: `"${effectiveGameId(group)}" is not a map` };
 
-  const dir = join(session.loaded.dir, box.path, ASSETS_DIR);
+  // The project's one assets folder (design/project-map-contract.md 1.4).
+  const dir = join(session.loaded.dir, ASSETS_DIR);
   // Taken names come from BOTH the folder and the bag: a file on disk nothing
   // references is still a name in use, and an entry whose file is missing still
   // owns its name.
@@ -1629,7 +1703,7 @@ export function addBackground(
   group.templates = withBackgrounds(group, [...backgroundsOf(group), entry]);
 
   const result = commit(session, "Add a background", `struct:${structCounter++}`,
-    [{ path: tagsFile(session, box), content: canonicalStringify(box.tags) }]);
+    [home.write()]);
   return "error" in result ? result : { result, file };
 }
 
@@ -1660,8 +1734,9 @@ export function editBackground(
   edit: BackgroundEdit, opts: { coalesce?: boolean } = {},
 ): OpenResult | { error: string } {
   const box = locateBox(session, boxId);
-  const group = box?.tags.groups.find((g) => g.id === groupId);
-  if (!box || !group) return { error: `unknown tag group (id ${groupId})` };
+  const home = groupHome(session, box, groupId);
+  const group = home?.group;
+  if (!box || !home || !group) return { error: `unknown tag group (id ${groupId})` };
   const current = backgroundsOf(group);
   const at = current.findIndex((b) => b.id === backgroundId);
   if (at < 0) return { error: `unknown background (id ${backgroundId})` };
@@ -1687,7 +1762,7 @@ export function editBackground(
   group.templates = withBackgrounds(group, updated);
   const key = opts.coalesce === true ? `bg:${backgroundId}` : `struct:${structCounter++}`;
   return commit(session, "Edit a background", key,
-    [{ path: tagsFile(session, box), content: canonicalStringify(box.tags) }]);
+    [home.write()]);
 }
 
 /** Move a background through the stack, among the OTHER BACKGROUNDS only: they are
@@ -1696,8 +1771,9 @@ export function restackBackground(
   session: ProjectSession, boxId: string, groupId: string, backgroundId: string, move: StackMove,
 ): OpenResult | { error: string } {
   const box = locateBox(session, boxId);
-  const group = box?.tags.groups.find((g) => g.id === groupId);
-  if (!box || !group) return { error: `unknown tag group (id ${groupId})` };
+  const home = groupHome(session, box, groupId);
+  const group = home?.group;
+  if (!box || !home || !group) return { error: `unknown tag group (id ${groupId})` };
   const current = backgroundsOf(group);
   const z = restack(current, backgroundId, move);
   if (z === undefined) return reload(session);
@@ -1705,7 +1781,7 @@ export function restackBackground(
   const updated = current.map((b) => (b.id === backgroundId ? { ...b, z } : b));
   group.templates = withBackgrounds(group, updated);
   return commit(session, "Restack a background", `struct:${structCounter++}`,
-    [{ path: tagsFile(session, box), content: canonicalStringify(box.tags) }]);
+    [home.write()]);
 }
 
 /**
@@ -1720,13 +1796,14 @@ export function removeBackground(
   session: ProjectSession, boxId: string, groupId: string, backgroundId: string,
 ): OpenResult | { error: string } {
   const box = locateBox(session, boxId);
-  const group = box?.tags.groups.find((g) => g.id === groupId);
-  if (!box || !group) return { error: `unknown tag group (id ${groupId})` };
+  const home = groupHome(session, box, groupId);
+  const group = home?.group;
+  if (!box || !home || !group) return { error: `unknown tag group (id ${groupId})` };
   const current = backgroundsOf(group);
   if (!current.some((b) => b.id === backgroundId)) return { error: `unknown background (id ${backgroundId})` };
   group.templates = withBackgrounds(group, current.filter((b) => b.id !== backgroundId));
   return commit(session, "Remove a background", `struct:${structCounter++}`,
-    [{ path: tagsFile(session, box), content: canonicalStringify(box.tags) }]);
+    [home.write()]);
 }
 
 /** Take hands off the map. The hands themselves are untouched: only their sites. */
@@ -1768,7 +1845,7 @@ export function moveSitesOnMap(
 
   const moved: Record<string, { x: number; y: number }> = {};
   for (const p of placements) moved[p.id] = { x: Math.round(p.x), y: Math.round(p.y) };
-  const rebound = bindSitesToZones(box, groupId, moved);
+  const rebound = bindSitesToZones(boxWithMap(session.loaded.source, box), groupId, moved);
 
   // One or two files: the map shard, and - for a project whose map still lives in
   // its view shard - the view shard without it. The move out rides the same
@@ -1827,7 +1904,7 @@ export function setCanvasFurniture(
 ): OpenResult | { error: string } {
   const box = locateBox(session, boxId);
   if (!box) return { error: `unknown box (id ${boxId})` };
-  const writes = planCanvasFurniture(session.loaded.dir, box, ref, furniture);
+  const writes = planCanvasFurniture(session.loaded.dir, box, ref, furniture, session.loaded.source);
   if (writes.length === 0) return reload(session);   // nothing moved: no file touched, no undo step
   return commit(session, label, coalesce ?? `struct:${structCounter++}`,
     writes.map((w) => ({ path: w.path, content: w.content })));

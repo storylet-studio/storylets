@@ -10,5 +10,6 @@
       specificity: true,
     },
     title: "The Village",
+    usesMap: true,
   },
 }

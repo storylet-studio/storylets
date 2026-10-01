@@ -31,6 +31,17 @@
 //     stale-handle rule).
 //   - engine.getProperty serves world.* and shared refs only; a ref that
 //     resolves per-flow throws, naming the fix (Patter's teaching rule).
+//   - the PROJECT MAP (design/project-map-contract.md 3) is one zone group
+//     above the boxes, in `bundle.map.group` and in no box's `tagGroups`. A
+//     box that opts in (`usesMap`) sees its name beside its own groups', so
+//     its hands bind zones and its cards are tagged with them by id exactly
+//     as with a box group. Each zone is ONE value bag, keyed by the tag's id
+//     like any tag's, so a zone property is one value whichever box's hand
+//     is dealt to it; the `shared` flag still decides per-flow against one
+//     for the engine. What the boxes on a map do NOT share: a hand deals only
+//     from its own box's decks, and play history stays the asking box's
+//     (D7). A bundle that breaks the map's rules is refused at construction
+//     (3.8) rather than half-played.
 //
 // Key dealing contracts, unchanged from round 2 (all per flow now):
 //   - two verbs: deal(hand) claims, peek(box, criteria) just looks; you can
@@ -70,19 +81,28 @@ import type { EvalContext, ExprNode, ScalarValue, ScopeResolver } from "@wildwin
 import { matchedSpecificity } from "@wildwinter/expr-specificity";
 import { storyletsDialect, NEVER_PLAYED } from "@storylet-studio/dialect";
 
-/** The play-history indexes' key for one (group, tag) pair.
+/** The play-history indexes' key for one (box, group, tag) triple.
+ *
+ *  The BOX is in it because play history is box-specific (design/project-map-
+ *  contract.md 3.7, D7, ruled 2026-10-01): `count_played_in` asks about the
+ *  asking box's own plays. A box group was already box-unique, so its key never
+ *  needed the box; a project-map zone is one tag every opted-in box tags its
+ *  cards with, and without the box a play of a newspaper at the quay in one box
+ *  would count as an encounter at the quay in another.
  *
  *  A UNIT SEPARATOR (U+001F) joins them: ids are letters, digits and
  *  underscores, so a control character cannot occur in one and two different
- *  pairs can never collide into one key the way a "." or ":" join could. NUL
+ *  triples can never collide into one key the way a "." or ":" join could. NUL
  *  would say the same thing and was the first choice, but GDScript will not
  *  carry one in a string - it substitutes U+FFFD and warns on every parse - and
  *  the four runtimes keep the same spelling. */
-const tagKey = (groupId: string, tagId: string): string => `${groupId}\u001f${tagId}`;
+const tagKey = (boxId: string, groupId: string, tagId: string): string =>
+  `${boxId}\u001f${groupId}\u001f${tagId}`;
 
 import type { StoryletsHost } from "@storylet-studio/dialect";
 import {
-  PLACE_GROUP, ambiguousValueAddressMessage, effectiveGameId, isHoleRef, parseHoleRef, valueAddresses,
+  BUNDLE_SCHEMAS, PLACE_GROUP, allTagGroups, ambiguousValueAddressMessage, effectiveGameId, groupsOfBox,
+  isHoleRef, parseHoleRef, valueAddresses, zoneQualifiedValueAddressMessage,
 } from "@storylet-studio/model";
 import type {
   Box, Bundle, BundleContent, Card, Deck, Expression, FlowSave, Hand, HandTemplate,
@@ -491,15 +511,15 @@ interface OwnerIndex {
   gameId: Map<string, string>;   // internal id -> owner segment
   id: Map<string, string>;       // owner segment -> internal id (first in bundle order wins)
   repeated: Map<string, string[]>;  // an ambiguous short form -> the qualified candidates
+  zoneQualified: Map<string, string>;  // "<box>/<zone>" -> "<zone>", refused (value scope only)
 }
 
 type OwnerIndexes = Record<OwnedScope, OwnerIndex>;
 
+const emptyOwnerIndex = (): OwnerIndex =>
+  ({ gameId: new Map(), id: new Map(), repeated: new Map(), zoneQualified: new Map() });
 const emptyOwnerIndexes = (): OwnerIndexes => ({
-  box: { gameId: new Map(), id: new Map(), repeated: new Map() },
-  deck: { gameId: new Map(), id: new Map(), repeated: new Map() },
-  hand: { gameId: new Map(), id: new Map(), repeated: new Map() },
-  value: { gameId: new Map(), id: new Map(), repeated: new Map() },
+  box: emptyOwnerIndex(), deck: emptyOwnerIndex(), hand: emptyOwnerIndex(), value: emptyOwnerIndex(),
 });
 
 const indexOwner = (index: OwnerIndex, entity: { id: string; gameId?: string; title?: string }): void => {
@@ -509,7 +529,8 @@ const indexOwner = (index: OwnerIndex, entity: { id: string; gameId?: string; ti
 };
 
 /** The value scope's index, whole: the segments to print, the segments to
- *  accept, and the gameIds that need qualifying. Built from the bundle rather
+ *  accept, the gameIds that need qualifying, and the box-qualified forms of
+ *  the project map's zones, which are refused. Built from the bundle rather
  *  than tag by tag, because whether a tag's own gameId is enough is a question
  *  about the OTHER boxes. */
 const indexValueOwners = (index: OwnerIndex, bundle: Bundle): void => {
@@ -517,6 +538,7 @@ const indexValueOwners = (index: OwnerIndex, bundle: Bundle): void => {
   for (const [id, segment] of addresses.print) index.gameId.set(id, segment);
   for (const [segment, id] of addresses.accept) index.id.set(segment, id);
   for (const [gameId, candidates] of addresses.repeated) index.repeated.set(gameId, candidates);
+  for (const [segment, zone] of addresses.zoneQualified) index.zoneQualified.set(segment, zone);
 };
 
 /** One side's five stores (shared on the engine, per-flow on each flow). */
@@ -546,7 +568,9 @@ interface Internals {
   /** The owner segment of a property address, both ways round (4.4). */
   owners: OwnerIndexes;
   templatesById: Map<string, HandTemplate<Expression>>;
-  groupsById: Map<string, { group: TagGroup; box: Box<Expression> }>;
+  /** Every group by internal id. `box` is absent for the project map's group,
+   *  which belongs to no box. */
+  groupsById: Map<string, { group: TagGroup; box?: Box<Expression> }>;
   requiredGroups: Set<string>;
   nodeCache: WeakMap<Expression, ExprNode>;
   ladders: {
@@ -642,7 +666,7 @@ const addressOf = (internals: Internals, kind: OwnedScope, id: string): string =
  * REFUSES it, listing those candidates. Undefined when the segment names no
  * owner at all, which is the caller's "no <kind> store" error.
  */
-type OwnerLookup = { id: string; legacy: boolean } | { ambiguous: string[] };
+type OwnerLookup = { id: string; legacy: boolean } | { ambiguous: string[] } | { zone: string };
 
 const resolveOwner = (internals: Internals, kind: OwnedScope, segment: string): OwnerLookup | undefined => {
   // Checked before the lookup, because the short form is deliberately NOT in
@@ -650,6 +674,10 @@ const resolveOwner = (internals: Internals, kind: OwnedScope, segment: string): 
   // bundle order is the bug this removes.
   const candidates = internals.owners[kind].repeated.get(segment);
   if (candidates !== undefined) return { ambiguous: candidates };
+  // A box-qualified form of a project-map zone: never accepted, because the
+  // zone belongs to no box (design/project-map-contract.md 3.4).
+  const zone = internals.owners[kind].zoneQualified.get(segment);
+  if (zone !== undefined) return { zone };
   const byGameId = internals.owners[kind].id.get(segment);
   if (byGameId !== undefined) return { id: byGameId, legacy: false };
   // A gameId that equals its id took the branch above, so anything reaching
@@ -664,6 +692,7 @@ const ownerOrThrow = (internals: Internals, kind: OwnedScope, segment: string, n
   const owner = resolveOwner(internals, kind, segment);
   if (owner === undefined) throw new Error(`no ${kind} store "${segment}"`);
   if ("ambiguous" in owner) throw new Error(ambiguousValueAddressMessage(segment, name, owner.ambiguous));
+  if ("zone" in owner) throw new Error(zoneQualifiedValueAddressMessage(segment, owner.zone, name));
   return owner;
 };
 
@@ -688,8 +717,11 @@ const buildPartition = (internals: Internals, half: (scope: FlaggedScope, decls:
     // a standalone hand declares its own (schema 2.6).
     hand: new Map(b.boxes.flatMap((box) => box.hands.map(
       (hand): [string, StateBag] => [hand.id, bagFromDecls(half("hand", handDeclsOf(internals, hand)), at("hand", hand.id))]))),
-    value: new Map(b.boxes.flatMap((box) => box.tagGroups.flatMap((group) => group.tags.map(
-      (tag): [string, StateBag] => [tag.id, bagFromDecls(half("value", tag.properties ?? []), at("value", tag.id))])))),
+    // Every box's tags, then the project map's zones ONCE (design/project-
+    // map-contract.md 3.3): a zone is one bag per partition, whichever boxes'
+    // hands are dealt to it.
+    value: new Map(allTagGroups(b).flatMap((group) => group.tags.map(
+      (tag): [string, StateBag] => [tag.id, bagFromDecls(half("value", tag.properties ?? []), at("value", tag.id))]))),
   };
 };
 
@@ -855,6 +887,93 @@ function finishReport(bundle: BundleContent, saved: BundleContent, flows: string
 
 // --- the Engine ---------------------------------------------------------------
 
+/**
+ * Refuse, at construction, a bundle this engine cannot read faithfully
+ * (design/project-map-contract.md 3.8). Throws one error naming every problem
+ * found, each naming the box and the group or tag at fault.
+ *
+ * The compiler refuses all of these first. The engine checks again because it
+ * cannot tell a hand-built or stale bundle from a compiled one, and the
+ * alternative is the silent half-working the server audit found twice: a hand
+ * whose bound group is looked up in the wrong place comes back empty, and an
+ * old runtime given a map bundle deals plausibly while every zone value is
+ * missing. Only what would make the engine's OWN resolution ambiguous or wrong
+ * is refused here; the compiler's bundle-wide group-name rule is stricter.
+ */
+const refuseUnreadableBundle = (bundle: Bundle): void => {
+  // The schema tag (D4). Checked alone and first: a bundle of a schema this
+  // runtime does not know may not have any of the shape the rest reads.
+  const schema = (bundle as { schema?: unknown }).schema;
+  if (typeof schema !== "string" || !BUNDLE_SCHEMAS.includes(schema)) {
+    throw new Error(`unsupported bundle schema: ${String(schema)} (this runtime reads ${BUNDLE_SCHEMAS.join(" and ")})`);
+  }
+  const problems: string[] = [];
+  const map = bundle.map?.group;
+  const mapName = map !== undefined ? effectiveGameId(map) : undefined;
+  if (map !== undefined && mapName === PLACE_GROUP) {
+    problems.push(`the project map's tag group is called "${PLACE_GROUP}", which is reserved for a box's own hands`);
+  }
+  // Every box tag gameId, for the zone-name rule: a zone's address has no
+  // qualified form to fall back on (3.4), so any box tag sharing it anywhere
+  // makes `value.<zone>.<name>` ambiguous.
+  const boxTags = new Map<string, { box: string; group: string }>();
+  for (const box of bundle.boxes) {
+    for (const group of box.tagGroups) {
+      for (const tag of group.tags) {
+        const gameId = effectiveGameId(tag);
+        if (!boxTags.has(gameId)) boxTags.set(gameId, { box: effectiveGameId(box), group: effectiveGameId(group) });
+      }
+    }
+  }
+  for (const tag of map?.tags ?? []) {
+    const zone = effectiveGameId(tag);
+    const clash = boxTags.get(zone);
+    if (clash !== undefined) {
+      problems.push(`the project map's zone "${zone}" has the name of tag "${zone}" in box "${clash.box}", group "${clash.group}", `
+        + `so "value.${zone}.<name>" would name two things`);
+    }
+  }
+  for (const box of bundle.boxes) {
+    const boxName = effectiveGameId(box);
+    if (box.usesMap === true) {
+      if (map === undefined) {
+        problems.push(`box "${boxName}" uses the project map, but the bundle has no map`);
+        continue;
+      }
+      // One namespace in an opted-in box (3.1): a box group with the map's
+      // name would make every name-based lookup there a coin toss.
+      const twin = box.tagGroups.find((g) => effectiveGameId(g) === mapName);
+      if (twin !== undefined) {
+        problems.push(`box "${boxName}" uses the project map and declares its own tag group "${mapName}", the map's name`);
+      }
+      continue;
+    }
+    if (map === undefined) continue;
+    // A box NOT on the map may not reference its group at all: every route a
+    // reference takes, card tags, template bindings and holes, a hand's
+    // chosen tags and a rule's bindings, by the group's id as written.
+    const names = (where: string): void => {
+      problems.push(`box "${boxName}" is not on the project map, but ${where} names the map's tag group "${mapName}"`);
+    };
+    for (const deck of box.decks) {
+      for (const card of deck.cards) {
+        if (card.tags?.[map.id] !== undefined) names(`card "${effectiveGameId(card)}"`);
+      }
+    }
+    for (const template of box.handTemplates) {
+      if (template.bindings?.[map.id] !== undefined || template.chooses?.includes(map.id) === true) {
+        names(`hand template "${effectiveGameId(template)}"`);
+      }
+    }
+    for (const hand of box.hands) {
+      if (hand.chosen?.[map.id] !== undefined || hand.rule?.bindings?.[map.id] !== undefined) {
+        names(`hand "${effectiveGameId(hand)}"`);
+      }
+    }
+  }
+  if (problems.length > 0) throw new Error(`bundle refused: ${problems.join("; ")}`);
+};
+
 export class Engine {
   private readonly internals: Internals;
   private readonly seed: number;
@@ -873,6 +992,10 @@ export class Engine {
   private readonly sharedMounts: Array<{ key: string; mount: () => void }> = [];
 
   constructor(bundle: Bundle, opts: EngineOptions = {}) {
+    // First, before anything is indexed or registered: a bundle this engine
+    // cannot read faithfully is refused whole (design/project-map-contract.md
+    // 3.8), and a refusal must leave the game's registry untouched.
+    refuseUnreadableBundle(bundle);
     this.creationOptions = opts;
     this.seed = opts.seed ?? 0;
     this.onReplacedFlow = opts.onReplacedFlow;
@@ -958,6 +1081,14 @@ export class Engine {
         indexOwner(internals.owners.hand, hand);
       }
     }
+    // The project map's group: by id like any group, so a hand's binding, a
+    // filled hole and tag matching need no logic of their own for it. Which
+    // boxes may NAME it is `groupInBox`'s business (3.1); which may reference
+    // it at all was settled by the refusal above.
+    if (bundle.map !== undefined) {
+      internals.groupsById.set(bundle.map.group.id, { group: bundle.map.group });
+      if (bundle.map.group.required === true) internals.requiredGroups.add(bundle.map.group.id);
+    }
     this.initLadders();
 
     // Both halves, precomputed once (a bundle's declarations never change):
@@ -970,8 +1101,8 @@ export class Engine {
         (deck): [string, PropertyDecl[]] => [deck.id, half("deck", deck.properties)]))),
       hand: new Map(bundle.boxes.flatMap((box) => box.hands.map(
         (hand): [string, PropertyDecl[]] => [hand.id, half("hand", handDeclsOf(internals, hand))]))),
-      value: new Map(bundle.boxes.flatMap((box) => box.tagGroups.flatMap((group) => group.tags.map(
-        (tag): [string, PropertyDecl[]] => [tag.id, half("value", tag.properties ?? [])])))),
+      value: new Map(allTagGroups(bundle).flatMap((group) => group.tags.map(
+        (tag): [string, PropertyDecl[]] => [tag.id, half("value", tag.properties ?? [])]))),
     });
     internals.flowDecls = declSet(flowHalf);
     internals.sharedDecls = declSet(sharedHalf);
@@ -1075,6 +1206,8 @@ export class Engine {
       }
       for (const hand of box.hands) internals.ladders.hand.set(hand.id, grab(handDeclsOf(internals, hand)));
     }
+    // The zones, once, keyed by tag id like every other tag (3.3).
+    for (const tag of b.map?.group.tags ?? []) internals.ladders.value.set(tag.id, grab(tag.properties));
     const any = (m: Map<string, Map<string, readonly string[]>>): boolean =>
       [...m.values()].some((x) => x.size > 0);
     internals.hasQualities = internals.ladders.world.size > 0 || internals.ladders.story.size > 0
@@ -1876,10 +2009,17 @@ export class Flow {
   /** Tag group names are box-scoped: two boxes may name a group the same way
    *  (schema 1 - boxes namespace their groups), so a name is only ever
    *  resolved inside the box being asked, never bundle-wide. Ids are
-   *  project-unique and accepted here too, still confined to the box. */
+   *  project-unique and accepted here too, still confined to the box.
+   *
+   *  A box on the project map sees ONE namespace: its own groups, then the
+   *  map's group (design/project-map-contract.md 3.1). A box that has not
+   *  opted in does not see the map's name at all, so a peek naming it there
+   *  is the ordinary unknown-group refusal. Own groups first is stated for
+   *  determinism only: a bundle that loads never has the two share a name. */
   private groupInBox(box: Box<Expression>, ref: string): TagGroup | undefined {
-    return box.tagGroups.find((g) => effectiveGameId(g) === ref)
-      ?? box.tagGroups.find((g) => g.id === ref);
+    const groups = groupsOfBox(this.internals.bundle, box);
+    return groups.find((g) => effectiveGameId(g) === ref)
+      ?? groups.find((g) => g.id === ref);
   }
 
   /** Fold one play into the indexes. O(the card's tags), not O(the log). */
@@ -1890,7 +2030,8 @@ export class Flow {
     if (!entry) return;
     for (const [groupId, tagIds] of Object.entries(entry.card.tags ?? {})) {
       for (const tagId of tagIds) {
-        const key = tagKey(groupId, tagId);
+        // Keyed by the PLAYED card's box: history is box-specific (D7).
+        const key = tagKey(entry.box.id, groupId, tagId);
         this.tagPlayCount.set(key, (this.tagPlayCount.get(key) ?? 0) + 1);
         this.lastPlayInTag.set(key, record);
       }
@@ -1908,8 +2049,10 @@ export class Flow {
   }
 
   /** `box` is the box whose ask is being evaluated: the play-history
-   *  functions take a bare group name, so it resolves there (a card's tags
-   *  reference its own box's group, which keeps the counts box-local).
+   *  functions take a bare group name, so it resolves there, and they count
+   *  only that box's own plays (the box is in the index key). That was
+   *  automatic while every group was a box's; a project-map zone is shared,
+   *  and its history is still not (design/project-map-contract.md 3.7, D7).
    *  History is THIS flow's: countPlayed answers "have I done this". */
   /** One host per box, built once.
    *
@@ -1933,14 +2076,15 @@ export class Flow {
   }
 
   private makeHost(box: Box<Expression>): StoryletsHost {
-    /** A group NAME and tag name resolved in THIS box, as the index's key.
-     *  Resolved once per call now, where `inTag` used to resolve it again for
-     *  every record in the log. Undefined when either name is unknown here,
-     *  which is the old per-record `false` and answers "never". */
+    /** A group NAME and tag name resolved in THIS box, as the index's key,
+     *  with this box in it: a zone's plays in another box are not this box's
+     *  history. Resolved once per call now, where `inTag` used to resolve it
+     *  again for every record in the log. Undefined when either name is
+     *  unknown here, which is the old per-record `false` and answers "never". */
     const keyOf = (group: string, tag: string): string | undefined => {
       const found = this.groupInBox(box, group);
       const t = found?.tags.find((v) => v.gameId === tag);
-      return found && t ? tagKey(found.id, t.id) : undefined;
+      return found && t ? tagKey(box.id, found.id, t.id) : undefined;
     };
     /** Turns-since is measured on the played card's box's clock (3.4). */
     const since = (record: PlayRecord): number => {
@@ -2179,7 +2323,9 @@ export class Flow {
    * is what says otherwise.
    */
   private bindStateGroups(box: Box<Expression>, boundTags: Map<string, string>, askNames: Record<string, string>): void {
-    for (const group of box.tagGroups) {
+    // The box's own groups and, when it is on the project map, the map's
+    // group: a `boundBy` there binds in every opted-in box (3.2).
+    for (const group of groupsOfBox(this.internals.bundle, box)) {
       if (group.boundBy === undefined || boundTags.has(group.id)) continue;
       const ref = /^@(world|story)\.([a-z][a-z0-9_-]*)$/.exec(group.boundBy);
       if (!ref) {

@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -3727,6 +3727,619 @@
       },
       "expect": [
         "c_xcalm"
+      ]
+    },
+    {
+      "name": "peek criteria name a project zone in an opted-in box",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_any",
+                    "gameId": "any",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_hill",
+                    "gameId": "hill",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_hill"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_quay",
+                    "gameId": "quay",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "box": "box",
+      "criteria": {
+        "district": "quay"
+      },
+      "expect": [
+        "c_quay",
+        "c_any"
+      ]
+    },
+    {
+      "name": "a box group and the project group coexist in one box, one namespace",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_both",
+                    "gameId": "both",
+                    "priority": 3,
+                    "redraw": "always",
+                    "tags": {
+                      "d_zone": [
+                        "v_market"
+                      ],
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_docks",
+                    "gameId": "docks",
+                    "priority": 4,
+                    "redraw": "always",
+                    "tags": {
+                      "d_zone": [
+                        "v_docks"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_free",
+                    "gameId": "free",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_hill",
+                    "gameId": "hill",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_hill"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_market",
+                    "gameId": "market",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_zone": [
+                        "v_market"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_named",
+                    "gameId": "named",
+                    "condition": {
+                      "src": "@hand.district == \"quay\" and @hand.zone == \"market\"",
+                      "ast": [
+                        "bin",
+                        "and",
+                        [
+                          "bin",
+                          "==",
+                          [
+                            "sv",
+                            "hand",
+                            "district"
+                          ],
+                          [
+                            "s",
+                            "quay"
+                          ]
+                        ],
+                        [
+                          "bin",
+                          "==",
+                          [
+                            "sv",
+                            "hand",
+                            "zone"
+                          ],
+                          [
+                            "s",
+                            "market"
+                          ]
+                        ]
+                      ]
+                    },
+                    "priority": 5,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "box": "box",
+      "criteria": {
+        "zone": "market",
+        "district": "quay"
+      },
+      "expect": [
+        "c_named",
+        "c_both",
+        "c_market",
+        "c_free"
+      ]
+    },
+    {
+      "name": "specificity counts a project zone's constraints beside a box group's",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_one",
+                    "gameId": "one",
+                    "condition": {
+                      "src": "@hand.zone == \"market\"",
+                      "ast": [
+                        "bin",
+                        "==",
+                        [
+                          "sv",
+                          "hand",
+                          "zone"
+                        ],
+                        [
+                          "s",
+                          "market"
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_three",
+                    "gameId": "three",
+                    "condition": {
+                      "src": "@hand.danger == 0 and @hand.zone == \"market\" and @hand.district == \"quay\"",
+                      "ast": [
+                        "bin",
+                        "and",
+                        [
+                          "bin",
+                          "and",
+                          [
+                            "bin",
+                            "==",
+                            [
+                              "sv",
+                              "hand",
+                              "danger"
+                            ],
+                            [
+                              "n",
+                              0
+                            ]
+                          ],
+                          [
+                            "bin",
+                            "==",
+                            [
+                              "sv",
+                              "hand",
+                              "zone"
+                            ],
+                            [
+                              "s",
+                              "market"
+                            ]
+                          ]
+                        ],
+                        [
+                          "bin",
+                          "==",
+                          [
+                            "sv",
+                            "hand",
+                            "district"
+                          ],
+                          [
+                            "s",
+                            "quay"
+                          ]
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_two",
+                    "gameId": "two",
+                    "condition": {
+                      "src": "@hand.zone == \"market\" and @hand.district == \"quay\"",
+                      "ast": [
+                        "bin",
+                        "and",
+                        [
+                          "bin",
+                          "==",
+                          [
+                            "sv",
+                            "hand",
+                            "zone"
+                          ],
+                          [
+                            "s",
+                            "market"
+                          ]
+                        ],
+                        [
+                          "bin",
+                          "==",
+                          [
+                            "sv",
+                            "hand",
+                            "district"
+                          ],
+                          [
+                            "s",
+                            "quay"
+                          ]
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_zero",
+                    "gameId": "zero",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "box": "box",
+      "criteria": {
+        "zone": "market",
+        "district": "quay"
+      },
+      "expect": [
+        "c_three",
+        "c_two",
+        "c_one",
+        "c_zero"
       ]
     }
   ],
@@ -22258,6 +22871,4384 @@
             "value.other/docks.danger": 6
           }
         }
+      ]
+    },
+    {
+      "name": "a card tagged with a project zone deals to its own box's hand bound to it",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_any",
+                    "gameId": "any",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_hill",
+                    "gameId": "hill",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_hill"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_quay",
+                    "gameId": "quay",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_xq",
+                "gameId": "xq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_xq"
+          ],
+          "expectBoard": {
+            "h_xq": [
+              "c_quay",
+              "c_any"
+            ]
+          },
+          "expectVerdicts": {
+            "hill": "tags"
+          }
+        }
+      ]
+    },
+    {
+      "name": "another box's hand on the same zone deals only its own box's cards",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_xquay",
+                    "gameId": "xquay",
+                    "priority": 5,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_xq",
+                "gameId": "xq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_yhill",
+                    "gameId": "yhill",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_hill"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_yquay",
+                    "gameId": "yquay",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_yq",
+                "gameId": "yq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_xq",
+            "h_yq"
+          ],
+          "expectBoard": {
+            "h_xq": [
+              "c_xquay"
+            ],
+            "h_yq": [
+              "c_yquay"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "one zone value: written by one box's outcome, read through @hand by another box's deal",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_xstir",
+                    "gameId": "xstir",
+                    "priority": 0,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": [
+                      {
+                        "id": "o_stir",
+                        "gameId": "stir",
+                        "changes": {
+                          "@hand.danger": {
+                            "src": "@hand.danger + 2",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "hand",
+                                "danger"
+                              ],
+                              [
+                                "n",
+                                2
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_xq",
+                "gameId": "xq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_ycalm",
+                    "gameId": "ycalm",
+                    "condition": {
+                      "src": "@hand.danger == 0",
+                      "ast": [
+                        "bin",
+                        "==",
+                        [
+                          "sv",
+                          "hand",
+                          "danger"
+                        ],
+                        [
+                          "n",
+                          0
+                        ]
+                      ]
+                    },
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_yriot",
+                    "gameId": "yriot",
+                    "condition": {
+                      "src": "@hand.danger >= 2",
+                      "ast": [
+                        "bin",
+                        ">=",
+                        [
+                          "sv",
+                          "hand",
+                          "danger"
+                        ],
+                        [
+                          "n",
+                          2
+                        ]
+                      ]
+                    },
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_yq",
+                "gameId": "yq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_yq"
+          ],
+          "expectBoard": {
+            "h_yq": [
+              "c_ycalm"
+            ]
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_xq"
+          ],
+          "expectBoard": {
+            "h_xq": [
+              "c_xstir"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_xstir",
+          "outcome": "stir",
+          "from": "h_xq",
+          "expectTrace": [
+            "write @hand.danger value.quay.danger"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.quay.danger": 2
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_yq"
+          ],
+          "expectBoard": {
+            "h_yq": [
+              "c_yriot"
+            ]
+          },
+          "expectVerdicts": {
+            "ycalm": "condition"
+          }
+        }
+      ]
+    },
+    {
+      "name": "two boxes' writes to one zone land in play order",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_xstir",
+                    "gameId": "xstir",
+                    "priority": 0,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": [
+                      {
+                        "id": "o_stir",
+                        "gameId": "stir",
+                        "changes": {
+                          "@hand.danger": {
+                            "src": "@hand.danger + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "hand",
+                                "danger"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_xq",
+                "gameId": "xq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_ystir",
+                    "gameId": "ystir",
+                    "priority": 0,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": [
+                      {
+                        "id": "o_stir",
+                        "gameId": "stir",
+                        "changes": {
+                          "@hand.danger": {
+                            "src": "@hand.danger + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "hand",
+                                "danger"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_yq",
+                "gameId": "yq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_xq",
+            "h_yq"
+          ],
+          "expectBoard": {
+            "h_xq": [
+              "c_xstir"
+            ],
+            "h_yq": [
+              "c_ystir"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_xstir",
+          "outcome": "stir",
+          "from": "h_xq",
+          "expectTrace": [
+            "write @hand.danger value.quay.danger"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.quay.danger": 1
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_ystir",
+          "outcome": "stir",
+          "from": "h_yq",
+          "expectTrace": [
+            "write @hand.danger value.quay.danger"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.quay.danger": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "a zone keeps the short address with two boxes on it, and box tags keep their rule",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_xstir",
+                    "gameId": "xstir",
+                    "priority": 0,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": [
+                      {
+                        "id": "o_stir",
+                        "gameId": "stir",
+                        "changes": {
+                          "@hand.danger": {
+                            "src": "@hand.danger + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "hand",
+                                "danger"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_xq",
+                "gameId": "xq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "setState",
+          "value": {
+            "quay": {
+              "danger": 3
+            }
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.quay.danger": 3
+          }
+        },
+        {
+          "op": "setState",
+          "value": {
+            "docks": {
+              "danger": 1
+            }
+          },
+          "expectRefused": [
+            "value.box/docks.danger",
+            "value.other/docks.danger"
+          ]
+        },
+        {
+          "op": "setState",
+          "value": {
+            "box/docks": {
+              "danger": 1
+            }
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.box/docks.danger": 1,
+            "value.other/docks.danger": 0,
+            "value.quay.danger": 3
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_xq"
+          ],
+          "expectBoard": {
+            "h_xq": [
+              "c_xstir"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_xstir",
+          "outcome": "stir",
+          "from": "h_xq",
+          "expectTrace": [
+            "write @hand.danger value.quay.danger"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.quay.danger": 4
+          }
+        }
+      ]
+    },
+    {
+      "name": "the box-qualified form of a project zone is refused, naming the short form",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_xplain",
+                    "gameId": "xplain",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_yplain",
+                    "gameId": "yplain",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "setState",
+          "value": {
+            "box/quay": {
+              "danger": 9
+            }
+          },
+          "expectRefused": [
+            "value.quay.danger"
+          ]
+        },
+        {
+          "op": "setState",
+          "value": {
+            "other/quay": {
+              "danger": 9
+            }
+          },
+          "expectRefused": [
+            "value.quay.danger"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.quay.danger": 0
+          }
+        },
+        {
+          "op": "setState",
+          "value": {
+            "v_quay": {
+              "danger": 6
+            }
+          },
+          "expectDiagnostic": "value.quay.danger"
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.quay.danger": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "per-flow and shared zone properties across two flows and two boxes",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_xraise",
+                    "gameId": "xraise",
+                    "priority": 0,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": [
+                      {
+                        "id": "o_raise",
+                        "gameId": "raise",
+                        "changes": {
+                          "@hand.alarm": {
+                            "src": "@hand.alarm + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "hand",
+                                "alarm"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          },
+                          "@hand.danger": {
+                            "src": "@hand.danger + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "hand",
+                                "danger"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_xq",
+                "gameId": "xq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_yalarm",
+                    "gameId": "yalarm",
+                    "condition": {
+                      "src": "@hand.alarm >= 1",
+                      "ast": [
+                        "bin",
+                        ">=",
+                        [
+                          "sv",
+                          "hand",
+                          "alarm"
+                        ],
+                        [
+                          "n",
+                          1
+                        ]
+                      ]
+                    },
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_ycalm",
+                    "gameId": "ycalm",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_ydanger",
+                    "gameId": "ydanger",
+                    "condition": {
+                      "src": "@hand.danger >= 1",
+                      "ast": [
+                        "bin",
+                        ">=",
+                        [
+                          "sv",
+                          "hand",
+                          "danger"
+                        ],
+                        [
+                          "n",
+                          1
+                        ]
+                      ]
+                    },
+                    "priority": 3,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_yq",
+                "gameId": "yq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "openFlow",
+          "flow": "b"
+        },
+        {
+          "op": "deal",
+          "flow": "a",
+          "hands": [
+            "h_xq"
+          ],
+          "expectBoard": {
+            "h_xq": [
+              "c_xraise"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "flow": "a",
+          "card": "c_xraise",
+          "outcome": "raise",
+          "from": "h_xq",
+          "expectTrace": [
+            "write @hand.danger value.quay.danger",
+            "write @hand.alarm value.quay.alarm"
+          ]
+        },
+        {
+          "op": "assertState",
+          "flow": "a",
+          "expect": {
+            "value.quay.danger": 1,
+            "value.quay.alarm": 1
+          }
+        },
+        {
+          "op": "assertState",
+          "flow": "b",
+          "expect": {
+            "value.quay.danger": 0,
+            "value.quay.alarm": 1
+          }
+        },
+        {
+          "op": "assertEngineRead",
+          "path": "value.quay.alarm",
+          "expect": 1
+        },
+        {
+          "op": "assertEngineRead",
+          "path": "value.quay.danger",
+          "expectError": true
+        },
+        {
+          "op": "deal",
+          "flow": "a",
+          "hands": [
+            "h_yq"
+          ],
+          "expectBoard": {
+            "h_yq": [
+              "c_ydanger",
+              "c_yalarm",
+              "c_ycalm"
+            ]
+          }
+        },
+        {
+          "op": "deal",
+          "flow": "b",
+          "hands": [
+            "h_yq"
+          ],
+          "expectBoard": {
+            "h_yq": [
+              "c_yalarm",
+              "c_ycalm"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a movable hole in another box names a project zone (the roaming character)",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_xquay",
+                    "gameId": "xquay",
+                    "priority": 9,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_xq",
+                "gameId": "xq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_yany",
+                    "gameId": "yany",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_yhill",
+                    "gameId": "yhill",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_hill"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_yquay",
+                    "gameId": "yquay",
+                    "priority": 3,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_ywary",
+                    "gameId": "ywary",
+                    "condition": {
+                      "src": "@hand.danger >= 1",
+                      "ast": [
+                        "bin",
+                        ">=",
+                        [
+                          "sv",
+                          "hand",
+                          "danger"
+                        ],
+                        [
+                          "n",
+                          1
+                        ]
+                      ]
+                    },
+                    "priority": 4,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [
+              {
+                "id": "t_npc",
+                "gameId": "npc",
+                "chooses": [
+                  "d_district"
+                ],
+                "slots": "unbounded",
+                "properties": [
+                  {
+                    "name": "zone",
+                    "type": "enum",
+                    "values": [
+                      "quay",
+                      "hill"
+                    ],
+                    "default": "quay"
+                  }
+                ]
+              }
+            ],
+            "hands": [
+              {
+                "id": "h_elder",
+                "gameId": "elder",
+                "template": "t_npc",
+                "chosen": {
+                  "d_district": "@hand.zone"
+                }
+              }
+            ]
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "setState",
+          "value": {
+            "hill": {
+              "danger": 1
+            }
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_elder"
+          ],
+          "expectBoard": {
+            "h_elder": [
+              "c_yquay",
+              "c_yany"
+            ]
+          }
+        },
+        {
+          "op": "setState",
+          "hand": {
+            "elder": {
+              "zone": "hill"
+            }
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_elder"
+          ],
+          "expectBoard": {
+            "h_elder": [
+              "c_yany",
+              "c_ywary",
+              "c_yhill"
+            ]
+          },
+          "expectVerdicts": {
+            "yquay": "tags"
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "hand.elder.zone": "hill"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a box not on the map is unaffected, and cannot name the zones",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_xquay",
+                    "gameId": "xquay",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_ydocks",
+                    "gameId": "ydocks",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_zone_y": [
+                        "v_docks_y"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_yplain",
+                    "gameId": "yplain",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "peek",
+          "box": "other",
+          "criteria": {
+            "zone": "docks"
+          },
+          "expect": [
+            "c_ydocks",
+            "c_yplain"
+          ]
+        },
+        {
+          "op": "peek",
+          "box": "other",
+          "criteria": {
+            "district": "quay"
+          },
+          "expectError": true
+        },
+        {
+          "op": "peek",
+          "box": "box",
+          "criteria": {
+            "district": "quay"
+          },
+          "expect": [
+            "c_xquay"
+          ]
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.quay.danger": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "zone values survive a save and a parked flow",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_ycalm",
+                    "gameId": "ycalm",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_yriot",
+                    "gameId": "yriot",
+                    "condition": {
+                      "src": "@hand.danger == 3",
+                      "ast": [
+                        "bin",
+                        "==",
+                        [
+                          "sv",
+                          "hand",
+                          "danger"
+                        ],
+                        [
+                          "n",
+                          3
+                        ]
+                      ]
+                    },
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_yq",
+                "gameId": "yq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "setState",
+          "value": {
+            "quay": {
+              "danger": 3,
+              "alarm": 2
+            }
+          }
+        },
+        {
+          "op": "saveLoad",
+          "expectReport": {
+            "exact": true
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.quay.danger": 3,
+            "value.quay.alarm": 2
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_yq"
+          ],
+          "expectBoard": {
+            "h_yq": [
+              "c_yriot",
+              "c_ycalm"
+            ]
+          }
+        },
+        {
+          "op": "openFlow",
+          "flow": "v"
+        },
+        {
+          "op": "setState",
+          "flow": "v",
+          "value": {
+            "quay": {
+              "danger": 5
+            }
+          }
+        },
+        {
+          "op": "parkFlow",
+          "flow": "v"
+        },
+        {
+          "op": "resumeFlow",
+          "flow": "v"
+        },
+        {
+          "op": "assertState",
+          "flow": "v",
+          "expect": {
+            "value.quay.danger": 5,
+            "value.quay.alarm": 2
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.quay.danger": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "per-box copies collapsed into the map: the kept copy's values restore, the dropped copy's are reported",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_xd",
+                "gameId": "xd",
+                "rule": {
+                  "bindings": {
+                    "d_zone": "v_docks"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_yd",
+                "gameId": "yd",
+                "rule": {
+                  "bindings": {
+                    "d_zone_y": "v_docks_y"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "bundleB": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_xd",
+                "gameId": "xd",
+                "rule": {
+                  "bindings": {
+                    "d_zone": "v_docks"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_yd",
+                "gameId": "yd",
+                "rule": {
+                  "bindings": {
+                    "d_zone": "v_docks"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_zone",
+            "gameId": "zone",
+            "tags": [
+              {
+                "id": "v_docks",
+                "gameId": "docks",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  }
+                ]
+              },
+              {
+                "id": "v_market",
+                "gameId": "market"
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "setState",
+          "value": {
+            "box/docks": {
+              "danger": 1
+            },
+            "other/docks": {
+              "danger": 5
+            }
+          }
+        },
+        {
+          "op": "saveLoad",
+          "into": "B",
+          "expectReport": {
+            "droppedProperties": [
+              {
+                "flow": "main",
+                "path": "value.v_docks_y.danger"
+              }
+            ]
+          }
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "value.docks.danger": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "play history on a shared zone stays box-specific (D7, ruled)",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_xprobe",
+                    "gameId": "xprobe",
+                    "condition": {
+                      "src": "count_played_in(\"district\", \"quay\") >= 1",
+                      "ast": [
+                        "bin",
+                        ">=",
+                        [
+                          "call",
+                          "count_played_in",
+                          [
+                            "s",
+                            "district"
+                          ],
+                          [
+                            "s",
+                            "quay"
+                          ]
+                        ],
+                        [
+                          "n",
+                          1
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_xquay",
+                    "gameId": "xquay",
+                    "priority": 0,
+                    "redraw": "never",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": [
+                      {
+                        "id": "o_go",
+                        "gameId": "go",
+                        "changes": {}
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_xp",
+                "gameId": "xp",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              },
+              {
+                "id": "h_xq",
+                "gameId": "xq",
+                "rule": {
+                  "bindings": {
+                    "d_district": "v_quay"
+                  },
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_yprobe",
+                    "gameId": "yprobe",
+                    "condition": {
+                      "src": "count_played_in(\"district\", \"quay\") >= 1",
+                      "ast": [
+                        "bin",
+                        ">=",
+                        [
+                          "call",
+                          "count_played_in",
+                          [
+                            "s",
+                            "district"
+                          ],
+                          [
+                            "s",
+                            "quay"
+                          ]
+                        ],
+                        [
+                          "n",
+                          1
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_yp",
+                "gameId": "yp",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_yp"
+          ],
+          "expectBoard": {
+            "h_yp": []
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_xq"
+          ],
+          "expectBoard": {
+            "h_xq": [
+              "c_xquay"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_xquay",
+          "outcome": "go",
+          "from": "h_xq"
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_yp"
+          ],
+          "expectBoard": {
+            "h_yp": []
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_xp"
+          ],
+          "expectBoard": {
+            "h_xp": [
+              "c_xprobe"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a project group bound by state binds in every opted-in box",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "where",
+              "type": "string",
+              "default": "quay"
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_xhill",
+                    "gameId": "xhill",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_hill"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_xquay",
+                    "gameId": "xquay",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_x",
+                "gameId": "x",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_yhill",
+                    "gameId": "yhill",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_hill"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_yquay",
+                    "gameId": "yquay",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_y",
+                "gameId": "y",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ],
+            "boundBy": "@story.where"
+          }
+        }
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_x",
+            "h_y"
+          ],
+          "expectBoard": {
+            "h_x": [
+              "c_xquay"
+            ],
+            "h_y": [
+              "c_yquay"
+            ]
+          }
+        },
+        {
+          "op": "setState",
+          "story": {
+            "where": "hill"
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_x",
+            "h_y"
+          ],
+          "expectBoard": {
+            "h_x": [
+              "c_xhill"
+            ],
+            "h_y": [
+              "c_yhill"
+            ]
+          },
+          "expectVerdicts": {
+            "xquay": "tags",
+            "yquay": "tags"
+          }
+        }
+      ]
+    }
+  ],
+  "load": [
+    {
+      "name": "a box not on the map with a card tagged by a zone is refused at load",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_yquay",
+                    "gameId": "yquay",
+                    "priority": 0,
+                    "redraw": "always",
+                    "tags": {
+                      "d_district": [
+                        "v_quay"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expectRefused": [
+        "other",
+        "district"
+      ]
+    },
+    {
+      "name": "a box not on the map with a hand bound to a zone is refused at load",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [
+              {
+                "id": "t_npc",
+                "gameId": "npc",
+                "chooses": [
+                  "d_district"
+                ],
+                "slots": "unbounded",
+                "properties": [
+                  {
+                    "name": "zone",
+                    "type": "string",
+                    "default": "quay"
+                  }
+                ]
+              }
+            ],
+            "hands": [
+              {
+                "id": "h_y",
+                "gameId": "y",
+                "template": "t_npc",
+                "chosen": {
+                  "d_district": "@hand.zone"
+                }
+              }
+            ]
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expectRefused": [
+        "other",
+        "district"
+      ]
+    },
+    {
+      "name": "a box on the map may not declare a group named like the map's",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_district_x",
+                "gameId": "district",
+                "tags": [
+                  {
+                    "id": "v_lane",
+                    "gameId": "lane"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_district",
+            "gameId": "district",
+            "tags": [
+              {
+                "id": "v_quay",
+                "gameId": "quay",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              },
+              {
+                "id": "v_hill",
+                "gameId": "hill",
+                "properties": [
+                  {
+                    "name": "danger",
+                    "type": "number",
+                    "default": 0
+                  },
+                  {
+                    "name": "alarm",
+                    "type": "number",
+                    "default": 0,
+                    "shared": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "expectRefused": [
+        "box",
+        "district"
+      ]
+    },
+    {
+      "name": "a zone may not share a tag gameId with a box tag",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ],
+        "map": {
+          "group": {
+            "id": "d_area",
+            "gameId": "area",
+            "tags": [
+              {
+                "id": "v_docks_p",
+                "gameId": "docks"
+              }
+            ]
+          }
+        }
+      },
+      "expectRefused": [
+        "docks"
+      ]
+    },
+    {
+      "name": "a box that uses the map needs a map",
+      "bundle": {
+        "schema": "storylets/bundle@1",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "usesMap": true,
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "expectRefused": [
+        "box"
+      ]
+    },
+    {
+      "name": "an unknown bundle schema is refused",
+      "bundle": {
+        "schema": "storylets/bundle@9",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_any",
+                    "gameId": "any",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "expectRefused": [
+        "storylets/bundle@9"
       ]
     }
   ]

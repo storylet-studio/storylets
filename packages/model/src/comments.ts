@@ -56,8 +56,11 @@ export interface CommentMessage {
  * Where a thread is DRAWN, when it was dropped on a canvas rather than opened
  * from an editor (design/annotation.md 3).
  *
- * `canvas` names the canvas it appears on: a deck id, or `map:<boxId>` for a
- * box's map. `x`/`y` are that canvas's own coordinates when the thread is
+ * `canvas` names the canvas it appears on: a deck id, or `map` for the project
+ * map (design/project-map-contract.md 1.1; a thread about a site stays in its
+ * box's notes, one about the map or a zone is in the project's). A project from
+ * before the project map writes `map:<boxId>`, which `storyletengine format`
+ * rewrites. `x`/`y` are that canvas's own coordinates when the thread is
  * anchored to the canvas itself, and an OFFSET from the item's origin when the
  * thread's `anchor` names an item on that canvas. One field, two readings,
  * distinguished by a single comparison - `anchor === canvas` - because the

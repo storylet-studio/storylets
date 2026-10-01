@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, basename } from "node:path";
 import { compileProject, serialiseBundle } from "@storylet-studio/compiler";
 import type { Issue } from "@storylet-studio/compiler";
-import { BUNDLE_EXTENSION, PROJECT_FOLDER_EXTENSION, backgroundsOf, bundleAssetPath, effectiveGameId, isSpatial } from "@storylet-studio/model";
+import { BUNDLE_EXTENSION, PROJECT_FOLDER_EXTENSION, backgroundsOf, bundleAssetPath } from "@storylet-studio/model";
 import type { Bundle } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
 import { assetPath } from "./assets.js";
@@ -73,25 +73,19 @@ export function bundleOutputPath(loaded: LoadedProject): string {
  * not even read.
  */
 function mapAssets(loaded: LoadedProject, bundlePath: string): PlannedBinaryWrite[] {
-  if (!loaded.source) return [];
+  const group = loaded.source?.map?.group;
+  if (group === undefined) return [];
   const root = dirname(bundlePath);
   const writes: PlannedBinaryWrite[] = [];
   const seen = new Set<string>();
-
-  for (const box of loaded.source.boxes) {
-    const boxGameId = effectiveGameId(box.box.box);
-    for (const group of box.tags.groups) {
-      if (!isSpatial(group)) continue;
-      for (const background of backgroundsOf(group)) {
-        if (background.hidden === true) continue;   // not shipped, so not copied
-        const rel = bundleAssetPath(boxGameId, background.file);
-        if (seen.has(rel)) continue;                // two maps may share a picture
-        const from = assetPath(loaded.dir, box, background.file);
-        if (from === undefined || !existsSync(from)) continue;
-        seen.add(rel);
-        writes.push({ path: join(root, rel), bytes: readFileSync(from) });
-      }
-    }
+  for (const background of backgroundsOf(group)) {
+    if (background.hidden === true) continue;   // not shipped, so not copied
+    const rel = bundleAssetPath(background.file);
+    if (seen.has(rel)) continue;                // two backgrounds may share a picture
+    const from = assetPath(loaded.dir, background.file);
+    if (from === undefined || !existsSync(from)) continue;
+    seen.add(rel);
+    writes.push({ path: join(root, rel), bytes: readFileSync(from) });
   }
   return writes;
 }
@@ -127,7 +121,7 @@ export function runExport(loaded: LoadedProject, out?: string, opts: ExportOptio
     bundle,
     text,
     write: { path, content: text },
-    assets: bundle.maps !== undefined ? mapAssets({ ...loaded, source }, path) : [],
+    assets: bundle.map?.geometry !== undefined ? mapAssets({ ...loaded, source }, path) : [],
     ...(scopesWrite !== undefined ? { scopesWrite } : {}),
   };
 }

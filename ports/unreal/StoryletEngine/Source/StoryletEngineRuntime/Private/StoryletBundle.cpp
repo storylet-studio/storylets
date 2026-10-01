@@ -134,6 +134,7 @@ FStoryletBundleDescription UStoryletBundle::DescribeBundle() const
 		FStoryletBoxSummary Box;
 		Box.GameId = Ue(B.gameId);
 		Box.Title = Ue(B.title);
+		Box.bUsesMap = B.usesMap;
 		Box.bRankingSpecificity = B.rankingSpecificity;
 		Box.TurnSeconds = B.turnSeconds.has_value() ? *B.turnSeconds : 0.0;
 		Box.DurableCards = B.durableCards;
@@ -194,17 +195,23 @@ FStoryletBundleDescription UStoryletBundle::DescribeBundle() const
 		Out.Properties.Add(MoveTemp(Scope));
 	}
 
-	// Inert payload, and therefore worth saying out loud: a bundle that silently
-	// carried a map would fail the promise this API makes.
-	for (const storylets::MapSummary& M : D.maps)
+	// The project map: its group, the boxes on it, and any geometry carried.
+	if (D.map.has_value())
 	{
-		FStoryletMapSummary Map;
-		Map.Box = Ue(M.box);
-		Map.Group = Ue(M.group);
-		Map.Zones = M.zones;
-		Map.Backgrounds = M.backgrounds;
-		Map.Sites = M.sites;
-		Out.Maps.Add(MoveTemp(Map));
+		const storylets::MapSummary& M = *D.map;
+		Out.bHasMap = true;
+		Out.Map.Group = Ue(M.group);
+		for (const std::string& T : M.tags) Out.Map.Tags.Add(Ue(T));
+		for (const std::string& B : M.boxes) Out.Map.Boxes.Add(Ue(B));
+		Out.Map.Zones = M.zones;
+		Out.Map.Backgrounds = M.backgrounds;
+		for (const auto& Pair : M.sites)
+		{
+			FStoryletMapSites Sites;
+			Sites.Box = Ue(Pair.first);
+			Sites.Sites = Pair.second;
+			Out.Map.Sites.Add(MoveTemp(Sites));
+		}
 	}
 	return Out;
 }
@@ -221,13 +228,14 @@ bool UStoryletBundle::Rebuild()
 		LoadError = ParseError;
 		return false;
 	}
-	// The schema tag is the bundle boundary rule: refuse a foreign blob
-	// before handing it to the loader.
+	// The schema tag is the bundle boundary rule: refuse a foreign blob, or a
+	// bundle schema this runtime does not read, before handing it to the
+	// loader. @0 and @1 are both read (design/project-map-contract.md 2.4).
 	const std::string Schema = Tree.strOr("schema");
-	if (Schema != storylets::BUNDLE_SCHEMA)
+	if (!storylets::IsSupportedBundleSchema(Schema))
 	{
-		LoadError = FString::Printf(TEXT("not a storylets bundle (expected schema \"%s\")"),
-			UTF8_TO_TCHAR(storylets::BUNDLE_SCHEMA));
+		LoadError = FString::Printf(TEXT("not a storylets bundle this runtime reads: schema \"%s\" (expected \"%s\" or \"%s\")"),
+			UTF8_TO_TCHAR(Schema.c_str()), UTF8_TO_TCHAR(storylets::BUNDLE_SCHEMA_V0), UTF8_TO_TCHAR(storylets::BUNDLE_SCHEMA));
 		return false;
 	}
 	try

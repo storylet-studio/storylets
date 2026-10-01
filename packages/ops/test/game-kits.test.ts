@@ -3,6 +3,8 @@
 // specification (2026-08-29): one box on a drawn map, ONE starting site that
 // opens the others, gates on everything but the starting zone, and scenes and
 // conversations that unfold across a couple of sites. Validated, then played.
+// Both map kits are cut on the PROJECT map (design/project-map-contract.md): the
+// zone group is the root map shard's, and a box joins it with `usesMap`.
 
 import { describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -11,6 +13,7 @@ import { dirname, join } from "node:path";
 import { compileProject } from "@storylet-studio/compiler";
 import { Engine } from "@storylet-studio/runtime";
 import { isSpatial } from "@storylet-studio/model";
+import { boxMap } from "../src/map.js";
 import { GAME_KITS, runInit } from "../src/init.js";
 import type { GameKit } from "../src/init.js";
 import { loadProject } from "../src/load.js";
@@ -38,14 +41,21 @@ describe("the game kits", () => {
 });
 
 describe("Map-based Story", () => {
-  it("is one box on a drawn map, with a site in each of three zones", () => {
-    const box = fresh("map-story").source!.boxes;
+  it("is one box on a drawn map, with a site for each of three places across two regions", () => {
+    const source = fresh("map-story").source!;
+    const box = source.boxes;
     expect(box).toHaveLength(1);
-    const zone = box[0]!.tags.groups.find((g) => g.gameId === "zone")!;
-    expect(isSpatial(zone)).toBe(true);
-    expect([...zone.tags].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((t) => t.gameId)).toEqual(["square", "mill", "woods"]);
-    const sites = [...box[0]!.hands.hands].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((h) => h.title);
-    expect(sites).toEqual(["The well", "The mill race", "The woodcutter's hut"]);
+    expect(box[0]!.box.box.usesMap).toBe(true);
+    // The map is the project's, so the box's own tags carry no zone group.
+    expect(box[0]!.tags.groups.some((g) => isSpatial(g))).toBe(false);
+    const region = source.map!.group;
+    expect(region.gameId).toBe("region");
+    expect(isSpatial(region)).toBe(true);
+    expect([...region.tags].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((t) => t.gameId)).toEqual(["village", "woods"]);
+    const hands = [...box[0]!.hands.hands].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    expect(hands.map((h) => h.title)).toEqual(["The well", "The mill race", "The woodcutter's hut"]);
+    // Every place stands somewhere: a site each, in the box's own map shard.
+    expect(Object.keys(boxMap(box[0]!).sites ?? {}).sort()).toEqual(hands.map((h) => h.id).sort());
   });
 
   it("opens the map from the starting site, then unfolds across the others", () => {
@@ -81,12 +91,18 @@ describe("Map-based Story", () => {
 
 describe("Action game", () => {
   it("is five boxes on one shared district map, talking only through @story", () => {
-    const boxes = fresh("action-game").source!.boxes;
+    const source = fresh("action-game").source!;
+    const boxes = source.boxes;
     expect(boxes.map((b) => b.box.box.gameId).sort()).toEqual(["codex", "contracts", "encounters", "items", "news"]);
-    for (const b of boxes.filter((x) => x.box.box.gameId !== "codex")) {
-      const d = b.tags.groups.find((g) => g.gameId === "district")!;
-      expect(isSpatial(d), `${b.box.box.gameId} has no map`).toBe(true);
-      expect(d.tags.map((t) => t.gameId).sort()).toEqual(["docks", "old-town"]);
+    // One district map, the project's: one set of districts every box shares.
+    const d = source.map!.group;
+    expect(d.gameId).toBe("district");
+    expect(isSpatial(d)).toBe(true);
+    expect(d.tags.map((t) => t.gameId).sort()).toEqual(["docks", "old-town"]);
+    for (const b of boxes) {
+      const onMap = b.box.box.gameId !== "codex";
+      expect(b.box.box.usesMap === true, `${b.box.box.gameId} ${onMap ? "is not on" : "should not be on"} the map`).toBe(onMap);
+      expect(b.tags.groups.some((g) => g.gameId === "district"), `${b.box.box.gameId} keeps its own district group`).toBe(false);
     }
   });
 

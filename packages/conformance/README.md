@@ -8,13 +8,22 @@ behaviour lands here as a case first, then in the implementations
 
 ## The corpus
 
-[`corpus.json`](./corpus.json) (`version: 2`) is the portable artifact. It
+[`corpus.json`](./corpus.json) (`version: 10`) is the portable artifact. It
 carries **compiled** forms only (`{ src, ast }` envelopes, whole bundles),
-so a runtime-only port consumes it with no parser or compiler. Four case
-kinds - `expressions`, `specificity`, `peek`, `scripted` - specified in
+so a runtime-only port consumes it with no parser or compiler. Five case
+kinds - `expressions`, `specificity`, `peek`, `scripted`, `load` - specified in
 [the compatibility contract](https://storylets.dev/compatibility/), with the
 dealing semantics they pin in
 [the bundle format](https://storylets.dev/format/bundle/).
+
+A `load` case is a bundle the engine must **refuse at construction**: the
+runner builds an engine from `bundle`, construction must fail through the
+runtime's own refusal channel (JS, C# and C++ throw; Godot's `create`
+returns null with `push_error`), and the refusal must contain every string in
+`expectRefused`. Nothing else runs. Version 10 added it, with the project map:
+bundles that carry `map` (the project's zone group) or a box's `usesMap` are
+written at schema `storylets/bundle@1`, every other bundle stays at `@0`, so
+the corpus holds both tags a runtime must accept.
 
 ## PRNG
 
@@ -28,7 +37,8 @@ verify first are tabled in the design notes, section 3.
   with **hand-authored** expectations - the expectations are the contract,
   never derived from an engine (PRNG-dependent ones are computed from the
   pinned algorithm and marked `PRNG-computed`). `src/cases.ts` is the live
-  contract - 117 cases (10 expressions, 8 specificity, 25 peek, 74 scripted);
+  contract - 183 cases (10 expressions, 8 specificity, 32 peek, 127 scripted,
+  6 load);
   the design notes' sections 1-5 specify the shapes, and its section 6 listing
   is the round-1 draft, awaiting re-transcription.
 - `buildCorpus` (in [`src/build.ts`](./src/build.ts)) compiles fixtures to

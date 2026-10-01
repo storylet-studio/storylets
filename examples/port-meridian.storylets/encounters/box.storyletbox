@@ -11,5 +11,6 @@
       specificity: true,
     },
     title: "Encounters",
+    usesMap: true,
   },
 }

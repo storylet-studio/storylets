@@ -18,14 +18,15 @@
 // template's declarations, exactly as the session's hand bags do).
 // ---------------------------------------------------------------------------
 
-import { effectiveGameId, isHoleRef } from "@storylet-studio/model";
+import { effectiveGameId, groupsOfBox, isHoleRef } from "@storylet-studio/model";
 import type {
   Box, Bundle, Expression, Hand, PropertyDecl, PropertyType, ScalarValue,
 } from "@storylet-studio/model";
 
 /** What bundle this is: the staleness/identity triple plus the schema tag. */
 export interface BundleIdentity {
-  /** The bundle schema tag ("storylets/bundle@0"). */
+  /** The bundle schema tag ("storylets/bundle@1", or "@0" from before the
+   *  project map). */
   schema: string;
   /** content.project - the project name a save must agree with. */
   project: string;
@@ -79,6 +80,10 @@ export interface TagGroupSummary {
 export interface BoxSummary {
   gameId: string;
   title?: string;
+  /** The box is on the project map (design/project-map-contract.md 3.7): it
+   *  may name the map's group in peek criteria beside its own `tagGroups`,
+   *  which list the box's OWN groups only. Absent is "not on the map". */
+  usesMap?: true;
   /** The only per-box ranking policy (Reboot 2.2). */
   ranking: { specificity: boolean };
   /** Present on a TIMED box (design/engine-server.md 4.8): how long one of
@@ -123,7 +128,8 @@ export type PropertyScopeKind = "world" | "story" | "box" | "deck" | "hand" | "t
 
 /** One scope's declared properties. `owner` is the owning entity's gameId
  *  (empty for world / story); `box` names its box; `group` names a tag's
- *  group. */
+ *  group. A zone of the project map is a `tag` scope with `group` and NO
+ *  `box`: it belongs to none. */
 export interface PropertyScopeSummary {
   scope: PropertyScopeKind;
   owner: string;
@@ -133,23 +139,28 @@ export interface PropertyScopeSummary {
 }
 
 /**
- * One map the bundle was asked to carry (design/graphical-views.md 2).
+ * The project map (design/project-map-contract.md 3.7): its group, which boxes
+ * are on it, and how much geometry the bundle carries.
  *
  * Counts rather than the geometry itself, which is the same judgement the rest
  * of this file makes: an inspector answers "what is in here", and a host that
- * wants the polygons reads `bundle.maps` directly. Reported because a bundle
- * that silently carried a map would fail the promise this API exists for.
+ * wants the polygons reads `bundle.map.geometry` directly. The geometry counts
+ * are zero when the build did not ask for geometry (`export.map`); the group is
+ * there regardless, because hands and cards reference it.
  */
 export interface MapSummary {
-  /** The owning box, by gameId. */
-  box: string;
-  /** The tag group this is a map of, by gameId. */
+  /** The zone group's gameId: the name an opted-in box's peek criteria use. */
   group: string;
+  /** Its tags (the zones), by gameId. */
+  tags: string[];
+  /** The opted-in boxes, by gameId, in bundle order. */
+  boxes: string[];
+  /** Drawn zones in the carried geometry. */
   zones: number;
   backgrounds: number;
-  /** Placed hands standing on this map (design/engine-server.md 4.3): where the
-   *  kiosks are, in a bundle that carries geometry at all. */
-  sites: number;
+  /** Box gameId -> placed hands standing on the map (design/engine-server.md
+   *  4.3): where the kiosks are. Only boxes with a site have a key. */
+  sites: Record<string, number>;
 }
 
 /** What a bundle offers a host, read from the asset alone. */
@@ -167,13 +178,13 @@ export interface BundleDescription {
   boxes: BoxSummary[];
   /** Every hand in the bundle, box by box: the deal() surface. */
   hands: HandSummary[];
-  /** world, story, then per box: the box, its decks, its hands, its tags.
-   *  Scopes that declare nothing are omitted (world and story always show,
+  /** world, story, then per box: the box, its decks, its hands, its tags;
+   *  then the project map's zones, once. Scopes that declare nothing are omitted (world and story always show,
    *  so their absence reads as "this bundle declares none"). */
   properties: PropertyScopeSummary[];
-  /** Maps carried as inert payload, when the build asked for them. Empty is
-   *  the normal state and means the bundle has no geometry in it. */
-  maps: MapSummary[];
+  /** The project map, when the bundle has one. Absent is the bundle with no
+   *  map at all. */
+  map?: MapSummary;
 }
 
 const summarise = (decls: PropertyDecl[]): PropertySummary[] =>
@@ -204,14 +215,18 @@ const handDecls = (hand: Hand<Expression>, box: Box<Expression>): PropertyDecl[]
 
 /** The hand's movable holes, in the bundle's own key order: every `chosen` /
  *  rule-binding value that is a property reference rather than a tag (4.6).
- *  A group id the bundle does not carry is skipped rather than reported under
- *  its raw id: the description speaks gameIds throughout. */
-const movableHoles = (hand: Hand<Expression>, box: Box<Expression>): MovableHole[] => {
+ *  The group is looked up where the engine looks it up: the box's own groups
+ *  and, for a box on the project map, the map's group, so the roaming
+ *  character whose hole names a zone is reported rather than lost (3.7). A
+ *  group id neither place holds is a bundle the engine refuses or cannot
+ *  bind, and is skipped rather than reported under its raw id: the
+ *  description speaks gameIds throughout. */
+const movableHoles = (bundle: Bundle, hand: Hand<Expression>, box: Box<Expression>): MovableHole[] => {
   const filled = hand.template !== undefined ? hand.chosen : hand.rule?.bindings;
   const out: MovableHole[] = [];
   for (const [groupId, value] of Object.entries(filled ?? {})) {
     if (!isHoleRef(value)) continue;
-    const group = box.tagGroups.find((g) => g.id === groupId);
+    const group = groupsOfBox(bundle, box).find((g) => g.id === groupId);
     if (group === undefined) continue;
     out.push({ group: effectiveGameId(group), from: value });
   }
@@ -245,6 +260,7 @@ export function describeBundle(bundle: Bundle): BundleDescription {
     boxes.push({
       gameId: boxGameId,
       ...(box.title !== undefined ? { title: box.title } : {}),
+      ...(box.usesMap === true ? { usesMap: true as const } : {}),
       ranking: { specificity: box.ranking.specificity },
       ...(box.turn !== undefined ? { turn: { seconds: box.turn.seconds } } : {}),
       ...(durableCardCount(box) > 0 ? { durableCards: durableCardCount(box) } : {}),
@@ -271,7 +287,7 @@ export function describeBundle(bundle: Bundle): BundleDescription {
       const template = hand.template !== undefined
         ? box.handTemplates.find((t) => t.id === hand.template)
         : undefined;
-      const movable = movableHoles(hand, box);
+      const movable = movableHoles(bundle, hand, box);
       hands.push({
         gameId: effectiveGameId(hand),
         ...(hand.title !== undefined ? { title: hand.title } : {}),
@@ -301,6 +317,19 @@ export function describeBundle(bundle: Bundle): BundleDescription {
     }
   }
 
+  // The project map's zones, ONCE and after every box, whichever boxes use
+  // them: the same order the engine's value bags are built in. A `tag` scope
+  // with no `box`, because a zone belongs to none.
+  const map = bundle.map;
+  if (map !== undefined) {
+    const group = effectiveGameId(map.group);
+    for (const tag of map.group.tags) {
+      const decls = tag.properties ?? [];
+      if (decls.length > 0) properties.push({ scope: "tag", owner: effectiveGameId(tag), group, properties: summarise(decls) });
+    }
+    totals.tagGroups += 1;
+  }
+
   return {
     identity: {
       schema: bundle.schema,
@@ -313,12 +342,15 @@ export function describeBundle(bundle: Bundle): BundleDescription {
     boxes,
     hands,
     properties,
-    maps: (bundle.maps ?? []).map((map) => ({
-      box: map.box,
-      group: map.group,
-      zones: map.zones.length,
-      backgrounds: map.backgrounds?.length ?? 0,
-      sites: map.sites?.length ?? 0,
-    })),
+    ...(map !== undefined ? {
+      map: {
+        group: effectiveGameId(map.group),
+        tags: map.group.tags.map((tag) => effectiveGameId(tag)),
+        boxes: bundle.boxes.filter((box) => box.usesMap === true).map((box) => effectiveGameId(box)),
+        zones: map.geometry?.zones.length ?? 0,
+        backgrounds: map.geometry?.backgrounds?.length ?? 0,
+        sites: Object.fromEntries(Object.entries(map.geometry?.sites ?? {}).map(([box, sites]) => [box, sites.length])),
+      },
+    } : {}),
   };
 }

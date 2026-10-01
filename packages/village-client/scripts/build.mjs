@@ -5,7 +5,7 @@
 // (design/village-client.md section 5). The bundle is compiled from
 // `examples/the-village.storylets` shards on every build, the map geometry is
 // derived by the same op the playable page uses, and the pictures are copied
-// from the box's own `assets/`. So the client cannot describe a Village that
+// from the project's own `assets/`. So the client cannot describe a Village that
 // is not the Village, and a compile error here fails the build rather than
 // shipping a sample that does not run.
 //
@@ -70,9 +70,10 @@ if (maps.length === 0) die("the Village has no drawn map, and the client is a ma
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, "assets"), { recursive: true });
 let pictures = 0;
-for (const box of loaded.source.boxes) {
-  const assets = join(project, box.path, "assets");
-  if (!existsSync(assets)) continue;
+// One folder for the project, beside the project map that names them
+// (design/project-map-contract.md 1.4).
+const assets = join(project, "assets");
+if (existsSync(assets)) {
   for (const name of readdirSync(assets)) {
     copyFileSync(join(assets, name), join(out, "assets", name));
     pictures++;

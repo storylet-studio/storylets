@@ -168,23 +168,30 @@ void FStoryletBundleDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 		}
 	}
 
-	// --- maps: inert payload, and therefore worth saying out loud ----------
+	// --- the project map: which boxes are on it, and any geometry carried ---
 	//
-	// Only when there ARE some, the rule the other three inspectors follow: an
-	// empty section on every ordinary bundle would teach the reader to skip the
-	// one section that only matters when it is not empty.
-	if (D.Maps.Num() > 0)
+	// Only when there IS one, the rule the other three inspectors follow: an
+	// empty section on every ordinary bundle would teach the reader to skip a
+	// section that only ever matters when it is not empty. The zones themselves
+	// are already under Properties; this says where they live and what the
+	// build carried besides, since the geometry is inert and would otherwise go
+	// unmentioned.
+	if (D.bHasMap)
 	{
-		IDetailCategoryBuilder& MapsCategory = DetailBuilder.EditCategory(
-			TEXT("StoryletMaps"), LOCTEXT("MapsCategory", "Maps (carried, not read)"),
+		IDetailCategoryBuilder& MapCategory = DetailBuilder.EditCategory(
+			TEXT("StoryletMap"), LOCTEXT("MapCategory", "Project map"),
 			ECategoryPriority::Important);
-		AddLine(MapsCategory, TEXT("Geometry the build was asked to carry. The engine ignores it."), true);
-		for (const FStoryletMapSummary& Map : D.Maps)
+		AddLine(MapCategory, FString::Printf(TEXT("%s: %s"), *D.Map.Group, *FString::Join(D.Map.Tags, TEXT(", "))));
+		AddLine(MapCategory, FString::Printf(TEXT("boxes on the map: %s"),
+			D.Map.Boxes.Num() > 0 ? *FString::Join(D.Map.Boxes, TEXT(", ")) : TEXT("none")));
+		TArray<FString> Sites;
+		for (const FStoryletMapSites& Entry : D.Map.Sites)
 		{
-			AddLine(MapsCategory, FString::Printf(
-				TEXT("%s - %s: zones %d, pictures %d, sites %d"),
-				*Map.Box, *Map.Group, Map.Zones, Map.Backgrounds, Map.Sites));
+			Sites.Add(FString::Printf(TEXT("%s %d"), *Entry.Box, Entry.Sites));
 		}
+		AddLine(MapCategory, FString::Printf(
+			TEXT("geometry carried (the engine ignores it): zones %d, pictures %d, sites %s"),
+			D.Map.Zones, D.Map.Backgrounds, Sites.Num() > 0 ? *FString::Join(Sites, TEXT(", ")) : TEXT("0")), true);
 	}
 
 	// --- counts: orientation, not inventory --------------------------------

@@ -13,12 +13,11 @@
 
 import { readFileSync, statSync } from "node:fs";
 import { extname } from "node:path";
-import { compileProject, serialiseBundle, spatialGroups } from "@storylet-studio/compiler";
-import type { Issue, SourceProject, SpatialGroup } from "@storylet-studio/compiler";
+import { compileProject, mapDrawing, serialiseBundle } from "@storylet-studio/compiler";
+import type { Issue, MapDrawing, SourceProject } from "@storylet-studio/compiler";
 import { effectiveGameId, handBinding, labelPoint } from "@storylet-studio/model";
 import { assetPath } from "./assets.js";
 import type { LoadedProject } from "./load.js";
-import { sharedSpaces } from "./spaces.js";
 import { mapSites } from "./map.js";
 import { PLAYABLE_PATTERPLAY_JS, PLAYABLE_PLAYER_JS } from "./playable-player.js";
 import { performedBoxes, readPatterLink } from "./patter-link.js";
@@ -41,11 +40,13 @@ export interface ExportHtmlResult {
 // costs megabytes, not tens of them.
 
 export interface PlayableMap {
-  /** The box that carries the geometry (the first member, for a shared space). */
+  /** The first box on the project map, which names the map when only one box
+   *  is on it. */
   box: string;
   boxTitle?: string;
-  /** EVERY box this map speaks for: one entry normally; several when boxes
-   *  share the same place (sharedSpaces) and the page draws it once. */
+  /** EVERY box on the project map, in project order: one entry for a project
+   *  with one box on its map, several when boxes share it, and the page draws
+   *  it once with all their hands. */
   boxes: string[];
   group: string;
   zones: { tag: string; polygon: { x: number; y: number }[]; label: { x: number; y: number } }[];
@@ -63,7 +64,7 @@ const MIME: Record<string, string> = {
  *  `inline` is the playable page's promise: one file, no requests, so every
  *  picture is a data URI. `byName` is for a client that ships as a FOLDER (the
  *  Village sample): `src` is the picture's file name and the caller copies the
- *  box's `assets/` beside the page. The derivation is otherwise identical, and
+ *  project's `assets/` beside the page. The derivation is otherwise identical, and
  *  it stays one derivation deliberately - "where is a site on the map" is the
  *  kind of question that gets answered twice and then differently. */
 export interface PlayableMapOptions {
@@ -74,95 +75,77 @@ export function playableMaps(
   loaded: LoadedProject, issues: Issue[], opts: PlayableMapOptions = {},
 ): PlayableMap[] {
   const source = loaded.source!;
-  const maps: PlayableMap[] = [];
-  // Boxes sharing the same place draw it ONCE, every member's hands on it
-  // (the author's ruling: they should feel like the same space, not three
-  // repetitions). The first member carries the geometry and pictures; later
-  // members contribute their pins and emit no map of their own.
-  const spaces = sharedSpaces(source);
-  const memberOf = new Map<string, { boxes: string[]; first: boolean }>();
-  for (const space of spaces) {
-    space.boxes.forEach((b, i) => memberOf.set(`${b}|${space.group}`, { boxes: space.boxes, first: i === 0 }));
-  }
-  /** One box's placed hands as playable sites, bound against ITS OWN copy of
-   *  the group (each member box has its own group instance and ids).
+  // The project map, drawn once with every opted-in box's hands on it
+  // (design/project-map-contract.md: one map, sites per box). The walk is the
+  // compiler's, shared with the bundle's geometry.
+  const g: MapDrawing | undefined = mapDrawing(source);
+  if (g === undefined || g.boxes.length === 0) return [];
+  /** One box's placed hands as playable sites, bound against the project map's
+   *  group, which every box on the map names by the same ids.
    *
    *  Still derived from the sidecar, though the compiled bundle now carries the
    *  positions too (design/engine-server.md 4.3): the page needs a LABEL and the
    *  zone the hand binds beside each position, and the bundle's block carries
    *  neither, so reading it here would answer a third of the question and leave
    *  the walk in place for the rest. */
-  const sitesOf = (boxGameId: string, groupGameId: string): PlayableMap["sites"] => {
-    const box = source.boxes.find((b) => effectiveGameId(b.box.box) === boxGameId);
-    if (!box) return [];
-    const group = box.tags.groups.find((g) => effectiveGameId(g) === groupGameId);
-    if (!group) return [];
+  const sitesOf = (box: MapDrawing["boxes"][number]): PlayableMap["sites"] => {
     const placed = mapSites(box);
     const sites: PlayableMap["sites"] = [];
     for (const hand of box.hands.hands) {
       const at = placed[hand.id];
       if (!at) continue;
       const template = box.hands.templates.find((t) => t.id === hand.template);
-      const binding = handBinding(hand, template, group.id);
+      const binding = handBinding(hand, template, g.group.id);
       sites.push({
         hand: effectiveGameId(hand), label: hand.title ?? effectiveGameId(hand),
-        box: boxGameId, x: at.x, y: at.y,
+        box: effectiveGameId(box.box.box), x: at.x, y: at.y,
         ...(binding.kind !== "none" && binding.tag !== undefined ? { zone: binding.tag } : {}),
       });
     }
     return sites;
   };
-  for (const g of spatialGroups(source)) {
-    {
-      // The zones come from the shared walk; the page adds a LABEL point per
-      // zone, which the bundle has no use for. The Board's own rule (model
-      // labelPoint, bias top): the MIDDLE of a zone is where its sites stand,
-      // so a name there collides with the very pins the zone contains.
-      const zones: PlayableMap["zones"] = g.zones.map((z: SpatialGroup["zones"][number]) => {
-        const at = labelPoint(z.polygon, { bias: "top" });
-        return { ...z, label: { x: at.x, y: at.y } };
-      });
-      const backgrounds: PlayableMap["backgrounds"] = [];
-      for (const b of g.backgrounds) {
-        const full = assetPath(loaded.dir, g.box, b.file);
-        let src: string | undefined;
-        try {
-          if (full !== undefined) {
-            const mime = MIME[extname(b.file).toLowerCase()];
-            // `byName` still READS nothing but still proves the file is there,
-            // so a picture that is declared and missing warns in both modes
-            // rather than only in the one that happens to open it.
-            if (mime !== undefined && opts.pictures === "byName") src = statSync(full).isFile() ? b.file : undefined;
-            else if (mime !== undefined) src = `data:${mime};base64,${readFileSync(full).toString("base64")}`;
-          }
-        } catch { /* missing on disk: warned below */ }
-        if (src === undefined) {
-          issues.push({ severity: "warning", path: g.box.path, where: g.groupGameId,
-            message: `map picture "${b.file}" could not be read; the page ships without it` });
-          continue;
-        }
-        backgrounds.push({ src, x: b.x, y: b.y, width: b.width, height: b.height,
-          ...(b.opacity !== undefined ? { opacity: b.opacity } : {}) });
+  // The zones come from the shared walk; the page adds a LABEL point per
+  // zone, which the bundle has no use for. The Board's own rule (model
+  // labelPoint, bias top): the MIDDLE of a zone is where its sites stand,
+  // so a name there collides with the very pins the zone contains.
+  const zones: PlayableMap["zones"] = g.zones.map((z) => {
+    const at = labelPoint(z.polygon, { bias: "top" });
+    return { ...z, label: { x: at.x, y: at.y } };
+  });
+  const backgrounds: PlayableMap["backgrounds"] = [];
+  for (const b of g.backgrounds) {
+    const full = assetPath(loaded.dir, b.file);
+    let src: string | undefined;
+    try {
+      if (full !== undefined) {
+        const mime = MIME[extname(b.file).toLowerCase()];
+        // `byName` still READS nothing but still proves the file is there,
+        // so a picture that is declared and missing warns in both modes
+        // rather than only in the one that happens to open it.
+        if (mime !== undefined && opts.pictures === "byName") src = statSync(full).isFile() ? b.file : undefined;
+        else if (mime !== undefined) src = `data:${mime};base64,${readFileSync(full).toString("base64")}`;
       }
-      // Checked AGAIN, because this page can lose backgrounds the shared walk
-      // kept: a picture that is declared, visible and unreadable on disk is
-      // dropped just above. A group left with nothing at all is not drawn.
-      if (zones.length === 0 && backgrounds.length === 0) continue;
-      const boxGameId = g.boxGameId;
-      const groupGameId = g.groupGameId;
-      const membership = memberOf.get(`${boxGameId}|${groupGameId}`);
-      if (membership !== undefined && !membership.first) continue;   // drawn by the first member
-      const speaks = membership?.boxes ?? [boxGameId];
-      maps.push({
-        box: boxGameId,
-        ...(g.box.box.box.title !== undefined ? { boxTitle: g.box.box.box.title } : {}),
-        boxes: speaks,
-        group: groupGameId, zones, backgrounds,
-        sites: speaks.flatMap((member) => sitesOf(member, groupGameId)),
-      });
+    } catch { /* missing on disk: warned below */ }
+    if (src === undefined) {
+      issues.push({ severity: "warning", path: "map", where: g.groupGameId,
+        message: `map picture "${b.file}" could not be read; the page ships without it` });
+      continue;
     }
+    backgrounds.push({ src, x: b.x, y: b.y, width: b.width, height: b.height,
+      ...(b.opacity !== undefined ? { opacity: b.opacity } : {}) });
   }
-  return maps;
+  // Checked AGAIN, because this page can lose backgrounds the shared walk
+  // kept: a picture that is declared, visible and unreadable on disk is
+  // dropped just above. A map left with nothing at all is not drawn.
+  if (zones.length === 0 && backgrounds.length === 0) return [];
+  const first = g.boxes[0]!;
+  return [{
+    box: effectiveGameId(first.box.box),
+    ...(first.box.box.title !== undefined ? { boxTitle: first.box.box.title } : {}),
+    boxes: g.boxes.map((box) => effectiveGameId(box.box.box)),
+    group: g.groupGameId, zones, backgrounds,
+    sites: g.boxes.flatMap(sitesOf),
+  }];
 }
 
 const esc = (s: string): string => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!));

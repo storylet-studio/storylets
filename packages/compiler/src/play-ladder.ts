@@ -167,6 +167,19 @@ export function contentAboveRung(source: SourceProject, rung: PlayRung): LadderI
     }
   }
 
+  // The project map's zone declarations, once, and only when a box is on the
+  // map: a map nothing uses is never dealt to, so it shows nothing whatever
+  // its flags say (design/project-map-contract.md 7, compiler follow-on).
+  const group = source.map?.group;
+  if (group !== undefined && source.boxes.some((box) => box.box.box.usesMap === true)) {
+    const mapPath = "map";
+    const groupName = effectiveGameId(group);
+    found.push(...declItems(group.properties, "hand", mapPath, groupName));
+    for (const tag of group.tags ?? []) {
+      found.push(...declItems(tag.properties, "hand", mapPath, `${groupName}/${effectiveGameId(tag)}`));
+    }
+  }
+
   return found.filter((item) => rungIndex(item.needs) > allowed);
 }
 

@@ -51,6 +51,17 @@
 //   - a trace event fires after the state it reports has landed, so a
 //     handler reading the flow inside it sees the effect (the Live Link's
 //     board snapshot depends on this; the shared fixture pins it)
+//   - the PROJECT MAP (design/project-map-contract.md 3) is one zone group
+//     above the boxes, in Bundle::map->group and in no box's tagGroups. A box
+//     that opts in (usesMap) sees its name beside its own groups', so its
+//     hands bind zones and its cards are tagged with them by id exactly as
+//     with a box group. Each zone is ONE value bag, keyed by the tag's id like
+//     any tag's, so a zone property is one value whichever box's hand is
+//     dealt to it; the `shared` flag still decides per-flow against one for
+//     the engine. What the boxes on a map do NOT share: a hand deals only
+//     from its own box's decks, and play history stays the asking box's
+//     (D7). A bundle that breaks the map's rules is refused at construction
+//     (3.8) rather than half-played.
 #pragma once
 
 #include <algorithm>
@@ -346,6 +357,8 @@ namespace storylets
             const Box* box = nullptr;
         };
 
+        /** A group by internal id. `box` is null for the project map's
+         *  group, which belongs to no box. */
         struct GroupInBox
         {
             const TagGroup* group = nullptr;
@@ -404,6 +417,12 @@ namespace storylets
              *  (a tag's gameId is unique within its group alone), and it is
              *  REFUSED rather than resolved to the first. */
             OrderedMap<std::string, std::vector<std::string>> repeated;
+            /** A box-qualified segment that names a project-map zone
+             *  ("box/quay") -> the zone's own segment ("quay"), the one an
+             *  address must use instead. REFUSED, never resolved: the zone
+             *  belongs to no box (design/project-map-contract.md 3.4). Value
+             *  scope only; empty when the bundle has no map. */
+            OrderedMap<std::string, std::string> zoneQualified;
         };
 
         /** One index per owned scope, reached by the scope word the address
@@ -459,6 +478,12 @@ namespace storylets
          * more do (design/engine-server.md 4.4). Built from the whole bundle
          * rather than tag by tag, because whether a tag's own gameId is enough
          * is a question about the OTHER boxes.
+         *
+         * A ZONE of the project map (design/project-map-contract.md 3.4) is the
+         * one tag with no qualified form: it belongs to no box, so it prints and
+         * is accepted as "value.<zoneGameId>.<name>" whichever boxes use it,
+         * after the box tags and never in `repeated`. Every box-qualified form
+         * of it goes in `zoneQualified`, to be refused naming the short form.
          */
         template <typename BundleT>
         void IndexValueOwners(OwnerIndex& index, const BundleT& bundle)
@@ -506,6 +531,146 @@ namespace storylets
                 if (!ambiguous && !index.id.contains(gameIds[i])) index.id.set(gameIds[i], ids[i]);
                 if (ambiguous) index.repeated.set(gameIds[i], candidates);
             }
+            // The zones. A zone whose gameId a box tag also uses is a bundle the
+            // engine refuses at construction; should one reach here anyway, the
+            // box tag keeps the short form it already had and the zone does not
+            // take it over silently.
+            if (!bundle.map.has_value()) return;
+            for (const auto& tag : bundle.map->group.tags)
+            {
+                const std::string gameId = EffectiveGameId(tag);
+                index.gameId.set(tag.id, gameId);
+                if (!index.id.contains(gameId)) index.id.set(gameId, tag.id);
+                for (const auto& box : bundle.boxes)
+                {
+                    index.zoneQualified.set(EffectiveGameId(box) + "/" + gameId, gameId);
+                }
+            }
+        }
+
+        /**
+         * Refuse, at construction, a bundle this engine cannot read faithfully
+         * (design/project-map-contract.md 3.8). Throws one StoryletError naming
+         * every problem found, each naming the box and the group or tag at
+         * fault.
+         *
+         * The compiler refuses all of these first. The engine checks again
+         * because it cannot tell a hand-built or stale bundle from a compiled
+         * one, and the alternative is the silent half-working the server audit
+         * found twice: a hand whose bound group is looked up in the wrong place
+         * comes back empty, and an old runtime given a map bundle deals
+         * plausibly while every zone value is missing. Only what would make the
+         * engine's OWN resolution ambiguous or wrong is refused here; the
+         * compiler's bundle-wide group-name rule is stricter.
+         */
+        inline void RefuseUnreadableBundle(const Bundle& bundle)
+        {
+            // The schema tag (D4). Checked alone and first: a bundle of a schema
+            // this runtime does not know may not have any of the shape the rest
+            // reads.
+            if (!IsSupportedBundleSchema(bundle.schema))
+            {
+                throw StoryletError("unsupported bundle schema: "
+                    + (bundle.schema.empty() ? std::string("(none)") : bundle.schema)
+                    + " (this runtime reads " + BUNDLE_SCHEMA_V0 + " and " + BUNDLE_SCHEMA + ")");
+            }
+            std::vector<std::string> problems;
+            const TagGroup* map = bundle.map.has_value() ? &bundle.map->group : nullptr;
+            const std::string mapName = map ? EffectiveGameId(*map) : std::string();
+            if (map && mapName == PLACE_GROUP)
+            {
+                problems.push_back(std::string("the project map's tag group is called \"") + PLACE_GROUP
+                    + "\", which is reserved for a box's own hands");
+            }
+            // Every box tag gameId, for the zone-name rule: a zone's address has
+            // no qualified form to fall back on (3.4), so any box tag sharing it
+            // anywhere makes "value.<zone>.<name>" ambiguous. First in bundle
+            // order is the one a refusal names.
+            OrderedMap<std::string, std::pair<std::string, std::string>> boxTags;
+            for (const Box& box : bundle.boxes)
+            {
+                for (const TagGroup& group : box.tagGroups)
+                {
+                    for (const Tag& tag : group.tags)
+                    {
+                        const std::string gameId = EffectiveGameId(tag);
+                        if (!boxTags.contains(gameId))
+                        {
+                            boxTags.set(gameId, std::make_pair(EffectiveGameId(box), EffectiveGameId(group)));
+                        }
+                    }
+                }
+            }
+            if (map)
+            {
+                for (const Tag& tag : map->tags)
+                {
+                    const std::string zone = EffectiveGameId(tag);
+                    const std::pair<std::string, std::string>* clash = boxTags.get(zone);
+                    if (!clash) continue;
+                    problems.push_back("the project map's zone \"" + zone + "\" has the name of tag \"" + zone
+                        + "\" in box \"" + clash->first + "\", group \"" + clash->second
+                        + "\", so \"value." + zone + ".<name>\" would name two things");
+                }
+            }
+            for (const Box& box : bundle.boxes)
+            {
+                const std::string boxName = EffectiveGameId(box);
+                if (box.usesMap)
+                {
+                    if (!map)
+                    {
+                        problems.push_back("box \"" + boxName + "\" uses the project map, but the bundle has no map");
+                        continue;
+                    }
+                    // One namespace in an opted-in box (3.1): a box group with the
+                    // map's name would make every name-based lookup there a coin
+                    // toss.
+                    for (const TagGroup& group : box.tagGroups)
+                    {
+                        if (EffectiveGameId(group) != mapName) continue;
+                        problems.push_back("box \"" + boxName + "\" uses the project map and declares its own tag group \""
+                            + mapName + "\", the map's name");
+                        break;
+                    }
+                    continue;
+                }
+                if (!map) continue;
+                // A box NOT on the map may not reference its group at all: every
+                // route a reference takes, card tags, template bindings and
+                // holes, a hand's chosen tags and a rule's bindings, by the
+                // group's id as written.
+                auto names = [&](const std::string& where)
+                {
+                    problems.push_back("box \"" + boxName + "\" is not on the project map, but " + where
+                        + " names the map's tag group \"" + mapName + "\"");
+                };
+                for (const Deck& deck : box.decks)
+                {
+                    for (const Card& card : deck.cards)
+                    {
+                        if (card.tags.contains(map->id)) names("card \"" + EffectiveGameId(card) + "\"");
+                    }
+                }
+                for (const HandTemplate& t : box.handTemplates)
+                {
+                    const bool chooses = std::find(t.chooses.begin(), t.chooses.end(), map->id) != t.chooses.end();
+                    if (t.bindings.contains(map->id) || chooses) names("hand template \"" + EffectiveGameId(t) + "\"");
+                }
+                for (const Hand& hand : box.hands)
+                {
+                    const bool rule = hand.rule && hand.rule->bindings.contains(map->id);
+                    if (hand.chosen.contains(map->id) || rule) names("hand \"" + EffectiveGameId(hand) + "\"");
+                }
+            }
+            if (problems.empty()) return;
+            std::string message = "bundle refused: ";
+            for (size_t i = 0; i < problems.size(); ++i)
+            {
+                if (i > 0) message += "; ";
+                message += problems[i];
+            }
+            throw StoryletError(message);
         }
 
         // --- the load report (design/engine-server.md 4.9) --------------------
@@ -1240,6 +1405,16 @@ namespace storylets
         {
             const std::vector<std::string>* candidates = owners_.of(kind).repeated.get(segment);
             if (candidates) throw StoryletError(ambiguousAddressMessage(segment, name, *candidates));
+            // A box-qualified form of a project-map zone: never accepted,
+            // because the zone belongs to no box (design/project-map-contract.md
+            // 3.4). The refusal names the address that works.
+            const std::string* zone = owners_.of(kind).zoneQualified.get(segment);
+            if (zone)
+            {
+                throw StoryletError("\"value." + segment + "." + name + "\": \"" + *zone
+                    + "\" is a zone of the project map, which belongs to no box; write \"value."
+                    + *zone + "." + name + "\"");
+            }
             std::string id;
             if (!resolveOwner(kind, segment, id, outLegacy))
             {
@@ -1332,6 +1507,16 @@ namespace storylets
                     {
                         shared.value.set(tag.id, bagFromDecls(half("value", tag.properties, true), addressOf("value", tag.id) + "."));
                     }
+                }
+            }
+            // The project map's zones ONCE (design/project-map-contract.md 3.3):
+            // a zone is one bag per partition, whichever boxes' hands are dealt
+            // to it.
+            if (bundle_->map.has_value())
+            {
+                for (const auto& tag : bundle_->map->group.tags)
+                {
+                    shared.value.set(tag.id, bagFromDecls(half("value", tag.properties, true), addressOf("value", tag.id) + "."));
                 }
             }
             shared_ = std::move(shared);
@@ -2297,14 +2482,26 @@ namespace storylets
 
         // --- expression plumbing -------------------------------------------------
 
-        /** The play-history indexes' key for one (group, tag) pair. A unit
-         *  separator (U+001F) joins them: ids are letters, digits and
+        /** The play-history indexes' key for one (box, group, tag) triple.
+         *
+         *  The BOX is in it because play history is box-specific
+         *  (design/project-map-contract.md 3.7, D7, ruled 2026-10-01):
+         *  count_played_in asks about the asking box's own plays. A box group
+         *  was already box-unique, so its key never needed the box; a
+         *  project-map zone is one tag every opted-in box tags its cards with,
+         *  and without the box a play of a newspaper at the quay in one box
+         *  would count as an encounter at the quay in another.
+         *
+         *  A unit separator (U+001F) joins them: ids are letters, digits and
          *  underscores, so a control character cannot occur in one and two
-         *  pairs can never collide into one key. Not NUL, which GDScript will
-         *  not carry in a string, and the four runtimes keep one spelling. */
-        static std::string tagKey(const std::string& groupId, const std::string& tagId)
+         *  triples can never collide into one key. Not NUL, which GDScript
+         *  will not carry in a string, and the four runtimes keep one
+         *  spelling. */
+        static std::string tagKey(const std::string& boxId, const std::string& groupId, const std::string& tagId)
         {
-            std::string key = groupId;
+            std::string key = boxId;
+            key.push_back('\x1f');
+            key.append(groupId);
             key.push_back('\x1f');
             key.append(tagId);
             return key;
@@ -2323,7 +2520,8 @@ namespace storylets
                 if (!tagIds) continue;
                 for (const auto& tagId : *tagIds)
                 {
-                    const std::string key = tagKey(groupId, tagId);
+                    // Keyed by the PLAYED card's box: history is box-specific (D7).
+                    const std::string key = tagKey(entry->box->id, groupId, tagId);
                     tagPlayCount_[key] += 1;
                     lastPlayInTag_[key] = record;
                 }
@@ -2344,26 +2542,35 @@ namespace storylets
          *  way (schema 1 - boxes namespace their groups), so a name is only
          *  ever resolved inside the box being asked, never bundle-wide. Ids
          *  are project-unique and accepted here too, still confined to the
-         *  box. */
-        static const TagGroup* groupInBox(const Box& box, const std::string& reference)
+         *  box.
+         *
+         *  A box on the project map sees ONE namespace: its own groups, then
+         *  the map's group (design/project-map-contract.md 3.1). A box that
+         *  has not opted in does not see the map's name at all, so a peek
+         *  naming it there is the ordinary unknown-group refusal. Own groups
+         *  first is stated for determinism only: a bundle that loads never has
+         *  the two share a name. */
+        const TagGroup* groupInBox(const Box& box, const std::string& reference) const
         {
-            for (const auto& group : box.tagGroups)
+            const std::vector<const TagGroup*> groups = GroupsOfBox(*engine_->bundle_, box);
+            for (const TagGroup* group : groups)
             {
-                if (EffectiveGameId(group) == reference) return &group;
+                if (EffectiveGameId(*group) == reference) return group;
             }
-            for (const auto& group : box.tagGroups)
+            for (const TagGroup* group : groups)
             {
-                if (group.id == reference) return &group;
+                if (group->id == reference) return group;
             }
             return nullptr;
         }
 
-        /** A group NAME and tag name resolved in THIS box, as the index's key;
-         *  false when either is unknown here, which is the old per-record
-         *  `false` and reads as "never". Resolved once per call, where inTag
-         *  used to resolve it again for every record in the log. */
-        static bool keyOf(const Box& box, const std::string& group, const std::string& tag,
-            std::string& outKey)
+        /** A group NAME and tag name resolved in THIS box, as the index's key,
+         *  with this box in it: a zone's plays in another box are not this
+         *  box's history (D7). False when either is unknown here, which is the
+         *  old per-record `false` and reads as "never". Resolved once per call,
+         *  where inTag used to resolve it again for every record in the log. */
+        bool keyOf(const Box& box, const std::string& group, const std::string& tag,
+            std::string& outKey) const
         {
             const TagGroup* found = groupInBox(box, group);
             if (!found) return false;
@@ -2371,7 +2578,7 @@ namespace storylets
             {
                 if (candidate.gameId == tag)
                 {
-                    outKey = tagKey(found->id, candidate.id);
+                    outKey = tagKey(box.id, found->id, candidate.id);
                     return true;
                 }
             }
@@ -2380,8 +2587,10 @@ namespace storylets
 
         /** One host per box: the play-history functions take a BARE group name
          *  with no box, so they resolve it in the box whose ask is being
-         *  evaluated (a card's tags reference its own box's group, which keeps
-         *  the counts box-local). */
+         *  evaluated, and they count only that box's own plays (the box is in
+         *  the index key). That was automatic while every group was a box's; a
+         *  project-map zone is shared, and its history is still not
+         *  (design/project-map-contract.md 3.7, D7). */
         StoryletsHost makeHost(const Box& box)
         {
             StoryletsHost host;
@@ -2811,8 +3020,11 @@ namespace storylets
          *  empty hand reads as content that does not exist. */
         void bindStateGroups(const Box& box, AskDescriptor& ask) const
         {
-            for (const auto& group : box.tagGroups)
+            // The box's own groups and, when it is on the project map, the
+            // map's group: a boundBy there binds in every opted-in box (3.2).
+            for (const TagGroup* groupPtr : GroupsOfBox(*engine_->bundle_, box))
             {
+                const TagGroup& group = *groupPtr;
                 if (group.boundBy.empty() || ask.boundTags.get(group.id)) continue;
                 const std::string& ref = group.boundBy;
                 std::string scope, name;
@@ -3772,6 +3984,11 @@ namespace storylets
     inline Engine::Engine(BundlePtr bundle, const EngineOptions& opts)
         : bundle_(std::move(bundle)), creationOptions_(opts), seed_(opts.seed), onReplacedFlow_(opts.onReplacedFlow)
     {
+        // First, before anything is indexed or registered: a bundle this engine
+        // cannot read faithfully is refused whole (design/project-map-contract.md
+        // 3.8), and a refusal must leave the game's registry untouched.
+        if (!bundle_) throw StoryletError("the engine needs a bundle");
+        detail::RefuseUnreadableBundle(*bundle_);
         if (opts.log) logCap_ = opts.logCap;
         if (opts.world.has_value()) hostWorld_ = opts.world;
         registry_ = opts.registry ? opts.registry : std::make_shared<ScopeRegistry>();
@@ -3814,6 +4031,16 @@ namespace storylets
                 detail::IndexOwner(owners_.hand, hand);
             }
         }
+        // The project map's group: by id like any group, so a hand's binding, a
+        // filled hole and tag matching need no logic of their own for it. Which
+        // boxes may NAME it is groupInBox's business (3.1); which may reference
+        // it at all was settled by the refusal above.
+        if (bundle_->map.has_value())
+        {
+            const TagGroup& group = bundle_->map->group;
+            groupsById_.set(group.id, detail::GroupInBox{&group, nullptr});
+            if (group.required) requiredGroups_.insert(group.id);
+        }
         initLadders();
         // Both halves, precomputed once (a bundle never changes): each openFlow
         // builds its bags from the per-flow half, and a load report asks either
@@ -3843,6 +4070,15 @@ namespace storylets
                 }
             }
         }
+        // The zones, once, after every box: the order the bags are built in.
+        if (bundle_->map.has_value())
+        {
+            for (const auto& tag : bundle_->map->group.tags)
+            {
+                flowDecls_.value.set(tag.id, half("value", tag.properties, false));
+                sharedDecls_.value.set(tag.id, half("value", tag.properties, true));
+            }
+        }
         initShared();
     }
 
@@ -3866,6 +4102,11 @@ namespace storylets
                 for (const auto& tag : group.tags) grab(tag.properties, valueLadders_[tag.id]);
             }
             for (const auto& hand : box.hands) grab(handDecls(hand), handLadders_[hand.id]);
+        }
+        // The zones, once, keyed by tag id like every other tag (3.3).
+        if (bundle_->map.has_value())
+        {
+            for (const auto& tag : bundle_->map->group.tags) grab(tag.properties, valueLadders_[tag.id]);
         }
     }
 

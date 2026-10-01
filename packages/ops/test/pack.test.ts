@@ -36,16 +36,27 @@ const PNG = Buffer.from(
   "1f15c4890000000a49444154789c6300010000050001" +
   "0d0a2db40000000049454e44ae426082", "hex");
 
-/** Reference an asset from the box's spatial group, so it is not an orphan.
- *  Written into the shard directly: the pack op reads shards, not the editor. */
+type Group = { id: string; templates?: Record<string, unknown> };
+
+/** Reference an asset from the PROJECT map, so it is not an orphan. The first
+ *  time, the box's first tag group becomes the project map and the box joins it.
+ *  Written into the shards directly: the pack op reads shards, not the editor. */
 function referenceAsset(dir: string, ...files: string[]): boolean {
-  const tags = join(dir, "encounters", "tags.storylettags");
-  const text = readFileSync(tags, "utf8");
-  const shard = parseSource(text) as {
-    groups: { id: string; templates?: Record<string, unknown> }[];
-  };
-  const group = shard.groups[0];
-  if (!group) return false;
+  const mapFile = join(dir, "map.storyletmap");
+  let group: Group | undefined;
+  if (existsSync(mapFile)) {
+    group = (parseSource(readFileSync(mapFile, "utf8")) as { group: Group }).group;
+  } else {
+    const tags = join(dir, "encounters", "tags.storylettags");
+    const shard = parseSource(readFileSync(tags, "utf8")) as { groups: Group[] };
+    group = shard.groups.shift();
+    if (!group) return false;
+    writeFileSync(tags, canonicalStringify(shard));
+    const boxFile = join(dir, "encounters", "box.storyletbox");
+    const box = parseSource(readFileSync(boxFile, "utf8")) as { box: Record<string, unknown> };
+    box.box["usesMap"] = true;
+    writeFileSync(boxFile, canonicalStringify(box));
+  }
   group.templates = {
     ...group.templates,
     spatial: {
@@ -54,12 +65,12 @@ function referenceAsset(dir: string, ...files: string[]): boolean {
       backgrounds: files.map((file, i) => ({ id: `g_${i + 1}`, file, x: 0, y: 0, width: 100, height: 50 })),
     },
   };
-  writeFileSync(tags, canonicalStringify(shard));
+  writeFileSync(mapFile, canonicalStringify({ schema: "storylets/projectmap@0", group }));
   return true;
 }
 
 /**
- * Put an asset in a box, REFERENCE it from the box's map, and say whether the
+ * Put an asset in the project, REFERENCE it from the project map, and say whether the
  * project asks for assets to travel.
  *
  * Referencing is the default because an unreferenced file is an orphan, and a
@@ -67,8 +78,8 @@ function referenceAsset(dir: string, ...files: string[]): boolean {
  * would be testing the orphan rule while claiming to test something else.
  */
 function withAsset(dir: string, opts: { packAssets?: boolean; reference?: boolean } = {}): string {
-  mkdirSync(join(dir, "encounters", "assets"), { recursive: true });
-  writeFileSync(join(dir, "encounters", "assets", "site-plan.png"), PNG);
+  mkdirSync(join(dir, "assets"), { recursive: true });
+  writeFileSync(join(dir, "assets", "site-plan.png"), PNG);
   if (opts.reference !== false) referenceAsset(dir, "site-plan.png");
   if (opts.packAssets !== undefined) {
     const projFile = join(dir, readdirSync(dir).find((f) => f.endsWith(".storyletproj"))!);
@@ -143,7 +154,7 @@ describe("a pack and its assets", () => {
 
   it("carries them when the PROJECT asks", async () => {
     const bytes = await runPack(withAsset(scratch(), { packAssets: true }));
-    expect((await readPackManifest(bytes))?.assets).toEqual(["encounters/assets/site-plan.png"]);
+    expect((await readPackManifest(bytes))?.assets).toEqual(["assets/site-plan.png"]);
   });
 
   it("lets one delivery override the project either way", async () => {
@@ -159,9 +170,9 @@ describe("a pack and its assets", () => {
     // and a pack should carry the project's content rather than everything that
     // has ever been in the folder. Nothing is lost: the sender still has it.
     const source = withAsset(scratch(), { packAssets: true });
-    writeFileSync(join(source, "encounters", "assets", "old-draft.png"), PNG);
+    writeFileSync(join(source, "assets", "old-draft.png"), PNG);
     const manifest = await readPackManifest(await runPack(source));
-    expect(manifest?.assets).toEqual(["encounters/assets/site-plan.png"]);
+    expect(manifest?.assets).toEqual(["assets/site-plan.png"]);
   });
 
   it("round trips the BYTES, which reading them as text would not", async () => {
@@ -177,14 +188,14 @@ describe("a pack and its assets", () => {
       mkdirSync(join(a.path, ".."), { recursive: true });
       writeFileSync(a.path, a.bytes);
     }
-    expect(readFileSync(join(target, "encounters", "assets", "site-plan.png")).equals(PNG)).toBe(true);
+    expect(readFileSync(join(target, "assets", "site-plan.png")).equals(PNG)).toBe(true);
   });
 
   it("lists them apart from the shards, so a reader treats them differently", async () => {
     const bytes = await runPack(withAsset(scratch(), { packAssets: true }));
     const manifest = await readPackManifest(bytes);
     expect(manifest?.files.some((f) => f.includes("assets/"))).toBe(false);
-    expect(manifest?.assets).toEqual(["encounters/assets/site-plan.png"]);
+    expect(manifest?.assets).toEqual(["assets/site-plan.png"]);
   });
 });
 
@@ -198,19 +209,19 @@ describe("a returned pack's assets", () => {
 
     // They re-save the first picture, PLACE a second, and leave a third lying in
     // the folder without placing it.
-    const theirCopy = join(source, "encounters", "assets", "site-plan.png");
+    const theirCopy = join(source, "assets", "site-plan.png");
     writeFileSync(theirCopy, Buffer.concat([PNG, Buffer.from([0])]));
-    writeFileSync(join(source, "encounters", "assets", "upper-floor.png"), PNG);
-    writeFileSync(join(source, "encounters", "assets", "never-placed.png"), PNG);
+    writeFileSync(join(source, "assets", "upper-floor.png"), PNG);
+    writeFileSync(join(source, "assets", "never-placed.png"), PNG);
     referenceAsset(source, "site-plan.png", "upper-floor.png");
     const returned = await runPack(source);
 
     // Our copy is the original.
     const ours = withAsset(scratch(), { packAssets: true });
     const merged = await runUnpackMerge(returned, base, ours);
-    expect(merged.keptAssets).toEqual(["encounters/assets/site-plan.png"]);
+    expect(merged.keptAssets).toEqual(["assets/site-plan.png"]);
     expect(merged.assets.map((a) => a.path.slice(ours.length + 1).split(sep).join("/")))
-      .toEqual(["encounters/assets/upper-floor.png"]);
+      .toEqual(["assets/upper-floor.png"]);
     // A file lying in their folder that they never PLACED is not part of the map,
     // so it neither travels nor arrives.
     expect(merged.assets.some((a) => a.path.includes("never-placed"))).toBe(false);
@@ -246,15 +257,17 @@ describe("pack", () => {
     }
   });
 
-  it("carries a box's map shard, which is a shard like any other", async () => {
+  it("carries the map shards, the project's and a box's, which are shards like any other", async () => {
     // The extension list is `Object.values(SHARD_EXTENSIONS)`, so a new shard
     // travels for free - and a delivery that quietly left the map behind would
     // hand somebody a project whose kiosks stand nowhere.
     const dir = scratch();
+    referenceAsset(dir);
     writeFileSync(join(dir, "encounters", "map.storyletmap"), canonicalStringify({
       schema: "storylets/map@0", map: { sites: { h_1: { x: 5, y: 6 } } },
     }));
     const zip = await JSZip.loadAsync(await runPack(dir));
+    expect(Object.keys(zip.files)).toContain("map.storyletmap");
     expect(Object.keys(zip.files)).toContain("encounters/map.storyletmap");
   });
 

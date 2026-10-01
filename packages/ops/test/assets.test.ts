@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Where a box's binary assets live, and the containment rule that guards them.
+// Where a project's binary assets live, and the containment rule that guards them.
 //
 // The rule exists because an asset's name arrives from a SHARD, which is
 // untrusted input: a pack, a merge or a hand edit can put anything in that
@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { beforeEach, describe, expect, it } from "vitest";
-import type { SourceBox } from "@storylet-studio/compiler";
+import type { SourceProject } from "@storylet-studio/compiler";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,11 +17,9 @@ import {
   ASSETS_DIR, assetPath, assetUse, freeAssetName, imageSize, isSafeAssetName, orphanAssetPaths,
 } from "../src/assets.js";
 
-const box = { path: "village" } as unknown as SourceBox;
-
 describe("resolving an asset", () => {
-  it("puts it in the box's own assets folder", () => {
-    expect(assetPath("/p", box, "site-plan.png")).toBe(`/p/village/${ASSETS_DIR}/site-plan.png`);
+  it("puts it in the project's one assets folder", () => {
+    expect(assetPath("/p", "site-plan.png")).toBe(`/p/${ASSETS_DIR}/site-plan.png`);
   });
 
   it("refuses anything that is not a plain file name", () => {
@@ -31,7 +29,7 @@ describe("resolving an asset", () => {
       "CON", "nul.png", "lpt1.txt",
     ]) {
       expect(isSafeAssetName(bad)).toBe(false);
-      expect(assetPath("/p", box, bad)).toBeUndefined();
+      expect(assetPath("/p", bad)).toBeUndefined();
     }
   });
 
@@ -138,12 +136,7 @@ describe("orphans: files no map uses", () => {
   // on: undoing an import keeps the file on purpose, and so does removing a
   // background. An undo that deleted somebody's only site plan would be worse
   // than any amount of tidying.
-  const box = (groups: unknown[]): SourceBox => ({
-    path: "village",
-    tags: { schema: "storylets/tags@0", groups },
-  } as unknown as SourceBox);
-
-  const mapWith = (...files: string[]): unknown => ({
+  const groupWith = (...files: string[]): unknown => ({
     id: "d_zone", gameId: "zone", tags: [],
     templates: {
       spatial: {
@@ -153,46 +146,55 @@ describe("orphans: files no map uses", () => {
     },
   });
 
+  // A project whose map has these pictures, or no map at all when given none.
+  // `boxGroups` stands in for whatever a box's own tags shard carries.
+  const project = (map?: unknown, boxGroups: unknown[] = []): SourceProject => ({
+    ...(map === undefined ? {} : { map: { schema: "storylets/projectmap@0", group: map } }),
+    boxes: [{ path: "village", tags: { schema: "storylets/tags@0", groups: boxGroups } }],
+  } as unknown as SourceProject);
+
   let dir = "";
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "orphans-"));
-    mkdirSync(join(dir, "village", ASSETS_DIR), { recursive: true });
+    mkdirSync(join(dir, ASSETS_DIR), { recursive: true });
     for (const name of ["used.png", "also-used.jpg", "left-over.png"]) {
-      writeFileSync(join(dir, "village", ASSETS_DIR, name), "bytes");
+      writeFileSync(join(dir, ASSETS_DIR, name), "bytes");
     }
   });
 
   it("tells used from unused", () => {
-    const use = assetUse(dir, box([mapWith("used.png", "also-used.jpg")]));
+    const use = assetUse(dir, project(groupWith("used.png", "also-used.jpg")));
     expect(use.used).toEqual(["also-used.jpg", "used.png"]);
     expect(use.orphans).toEqual(["left-over.png"]);
   });
 
-  it("counts a file referenced by ANY of the box's groups as used", () => {
-    const use = assetUse(dir, box([mapWith("used.png"), mapWith("left-over.png")]));
-    expect(use.orphans).toEqual(["also-used.jpg"]);
+  it("counts only what the PROJECT map uses, not a picture a box's own group names", () => {
+    // A box group with backgrounds is a compile error now (the map belongs to
+    // the project), so a file only it names keeps nothing alive.
+    const use = assetUse(dir, project(groupWith("used.png"), [groupWith("left-over.png")]));
+    expect(use.orphans).toEqual(["also-used.jpg", "left-over.png"]);
   });
 
   it("treats everything as an orphan when no map uses anything", () => {
-    const use = assetUse(dir, box([]));
+    const use = assetUse(dir, project());
     expect(use.used).toEqual([]);
     expect(use.orphans).toHaveLength(3);
   });
 
-  it("says nothing about a box with no assets folder, which is the normal state", () => {
+  it("says nothing about a project with no assets folder, which is the normal state", () => {
     const empty = mkdtempSync(join(tmpdir(), "orphans-none-"));
-    expect(assetUse(empty, box([mapWith("used.png")]))).toEqual({ used: [], orphans: [] });
+    expect(assetUse(empty, project(groupWith("used.png")))).toEqual({ used: [], orphans: [] });
   });
 
   it("ignores dotfiles, which are the filesystem's business and not ours", () => {
-    writeFileSync(join(dir, "village", ASSETS_DIR, ".DS_Store"), "junk");
-    expect(assetUse(dir, box([mapWith("used.png")])).orphans).not.toContain(".DS_Store");
+    writeFileSync(join(dir, ASSETS_DIR, ".DS_Store"), "junk");
+    expect(assetUse(dir, project(groupWith("used.png"))).orphans).not.toContain(".DS_Store");
   });
 
   it("does not call a PLACED picture an orphan just because the file is gone", () => {
     // A pack that travelled without its assets leaves exactly this: an entry
     // whose file is missing. That is validation's warning to give, not a tidy's.
-    const use = assetUse(dir, box([mapWith("used.png", "never-arrived.png")]));
+    const use = assetUse(dir, project(groupWith("used.png", "never-arrived.png")));
     expect(use.orphans).toEqual(["also-used.jpg", "left-over.png"]);
     expect(use.used).toEqual(["used.png"]);
   });
@@ -205,30 +207,30 @@ describe("sweeping orphans", () => {
   // the end of a session rather than mid-work.
   it("names every orphan in the project, and nothing that is used", () => {
     const dir = mkdtempSync(join(tmpdir(), "sweep-"));
-    for (const box of ["village", "castle"]) {
-      mkdirSync(join(dir, box, ASSETS_DIR), { recursive: true });
-      writeFileSync(join(dir, box, ASSETS_DIR, "used.png"), "bytes");
-      writeFileSync(join(dir, box, ASSETS_DIR, "dropped.png"), "bytes");
+    mkdirSync(join(dir, ASSETS_DIR), { recursive: true });
+    for (const name of ["used.png", "dropped.png", "also-dropped.png"]) {
+      writeFileSync(join(dir, ASSETS_DIR, name), "bytes");
     }
-    const boxes = ["village", "castle"].map((path) => ({
-      path,
-      tags: {
-        schema: "storylets/tags@0",
-        groups: [{
+    const source = {
+      map: {
+        schema: "storylets/projectmap@0",
+        group: {
           id: "d_zone", gameId: "zone", tags: [],
           templates: { spatial: { map: true, backgrounds: [{ id: "g_1", file: "used.png", x: 0, y: 0, width: 1, height: 1 }] } },
-        }],
+        },
       },
-    })) as unknown as SourceBox[];
+      boxes: ["village", "castle"].map((path) => ({ path, tags: { schema: "storylets/tags@0", groups: [] } })),
+    } as unknown as SourceProject;
 
-    expect(orphanAssetPaths(dir, boxes)).toEqual([
-      join(dir, "castle", ASSETS_DIR, "dropped.png"),
-      join(dir, "village", ASSETS_DIR, "dropped.png"),
+    expect(orphanAssetPaths(dir, source)).toEqual([
+      join(dir, ASSETS_DIR, "also-dropped.png"),
+      join(dir, ASSETS_DIR, "dropped.png"),
     ]);
   });
 
   it("finds nothing in a project with no pictures at all", () => {
     const dir = mkdtempSync(join(tmpdir(), "sweep-none-"));
-    expect(orphanAssetPaths(dir, [{ path: "village", tags: { groups: [] } } as unknown as SourceBox])).toEqual([]);
+    const source = { boxes: [{ path: "village", tags: { groups: [] } }] } as unknown as SourceProject;
+    expect(orphanAssetPaths(dir, source)).toEqual([]);
   });
 });

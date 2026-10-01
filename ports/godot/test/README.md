@@ -12,8 +12,10 @@ godot --headless --path ports/godot --import
 - `test_corpus.gd` - replays the shared conformance corpus
   ([`packages/conformance`](../../../packages/conformance)) through the
   addon's runtime and asserts the same results the JS reference produces (the
-  four runner obligations of `packages/conformance/src/runner.ts`:
-  expressions, specificity, peek asked twice, scripted):
+  runner obligations of `packages/conformance/src/runner.ts`:
+  expressions, specificity, peek asked twice, scripted, and load, a bundle
+  the engine must refuse at construction, which here means `create` returns
+  null and the engine's `_init_error` names each expected string):
 
   ```sh
   godot --headless --path ports/godot --script res://test/test_corpus.gd \

@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { buildCorpus } from "../src/build.js";
 import { fixtures } from "../src/cases.js";
-import { runExpressionCase, runPeekCase, runScriptedCase, runSpecificityCase } from "../src/runner.js";
+import { runExpressionCase, runLoadCase, runPeekCase, runScriptedCase, runSpecificityCase } from "../src/runner.js";
 import type { Bundle, Card, Expression } from "@storylet-studio/model";
 
 const corpus = buildCorpus(fixtures);
@@ -19,7 +19,7 @@ const allCards = (bundle: Bundle): Card<Expression>[] =>
 
 describe("corpus", () => {
   it("case names are unique within each family", () => {
-    for (const family of ["expressions", "specificity", "peek", "scripted"] as const) {
+    for (const family of ["expressions", "specificity", "peek", "scripted", "load"] as const) {
       const names = corpus[family].map((c) => c.name);
       expect(new Set(names).size, family).toBe(names.length);
     }
@@ -124,6 +124,14 @@ describe("reference runtime vs corpus", () => {
     for (const c of corpus.scripted) {
       it(c.name, () => {
         expect(runScriptedCase(c)).toEqual([]);
+      });
+    }
+  });
+
+  describe("load", () => {
+    for (const c of corpus.load) {
+      it(c.name, () => {
+        expect(runLoadCase(c)).toEqual([]);
       });
     }
   });

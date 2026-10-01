@@ -1,8 +1,8 @@
 // The compiled bundle model, its loader, and the save envelope. Port of
 // @storylet-studio/model (packages/model/src/index.ts): the bundle schema
-// "storylets/bundle@0" (world/story property decls, boxes with decks/cards/
-// outcomes/tag groups/hands/hand templates, ranking, fields, redraw, copies,
-// the home group), SaveEnvelope ("storylets/save@2"; @1 still read), and the gameId
+// "storylets/bundle@1" ("@0" still read; world/story property decls, boxes with
+// decks/cards/outcomes/tag groups/hands/hand templates, ranking, fields, redraw,
+// copies, the home group, the project map), SaveEnvelope ("storylets/save@2"; @1 still read), and the gameId
 // derivation rules (GameIdify / EffectiveGameId). The loader consumes the
 // core's neutral JsonValue tree (the Unity port's BundleLoader, minus the
 // JSON library), so hosts feed it from any parser. No behaviour lives here.
@@ -23,7 +23,27 @@
 
 namespace storylets
 {
-    inline const char* const BUNDLE_SCHEMA = "storylets/bundle@0";
+    /** The bundle schema this build of the format writes: @1 since the
+     *  project map (design/project-map-contract.md 2.4), the bundle that can
+     *  carry `map` and `Box::usesMap`.
+     *
+     *  Every runtime READS @0 and @1 and refuses anything else, by name.
+     *  Reading @0 is not a compatibility branch: an @0 bundle cannot carry a
+     *  map, so it is the same shape with less in it. The check exists so that
+     *  from this release on a runtime meeting a schema it does not know says
+     *  so, rather than half-working the way an @0 runtime does on a map bundle
+     *  (tag matching is by id, so its deals look right while every zone value
+     *  is missing). */
+    inline const char* const BUNDLE_SCHEMA = "storylets/bundle@1";
+    /** The schema before the project map, still read by every runtime. */
+    inline const char* const BUNDLE_SCHEMA_V0 = "storylets/bundle@0";
+
+    /** Is this a bundle schema this runtime reads (@0 or @1)? */
+    inline bool IsSupportedBundleSchema(const std::string& schema)
+    {
+        return schema == BUNDLE_SCHEMA_V0 || schema == BUNDLE_SCHEMA;
+    }
+
     /** The engine's save envelope, version 2 (the one-registry model):
      *  property values are the game's ScopeRegistry's, not the engine's. The
      *  envelope holds what is NOT a property (boards, clocks, cooldowns, PRNGs,
@@ -402,6 +422,23 @@ namespace storylets
          *  when the box declares none (the key is absent from the bundle). */
         std::vector<FieldDecl> outcomeFields;
         std::vector<PropertyDecl> properties;
+        /**
+         * The box has opted in to the PROJECT MAP (design/project-map-contract.md
+         * 1.2, 2.2): its hands may bind the map's zone group and its cards may
+         * be tagged with it, and it sees the group's name beside its own
+         * groups' names. False is "not on the map", and a box that is not may
+         * not reference the group at all: the engine refuses such a bundle at
+         * construction.
+         *
+         * Opting in changes nothing about what the box deals FROM: a hand
+         * still deals only from its own box's decks. What the boxes on the map
+         * share is the zones' values (one bag per zone), never their cards or
+         * their history.
+         */
+        bool usesMap = false;
+        /** The box's OWN tag groups. The project map's group is never here,
+         *  even in a box that uses it: it is the bundle's, in `Bundle::map`
+         *  (GroupsOfBox gives the two together). */
         std::vector<TagGroup> tagGroups;
         std::vector<Deck> decks;
         std::vector<HandTemplate> handTemplates;
@@ -444,7 +481,7 @@ namespace storylets
     /** One background picture behind a map. Draw order is list order. */
     struct MapBackground
     {
-        /** Where the file sits relative to the bundle ("assets/<box>/<file>"). */
+        /** Where the file sits relative to the bundle ("assets/<file>"). */
         std::string file;
         double x = 0;
         double y = 0;
@@ -460,7 +497,7 @@ namespace storylets
         std::vector<MapPoint> polygon;
     };
 
-    /** Where a placed hand stands on a map, by hand gameId
+    /** Where a placed hand stands on the map, by hand gameId
      *  (design/engine-server.md 4.3). Sorted by that gameId in the bundle. */
     struct MapSite
     {
@@ -469,23 +506,43 @@ namespace storylets
         double y = 0;
     };
 
-    /**
-     * A map the build was asked to carry: one spatial tag group's geometry
-     * (design/graphical-views.md 2, "The map MAY ship with a bundle").
-     *
-     * INERT PAYLOAD. Nothing in the engine reads this, and nothing will: the
-     * runtime deals in tag names. It is parsed and handed over so a host that
-     * wants to draw an in-game map does not have to re-parse the asset itself,
-     * which is the whole reason the export option exists.
-     */
-    struct BundleMap
+    /** The project map's drawing data: only under `export.map`. INERT
+     *  PAYLOAD: nothing in the engine reads it, and nothing will. It is parsed
+     *  and handed over so a host that wants to draw an in-game map does not
+     *  have to re-parse the asset itself. GAME IDS throughout, because a host
+     *  matches these against the names it passes to Peek(). */
+    struct MapGeometry
     {
-        std::string box;                        // the owning box, by gameId
-        std::string group;                      // the tag group, by gameId
+        /** Drawn zones only, by tag gameId, in group order. */
         std::vector<MapZone> zones;
+        /** Visible background pictures, back to front. */
         std::vector<MapBackground> backgrounds;
-        /** Where the placed hands stand: empty when nobody put a hand here. */
-        std::vector<MapSite> sites;
+        /** Box gameId -> where that box's placed hands stand. Only opted-in
+         *  boxes, and only those with a site: sites stay per box, because a
+         *  hand belongs to one box. */
+        OrderedMap<std::string, std::vector<MapSite>> sites;
+    };
+
+    /**
+     * The PROJECT MAP (design/project-map-contract.md 2.1): at most one per
+     * project, above the boxes. Two halves, on purpose.
+     *
+     * `group` is SEMANTIC and always ships when the project declares a map:
+     * the zone group, compiled exactly as a box's group is (the group's
+     * properties flattened onto each tag), which opted-in boxes' hands bind and
+     * cards are tagged with BY ID, as with any group. It is in no box's
+     * `tagGroups`. Each zone is one tag and so one value bag, whichever boxes'
+     * hands are dealt to it.
+     *
+     * `geometry` is inert payload (MapGeometry), absent unless the project
+     * asked for it.
+     */
+    struct ProjectMap
+    {
+        /** The zone group. The engine reads this. */
+        TagGroup group;
+        /** Drawing data, only under `export.map`. The engine never reads it. */
+        std::optional<MapGeometry> geometry;
     };
 
     struct Bundle
@@ -497,8 +554,10 @@ namespace storylets
         WorldSection world;
         StorySection story;
         std::vector<Box> boxes;
-        /** Maps, when the build carried them. Empty is the normal state. */
-        std::vector<BundleMap> maps;
+        /** The project map, when the project declares one (see ProjectMap).
+         *  The per-box `maps` array it replaces is gone, not kept as a
+         *  one-element list: zones are no longer a box's. */
+        std::optional<ProjectMap> map;
         /** Other engines' game-wide scopes the content names (`patter`),
          *  sorted: the family's shared vocabulary, let through unchecked by the
          *  compiler. The engine reports when the game has not registered one,
@@ -507,6 +566,39 @@ namespace storylets
     };
 
     using BundlePtr = std::shared_ptr<const Bundle>;
+
+    // --- reading the project map (design/project-map-contract.md 5, Q12) --
+    //
+    // The questions every reader of a bundle asks once a group may live
+    // outside the box that uses it, answered once here, because the engine,
+    // describeBundle and the inspectors each looked a bound group up in the
+    // hand's own box and would silently lose the project one. Pure field access.
+
+    /** The tag groups a box sees, by NAME as well as by id: its own groups,
+     *  then the project map's group when the box has opted in. Own groups
+     *  first is stated for determinism only: a bundle the engine loads never
+     *  has a box group sharing the project group's name. */
+    inline std::vector<const TagGroup*> GroupsOfBox(const Bundle& bundle, const Box& box)
+    {
+        std::vector<const TagGroup*> groups;
+        groups.reserve(box.tagGroups.size() + 1);
+        for (const TagGroup& group : box.tagGroups) groups.push_back(&group);
+        if (box.usesMap && bundle.map.has_value()) groups.push_back(&bundle.map->group);
+        return groups;
+    }
+
+    /** Every tag group in the bundle, each once: the boxes' groups in bundle
+     *  order, then the project map's. What a walk over every value bag wants. */
+    inline std::vector<const TagGroup*> AllTagGroups(const Bundle& bundle)
+    {
+        std::vector<const TagGroup*> groups;
+        for (const Box& box : bundle.boxes)
+        {
+            for (const TagGroup& group : box.tagGroups) groups.push_back(&group);
+        }
+        if (bundle.map.has_value()) groups.push_back(&bundle.map->group);
+        return groups;
+    }
 
     // --- the save envelope ----------------------------------------------------
 
@@ -944,14 +1036,17 @@ namespace storylets
             return hand;
         }
 
-        /** One shipped map. Absent on almost every bundle: geometry ships only
-         *  when the build asked for it. */
-        inline BundleMap ParseMap(const JsonValue& o)
+        /** The project map: its zone group always, its geometry only when
+         *  the build asked for it. */
+        inline ProjectMap ParseProjectMap(const JsonValue& o)
         {
-            BundleMap map;
-            map.box = o.strOr("box");
-            map.group = o.strOr("group");
-            const JsonValue* zones = o.find("zones");
+            ProjectMap map;
+            const JsonValue* group = o.find("group");
+            if (group && group->isObject()) map.group = ParseTagGroup(*group);
+            const JsonValue* g = o.find("geometry");
+            if (!g || !g->isObject()) return map;
+            MapGeometry geometry;
+            const JsonValue* zones = g->find("zones");
             if (zones && zones->isArray())
             {
                 for (const auto& z : zones->arr)
@@ -966,36 +1061,45 @@ namespace storylets
                             zone.polygon.push_back(MapPoint{ p.numOr("x", 0), p.numOr("y", 0) });
                         }
                     }
-                    map.zones.push_back(std::move(zone));
+                    geometry.zones.push_back(std::move(zone));
                 }
             }
-            const JsonValue* backgrounds = o.find("backgrounds");
+            const JsonValue* backgrounds = g->find("backgrounds");
             if (backgrounds && backgrounds->isArray())
             {
-                for (const auto& g : backgrounds->arr)
+                for (const auto& b : backgrounds->arr)
                 {
                     MapBackground background;
-                    background.file = g.strOr("file");
-                    background.x = g.numOr("x", 0);
-                    background.y = g.numOr("y", 0);
-                    background.width = g.numOr("width", 0);
-                    background.height = g.numOr("height", 0);
-                    background.opacity = g.numOr("opacity", 1);
-                    map.backgrounds.push_back(std::move(background));
+                    background.file = b.strOr("file");
+                    background.x = b.numOr("x", 0);
+                    background.y = b.numOr("y", 0);
+                    background.width = b.numOr("width", 0);
+                    background.height = b.numOr("height", 0);
+                    background.opacity = b.numOr("opacity", 1);
+                    geometry.backgrounds.push_back(std::move(background));
                 }
             }
-            const JsonValue* sites = o.find("sites");
-            if (sites && sites->isArray())
+            const JsonValue* sites = g->find("sites");
+            if (sites && sites->isObject())
             {
-                for (const auto& s : sites->arr)
+                for (const auto& pair : sites->obj)
                 {
-                    MapSite site;
-                    site.hand = s.strOr("hand");
-                    site.x = s.numOr("x", 0);
-                    site.y = s.numOr("y", 0);
-                    map.sites.push_back(std::move(site));
+                    std::vector<MapSite> list;
+                    if (pair.second.isArray())
+                    {
+                        for (const auto& st : pair.second.arr)
+                        {
+                            MapSite site;
+                            site.hand = st.strOr("hand");
+                            site.x = st.numOr("x", 0);
+                            site.y = st.numOr("y", 0);
+                            list.push_back(std::move(site));
+                        }
+                    }
+                    geometry.sites.set(pair.first, std::move(list));
                 }
             }
+            map.geometry = std::move(geometry);
             return map;
         }
 
@@ -1010,6 +1114,7 @@ namespace storylets
             if (ranking && ranking->isObject()) box.ranking.specificity = ranking->boolOr("specificity");
             const JsonValue* turn = o.find("turn");
             if (turn && turn->isObject()) box.turnSeconds = turn->numOr("seconds", 0);
+            box.usesMap = o.boolOr("usesMap");
             const JsonValue* fields = o.find("fields");
             if (fields && fields->isArray())
             {
@@ -1051,7 +1156,10 @@ namespace storylets
     inline BundlePtr ParseBundle(const JsonValue& b)
     {
         auto bundle = std::make_shared<Bundle>();
-        bundle->schema = b.strOr("schema", BUNDLE_SCHEMA);
+        // No default: a blob with no schema tag is not a bundle this runtime
+        // knows, and the engine refuses it by name at construction (D4) rather
+        // than reading it as the current schema.
+        bundle->schema = b.strOr("schema");
         bundle->metadata = b.strOr("metadata", "full");
         const JsonValue* content = b.find("content");
         if (content && content->isObject())
@@ -1082,11 +1190,8 @@ namespace storylets
         {
             for (const auto& box : boxes->arr) bundle->boxes.push_back(bundleloader::ParseBox(box));
         }
-        const JsonValue* maps = b.find("maps");
-        if (maps && maps->isArray())
-        {
-            for (const auto& map : maps->arr) bundle->maps.push_back(bundleloader::ParseMap(map));
-        }
+        const JsonValue* map = b.find("map");
+        if (map && map->isObject()) bundle->map = bundleloader::ParseProjectMap(*map);
         const JsonValue* external = b.find("externalScopes");
         if (external && external->isArray())
         {

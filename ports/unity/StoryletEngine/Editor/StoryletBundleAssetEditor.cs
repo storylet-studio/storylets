@@ -6,7 +6,8 @@
 // Read-only by construction: the rows come from BundleInspector.DescribeBundle
 // (no session, no state), and nothing here writes to the asset. Identity
 // first, then collapsible sections - Hands (the Deal() surface), Tags by box
-// (the Peek() criteria surface), Properties (declared), Counts - with the
+// (the Peek() criteria surface), Properties (declared), the Project map when
+// the bundle has one, Counts - with the
 // LoadError surfaced prominently above everything when the bundle failed to
 // compile. The raw JSON stays behind a closed foldout: it is the artefact, not
 // the answer.
@@ -54,13 +55,13 @@ namespace StoryletStudio.StoryletEngine.Editor
             _propsOpen = EditorGUILayout.Foldout(_propsOpen, "Properties (declared)", true);
             if (_propsOpen) DrawProperties(description);
 
-            // Only when there are some. An empty section on every ordinary
+            // Only when there IS one. An empty section on every ordinary
             // bundle would teach the reader to skip the one section that only
             // matters when it is not empty.
-            if (description.Maps.Count > 0)
+            if (description.Map != null)
             {
-                _mapsOpen = EditorGUILayout.Foldout(_mapsOpen, "Maps (carried, not read)", true);
-                if (_mapsOpen) DrawMaps(description);
+                _mapsOpen = EditorGUILayout.Foldout(_mapsOpen, "Project map", true);
+                if (_mapsOpen) DrawMap(description.Map);
             }
 
             _countsOpen = EditorGUILayout.Foldout(_countsOpen, "Counts", true);
@@ -155,14 +156,29 @@ namespace StoryletStudio.StoryletEngine.Editor
             return $"{p.Type} = {def}{options}{durable}";
         }
 
-        private static void DrawMaps(BundleDescription description)
+        /// <summary>The project map: which boxes are on it, and any geometry
+        /// carried. The zones themselves are already under Properties; this
+        /// says where they live and what the build carried besides, since the
+        /// geometry is inert and would otherwise go unmentioned.</summary>
+        private static void DrawMap(MapSummary map)
         {
-            EditorGUILayout.LabelField("Geometry the build was asked to carry. The engine ignores it.", EditorStyles.miniLabel);
-            foreach (var map in description.Maps)
+            foreach (var line in MapLines(map)) EditorGUILayout.LabelField("  " + line);
+        }
+
+        /// <summary>Rendering helper shared with the tests: the project map
+        /// section's lines, as the inspector shows them (the JS inspector's
+        /// three lines, word for word).</summary>
+        internal static List<string> MapLines(MapSummary map)
+        {
+            var sites = new List<string>();
+            foreach (var pair in map.Sites) sites.Add($"{pair.Key} {pair.Value}");
+            return new List<string>
             {
-                EditorGUILayout.LabelField(
-                    $"{map.Box} - {map.Group}: zones {map.Zones}, pictures {map.Backgrounds}, sites {map.Sites}");
-            }
+                $"{map.Group}: {string.Join(", ", map.Tags)}",
+                $"boxes on the map: {(map.Boxes.Count > 0 ? string.Join(", ", map.Boxes) : "none")}",
+                $"geometry carried (the engine ignores it): zones {map.Zones}, pictures {map.Backgrounds}"
+                    + $", sites {(sites.Count == 0 ? "0" : string.Join(", ", sites))}",
+            };
         }
 
         private static void DrawCounts(BundleDescription description)

@@ -78,44 +78,82 @@ func _initialize() -> void:
 	# including the "zone" group both of this demo's boxes declare.
 	# A throwaway session for the probes: a peek shuffles tie runs, so it
 	# advances the PRNG - the smoke's own deal below must not be perturbed.
-	# A bundle that carries a map: parsed, reported, and above all IGNORED. The
-	# corpus has no map in it (geometry is inert payload, so it has no dealing
-	# behaviour to conform to), so this is where the path gets executed.
+	# A bundle with a PROJECT MAP (design/project-map-contract.md 2.1): one zone
+	# group above the boxes, which the village opts in to, plus the geometry a
+	# build carries under `export.map`. The corpus pins the dealing; this is
+	# where the inspector's half and the inert geometry get executed.
 	var mapped: Dictionary = bundle.duplicate(true)
-	mapped["maps"] = [{
-		"box": "village", "group": "zone",
-		"zones": [{"tag": "tavern", "polygon": [
-			{"x": 0, "y": 0}, {"x": 4, "y": 0}, {"x": 4, "y": 3}]}],
-		"backgrounds": [{"file": "assets/village/plan.png",
-			"x": 1, "y": 2, "width": 8, "height": 6, "opacity": 0.6}],
-		"sites": [{"hand": "the-forge", "x": 5, "y": 6}, {"hand": "the-well", "x": 7, "y": 8}],
-	}]
+	mapped["schema"] = StoryletBundle.BUNDLE_SCHEMA
+	mapped["boxes"][0]["usesMap"] = true
+	mapped["map"] = {
+		"group": {"id": "d_district", "gameId": "district", "tags": [
+			{"id": "v_quay", "gameId": "quay",
+				"properties": [{"name": "danger", "type": "number", "default": 0}]},
+			{"id": "v_hill", "gameId": "hill"},
+		]},
+		"geometry": {
+			"zones": [{"tag": "quay", "polygon": [
+				{"x": 0, "y": 0}, {"x": 4, "y": 0}, {"x": 4, "y": 3}]}],
+			"backgrounds": [{"file": "assets/plan.png",
+				"x": 1, "y": 2, "width": 8, "height": 6, "opacity": 0.6}],
+			"sites": {"village": [{"hand": "the-forge", "x": 5, "y": 6}, {"hand": "the-inn", "x": 7, "y": 8}]},
+		},
+	}
 	var mapped_loaded := StoryletBundle.load_from_dict(mapped)
-	_check("a bundle carrying a map still loads", mapped_loaded["ok"],
+	_check("a bundle carrying a project map loads", mapped_loaded["ok"],
 		str(mapped_loaded.get("error", "")))
 	var mapped_described := StoryletBundleInspector.describe_bundle(mapped)
-	var map_rows: Array = mapped_described.get("maps", [])
-	_check("describe_bundle reports the map", map_rows.size() == 1)
-	if map_rows.size() == 1:
-		_check("the map keeps its box, group and counts",
-			str(map_rows[0]["box"]) == "village" and str(map_rows[0]["group"]) == "zone"
-			and int(map_rows[0]["zones"]) == 1 and int(map_rows[0]["backgrounds"]) == 1
-			and int(map_rows[0]["sites"]) == 2,
-			str(map_rows[0]))
-	# The geometry itself needs no accessor here: the parsed Dictionary IS the
-	# bundle, so a host reads it straight off.
+	_check("describe_bundle reports the project map", mapped_described.has("map"))
+	if mapped_described.has("map"):
+		var map_row: Dictionary = mapped_described["map"]
+		_check("the map names its group, zones and boxes, and counts the geometry",
+			str(map_row["group"]) == "district" and map_row["tags"] == ["quay", "hill"]
+			and map_row["boxes"] == ["village"] and int(map_row["zones"]) == 1
+			and int(map_row["backgrounds"]) == 1 and map_row["sites"] == {"village": 2},
+			str(map_row))
+	_check("the opted-in box says so, and its own groups stay its own",
+		mapped_described["boxes"][0].get("usesMap") == true
+		and (mapped_described["boxes"][0]["tagGroups"] as Array).size() == (bundle["boxes"][0]["tagGroups"] as Array).size())
+	_check("the project group is counted once",
+		int(mapped_described["totals"]["tagGroups"]) == int(described["totals"]["tagGroups"]) + 1)
+	var zone_scopes: Array = (mapped_described["properties"] as Array).filter(
+		func(p): return str(p.get("group", "")) == "district")
+	_check("a zone's properties are a tag scope with a group and no box",
+		zone_scopes.size() == 1 and str(zone_scopes[0]["owner"]) == "quay"
+		and str(zone_scopes[0]["scope"]) == "tag" and not zone_scopes[0].has("box"),
+		str(zone_scopes))
+	_check("an ordinary bundle reports no map", not described.has("map"))
+	# The geometry needs no accessor: the parsed Dictionary IS the bundle, so a
+	# host reads it straight off. It is inert, and an engine over it still runs.
 	_check("the geometry is readable by a host",
-		int(mapped["maps"][0]["zones"][0]["polygon"][2]["x"]) == 4)
-	# The placed hands (design/engine-server.md 4.3): a position is content in a
-	# physical experience, so it travels in the block with the rest.
-	_check("the placed hands are readable by a host",
-		str(mapped["maps"][0]["sites"][0]["hand"]) == "the-forge"
-		and int(mapped["maps"][0]["sites"][0]["x"]) == 5)
-	_check("an ordinary bundle reports no maps",
-		(described.get("maps", []) as Array).is_empty())
-	# Inert means inert: an engine over it still runs.
-	_check("an engine over a mapped bundle still runs",
-		StoryletEngine.create(mapped, {"seed": 7}) != null)
+		int(mapped["map"]["geometry"]["zones"][0]["polygon"][2]["x"]) == 4
+		and str(mapped["map"]["geometry"]["sites"]["village"][0]["hand"]) == "the-forge")
+	var mapped_engine := StoryletEngine.create(mapped, {"seed": 7})
+	_check("an engine over a mapped bundle runs", mapped_engine != null)
+	if mapped_engine != null:
+		var on_map := mapped_engine.open_flow("main")
+		_check("the opted-in box names the map's group in peek criteria",
+			not on_map.peek("village", {"district": "quay"}).has("error"))
+		_check("a zone property has the short address",
+			on_map.set_property("value.quay.danger", 2) == "" and on_map.get_property("value.quay.danger") == 2.0,
+			str(on_map.get_property("value.quay.danger")))
+		print("(an expected refusal error follows)")
+		var qualified := on_map.set_property("value.village/quay.danger", 3)
+		_check("the box-qualified form of a zone is refused, naming the short form",
+			qualified.contains('write "value.quay.danger"'), qualified)
+
+	# Construction refuses what it cannot read faithfully (3.8), through the
+	# usual channel: null with push_error (the lines below are expected).
+	print("(expected refusal errors follow)")
+	var unknown := bundle.duplicate(true)
+	unknown["schema"] = "storylets/bundle@9"
+	_check("an unknown bundle schema is refused by the loader", not StoryletBundle.load_from_dict(unknown)["ok"])
+	_check("and by the engine", StoryletEngine.create(unknown) == null)
+	var no_map := bundle.duplicate(true)
+	no_map["boxes"][0]["usesMap"] = true
+	_check("a box on a map the bundle lacks is refused", StoryletEngine.create(no_map) == null)
+	var reason: String = StoryletEngine.new(no_map)._init_error
+	_check("the refusal names the box", reason.begins_with("bundle refused: ") and reason.contains('box "village"'), reason)
 
 	var probe := StoryletEngine.create(bundle, {"seed": 7}).open_flow("main")
 	var criteria_ok := true

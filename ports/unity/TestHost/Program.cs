@@ -8,7 +8,7 @@
 //
 // Families: expressions (evaluator + dialect), specificity (matched-constraint
 // scorer), peek (bundle + one ask, asked twice), scripted (deals, plays,
-// turns, save/load).
+// turns, save/load), load (a bundle the engine must refuse at construction).
 
 using System;
 using System.Collections.Generic;
@@ -51,11 +51,15 @@ namespace StoryletStudio.StoryletEngine.TestHost
             var specificity = (JArray)root["specificity"];
             var peek = (JArray)root["peek"];
             var scripted = (JArray)root["scripted"];
+            // Absent before corpus version 10, which is an empty family rather
+            // than a failure: an older corpus simply has no load cases.
+            var load = root["load"] as JArray ?? new JArray();
 
             int e = RunExpressions(expressions);
             int sp = RunSpecificity(specificity);
             int p = RunPeek(peek);
             int s = RunScripted(scripted);
+            int ld = RunLoad(load);
             // Read-only @world with a HOST resolver bound: the corpus case pins the
             // self-backed (kernel) path; this reaches the engine's own check, which
             // only a bound resolver does. Same probe in the JS, C++ and Godot harnesses.
@@ -75,7 +79,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             Console.WriteLine($"describeBundle checks: {d}/1  maps: {m}/1  live-link fixture: {l}/1");
             Console.WriteLine(
                 $"expressions: {e}/{expressions.Count}  specificity: {sp}/{specificity.Count}  " +
-                $"peek: {p}/{peek.Count}  scripted: {s}/{scripted.Count}");
+                $"peek: {p}/{peek.Count}  scripted: {s}/{scripted.Count}  load: {ld}/{load.Count}");
             // The expr parity corpus sits beside ours, vendored from ../expr. Absent is
             // a FAILURE, not a skip: a parity gate that quietly does nothing when its
             // fixture is missing is the shape of check this codebase has been bitten by.
@@ -597,6 +601,54 @@ namespace StoryletStudio.StoryletEngine.TestHost
             return pass;
         }
 
+        // -- load ---------------------------------------------------------------------
+
+        /// <summary>A bundle the engine must REFUSE at construction
+        /// (design/project-map-contract.md 3.8): building the engine must throw,
+        /// and the refusal must contain every expected string. The bundle is
+        /// parsed first, as a host's would be; only the construction may
+        /// refuse it.</summary>
+        private static int RunLoad(JArray cases)
+        {
+            int pass = 0;
+            foreach (var c in cases.Cast<JObject>())
+            {
+                var name = c.Value<string>("name");
+                try
+                {
+                    var bundle = BundleLoader.Parse((JObject)c["bundle"]);
+                    string error = null;
+                    try
+                    {
+                        new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = 0 });
+                    }
+                    catch (StoryletError ex)
+                    {
+                        error = ex.Message;
+                    }
+                    var failures = new List<string>();
+                    if (error == null)
+                    {
+                        failures.Add("expected the engine to refuse the bundle at construction, it was accepted");
+                    }
+                    else
+                    {
+                        foreach (var want in StringList(c["expectRefused"]))
+                        {
+                            if (!error.Contains(want)) failures.Add($"expected the refusal to name \"{want}\", got \"{error}\"");
+                        }
+                    }
+                    if (failures.Count == 0) pass++;
+                    else foreach (var f in failures) Fail("load", name, f);
+                }
+                catch (Exception ex)
+                {
+                    Fail("load", name, ex.Message);
+                }
+            }
+            return pass;
+        }
+
         // -- the bundle inspector (design/engine-runtimes.md 2, piece 6) --------------
 
         /// <summary>describeBundle is a bundle-level API with no corpus family of
@@ -606,57 +658,143 @@ namespace StoryletStudio.StoryletEngine.TestHost
         /// criteria Peek() accepts, and its property scopes must be the static
         /// twin of the session's ListProperties() - same names, same order. Run
         /// over the first peek case's bundle.</summary>
-        /// <summary>A bundle that carries a map: parsed, reported, and above all
-        /// IGNORED. The corpus has no map in it (geometry is inert payload, so it
-        /// has no dealing behaviour to conform to), which would leave the whole
-        /// path compiled and never executed - so the map arrives here instead.</summary>
+        /// <summary>The project map through DescribeBundle
+        /// (design/project-map-contract.md 3.7), the port of the JS runtime's
+        /// "describeBundle and the project map" tests. Not in the corpus:
+        /// DescribeBundle is session-less and each runtime pins it in its own
+        /// checks. Built in the shape of the conformance PROJECT SCAFFOLD: group
+        /// "district", zones "quay" and "hill", each declaring `danger` (per flow)
+        /// and `alarm` (shared); "box" on the map, "other" not. The geometry is
+        /// INERT, so the same bundle is also run with it to prove a session over
+        /// it still deals.</summary>
         private static int RunDescribeMaps()
         {
             const string json = @"{
-                ""schema"": ""storylets/bundle@0"",
+                ""schema"": ""storylets/bundle@1"",
                 ""content"": { ""project"": ""p"", ""version"": ""1"", ""hash"": """" },
                 ""metadata"": ""full"",
                 ""settings"": { ""playAdvancesTurns"": 1 },
                 ""world"": { ""properties"": [] },
                 ""story"": { ""properties"": [] },
-                ""boxes"": [],
-                ""maps"": [{
-                    ""box"": ""village"", ""group"": ""zone"",
-                    ""zones"": [{ ""tag"": ""tavern"", ""polygon"": [
-                        { ""x"": 0, ""y"": 0 }, { ""x"": 4, ""y"": 0 }, { ""x"": 4, ""y"": 3 }] }],
-                    ""backgrounds"": [{ ""file"": ""assets/village/plan.png"",
-                        ""x"": 1, ""y"": 2, ""width"": 8, ""height"": 6, ""opacity"": 0.6 }],
-                    ""sites"": [{ ""hand"": ""the-forge"", ""x"": 5, ""y"": 6 },
-                        { ""hand"": ""the-well"", ""x"": 7, ""y"": 8 }]
-                }]
+                ""boxes"": [{
+                    ""id"": ""b_x"", ""gameId"": ""box"", ""ranking"": { ""specificity"": true }, ""usesMap"": true,
+                    ""fields"": [], ""properties"": [],
+                    ""tagGroups"": [{ ""id"": ""d_zone"", ""gameId"": ""zone"", ""tags"": [
+                        { ""id"": ""v_docks"", ""gameId"": ""docks"" }, { ""id"": ""v_market"", ""gameId"": ""market"" }] }],
+                    ""decks"": [{ ""id"": ""k_main"", ""gameId"": ""main"", ""properties"": [], ""cards"": [
+                        { ""id"": ""c_q"", ""gameId"": ""q"", ""redraw"": ""always"", ""tags"": { ""d_district"": [""v_quay""] }, ""outcomes"": [] }] }],
+                    ""handTemplates"": [{ ""id"": ""t_npc"", ""gameId"": ""npc"", ""chooses"": [""d_district""], ""slots"": 1,
+                        ""properties"": [{ ""name"": ""zone"", ""type"": ""string"", ""default"": ""quay"" }] }],
+                    ""hands"": [{ ""id"": ""h_elder"", ""gameId"": ""elder"", ""template"": ""t_npc"",
+                        ""chosen"": { ""d_district"": ""@hand.zone"" } }]
+                }, {
+                    ""id"": ""b_y"", ""gameId"": ""other"", ""ranking"": { ""specificity"": true },
+                    ""fields"": [], ""properties"": [],
+                    ""tagGroups"": [
+                        { ""id"": ""d_weather_y"", ""gameId"": ""weather"", ""tags"": [{ ""id"": ""v_rain_y"", ""gameId"": ""rain"" }] },
+                        { ""id"": ""d_zone_y"", ""gameId"": ""zone"", ""tags"": [{ ""id"": ""v_docks_y"", ""gameId"": ""docks"" }] }],
+                    ""decks"": [{ ""id"": ""k_ymain"", ""gameId"": ""ymain"", ""properties"": [], ""cards"": [
+                        { ""id"": ""c_y"", ""gameId"": ""y"", ""redraw"": ""always"", ""outcomes"": [] }] }],
+                    ""handTemplates"": [], ""hands"": []
+                }],
+                ""map"": { ""group"": { ""id"": ""d_district"", ""gameId"": ""district"", ""tags"": [
+                    { ""id"": ""v_quay"", ""gameId"": ""quay"", ""properties"": [
+                        { ""name"": ""danger"", ""type"": ""number"", ""default"": 0 },
+                        { ""name"": ""alarm"", ""type"": ""number"", ""default"": 0, ""shared"": true }] },
+                    { ""id"": ""v_hill"", ""gameId"": ""hill"", ""properties"": [
+                        { ""name"": ""danger"", ""type"": ""number"", ""default"": 0 },
+                        { ""name"": ""alarm"", ""type"": ""number"", ""default"": 0, ""shared"": true }] }] } }
             }";
+            const string geometry = @"{
+                ""zones"": [{ ""tag"": ""quay"", ""polygon"": [
+                    { ""x"": 0, ""y"": 0 }, { ""x"": 4, ""y"": 0 }, { ""x"": 4, ""y"": 3 }] }],
+                ""backgrounds"": [{ ""file"": ""assets/plan.png"",
+                    ""x"": 1, ""y"": 2, ""width"": 8, ""height"": 6, ""opacity"": 0.6 }],
+                ""sites"": { ""box"": [{ ""hand"": ""elder"", ""x"": 5, ""y"": 6 }] }
+            }";
+            bool Check(bool ok, string what)
+            {
+                if (!ok) Fail("describe", "maps", what);
+                return ok;
+            }
             try
             {
-                var bundle = BundleLoader.Parse(json);
-                if (bundle.Maps.Count != 1) { Fail("describe", "maps", "the map did not parse"); return 0; }
-                var map = bundle.Maps[0];
-                if (map.Box != "village" || map.Group != "zone") { Fail("describe", "maps", "box/group lost"); return 0; }
-                if (map.Zones.Count != 1 || map.Zones[0].Polygon.Count != 3) { Fail("describe", "maps", "the polygon lost points"); return 0; }
-                if (map.Zones[0].Polygon[2].X != 4 || map.Zones[0].Polygon[2].Y != 3) { Fail("describe", "maps", "a point moved"); return 0; }
-                if (map.Backgrounds.Count != 1 || map.Backgrounds[0].File != "assets/village/plan.png") { Fail("describe", "maps", "the picture lost its path"); return 0; }
-                if (map.Backgrounds[0].Opacity != 0.6) { Fail("describe", "maps", "opacity lost"); return 0; }
-                // The placed hands (design/engine-server.md 4.3): a position is
-                // content in a physical experience, so it travels in the block.
-                if (map.Sites.Count != 2) { Fail("describe", "maps", "the sites did not parse"); return 0; }
-                if (map.Sites[0].Hand != "the-forge" || map.Sites[0].X != 5 || map.Sites[0].Y != 6)
-                {
-                    Fail("describe", "maps", "a site moved");
-                    return 0;
-                }
+                // A bundle with no map reports none, and no box on one.
+                var plainJson = JObject.Parse(json);
+                plainJson.Remove("map");
+                ((JObject)plainJson["boxes"][0]).Remove("usesMap");
+                var plain = BundleLoader.Parse(plainJson);
+                plain.Boxes[0].HandTemplates.Clear();
+                plain.Boxes[0].Hands.Clear();
+                plain.Boxes[0].Decks[0].Cards.Clear();
+                var dPlain = BundleInspector.DescribeBundle(plain);
+                if (!Check(dPlain.Map == null && !dPlain.Boxes[0].UsesMap, "a bundle without a map reports one")) return 0;
 
+                var bundle = BundleLoader.Parse(json);
+                if (!Check(bundle.Map?.Group?.Id == "d_district" && bundle.Map.Geometry == null, "the map's group did not parse")) return 0;
+                if (!Check(bundle.Boxes[0].UsesMap && !bundle.Boxes[1].UsesMap, "usesMap did not parse")) return 0;
                 var d = BundleInspector.DescribeBundle(bundle);
-                if (d.Maps.Count != 1 || d.Maps[0].Zones != 1 || d.Maps[0].Backgrounds != 1 || d.Maps[0].Sites != 2)
-                {
-                    Fail("describe", "maps", "the description does not report the map");
-                    return 0;
-                }
-                // And a session over it still runs: inert means inert.
-                new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions()).OpenFlow("main");
+                // The opted-in box is marked, and its tagGroups are its OWN: the
+                // map's group is reported once, in the map summary.
+                if (!Check(d.Boxes[0].UsesMap && !d.Boxes[1].UsesMap, "the opted-in box is not marked")) return 0;
+                if (!Check(SameList(d.Boxes[0].TagGroups.Select(g => g.GameId).ToList(), new List<string> { "zone" }),
+                    "a box's tagGroups took in the map's group")) return 0;
+                // The scaffold's `zone` in each box, `weather` in the other, and
+                // the project group counted ONCE however many boxes use it.
+                if (!Check(d.Totals.TagGroups == 4, $"totals.tagGroups is {d.Totals.TagGroups}, not 4")) return 0;
+                var m = d.Map;
+                if (!Check(m != null && m.Group == "district" && SameList(m.Tags, new List<string> { "quay", "hill" })
+                    && SameList(m.Boxes, new List<string> { "box" }) && m.Zones == 0 && m.Backgrounds == 0 && m.Sites.Count == 0,
+                    "the map summary is wrong without geometry")) return 0;
+                // Each zone's properties once, as a tag scope with a group and no box.
+                var zones = d.Properties.Where(p => p.Group == "district").ToList();
+                if (!Check(zones.Count == 2 && zones[0].Scope == PropertyScopeKinds.Tag && zones[0].Owner == "quay"
+                    && zones[1].Owner == "hill" && zones.All(z => z.Box == null)
+                    && SameList(zones[0].Properties.Select(p => p.Name).ToList(), new List<string> { "danger", "alarm" }),
+                    "the zones' property scopes are wrong")) return 0;
+                // A movable hole naming the map's group is reported, not skipped.
+                var elder = d.Hands.Find(h => h.GameId == "elder");
+                if (!Check(elder != null && elder.Movable.Count == 1 && elder.Movable[0].Group == "district"
+                    && elder.Movable[0].From == "@hand.zone", "the hole naming the map's group was lost")) return 0;
+
+                // The static twin still matches the live examiner: one zone, one
+                // row each. Compared as sets of rows, because the examiner lists
+                // a scope's shared half apart from its per-flow half, and the
+                // zones declare one of each.
+                var session = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions()).OpenFlow("main");
+                var declared = d.Properties.SelectMany(sc => sc.Properties).Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+                var live = session.ListProperties().Select(r => r.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+                if (!Check(SameList(declared, live), $"declared properties {Show(declared)} disagree with ListProperties {Show(live)}")) return 0;
+                // The opted-in box names the map's group in peek criteria; the
+                // other box does not see it.
+                var criteria = new OrderedMap<string, string>();
+                criteria.Set("district", "quay");
+                if (!Check(SameList(Ids(session.Peek("box", criteria).Cards), new List<string> { "c_q" }), "peek on the map's group in the opted-in box")) return 0;
+                bool refused = false;
+                try { session.Peek("other", criteria); }
+                catch (StoryletError) { refused = true; }
+                if (!Check(refused, "a box not on the map named the map's group")) return 0;
+
+                // The geometry: parsed, counted, and IGNORED.
+                var withJson = JObject.Parse(json);
+                ((JObject)withJson["map"])["geometry"] = JObject.Parse(geometry);
+                var withGeometry = BundleLoader.Parse(withJson);
+                var g = withGeometry.Map.Geometry;
+                if (!Check(g != null && g.Zones.Count == 1 && g.Zones[0].Polygon.Count == 3
+                    && g.Zones[0].Polygon[2].X == 4 && g.Zones[0].Polygon[2].Y == 3, "the polygon did not survive the parse")) return 0;
+                if (!Check(g.Backgrounds.Count == 1 && g.Backgrounds[0].File == "assets/plan.png" && g.Backgrounds[0].Opacity == 0.6,
+                    "the picture did not survive the parse")) return 0;
+                // The placed hands (design/engine-server.md 4.3), per box: a
+                // position is content in a physical experience.
+                var sites = g.Sites.GetOrDefault("box");
+                if (!Check(g.Sites.Count == 1 && sites != null && sites.Count == 1 && sites[0].Hand == "elder"
+                    && sites[0].X == 5 && sites[0].Y == 6, "the sites did not survive the parse")) return 0;
+                var mg = BundleInspector.DescribeBundle(withGeometry).Map;
+                if (!Check(mg.Zones == 1 && mg.Backgrounds == 1 && mg.Sites.Count == 1 && mg.Sites.GetOrDefault("box") == 1,
+                    "the description does not count the geometry")) return 0;
+                // And a session over it still deals: inert means inert.
+                var withSession = new StoryletStudio.StoryletEngine.Engine(withGeometry, new EngineOptions()).OpenFlow("main");
+                if (!Check(SameList(Ids(withSession.Peek("box", criteria).Cards), new List<string> { "c_q" }), "the geometry changed a deal")) return 0;
                 return 1;
             }
             catch (Exception ex)
@@ -677,7 +815,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 var d = BundleInspector.DescribeBundle(bundle);
                 var session = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions()).OpenFlow("main");
 
-                if (d.Identity.Schema != Model.BUNDLE_SCHEMA)
+                if (d.Identity.Schema != bundle.Schema || !Model.BUNDLE_SCHEMAS.Contains(d.Identity.Schema))
                 {
                     Fail("describe", name, $"Identity.Schema is {d.Identity.Schema}");
                 }

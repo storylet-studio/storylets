@@ -28,7 +28,7 @@
 import { compileProject } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import type { Bundle, Expression } from "@storylet-studio/model";
-import { effectiveGameId } from "@storylet-studio/model";
+import { effectiveGameId, groupsOfBox } from "@storylet-studio/model";
 
 type AstNode = Expression["ast"];
 
@@ -144,7 +144,7 @@ export function deadStateIssues(source: SourceProject, compiled?: Bundle): Issue
     for (const hand of box.hands) {
       if (hand.rule?.condition) scan(hand.rule.condition.ast, `hand ${effectiveGameId(hand)}`, m, at);
     }
-    for (const group of box.tagGroups) {
+    for (const group of groupsOfBox(bundle, box)) {
       if (group.boundBy !== undefined) life(m, keyOf(group.boundBy, at)).reads.wheres.push(`tag group ${effectiveGameId(group)}`);
     }
     for (const deck of box.decks) {

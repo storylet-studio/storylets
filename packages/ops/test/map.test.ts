@@ -10,16 +10,20 @@
 //   - everything the old sidecar promised a site still holds: sparse, whole
 //     numbers, position and nothing else, no husks, and quiet when nothing moved
 //   - the bundle does not change, because the block it compiles from did not
+//   - the map's furniture is the PROJECT map's (design/project-map-contract.md
+//     1.1): one map, so one set of frames, in the root `map.storyletmap`
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
 import { parseSource } from "@storylet-studio/compiler";
-import type { SourceBox } from "@storylet-studio/compiler";
-import { MAP_SCHEMA, VIEW_SCHEMA } from "@storylet-studio/model";
-import type { MapShard, ViewPoint, ViewShard } from "@storylet-studio/model";
+import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
+import { MAP_SCHEMA, PROJECTMAP_SCHEMA, VIEW_SCHEMA } from "@storylet-studio/model";
+import type { MapShard, ProjectMapShard, TagGroup, ViewPoint, ViewShard } from "@storylet-studio/model";
 import type { PlannedWrite } from "../src/write.js";
 import { canvasFurniture, planCanvasFurniture } from "../src/view.js";
-import { mapPath, mapSites, planForgetSites, planMapMigration, planMapSites } from "../src/map.js";
+import {
+  mapPath, mapSites, planForgetSites, planMapMigration, planMapSites, projectMapPath,
+} from "../src/map.js";
 
 const box = (shards: { view?: ViewShard; map?: MapShard } = {}): SourceBox => ({
   path: "village",
@@ -58,6 +62,26 @@ const viewOf = (writes: PlannedWrite[]): ViewShard | undefined => {
   const write = writes.find((w) => w.path.endsWith(".storyletview"));
   return write ? parseSource(write.content) as ViewShard : undefined;
 };
+
+/** The project map shard a plan would land, parsed back. */
+const projectMapOf = (writes: PlannedWrite[]): ProjectMapShard => {
+  const write = writes.find((w) => w.path === projectMapPath("/p"));
+  return parseSource(write!.content) as ProjectMapShard;
+};
+
+/** The project round one box, with a map when given one. */
+const ZONES: TagGroup = {
+  id: "d_zone", gameId: "zone", templates: { spatial: { map: true } },
+  tags: [{ id: "t_docks", gameId: "docks" }],
+} as TagGroup;
+const project = (b: SourceBox, map?: ProjectMapShard): SourceProject => ({
+  path: "project.storyletproject",
+  boxes: [b],
+  ...(map ? { map } : {}),
+} as unknown as SourceProject);
+const zoned = (frames?: ProjectMapShard["frames"]): ProjectMapShard => ({
+  schema: PROJECTMAP_SCHEMA, group: ZONES, ...(frames ? { frames } : {}),
+});
 
 const placed = (sites: Record<string, ViewPoint>): MapShard => ({ schema: MAP_SCHEMA, map: { sites } });
 
@@ -120,31 +144,41 @@ describe("taking a hand off the map", () => {
 describe("the map's furniture", () => {
   const REGION = { id: "r_1", x: 10, y: 20, w: 100, h: 80, title: "Act two" };
 
-  it("goes to the map shard, and comes back from it", () => {
-    const writes = planCanvasFurniture("/p", box(), { kind: "map" }, { frames: [REGION] });
-    expect(writes.map((w) => w.path)).toEqual([mapPath("/p", box())]);
-    const shard = mapOf(writes);
-    expect(shard.map.frames).toEqual([REGION]);
-    expect(canvasFurniture(box({ map: shard }), { kind: "map" })).toEqual({ frames: [REGION] });
+  it("goes to the PROJECT map shard, and comes back from it", () => {
+    const b = box();
+    const writes = planCanvasFurniture("/p", b, { kind: "map" }, { frames: [REGION] }, project(b, zoned()));
+    expect(writes.map((w) => w.path)).toEqual([projectMapPath("/p")]);
+    const shard = projectMapOf(writes);
+    expect(shard.frames).toEqual([REGION]);
+    expect(canvasFurniture(b, { kind: "map" }, shard)).toEqual({ frames: [REGION] });
   });
 
-  it("leaves the sites beside it alone", () => {
-    const map = placed({ h_all: { x: 3, y: 4 } });
-    const shard = mapOf(planCanvasFurniture("/p", box({ map }), { kind: "map" }, { frames: [REGION] }));
-    expect(shard.map.sites).toEqual({ h_all: { x: 3, y: 4 } });
-    expect(shard.map.frames).toEqual([REGION]);
+  it("leaves the zone group beside it alone, and the box's sites untouched", () => {
+    const b = box({ map: placed({ h_all: { x: 3, y: 4 } }) });
+    const writes = planCanvasFurniture("/p", b, { kind: "map" }, { frames: [REGION] }, project(b, zoned()));
+    expect(writes.some((w) => w.path === mapPath("/p", b))).toBe(false);
+    const shard = projectMapOf(writes);
+    expect(shard.group).toEqual(ZONES);
+    expect(shard.frames).toEqual([REGION]);
   });
 
   it("writes nothing when nothing changed", () => {
-    const drawn = mapOf(planCanvasFurniture("/p", box(), { kind: "map" }, { frames: [REGION] }));
-    expect(planCanvasFurniture("/p", box({ map: drawn }), { kind: "map" }, { frames: [REGION] }))
+    const b = box();
+    const drawn = projectMapOf(planCanvasFurniture("/p", b, { kind: "map" }, { frames: [REGION] }, project(b, zoned())));
+    expect(planCanvasFurniture("/p", b, { kind: "map" }, { frames: [REGION] }, project(b, drawn)))
       .toEqual([]);
   });
 
   it("clearing the map leaves no husk", () => {
-    const drawn = mapOf(planCanvasFurniture("/p", box(), { kind: "map" }, { frames: [REGION] }));
-    const cleared = mapOf(planCanvasFurniture("/p", box({ map: drawn }), { kind: "map" }, { frames: [] }));
-    expect(cleared).toEqual({ schema: MAP_SCHEMA, map: {} });
+    const b = box();
+    const drawn = projectMapOf(planCanvasFurniture("/p", b, { kind: "map" }, { frames: [REGION] }, project(b, zoned())));
+    const cleared = projectMapOf(planCanvasFurniture("/p", b, { kind: "map" }, { frames: [] }, project(b, drawn)));
+    expect(cleared).toEqual({ schema: PROJECTMAP_SCHEMA, group: ZONES });
+  });
+
+  it("has nowhere to go in a project with no map", () => {
+    const b = box();
+    expect(planCanvasFurniture("/p", b, { kind: "map" }, { frames: [REGION] }, project(b))).toEqual([]);
   });
 });
 
@@ -180,11 +214,14 @@ describe("a map that still lives in the view shard", () => {
     expect(view.map).toBeUndefined();
   });
 
-  it("moves out when the map's furniture is drawn", () => {
-    const writes = planCanvasFurniture("/p", box({ view: legacy }), { kind: "map" },
-      { frames: [{ id: "r_1", x: 0, y: 0, w: 10, h: 10 }] });
-    expect(mapOf(writes).map.sites).toEqual({ h_all: { x: 5, y: 6 } });
-    expect(viewOf(writes)!.map).toBeUndefined();
+  it("stays put when the map's furniture is drawn, which is the project's business now", () => {
+    // Furniture lands in the project map shard and touches no box, so it is not
+    // the edit that moves a box's sites; the next site edit, or format, is.
+    const b = box({ view: legacy });
+    const writes = planCanvasFurniture("/p", b, { kind: "map" },
+      { frames: [{ id: "r_1", x: 0, y: 0, w: 10, h: 10 }] }, project(b, zoned()));
+    expect(writes.map((w) => w.path)).toEqual([projectMapPath("/p")]);
+    expect(viewOf(writes)).toBeUndefined();
   });
 
   it("migrates on its own, which is what `storyletengine format` runs", () => {

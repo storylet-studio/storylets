@@ -16,7 +16,7 @@ import { canonicalStringify, compileProject, contentAboveRung, playRungOf, proje
 import { writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { SHARD_EXTENSIONS, effectiveGameId, isSpatial, openThreadCounts, PLACE_GROUP } from "@storylet-studio/model";
 import type { Bundle, Card, CoverageDriver, HandTemplate, PlayRung, PropertyDecl } from "@storylet-studio/model";
-import type { SourceBox } from "@storylet-studio/compiler";
+import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
 import { boardScopes, gameScopesDto, worldFileLabel } from "./game-scopes.js";
 import type {
   BoardPatterDto, BoardScopesDto, BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectSettingsDto,
@@ -31,6 +31,24 @@ export interface ProjectSession {
   loaded: LoadedProject;
   dto: ProjectDto;
   history: History;
+}
+
+/**
+ * The box as its own pages and pickers see it: its own tag groups, then the
+ * PROJECT MAP's zone group when the box is on the map
+ * (design/project-map-contract.md 1.5: one namespace of group names in an
+ * opted-in box). A shallow copy with a widened `tags`, for READING: the zone
+ * group lives in the root map shard, so nothing may write this copy's `tags`
+ * back to the box's tags shard (mutate.ts `groupHome` is how a group is written).
+ *
+ * The minimal bridge until the editor learns the project map as a surface of
+ * its own (the layered map, the opt-in line on the box page): every existing
+ * page that lists a box's groups keeps working for a box on the map.
+ */
+export function boxWithMap(source: SourceProject | undefined, box: SourceBox): SourceBox {
+  const group = source?.map?.group;
+  if (group === undefined || box.box.box.usesMap !== true) return box;
+  return { ...box, tags: { ...box.tags, groups: [...box.tags.groups, group] } };
 }
 
 const chipValues = (
@@ -182,7 +200,7 @@ export function toDto(loaded: LoadedProject): ProjectDto {
     // itself travels with each card, as every property does).
     ...(() => { const g = gameScopesDto(loaded); return g !== undefined ? { gameScopes: g } : {}; })(),
     boxes: source.boxes
-      .map((box, i) => ({ box, o: box.box.box.order ?? i }))
+      .map((box, i) => ({ box: boxWithMap(source, box), o: box.box.box.order ?? i }))
       .sort((a, b) => a.o - b.o)
       .map(({ box }): BoxDto => ({
       id: box.box.box.id,
@@ -227,8 +245,9 @@ export function toDto(loaded: LoadedProject): ProjectDto {
         values: byDisplay(group.tags).map((v) => effectiveGameId(v)),
         // A map, so the box page offers its Map tab and the group's own page can
         // say so. The geometry itself stays out of the DTO: only the map asks for
-        // that, and it asks separately (boxMap).
-        ...(isSpatial(group) ? { spatial: true } : {}),
+        // that, and it asks separately (boxMap). The project map's group is a
+        // map whether or not it carries the marker.
+        ...(isSpatial(group) || group === source.map?.group ? { spatial: true } : {}),
       })),
       hands: byDisplay(box.hands.hands)
         .map((h) => ({

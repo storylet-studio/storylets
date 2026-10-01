@@ -5,6 +5,8 @@
 //   - geometry never blocks a release, because it never reaches a game
 //   - but a zone that will not draw has to SAY so, or an author hunts for why
 //   - core validates only what it knows; a template checks its own bags
+//   - the map is the PROJECT's (design/project-map-contract.md 1.1): outlines
+//     and pictures are checked on the root map shard's group, anchored at "map"
 //
 // Authoring-side, so it is pinned here rather than in the conformance corpus,
 // which is the cross-runtime contract (view.test.ts and influence.test.ts say
@@ -13,24 +15,30 @@
 
 import { describe, expect, it } from "vitest";
 import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
+import { PROJECTMAP_SCHEMA } from "@storylet-studio/model";
 import type { TagGroup } from "@storylet-studio/model";
 import { runValidate } from "../src/validate.js";
 import type { LoadedProject } from "../src/load.js";
 
 const SQUARE = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }];
 
-const box = (groups: TagGroup[]): SourceBox => ({
+/** One box; on the project map when there is one, since a map no box uses is
+ *  warned about in its own right and would only be noise here. */
+const box = (groups: TagGroup[], usesMap = false): SourceBox => ({
   path: "village",
   box: {
     schema: "storylets/box@0",
-    box: { id: "b_1", gameId: "village", ranking: { specificity: true }, fields: [], properties: [] },
+    box: {
+      id: "b_1", gameId: "village", ranking: { specificity: true }, fields: [], properties: [],
+      ...(usesMap ? { usesMap: true as const } : {}),
+    },
   },
   tags: { schema: "storylets/tags@0", groups },
   hands: { schema: "storylets/hands@0", templates: [], hands: [] },
   decks: [],
 });
 
-const project = (groups: TagGroup[]): SourceProject => ({
+const project = (groups: TagGroup[], map?: TagGroup): SourceProject => ({
   path: "p.storyletproj",
   project: {
     schema: "storylets/project@0",
@@ -41,19 +49,25 @@ const project = (groups: TagGroup[]): SourceProject => ({
     templates: {},
     export: { bundle: "d.storyletsc", metadata: "full" },
   },
-  boxes: [box(groups)],
+  boxes: [box(groups, map !== undefined)],
   contracts: [],
+  ...(map ? { map: { schema: PROJECTMAP_SCHEMA, group: map } } : {}),
 });
 
-/** Validate a project made of these tag groups, with the bundle gate off (there
- *  is no bundle on disk here; the studio editor runs it this way too). */
-const check = (groups: TagGroup[]): { ok: boolean; issues: { severity: string; where?: string; message: string }[] } => {
+type Checked = { ok: boolean; issues: { severity: string; path?: string; where?: string; message: string }[] };
+
+/** Validate a project made of these BOX tag groups, with the bundle gate off
+ *  (there is no bundle on disk here; the studio editor runs it this way too). */
+const check = (groups: TagGroup[], map?: TagGroup): Checked => {
   const loaded = {
-    dir: "/p", files: [], sidecars: [], issues: [], source: project(groups),
+    dir: "/p", files: [], sidecars: [], issues: [], source: project(groups, map),
   } as unknown as LoadedProject;
   const result = runValidate(loaded, { checkBundle: false });
   return { ok: result.ok, issues: result.issues };
 };
+
+/** Validate a project whose MAP is this group, and whose box has no groups. */
+const checkMap = (map: TagGroup): Checked => check([], map);
 
 const zone = (polygon: unknown): TagGroup => ({
   id: "d_zone", gameId: "zone",
@@ -63,7 +77,7 @@ const zone = (polygon: unknown): TagGroup => ({
 
 describe("a zone outline that will not draw", () => {
   it("says nothing about a good one", () => {
-    const { ok, issues } = check([zone(SQUARE)]);
+    const { ok, issues } = checkMap(zone(SQUARE));
     expect(ok).toBe(true);
     expect(issues).toEqual([]);
   });
@@ -71,27 +85,38 @@ describe("a zone outline that will not draw", () => {
   it("says nothing about a spatial group whose zones are simply undrawn", () => {
     // A group marked spatial before any zone is traced is the normal starting
     // state, not a problem to report.
-    const { issues } = check([{
+    const { issues } = checkMap({
       id: "d_zone", gameId: "zone", templates: { spatial: { map: true } },
       tags: [{ id: "v_docks", gameId: "docks" }],
-    }]);
+    });
     expect(issues).toEqual([]);
+  });
+
+  it("refuses a map inside a box, and names the command that moves it", () => {
+    // Not this template's check but the compiler's: one map per project, so a
+    // marked box group is a project from before the project map.
+    const { ok, issues } = check([zone(SQUARE)]);
+    expect(ok).toBe(false);
+    expect(issues.filter((i) => i.severity === "error").map((i) => i.message)).toEqual([
+      'tag group "zone" in box "village" is a map: a map belongs to the project now; run `storyletengine format` to move it',
+    ]);
   });
 
   it("warns, rather than errors, about a broken outline", () => {
     // The load-bearing half: geometry cannot break a game, so it cannot block a
     // release either. It still has to be said.
-    const { ok, issues } = check([zone("nonsense")]);
+    const { ok, issues } = checkMap(zone("nonsense"));
     expect(ok).toBe(true);
     expect(issues).toHaveLength(1);
     expect(issues[0]!.severity).toBe("warning");
+    expect(issues[0]!.path).toBe("map");
     expect(issues[0]!.where).toBe("zone.docks");
     expect(issues[0]!.message).toContain("not a list of {x, y} numbers");
   });
 
   it("counts the points when there are too few", () => {
     // Naming the number is the difference between "fix this" and "what is wrong?".
-    const { issues } = check([zone([{ x: 0, y: 0 }, { x: 5, y: 5 }])]);
+    const { issues } = checkMap(zone([{ x: 0, y: 0 }, { x: 5, y: 5 }]));
     expect(issues.map((i) => i.message)).toEqual(["zone outline needs at least 3 points, not 2"]);
   });
 
@@ -132,26 +157,26 @@ describe("a background that will not appear", () => {
   it("warns that a file is not there, naming it, and does not block a release", () => {
     // The case that will actually happen: assets are opt-in on a pack, so a
     // project can arrive with somebody's placement and none of their pictures.
-    const { ok, issues } = check([mapWith([{ id: "g_1", file: "site-plan.png", ...rect }])]);
+    const { ok, issues } = checkMap(mapWith([{ id: "g_1", file: "site-plan.png", ...rect }]));
     expect(ok).toBe(true);
     expect(issues).toHaveLength(1);
-    expect(issues[0]).toMatchObject({ severity: "warning", where: "zone" });
+    expect(issues[0]).toMatchObject({ severity: "warning", path: "map", where: "zone" });
     expect(issues[0]!.message).toContain("site-plan.png");
-    expect(issues[0]!.message).toContain("assets");
+    expect(issues[0]!.message).toContain("the project's assets folder");
   });
 
   it("warns about an entry missing what it needs, by position", () => {
-    const { ok, issues } = check([mapWith([{ id: "g_1", file: "no-size.png", x: 0, y: 0, width: 0, height: 10 }])]);
+    const { ok, issues } = checkMap(mapWith([{ id: "g_1", file: "no-size.png", x: 0, y: 0, width: 0, height: 10 }]));
     expect(ok).toBe(true);
     expect(issues[0]!.message).toContain("background 1");
     expect(issues[0]!.message).toContain("rectangle with size");
   });
 
   it("warns about two pictures sharing an id, since only one can win", () => {
-    const { issues } = check([mapWith([
+    const { issues } = checkMap(mapWith([
       { id: "g_1", file: "a.png", ...rect },
       { id: "g_1", file: "b.png", ...rect },
-    ])]);
+    ]));
     expect(issues.some((i) => i.message.includes('share the id "g_1"'))).toBe(true);
   });
 
@@ -159,7 +184,7 @@ describe("a background that will not appear", () => {
     // A shard field is untrusted input: a pack, a merge or a hand edit can put
     // anything here, and this is the message rather than a traversal.
     for (const file of ["../../../.ssh/id_rsa", "/etc/passwd", "sub/dir.png", ".hidden.png"]) {
-      const { ok, issues } = check([mapWith([{ id: "g_1", file, ...rect }])]);
+      const { ok, issues } = checkMap(mapWith([{ id: "g_1", file, ...rect }]));
       expect(ok).toBe(true);
       expect(issues.some((i) => i.message.includes("plain file name"))).toBe(true);
     }
@@ -176,7 +201,7 @@ describe("a background that will not appear", () => {
   });
 
   it("warns once when the list is not a list at all", () => {
-    const { issues } = check([mapWith("a string")]);
+    const { issues } = checkMap(mapWith("a string"));
     expect(issues).toHaveLength(1);
     expect(issues[0]!.message).toContain("not a list");
   });

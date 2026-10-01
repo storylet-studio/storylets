@@ -25,7 +25,8 @@ namespace StoryletStudio.StoryletEngine
     /// schema tag.</summary>
     public sealed class BundleIdentity
     {
-        /// <summary>The bundle schema tag ("storylets/bundle@0").</summary>
+        /// <summary>The bundle schema tag ("storylets/bundle@1", or "@0" from
+        /// before the project map).</summary>
         public string Schema;
         /// <summary>content.project - the project name a save must agree with.</summary>
         public string Project;
@@ -99,6 +100,11 @@ namespace StoryletStudio.StoryletEngine
         public string GameId;
         /// <summary>Null when the box has no title.</summary>
         public string Title;
+        /// <summary>The box is on the project map (design/project-map-contract.md
+        /// 3.7): it may name the map's group in peek criteria beside its own
+        /// TagGroups, which list the box's OWN groups only. False is "not on the
+        /// map".</summary>
+        public bool UsesMap;
         /// <summary>The only per-box ranking policy (Reboot 2.2).</summary>
         public bool RankingSpecificity;
         /// <summary>Set on a TIMED box (design/engine-server.md 4.8): how long one
@@ -146,12 +152,13 @@ namespace StoryletStudio.StoryletEngine
 
     /// <summary>One scope's declared properties. Owner is the owning entity's
     /// gameId (empty for world / story); Box names its box; Group names a tag's
-    /// group.</summary>
+    /// group. A zone of the project map is a tag scope with Group set and Box
+    /// null: it belongs to none.</summary>
     public sealed class PropertyScopeSummary
     {
         public string Scope;
         public string Owner = "";
-        /// <summary>Null for world / story.</summary>
+        /// <summary>Null for world / story, and for a project-map zone.</summary>
         public string Box;
         /// <summary>Null except on tag scopes.</summary>
         public string Group;
@@ -169,23 +176,32 @@ namespace StoryletStudio.StoryletEngine
         public int TagGroups;
     }
 
-    /// <summary>What a bundle offers a host, read from the asset alone.</summary>
-    /// <summary>One map the bundle was asked to carry. Counts rather than the
-    /// geometry: an inspector answers "what is in here", and a host that wants
-    /// the polygons reads Bundle.Maps directly.</summary>
+    /// <summary>The project map (design/project-map-contract.md 3.7): its
+    /// group, which boxes are on it, and how much geometry the bundle carries.
+    /// Counts rather than the geometry itself: an inspector answers "what is in
+    /// here", and a host that wants the polygons reads Bundle.Map.Geometry
+    /// directly. The geometry counts are zero when the build did not ask for
+    /// geometry (`export.map`); the group is there regardless, because hands and
+    /// cards reference it.</summary>
     public sealed class MapSummary
     {
-        /// <summary>The owning box, by gameId.</summary>
-        public string Box;
-        /// <summary>The tag group this is a map of, by gameId.</summary>
+        /// <summary>The zone group's gameId: the name an opted-in box's peek
+        /// criteria use.</summary>
         public string Group;
+        /// <summary>Its tags (the zones), by gameId.</summary>
+        public List<string> Tags = new List<string>();
+        /// <summary>The opted-in boxes, by gameId, in bundle order.</summary>
+        public List<string> Boxes = new List<string>();
+        /// <summary>Drawn zones in the carried geometry.</summary>
         public int Zones;
         public int Backgrounds;
-        /// <summary>Placed hands standing on this map: where the kiosks are
-        /// (design/engine-server.md 4.3).</summary>
-        public int Sites;
+        /// <summary>Box gameId -> placed hands standing on the map
+        /// (design/engine-server.md 4.3): where the kiosks are. Only boxes with
+        /// a site have a key.</summary>
+        public OrderedMap<string, int> Sites = new OrderedMap<string, int>();
     }
 
+    /// <summary>What a bundle offers a host, read from the asset alone.</summary>
     public sealed class BundleDescription
     {
         public BundleIdentity Identity = new BundleIdentity();
@@ -194,13 +210,13 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Every hand in the bundle, box by box: the Deal() surface.</summary>
         public List<HandSummary> Hands = new List<HandSummary>();
         /// <summary>world, story, then per box: the box, its decks, its hands,
-        /// its tags. Scopes that declare nothing are omitted (world and story
-        /// always show, so their absence reads as "this bundle declares
-        /// none").</summary>
+        /// its tags; then the project map's zones, once. Scopes that declare
+        /// nothing are omitted (world and story always show, so their absence
+        /// reads as "this bundle declares none").</summary>
         public List<PropertyScopeSummary> Properties = new List<PropertyScopeSummary>();
-        /// <summary>Maps carried as inert payload, when the build asked for
-        /// them. Empty is the normal state.</summary>
-        public List<MapSummary> Maps = new List<MapSummary>();
+        /// <summary>The project map, when the bundle has one. Null is the bundle
+        /// with no map at all.</summary>
+        public MapSummary Map;
     }
 
     /// <summary>The bundle inspector's runtime half: authoring-time inspection
@@ -233,23 +249,6 @@ namespace StoryletStudio.StoryletEngine
                 Scope = PropertyScopeKinds.Story,
                 Properties = Summarise(bundle.Story?.Properties),
             });
-            // Inert payload, and therefore worth saying out loud: a bundle that
-            // silently carried a map would fail the promise this API makes.
-            if (bundle.Maps != null)
-            {
-                foreach (var map in bundle.Maps)
-                {
-                    d.Maps.Add(new MapSummary
-                    {
-                        Box = map.Box,
-                        Group = map.Group,
-                        Zones = map.Zones != null ? map.Zones.Count : 0,
-                        Backgrounds = map.Backgrounds != null ? map.Backgrounds.Count : 0,
-                        Sites = map.Sites != null ? map.Sites.Count : 0,
-                    });
-                }
-            }
-
             foreach (var box in bundle.Boxes)
             {
                 string boxGameId = Model.EffectiveGameId(box);
@@ -270,6 +269,7 @@ namespace StoryletStudio.StoryletEngine
                 {
                     GameId = boxGameId,
                     Title = box.Title,
+                    UsesMap = box.UsesMap,
                     RankingSpecificity = box.Ranking != null && box.Ranking.Specificity,
                     TurnSeconds = box.Turn != null ? box.Turn.Seconds : (double?)null,
                     DurableCards = durableCards,
@@ -307,7 +307,7 @@ namespace StoryletStudio.StoryletEngine
                         Box = boxGameId,
                         Slots = HandSlots(hand, template),
                         Template = template != null ? Model.EffectiveGameId(template) : null,
-                        Movable = MovableHoles(hand, box),
+                        Movable = MovableHoles(bundle, hand, box),
                     });
                 }
 
@@ -333,6 +333,38 @@ namespace StoryletStudio.StoryletEngine
                             tag.Properties);
                     }
                 }
+            }
+
+            // The project map's zones, ONCE and after every box, whichever boxes
+            // use them: the same order the engine's value bags are built in. A
+            // tag scope with no box, because a zone belongs to none.
+            var map = bundle.Map;
+            if (map?.Group != null)
+            {
+                string group = Model.EffectiveGameId(map.Group);
+                foreach (var tag in map.Group.Tags)
+                {
+                    Push(d, PropertyScopeKinds.Tag, Model.EffectiveGameId(tag), null, group, tag.Properties);
+                }
+                d.Totals.TagGroups += 1;
+
+                var summary = new MapSummary { Group = group };
+                foreach (var tag in map.Group.Tags) summary.Tags.Add(Model.EffectiveGameId(tag));
+                foreach (var box in bundle.Boxes)
+                {
+                    if (box.UsesMap) summary.Boxes.Add(Model.EffectiveGameId(box));
+                }
+                var geometry = map.Geometry;
+                if (geometry != null)
+                {
+                    summary.Zones = geometry.Zones != null ? geometry.Zones.Count : 0;
+                    summary.Backgrounds = geometry.Backgrounds != null ? geometry.Backgrounds.Count : 0;
+                    if (geometry.Sites != null)
+                    {
+                        foreach (var pair in geometry.Sites) summary.Sites.Set(pair.Key, pair.Value != null ? pair.Value.Count : 0);
+                    }
+                }
+                d.Map = summary;
             }
             return d;
         }
@@ -392,9 +424,14 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>The hand's movable holes, in the bundle's own key order:
         /// every Chosen / rule-binding value that is a property reference
-        /// rather than a tag (4.6). A group id the bundle does not carry is
-        /// skipped: the description speaks gameIds throughout.</summary>
-        private static List<MovableHole> MovableHoles(Hand hand, Box box)
+        /// rather than a tag (4.6). The group is looked up where the engine
+        /// looks it up: the box's own groups and, for a box on the project map,
+        /// the map's group, so the roaming character whose hole names a zone is
+        /// reported rather than lost (design/project-map-contract.md 3.7). A
+        /// group id neither place holds is a bundle the engine refuses or cannot
+        /// bind, and is skipped rather than reported under its raw id: the
+        /// description speaks gameIds throughout.</summary>
+        private static List<MovableHole> MovableHoles(Bundle bundle, Hand hand, Box box)
         {
             var filled = !string.IsNullOrEmpty(hand.Template) ? hand.Chosen : hand.Rule?.Bindings;
             var holes = new List<MovableHole>();
@@ -402,7 +439,7 @@ namespace StoryletStudio.StoryletEngine
             foreach (var pair in filled)
             {
                 if (!Model.IsHoleRef(pair.Value)) continue;
-                var group = box.TagGroups.Find(g => g.Id == pair.Key);
+                var group = Model.GroupsOfBox(bundle, box).Find(g => g.Id == pair.Key);
                 if (group == null) continue;
                 holes.Add(new MovableHole { Group = Model.EffectiveGameId(group), From = pair.Value });
             }

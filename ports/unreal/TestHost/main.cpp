@@ -10,7 +10,8 @@
 //
 // Families: expressions (evaluator + dialect), specificity
 // (matched-constraint scorer), peek (bundle + one ask, asked twice), scripted
-// (deals, plays, turns, save/load). Plus the Live Link fixture
+// (deals, plays, turns, save/load), load (a bundle the engine must refuse at
+// construction). Plus the Live Link fixture
 // (packages/conformance/live-link/, beside the corpus): the frames the client
 // must send for a scripted session, replayed through Storylets/LiveLink.h
 // against a recording sink (LiveLinkFixture.h).
@@ -306,6 +307,47 @@ static int runPeek(const JsonValue& cases)
         {
             fail("peek", name, ex.what());
         }
+    }
+    return pass;
+}
+
+// -- load ---------------------------------------------------------------------------
+
+/** Construct the engine from the case's bundle: the construction must be
+ *  refused (a throw, this runtime's construction-refusal channel), and the
+ *  refusal must contain every expectRefused string
+ *  (design/project-map-contract.md 3.8; runner.ts runLoadCase). */
+static int runLoad(const JsonValue& cases)
+{
+    int pass = 0;
+    for (const auto& c : cases.arr)
+    {
+        std::string name = c.strOr("name");
+        std::optional<std::string> error;
+        try
+        {
+            BundlePtr bundle = ParseBundle(c.at("bundle"));
+            EngineOptions opts;
+            opts.seed = 0;
+            Engine engine(bundle, opts);
+        }
+        catch (const std::exception& ex)
+        {
+            error = ex.what();
+        }
+        if (!error.has_value())
+        {
+            fail("load", name, "expected the engine to refuse the bundle at construction, it was accepted");
+            continue;
+        }
+        bool ok = true;
+        for (const std::string& want : stringList(c.at("expectRefused")))
+        {
+            if (error->find(want) != std::string::npos) continue;
+            fail("load", name, "expected the refusal to name \"" + want + "\", got \"" + *error + "\"");
+            ok = false;
+        }
+        if (ok) ++pass;
     }
     return pass;
 }
@@ -1292,7 +1334,7 @@ static int runDescribe(const JsonValue& cases)
         Engine engine(bundle, EngineOptions{});
         Flow& session = *engine.openFlow("main");
 
-        if (d.identity.schema != BUNDLE_SCHEMA)
+        if (d.identity.schema != bundle->schema || !IsSupportedBundleSchema(d.identity.schema))
         {
             fail("describe", name, "identity.schema is " + d.identity.schema);
         }
@@ -1343,71 +1385,160 @@ static int runDescribe(const JsonValue& cases)
     }
 }
 
-// -- a bundle that carries a map ------------------------------------------------------
+// -- a bundle with the project map ---------------------------------------------------
 //
-// Parsed, reported, and above all IGNORED. The corpus has no map in it (geometry
-// is inert payload, so it has no dealing behaviour to conform to), which would
-// otherwise leave the whole path compiled and never executed - so the map
-// arrives here instead.
+// describeBundle is session-less, so each runtime pins its project map summary
+// in its own describe tests (design/project-map-contract.md 3.7); this is the
+// C++ twin of packages/runtime/test/describe-bundle.test.ts. The geometry is
+// inert payload the corpus cannot observe, which would otherwise leave its
+// parse path compiled and never executed, so it arrives here too.
 
 static int runDescribeMaps()
 {
+    // The conformance PROJECT SCAFFOLD: group "district", zones "quay" and
+    // "hill", each declaring `danger` (per flow) and `alarm` (shared). Box
+    // "box" is on the map (its own group "zone" beside it, and a hand whose
+    // hole names the district); box "other" is not.
     static const char* json = R"({
-        "schema": "storylets/bundle@0",
+        "schema": "storylets/bundle@1",
         "content": { "project": "p", "version": "1", "hash": "" },
         "metadata": "full",
         "settings": { "playAdvancesTurns": 1 },
         "world": { "properties": [] },
         "story": { "properties": [] },
-        "boxes": [],
-        "maps": [{
-            "box": "village", "group": "zone",
-            "zones": [{ "tag": "tavern", "polygon": [
-                { "x": 0, "y": 0 }, { "x": 4, "y": 0 }, { "x": 4, "y": 3 }] }],
-            "backgrounds": [{ "file": "assets/village/plan.png",
-                "x": 1, "y": 2, "width": 8, "height": 6, "opacity": 0.6 }],
-            "sites": [{ "hand": "the-forge", "x": 5, "y": 6 },
-                { "hand": "the-well", "x": 7, "y": 8 }]
-        }]
+        "boxes": [
+            { "id": "b_x", "gameId": "box", "usesMap": true, "ranking": { "specificity": true },
+              "fields": [], "properties": [],
+              "tagGroups": [{ "id": "d_zone", "gameId": "zone", "tags": [{ "id": "v_docks", "gameId": "docks" }] }],
+              "decks": [{ "id": "k_x", "gameId": "main", "properties": [], "cards": [
+                  { "id": "c_q", "gameId": "q", "priority": 0, "redraw": "always", "tags": { "d_district": ["v_quay"] }, "outcomes": [] }] }],
+              "handTemplates": [{ "id": "t_npc", "gameId": "npc", "chooses": ["d_district"], "slots": 1,
+                  "properties": [{ "name": "zone", "type": "string", "default": "quay" }] }],
+              "hands": [{ "id": "h_elder", "gameId": "elder", "template": "t_npc", "chosen": { "d_district": "@hand.zone" } }] },
+            { "id": "b_y", "gameId": "other", "ranking": { "specificity": true },
+              "fields": [], "properties": [],
+              "tagGroups": [{ "id": "d_weather", "gameId": "weather", "tags": [{ "id": "v_rain", "gameId": "rain" }] }],
+              "decks": [{ "id": "k_y", "gameId": "main_y", "properties": [], "cards": [
+                  { "id": "c_y", "gameId": "y", "priority": 0, "redraw": "always", "outcomes": [] }] }],
+              "handTemplates": [], "hands": [] }
+        ],
+        "map": {
+            "group": { "id": "d_district", "gameId": "district", "tags": [
+                { "id": "v_quay", "gameId": "quay", "properties": [
+                    { "name": "danger", "type": "number", "default": 0 },
+                    { "name": "alarm", "type": "number", "default": 0, "shared": true }] },
+                { "id": "v_hill", "gameId": "hill", "properties": [
+                    { "name": "danger", "type": "number", "default": 0 },
+                    { "name": "alarm", "type": "number", "default": 0, "shared": true }] }] },
+            "geometry": {
+                "zones": [{ "tag": "quay", "polygon": [
+                    { "x": 0, "y": 0 }, { "x": 4, "y": 0 }, { "x": 4, "y": 3 }] }],
+                "backgrounds": [{ "file": "assets/plan.png",
+                    "x": 1, "y": 2, "width": 8, "height": 6, "opacity": 0.6 }],
+                "sites": { "box": [{ "hand": "elder", "x": 5, "y": 6 }] }
+            }
+        }
     })";
+    auto bad = [](const std::string& detail) { fail("describe", "project map", detail); return 0; };
     try
     {
         JsonParser parser{ std::string(json) };
         JsonValue root = parser.parse();
         BundlePtr bundle = ParseBundle(root);
 
-        if (bundle->maps.size() != 1) { fail("describe", "maps", "the map did not parse"); return 0; }
-        const BundleMap& map = bundle->maps.front();
-        if (map.box != "village" || map.group != "zone") { fail("describe", "maps", "box/group lost"); return 0; }
-        if (map.zones.size() != 1 || map.zones[0].polygon.size() != 3) { fail("describe", "maps", "the polygon lost points"); return 0; }
-        if (map.zones[0].polygon[2].x != 4 || map.zones[0].polygon[2].y != 3) { fail("describe", "maps", "a point moved"); return 0; }
-        if (map.backgrounds.size() != 1 || map.backgrounds[0].file != "assets/village/plan.png") { fail("describe", "maps", "the picture lost its path"); return 0; }
-        if (map.backgrounds[0].opacity != 0.6) { fail("describe", "maps", "opacity lost"); return 0; }
-        // The placed hands (design/engine-server.md 4.3): a position is content
-        // in a physical experience, so it travels in the block like the rest.
-        if (map.sites.size() != 2) { fail("describe", "maps", "the sites did not parse"); return 0; }
-        if (map.sites[0].hand != "the-forge" || map.sites[0].x != 5 || map.sites[0].y != 6)
-        {
-            fail("describe", "maps", "a site moved");
-            return 0;
-        }
+        if (!bundle->map.has_value()) return bad("the map did not parse");
+        const ProjectMap& map = *bundle->map;
+        if (map.group.id != "d_district" || map.group.tags.size() != 2) return bad("the zone group lost its tags");
+        if (!bundle->boxes[0].usesMap || bundle->boxes[1].usesMap) return bad("usesMap lost");
+        if (!map.geometry.has_value()) return bad("the geometry did not parse");
+        const MapGeometry& g = *map.geometry;
+        if (g.zones.size() != 1 || g.zones[0].polygon.size() != 3) return bad("the polygon lost points");
+        if (g.zones[0].polygon[2].x != 4 || g.zones[0].polygon[2].y != 3) return bad("a point moved");
+        if (g.backgrounds.size() != 1 || g.backgrounds[0].file != "assets/plan.png") return bad("the picture lost its path");
+        if (g.backgrounds[0].opacity != 0.6) return bad("opacity lost");
+        // The placed hands (design/engine-server.md 4.3), keyed by box: sites
+        // stay per box, because a hand belongs to one box.
+        const std::vector<MapSite>* sites = g.sites.get("box");
+        if (g.sites.size() != 1 || !sites || sites->size() != 1) return bad("the sites did not parse");
+        if ((*sites)[0].hand != "elder" || (*sites)[0].x != 5 || (*sites)[0].y != 6) return bad("a site moved");
 
         BundleDescription d = describeBundle(*bundle);
-        if (d.maps.size() != 1 || d.maps[0].zones != 1 || d.maps[0].backgrounds != 1 || d.maps[0].sites != 2)
+        if (!d.boxes[0].usesMap || d.boxes[1].usesMap) return bad("the description does not mark the opted-in box");
+        // A box's tagGroups are its OWN: the map's group is reported once, below.
+        if (d.boxes[0].tagGroups.size() != 1 || d.boxes[0].tagGroups[0].gameId != "zone")
         {
-            fail("describe", "maps", "the description does not report the map");
-            return 0;
+            return bad("the box's own groups took in the map's");
         }
-        // And a session over it still runs: inert means inert.
+        // zone, weather, and the project group counted ONCE.
+        if (d.totals.tagGroups != 3) return bad("totals.tagGroups is " + std::to_string(d.totals.tagGroups) + ", expected 3");
+        if (!d.map.has_value()) return bad("the description does not report the map");
+        const MapSummary& m = *d.map;
+        if (m.group != "district" || show(m.tags) != show({ "quay", "hill" }) || show(m.boxes) != show({ "box" }))
+        {
+            return bad("the map summary names the wrong group, zones or boxes");
+        }
+        const int* boxSites = m.sites.get("box");
+        if (m.zones != 1 || m.backgrounds != 1 || m.sites.size() != 1 || !boxSites || *boxSites != 1)
+        {
+            return bad("the map summary miscounts the geometry");
+        }
+        // Each zone's properties once, as a tag scope with a group and NO box.
+        std::vector<std::string> zoneScopes;
+        for (const PropertyScopeSummary& scope : d.properties)
+        {
+            if (scope.group != "district") continue;
+            zoneScopes.push_back(scope.scope + ":" + scope.owner + ":" + scope.box);
+            if (scope.properties.size() != 2 || scope.properties[0].name != "danger" || scope.properties[1].name != "alarm")
+            {
+                return bad("a zone's declarations are wrong");
+            }
+        }
+        if (show(zoneScopes) != show({ "tag:quay:", "tag:hill:" })) return bad("zone scopes are " + show(zoneScopes));
+        // A movable hole that names the map's group is reported, not skipped.
+        const HandSummary* elder = nullptr;
+        for (const HandSummary& h : d.hands) if (h.gameId == "elder") elder = &h;
+        if (!elder || elder->movable.size() != 1 || elder->movable[0].group != "district"
+            || elder->movable[0].from != "@hand.zone")
+        {
+            return bad("the elder's movable hole on the map's group was lost");
+        }
+
+        // And a session over it runs, its declared surface is the live one (as
+        // a set of names: listProperties puts an owner's shared declarations
+        // before its per-flow ones, and the scaffold zone has one of each), and
+        // the opted-in box's peek takes the map's name.
         Engine engine(bundle, EngineOptions{});
         Flow& session = *engine.openFlow("main");
-        (void)session;
+        std::vector<std::string> declared;
+        for (const PropertyScopeSummary& scope : d.properties)
+        {
+            for (const PropertySummary& p : scope.properties) declared.push_back(p.name);
+        }
+        std::vector<std::string> live;
+        for (const PropertyRow& row : session.listProperties()) live.push_back(row.name);
+        if (showSorted(declared) != showSorted(live))
+        {
+            return bad("declared properties " + show(declared) + " disagree with listProperties " + show(live));
+        }
+        OrderedMap<std::string, std::string> criteria;
+        criteria.set("district", "quay");
+        if (ids(session.peek("box", criteria, std::nullopt).cards) != std::vector<std::string>{ "c_q" })
+        {
+            return bad("the opted-in box's peek on the map's group lost its card");
+        }
+
+        // No map: none reported, no box marked.
+        static const char* plain = R"({ "schema": "storylets/bundle@0", "boxes": [
+            { "id": "b_x", "gameId": "box", "tagGroups": [], "decks": [], "handTemplates": [], "hands": [] }] })";
+        JsonParser plainParser{ std::string(plain) };
+        JsonValue plainRoot = plainParser.parse();
+        BundleDescription none = describeBundle(*ParseBundle(plainRoot));
+        if (none.map.has_value() || none.boxes[0].usesMap) return bad("a bundle without a map reports one");
         return 1;
     }
     catch (const std::exception& ex)
     {
-        fail("describe", "maps", ex.what());
-        return 0;
+        return bad(ex.what());
     }
 }
 
@@ -1542,11 +1673,16 @@ int main(int argc, char** argv)
         const JsonValue& specificity = root.at("specificity");
         const JsonValue& peek = root.at("peek");
         const JsonValue& scripted = root.at("scripted");
+        // Corpus version 10 adds the `load` kind; absent on an older corpus.
+        static const JsonValue noCases = [] { JsonValue v; v.type = JsonValue::Array; return v; }();
+        const JsonValue* loadCases = root.find("load");
+        const JsonValue& load = loadCases && loadCases->isArray() ? *loadCases : noCases;
 
         int e = runExpressions(expressions);
         int sp = runSpecificity(specificity);
         int p = runPeek(peek);
         int s = runScripted(scripted);
+        int l = runLoad(load);
         int d = runDescribe(peek);
         int m = runDescribeMaps();
         int sv = runSave(peek);
@@ -1558,11 +1694,12 @@ int main(int argc, char** argv)
         for (const std::string& f : kernelErrors.failures) fail("kernel-errors", "engine", f);
 
         std::cout << "corpus version " << version << "\n";
-        std::cout << "describeBundle checks: " << d << "/1  maps: " << m << "/1  save round trip: " << sv << "/1\n";
+        std::cout << "describeBundle checks: " << d << "/1  project map: " << m << "/1  save round trip: " << sv << "/1\n";
         std::cout << "expressions: " << e << "/" << expressions.arr.size()
             << "  specificity: " << sp << "/" << specificity.arr.size()
             << "  peek: " << p << "/" << peek.arr.size()
-            << "  scripted: " << s << "/" << scripted.arr.size() << "\n";
+            << "  scripted: " << s << "/" << scripted.arr.size()
+            << "  load: " << l << "/" << load.arr.size() << "\n";
         std::cout << "live-link fixture: " << live << "/" << liveTotal << " frames\n";
         std::cout << "one registry per game: " << oneRegistry.passed << "/" << oneRegistry.total << "\n";
         std::cout << "kernel errors reach the game as the engine's own: " << kernelErrors.passed << "/" << kernelErrors.total << "\n";

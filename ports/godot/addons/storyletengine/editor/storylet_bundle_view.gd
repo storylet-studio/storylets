@@ -78,16 +78,24 @@ func _render(res: Resource) -> void:
 		for p in scope["properties"]:
 			_add_row("    " + StoryletBundleInspector.property_label(p))
 
-	# Only when there are some: an empty section on every ordinary bundle would
-	# teach the reader to skip the one that only matters when it is not empty.
-	if not (d.get("maps", []) as Array).is_empty():
-		_add_section("Maps (carried, not read)")
-		_add_row("Geometry the build was asked to carry. The engine ignores it.", true)
-		for map in d["maps"]:
-			_add_row("%s - %s: zones %d, pictures %d, sites %d" % [
-				str(map["box"]), str(map["group"]), int(map["zones"]), int(map["backgrounds"]),
-				int(map["sites"]),
-			])
+	# The project map: which boxes are on it, and any geometry carried. Only
+	# when there IS one: an empty section on every ordinary bundle would teach
+	# the reader to skip the one that only matters when it is not empty. The
+	# zones themselves are already under Properties; this says where they live
+	# and what the build carried besides, since the geometry is inert and would
+	# otherwise go unmentioned.
+	if d.has("map"):
+		var map: Dictionary = d["map"]
+		_add_section("Project map")
+		_add_row("%s: %s" % [str(map["group"]), ", ".join(map["tags"])])
+		var on_map: Array = map["boxes"]
+		_add_row("boxes on the map: %s" % (", ".join(on_map) if not on_map.is_empty() else "none"))
+		var sites: Array = []
+		for box_game_id in map["sites"]:
+			sites.append("%s %d" % [str(box_game_id), int(map["sites"][box_game_id])])
+		_add_row("geometry carried (the engine ignores it): zones %d, pictures %d, sites %s" % [
+			int(map["zones"]), int(map["backgrounds"]), ", ".join(sites) if not sites.is_empty() else "0",
+		], true)
 
 	# Per-box counts: orientation, not inventory.
 	_add_section("Counts by box")
