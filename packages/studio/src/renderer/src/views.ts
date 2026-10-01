@@ -19,6 +19,11 @@ import { previewCondition } from "./expr-panels.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { currentDocTab, docTabs, documentHeading, setDocTab } from "./inspector.js";
 import { problemText } from "./problem-copy.js";
+import { placeGroupsOf } from "./where.js";
+import { mapGlyph } from "./map-glyphs.js";
+import { boxColour, boxPin } from "./box-tint.js";
+import { alsoUnder, boxEntries, groupEntries, groupOptions, resolveGroup } from "./card-groups.js";
+import type { CardGroup, GroupEntry, GroupKey, GroupOption, GroupPage } from "./card-groups.js";
 import type { ProblemNames } from "./problem-copy.js";
 import type { BoxDto, BoxEdit, CardDto, ConditionProperty, DeckDto, Problem, ProjectDto, ReviewItemDto, ViewMode } from "../../shared/api.js";
 
@@ -29,6 +34,8 @@ import type { BoxDto, BoxEdit, CardDto, ConditionProperty, DeckDto, Problem, Pro
 export type Focus =
   | { kind: "project"; box?: undefined }
   | { kind: "story"; box?: undefined }
+  /** The project map's page: the project's, so it names no box. */
+  | { kind: "map"; box?: undefined }
   | { kind: "box"; box: string }
   | { kind: "decks"; box: string }
   | { kind: "deck"; box: string; deck: string }
@@ -49,6 +56,8 @@ export interface ViewActions {
   inspectTemplate(box: string, template: string): void;
   inspectTagGroup(box: string, group: string): void;
   inspectHand(box: string, hand: string): void;
+  /** Open a hand on its Cards tab: the ways in that are about the place. */
+  openHand(box: string, hand: string): void;
   saveDeck(deckId: string, edit: { title?: string; gameId?: string; purpose?: string }): void;
   saveBox(boxId: string, edit: BoxEdit): void;
   newCard(box: string, deck: string): void;
@@ -83,8 +92,21 @@ export interface ViewActions {
   /** Fill a node-view container: fetch the deck's links, then mount the canvas.
    *  Owned by the renderer because views.ts never touches IPC. */
   mountNodeView(host: HTMLElement, deck: DeckDto): void;
-  /** Fill the box's Map tab: fetch the zones and pins, then mount the canvas. */
-  mountMapView(host: HTMLElement, box: BoxDto): void;
+  /** Fill an opted-in box's Map tab: its own sites on the project map. */
+  mountBoxSites(host: HTMLElement, box: BoxDto): void;
+  /** The project map's page, optionally with one site or zone selected. */
+  openMap(select?: string): void;
+  /** Put a box on the project map, or take it off (refused, with a sentence,
+   *  while its hands or cards still reference a zone). */
+  useProjectMap(box: string, on: boolean): void;
+  /** What this box's cards are grouped by on a page, as this person last chose
+   *  (app state, never the project); undefined when they never have. */
+  cardGroup(box: string, page: GroupPage): GroupKey | undefined;
+  /** Choose it, remember it, and redraw. */
+  setCardGroup(box: string, page: GroupPage, key: GroupKey): void;
+  /** A deck's condition catalogue for a page showing several decks' cards (a
+   *  box's Contents): what it has now, fetched and redrawn when it has none. */
+  deckCatalogue(box: string, deck: string): ConditionProperty[];
   moveCard(box: string, deck: string, card: string, target: string, before: boolean): void;
   moveBox(box: string, target: string, before: boolean): void;
   moveDeck(box: string, deck: string, target: string, before: boolean): void;
@@ -268,6 +290,15 @@ export function chipDot(name: string): HTMLElement {
   return dot;
 }
 export const chip = (name: string): HTMLElement => el("span", { className: "pill" }, chipDot(name), name);
+/** A box as a pill, tinted the way its sites are on the map. */
+export function boxChip(b: Pick<BoxDto, "id" | "gameId" | "title">): HTMLElement {
+  const c = chip(b.title ?? b.gameId);
+  const dot = c.querySelector("i");
+  if (dot) dot.style.background = boxColour(b.id);
+  return c;
+}
+/** Colour an element (a glyph drawn in currentColor) and hand it back. */
+const tinted = (node: HTMLElement, colour: string): HTMLElement => { node.style.color = colour; return node; };
 
 // --- navigator ----------------------------------------------------------------
 
@@ -314,6 +345,9 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
     /** A first-contact rollover. The audit's sharpest orientation finding:
      *  every wrong belief it formed, it formed HERE, where nothing taught. */
     tip?: string;
+    /** A small glyph: before the label (`lead`), or after it (`mark`). */
+    lead?: HTMLElement;
+    mark?: HTMLElement;
   }): HTMLElement => {
     const b = el("button", { className: `nav-row nav-d${opts.depth}${opts.sel ? " sel" : ""}${opts.path ? " on-path" : ""}${opts.cls ? ` ${opts.cls}` : ""}`, onClick: opts.onClick, ...(opts.tip !== undefined ? { tip: opts.tip } : {}) });
     if (opts.vc) b.dataset["vc"] = opts.vc;
@@ -325,7 +359,9 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
     } else {
       b.append(el("span", { className: "nav-chev-space" }));
     }
+    if (opts.lead) b.append(opts.lead);
     b.append(el("span", { className: "nav-label", text: opts.label }));
+    if (opts.mark) b.append(opts.mark);
     if (opts.count !== undefined) b.append(el("span", { className: "nav-n", text: String(opts.count) }));
     return b;
   };
@@ -349,11 +385,33 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
     onClick: () => actions.focus({ kind: "story" }),
   }));
 
+  // The PROJECT MAP, one row at project level between Story and the boxes,
+  // present only when the project has a map. An amendment to structure rule 8
+  // (design/studio-editing-structure.md), ruled in the surfacing review
+  // (design/surfacing-review-2026-10/README.md, "Direction: back to basics",
+  // plan item 2): the map is above the boxes, so it gets a row of its own; it
+  // stays a SINGLE row, a page like Story's, never a tree of zones or sites,
+  // which live on the map's own side panel.
+  if (project.map !== undefined) {
+    host.append(row({
+      depth: 0, label: "Map", cls: "nav-maprow",
+      lead: mapGlyph("map", 13, "map-glyph nav-glyph"),
+      tip: "The project map: zones drawn once, and every box that uses it a layer of its own sites.",
+      count: project.map.zones,
+      sel: focus?.kind === "map",
+      onClick: () => actions.focus({ kind: "map" }),
+    }));
+  }
+
   for (const box of project.boxes) {
     const inBox = focus?.box === box.id;
     const boxNode = navId.box(box.id);
     const boxRow = row({
       depth: 0, label: box.title ?? box.gameId, node: boxNode, cls: "nav-boxrow", vc: vcKeys.box(box.id),
+      // A small map glyph on a box that uses the map: which boxes are on it,
+      // readable from the tree without opening anything. In the box's colour,
+      // so the tree says which layer on the map is this box's.
+      ...(box.usesMap === true ? { mark: tinted(mapGlyph("map", 12, "map-glyph nav-mark"), boxColour(box.id)) } : {}),
       tip: "A box is a self-contained set of decks, hands, and tags.",
       sel: inBox && focus.kind === "box",
       path: inBox && focus.kind !== "box",
@@ -496,7 +554,12 @@ function wireCardGestures(el: HTMLElement, cardId: string, gestures: CardGesture
 
 // --- centre: deck of cards ----------------------------------------------------
 
-function cardFace(card: CardDto, catalogue: ConditionProperty[], selected: boolean, gestures: CardGestures, onContext: (e: MouseEvent) => void): HTMLElement {
+/** What a grouped view adds to a face: the other headings it is also under,
+ *  the deck it lives in (a box's Contents mixes decks), and whether it can be
+ *  dragged (only an ungrouped deck, whose order IS the deck's). */
+interface FaceExtras { also?: string[]; deck?: string; drag?: boolean }
+
+function cardFace(card: CardDto, catalogue: ConditionProperty[], selected: boolean, gestures: CardGestures, onContext: (e: MouseEvent) => void, extras: FaceExtras = {}): HTMLElement {
   // Title, then the eligibility condition (when this card fires), then the
   // beat. The ranking machinery is recessive (in the inspector). The condition
   // is a restrained, Patterpad-style "if" preview - a quiet prefix with
@@ -519,16 +582,20 @@ function cardFace(card: CardDto, catalogue: ConditionProperty[], selected: boole
   face.append(card.purpose
     ? el("p", { className: "beat", text: card.purpose })
     : el("p", { className: "beat muted", text: "No purpose yet." }));
+  if (extras.also !== undefined && extras.also.length > 0) {
+    face.append(el("p", { className: "card-also", text: `also under ${extras.also.join(", ")}` }));
+  }
   // No outcome indicator here. Pips were tried and removed in July (b2ce77b);
   // a plain numeral was tried and removed on 2026-08-04, on both this face and
   // the node canvas, for the same reason: a number in a corner with nothing to
   // anchor it says nothing. The card page shows the outcomes themselves.
-  if (card.tags.length > 0) {
+  if (card.tags.length > 0 || extras.deck !== undefined) {
     const chips = el("div", { className: "chips" });
+    if (extras.deck !== undefined) chips.append(chip(extras.deck));
     for (const m of card.tags) for (const v of m.values) chips.append(chip(v));
     face.append(chips);
   }
-  face.append(openChip(card.id, gestures), grip());
+  face.append(openChip(card.id, gestures), ...(extras.drag === false ? [] : [grip()]));
   return face;
 }
 
@@ -578,27 +645,38 @@ export function renderDeckCentre(
   ], tab, (next) => { setDocTab(tabKey, next); actions.focus({ kind: "deck", box: box.id, deck: deck.id }); });
 
   let body: HTMLElement;
+  let bar: HTMLElement | null = null;
   if (tab === "cards") {
     const move = (from: string, to: string, before: boolean): void => actions.moveCard(box.id, deck.id, from, to, before);
     const gestures: CardGestures = {
       select: (card, how) => actions.selectCard(card, how),
       open: (card) => actions.inspectCard(box.id, deck.id, card),
     };
+    // Group by, on the grid and the table alike; the canvas lays cards out by
+    // their links, and a heading has nowhere to go there. Offered only when
+    // there is something to group by: a box with no tags and no places keeps
+    // the deck page exactly as it was.
+    const options = groupOptions(box, "deck");
+    const by = resolveGroup(box, "deck", actions.cardGroup(box.id, "deck"));
+    if (mode !== "node" && options.length > 1) bar = groupBar(options, by, (key) => actions.setCardGroup(box.id, "deck", key));
+    const groups = groupEntries(box, deck.cards.map((card) => ({ card, deck })), by);
+    // Only the ungrouped deck reorders: its order IS the deck's, and a drop
+    // between two headings would say something the deck does not.
+    const drag = by === "none";
+    const newCard = (): void => actions.newCard(box.id, deck.id);
     body = mode === "node"
       // The canvas needs the deck's links, which only main can work out, so the
       // container is handed over and filled when they arrive.
       ? nodeHost(deck, actions)
       : mode === "table"
-      ? deckTable(box, deck, catalogue, selectedCards, gestures, move, actions)
-      : el("div", { className: "cards" },
-          ...deck.cards.map((c) => {
-            const face = cardFace(c, catalogue, selectedCards.has(c.id),
-              gestures, cardMenu(box.id, deck.id, c.id, actions));
-            wireDrop(face, c.id, "x", move);
-            return face;
-          }),
-          el("button", { className: "scard ghost", text: "+ New card", onClick: () => actions.newCard(box.id, deck.id) }),
-        );
+      ? deckTable(box, deck, catalogue, selectedCards, gestures, drag ? move : undefined, actions, groups)
+      : el("div", { className: "gb-body" }, ...groupedCards(box, groups, {
+          page: "deck", catalogue: () => catalogue, selectedCards, actions,
+          gestures: () => gestures,
+          menu: (e) => cardMenu(box.id, deck.id, e.card.id, actions),
+          ...(drag ? { move } : {}),
+          ghost: () => el("button", { className: "scard ghost", text: "+ New card", onClick: newCard }),
+        }));
   } else {
     body = el("div", { className: "centre-editor" });
     tabBody(body, tab);
@@ -607,8 +685,117 @@ export function renderDeckCentre(
   // grid and its map are surfaces to fill, and a canvas stopping short of its own
   // pane would read as a bug rather than as typography.
   host.classList.toggle("measured", body.classList.contains("centre-editor"));
-  host.replaceChildren(trail, heading, tabs, body);
+  host.replaceChildren(trail, heading, tabs, ...(bar ? [bar] : []), body);
   playSettle(host);
+  refocusGroupBar(host);
+}
+
+// --- Group by (the surfacing review's plan item 3) ----------------------------
+//
+// One segmented control above a card view, in the shape Patterpad's Coverage
+// gives its one ordering control (a `.seg` of `.seg-opt` tabs, left-aligned
+// above the list it orders; Storyletter's Coverage copies it). One departure,
+// argued: a "Group by" label in front. Coverage's options are sentences that
+// say what they do ("Least reached first"); these are bare names (Deck, Place,
+// npc), and a row of names with no verb reads as a filter, which it is not.
+//
+// What it groups by is the person's, per box and per page (StudioState
+// cardGroups), never the project's. The grouping itself is card-groups.ts.
+
+/** A click on an option redraws the page, which throws the clicked button
+ *  away: put the focus back on its successor, so the keyboard carries on from
+ *  where it was, as it does on Coverage's control (which repaints in place). */
+let groupBarFocus = false;
+
+function groupBar(options: GroupOption[], current: GroupKey, pick: (key: GroupKey) => void): HTMLElement {
+  const seg = el("div", { className: "seg groupby-seg" });
+  seg.setAttribute("role", "tablist");
+  seg.setAttribute("aria-label", "Group by");
+  for (const o of options) {
+    const on = o.key === current;
+    const b = el("button", { className: `seg-opt${on ? " on" : ""}`, text: o.label });
+    b.type = "button";
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", String(on));
+    b.dataset["group"] = o.key;
+    b.addEventListener("click", () => {
+      if (on) return;
+      groupBarFocus = b.matches(":focus-visible");
+      pick(o.key);
+    });
+    seg.append(b);
+  }
+  return el("div", { className: "groupby" }, el("span", { className: "groupby-label", text: "Group by" }), seg);
+}
+
+function refocusGroupBar(host: HTMLElement): void {
+  if (!groupBarFocus) return;
+  groupBarFocus = false;
+  host.querySelector<HTMLElement>(".groupby .seg-opt.on")?.focus();
+}
+
+interface GroupedOptions {
+  page: GroupPage;
+  /** The properties a card's condition is checked against, by deck. */
+  catalogue: (deck: string) => ConditionProperty[];
+  selectedCards: ReadonlySet<string>;
+  actions: ViewActions;
+  gestures: (e: GroupEntry) => CardGestures;
+  menu: (e: GroupEntry) => (ev: MouseEvent) => void;
+  /** Reorder within the deck; absent when the view is grouped. */
+  move?: (from: string, to: string, before: boolean) => void;
+  /** Name each card's deck on its face: a box's Contents mixes decks. */
+  showDeck?: boolean;
+  /** The "+ New card" ghost, at the end of the last group. */
+  ghost?: () => HTMLElement;
+}
+
+/** The headings and their grids. A `none` grouping is one grid, no heading. */
+function groupedCards(box: BoxDto, groups: CardGroup[], o: GroupedOptions): HTMLElement[] {
+  const also = alsoUnder(groups);
+  const out: HTMLElement[] = [];
+  if (groups.length === 0 && o.ghost) out.push(el("div", { className: "cards" }, o.ghost()));
+  groups.forEach((g, i) => {
+    if (g.label !== "") out.push(groupHead(box, g, o.actions, o.page));
+    const grid = el("div", { className: "cards" });
+    for (const e of g.entries) {
+      const others = also(e.card.id, g.key);
+      const face = cardFace(e.card, o.catalogue(e.deck.id), o.selectedCards.has(e.card.id), o.gestures(e), o.menu(e), {
+        ...(others.length > 0 ? { also: others } : {}),
+        ...(o.showDeck === true ? { deck: e.deck.title ?? e.deck.gameId } : {}),
+        drag: o.move !== undefined,
+      });
+      if (o.move) wireDrop(face, e.card.id, "x", o.move);
+      grid.append(face);
+    }
+    if (o.ghost && i === groups.length - 1) grid.append(o.ghost());
+    out.push(grid);
+  });
+  return out;
+}
+
+/** One heading: its name (a way to the deck or the place, when it is one), a
+ *  quiet word after it, and how many cards are under it. */
+function groupHead(box: BoxDto, g: CardGroup, actions: ViewActions, page: GroupPage): HTMLElement {
+  const go = g.go;
+  const name = go === undefined
+    ? el("span", { className: "gb-name", text: g.label })
+    : el("button", {
+        className: "linkbtn gb-name",
+        text: g.label,
+        tip: go.kind === "deck" ? "Open this deck" : go.kind === "hand" ? "Open this place" : "Group by it instead",
+        onClick: () => {
+          if (go.kind === "deck") actions.focus({ kind: "deck", box: box.id, deck: go.deck });
+          else if (go.kind === "hand") actions.openHand(box.id, go.hand);
+          else actions.setCardGroup(box.id, page, go.key);
+        },
+      });
+  return el("div", { className: `gb-head${g.rest ? " rest" : ""}` },
+    // A site's heading wears its pin, in its box's colour, on a box on the map.
+    ...(go?.kind === "hand" && box.usesMap === true ? [boxPin(box.id)] : []),
+    name,
+    ...(g.sub !== undefined ? [el("span", { className: "gb-sub", text: g.sub })] : []),
+    el("span", { className: "gb-n", text: String(g.entries.length) }));
 }
 
 /** The node view's container. views.ts draws DOM and never talks to main, so the
@@ -619,37 +806,59 @@ function nodeHost(deck: DeckDto, actions: ViewActions): HTMLElement {
   return host;
 }
 
-function deckTable(box: BoxDto, deck: DeckDto, catalogue: ConditionProperty[], selectedCards: ReadonlySet<string>, gestures: CardGestures, move: (from: string, to: string, before: boolean) => void, actions: ViewActions): HTMLElement {
+function deckTable(
+  box: BoxDto, deck: DeckDto, catalogue: ConditionProperty[], selectedCards: ReadonlySet<string>, gestures: CardGestures,
+  /** Absent when grouped: only the deck's own order reorders. */
+  move: ((from: string, to: string, before: boolean) => void) | undefined,
+  actions: ViewActions,
+  groups: CardGroup[] = [{ key: "all", label: "", entries: deck.cards.map((card) => ({ card, deck })) }],
+): HTMLElement {
   const table = el("table", { className: "ctable" });
   // The card's own data (mirrors the card face), not the recessive ranking
   // machinery (priority / redraw / outcomes live in the inspector).
   // Where and Tags are DIFFERENT answers and shared one column: the audit
   // read a card's home hand under "TAGS" and learned a false model (that
-  // placement is a tag). Where = the home group plus every spatial group,
-  // the same rule the card's own Where sentence uses (where.ts).
+  // placement is a tag). Where = the home group plus every spatial group and
+  // every group a hand template chooses, the same rule the card's own Where
+  // sentence uses (where.ts).
   const cols = ["", "Title", "gameId", "When", "Where", "Tags", ""];
   table.append(el("thead", {}, el("tr", {}, ...cols.map((c) => el("th", { className: "overline", text: c })))));
-  const spatial = new Set(box.tagGroups.filter((g) => g.spatial).map((g) => g.gameId));
-  const isPlace = (group: string): boolean => group === PLACE_GROUP || spatial.has(group);
+  const axes = placeGroupsOf(box);
+  const isPlace = (group: string): boolean => group === PLACE_GROUP || axes.has(group);
   const body = el("tbody");
-  for (const c of deck.cards) {
-    const where = c.tags.filter((m) => isPlace(m.group)).flatMap((m) => m.values).join(", ");
-    const tags = c.tags.filter((m) => !isPlace(m.group)).flatMap((m) => m.values).join(", ");
-    const row = el("tr", { className: selectedCards.has(c.id) ? "sel" : "" },
-      el("td", { className: "ct-grip" }, grip()),
-      el("td", { className: "ct-title", text: c.title ?? c.gameId }),
-      el("td", { className: "ct-mono", text: c.gameId }),
-      c.condition
-        ? el("td", { className: "ct-when" }, el("span", { className: "cardwhen-if", text: "if" }), previewCondition(c.condition, catalogue))
-        : el("td", { className: "ct-when ct-dim", text: "always" }),
-      el("td", { className: where ? "" : "ct-dim", text: where || "anywhere" }),
-      el("td", { className: tags ? "" : "ct-dim", text: tags || "any" }),
-      el("td", { className: "ct-open" }, openChip(c.id, gestures)),
-    );
-    wireCardGestures(row, c.id, gestures);
-    row.addEventListener("contextmenu", cardMenu(box.id, deck.id, c.id, actions));
-    wireDrop(row, c.id, "y", move);
-    body.append(row);
+  const also = alsoUnder(groups);
+  for (const g of groups) {
+    // A heading row per group, spanning the table: the table's version of the
+    // grid's headings, so the two views of a deck group the same way.
+    if (g.label !== "") {
+      const th = el("th", {},
+        el("span", { className: "gb-name", text: g.label }),
+        ...(g.sub !== undefined ? [el("span", { className: "gb-sub", text: g.sub })] : []),
+        el("span", { className: "gb-n", text: String(g.entries.length) }));
+      th.colSpan = cols.length;
+      body.append(el("tr", { className: `ct-group${g.rest ? " rest" : ""}` }, th));
+    }
+    for (const { card: c } of g.entries) {
+      const others = also(c.id, g.key);
+      const where = c.tags.filter((m) => isPlace(m.group)).flatMap((m) => m.values).join(", ");
+      const tags = c.tags.filter((m) => !isPlace(m.group)).flatMap((m) => m.values).join(", ");
+      const row = el("tr", { className: selectedCards.has(c.id) ? "sel" : "" },
+        el("td", { className: "ct-grip" }, ...(move ? [grip()] : [])),
+        el("td", { className: "ct-title" }, c.title ?? c.gameId,
+          ...(others.length > 0 ? [el("span", { className: "ct-also", text: `also under ${others.join(", ")}` })] : [])),
+        el("td", { className: "ct-mono", text: c.gameId }),
+        c.condition
+          ? el("td", { className: "ct-when" }, el("span", { className: "cardwhen-if", text: "if" }), previewCondition(c.condition, catalogue))
+          : el("td", { className: "ct-when ct-dim", text: "always" }),
+        el("td", { className: where ? "" : "ct-dim", text: where || "anywhere" }),
+        el("td", { className: tags ? "" : "ct-dim", text: tags || "any" }),
+        el("td", { className: "ct-open" }, openChip(c.id, gestures)),
+      );
+      wireCardGestures(row, c.id, gestures);
+      row.addEventListener("contextmenu", cardMenu(box.id, deck.id, c.id, actions));
+      if (move) wireDrop(row, c.id, "y", move);
+      body.append(row);
+    }
   }
   table.append(body);
   const wrap = el("div", { className: "ctable-wrap" }, table,
@@ -660,30 +869,28 @@ function deckTable(box: BoxDto, deck: DeckDto, catalogue: ConditionProperty[], s
 export function renderBoxCentre(
   host: HTMLElement, box: BoxDto,
   tabBody: (bodyHost: HTMLElement, tab: string) => void, actions: ViewActions,
+  projectMap?: { users: BoxDto[] },
+  /** The selected cards, for the Contents tab's grid. */
+  selectedCards: ReadonlySet<string> = new Set(),
 ): void {
   // The box page: identity heading (title + gameId + purpose) above
   // [Map] | Contents | Dealing | Card template | Hand templates | Tags |
   // Properties. Contents is the box's CONTENT (decks, hands); the rest is its
   // setup, behind this one page (structure rule 10). The box is the trail's root.
   //
-  // A box with a MAP leads with it, and lands on it. A place that has been drawn
-  // is what that box IS: opening it to a list of two rows saying "Decks" and
-  // "Hands" and making the author go and find the map treats the drawing as an
-  // extra, when it is the most informative thing the box has to show. A box
-  // without a spatial tag group is unchanged, and one visit to another tab is
-  // remembered, so this decides the FIRST answer rather than overriding anybody.
+  // A box ON THE PROJECT MAP leads with its Map tab, and lands on it: its sites
+  // are what that box IS. The tab is this box's sites on the map and a door to
+  // the map itself, which is the project's (the surfacing review's plan item
+  // 2); the canvas lives on the Map page, once. A box NOT on the map has no Map
+  // tab at all, only one quiet line under its purpose: "Use the project map"
+  // when there is one, "Make a map" when there is none. One visit to another
+  // tab is remembered, so this decides the FIRST answer rather than overriding
+  // anybody; a remembered Map tab on a box that has since left the map falls
+  // back to Contents rather than to an empty page.
   const tabKey = `box:${box.id}`;
-  const mapped = box.tagGroups.filter((g) => g.spatial);
-  // The DEFAULT still depends on whether a map exists: a box with one opens on it,
-  // because that is the most informative thing it has to show, and a box without
-  // one opens on Contents rather than on an invitation.
-  //
-  // What is no longer done is FORCING the tab back. That guard was right when the
-  // tab vanished with its last spatial group, since a remembered route to a tab
-  // that no longer existed left an empty screen. The tab is permanent now and has
-  // an empty state, so forcing would instead mean a reader who clicked Maps was
-  // silently put somewhere else.
-  const tab = currentDocTab(tabKey, mapped.length > 0 ? "map" : "contents");
+  const onMap = box.usesMap === true;
+  const remembered = currentDocTab(tabKey, onMap ? "map" : "contents");
+  const tab = remembered === "map" && !onMap ? "contents" : remembered;
   let titled = box.title ?? "";
   let purpose = box.purpose ?? "";
   let pinned = box.gameIdPinned ?? "";
@@ -694,6 +901,10 @@ export function renderBoxCentre(
     comments: { on: box.id, count: actions.openThreads(box.id), open: (a) => actions.showComments(box.id, titled || box.gameId, a) },
     menu: [
       { label: "Duplicate box", onClick: () => actions.duplicateBox(box.id) },
+      // Leaving the map is quiet and rare, so it lives in the menu rather than on
+      // the page; main refuses it, with a sentence, while anything still names
+      // a zone.
+      ...(onMap ? [{ label: "Leave the project map", onClick: () => actions.useProjectMap(box.id, false) }] : []),
       { label: "Delete box", danger: true, onClick: () => actions.deleteBox(box.id) },
     ],
     // The venue's claim is on the NAME it bound: renaming the box in place lets
@@ -707,20 +918,16 @@ export function renderBoxCentre(
         }
       : {}),
   });
-  // The MAP is offered by a box that has one, which means a tag group marked
-  // spatial. A tab rather than a setting of a view switch, because a box page is
-  // tabbed: its concerns sit side by side (Contents, Dealing, Tags...) rather than
-  // being three ways of looking at one list, which is what the deck's switch is for.
-  // FIRST when it exists, because the tab order is a claim about what the page is
-  // mostly for.
-  // ALWAYS offered, even with no map yet. It used to appear only once a spatial
-  // group existed, which meant the word "map" was nowhere in the editor until
-  // after you had made one, and the only route to making one ran through the Tags
-  // tab and a toggle you had to know was there (design/maps-discoverability.md).
-  // An empty tab is a small permanent cost; a feature you cannot find is a larger
-  // one. The empty state does the teaching.
+  // The opt-in: one quiet line under the purpose, for a box off the map. The
+  // map is never advertised more loudly than this, and a box that has no use
+  // for one sees nothing else about it.
+  const optIn = onMap ? null : el("p", { className: "box-mapline" },
+    mapGlyph("map", 12, "map-glyph"),
+    projectMap !== undefined
+      ? el("button", { className: "linkbtn", text: "Use the project map", tip: "Put this box's hands on the project's zones", onClick: () => actions.useProjectMap(box.id, true) })
+      : el("button", { className: "linkbtn", text: "Make a map", tip: "Draw zones for the project, and put this box's hands on them", onClick: () => actions.newMap(box.id) }));
   const tabs = docTabs([
-    { key: "map", label: "Maps", ...(mapped.length > 0 ? { count: mapped.length } : {}) },
+    ...(onMap ? [{ key: "map", label: "Map" }] : []),
     { key: "contents", label: "Contents" },
     { key: "dealing", label: "Dealing" },
     // Both halves of the template count (2026-09-13). The tab holds two lists
@@ -738,22 +945,24 @@ export function renderBoxCentre(
   if (tab === "templates") {
     body = boxTemplatesBody(box, actions);
   } else if (tab === "tags") {
-    body = boxTagsBody(box, actions);
-  } else if (tab === "map" && mapped.length > 0) {
-    // The canvas is mounted by the renderer (it needs IPC, which views.ts never
-    // touches), into a host this tab owns. Same arrangement as the node view.
-    body = el("div", { className: "nodeview" });
-    actions.mountMapView(body, box);
+    body = boxTagsBody(box, actions, projectMap === undefined);
   } else if (tab === "map") {
-    // The teaching surface, and the only place the model is explained BEFORE an
-    // author has committed to it. It says what a map is made of, because they
-    // will meet that anyway the first time they tag a card `zone:cave`, and it
-    // says a map need not be geography, because "place", "zone" and "site" all
-    // pull that way and a reader who only has those words will assume it.
+    // This box's sites on the project map, and the door to it. The sites are
+    // filled by the renderer (they need IPC, which views.ts never touches).
+    const others = (projectMap?.users ?? []).filter((b) => b.id !== box.id);
+    const intro = el("p", { className: "doc-tab-note" }, "The zones are the project's, drawn once",
+      ...(others.length > 0 ? [", and shared with ", ...others.flatMap((b, i) => [...(i > 0 ? [" "] : []), boxChip(b)])] : []),
+      ". Where this box's sites stand on them is its own.");
+    const sites = el("div", { className: "rowlist boxsites" });
+    actions.mountBoxSites(sites, box);
     body = el("div", { className: "doc-sect" },
-      el("p", { className: "doc-tab-note", text: "A map is a tag group you can draw. Its tags become zones with outlines, and the hands bound to them stand inside as pins." }),
-      el("p", { className: "doc-tab-note", text: "It doesn't have to be geography. Anything you can lay out in two dimensions works, such as acts and their beats, a cast and who is close to whom, or a tech tree. The drawing is for you and the reader. It never reaches the bundle." }),
-      el("button", { className: "listrow ghost", text: "+ New map", onClick: () => actions.newMap(box.id) }));
+      el("div", { className: "doc-panel boxsites-head" },
+        el("div", { className: "boxsites-title" },
+          el("span", { className: "insp-label", text: "This box's sites on the project map" }),
+          el("span", { className: "crumb-spacer" }),
+          el("button", { className: "btn primary", onClick: () => actions.openMap() }, mapGlyph("map", 13, "map-glyph"), "Open map")),
+        intro),
+      sites);
   } else if (tab !== "contents") {
     body = el("div", { className: "centre-editor" });
     tabBody(body, tab);
@@ -770,17 +979,38 @@ export function renderBoxCentre(
     // most needs to avoid: a deck owns cards, a hand owns what it was DEALT.
     // Two definitions forty lines apart, and the wrong one came first.
     row("Hands", box.hands.length, "The places on the board. Each hand holds the cards it's dealt.", "hands");
-    // Named here so a box says what it HAS. Only when it has one: an author with
-    // no maps is told about them on the Maps tab, which is the surface for that,
-    // and a contents list that advertises what is absent is a different job.
-    if (mapped.length > 0) {
+    // Named here so a box says what it HAS. Only when it is on the map: a box
+    // off it is offered the map once, under its purpose, and a contents list
+    // that advertises what is absent is a different job.
+    if (onMap) {
       list.append(el("button", { className: "listrow", onClick: () => { setDocTab(tabKey, "map"); actions.focus({ kind: "box", box: box.id }); } },
-        el("span", { className: "listname", text: "Maps" }),
-        listMeta([String(mapped.length), mapped.map((g) => g.gameId).join(", ")])));
+        el("span", { className: "listname", text: "Map" }),
+        listMeta(["This box's sites on the project map"])));
     }
-    body = list;
+    // Then the box's cards themselves, grouped (plan item 3): by deck until the
+    // author chooses otherwise, or by place, or by any of the box's tag groups.
+    const entries = boxEntries(box);
+    if (entries.length === 0) {
+      body = list;
+    } else {
+      const by = resolveGroup(box, "contents", actions.cardGroup(box.id, "contents"));
+      const groups = groupEntries(box, entries, by);
+      body = el("div", { className: "doc-sect box-contents" }, list,
+        groupBar(groupOptions(box, "contents"), by, (key) => actions.setCardGroup(box.id, "contents", key)),
+        el("div", { className: "gb-body" }, ...groupedCards(box, groups, {
+          page: "contents", catalogue: (d) => actions.deckCatalogue(box.id, d), selectedCards, actions,
+          gestures: (e) => ({
+            select: (card, how) => actions.selectCard(card, how),
+            open: (card) => actions.inspectCard(box.id, e.deck.id, card),
+          }),
+          menu: (e) => cardMenu(box.id, e.deck.id, e.card.id, actions),
+          // Under Deck the heading names it; under anything else the card does.
+          showDeck: by !== "deck",
+        })));
+    }
   }
-  host.replaceChildren(heading, tabs, body);
+  host.replaceChildren(heading, ...(optIn ? [optIn] : []), tabs, body);
+  refocusGroupBar(host);
 }
 
 // The box's setup tabs: hand templates and tags list here (behind the box
@@ -811,7 +1041,7 @@ function boxTemplatesBody(box: BoxDto, actions: ViewActions): HTMLElement {
   return body;
 }
 
-function boxTagsBody(box: BoxDto, actions: ViewActions): HTMLElement {
+function boxTagsBody(box: BoxDto, actions: ViewActions, canMakeMap: boolean): HTMLElement {
   const list = el("div", { className: "rowlist" });
   for (const group of box.tagGroups) {
     const row = el("button", { className: "listrow", onClick: () => actions.inspectTagGroup(box.id, group.id) },
@@ -829,8 +1059,10 @@ function boxTagsBody(box: BoxDto, actions: ViewActions): HTMLElement {
   // one should not have to know that before they can make one: until this, the
   // word "map" appeared nowhere in the editor until after you had made one
   // (design/maps-discoverability.md). It sits here, next to the thing it makes,
-  // so the relationship is visible in the act rather than hidden by it.
-  list.append(el("button", { className: "listrow ghost", text: "+ New map", onClick: () => actions.newMap(box.id) }));
+  // so the relationship is visible in the act rather than hidden by it. Only
+  // while the project has no map: a project has one, and a box joins it from
+  // the line under its purpose instead.
+  if (canMakeMap) list.append(el("button", { className: "listrow ghost", text: "+ New map", onClick: () => actions.newMap(box.id) }));
   const body = el("div", { className: "doc-sect" },
     // B5: one sentence, used on all three tag surfaces, naming both jobs. "Peeks"
     // was engine vocabulary that appears nowhere else an author can see.
@@ -963,7 +1195,7 @@ export function renderHandsCentre(host: HTMLElement, box: BoxDto, actions: ViewA
   for (const hand of box.hands) {
     const kind = hand.template !== undefined ? hand.template : "standalone rule";
     // A titled hand reads as a title; only a bare gameId reads as a name.
-    const row = el("button", { className: "listrow draggable", onClick: () => actions.inspectHand(box.id, hand.id) },
+    const row = el("button", { className: "listrow draggable", onClick: () => actions.openHand(box.id, hand.id) },
       el("span", { className: `listname${hand.title !== undefined ? " listtitle" : ""}`, text: hand.title ?? hand.gameId }),
       listMeta([kind, hand.slots !== undefined ? plural(hand.slots, "slot") : undefined]));
     // Every hand lives in the one hands shard, so they badge together.

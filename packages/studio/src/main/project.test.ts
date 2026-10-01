@@ -48,7 +48,8 @@ describe("project session", () => {
     expect(street.bindings).toEqual(["area = ?"]);   // a hole: the instance chooses
     expect(street.slots).toBe("3");
     expect(street.instances).toBe(1);
-    expect(box.tagGroups).toEqual([{ id: "d_zone", gameId: "area", values: ["docks", "market"] }]);
+    // Chosen by the template, so a place axis on the card's Where row.
+    expect(box.tagGroups).toEqual([{ id: "d_zone", gameId: "area", values: ["docks", "market"], chosen: true }]);
     expect(box.hands[0]).toMatchObject({ gameId: "docks-street", template: "street-hands", slots: 2 });
   });
 

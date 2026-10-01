@@ -58,6 +58,12 @@ export interface SiteShape extends CanvasItem {
   zoneName?: string;
   /** Nothing is holding this hand's binding: drawn hollow. */
   unbound?: boolean;
+  /** A palette INDEX to colour the disc by instead of its zone: the project map
+   *  tints a site by its BOX, since there the question a pin answers first is
+   *  whose it is (the surfacing review's plan item 2). The zone is the ground
+   *  it stands on, which the map already shows. An index rather than a name
+   *  because a box's colour is assigned, not hashed (box-tint.ts). */
+  tint?: number;
   /**
    * The NAMES of the other zones whose outlines this site also falls inside,
    * when there is more than one. Empty or absent means no ambiguity to report.
@@ -192,7 +198,8 @@ export function drawSite(item: SiteShape, ctx: DrawContext): Konva.Group {
   // Quiet, never hidden. A filtered map that dropped its sites would change
   // SHAPE as you filtered it, and a map you cannot recognise is not a map.
   if (item.quiet === true) group.opacity(0.35);
-  const ink = item.zoneName !== undefined ? charColour(tokens, item.zoneName) : tokens.muted;
+  const ink = item.tint !== undefined ? (tokens.chars[item.tint % tokens.chars.length] ?? tokens.accent)
+    : item.zoneName !== undefined ? charColour(tokens, item.zoneName) : tokens.muted;
   const r = PIN_R / scale;
 
   // The coverage HALO, outside the disc. The disc keeps its zone colour, because

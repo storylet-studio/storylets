@@ -7,7 +7,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { JOB_PROGRESS_CHANNEL, PROJECT_CHANGED } from "../shared/api.js";
 import type { JobProgress } from "../shared/api.js";
 import type {
-  BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, LeavePromptDto, LeaveSettledDto, LiveLinkFrame, LiveLinkStatus, MenuCommand, OpenResult, PackOffer, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
+  BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, LeavePromptDto, MapLayerPrefs, LeaveSettledDto, LiveLinkFrame, LiveLinkStatus, MenuCommand, OpenResult, PackOffer, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
   UpdaterPromptOptions,
   UpdaterDownloadProgress,
 } from "../shared/api.js";
@@ -36,7 +36,8 @@ const api: StudioApi = {
   setAutoRebuild: (on: boolean) => ipcRenderer.invoke("state:setAutoRebuild", on),
   setViewMode: (mode: ViewMode) => ipcRenderer.invoke("state:setViewMode", mode),
   setNavExpanded: (ids: string[]) => ipcRenderer.invoke("state:setNavExpanded", ids),
-  setMapGroups: (groups: Record<string, string>) => ipcRenderer.invoke("state:setMapGroups", groups),
+  setMapLayers: (groupId: string, prefs: MapLayerPrefs) => ipcRenderer.invoke("state:setMapLayers", groupId, prefs),
+  setCardGroup: (boxId: string, page: "contents" | "deck", key: string) => ipcRenderer.invoke("state:setCardGroup", boxId, page, key),
   setCanvasCameras: (cameras: Record<string, { x: number; y: number; scale: number }>) =>
     ipcRenderer.invoke("state:setCanvasCameras", cameras),
   projectSettings: () => ipcRenderer.invoke("project:settings"),
@@ -54,8 +55,9 @@ const api: StudioApi = {
   duplicateHand: (boxId: string, handId: string) => ipcRenderer.invoke("hand:duplicate", boxId, handId),
   duplicateTagGroup: (boxId: string, groupId: string) => ipcRenderer.invoke("tag-group:duplicate", boxId, groupId),
   handDetail: (boxId: string, handId: string) => ipcRenderer.invoke("hand:detail", boxId, handId),
+  handCards: (boxId: string, handId: string) => ipcRenderer.invoke("hand:cards", boxId, handId),
   saveHand: (boxId: string, handId: string, edit: HandEdit) => ipcRenderer.invoke("hand:save", boxId, handId, edit),
-  createHand: (boxId: string) => ipcRenderer.invoke("hand:create", boxId),
+  createHand: (boxId: string, site?: { x: number; y: number }) => ipcRenderer.invoke("hand:create", boxId, site),
   deleteHand: (boxId: string, handId: string) => ipcRenderer.invoke("hand:delete", boxId, handId),
   templateDetail: (boxId: string, templateId: string) => ipcRenderer.invoke("template:detail", boxId, templateId),
   saveTemplate: (boxId: string, templateId: string, edit: TemplateEdit) => ipcRenderer.invoke("template:save", boxId, templateId, edit),
@@ -66,7 +68,7 @@ const api: StudioApi = {
   createTagGroup: (boxId: string) => ipcRenderer.invoke("tag-group:create", boxId),
   deleteTagGroup: (boxId: string, groupId: string) => ipcRenderer.invoke("tag-group:delete", boxId, groupId),
   saveCard: (deckId: string, cardId: string, edit: CardEdit) => ipcRenderer.invoke("card:save", deckId, cardId, edit),
-  createCard: (deckId: string) => ipcRenderer.invoke("card:create", deckId),
+  createCard: (deckId: string, place?: string) => ipcRenderer.invoke("card:create", deckId, place),
   duplicateCard: (deckId: string, cardId: string) => ipcRenderer.invoke("card:duplicate", deckId, cardId),
   moveCard: (deckId: string, cardId: string, targetId: string, before: boolean) => ipcRenderer.invoke("card:move", deckId, cardId, targetId, before),
   deleteCard: (deckId: string, cardId: string) => ipcRenderer.invoke("card:delete", deckId, cardId),
@@ -138,6 +140,9 @@ const api: StudioApi = {
   deckGraph: (deckId: string) => ipcRenderer.invoke("graph:deck", deckId),
   boxMap: (boxId: string, groupId?: string) => ipcRenderer.invoke("map:box", boxId, groupId),
   projectMaps: () => ipcRenderer.invoke("map:project"),
+  projectMapView: () => ipcRenderer.invoke("map:view"),
+  mapZone: (tagId: string) => ipcRenderer.invoke("map:zone", tagId),
+  useProjectMap: (boxId: string, on: boolean) => ipcRenderer.invoke("map:use", boxId, on),
   setGroupSpatial: (boxId: string, groupId: string, on: boolean) => ipcRenderer.invoke("map:setSpatial", boxId, groupId, on),
   createZone: (boxId: string, groupId: string, polygon: { x: number; y: number }[]) =>
     ipcRenderer.invoke("map:createZone", boxId, groupId, polygon),

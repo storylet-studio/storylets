@@ -1,32 +1,44 @@
 // ---------------------------------------------------------------------------
-// The map: a box's zones seen from above, with its hands pinned on them.
+// The project map: its zones seen from above, once for the project, with every
+// box on the map as a LAYER of its own sites (the surfacing review's plan item
+// 2, design/surfacing-review-2026-10/README.md, "Direction: back to basics").
 //
-// An ORDINARY view of a box, and the same gesture grammar as the other two
-// canvases: click selects, double-click opens the thing in the editor, right-click
-// offers what that thing can do. The map is the tag data you already have
-// (design/graphical-views.md section 2): a zone IS a tag of a spatial group and its
-// outline lives in that tag; a pin is a hand's position in the arrangement sidecar.
+// An ORDINARY view, and the same gesture grammar as the other two canvases:
+// click selects, double-click opens the thing in the editor, right-click offers
+// what that thing can do. The map is the tag data you already have
+// (design/graphical-views.md section 2): a zone IS a tag of the project map's
+// group and its outline lives in that tag; a pin is a hand's position in its
+// own box's map shard.
 //
-// ADDING is a control, not a menu. The first cut put "place zone X" and "pin hand
-// Y" in the context menu, one item per undrawn zone and unplaced hand, which grew
-// with the project and was the wrong shape for the commonest act on a map. The strip
-// now carries the verbs, and a chip for anything waiting to be placed: pick what,
-// then say where.
+// TWO MODES, and the split is the review's. Reading is the common act, so the
+// map opens read-only: selecting a site fills the side panel with what can come
+// up there, selecting a zone with its properties and everything filed to it,
+// and nothing can be dragged. "Edit layout" holds the drawing tools and the
+// drag: zones traced and reshaped, pins dropped and dragged (which REBINDS a
+// hand, the map's one meaningful move), pictures, frames, comments. A stray
+// drag while reading would be a hand moved zone by somebody looking at cards,
+// which is the silent edit the 2026-09-07 ruling exists to prevent. The view
+// is remounted on the switch (the surface's read-only is a mount option); the
+// camera survives through canvas memory.
+//
+// ADDING is a control, not a menu: the strip carries the verbs, and the side
+// panel the things waiting to be placed.
 //
 // A zone is TRACED, never conjured as a square. Click to lay vertices, click the
-// first one again or press Enter to close, Escape to abandon; then drag its vertices
-// to reshape, or a mid-edge handle to add one. That is the old system's canvas
-// (../storylets-old, StorymapCanvasZoneHandles and its draw-zone tool), whose
-// conventions were paid for once already.
+// first one again or press Enter to close, Escape to abandon; then drag its
+// vertices to reshape, or a mid-edge handle to add one. That is the old
+// system's canvas (../storylets-old, StorymapCanvasZoneHandles and its
+// draw-zone tool), whose conventions were paid for once already.
 //
-// Zones and sites share ONE surface and one selection, with each item saying which
-// it is. Two stacked surfaces would mean two cameras to keep in step and two
-// selections to reconcile, for no gain.
+// Zones and sites share ONE surface and one selection, with each item saying
+// which it is. Two stacked surfaces would mean two cameras to keep in step and
+// two selections to reconcile, for no gain.
 // ---------------------------------------------------------------------------
 
 import { el } from "./dom.js";
-import { iconNode, plural, tipWithKey } from "@wildwinter/app-shell";
+import { iconNode, plural, tipWithKey, wireReorder } from "@wildwinter/app-shell";
 import { colourIndex } from "../../shell/colour.js";
+import { boxColour, boxColourIndex, boxPin } from "./box-tint.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface, type DrawContext } from "./canvas-surface.js";
 import { mapCameraKey, recallCamera, rememberCamera } from "./canvas-memory.js";
@@ -36,25 +48,32 @@ import {
   LABEL_FLOOR, type BackgroundShape, type SiteShape, type ZoneShape,
 } from "./map-art.js";
 import { onImageReady } from "./image-cache.js";
-import {
-  drawFrame, frameShape, type FrameShape,
-} from "./furniture-art.js";
+import { drawFrame, frameShape, type FrameShape } from "./furniture-art.js";
 import { createFurniture, type FurnitureController } from "./furniture-edit.js";
 import { markerPainter, markerPoint } from "./comment-markers.js";
 import { coverageLegend, handHeat } from "./coverage-art.js";
 import {
   closesShape, paintDraft, paintHandles, paintScaleHandles, withVertexAfter, withVertexAt, withoutVertex,
 } from "./map-edit.js";
+import {
+  MAP_LAYER_PICTURES, MAP_LAYER_ZONES, activeBox, hideAll, isShown, moveLayer, orderedBoxes, setActive,
+  showAll, soloLayer, toggleLayer,
+} from "./map-layers.js";
+import { mapGlyph } from "./map-glyphs.js";
 import { zonesAt } from "@storylet-studio/model";
 import type { Polygon, ViewPoint } from "@storylet-studio/model";
-import type { BoxMapDto, CanvasFurnitureDto, CommentMarkerDto, CoverageOverlayDto, MapBackgroundDto } from "../../shared/api.js";
+import type {
+  CanvasFurnitureDto, CommentMarkerDto, CoverageOverlayDto, MapBackgroundDto, MapLayerPrefs,
+  ProjectMapLayerDto, ProjectMapSiteDto, ProjectMapViewDto,
+} from "../../shared/api.js";
 import Konva from "konva";
 
 export interface MapViewActions {
-  /** Double-click a zone: its tag group's page, where the zone's properties are. */
+  /** Double-click a zone: the zone group's page, where every zone's properties
+   *  are declared. */
   openZone: (tagId: string) => void;
   /** Double-click a site: the hand's page. */
-  openHand: (handId: string) => void;
+  openHand: (box: string, handId: string) => void;
   /** A traced outline for a zone that had none. */
   placeZone: (tagId: string, polygon: Polygon) => void;
   /** A traced outline for a zone that does not exist yet: make the tag too. */
@@ -79,14 +98,14 @@ export interface MapViewActions {
   /** A zone moved through the stack. Which zone owns a pin is the frontmost one
    *  it stands in, so this can rebind hands where zones overlap. */
   restackZone: (tagId: string, move: "front" | "forward" | "backward" | "back") => void;
-  /** Sites moved or were placed: where each one now is. Which zone that turns out
-   *  to be, and therefore which hands are rebound, is decided in main from the
-   *  position over the geometry: one rule, one place (mutate.ts). */
-  movedSites: (moves: { id: string; x: number; y: number }[]) => void;
+  /** One box's sites moved or were placed: where each one now is. Which zone
+   *  that turns out to be, and therefore which hands are rebound, is decided in
+   *  main from the position over the geometry: one rule, one place (mutate.ts). */
+  movedSites: (box: string, moves: { id: string; x: number; y: number }[]) => void;
+  /** "+ Site": a new hand in `box`, pinned here, in one undo step. */
+  newSite: (box: string, at: { x: number; y: number }) => void;
   /** Take a hand off the map. The hand itself stays; only its site goes. */
-  removeSite: (handId: string) => void;
-  /** Show a different spatial group's map. */
-  showGroup: (groupId: string) => void;
+  removeSite: (box: string, handId: string) => void;
   /** The furniture changed: the whole list, with the gesture named for undo. */
   setFurniture: (furniture: CanvasFurnitureDto, label: string, coalesce?: string) => void;
   /** The comment markers on this map, as main resolved them. The same four calls
@@ -102,21 +121,37 @@ export interface MapViewActions {
     at: { x: number; y: number }, item: string | undefined, anchor: HTMLElement,
   ) => void;
   moveMarker: (threadId: string, x: number, y: number, item?: string) => void;
+  /** This person's layers (app state). */
+  layers: () => MapLayerPrefs;
+  /** Keep a change to the layers. The view repaints itself; this persists. */
+  setLayers: (prefs: MapLayerPrefs) => void;
+  /** Into Edit layout, or out: the renderer remounts the view in that mode. */
+  setEditing: (on: boolean) => void;
+  /** Fill the side panel with one SITE: what can come up there. `back`
+   *  returns the panel to the layer list. */
+  paintSite: (host: HTMLElement, layer: ProjectMapLayerDto, site: ProjectMapSiteDto, back: () => void) => void;
+  /** Fill the side panel with one ZONE: its properties, sites and cards by
+   *  box. `hidden` is the box layers hidden now, whose share the panel folds
+   *  into one line; `show` brings those layers back. */
+  paintZone: (host: HTMLElement, tagId: string, hidden: Set<string>, show: (boxes: string[]) => void, back: () => void) => void;
 }
 
 export interface MountedMapView {
   /** Hands whose zone changed because of an edit here: main's answer to a site
-   *  drop or a reshaped outline. `zone` null means the hand now sits in none,
-   *  which the Problems bar will be naming as an error. */
+   *  drop. `zone` null means the hand now sits in none, which the Problems bar
+   *  will be naming as an error. */
   rebound: (changes: { id: string; zone: string | null }[]) => void;
-  /** Redraw the comment markers alone. Not a remount: that would lose the camera
-   *  and the selection. */
   /** Open one marker's thread, centring the canvas on it: the feedback walk's
    *  way in. False when that thread is not a marker on this canvas. */
   openMarker: (threadId: string) => boolean;
+  /** Redraw the comment markers alone. Not a remount: that would lose the camera
+   *  and the selection. */
   repaintMarkers: () => void;
   /** The overlay came, went or was re-run (see node-view). */
   refreshCoverage: () => void;
+  /** Select an item and bring it into view: a way back to the map that should
+   *  land on the site it left from. */
+  select: (id: string) => void;
   destroy: () => void;
 }
 
@@ -125,26 +160,37 @@ type MapItem =
   | (BackgroundShape & { kind: "background" })
   | FrameShape
   | (ZoneShape & { kind: "zone" })
-  | (SiteShape & { kind: "site" })
+  | (SiteShape & { kind: "site"; box: string })
+
+/** A box's name as a person reads it. */
+const layerName = (l: { title?: string; gameId: string }): string => l.title ?? l.gameId;
 
 export function mountMapView(
-  host: HTMLElement, boxId: string, map: BoxMapDto, actions: MapViewActions,
+  host: HTMLElement, map: ProjectMapViewDto, editing: boolean, actions: MapViewActions,
 ): MountedMapView {
   const stage = el("div", { className: "nodestage" });
   const strip = el("div", { className: "nodestrip" });
-  // The map's shape is the Board's map mode: the canvas takes the big column
-  // and a side panel carries the CONTENTS. A map is wide and shallow (the
-  // strip is one line), so the room to spend is on the right, and the strip
-  // stays for verbs and state while the nouns live where there is space.
-  const side = el("aside", { className: "mapside" });
+  // The canvas takes the big column and a side panel carries the CONTENTS: the
+  // layers, or the thing selected. A map is wide and shallow, so the room to
+  // spend is on the right, which is also the Board's own map shape.
+  const side = el("aside", { className: "mapside wide" });
   const main = el("div", { className: "mapmain-ed" }, stage, strip);
   host.replaceChildren(el("div", { className: "mapwrap" }, main, side));
 
-  /** A zone's name from its id: what a pin is coloured by.
-   *
-   *  Undrawn zones count. A hand can be bound to a zone nobody has traced yet,
-   *  and its pin saying "in a zone" when the tag has a perfectly good name would
-   *  be the map being coy about something it knows. */
+  const boxIds = map.layers.map((l) => l.box);
+  const layerOf = new Map(map.layers.map((l) => [l.box, l]));
+  /** Which box each site belongs to: a hand id is unique project-wide. */
+  const siteBox = new Map(map.layers.flatMap((l) => l.sites.map((s) => [s.id, l.box] as const)));
+  const siteDto = new Map(map.layers.flatMap((l) => l.sites.map((s) => [s.id, s] as const)));
+  let prefs = actions.layers();
+  const keep = (next: MapLayerPrefs): void => {
+    prefs = next;
+    actions.setLayers(next);
+    rebuild();
+  };
+
+  /** A zone's name from its id. Undrawn zones count: a hand can be bound to a
+   *  zone nobody has traced yet, and the map should not be coy about its name. */
   const zoneName = (id: string | undefined): string | undefined => {
     if (id === undefined) return undefined;
     return map.zones.find((z) => z.id === id)?.gameId ?? map.undrawn.find((z) => z.id === id)?.gameId;
@@ -156,56 +202,58 @@ export function mountMapView(
    * Overlapping outlines are legitimate (a market square inside a district) and
    * the model resolves a point to the frontmost: that is `zoneAt`, and it is what
    * a DRAG binds to. What the picture cannot say is that the other outlines count
-   * for nothing, so the site is marked and the strip explains.
-   *
-   * Excluding the site's OWN zone rather than just the frontmost, which a first
-   * pass got wrong. A site's zone comes from its hand's binding (`chosen`), NOT
-   * from geometry - the two are deliberately separate - so they can disagree: draw
-   * a new outline over an existing site and the frontmost zone is one the hand has
-   * never heard of. Taking `slice(1)` would then have named the site's own zone as
-   * something that "counts for nothing", which is precisely backwards.
+   * for nothing, so the site is marked and the strip explains. Excluding the
+   * site's OWN zone rather than the frontmost: a site's zone comes from its
+   * hand's binding, not from geometry, so the two can disagree.
    */
   const alsoInside = (at: ViewPoint, own: string | undefined): string[] =>
     zonesAt(at, map.zones).filter((id) => id !== own).map((id) => zoneName(id) ?? "a zone");
 
-  const items: MapItem[] = [
-    // Pictures FIRST, so they are a band structurally below every zone: no z
-    // value can put an image over a zone, because the bands are the array order.
-    // A hidden one is not built at all - hiding is not the same as locking, and a
-    // picture nobody wants to see should not be framed by a fit either.
-    ...map.backgrounds.filter((b) => b.hidden !== true).map((b): MapItem => ({
-      kind: "background",
-      ...backgroundShape(b),
-    })),
-    // Frames above the pictures and below the zones: furniture describes the
-    // map, so it sits on the base and under the thing it describes.
-    ...map.furniture.frames.map((r): MapItem => frameShape(r)),
-    ...map.zones.map((zone): MapItem => ({
-      kind: "zone",
-      ...zoneShape({ id: zone.id, title: zone.gameId, name: zone.gameId, polygon: zone.polygon }),
-    })),
-    // Sites after the zones, so they draw on top and the pointer finds them first.
-    ...map.sites.map((site): MapItem => ({
-      kind: "site",
+  // --- the items, filtered by the layers --------------------------------------
+  let items: MapItem[] = [];
+  function buildItems(): MapItem[] {
+    const sitesOf = (layer: ProjectMapLayerDto): MapItem[] => layer.sites.map((site): MapItem => ({
+      kind: "site", box: layer.box,
       ...siteShape({
-        id: site.id, title: site.gameId, name: site.gameId, at: { x: site.x, y: site.y },
+        id: site.id, title: site.title ?? site.gameId, name: site.gameId, at: { x: site.x, y: site.y },
         ...(site.zone !== undefined
           ? { zone: site.zone, ...(zoneName(site.zone) !== undefined ? { zoneName: zoneName(site.zone)! } : {}) }
           : {}),
       }),
+      // Tinted by BOX: on the project map the first thing a pin answers is
+      // whose it is (map-art.ts, `tint`).
+      tint: boxColourIndex(layer.box),
       ...((): { alsoInside?: string[] } => {
         const others = alsoInside({ x: site.x, y: site.y }, site.zone);
         return others.length > 0 ? { alsoInside: others } : {};
       })(),
-    })),
-  ];
+    }));
+    // Box layers bottom first, so the TOP layer's pins draw last, over the rest:
+    // the layer order is the pin draw order.
+    const shownBoxes = orderedBoxes(prefs, boxIds).filter((b) => isShown(prefs, b)).reverse();
+    return [
+      // Pictures FIRST, so they are a band structurally below every zone: no z
+      // value can put an image over a zone, because the bands are the array
+      // order. A hidden one (its own flag, the project's) is not built at all.
+      ...(isShown(prefs, MAP_LAYER_PICTURES)
+        ? map.backgrounds.filter((b) => b.hidden !== true).map((b): MapItem => ({ kind: "background", ...backgroundShape(b) }))
+        : []),
+      // Frames above the pictures and below the zones: furniture describes the
+      // map, so it sits on the base and under the thing it describes.
+      ...map.furniture.frames.map((r): MapItem => frameShape(r)),
+      ...(isShown(prefs, MAP_LAYER_ZONES)
+        ? map.zones.map((zone): MapItem => ({
+          kind: "zone",
+          ...zoneShape({ id: zone.id, title: zone.gameId, name: zone.gameId, polygon: zone.polygon }),
+        }))
+        : []),
+      ...shownBoxes.flatMap((b) => sitesOf(layerOf.get(b)!)),
+    ];
+  }
 
   /**
-   * Put the coverage reading on the sites.
-   *
-   * After `siteShape` rather than through it: a site's SHAPE comes from where
-   * the hand sits, and heat is a mode that comes and goes over a canvas that
-   * stays up. Re-run on every repaint, like the node canvas's faces.
+   * Put the coverage reading on the sites. After `siteShape` rather than
+   * through it: heat is a mode that comes and goes over a canvas that stays up.
    */
   const dressCoverage = (): void => {
     const cover = actions.coverage();
@@ -215,68 +263,48 @@ export function mountMapView(
       item.heat = cover === undefined ? undefined : handHeat(item.id, cover);
     }
   };
-  dressCoverage();
 
-  // Per GROUP, not merely per box: a box can carry several maps (a district and
-  // a building interior), and they are different places to be looking.
-  const cameraKey = mapCameraKey(boxId, map.groupId);
+  const cameraKey = mapCameraKey("project", map.groupId);
 
   /** What each pin's hand can do about its binding: whether dragging it means
-   *  anything, and if not, why not. Beside the items rather than in them, because
-   *  it belongs to the HAND rather than to the drawing. */
-  const siteRule = new Map(map.sites.map((p) => [p.id, { rebinds: p.rebinds, fixedBy: p.fixedBy }]));
+   *  anything, and if not, why not. */
+  const siteRule = new Map(map.layers.flatMap((l) => l.sites.map((p) => [p.id, { rebinds: p.rebinds, fixedBy: p.fixedBy }] as const)));
 
   const byId = (id: string): MapItem | undefined => items.find((i) => i.id === id);
-  /** Frames and stickies, shared with the node canvas (furniture-edit.ts). Built
-   *  after the surface, which its callbacks close over. */
   let furniture: FurnitureController | undefined;
   /** The comment tool is armed: the next click drops a marker. */
   let commentArmed = false;
   const worldOutline = (z: ZoneShape): Polygon => z.outline.map((p) => ({ x: z.x + p.x, y: z.y + p.y }));
   // --- what is being traced or placed -----------------------------------------
-  /** The zone being traced (an existing tag, or a new one), or the hand being
-   *  placed. Undefined means the ordinary select-and-drag canvas. */
   let busy: { label: string; tag?: string; drawing: boolean } | undefined;
   let draft: Polygon = [];
   let pointer: ViewPoint | undefined;
-  /** A vertex mid-drag: the shape to draw until it lands. */
   let preview: { id: string; polygon: Polygon } | undefined;
-  /** Which corner of the selected zone is picked out, for Delete. */
   let pickedVertex: number | undefined;
-  /** Why the last drop did not rebind, when there is something to say. Cleared by
-   *  the next drop, so it reads as a reply to what just happened. */
+  /** Why the last drop did not rebind, when there is something to say. */
   let refused: string | undefined;
-  /** A picture being scaled: the rectangle it WOULD have, drawn until it lands.
-   *  Never written into the item mid-drag, or the handle in the hand dies. */
   let scaling: { id: string; rect: { x: number; y: number; width: number; height: number } } | undefined;
 
   /**
-   * A zone's new outline: applied HERE first, then persisted.
+   * A zone's new outline: applied HERE first, then persisted. The canvas holds
+   * its own copy of every shape, so persisting alone left the picture as it was:
+   * an inserted corner appeared for one frame and vanished on the next repaint.
    *
-   * The canvas holds its own copy of every shape (that is what the surface draws
-   * and hit-tests), so persisting alone changed the shard and left the picture
-   * exactly as it was: an inserted corner appeared for one frame and vanished on
-   * the next repaint, and a dragged corner sprang back. The lab did not catch it
-   * because the lab updated its own model, which the app was not doing - a harness
-   * has to mirror the app's data flow or it stops being evidence about the app.
+   * Nothing is rebound here, and that is the point (2026-08-06): a hand's zone is
+   * the hand's own binding, changed only by dragging that hand's pin.
    */
   function applyOutline(zoneId: string, polygon: Polygon): void {
     const at = items.findIndex((i) => i.id === zoneId);
     const zone = at >= 0 ? items[at] : undefined;
     if (!zone || zone.kind !== "zone") return;
     items[at] = { kind: "zone", ...zoneShape({ id: zoneId, title: zone.title, name: zone.name, polygon }) };
+    const dto = map.zones.find((z) => z.id === zoneId);
+    if (dto) dto.polygon = polygon;
     preview = undefined;
     surface.setItems(items);
     repaint();
     paintStrip();
     actions.reshapeZone(zoneId, polygon);
-    // Nothing is rebound here, and that is the point (2026-08-06). Reshaping a
-    // zone used to re-derive every pin's zone from the new geometry, which meant
-    // nudging one polygon could quietly move hands into it. A hand's zone is the
-    // hand's own binding now, changed only by dragging that hand's pin: one
-    // gesture, one meaning. A pin left sitting outside the zone it belongs to is
-    // visible and harmless; a hand rebound by somebody tidying an outline is
-    // neither.
   }
 
   function stopTool(): void {
@@ -310,8 +338,7 @@ export function mountMapView(
   }
 
   function finishTrace(): void {
-    // Under three points there is no shape, so this is an abandon rather than a
-    // save: better than writing a zone nobody can see.
+    // Under three points there is no shape: an abandon rather than a save.
     if (draft.length < 3) { stopTool(); return; }
     const shape = draft;
     const tag = busy?.tag;
@@ -320,141 +347,199 @@ export function mountMapView(
     else actions.newZone(shape);
   }
 
-  /** Place a hand: the next click drops its pin, wherever that is. */
-  function place(handId: string, label: string): void {
+  /** Place a hand that has no pin yet: the next click drops it, wherever that is. */
+  function place(box: string, handId: string, label: string): void {
     busy = { label, drawing: false };
     surface.setTool({
       cursor: "crosshair",
       onClick: (at) => {
-        // A tool takes over the click so a pin can be dropped INSIDE a zone rather
-        // than only on empty ground and dragged in afterwards; landing in one is
-        // what binds the hand.
+        // A tool takes over the click so a pin can be dropped INSIDE a zone;
+        // landing in one is what binds the hand.
         stopTool();
-        actions.movedSites([{ id: handId, x: Math.round(at.x), y: Math.round(at.y) }]);
+        actions.movedSites(box, [{ id: handId, x: Math.round(at.x), y: Math.round(at.y) }]);
       },
       onCancel: () => stopTool(),
     });
     paintStrip();
   }
 
-  // --- the strip ---------------------------------------------------------------
-  // No camera buttons here: fit, fit-the-selection and zoom are the cluster in
-  // the canvas's own corner, identical on all three canvases
-  // (canvas-controls.ts). The strip is for what is true of THIS map.
+  /** "+ Site": a new hand in the ACTIVE layer's box, made where the click lands. */
+  function newSite(): void {
+    const box = activeBox(prefs, boxIds);
+    if (box === undefined) return;
+    busy = { label: `a new site for ${layerName(layerOf.get(box)!)}`, drawing: false };
+    surface.setTool({
+      cursor: "crosshair",
+      onClick: (at) => {
+        stopTool();
+        actions.newSite(box, { x: Math.round(at.x), y: Math.round(at.y) });
+      },
+      onCancel: () => stopTool(),
+    });
+    paintStrip();
+  }
 
-  /** Which group's map this is, and a way to the others. */
-  function groupControl(): HTMLElement | null {
-    if (map.groups.length === 0) return null;
-    const here = map.groups.find((g) => g.id === map.groupId);
-    // A bare group name at the far left told a reader nothing: "zone" is not
-    // obviously the NAME of the thing being mapped until somebody says so.
-    if (map.groups.length === 1) {
-      return el("span", { className: "maphere" },
-        el("span", { className: "maphere-of", text: "Map of" }),
-        el("span", { className: "maphere-name", text: here?.gameId ?? "" }));
-    }
-    const select = document.createElement("select");
-    select.className = "mapgroup";
-    for (const group of map.groups) {
-      const option = document.createElement("option");
-      option.value = group.id;
-      option.textContent = group.gameId;
-      option.selected = group.id === map.groupId;
-      select.append(option);
-    }
-    select.addEventListener("change", () => actions.showGroup(select.value));
-    return select;
+  // --- the side panel ------------------------------------------------------------
+
+  /** The layer list's eye: click toggles, Option-click solos (and restores). */
+  function eye(layer: string, label: string): HTMLElement {
+    const shown = isShown(prefs, layer);
+    const b = el("button", {
+      className: `maplayer-eye${shown ? "" : " off"}`,
+      tip: `${shown ? "Hide" : "Show"} ${label}. Option-click shows only this layer, and again puts the rest back.`,
+    }, mapGlyph(shown ? "eye" : "eyeOff", 14, "map-glyph"));
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      keep(e.altKey ? soloLayer(prefs, layer, boxIds) : toggleLayer(prefs, layer));
+    });
+    return b;
   }
 
   /**
-   * The side panel: the map's CONTENTS, one row a thing. The strip carried a
-   * chip per undrawn zone, per picture and per unplaced hand, which was
-   * unusable at the Village's thirteen unplaced hands (one non-wrapping line);
-   * a first fix folded each family into a counted menu chip, and the author's
-   * ruling took it further the same day: a wide, shallow view has its spare
-   * room on the RIGHT, so the contents live there, which is also the Board's
-   * own map shape (canvas in the big column, a side panel beside it).
+   * The side panel with nothing selected: the LAYERS (the author's layered map
+   * view). Show all / Hide all at the top, a row per box on the map in the
+   * person's order (the active one highlighted), then Zones and Pictures.
    *
-   * Rows act: a drawn zone or a placed hand selects itself on the canvas and
-   * comes into view; an undrawn zone arms its trace; an unplaced hand arms its
-   * placement; a picture opens its own menu, which keeps the locked-background
-   * reachability story (a locked picture is invisible to the pointer, so this
-   * panel is the only way to reach one).
+   * In Edit layout each layer opens out to its contents, which is what the old
+   * Zones / Hands / Pictures panel held: the active box's sites and its hands
+   * still waiting to be placed, every zone (an undrawn one arms its trace), and
+   * every picture (a picture's row is the only handle a LOCKED picture has).
    */
-  function paintSide(): void {
-    const cap = (text: string, waiting?: number): HTMLElement =>
-      el("div", { className: "mapside-cap" }, el("span", { text }),
-        ...(waiting !== undefined && waiting > 0
-          ? [el("span", { className: "mapside-waiting", text: `${waiting} waiting` })] : []));
-    const row = (label: string, tip: string, onClick: (e: MouseEvent) => void, cls = ""): HTMLElement =>
-      el("button", { className: `mapside-row${cls}`, tip, onClick },
-        el("span", { className: "mapside-name", text: label }));
+  function paintLayers(): void {
+    const active = activeBox(prefs, boxIds);
+    const head = el("div", { className: "maplayers-head" },
+      el("span", { className: "mapside-title", text: "Layers" }),
+      el("span", { className: "crumb-spacer" }),
+      el("button", { className: "maplayers-all", text: "Show all", onClick: () => keep(showAll(prefs)) }),
+      el("button", { className: "maplayers-all", text: "Hide all", tip: "Hide every box's sites. Zones stay.", onClick: () => keep(hideAll(prefs, boxIds)) }));
+    const rows: HTMLElement[] = [];
+    for (const box of orderedBoxes(prefs, boxIds)) {
+      const layer = layerOf.get(box)!;
+      const swatch = el("i", { className: "maplayer-swatch" });
+      swatch.style.background = boxColour(layer.box);
+      const row = el("div", {
+        className: `maplayer${box === active ? " active" : ""}${isShown(prefs, box) ? "" : " hidden"}`,
+        tip: box === active ? "The active layer: + Site adds here." : "Make this the active layer",
+      }, eye(box, layerName(layer)), el("span", { className: "maplayer-grip" }, iconNode("grip", 12)), swatch,
+        el("span", { className: "maplayer-name", text: layerName(layer) }),
+        el("span", { className: "maplayer-n", text: plural(layer.sites.length, "site") }));
+      row.addEventListener("click", () => keep(setActive(prefs, box)));
+      // The person's order, by drag: the pin draw order follows it.
+      wireReorder(row, box, "y", (from, before, to) => keep(moveLayer(prefs, boxIds, from, to, before)));
+      rows.push(row);
+      if (editing && box === active) rows.push(...activeContents(layer));
+    }
+    const zonesRow = el("div", { className: `maplayer${isShown(prefs, MAP_LAYER_ZONES) ? "" : " hidden"}` },
+      eye(MAP_LAYER_ZONES, "the zones"), el("span", { className: "maplayer-grip none" }), el("i", { className: "maplayer-swatch zones" }),
+      el("span", { className: "maplayer-name", text: "Zones" }),
+      el("span", { className: "maplayer-n", text: plural(map.zones.length + map.undrawn.length, "zone") }));
+    const picturesRow = el("div", { className: `maplayer${isShown(prefs, MAP_LAYER_PICTURES) ? "" : " hidden"}` },
+      eye(MAP_LAYER_PICTURES, "the pictures"), el("span", { className: "maplayer-grip none" }), el("i", { className: "maplayer-swatch pictures" }),
+      el("span", { className: "maplayer-name", text: "Pictures" }),
+      el("span", { className: "maplayer-n", text: String(map.backgrounds.length) }));
+    side.replaceChildren(head, ...rows, zonesRow, ...(editing ? zoneContents() : []),
+      picturesRow, ...(editing ? pictureContents() : []),
+      ...(editing
+        ? []
+        : [el("p", { className: "mapside-teach", text: boxIds.length > 0
+            ? "Choose a site to see what can come up there, or a zone for its properties and everything filed to it."
+            : "No box uses the map yet. A box joins it from its own page." })]));
+  }
 
-    const zoneRows = [
+  const subRow = (label: string, tip: string, onClick: (e: MouseEvent) => void, cls = "", meta?: string): HTMLElement =>
+    el("button", { className: `mapside-row sub${cls}`, tip, onClick },
+      el("span", { className: "mapside-name", text: label }),
+      ...(meta !== undefined ? [el("span", { className: "mapside-meta", text: meta })] : []));
+
+  /** The active layer's sites and its hands still waiting for a pin. */
+  function activeContents(layer: ProjectMapLayerDto): HTMLElement[] {
+    return [
+      ...layer.sites.map((site) => {
+        const r = subRow(site.title ?? site.gameId, "Show its pin on the map",
+          () => { surface.select([site.id]); surface.showSelection(); }, site.title !== undefined ? " titled" : "",
+          zoneName(site.zone) ?? "no zone");
+        r.prepend(boxPin(layer.box));
+        return r;
+      }),
+      ...layer.unplaced.map((hand) => {
+        const r = subRow(hand.title ?? hand.gameId, "Not on the map yet. Click, then click where it sits.",
+          () => place(layer.box, hand.id, hand.title ?? hand.gameId), hand.title !== undefined ? " todo titled" : " todo");
+        r.append(el("span", { className: "mapside-act", text: "place" }));
+        return r;
+      }),
+    ];
+  }
+
+  function zoneContents(): HTMLElement[] {
+    const rows = [
       ...map.zones.map((z) => {
-        const r = row(z.gameId, "Show it on the map", () => { surface.select([z.id]); surface.showSelection(); });
+        const r = subRow(z.gameId, "Show it on the map", () => { surface.select([z.id]); surface.showSelection(); });
         const dot = el("i", { className: "mapside-dot" });
         dot.style.color = `var(--char-${colourIndex(z.gameId)})`;
         r.prepend(dot);
         return r;
       }),
       ...map.undrawn.map((z) => {
-        const r = row(z.gameId, "Not drawn yet. Click to trace its outline.", () => trace(z.id, z.gameId), " todo");
+        const r = subRow(z.gameId, "Not drawn yet. Click to trace its outline.", () => trace(z.id, z.gameId), " todo");
         r.append(el("span", { className: "mapside-act", text: "trace" }));
         return r;
       }),
     ];
-    const siteRows = [
-      ...map.sites.map((site) => {
-        const r = row(site.gameId, "Show its pin on the map", () => { surface.select([site.id]); surface.showSelection(); });
-        r.prepend(el("i", { className: "mapside-pin" }));
-        return r;
-      }),
-      ...(map.unplaced ?? []).map((hand) => {
-        const r = row(hand.gameId, "Not on the map yet. Click, then click where it sits.", () => place(hand.id, hand.gameId), " todo");
-        r.append(el("span", { className: "mapside-act", text: "place" }));
-        return r;
-      }),
-    ];
-    const pictureRows = map.backgrounds.map((b) =>
-      row(`${b.file}${b.locked === true ? " \u00b7 locked" : ""}${b.hidden === true ? " \u00b7 hidden" : ""}`,
-        "Everything a picture can do, in its menu.",
+    // What every zone carries, said once: the declarations are the group's.
+    if (map.properties.length > 0) {
+      rows.push(el("p", { className: "mapside-note",
+        text: `Each zone has ${map.properties.map((p) => `${p.name}, ${/^[aeiou]/i.test(p.type) ? "an" : "a"} ${p.type}`).join("; ")}.` }));
+    }
+    return rows;
+  }
+
+  function pictureContents(): HTMLElement[] {
+    return map.backgrounds.map((b) =>
+      subRow(b.file, "Everything a picture can do, in its menu.",
         (e) => {
           const at = (e.currentTarget as HTMLElement).getBoundingClientRect();
           backgroundMenu(b, { x: at.left, y: at.bottom + 2 });
-        }));
-
-    side.replaceChildren(
-      cap("Zones", map.undrawn.length), ...zoneRows,
-      cap("Hands", (map.unplaced ?? []).length), ...siteRows,
-      ...(pictureRows.length > 0 ? [cap("Pictures"), ...pictureRows] : []),
-    );
+        }, "", [b.locked === true ? "locked" : "", b.hidden === true ? "hidden" : ""].filter((x) => x !== "").join(", ") || undefined));
   }
 
-  /**
-   * What a selected pin says about itself: which zone its HAND belongs to, and
-   * whether dragging it can change that.
-   *
-   * The three answers are genuinely different and used to read the same. A hand
-   * whose template chooses this group can be moved by dragging. A hand whose
-   * template BINDS the group for all its instances cannot, and the reason is not
-   * about this hand at all. And a hand with no route to the group has a pin that
-   * is a note about where it sits and nothing more, which an author should be
-   * told before they try to drag it somewhere meaningful.
-   */
+  /** Which panel is up, so a repaint of the same selection does not refetch it. */
+  let panelFor: string | undefined;
+  /** The panel: the selected site or zone while reading, else the layers. Edit
+   *  layout keeps the layers up whatever is selected: the content panel is for
+   *  reading, and editing wants the contents to hand. */
+  function paintSide(): void {
+    const chosen = surface.selection();
+    const only = !editing && busy === undefined && chosen.length === 1 ? byId(chosen[0]!) : undefined;
+    const back = (): void => { surface.select([]); };
+    if (only?.kind === "site") {
+      if (panelFor === only.id) return;
+      panelFor = only.id;
+      actions.paintSite(side, layerOf.get(only.box)!, siteDto.get(only.id)!, back);
+      return;
+    }
+    if (only?.kind === "zone") {
+      const key = `${only.id}|${(prefs.hidden ?? []).join(",")}`;
+      if (panelFor === key) return;
+      panelFor = key;
+      const hidden = new Set(boxIds.filter((b) => !isShown(prefs, b)));
+      actions.paintZone(side, only.id, hidden, (boxes) => {
+        let next = prefs;
+        for (const b of boxes) if (!isShown(next, b)) next = toggleLayer(next, b);
+        keep(next);
+      }, back);
+      return;
+    }
+    panelFor = undefined;
+    paintLayers();
+  }
+
+  /** What a selected pin says about itself: which zone its hand belongs to, and
+   *  whether dragging it can change that. */
   function describeSite(site: SiteShape & { kind: "site" }): string {
     const rule = siteRule.get(site.id);
     const where = site.zone === undefined ? "no zone yet" : (zoneName(site.zone) ?? "a zone");
-    // Said FIRST when it applies, because it is the thing the picture is getting
-    // wrong: two outlines around one site look like nesting, and zones are tags,
-    // so they do not nest. Naming the losers is the point - "also inside" without
-    // saying what would leave the author hunting for the other outline.
-    // SHORT here, because the strip is one line with an ellipsis and a clipped
-    // explanation explains nothing. The full reason is on the site's own rollover
-    // (`hoverTip`), which is where this app teaches: the strip states the fact.
     const others = site.alsoInside ?? [];
-    const also = others.length === 0 ? ""
-      : ` Also inside ${listNames(others)}, which does not count.`;
+    const also = others.length === 0 ? "" : ` Also inside ${listNames(others)}, which does not count.`;
     if (rule?.rebinds === true) {
       return site.zone === undefined
         ? `${site.title} is in ${where}. Drag it into one to bind it.${also}`
@@ -463,7 +548,7 @@ export function mountMapView(
     if (rule?.fixedBy !== undefined) {
       return `${site.title} is in ${where}, fixed by the template "${rule.fixedBy}" for every hand it makes.${also}`;
     }
-    return `${site.title} doesn't use this map's tags, so its pin only marks a spot.${also}`;
+    return `${site.title} doesn't use the map's zones, so its pin only marks a spot.${also}`;
   }
 
   /** "a", "a and b", "a, b and c" - a list an author reads, not a join. */
@@ -472,7 +557,7 @@ export function mountMapView(
     return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]!}`;
   }
 
-  /** Everything a picture can be told to do, in one place. Reached from its chip
+  /** Everything a picture can be told to do, in one place. Reached from its row
    *  (which works even when locked) and from a right-click on the map. */
   function backgroundMenu(b: MapBackgroundDto, at2: { x: number; y: number }): void {
     const order = map.backgrounds.map((x) => x.id);
@@ -486,8 +571,7 @@ export function mountMapView(
       b.hidden === true
         ? { label: "Show", onClick: () => actions.editBackground(b.id, { hidden: false }) }
         : { label: "Hide", onClick: () => actions.editBackground(b.id, { hidden: true }) },
-      // Fading is what makes a tracing base usable, so it is one click rather
-      // than a slider nobody would find: three steps and back to full.
+      // Fading is what makes a tracing base usable: three steps and back to full.
       { label: `Fade (${Math.round((b.opacity ?? 1) * 100)}%)`, onClick: () => {
         const steps = [1, 0.6, 0.35, 0.15];
         const now = steps.findIndex((v) => Math.abs(v - (b.opacity ?? 1)) < 0.02);
@@ -505,12 +589,14 @@ export function mountMapView(
     ]);
   }
 
+  // --- the strip ---------------------------------------------------------------
+  // No camera buttons here: fit, fit-the-selection and zoom are the cluster in
+  // the canvas's own corner, identical on all three canvases (canvas-controls.ts).
+
   function paintStrip(): void {
     paintSide();
     const chosen = surface.selection();
 
-    // A tool is armed: same rule as a trace, one instruction and a way out. The
-    // comment tool shares that grammar rather than inventing a second one.
     const furnitureHint = commentArmed ? "Click where the comment goes" : furniture?.hint();
     if (furnitureHint !== undefined) {
       strip.replaceChildren(
@@ -524,8 +610,7 @@ export function mountMapView(
       return;
     }
 
-    // Mid-gesture the strip says how to finish and how to get out, and nothing else:
-    // a canvas in the middle of a shape is no place for a row of other verbs.
+    // Mid-gesture the strip says how to finish and how to get out, and nothing else.
     if (busy !== undefined) {
       strip.replaceChildren(
         el("span", { className: "hint", text: busy.drawing
@@ -541,9 +626,28 @@ export function mountMapView(
       return;
     }
 
+    const legend = actions.coverageOn()
+      ? [el("span", { className: "hint cover-legend", text: coverageLegend(actions.coverage(), Date.now()) })]
+      : [];
+    const toggle = el("button", {
+      className: `stripbtn${editing ? " on" : ""}`,
+      tip: editing ? "Back to reading the map" : "Draw zones, place sites, add pictures, frames and comments",
+      onClick: () => actions.setEditing(!editing),
+    }, editing ? iconNode("tick", 12) : iconNode("add", 12), editing ? "Done" : "Edit layout");
+
+    if (!editing) {
+      // Reading: one verb and the state of the map, quietly.
+      const shown = items.filter((i) => i.kind === "site").length;
+      const zones = map.zones.length;
+      strip.replaceChildren(toggle,
+        el("span", { className: "hint", text: refused ?? `${plural(zones, "zone")}, ${plural(shown, "site")} shown.` }),
+        ...legend, el("span", { className: "stripgap" }));
+      return;
+    }
+
     const what = chosen.length === 1 ? byId(chosen[0]!) : undefined;
     const said = refused ?? (what === undefined
-      ? (chosen.length > 1 ? `${chosen.length} selected` : describe(map))
+      ? (chosen.length > 1 ? `${chosen.length} selected` : "Zones are the project's. Sites go to the active layer.")
       : what.kind === "background"
         ? `${what.title} is a picture behind the map. Drag it, or lock it once it's right.`
         : what.kind === "frame"
@@ -553,19 +657,19 @@ export function mountMapView(
                 ? `Corner ${pickedVertex + 1} of ${what.title} is picked. Delete removes it.`
                 : `${what.title} is a zone. Drag a corner to reshape it, or a mid-point to add one.`
               : describeSite(what));
-
-    const group = groupControl();
-    // Three voices, left to right: the verbs as real buttons, the things waiting to
-    // be placed as chips (a noun you pick, not a verb), then what is going on. They
-    // used to share one voice, which made the strip read as a sentence rather than
-    // as a toolbar.
+    const active = activeBox(prefs, boxIds);
+    const activeLayer = active === undefined ? undefined : layerOf.get(active);
+    const siteDot = el("i", { className: "maplayer-swatch" });
+    if (activeLayer) siteDot.style.background = boxColour(activeLayer.box);
     strip.replaceChildren(
-      ...(group ? [group] : []),
+      toggle,
       el("div", { className: "striptools" },
-        el("button", {
-          className: "stripbtn", tip: "Trace a new zone on the map",
-          onClick: () => trace(undefined, "New zone"),
-        }, iconNode("add", 12), "Zone"),
+        el("button", { className: "stripbtn", tip: "Trace a new zone on the map", onClick: () => trace(undefined, "New zone") },
+          iconNode("add", 12), "Zone"),
+        ...(activeLayer
+          ? [el("button", { className: "stripbtn", tip: `A new site for ${layerName(activeLayer)}, the active layer. Click where it goes.`, onClick: () => newSite() },
+              iconNode("add", 12), "Site", siteDot, el("span", { className: "stripbtn-sub", text: layerName(activeLayer) }))]
+          : []),
         el("button", {
           className: "stripbtn",
           tip: "Put a picture behind the map, to place the content on",
@@ -577,30 +681,17 @@ export function mountMapView(
             actions.addBackground({
               view: { width: box.width, height: box.height },
               scale: cam.scale,
-              at: {
-                x: (box.width / 2 - cam.x) / cam.scale,
-                y: (box.height / 2 - cam.y) / cam.scale,
-              },
+              at: { x: (box.width / 2 - cam.x) / cam.scale, y: (box.height / 2 - cam.y) / cam.scale },
             });
           },
-        }, iconNode("add", 12), "Background"),
-        el("button", {
-          className: "stripbtn",
-          tip: "Draw a titled frame behind part of the map",
-          onClick: () => furniture?.drawFrame(),
-        }, iconNode("add", 12), "Frame"),
-        el("button", {
-          className: "stripbtn",
-          tip: "Drop a comment on the map or on a site",
-          onClick: () => armComment(),
-        }, iconNode("add", 12), "Comment"),
+        }, iconNode("add", 12), "Picture"),
+        el("button", { className: "stripbtn", tip: "Draw a titled frame behind part of the map", onClick: () => furniture?.drawFrame() },
+          iconNode("add", 12), "Frame"),
+        el("button", { className: "stripbtn", tip: "Drop a comment on the map or on a site", onClick: () => armComment() },
+          iconNode("add", 12), "Comment"),
       ),
       el("span", { className: "hint", text: said }),
-      // The overlay names itself and DATES its evidence, as it does on the node
-      // canvas: a map silently wearing an old run is the one way this misleads.
-      ...(actions.coverageOn()
-        ? [el("span", { className: "hint cover-legend", text: coverageLegend(actions.coverage(), Date.now()) })]
-        : []),
+      ...legend,
       el("span", { className: "stripgap" }),
     );
   }
@@ -610,134 +701,143 @@ export function mountMapView(
   const surface: CanvasSurface<MapItem> = mountCanvasSurface<MapItem>({
     host: stage,
     tokens,
-    // A map is a place, not a diagram: zones line up with a floor plan, not with a
-    // grid of our choosing, so nothing snaps.
+    // A map is a place, not a diagram: nothing snaps.
     grid: 0,
+    // Reading moves nothing (see the header): the drag is Edit layout's.
+    readOnly: !editing,
     draw: (item: MapItem, ctx: DrawContext): Konva.Group => {
       if (item.kind === "background") return drawBackground(item, ctx);
       if (item.kind === "frame") return drawFrame(item, ctx);
       return item.kind === "zone" ? drawZone(item, ctx) : drawSite(item, ctx);
     },
-    // Below the label floor the map is shapes and dots with no names on it at
-    // all, and a pin is four pixels across. The rollover is how you ask which is
-    // which without zooming back in and losing the whole picture.
+    // Below the label floor the map is shapes and dots with no names: the
+    // rollover is how you ask which is which without zooming back in.
     hoverTip: (item, scale) => {
-      // Overlapping outlines get the full explanation, at any zoom: this is the
-      // one thing on the map the picture actively misleads about, so it is worth
-      // a rollover of its own rather than a label the eye has to be small to see.
       if (item.kind === "site" && item.alsoInside !== undefined && item.alsoInside.length > 0) {
         const own = item.zone === undefined ? undefined : zoneName(item.zone);
         return own === undefined
           ? `${item.title} sits inside ${listNames(item.alsoInside)}. Zones don't nest, so dropping it binds to the frontmost one only.`
           : `${item.title} belongs to ${own}. It also sits inside ${listNames(item.alsoInside)}, which counts for nothing. Zones are tags, so they don't nest, and a site belongs to the frontmost zone around it.`;
       }
+      if (item.kind === "site" && scale >= LABEL_FLOOR) {
+        // The box is the one thing the label never says, and the tint only
+        // hints at it.
+        const layer = layerOf.get(item.box);
+        return layer && map.layers.length > 1 ? `${item.title}, ${layerName(layer)}` : undefined;
+      }
       if (scale >= LABEL_FLOOR) return undefined;
-      return item.title;
+      return item.kind === "site" ? `${item.title}, ${layerName(layerOf.get(item.box)!)}` : item.title;
     },
     onActivate: (id) => {
       if (furniture?.activate(id) === true) return;
       const item = byId(id);
       if (item?.kind === "zone") actions.openZone(id);
-      else if (item?.kind === "site") actions.openHand(id);
+      else if (item?.kind === "site") actions.openHand(item.box, id);
     },
     onSelectionChange: () => {
-      // A different zone's corners are not this zone's: the pick goes with it.
       pickedVertex = undefined;
+      // Selecting a site makes its box the active layer: the next "+ Site" goes
+      // where the author was just looking.
+      const chosen = surface.selection();
+      const only = chosen.length === 1 ? byId(chosen[0]!) : undefined;
+      if (only?.kind === "site" && activeBox(prefs, boxIds) !== only.box) {
+        prefs = setActive(prefs, only.box);
+        actions.setLayers(prefs);
+      }
       repaint();
       paintStrip();
     },
-    // Delete on the canvas means the picked CORNER, when there is one. Zones and
-    // hands come off the map from their own menus, where the wording can say what
-    // stays behind.
     onDelete: () => {
+      if (!editing) return;
       const chosen = surface.selection();
       if (furniture !== undefined && furniture.absorbDelete(chosen).length !== chosen.length) return;
       const only = chosen.length === 1 ? byId(chosen[0]!) : undefined;
       if (pickedVertex !== undefined && only?.kind === "zone") removeVertex(only.id, pickedVertex);
     },
     onContext: (id, _world, e) => {
-      if (id !== undefined && furniture?.menu(id, e) === true) return;
+      if (id !== undefined && editing && furniture?.menu(id, e) === true) return;
       const item = id === undefined ? undefined : byId(id);
-      // Per-item actions only: adding lives in the strip, where it cannot grow into
-      // a list of everything in the project.
-      // The wording names what goes and what stays. "Clear its outline" described
-      // the mechanism (geometry) rather than the act, and read as though it might
-      // delete the zone itself; nothing here ever deletes a tag or a hand.
+      // Per-item actions only. The wording names what goes and what stays;
+      // nothing here ever deletes a tag or a hand. Reading offers the way in;
+      // the layout verbs are Edit layout's.
       if (item?.kind === "site") {
         openContextMenu(e.clientX, e.clientY, [
-          { label: `Open ${item.title}`, onClick: () => actions.openHand(item.id) },
-          { label: "Remove from the map", danger: true, onClick: () => actions.removeSite(item.id) },
+          { label: `Open ${item.title}`, onClick: () => actions.openHand(item.box, item.id) },
+          ...(editing ? [{ label: "Remove from the map", danger: true, onClick: () => actions.removeSite(item.box, item.id) }] : []),
         ]);
         return;
       }
-      if (item?.kind === "background") {
+      if (item?.kind === "background" && editing) {
         const dto = map.backgrounds.find((b) => b.id === item.id);
         if (dto) backgroundMenu(dto, { x: e.clientX, y: e.clientY });
         return;
       }
       if (item?.kind === "zone") {
-        // Drawing-app layering, in a drawing app's words. Only offered where it
-        // would do something: on the frontmost zone, "bring to front" is a menu
-        // item that does nothing, which is worse than one that is not there.
+        // Drawing-app layering, in a drawing app's words, offered only where it
+        // would do something.
         const order = map.zones.map((z) => z.id);
         const at = order.indexOf(item.id);
         const canRaise = at >= 0 && at < order.length - 1;
         const canLower = at > 0;
         openContextMenu(e.clientX, e.clientY, [
           { label: `Open ${item.title}`, onClick: () => actions.openZone(item.id) },
-          ...(canRaise ? [
+          ...(editing && canRaise ? [
             { label: "Bring to front", onClick: () => actions.restackZone(item.id, "front") },
             { label: "Bring forward", onClick: () => actions.restackZone(item.id, "forward") },
           ] : []),
-          ...(canLower ? [
+          ...(editing && canLower ? [
             { label: "Send backward", onClick: () => actions.restackZone(item.id, "backward") },
             { label: "Send to back", onClick: () => actions.restackZone(item.id, "back") },
           ] : []),
-          { label: "Remove from the map", danger: true, onClick: () => actions.reshapeZone(item.id, []) },
+          ...(editing ? [{ label: "Remove from the map", danger: true, onClick: () => actions.reshapeZone(item.id, []) }] : []),
         ]);
       }
     },
     onMove: (rawMoves) => {
-      // Furniture first, and it takes its own out of the list: a frame or a
-      // sticky is arrangement, so it never reaches the pin rebinding below.
+      // Furniture first, and it takes its own out of the list.
       const moves = furniture?.absorbMoves(rawMoves) ?? rawMoves;
       for (const move of moves) {
         const item = byId(move.id);
         if (item) { item.x = move.x; item.y = move.y; }
       }
-      // Zones first: a dropped ZONE writes its new outline. It rebinds nobody (see
-      // applyOutline), so the sites that travelled with it keep the hands they had.
+      // A dropped ZONE writes its new outline. It rebinds nobody (see applyOutline).
       for (const move of moves) {
         const item = byId(move.id);
-        if (item?.kind === "zone") actions.reshapeZone(item.id, worldOutline(item));
-      }
-      // A dropped PICTURE keeps its new corner. Coalesced, because a drag is one
-      // gesture however many frames it took.
-      for (const move of moves) {
-        const item = byId(move.id);
-        if (item?.kind === "background") {
-          actions.editBackground(item.id, { x: move.x, y: move.y }, { coalesce: true });
+        if (item?.kind === "zone") {
+          const polygon = worldOutline(item);
+          const dto = map.zones.find((z) => z.id === item.id);
+          if (dto) dto.polygon = polygon;
+          actions.reshapeZone(item.id, polygon);
         }
       }
-      // Then the PINS, which is the move the map exists for. Only where they now
-      // are: main works out which zone that is and which hands it rebinds, and
-      // says so through `rebound` (below), so the canvas and the shard cannot
-      // come to different conclusions about the same drop.
+      // A dropped PICTURE keeps its new corner, coalesced: one gesture.
+      for (const move of moves) {
+        const item = byId(move.id);
+        if (item?.kind === "background") actions.editBackground(item.id, { x: move.x, y: move.y }, { coalesce: true });
+      }
+      // Then the PINS, the move the map exists for, PER BOX: a box's sites are
+      // its own shard. Main works out which zone each landed in and which hands
+      // it rebinds, and says so through `rebound`.
       const dropped = moves
         .map((m) => byId(m.id))
-        .filter((i): i is SiteShape & { kind: "site" } => i?.kind === "site");
+        .filter((i): i is SiteShape & { kind: "site"; box: string } => i?.kind === "site");
       if (dropped.length > 0) {
         refused = undefined;
-        // A site whose group is fixed by its template will not move zone whatever
-        // it is dropped on, so say that now rather than leaving the author to
-        // notice that nothing happened.
         for (const site of dropped) {
           const rule = siteRule.get(site.id);
           if (rule?.fixedBy !== undefined) {
             refused = `${site.title} goes where "${rule.fixedBy}" says, because every hand from that template shares one zone.`;
           }
+          const dto = siteDto.get(site.id);
+          if (dto) { const at = sitePoint(site); dto.x = at.x; dto.y = at.y; }
         }
-        actions.movedSites(dropped.map((site) => ({ id: site.id, ...sitePoint(site) })));
+        const byBox = new Map<string, { id: string; x: number; y: number }[]>();
+        for (const site of dropped) {
+          const list = byBox.get(site.box) ?? [];
+          list.push({ id: site.id, ...sitePoint(site) });
+          byBox.set(site.box, list);
+        }
+        for (const [box, list] of byBox) actions.movedSites(box, list);
       }
       surface.setItems(items);
       repaint();
@@ -754,8 +854,7 @@ export function mountMapView(
     repaint: () => { repaint(); paintStrip(); },
   });
 
-  /** Take a corner out, if the shape can spare it. A triangle cannot: refusing
-   *  beats leaving a zone that cannot be drawn. */
+  /** Take a corner out, if the shape can spare it. A triangle cannot. */
   function removeVertex(zoneId: string, index: number): void {
     const zone = byId(zoneId);
     if (zone?.kind !== "zone") return;
@@ -769,8 +868,7 @@ export function mountMapView(
    * The painted layers. SPLIT deliberately: `paintNames` redraws the foreground
    * (names, the shape being traced or previewed), `paintHandlesNow` rebuilds the
    * chrome. Rebuilding chrome destroys the handle the pointer is holding, so a
-   * vertex drag repaints the preview and nothing else: doing both was why a drag
-   * stopped dead after a few pixels.
+   * vertex drag repaints the preview and nothing else.
    */
   function repaint(): void {
     paintNames();
@@ -778,16 +876,16 @@ export function mountMapView(
   }
 
   function paintNames(): void {
+    const zonesShown = isShown(prefs, MAP_LAYER_ZONES);
     surface.setForeground((layer, scale, at) => {
-      paintZoneLabels(layer, scale, tokens, map.zones, (id) => {
-        const item = at(id);
-        return item?.kind === "zone" ? item : undefined;
-      });
+      if (zonesShown) {
+        paintZoneLabels(layer, scale, tokens, map.zones, (id) => {
+          const item = at(id);
+          return item?.kind === "zone" ? item : undefined;
+        });
+      }
       if (draft.length > 0) paintDraft(layer, scale, tokens, draft, pointer);
-      // A vertex mid-drag: the shape as it WOULD be, drawn here rather than by
-      // rebuilding the zone, so the handle in the hand survives the frame.
       if (preview) paintDraft(layer, scale, tokens, preview.polygon, undefined);
-      // A frame being dragged out: the rectangle it would be.
       const band = furniture?.draft();
       if (band) {
         layer.add(new Konva.Rect({
@@ -796,7 +894,6 @@ export function mountMapView(
           listening: false,
         }));
       }
-      // A picture mid-scale, for the same reason: the rectangle it would have.
       if (scaling) {
         const r = scaling.rect;
         layer.add(new Konva.Rect({
@@ -809,13 +906,10 @@ export function mountMapView(
   }
 
   function paintHandlesNow(): void {
-    // Handles on exactly ONE selected thing: two shapes' worth would be ambiguous
-    // to grab and would not say which they belonged to.
+    // Handles are Edit layout's, and on exactly ONE selected thing.
     const chosen = surface.selection();
-    const only = chosen.length === 1 ? byId(chosen[0]!) : undefined;
+    const only = editing && chosen.length === 1 ? byId(chosen[0]!) : undefined;
 
-    // A selected PICTURE gets corner handles, which scale it proportionally. It
-    // can only be selected when unlocked, so this never fights a tracing base.
     if (busy === undefined && only?.kind === "background") {
       const picture = only;
       surface.setChrome((layer, scale) => {
@@ -823,8 +917,6 @@ export function mountMapView(
           { x: picture.x, y: picture.y, width: picture.width, height: picture.height }, {
             preview: (rect) => {
               scaling = rect === undefined ? undefined : { id: picture.id, rect };
-              // Names and the preview only: rebuilding the chrome here would
-              // destroy the handle being dragged.
               paintNames();
             },
             commit: (rect) => {
@@ -842,20 +934,14 @@ export function mountMapView(
     }
     const zone = only;
     surface.setChrome((layer, scale) => {
-      // The zone's committed shape: the handle being dragged moves itself, and the
-      // preview of where it is going is drawn in the foreground.
       paintHandles(layer, scale, tokens, worldOutline(zone), {
         previewVertex: (index, to) => {
           preview = to === undefined ? undefined : { id: zone.id, polygon: withVertexAt(worldOutline(zone), index, to) };
-          // Names and the preview shape ONLY: rebuilding the handles here would
-          // destroy the one being dragged.
           paintNames();
         },
         moveVertex: (index, to) => applyOutline(zone.id, withVertexAt(worldOutline(zone), index, to)),
         insertVertex: (index, at) => {
           applyOutline(zone.id, withVertexAfter(worldOutline(zone), index, at));
-          // The new corner is the one you just asked for, so it is the one picked
-          // out: Delete right after inserting undoes the insert.
           pickedVertex = index + 1;
           repaint();
         },
@@ -874,11 +960,8 @@ export function mountMapView(
 
   /**
    * Comment markers, in the surface's marker group (design/annotation.md 3).
-   *
-   * `itemAt` answers with SITES only. A marker dropped on a zone stays on the
-   * canvas rather than following the zone: a zone is a traced area, its outline
-   * is reshaped for cartographic reasons that have nothing to do with what the
-   * comment says, and "this corner of the docks is thin" is about the place.
+   * `itemAt` answers with SITES only: a marker dropped on a zone stays on the
+   * canvas rather than following the zone's outline about.
    */
   surface.setMarkers(markerPainter<MapItem>({
     markers: () => actions.markers(),
@@ -913,16 +996,7 @@ export function mountMapView(
     paintStrip();
   }
 
-
-  /**
-   * Open a marker's thread from OUTSIDE the canvas: the Review Feedback walk
-   * stepping onto a comment that lives here.
-   *
-   * A marker is a Konva shape, so it cannot be reached the way the walk reaches
-   * a document's topline bubble. It is centred first and its popover hangs off a
-   * proxy at its point, which is the whole reason a comment was dropped on a
-   * canvas rather than filed against the container: the place IS the subject.
-   */
+  /** Open a marker's thread from OUTSIDE the canvas: the Review Feedback walk. */
   function openMarker(threadId: string): boolean {
     const marker = actions.markers().find((m) => m.id === threadId);
     if (!marker) return false;
@@ -944,6 +1018,21 @@ export function mountMapView(
     return proxy;
   }
 
+  /** The layers changed: rebuild what is drawn, keep the camera and whatever of
+   *  the selection is still on the map. */
+  function rebuild(): void {
+    items = buildItems();
+    dressCoverage();
+    const still = surface.selection().filter((id) => items.some((i) => i.id === id));
+    surface.setItems(items);
+    if (still.length !== surface.selection().length) surface.select(still);
+    panelFor = undefined;
+    repaint();
+    paintStrip();
+  }
+
+  items = buildItems();
+  dressCoverage();
   surface.setItems(items);
   repaint();
   const remembered = recallCamera(cameraKey);
@@ -952,24 +1041,31 @@ export function mountMapView(
   paintStrip();
 
   const unwatch = watchCanvasTokens((next) => { tokens = next; surface.setTokens(next); repaint(); });
-  // A picture finishing its load is the one repaint nobody asked for: the first
-  // paint of a new background is a placeholder, and this is the arrival.
+  // A picture finishing its load is the one repaint nobody asked for.
   const unwatchImages = onImageReady(() => { surface.setItems(items); repaint(); });
 
   return {
     repaintMarkers() { surface.repaintMarkers(); },
     openMarker,
     refreshCoverage() { dressCoverage(); surface.setItems(items); paintStrip(); },
+    select(id) {
+      if (!items.some((i) => i.id === id)) return;
+      surface.select([id]);
+      surface.revealIfOffscreen([id]);
+    },
     rebound(changes) {
       if (changes.length === 0) return;
       for (const change of changes) {
         const site = byId(change.id);
+        const dto = siteDto.get(change.id);
+        if (dto) { if (change.zone === null) delete dto.zone; else dto.zone = change.zone; }
         if (site?.kind !== "site") continue;
         site.zone = change.zone ?? undefined;
         site.zoneName = change.zone === null ? undefined : zoneName(change.zone);
         site.unbound = change.zone === null;
       }
       surface.setItems(items);
+      panelFor = undefined;
       repaint();
       paintStrip();
     },
@@ -982,10 +1078,6 @@ export function mountMapView(
   };
 }
 
-/** What the strip says with nothing selected: the state of the map, quietly. */
-function describe(map: BoxMapDto): string {
-  if (map.zones.length === 0) return "No zones yet. Add one and trace its outline.";
-  const zones = `${plural(map.zones.length, "zone")}`;
-  const sites = map.sites.length === 0 ? "no hands pinned" : `${map.sites.length} pinned`;
-  return `${zones}, ${sites}.`;
-}
+/** The box a hand belongs to on the map, placed or waiting. */
+export const siteBoxOf = (map: ProjectMapViewDto, handId: string): string | undefined =>
+  map.layers.find((l) => l.sites.some((s) => s.id === handId) || l.unplaced.some((u) => u.id === handId))?.box;

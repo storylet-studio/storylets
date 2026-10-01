@@ -39,7 +39,7 @@ import { launchLocation, launchLocationFromArgv, launchPathFromArgv, sameProject
 import {
   addCoverageDrivers, cardCatalogue, createBox, createCard, createDeck, createTagGroup, createTemplate,
   boxCatalogue, createHand, deleteBox, deleteCard, deleteDeck, deleteTagGroup, deleteHand, deleteTemplate, tagGroupDetail, duplicateBox, duplicateCard,
-  duplicateDeck, duplicateTagGroup, duplicateHand, duplicateTemplate, handDetail, moveBox, moveCard, moveDeck, moveHand, templateDetail, redo, renameDeck,
+  duplicateDeck, duplicateTagGroup, duplicateHand, duplicateTemplate, handCards, handDetail, mapZoneDetail, projectMapView, useProjectMap, moveBox, moveCard, moveDeck, moveHand, templateDetail, redo, renameDeck,
   saveHand,
   declareProperty, deleteCommentMessage, repointTag, addNamedOutcome,
   saveBox, saveCard, saveTagGroup, saveProjectSettings, saveTemplate, proposeDrivers, undo, moveCardsOnCanvas, createCardOnCanvas, layoutDeck,
@@ -67,9 +67,9 @@ import type { Bundle, Comment, Frame, PropertyDecl, SaveFile, ScalarValue, Stack
 import type { BackgroundEdit } from "./mutate.js";
 import { ASSET_SCHEME, assetUrl } from "../shared/api.js";
 import type {
-  BoxEdit, BoxKit, BoxMapDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOrder, CoverageOverlayDto, CoverageReport, DeckGraph, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, PackOffer, ContractBreakDto, LeavePromptDto, LeaveSettledDto, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
+  BoxEdit, BoxKit, BoxMapDto, MapLayerPrefs, ProjectMapViewDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOrder, CoverageOverlayDto, CoverageReport, DeckGraph, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, PackOffer, ContractBreakDto, LeavePromptDto, LeaveSettledDto, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
 } from "../shared/api.js";
-import { JOB_PROGRESS_CHANNEL, MAP_CANVAS, PROJECT_CHANGED } from "../shared/api.js";
+import { JOB_PROGRESS_CHANNEL, MAP_CANVAS, PROJECT_CHANGED, PROJECT_MAP_ASSETS, PROJECT_MAP_CANVAS_ID } from "../shared/api.js";
 import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
 import { EXAMPLES } from "../shared/examples.js";
 
@@ -1251,8 +1251,6 @@ function wireIpc(): void {
   ipcMain.handle("state:setAutoRebuild", (_event, on: boolean) => { store.setAutoRebuild(on); menu(); });
   ipcMain.handle("state:setViewMode", (_event, mode: ViewMode) => store.setViewMode(mode));
   ipcMain.handle("state:setNavExpanded", (_event, ids: string[]) => store.setNavExpanded(ids));
-  ipcMain.handle("state:setMapGroups",
-    (_event, groups: Record<string, string>) => store.setMapGroups(groups));
   ipcMain.handle("state:setCanvasCameras",
     (_event, cameras: Record<string, { x: number; y: number; scale: number }>) => store.setCanvasCameras(cameras));
   ipcMain.handle("project:settings", (): ProjectSettingsDto | null => (session ? projectSettings(session) : null));
@@ -1267,8 +1265,8 @@ function wireIpc(): void {
 
   ipcMain.handle("card:save", (_event, deckId: string, cardId: string, edit: CardEdit) =>
     (session ? saveCard(session, deckId, cardId, edit) : { error: "no project open" }));
-  ipcMain.handle("card:create", (_event, deckId: string) =>
-    (session ? createCard(session, deckId) : { error: "no project open" }));
+  ipcMain.handle("card:create", (_event, deckId: string, place?: string) =>
+    (session ? createCard(session, deckId, place) : { error: "no project open" }));
   ipcMain.handle("card:duplicate", (_event, deckId: string, cardId: string) =>
     (session ? duplicateCard(session, deckId, cardId) : { error: "no project open" }));
   ipcMain.handle("card:delete", (_event, deckId: string, cardId: string) =>
@@ -1304,10 +1302,12 @@ function wireIpc(): void {
 
   ipcMain.handle("hand:detail", (_event, boxId: string, handId: string) =>
     (session ? handDetail(session, boxId, handId) : null));
+  ipcMain.handle("hand:cards", (_event, boxId: string, handId: string) =>
+    (session ? handCards(session, boxId, handId) : null));
   ipcMain.handle("hand:save", (_event, boxId: string, handId: string, edit: HandEdit) =>
     (session ? saveHand(session, boxId, handId, edit) : { error: "no project open" }));
-  ipcMain.handle("hand:create", (_event, boxId: string) =>
-    (session ? createHand(session, boxId) : { error: "no project open" }));
+  ipcMain.handle("hand:create", (_event, boxId: string, site?: { x: number; y: number }) =>
+    (session ? createHand(session, boxId, site) : { error: "no project open" }));
   ipcMain.handle("hand:delete", (_event, boxId: string, handId: string) =>
     (session ? deleteHand(session, boxId, handId) : { error: "no project open" }));
   ipcMain.handle("deck:duplicate", (_event, deckId: string) =>
@@ -1812,11 +1812,14 @@ function wireIpc(): void {
     const unplaced: { id: string; gameId: string }[] = [];
     for (const hand of box.hands.hands) {
       const at = placed[hand.id];
-      if (!at) { unplaced.push({ id: hand.id, gameId: effectiveGameId(hand) }); continue; }
+      // Titles ride along: a pin and a side-panel row say what the author called
+      // the place, and the gameId is the address, not the name (plan item 0).
+      const title = hand.title !== undefined ? { title: hand.title } : {};
+      if (!at) { unplaced.push({ id: hand.id, gameId: effectiveGameId(hand), ...title }); continue; }
       const template = box.hands.templates.find((t) => t.id === hand.template);
       const binding = handBinding(hand, template, group.id);
       sites.push({
-        id: hand.id, gameId: effectiveGameId(hand), x: at.x, y: at.y,
+        id: hand.id, gameId: effectiveGameId(hand), ...title, x: at.x, y: at.y,
         ...(binding.kind !== "none" && binding.tag !== undefined ? { zone: binding.tag } : {}),
         rebinds: binding.editable,
         ...(binding.kind === "fixed" && template ? { fixedBy: effectiveGameId(template) } : {}),
@@ -1843,6 +1846,16 @@ function wireIpc(): void {
       ...(on.length > 1 ? { space: 0 } : {}),
     }));
   });
+
+  // The project map page (the surfacing review's plan item 2): zones and
+  // pictures once, every box on the map a layer. Built in mutate.ts beside
+  // `handCards`, which it shares the tiering with.
+  ipcMain.handle("map:view", (): ProjectMapViewDto => projectMapView(session));
+  ipcMain.handle("map:zone", (_event, tagId: string) => (session ? mapZoneDetail(session, tagId) : null));
+  ipcMain.handle("map:use", (_event, boxId: string, on: boolean) =>
+    (session ? useProjectMap(session, boxId, on) : { error: "no project open" }));
+  ipcMain.handle("state:setMapLayers", (_event, groupId: string, prefs: MapLayerPrefs) => store.setMapLayers(groupId, prefs));
+  ipcMain.handle("state:setCardGroup", (_event, boxId: string, page: "contents" | "deck", key: string) => store.setCardGroup(boxId, page, key));
 
   ipcMain.handle("map:setSpatial", (_event, boxId: string, groupId: string, on: boolean) => {
     if (!session) return { error: "no project open" };
@@ -1919,8 +1932,10 @@ function wireIpc(): void {
   ipcMain.handle("comments:for", (_event, anchor: string): CommentDto[] => {
     const source = session?.loaded.source;
     if (!source) return [];
-    for (const box of source.boxes) {
-      const threads = threadsFor(box.notes, anchor);
+    // The root notes last: the project map and its zones are the only things
+    // whose threads live there (design/project-map-contract.md 1.1).
+    for (const notes of [...source.boxes.map((b) => b.notes), source.notes]) {
+      const threads = threadsFor(notes, anchor);
       if (threads.length > 0) return threads;
     }
     return [];
@@ -2028,7 +2043,22 @@ function wireIpc(): void {
         const deck = box.decks.find((d) => d.shard.deck.id === canvas);
         if (deck) add(t, { kind: "deck", box: box.box.box.id, deck: deck.shard.deck.id }, `${boxName} / ${effectiveGameId(deck.shard.deck)} / canvas`);
         else if (canvas === `${MAP_CANVAS}${box.box.box.id}`) add(t, { kind: "box", box: box.box.box.id }, `${boxName} / map`);
+        else if (canvas === PROJECT_MAP_CANVAS_ID) add(t, { kind: "map" }, `Map`);
       }
+    }
+    // The project's own threads, last: the map itself and its zones, which
+    // belong to no box. Each opens the map page, where its marker is.
+    for (const t of commentsOf(source.notes)) {
+      if (t.resolved === true && !showResolved) continue;
+      const first = t.messages[0];
+      const zone = source.map?.group.tags.find((z) => z.id === t.anchor);
+      out.push({
+        thread: t.id, anchor: t.anchor, at: { kind: "map" },
+        where: zone !== undefined ? `Map / ${effectiveGameId(zone)}` : "Map",
+        ...(t.mark ? { canvas: t.mark.canvas } : {}),
+        author: first?.author ?? "", text: (first?.body ?? "").split("\n")[0] ?? "",
+        ...(t.resolved === true ? { resolved: true } : {}),
+      });
     }
     return out;
   });
@@ -2044,11 +2074,22 @@ function wireIpc(): void {
     // are about one of its sites (design/project-map-contract.md 1.1). Threads
     // about the map itself now sit in the project's root notes, which this
     // editor does not read yet.
+    //
+    // The PROJECT map's canvas (`map`) gathers from everywhere: the root notes
+    // hold threads about the map and its zones, each box's notes the threads
+    // about its own sites, and a box map's old `map:<box>` canvas, which only a
+    // project not yet formatted still has, is read as the same place.
     const mapOf = canvas.startsWith(MAP_CANVAS) ? canvas.slice(MAP_CANVAS.length) : undefined;
-    for (const box of source.boxes) {
+    const onProjectMap = canvas === PROJECT_MAP_CANVAS_ID;
+    const holders = [
+      ...source.boxes.map((box) => ({ notes: box.notes, legacy: `${MAP_CANVAS}${box.box.box.id}`, id: box.box.box.id })),
+      ...(onProjectMap ? [{ notes: source.notes, legacy: undefined, id: undefined }] : []),
+    ];
+    for (const holder of holders) {
       const onCanvas = [
-        ...marksOn(box.notes, canvas),
-        ...(mapOf === box.box.box.id ? marksOn(box.notes, PROJECT_MAP_CANVAS) : []),
+        ...marksOn(holder.notes, canvas),
+        ...(mapOf !== undefined && mapOf === holder.id ? marksOn(holder.notes, PROJECT_MAP_CANVAS) : []),
+        ...(onProjectMap && holder.legacy !== undefined ? marksOn(holder.notes, holder.legacy) : []),
       ];
       for (const thread of onCanvas) {
         const at = markOf(thread);
@@ -2601,7 +2642,10 @@ function serveAssets(): void {
     const file = decodeURIComponent(url.pathname.replace(/^\//, ""));
     const source = session?.loaded.source;
     const box = source?.boxes.find((b) => b.box.box.id === boxId);
-    if (!session || !box) return new Response("no such box", { status: 404 });
+    // The project map's pictures belong to no box: their host is
+    // PROJECT_MAP_ASSETS, served while the project has a map.
+    const projectMap = boxId === PROJECT_MAP_ASSETS && source?.map !== undefined;
+    if (!session || (!box && !projectMap)) return new Response("no such box", { status: 404 });
     const full = assetPath(session.loaded.dir, file);
     if (full === undefined) return new Response("not a file name", { status: 400 });
     try {

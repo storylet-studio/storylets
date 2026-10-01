@@ -28,8 +28,9 @@ import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import { previewRegistry } from "./game-scopes.js";
 import { Engine, makePrng } from "@storylet-studio/runtime";
 import type { Flow } from "@storylet-studio/runtime";
-import { PLACE_GROUP, effectiveGameId, groupsOfBox, isHoleRef } from "@storylet-studio/model";
+import { effectiveGameId, groupsOfBox } from "@storylet-studio/model";
 import { RARE_DEALT_PCT, rarelyDealt } from "./coverage-order.js";
+import { handReach } from "./reach.js";
 import type {
   AstNode, Box, Bundle, Card, CoverageConfig, CoverageDriver, Deck,
   Expression, Hand, ScalarValue,
@@ -358,89 +359,9 @@ function analyse(bundle: Bundle): Analysis {
 }
 
 // --- what could come up where (static) ------------------------------------------
-// Which cards a hand could ever be dealt, by tags and place alone: the runtime's
-// tag matching (engine.ts tagsMatch, schema 3.1 step 3) run over the bindings a
-// hand makes on every ask. A place-pinned card needs this hand among its
-// places; for every group the hand binds, the card lists the bound tag or omits
-// the group (a wildcard), unless the group is `required`.
-//
-// One copy of the rule, used by the composed-name net below (which hands ask a
-// card) and by the per-hand report (what a hand's coverage is out of), so the
-// two can never disagree about who can hold what.
-//
-// It errs towards "could". A group bound at run time stays UNBOUND here, which
-// is a wildcard: a `boundBy` group, and a chosen or rule binding that is a
-// property reference (a movable hole, `isHoleRef`). Conditions are dynamic and
-// are not considered at all. So it never calls a card impossible at a hand
-// that some run could legitimately deal it to.
-
-/** One binding a hand makes on every ask. */
-interface FixedBinding {
-  group: string;
-  tag: string;
-  /** Names its group in the @hand bag: chosen and rule bindings do, a
-   *  template's own fixed binding does not (the runtime's askNames). */
-  named: boolean;
-}
-
-interface HandReach {
-  /** The bindings a hand makes whatever the run does, movable holes left out. */
-  fixed(hand: Hand<Expression>): FixedBinding[];
-  /** The groups a hand fills from a property at ask time (its movable holes). */
-  holes(hand: Hand<Expression>): Set<string>;
-  /** Could this card ever come up at this hand, by tags and place alone? */
-  admits(card: Card<Expression>, hand: Hand<Expression>): boolean;
-}
-
-/** The static reach of every hand in one box. The groups are the box's own and,
- *  when it is on the project map, the map's zone group: a `required` zone group
- *  refuses an untagged card exactly as a box's own would. */
-function handReach(bundle: Bundle, box: Box<Expression>): HandReach {
-  const required = new Set(groupsOfBox(bundle, box).filter((g) => g.required === true).map((g) => g.id));
-  const templatesById = new Map(box.handTemplates.map((t) => [t.id, t]));
-  const cache = new Map<string, { fixed: FixedBinding[]; holes: Set<string> }>();
-  // As the runtime composes an ask: a template instance takes its template's
-  // bindings and its own chosen tags, a standalone hand its rule's bindings.
-  const of = (hand: Hand<Expression>): { fixed: FixedBinding[]; holes: Set<string> } => {
-    const found = cache.get(hand.id);
-    if (found) return found;
-    const fixed: FixedBinding[] = [];
-    const holes = new Set<string>();
-    const add = (bindings: Record<string, string> | undefined, named: boolean): void => {
-      for (const [group, tag] of Object.entries(bindings ?? {})) {
-        if (isHoleRef(tag)) holes.add(group);
-        else fixed.push({ group, tag, named });
-      }
-    };
-    if (hand.template !== undefined) {
-      add(templatesById.get(hand.template)?.bindings, false);
-      add(hand.chosen, true);
-    } else {
-      add(hand.rule?.bindings, true);
-    }
-    const reach = { fixed, holes };
-    cache.set(hand.id, reach);
-    return reach;
-  };
-  return {
-    fixed: (hand) => of(hand).fixed,
-    holes: (hand) => of(hand).holes,
-    admits: (card, hand) => {
-      const home = card.tags?.[PLACE_GROUP];
-      if (home !== undefined && home.length > 0 && !home.includes(hand.id)) return false;
-      const { fixed, holes } = of(hand);
-      for (const { group, tag } of fixed) {
-        // The runtime binds place to the hand itself, whatever else says so,
-        // and a hole over the same group may rebind it at ask time.
-        if (group === PLACE_GROUP || holes.has(group)) continue;
-        const tags = card.tags?.[group];
-        if (tags === undefined) { if (required.has(group)) return false; continue; }
-        if (!tags.includes(tag)) return false;
-      }
-      return true;
-    },
-  };
-}
+// The rule lives in reach.ts (`handReach`), one copy shared with the editor's
+// hand page, so the per-hand report and the page can never disagree about who
+// can hold what.
 
 // --- the composed-name net (static) --------------------------------------------
 // The class the Board's peek false alarm pointed at (design/board-legibility.md):

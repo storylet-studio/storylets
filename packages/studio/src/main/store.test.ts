@@ -64,13 +64,30 @@ describe("studio store", () => {
     expect(new StudioStore(dir).get().boardFollow).toBe(true);
   });
 
-  it("keeps which map each box was showing", () => {
-    // The map is a box's landing page, so which of its maps is part of where the
-    // author was, not a preference they should have to re-pick.
+  it("keeps each project map's layers, per map", () => {
+    // How a person looks at the map (what is hidden, the order, the active
+    // layer) is theirs, and two projects' maps are kept apart by group id.
     const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
     const store = new StudioStore(dir);
-    store.setMapGroups({ b_1: "d_town", b_2: "d_castle" });
-    expect(new StudioStore(dir).get().mapGroups).toEqual({ b_1: "d_town", b_2: "d_castle" });
+    store.setMapLayers("d_town", { hidden: ["b_2"], order: ["b_2", "b_1"], active: "b_1" });
+    store.setMapLayers("d_castle", { hidden: ["pictures"] });
+    expect(new StudioStore(dir).get().mapLayers).toEqual({
+      d_town: { hidden: ["b_2"], order: ["b_2", "b_1"], active: "b_1" },
+      d_castle: { hidden: ["pictures"] },
+    });
+  });
+
+  it("keeps each box's Group by, per page", () => {
+    // Like the layers: a person's way of looking at a box, never the project's.
+    const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+    const store = new StudioStore(dir);
+    store.setCardGroup("b_1", "contents", "place");
+    store.setCardGroup("b_1", "deck", "tag:g_npc");
+    store.setCardGroup("b_2", "deck", "none");
+    expect(new StudioStore(dir).get().cardGroups).toEqual({
+      b_1: { contents: "place", deck: "tag:g_npc" },
+      b_2: { deck: "none" },
+    });
   });
 
   it("caps recents and forgets unopenable projects", () => {

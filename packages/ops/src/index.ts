@@ -36,6 +36,9 @@ export type {
   CoverageOptions, CoverageReport, CoverageTotals, CardCoverage, OutcomeCoverage, HandCoverage,
 } from "./coverage.js";
 export { leastReachedFirst, rarelyDealt, sharePct, RARE_DEALT_PCT } from "./coverage-order.js";
+// What could come up at a hand, statically: coverage's per-hand reach and the editor's hand page
+export { handReach, placeTiers, zonesOfHand } from "./reach.js";
+export type { FixedBinding, HandReach, HoleDecls, PlaceTiers, ReachBox, ReachCard, ReachMap } from "./reach.js";
 export type { CoverageOrder } from "./coverage-order.js";
 export {
   runMerge, detectMergeType, conflictSidecar, MergeInputError, CONFLICT_SIDECAR_EXTENSION,
@@ -66,6 +69,7 @@ export {
 export { PROJECT_MAP_CANVAS, planProjectMapMigration } from "./project-map-migration.js";
 export type { PlannedMove, ProjectMapMigration } from "./project-map-migration.js";
 export { notesPath, planComments } from "./comments.js";
+export type { NotesOwner } from "./comments.js";
 export { layoutByDependency } from "./layout.js";
 export type { LayoutEdge, LayoutOptions, LayoutResult } from "./layout.js";
 export type { CardPlacement } from "./view.js";

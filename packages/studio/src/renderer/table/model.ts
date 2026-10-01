@@ -78,6 +78,8 @@ export interface HandView {
    *  the board's filter key ("show all hands in the forest"). */
   tags: Record<string, string>;
   box: string;
+  /** The box's internal id, which is what the editor opens a hand by. */
+  boxId: string;
 }
 
 /** A card the ask considered but did not list, with why (the "not dealt"
@@ -555,6 +557,7 @@ export class Table {
             `${groupNames.get(g) ?? g} = ${tagNames.get(t) ?? t}`),
           tags: bound,
           box: box.gameId ?? box.id,
+          boxId: box.id,
         });
       }
     }

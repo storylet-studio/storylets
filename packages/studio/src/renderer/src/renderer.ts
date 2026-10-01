@@ -36,6 +36,7 @@ import "@wildwinter/app-shell/link-status.css";
 import "@wildwinter/app-shell/job.css";
 import "@wildwinter/expr-editor/styles.css";
 import { applyTheme } from "./theme.js";
+import { boxPin, setBoxOrder } from "./box-tint.js";
 import { baseName } from "./paths.js";
 import { el } from "./dom.js";
 import { hydrateCameras } from "./canvas-memory.js";
@@ -49,12 +50,12 @@ import type { PaneShell } from "@wildwinter/app-shell";
 import {
   renderBoxCentre, renderDeckCentre, renderDecksCentre, renderHandsCentre, renderNav, renderProblems, renderProjectCentre, renderReviewBar,
 } from "./views.js";
-import { cardHasContent, crumbTrail, navId, projectLead, setCameFrom, vcKeys } from "./views.js";
+import { boxChip, cardHasContent, chip, crumbTrail, navId, projectLead, setCameFrom, vcKeys } from "./views.js";
 import type { Focus, ViewActions } from "./views.js";
 import { foldVc, lockControls, lockNotice, paintVcBadges, shapeNotice } from "./vc-view.js";
 import {
   renderCardWorkspace, renderTemplateWorkspace, renderHandWorkspace, renderTagGroupWorkspace,
-  renderBoxTabBody, renderDeckTabBody, docTabFor, expandOutcome, refreshGameIds, setDocTab, resetDocTabMemory,
+  renderBoxTabBody, renderDeckTabBody, docTabFor, documentHeading, expandOutcome, noteMadeInDeck, refreshGameIds, repaintBubbles, setDocTab, resetDocTabMemory,
 } from "./inspector.js";
 import type { Detail, Inspected, InspectorHost } from "./inspector.js";
 import { createProjectSettings } from "./project-settings.js";
@@ -82,7 +83,7 @@ import type { ProblemNames } from "./problem-copy.js";
 // what the game sends stays the Board's business.
 import { mountLinkStatus } from "@wildwinter/app-shell";
 import type { LinkStatus, LinkStatusChip } from "@wildwinter/app-shell";
-import { canvasId, MAP_CANVAS } from "../../shared/api.js";
+import { canvasId, MAP_CANVAS, PROJECT_MAP_CANVAS_ID } from "../../shared/api.js";
 import { askLeave, askPush, askServer, settleLeave } from "./server-dialog.js";
 import type { PushOptions } from "./server-dialog.js";
 import type {
@@ -143,12 +144,13 @@ function selectCards(ids: string[]): void {
 let nodeView: MountedNodeView | undefined;
 /** The live map canvas, held for the same reason. */
 let mapView: MountedMapView | undefined;
-/** Which spatial group each box's map is showing, for this session. Not persisted:
- *  which of a box's maps you were last looking at is a glance, not a decision. */
-/** Which spatial group each box's map is showing. Seeded from the user's state
- *  at boot and written through on the pick: the map is a box's landing page, so
- *  which map is part of where the author was. */
-const mapGroup = new Map<string, string>();
+/** Edit layout on the project map, for this session. Reading is where the map
+ *  opens: a remembered edit mode would greet the author with a canvas that
+ *  rebinds hands on a stray drag. */
+let mapEditing = false;
+/** A site or zone the next mount of the map should land on selected: the way
+ *  back to the map from a card opened off its side panel. */
+let mapSelect: string | undefined;
 
 /**
  * Arriving SIDEWAYS: from a canvas, from Find, from Links. Up and back are two
@@ -218,6 +220,7 @@ function restorePlace(p: CapturedPlace): void {
 function placeUsable(p: CapturedPlace): boolean {
   if (!project) return false;
   if (p.focus.kind === "story" || p.focus.kind === "project") return true;
+  if (p.focus.kind === "map") return project.map !== undefined;
   const box = project.boxes.find((b) => b.id === p.focus.box);
   if (!box) return false;
   const doc = p.inspected;
@@ -260,7 +263,7 @@ function returnHere(): { label: string; go: () => void } | undefined {
   if (!place || !project) return undefined;
   const doc = place.inspected;
   const box = place.focus.box === undefined ? undefined : project.boxes.find((b) => b.id === place.focus.box);
-  let label = place.focus.kind === "story" ? "Story" : place.focus.kind === "project" ? project.name
+  let label = place.focus.kind === "story" ? "Story" : place.focus.kind === "map" ? "Map" : place.focus.kind === "project" ? project.name
     : box?.title ?? box?.gameId ?? "where you were";
   if (doc?.kind === "card") {
     const card = box?.decks.find((d) => d.id === doc.deck)?.cards.find((c) => c.id === doc.card);
@@ -387,6 +390,12 @@ const actions: ViewActions = {
   inspectTemplate(box, template) { goingSomewhere(); void flushSaves(); setDocTab(`box:${box}`, "templates"); focus = { kind: "box", box }; inspected = { kind: "template", box, template }; detail = undefined; renderWorkspace(); void loadTemplateDetail(box, template); },
   inspectTagGroup(box, group) { goingSomewhere(); void flushSaves(); setDocTab(`box:${box}`, "tags"); focus = { kind: "box", box }; inspected = { kind: "tagGroup", box, group }; detail = undefined; renderWorkspace(); void loadTagGroupDetail(box, group); },
   inspectHand(box, hand) { goingSomewhere(); void flushSaves(); focus = { kind: "hands", box }; inspected = { kind: "hand", box, hand }; detail = undefined; renderWorkspace(); void loadHandDetail(box, hand); },
+  // The ways in that are about the PLACE (a pin, a Hands row, the Board's hand,
+  // a Find hit) open it on Cards: a jump that targets a tab, which the tab
+  // memory counts as the author's latest choice like any click on the bar
+  // (doc-tab-memory.ts). A problem's jump does not come through here, so it
+  // keeps the remembered tab.
+  openHand(box, hand) { setDocTab(`hand:${hand}`, "cards"); actions.inspectHand(box, hand); },
   newCard(box, deck) {
     void (async () => {
       const created = await studio.createCard(deck);
@@ -397,6 +406,7 @@ const actions: ViewActions = {
       // default tab, recorded as the type's choice (the one carve-out from
       // the sticky-tab ruling, design/editor-legibility.md piece 6).
       setDocTab(`card:${deck}/${created.cardId}`, "dealing");
+      noteMadeInDeck(created.cardId);
       actions.inspectCard(box, deck, created.cardId);
     })();
   },
@@ -638,6 +648,7 @@ const actions: ViewActions = {
             const created = await studio.createCardOnCanvas(deck.id, at, pinned);
             if (!ok(created)) return;
             applyResult(created.result);
+            noteMadeInDeck(created.cardId);
             selectCards([created.cardId]);
             renderCentre();
           })();
@@ -699,171 +710,54 @@ const actions: ViewActions = {
       void refreshMarkers(canvasId({ kind: "deck", deck: deck.id }));
     })();
   },
-  mountMapView(host, box) {
+  mountBoxSites(host, box) {
     void (async () => {
-      // The same chunking as the node view: Konva only loads for a session that
-      // actually opens a canvas.
-      const [{ mountMapView }, map] = await Promise.all([
-        import("./map-view.js"),
-        studio.boxMap(box.id, mapGroup.get(box.id)),
-      ]);
-      // The centre may have moved on while main was reading (a click, a save):
-      // mounting into a detached container leaks a canvas nothing can reach.
+      const map = await studio.projectMapView();
       if (!host.isConnected) return;
-      mapView?.destroy();
-      /** A map edit that changed a shard: take the result, and repaint the canvas
-       *  from the new truth. Unlike a card drag (which the canvas has already
-       *  drawn), a placed zone or a re-bound pin changes what the map IS. */
-      const applyAndRedraw = (result: OpenResult | { error: string }): void => {
-        if (!applied(result)) return;
-        void refreshVc();
-        renderCentre();
-      };
-      const group = map.groupId ?? "";
-      /** Back to this map: the box page, on its Map tab, with this group showing. */
-      const backToMap = (): void => {
-        setDocTab(`box:${box.id}`, "map");
-        actions.focus({ kind: "box", box: box.id });
-      };
-      mapView = mountMapView(host, box.id, map, {
-        // Opening a zone or a hand from the map is a SIDEWAYS arrival: the thing's
-        // parent is not where the author came from, so the page offers the way back
-        // here as well as the way up (structure rule 12).
-        openZone: () => arriveFrom("Map", backToMap, () => actions.inspectTagGroup(box.id, group)),
-        openHand: (handId) => arriveFrom("Map", backToMap, () => actions.inspectHand(box.id, handId)),
-        // A traced shape for a zone that exists, and one for a zone that does not:
-        // both change what the map IS, so both repaint it from the new truth.
-        placeZone: (tagId, polygon) => {
-          void (async () => {
-            const shaped = await studio.setZonePolygon(box.id, group, tagId, polygon);
-            if ("error" in shaped) { flashError(shaped.error); return; }
-            applyAndRedraw(shaped.result);
-          })();
-        },
-        newZone: (polygon) => {
-          void (async () => {
-            const created = await studio.createZone(box.id, group, polygon);
-            if ("error" in created) { flashError(created.error); return; }
-            applyAndRedraw(created.result);
-          })();
-        },
-        reshapeZone: (tagId, polygon) => {
-          void (async () => {
-            // An empty polygon clears the outline, which takes the zone off the map:
-            // that changes the map's shape, so it is a redraw rather than a quiet save.
-            const shaped = await studio.setZonePolygon(box.id, group, tagId, polygon.length === 0 ? undefined : polygon);
-            if ("error" in shaped) { flashError(shaped.error); return; }
-            if (polygon.length === 0) { applyAndRedraw(shaped.result); return; }
-            // A quiet save: the canvas has already drawn the new outline, and a
-            // dragged outline rebinds nobody (see `applyOutline` in map-view.ts),
-            // so there is nothing to tell it about.
-            applyResult(shaped.result);
-            void refreshVc();
-          })();
-        },
-        addBackground: (place) => {
-          void (async () => {
-            const added = await studio.addBackground(box.id, group, place);
-            if (added === null) return;                       // cancelled
-            if ("error" in added) { flashError(added.error); return; }
-            // A new picture changes what the map IS, so it is re-read rather than
-            // patched: the canvas has never heard of this file.
-            applyAndRedraw(added.result);
-          })();
-        },
-        editBackground: (id, edit, opts) => {
-          void (async () => {
-            const result = await studio.editBackground(box.id, group, id, edit, opts);
-            if ("error" in result) { flashError(result.error); return; }
-            // A drag or a scale: the canvas has already drawn it, so this is a
-            // quiet save. Anything else (hide, lock) changes what the map OFFERS,
-            // so the view is re-read.
-            const quiet = opts?.coalesce === true;
-            if (quiet) { applyResult(result); void refreshVc(); return; }
-            applyAndRedraw(result);
-          })();
-        },
-        restackBackground: (id, move) => {
-          void (async () => {
-            const result = await studio.restackBackground(box.id, group, id, move);
-            if ("error" in result) { flashError(result.error); return; }
-            applyAndRedraw(result);   // the drawing order changed: re-read it
-          })();
-        },
-        removeBackground: (id) => {
-          void (async () => {
-            const result = await studio.removeBackground(box.id, group, id);
-            if ("error" in result) { flashError(result.error); return; }
-            applyAndRedraw(result);
-          })();
-        },
-        restackZone: (tagId, move) => {
-          void (async () => {
-            const moved = await studio.restackZone(box.id, group, tagId, move);
-            if ("error" in moved) { flashError(moved.error); return; }
-            // The drawing order changed, so the canvas is re-read rather than
-            // told: which zone is in front is what the whole picture is made of.
-            applyAndRedraw(moved.result);
-          })();
-        },
-        removeSite: (handId) => {
-          // The map changes shape (the hand joins the "waiting to be placed" chips
-          // again), so this is a redraw rather than a quiet save.
-          void (async () => applyAndRedraw(await studio.removeSitesFromMap(box.id, [handId])))();
-        },
-        movedSites: (moves) => {
-          void (async () => {
-            const moved = await studio.moveSitesOnMap(box.id, group, moves);
-            if ("error" in moved) { flashError(moved.error); return; }
-            // NOT renderCentre() for a drag: the canvas has already drawn it, and a
-            // rebuild mid-arranging would cost the camera and the selection after
-            // every drop (the node view learnt this). A PLACEMENT is different: the
-            // pin was not on the map before, so the strip's "waiting to be placed"
-            // chips have changed and the map has to be re-read.
-            const placed = moves.some((m) => !map.sites.some((p) => p.id === m.id));
-            if (placed) { applyAndRedraw(moved.result); return; }
-            applyResult(moved.result);
-            // A rebinding is a change to the HAND, so the canvas recolours from
-            // main's answer rather than from its own guess about the geometry.
-            mapView?.rebound(moved.rebound);
-            void refreshVc();
-          })();
-        },
-        showGroup: (groupId) => {
-          mapGroup.set(box.id, groupId);
-          void studio.setMapGroups(Object.fromEntries(mapGroup));
-          renderCentre();
-        },
-        setFurniture: (furniture, label, coalesce) => {
-          void (async () => {
-            applyAndRedraw(await studio.setCanvasFurniture(box.id, { kind: "map" }, furniture, label, coalesce));
-          })();
-        },
-        // The same four as the node view. A map has no id of its own, so its
-        // canvas borrows the box's behind the `map:` prefix (canvasId).
-        markers: () => markerList,
-      coverage: () => coverage,
-      coverageOn: () => state.coverageOverlay,
-        openThread: (threadId, anchor) => {
-          showThread(threadId, anchor, canvasId({ kind: "map", box: box.id }));
-        },
-        startThread: (at, item, anchor) => {
-          startThread(canvasId({ kind: "map", box: box.id }), at, item, anchor);
-        },
-        moveMarker: (threadId, x, y, item) => {
-          void (async () => {
-            const canvas = canvasId({ kind: "map", box: box.id });
-            const result = await studio.moveComment(threadId, canvas, x, y, item);
-            if (!applied(result)) return;
-            void refreshVc();
-            void refreshMarkers(canvas);
-          })();
-        },
-      });
-      repaintMarkers = () => mapView?.repaintMarkers();
-      refreshCoverage = () => mapView?.refreshCoverage();
-      openMarkerOn = (id) => mapView?.openMarker(id) ?? false;
-      void refreshMarkers(canvasId({ kind: "map", box: box.id }));
+      const layer = map.layers.find((l) => l.box === box.id);
+      const zoneName = (id: string | undefined): string | undefined =>
+        (id === undefined ? undefined : (map.zones.find((z) => z.id === id) ?? map.undrawn.find((z) => z.id === id))?.gameId);
+      if (!layer) { host.replaceChildren(); return; }
+      // One row a site, as the hand page and the map name it: title, its zone,
+      // and how many cards are only here. A row opens the place's own page.
+      const rows = layer.sites.map((site) => el("button", {
+        className: "listrow boxsite",
+        onClick: () => arriveFrom(box.title ?? box.gameId, () => { setDocTab(`box:${box.id}`, "map"); actions.focus({ kind: "box", box: box.id }); },
+          () => actions.openHand(box.id, site.id)),
+      },
+        el("span", { className: `listname${site.title !== undefined ? " listtitle" : ""}` }, boxPin(box.id), site.title ?? site.gameId),
+        el("span", { className: "boxsite-meta" },
+          ...(zoneName(site.zone) !== undefined ? [chip(zoneName(site.zone)!)] : [el("span", { className: "listmeta", text: "no zone" })]),
+          el("span", { className: "listmeta", text: `${site.only} only here` }))));
+      const waiting = layer.unplaced.length > 0
+        ? [el("p", { className: "doc-tab-note", text: `${plural(layer.unplaced.length, "hand")} not on the map yet. Place ${layer.unplaced.length === 1 ? "it" : "them"} from the map, in Edit layout.` })]
+        : [];
+      host.replaceChildren(...(rows.length > 0 ? rows : [el("p", { className: "doc-tab-note", text: "No sites yet. Open the map and add one in Edit layout." })]), ...waiting);
+    })();
+  },
+  cardGroup(box, page) { return state.cardGroups?.[box]?.[page]; },
+  deckCatalogue(box, deck) { return boxDeckCatalogue(box, deck); },
+  setCardGroup(box, page, key) {
+    // A person's way of looking (app state), so no undo and no shard: the
+    // same footing as the map's layers.
+    state = { ...state, cardGroups: { ...state.cardGroups, [box]: { ...state.cardGroups?.[box], [page]: key } } };
+    void studio.setCardGroup(box, page, key);
+    renderCentre();
+  },
+  openMap(select) {
+    mapSelect = select;
+    actions.focus({ kind: "map" });
+  },
+  useProjectMap(box, on) {
+    void (async () => {
+      await flushSaves();
+      const result = await studio.useProjectMap(box, on);
+      if (!applied(result)) return;
+      // Joining lands on the box's new Map tab, which is what it now leads
+      // with; leaving goes back to Contents, the tab having gone.
+      setDocTab(`box:${box}`, on ? "map" : "contents");
+      renderWorkspace();
+      void refreshVc();
     })();
   },
   moveCard(_box, deck, card, target, before) {
@@ -893,6 +787,23 @@ function ensureBoxCatalogue(boxId: string): void {
 }
 // Keep the focused deck's catalogue loaded so card faces can preview conditions.
 // Set catalogueDeck optimistically at fetch start to avoid a render→fetch loop.
+/** Every deck's catalogue for one box's Contents, which draws all of its
+ *  cards' conditions at once. Fetched together, drawn once they are all in,
+ *  and kept for the box as the deck page keeps its own. */
+let boxCatalogues: { box: string; byDeck: Map<string, ConditionProperty[]> } | undefined;
+function boxDeckCatalogue(boxId: string, deckId: string): ConditionProperty[] {
+  // Keyed by the box AND its decks, so a deck made since is fetched too.
+  const decks = currentBox()?.decks.map((d) => d.id) ?? [];
+  const key = `${boxId}:${decks.join(",")}`;
+  if (boxCatalogues?.box === key) return boxCatalogues.byDeck.get(deckId) ?? [];
+  const mine = { box: key, byDeck: new Map<string, ConditionProperty[]>() };
+  boxCatalogues = mine;
+  void (async () => {
+    await Promise.all(decks.map(async (d) => { mine.byDeck.set(d, await studio.cardCatalogue(d)); }));
+    if (boxCatalogues === mine && focus?.kind === "box" && focus.box === boxId) renderCentre();
+  })();
+  return [];
+}
 function ensureCatalogue(deckId: string): void {
   if (catalogueDeck === deckId) return;
   catalogueDeck = deckId; catalogueBox = undefined;
@@ -917,7 +828,7 @@ function applySearchSelection(sel: SearchSelection): void {
   if (sel.kind === "card") actions.inspectCard(sel.box, sel.deck, sel.card);
   else if (sel.kind === "deck") actions.focus({ kind: "deck", box: sel.box, deck: sel.deck });
   else if (sel.kind === "template") actions.inspectTemplate(sel.box, sel.template);
-  else if (sel.kind === "hand") actions.inspectHand(sel.box, sel.hand);
+  else if (sel.kind === "hand") actions.openHand(sel.box, sel.hand);
   else actions.inspectTagGroup(sel.box, sel.group);
 }
 
@@ -966,6 +877,25 @@ const inspectorHost: InspectorHost = {
     setDocTab(`box:${boxId}`, "templates"); actions.focus({ kind: "box", box: boxId });
   })(),
   saveHand: (boxId, handId, edit) => queueStruct(() => studio.saveHand(boxId, handId, edit)),
+  handCards: (boxId, handId) => studio.handCards(boxId, handId),
+  deckCatalogue: (deckId) => studio.cardCatalogue(deckId),
+  openHand: (boxId, handId) => actions.openHand(boxId, handId),
+  // From a hand's Cards tab, sideways: the card's parent is its deck, and the
+  // way back to the place it was opened from is offered beside the way up
+  // (structure rule 12), as the map does for a pin.
+  openCardFromHand: (boxId, deckId, cardId, hand) =>
+    arriveFrom(hand.title, () => actions.openHand(boxId, hand.id), () => actions.inspectCard(boxId, deckId, cardId)),
+  newCardAtHand: (boxId, deckId, hand) => void (async () => {
+    await flushSaves();
+    const created = await studio.createCard(deckId, hand.id);
+    if (!ok(created)) return;
+    applyResult(created.result);
+    pendingFocusTitle = true;
+    // Opened the way any new card is (on Dealing, title focused), with the way
+    // back to the place it was made at.
+    setDocTab(`card:${deckId}/${created.cardId}`, "dealing");
+    arriveFrom(hand.title, () => actions.openHand(boxId, hand.id), () => actions.inspectCard(boxId, deckId, created.cardId));
+  })(),
   createHand: (boxId) => void (async () => {
     const created = await studio.createHand(boxId);
     if ("error" in created) { flashError(created.error); return; }
@@ -1095,6 +1025,7 @@ function showThread(threadId: string, anchor: HTMLElement, canvas: string): void
           if (!applied(result)) return;
           void refreshVc();
           void refreshMarkers(canvas);
+          repaintBubbles(shell.centre, actions.openThreads);
         })();
       },
       setResolved: (id, resolved) => {
@@ -1103,6 +1034,7 @@ function showThread(threadId: string, anchor: HTMLElement, canvas: string): void
           if (!applied(result)) return;
           void refreshVc();
           void refreshMarkers(canvas);
+          repaintBubbles(shell.centre, actions.openThreads);
         })();
       },
       deleteMessage,
@@ -1155,6 +1087,8 @@ function startThread(
         if (!applied(result)) return;
         void refreshVc();
         void refreshMarkers(canvas);
+        // The page's own bubble counts the canvas's threads: the map's heading.
+        repaintBubbles(shell.centre, actions.openThreads);
         // Close it. The panel was opened on a composer for a thread that did not
         // exist; once the first message is posted the thread does exist, and
         // leaving an empty composer sitting there reads as "that did not work".
@@ -1250,6 +1184,7 @@ const AUTOSAVE_MS = 700;
  */
 function applyResult(result: OpenResult): void {
   project = result.project;
+  setBoxOrder(project.boxes);
   remote = result.remote;
   // The game's shared scopes folder, for the expression editors' dialect: seeded on every
   // result, since sharing the project's scopes comes back through here.
@@ -1639,7 +1574,8 @@ function renderReviewWalk(): void {
  *  hit's item, a box, or an outcome (its card, with that outcome expanded). */
 function goTo(at: ReviewAt): void {
   if (!project) return;
-  if (at.kind === "box") actions.focus({ kind: "box", box: at.box });
+  if (at.kind === "map") actions.focus({ kind: "map" });
+  else if (at.kind === "box") actions.focus({ kind: "box", box: at.box });
   else if (at.kind === "outcome") {
     actions.inspectCard(at.box, at.deck, at.card);
     // The card editor keys its tab state by DECK and card, because the same card
@@ -1664,6 +1600,13 @@ async function goToReview(item: ReviewItemDto | undefined): Promise<void> {
   // up: arriving at the deck's card list and opening the thread off the topline
   // bubble answers "what was said" but throws away "where", which is the only
   // reason the comment was dropped there instead of filed against the deck.
+  // The project map's canvas is its own page: a thread there is opened ON the
+  // map, whatever it is anchored to (a site's thread is about a hand, but its
+  // marker is on the map, which is where it was dropped).
+  if (item.canvas === PROJECT_MAP_CANVAS_ID) {
+    actions.focus({ kind: "map" });
+    if (await openMarkerWhenMounted(item.thread)) return;
+  }
   if (item.canvas !== undefined) {
     if (item.canvas.startsWith(MAP_CANVAS)) setDocTab(`box:${item.canvas.slice(MAP_CANVAS.length)}`, "map");
     // Through the action, so the switch is REMEMBERED. The walk really did change
@@ -1877,6 +1820,162 @@ function applyFix(problem: Problem, fix: NonNullable<Problem["fix"]>, anchor: HT
  * behind Project Settings because it is the other kind of state: a contract
  * with the game, set once by the principal designer, not working vocabulary.
  */
+/**
+ * The project map's page (the surfacing review's plan item 2): one canvas for
+ * the project, zones drawn once, every box on the map a layer of its sites.
+ *
+ * Its edits name no box (`""` to main's map calls): zones, pictures and frames
+ * are the project's and land in the root map shard. Sites are each box's, so
+ * those calls name the box the site belongs to.
+ */
+function renderMapCentre(host: HTMLElement): void {
+  if (!project?.map) { host.replaceChildren(); return; }
+  host.classList.remove("measured");
+  const users = project.boxes.filter((b) => b.usesMap === true);
+  const head = documentHeading("Project map", {
+    comments: {
+      on: PROJECT_MAP_CANVAS_ID, count: actions.openThreads(PROJECT_MAP_CANVAS_ID),
+      open: (a) => actions.showComments(PROJECT_MAP_CANVAS_ID, "Map", a),
+    },
+  });
+  head.append(
+    el("h2", { className: "collection-title", text: "Map" }),
+    el("p", { className: "master-sub mapdoc-sub" },
+      users.length > 0 ? "Zones drawn once for the project. Used by " : "Zones drawn once for the project. No box uses it yet.",
+      ...users.flatMap((b, i) => [...(i > 0 ? [" "] : []), boxChip(b)])));
+  const viewHost = el("div", { className: "nodeview" });
+  host.replaceChildren(el("div", { className: "mapdoc" }, head, viewHost));
+  const group = project.map.groupId;
+  void (async () => {
+    const [{ mountMapView }, panel, map] = await Promise.all([
+      import("./map-view.js"), import("./map-panel.js"), studio.projectMapView(),
+    ]);
+    if (!viewHost.isConnected || !map.hasMap) return;
+    mapView?.destroy();
+    const redraw = (result: OpenResult | { error: string }): void => {
+      if (!applied(result)) return;
+      void refreshVc();
+      // The navigator too: its Map row counts the zones.
+      renderNavPane();
+      renderCentre();
+    };
+    const quiet = (result: OpenResult | { error: string }): void => {
+      if ("error" in result) { flashError(result.error); return; }
+      applyResult(result);
+      void refreshVc();
+    };
+    /** Back to the map, landing on what the author left it from. */
+    const backToMap = (select?: string): (() => void) => () => actions.openMap(select);
+    const host2: import("./map-panel.js").MapPanelHost = {
+      box: (id) => project?.boxes.find((b) => b.id === id),
+      handCards: (box, hand) => studio.handCards(box, hand),
+      zone: (tagId) => studio.mapZone(tagId),
+      catalogue: (deck) => studio.cardCatalogue(deck),
+      openCard: (box, deck, card, from) => arriveFrom("Map", backToMap(from), () => actions.inspectCard(box, deck, card)),
+      openHand: (box, hand) => arriveFrom("Map", backToMap(hand), () => actions.openHand(box, hand)),
+      // Made at the site, as the hand page makes one, but the way back is to
+      // the map with the site still selected: that is where the author was.
+      newCardAt: (box, deck, hand) => void (async () => {
+        await flushSaves();
+        const created = await studio.createCard(deck, hand.id);
+        if (!ok(created)) return;
+        applyResult(created.result);
+        pendingFocusTitle = true;
+        setDocTab(`card:${deck}/${created.cardId}`, "dealing");
+        arriveFrom("Map", backToMap(hand.id), () => actions.inspectCard(box, deck, created.cardId));
+      })(),
+      // The zones' page is a tag group page, which is a box's: any box on the
+      // map shows the project's zone group (main's `groupHome`).
+      editZones: () => { if (users[0]) arriveFrom("Map", backToMap(), () => actions.inspectTagGroup(users[0]!.id, group)); },
+    };
+    const zoneName = (id: string | undefined): string | undefined =>
+      (id === undefined ? undefined : (map.zones.find((z) => z.id === id) ?? map.undrawn.find((z) => z.id === id))?.gameId);
+    mapView = mountMapView(viewHost, map, mapEditing, {
+      openZone: () => host2.editZones(),
+      openHand: (box, hand) => host2.openHand(box, hand),
+      placeZone: (tagId, polygon) => void (async () => {
+        const shaped = await studio.setZonePolygon("", group, tagId, polygon);
+        if ("error" in shaped) { flashError(shaped.error); return; }
+        redraw(shaped.result);
+      })(),
+      newZone: (polygon) => void (async () => {
+        const created = await studio.createZone("", group, polygon);
+        if ("error" in created) { flashError(created.error); return; }
+        redraw(created.result);
+      })(),
+      reshapeZone: (tagId, polygon) => void (async () => {
+        // An empty polygon takes the zone off the map, which changes its shape:
+        // a redraw. Otherwise the canvas has drawn it already: a quiet save.
+        const shaped = await studio.setZonePolygon("", group, tagId, polygon.length === 0 ? undefined : polygon);
+        if ("error" in shaped) { flashError(shaped.error); return; }
+        if (polygon.length === 0) redraw(shaped.result); else quiet(shaped.result);
+      })(),
+      addBackground: (place) => void (async () => {
+        const added = await studio.addBackground("", group, place);
+        if (added === null) return;
+        if ("error" in added) { flashError(added.error); return; }
+        redraw(added.result);
+      })(),
+      editBackground: (id, edit, opts) => void (async () => {
+        const result = await studio.editBackground("", group, id, edit, opts);
+        if (opts?.coalesce === true) quiet(result); else redraw(result);
+      })(),
+      restackBackground: (id, move) => void (async () => redraw(await studio.restackBackground("", group, id, move)))(),
+      removeBackground: (id) => void (async () => redraw(await studio.removeBackground("", group, id)))(),
+      restackZone: (tagId, move) => void (async () => {
+        const moved = await studio.restackZone("", group, tagId, move);
+        if ("error" in moved) { flashError(moved.error); return; }
+        redraw(moved.result);
+      })(),
+      removeSite: (box, handId) => void (async () => redraw(await studio.removeSitesFromMap(box, [handId])))(),
+      movedSites: (box, moves) => void (async () => {
+        const moved = await studio.moveSitesOnMap(box, group, moves);
+        if ("error" in moved) { flashError(moved.error); return; }
+        // A PLACEMENT changes the panel's waiting list, so the map is re-read; a
+        // drag is a quiet save, and main's answer recolours the pins it rebound.
+        const layer = map.layers.find((l) => l.box === box);
+        const placed = moves.some((m) => !(layer?.sites ?? []).some((p) => p.id === m.id));
+        if (placed) { redraw(moved.result); return; }
+        quiet(moved.result);
+        mapView?.rebound(moved.rebound);
+      })(),
+      newSite: (box, at) => void (async () => {
+        const created = await studio.createHand(box, at);
+        if ("error" in created) { flashError(created.error); return; }
+        mapSelect = created.handId;
+        redraw(created.result);
+      })(),
+      setFurniture: (furniture, label, coalesce) => void (async () => {
+        redraw(await studio.setCanvasFurniture("", { kind: "map" }, furniture, label, coalesce));
+      })(),
+      markers: () => markerList,
+      coverage: () => coverage,
+      coverageOn: () => state.coverageOverlay,
+      openThread: (threadId, anchor) => showThread(threadId, anchor, PROJECT_MAP_CANVAS_ID),
+      startThread: (at, item, anchor) => startThread(PROJECT_MAP_CANVAS_ID, at, item, anchor),
+      moveMarker: (threadId, x, y, item) => void (async () => {
+        const result = await studio.moveComment(threadId, PROJECT_MAP_CANVAS_ID, x, y, item);
+        if (!applied(result)) return;
+        void refreshVc();
+        void refreshMarkers(PROJECT_MAP_CANVAS_ID);
+      })(),
+      layers: () => state.mapLayers?.[group] ?? {},
+      setLayers: (prefs) => {
+        state = { ...state, mapLayers: { ...state.mapLayers, [group]: prefs } };
+        void studio.setMapLayers(group, prefs);
+      },
+      setEditing: (on) => { mapEditing = on; renderCentre(); },
+      paintSite: (side, layer, site, back) => panel.paintSitePanel(side, host2, layer, site, zoneName(site.zone), back),
+      paintZone: (side, tagId, hidden, show, back) => panel.paintZonePanel(side, host2, tagId, hidden, show, back),
+    });
+    if (mapSelect !== undefined) { mapView.select(mapSelect); mapSelect = undefined; }
+    repaintMarkers = () => mapView?.repaintMarkers();
+    refreshCoverage = () => mapView?.refreshCoverage();
+    openMarkerOn = (id) => mapView?.openMarker(id) ?? false;
+    void refreshMarkers(PROJECT_MAP_CANVAS_ID);
+  })();
+}
+
 function renderStoryCentre(host: HTMLElement): void {
   host.classList.add("measured");
   const page = el("div", { className: "centre-editor" });
@@ -2139,14 +2238,14 @@ function goUp(): void {
   if (inspected?.kind === "hand") { actions.focus({ kind: "hands", box: box.id }); return; }
   if (focus.kind === "deck") { actions.focus({ kind: "decks", box: box.id }); return; }
   if (focus.kind === "decks" || focus.kind === "hands") { actions.focus({ kind: "box", box: box.id }); return; }
-  if (focus.kind === "box" || focus.kind === "story") { actions.focus({ kind: "project" }); return; }
+  if (focus.kind === "box" || focus.kind === "story" || focus.kind === "map") { actions.focus({ kind: "project" }); return; }
 }
 
 /** The expandable nodes on the way to the current focus - navigation expands
  *  (never collapses) so the path to where you are is always visible. */
 function navPath(): string[] {
   const f = focus;
-  if (!f || f.kind === "project" || f.kind === "story") return [];
+  if (!f || f.kind === "project" || f.kind === "story" || f.kind === "map") return [];
   const ids = [navId.box(f.box)];
   if (f.kind === "deck" || f.kind === "decks") ids.push(navId.collection(f.box, "decks"));
   else if (f.kind === "hands") ids.push(navId.collection(f.box, "hands"));
@@ -2173,6 +2272,8 @@ function fillCentre(): void {
   // has to be told.
   nodeView?.destroy();
   nodeView = undefined;
+  mapView?.destroy();
+  mapView = undefined;
   // The markers went with it. Clearing both means a comment posted from a
   // document's topline cannot repaint into a surface that has been destroyed, and
   // a late `commentMarkers` answer for the old canvas is discarded rather than
@@ -2185,10 +2286,13 @@ function fillCentre(): void {
   const f = focus;
   if (f?.kind === "project" && project) { renderProjectCentre(shell.centre, project, actions); return; }
   if (f?.kind === "story" && project) { renderStoryCentre(shell.centre); return; }
+  if (f?.kind === "map" && project) { renderMapCentre(shell.centre); return; }
   const box = currentBox();
   if (!box || !f) { shell.centre.classList.remove("measured"); shell.centre.replaceChildren(); return; }
   if (f.kind === "box") {
-    renderBoxCentre(shell.centre, box, (h, tab) => renderBoxTabBody(h, box, tab, inspectorHost), actions);
+    renderBoxCentre(shell.centre, box, (h, tab) => renderBoxTabBody(h, box, tab, inspectorHost), actions,
+      project?.map !== undefined ? { users: project.boxes.filter((b) => b.usesMap === true) } : undefined,
+      new Set(cardSelection));
   }
   else if (f.kind === "decks") renderDecksCentre(shell.centre, box, state.viewMode, actions);
   else if (f.kind === "hands") renderHandsCentre(shell.centre, box, actions);
@@ -2515,6 +2619,7 @@ function rememberPlace(): void {
     focus: place.focus,
     ...(place.inspected ? { inspected: place.inspected } : {}),
     ...(place.tab !== undefined ? { tab: place.tab } : {}),
+    ...(place.inspected?.kind === "hand" ? { handCards: true } : {}),
   });
 }
 
@@ -2539,6 +2644,7 @@ function restoredPlace(): { focus: Focus; inspected?: Inspected } | undefined {
   const place = state.lastPlace;
   if (!place || !project) return undefined;
   if (place.focus.kind === "story") return { focus: { kind: "story" } };
+  if (place.focus.kind === "map") return project.map !== undefined ? { focus: { kind: "map" } } : undefined;
   const box = project.boxes.find((b) => b.id === place.focus.box);
   const deck = box?.decks.find((d) => d.id === place.focus.deck);
   const doc = place.inspected;
@@ -2556,7 +2662,12 @@ function restoredPlace(): { focus: Focus; inspected?: Inspected } | undefined {
       return { focus: { kind: "box", box: box.id }, inspected: { kind: "template", box: box.id, template: doc.template! } };
     }
     if (doc.kind === "hand" && box.hands.some((x) => x.id === doc.hand)) {
-      if (place.tab) setDocTab(`hand:${doc.hand}`, place.tab);
+      // ONCE, a hand left by a build before its Cards tab is not put back on the
+      // tab it was left on: that build's first tab was Dealing, so "dealing" there
+      // meant "the hand page", and the hand page now opens on what can come up
+      // at it. Everything written since carries `handCards`, and rule 13 (restore
+      // the document AND its tab) holds for it as for every other page.
+      if (place.tab && place.handCards === true) setDocTab(`hand:${doc.hand}`, place.tab);
       return { focus: { kind: "hands", box: box.id }, inspected: { kind: "hand", box: box.id, hand: doc.hand! } };
     }
     if (doc.kind === "tagGroup" && box.tagGroups.some((x) => x.id === doc.group)) {
@@ -2621,6 +2732,7 @@ async function adopt(pending: Promise<OpenResult | { error: string } | null>): P
     problems = [];
   }
   project = result.project;
+  setBoxOrder(project.boxes);
   remote = result.remote;
   setGameScopes(result.project.gameScopes);
   setPlayRung(result.project.play);
@@ -2643,6 +2755,12 @@ async function adopt(pending: Promise<OpenResult | { error: string } | null>): P
     : focus && focus.kind === "box" ? { kind: "box", box: focus.box } : undefined;
   clearVc();
   renderWorkspace();
+  // A restored setup document has to fetch its detail, as the action that opened
+  // it did: without this a hand reopened to its box's Hands list (found checking
+  // the hand page's restore, 2026-10-01).
+  if (inspected?.kind === "hand") void loadHandDetail(inspected.box, inspected.hand);
+  else if (inspected?.kind === "template") void loadTemplateDetail(inspected.box, inspected.template);
+  else if (inspected?.kind === "tagGroup") void loadTagGroupDetail(inspected.box, inspected.group);
   // A `--at` launch: the item named on the command line, over the remembered place.
   if (result.at) goTo(result.at);
   void refreshVc();   // badge the shards + apply read-only from the VC snapshot
@@ -3099,7 +3217,6 @@ async function boot(): Promise<void> {
   state = await studio.getState();
   navExpanded = new Set(state.navExpanded ?? []);
   hydrateCameras(state.canvasCameras);
-  for (const [boxId, groupId] of Object.entries(state.mapGroups ?? {})) mapGroup.set(boxId, groupId);
   // One delegated controller for every `data-tip` in the window (Patterpad's
   // themed tooltip, now shell-side): our own bubble on our own delay, rather
   // than the platform's unstyled one after a second of waiting.

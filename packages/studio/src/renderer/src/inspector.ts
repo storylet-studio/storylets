@@ -13,9 +13,9 @@
 // (add/remove outcome, params, values) redraw the document in place.
 // ---------------------------------------------------------------------------
 
-import { iconNode, openGameIdEditor, plural } from "@wildwinter/app-shell";
+import { iconNode, metaLine, openAnchoredPanel, openGameIdEditor, plural } from "@wildwinter/app-shell";
 import { currentDocTab, setDocTab } from "./doc-tab-memory.js";
-import { whereModel, whereWarning } from "./where.js";
+import { isAnywhere, placeGroupsOf, whereModel, whereWarning } from "./where.js";
 // The DERIVED address, computed for placeholders and previews. From the model
 // rather than the shell: this is the same rule the compiler and the CLI use, and
 // model/test/id-parity.test.ts holds the two copies to each other.
@@ -30,7 +30,7 @@ import { shows } from "./play-ladder.js";
 import { hoistableProperties, hoistProperty } from "./tag-hoist.js";
 import type {
   BindingDto, BoxDto, BoxEdit, CardDto, CardEdit, ConditionProperty, DeckDto, DeckEdit,
-  FieldDeclDto, HandDetail, HandEdit, OutcomeDto, OutcomeEdit, PropertyDeclDto,
+  FieldDeclDto, HandCardRef, HandCardsDto, HandDetail, HandEdit, OutcomeDto, OutcomeEdit, PropertyDeclDto,
   TagGroupDetail, TagGroupEdit, TemplateDetail, TemplateEdit, ValueDetail,
 } from "../../shared/api.js";
 
@@ -83,6 +83,92 @@ export interface InspectorHost {
   setGroupSpatial(boxId: string, groupId: string, on: boolean): void;
   createHand(boxId: string): void;
   deleteHand(boxId: string, handId: string): void;
+  /** What could come up at a hand, tiered (main asks ops `placeTiers`). */
+  handCards(boxId: string, handId: string): Promise<HandCardsDto | null>;
+  /** A deck's condition catalogue: what its cards' `if` lines are read
+   *  against, @deck included, which the box's own catalogue cannot know. */
+  deckCatalogue(deckId: string): Promise<ConditionProperty[]>;
+  /** Open a card from a hand's Cards tab: a sideways arrival, so the card page
+   *  offers the way back to the hand as well as the way up to its deck. */
+  openCardFromHand(boxId: string, deckId: string, cardId: string, hand: { id: string; title: string }): void;
+  /** Make a card in `deckId` whose place is this hand, and open it. */
+  newCardAtHand(boxId: string, deckId: string, hand: { id: string; title: string }): void;
+  /** Open a hand's page on its Cards tab: the place chip in a card's sentence. */
+  openHand(boxId: string, handId: string): void;
+}
+
+/**
+ * Cards made in a deck this session (its "+ New card", on the grid, the table
+ * or the canvas), for the one-time "comes up anywhere" note on the card page
+ * (plan item 0, mock-up 4b). A deck has no place, so a card made there is a
+ * card for every hand in the box until somebody says otherwise, and in a box on
+ * the map that is rarely what was meant. Session memory, like the tab memory:
+ * the note is about the moment of making, and a card answered (a place chosen,
+ * or "Anywhere is right") leaves the set for good.
+ */
+const madeInDeck = new Set<string>();
+export function noteMadeInDeck(cardId: string): void { madeInDeck.add(cardId); }
+
+/** The deck "+ New card here" last filed into, per box: the picker's default.
+ *  Still ASKED every time (the antagonist review, ladder step 2: a silent
+ *  default files an Inn card into whichever storyline you touched last). */
+const lastDeckFor = new Map<string, string>();
+
+/**
+ * One card that could come up at a hand: its title, its `if` line in the card
+ * face's quiet styling, its deck, and where else it is placed. The hand page's
+ * Cards tab and the project map's site panel draw the same row, so a place
+ * reads the same wherever it is asked about. `here` is the hand's gameId, left
+ * out of "also at"; `catalogue` is the card's OWN deck's (it reads @deck).
+ */
+export function handCardRow(
+  box: BoxDto, ref: HandCardRef, catalogue: ConditionProperty[], here: string | undefined,
+  open: (deck: string, card: string) => void,
+): HTMLElement | null {
+  const deck = box.decks.find((d) => d.id === ref.deck);
+  const card = deck?.cards.find((c) => c.id === ref.card);
+  if (!deck || !card) return null;
+  const also = (card.tags.find((t) => t.group === PLACE_GROUP)?.values ?? [])
+    .filter((g) => g !== here)
+    .map((g) => box.hands.find((x) => x.gameId === g)?.title ?? g);
+  const meta = metaLine([deck.title ?? deck.gameId, also.length > 0 ? `also at ${also.join(", ")}` : undefined]);
+  meta.classList.add("listmeta");
+  return el("button", { className: "listrow handcard", onClick: () => open(deck.id, card.id) },
+    el("span", { className: "handcard-head" }, el("span", { className: "listname listtitle", text: card.title ?? card.gameId }), meta),
+    card.condition
+      ? el("div", { className: "cardwhen" }, el("span", { className: "cardwhen-if", text: "if" }), previewCondition(card.condition, catalogue))
+      : null);
+}
+
+/**
+ * Which deck a card made at a place goes into: ASKED, every time, with the last
+ * deck used marked and focused so Return takes it. Patterpad's jump picker
+ * (its jump-picker.ts) is the shape, since it is the family's anchored list of
+ * one choice: the shell's anchored panel, a title, a row per option, the
+ * current one marked. Shared by the hand page and the project map's site panel,
+ * with one memory per box, so the mark is the same from either.
+ */
+export function openDeckPickerFor(anchor: HTMLElement, box: BoxDto, pick: (deckId: string) => void): void {
+  const panel = openAnchoredPanel({ anchor, className: "deckpick", title: "Which deck", width: 240, prefer: "below" });
+  if (!panel) return;
+  panel.body.classList.add("deckpick-list");
+  if (box.decks.length === 0) {
+    panel.body.append(el("p", { className: "doc-tab-note", text: "This box has no decks yet. Make one first, from the navigator's + deck." }));
+    return;
+  }
+  const last = lastDeckFor.get(box.id);
+  let focus: HTMLElement | undefined;
+  for (const deck of box.decks) {
+    const opt = el("button", { className: `deckpick-opt${deck.id === last ? " sel" : ""}`, text: deck.title ?? deck.gameId,
+      onClick: () => {
+        panel.close();
+        lastDeckFor.set(box.id, deck.id);
+        pick(deck.id);
+      } });
+    if (focus === undefined || deck.id === last) focus = opt;
+    panel.body.append(opt);
+  }
+  focus?.focus();
 }
 
 // A section caption: sentence-case words in the UI face, weight 600, never a
@@ -385,8 +471,19 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
 
     // Dealing: how this card gets dealt - its condition, its rank, and the
     // tags hands pull by. One coherent page (tab-grammar 3).
+    //
+    // WHERE LEADS in a box on the project map, as one sentence ("Comes up at
+    // the Inn when..."), because place is the coarser filter and the first thing
+    // a designer of a mapped box asks (design/where-and-selectors.md, which put
+    // Where above When from the start; plan item 0 restores it). In a box off the
+    // map When leads as it always has, and Where keeps its row at the foot: a
+    // box with no geography asks "when" first, and a sentence about places it
+    // does not have would teach a model it does not use.
+    const onMap = box.usesMap === true;
+    const lead = onMap ? whereLead() : undefined;
+    if (lead) view.append(lead.root);
     const condHost = el("div", { className: "insp-exed" });
-    mountCondition(condHost, { src: edit.condition ?? "", properties: catalogue, onChange: (src) => { edit.condition = src; commit(); } });
+    mountCondition(condHost, { src: edit.condition ?? "", properties: catalogue, onChange: (src) => { edit.condition = src; commit(); lead?.paintWhen(); } });
     view.append(section("When", "the condition to be dealt", condHost));
 
     const priority = textField(edit.priority ?? "", "insp-input insp-mono insp-short", (v) => { edit.priority = v; }, commit);
@@ -501,16 +598,16 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       ...sharedRows(),
     ));
 
-    // WHERE: the first question a designer asks of a card, answered as a
-    // sentence rather than left to be assembled from a place row and a region
-    // row (design/where-and-selectors.md Part A). Place axes are
-    // the home group plus every SPATIAL group; everything else stays in Tags.
-    view.append(whereRow());
+    // WHERE, off the map: answered as a sentence rather than left to be
+    // assembled from a place row and a region row (design/where-and-selectors.md
+    // Part A). Place axes are the home group, every SPATIAL group and every
+    // group a hand template chooses (where.ts); everything else stays in Tags.
+    if (!onMap) view.append(whereRow());
 
     // Tags: the groups this card is filed under, minus the place axes the Where
-    // row above now owns. The reserved home group is a place axis by
+    // row (or sentence) now owns. The reserved home group is a place axis by
     // definition, so it never appears here any more.
-    const placeGroups = new Set(box.tagGroups.filter((g) => g.spatial === true).map((g) => g.gameId));
+    const placeGroups = placeGroupsOf(box);
     const groups: { name: string; values: string[] }[] =
       box.tagGroups.filter((g) => !placeGroups.has(g.gameId)).map((g) => ({ name: g.gameId, values: g.values }));
     if (groups.length > 0) {
@@ -553,12 +650,16 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
   function whereRow(): HTMLElement {
     const m = whereModel(box, edit.tags);
     const line = el("div", { className: "where-line" });
-    if (m.places.length === 0 && m.regions.length === 0) {
+    if (isAnywhere(m)) {
       line.append(el("span", { className: "where-any", text: "Anywhere" }));
     } else {
       for (const p of m.places) line.append(el("span", { className: "chip on where-place" }, iconNode("pin", 11), p.title));
       for (const r of m.regions) {
         for (const v of r.values) line.append(el("span", { className: "chip on where-region" }, chipDot(v), `anywhere in ${v}`));
+      }
+      // A group a hand template chooses: who or what, by the group's own name.
+      for (const c of m.chosen) {
+        for (const v of c.values) line.append(el("span", { className: "chip on" }, chipDot(v), `${c.group}: ${v}`));
       }
     }
     const open = el("button", { className: "btn where-edit", text: "Change", tip: "Choose the places and regions this card belongs to" });
@@ -567,6 +668,88 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     const body = el("div", { className: "where-body" }, el("div", { className: "where-head" }, line, open));
     if (warning !== undefined) body.append(el("p", { className: "where-warn", text: warning }));
     return section("Where", "the places this card can come up", body);
+  }
+
+  /**
+   * The Where sentence: Dealing's lead in a box on the project map (mock-up
+   * screen 6). "Comes up at [the Inn] when [condition]", the place a chip that
+   * opens the place, Change opening the same picker the off-map row uses.
+   *
+   * The condition is a READING of the When editor below, in the card face's
+   * quiet "if" styling, and is repainted as that editor changes rather than on
+   * the next redraw: a sentence that disagreed with the panel under it would be
+   * worse than no sentence.
+   */
+  function whereLead(): { root: HTMLElement; paintWhen: () => void } {
+    const m = whereModel(box, edit.tags);
+    const anywhere = isAnywhere(m);
+    if (!anywhere) madeInDeck.delete(card.id);   // answered: a place was chosen
+    const line = el("p", { className: "where-sentence" }, el("span", { text: "Comes up" }));
+    const joiner = (text: string): HTMLElement => el("span", { className: "where-join", text });
+    if (anywhere) {
+      // The place word in amber: "anywhere" is a real answer, but in a box on the
+      // map it is usually the answer nobody chose.
+      line.append(el("span", { className: "where-anyword", text: "anywhere" }));
+    } else {
+      const parts: HTMLElement[][] = [];
+      if (m.places.length > 0) {
+        const chips: HTMLElement[] = [joiner("at")];
+        m.places.forEach((p, i) => {
+          if (i > 0) chips.push(joiner("or"));
+          const hand = box.hands.find((x) => x.gameId === p.gameId);
+          const chip = el("button", { className: "chip on where-place where-chip", tip: `Open ${p.title}` }, iconNode("pin", 11), p.title);
+          if (hand) chip.addEventListener("click", () => h.openHand(box.id, hand.id));
+          chips.push(chip);
+        });
+        parts.push(chips);
+      }
+      for (const r of m.regions) {
+        parts.push([joiner("anywhere in"), ...r.values.flatMap((v, i) => [
+          ...(i > 0 ? [joiner("or")] : []),
+          el("span", { className: "chip on where-region where-chip" }, chipDot(v), v),
+        ])]);
+      }
+      for (const c of m.chosen) {
+        parts.push(c.values.flatMap((v, i) => [
+          ...(i > 0 ? [joiner("or")] : []),
+          el("span", { className: "chip on where-chip" }, chipDot(v), `${c.group}: ${v}`),
+        ]));
+      }
+      parts.forEach((p, i) => { if (i > 0) line.append(joiner("and")); line.append(...p); });
+    }
+    const when = el("span", { className: "where-when" });
+    const paintWhen = (): void => {
+      const src = (edit.condition ?? "").trim();
+      when.replaceChildren(...(src
+        ? [joiner("when"), el("span", { className: "cardwhen where-cond" }, previewCondition(src, catalogue))]
+        : [el("span", { className: "where-join where-always", text: ", always." })]));
+    };
+    paintWhen();
+    line.append(when);
+
+    const root = el("div", { className: "doc-panel where-lead" }, line);
+    const warning = whereWarning(m);
+    if (warning !== undefined) root.append(el("p", { className: "where-warn", text: warning }));
+    // The one-time note (mock-up 4b), for a card made in a deck: it has no place
+    // because a deck has none to give it, not because anybody decided.
+    if (anywhere && madeInDeck.has(card.id)) {
+      const ends = box.hands.length >= 2
+        ? `, from ${box.hands[0]!.title ?? box.hands[0]!.gameId} to ${box.hands[box.hands.length - 1]!.title ?? box.hands[box.hands.length - 1]!.gameId}` : "";
+      const choose = el("button", { className: "btn", text: "Choose a place" });
+      choose.addEventListener("click", () => openWherePicker(choose));
+      root.append(el("div", { className: "where-note" },
+        el("span", { className: "where-note-glyph" }, iconNode("warning", 13)),
+        el("div", {},
+          el("p", { text: `A card made in a deck comes up anywhere: at every place in ${box.title ?? box.gameId}${ends}. Choose a place to keep it to one.` }),
+          el("div", { className: "where-note-acts" }, choose,
+            el("button", { className: "btn", text: "Anywhere is right", onClick: () => { madeInDeck.delete(card.id); drawCentre(); } })))));
+    }
+    const change = el("button", { className: "btn where-edit", text: "Change", tip: "Choose the places and regions this card belongs to" });
+    change.addEventListener("click", () => openWherePicker(change));
+    root.append(el("div", { className: "where-foot" },
+      el("span", { text: `In ${deck.title ?? deck.gameId}, ${box.title ?? box.gameId}` }),
+      el("span", { className: "crumb-spacer" }), change));
+    return { root, paintWhen };
   }
 
   /** The picker: places and regions in separate sections, because a place plus
@@ -593,7 +776,9 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
         placeRow.append(chip);
       }
       wrap.append(placeRow);
-      for (const g of box.tagGroups.filter((x) => x.spatial === true)) {
+      // Every place axis (where.ts): the maps, then the groups a hand template
+      // chooses, which a card answers "where" with as surely as a zone.
+      for (const g of box.tagGroups.filter((x) => x.spatial === true || x.chosen === true)) {
         // The group's own name, not a sentence: "Anywhere in area" reads badly for
         // a group called "area", and the chips below already say "anywhere in X".
         wrap.append(el("span", { className: "insp-label", text: `${g.gameId.charAt(0).toUpperCase()}${g.gameId.slice(1)}` }));
@@ -727,6 +912,7 @@ export function documentHeading(label: string, opts: {
       tip: c.count > 0 ? `${plural(c.count, "open comment")}` : "Comment on this",
     }, iconNode("comment", 12), c.count > 0 ? String(c.count) : null);
     bubble.dataset.threadFor = c.on;
+    bubble.dataset.tipNone = "Comment on this";
     bubble.addEventListener("click", (e) => { e.preventDefault(); c.open(bubble); });
     topline.append(bubble);
   }
@@ -855,8 +1041,29 @@ function commentBubble(on: string, count: number, open: (anchor: HTMLElement) =>
     tip: count > 0 ? `${plural(count, "open comment")}` : "Comment on this outcome",
   }, iconNode("comment", 12), count > 0 ? String(count) : null);
   bubble.dataset.threadFor = on;
+  bubble.dataset.tipNone = "Comment on this outcome";
   bubble.addEventListener("click", (e) => { e.preventDefault(); open(bubble); });
   return bubble;
+}
+
+/**
+ * Bring every comment bubble under `root` up to date, in place.
+ *
+ * For a thread posted somewhere that does not rebuild the page: a marker on a
+ * canvas. Rebuilding would throw the canvas away (its camera, its selection),
+ * so the canvas repaints its markers and this repaints the bubbles, and the
+ * map's heading stops showing the count it was drawn with.
+ */
+export function repaintBubbles(root: ParentNode, count: (id: string) => number): void {
+  root.querySelectorAll<HTMLElement>(".doc-thread[data-thread-for]").forEach((bubble) => {
+    const n = count(bubble.dataset.threadFor!);
+    const tip = n > 0 ? plural(n, "open comment") : bubble.dataset.tipNone ?? "Comment on this";
+    bubble.classList.toggle("has", n > 0);
+    bubble.dataset.tip = tip;
+    bubble.setAttribute("aria-label", tip);
+    const icon = bubble.firstElementChild;
+    bubble.replaceChildren(...(icon ? [icon] : []), ...(n > 0 ? [String(n)] : []));
+  });
 }
 
 // The outcomes accordion in the centre: a light row per outcome that expands in
@@ -1089,9 +1296,91 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
   const redraw = (): void => draw();
   const standalone = (): boolean => edit.template === undefined || edit.template === "";
 
+  // The Cards tab's answer, asked of main every time this page is built: what
+  // could come up here moves with edits made anywhere (a card's place, this
+  // hand's own zone), and the page is rebuilt on each of them. Undefined until
+  // it arrives; it then paints into the tab and the count, never through a
+  // whole redraw, so a title being typed above keeps its caret.
+  let cards: HandCardsDto | null | undefined;
+  let showAnywhere = false;
+  let cardsHost: HTMLElement | undefined;
+  let cardsTab: HTMLElement | undefined;
+  // Each row reads its condition against its OWN deck's catalogue, as the card
+  // face does: the box's catalogue has no @deck, so a deck property would read
+  // as unknown here and declared on the card's own page.
+  const catalogues = new Map<string, ConditionProperty[]>();
+  void (async () => {
+    const answer = await h.handCards(boxId, detail.id);
+    if (answer) {
+      const decks = new Set([...answer.only, ...answer.zones.flatMap((z) => z.cards), ...answer.anywhere].map((r) => r.deck));
+      await Promise.all([...decks].map(async (d) => { catalogues.set(d, await h.deckCatalogue(d)); }));
+    }
+    cards = answer;
+    if (centre.isConnected) paintCards();
+  })();
+  const hereTitle = (): string => edit.title.trim() || detail.title || detail.gameId;
+  const tierCount = (c: HandCardsDto): number =>
+    c.only.length + c.zones.reduce((n, z) => n + z.cards.length, 0) + c.anywhere.length;
+
+  /** One card that could come up here (`handCardRow`). */
+  const cardRow = (ref: HandCardRef): HTMLElement | null =>
+    handCardRow(box, ref, catalogues.get(ref.deck) ?? catalogue, detail.gameId,
+      (deck, card) => h.openCardFromHand(boxId, deck, card, { id: detail.id, title: hereTitle() }));
+
+  /** The Cards tab, painted into its host: the tiers, the Anywhere count, and
+   *  the one way to add a card that belongs here. */
+  function paintCards(): void {
+    if (cardsTab && cards) {
+      cardsTab.querySelector(".doc-tab-n")?.remove();
+      const n = tierCount(cards);
+      cardsTab.append(el("span", { className: "doc-tab-n", text: String(n) }));
+      cardsTab.classList.toggle("zero", n === 0);
+    }
+    if (!cardsHost) return;
+    if (cards === undefined) { cardsHost.replaceChildren(); return; }
+    if (cards === null) { cardsHost.replaceChildren(el("p", { className: "doc-tab-note", text: "This hand is gone." })); return; }
+    const c = cards;
+    // The count is the tier's data, so it stays up; a section hint waits to be
+    // approached, which is right for teaching text and wrong for a number.
+    const tier = (label: string, refs: HandCardRef[]): HTMLElement => el("div", { className: "doc-sect" },
+      el("div", { className: "doc-sect-head" }, caption(label), el("span", { className: "handcard-n", text: String(refs.length) })),
+      refs.length > 0
+        ? el("div", { className: "rowlist handcards" }, ...refs.map(cardRow))
+        : el("p", { className: "doc-tab-note", text: "None." }));
+    const boxName = box.title ?? box.gameId;
+    // ANYWHERE IS A COUNT, not a list (plan item 1): in a big box it is most of
+    // the box, and a place page that listed it would stop being about the place.
+    const n = c.anywhere.length;
+    const toggle = el("button", { className: "linkbtn", text: showAnywhere ? "Hide" : "Show",
+      onClick: () => { showAnywhere = !showAnywhere; paintCards(); } });
+    const anyLine = el("div", { className: "doc-sect" },
+      n > 0
+        ? el("p", { className: "handcard-any" },
+            el("span", { text: `and ${plural(n, "card")} with no place${box.usesMap === true ? " or zone" : ""}, which can come up here too. ` }),
+            toggle)
+        : el("p", { className: "handcard-any", text: `Every card in ${boxName} that could come up here is placed.` }),
+      n > 0 && showAnywhere ? el("div", { className: "rowlist handcards" }, ...c.anywhere.map(cardRow)) : null);
+    const add = el("button", { className: "listrow ghost", text: "+ New card here" });
+    add.addEventListener("click", () => openDeckPicker(add));
+    cardsHost.replaceChildren(
+      tier("Only here", c.only),
+      ...c.zones.map((z) => tier(`Anywhere in ${z.zone}`, z.cards)),
+      anyLine,
+      add,
+      // "Could", never "comes": nothing here evaluates a condition
+      // (the antagonist review, ladder step 1, point 6).
+      el("p", { className: "doc-tab-note", text: `Everything that could be dealt here from the decks in ${boxName}, whatever the conditions say right now.` }));
+  }
+
+  const openDeckPicker = (anchor: HTMLElement): void =>
+    openDeckPickerFor(anchor, box, (deck) => h.newCardAtHand(boxId, deck, { id: detail.id, title: hereTitle() }));
+
   function draw(): void {
     const tabKey = `hand:${detail.id}`;
-    const tab = currentDocTab(tabKey, "dealing");
+    // CARDS FIRST (plan item 2): a hand is a place, and what an author opens a
+    // place for is what can happen there. The deck page made the same move for
+    // the same reason (structure rule 4, 2026-08-04).
+    const tab = currentDocTab(tabKey, "cards");
     const templateNow = detail.templates.find((t) => t.gameId === edit.template);
     const view = el("div", { className: "insp-card cardedit" });
     view.append(documentHeading("Hand", {
@@ -1111,11 +1400,23 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
     const declared = standalone() ? edit.rule?.slots ?? "unbounded" : templateNow?.slots ?? "unbounded";
     const slotsNow = /^\d+$/.test(edit.slots) ? Number(edit.slots)
       : (/^\d+$/.test(String(declared)) ? Number(declared) : undefined);
-    view.append(docTabs([
+    const bar = docTabs([
+      { key: "cards", label: "Cards", ...(cards ? { count: tierCount(cards) } : {}) },
       { key: "dealing", label: "Dealing" },
       { key: "slots", label: "Slots", ...(slotsNow !== undefined ? { count: slotsNow } : {}) },
       { key: "properties", label: "Properties", count: (standalone() ? edit.properties?.length ?? 0 : 0) },
-    ], tab, (next) => { setDocTab(tabKey, next); draw(); }));
+    ], tab, (next) => { setDocTab(tabKey, next); draw(); });
+    cardsTab = bar.firstElementChild as HTMLElement;
+    view.append(bar);
+
+    if (tab === "cards") {
+      cardsHost = el("div", { className: "handcards-tab" });
+      view.append(cardsHost);
+      paintCards();
+      centre.replaceChildren(view);
+      return;
+    }
+    cardsHost = undefined;
 
     if (tab === "slots") {
       if (standalone()) {

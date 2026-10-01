@@ -692,10 +692,11 @@ function showMap(): void {
       },
       // Double-click reveals in the editor, the same gesture as everywhere else.
       // It is the author asking, not the Board driving: the Board marks.
+      // By the hand's own ids: the editor opens a hand by id, and the pin is
+      // keyed by gameId (it used to send that, which opened nothing).
       reveal: (hand) => {
         const hv = table?.hands().find((h) => h.gameId === hand);
-        const home = maps.find((m) => m.boxGameId === hv?.box) ?? currentPick();
-        if (home) void studio.searchReveal({ kind: "hand", box: home.box, hand });
+        if (hv) void studio.searchReveal({ kind: "hand", box: hv.boxId, hand: hv.id });
       },
     });
   })();
@@ -728,7 +729,7 @@ function listFloat(): HTMLElement | null {
 }
 
 // --- render ------------------------------------------------------------------
-function handCell(hand: { gameId: string; title?: string; tags: Record<string, string>; slots?: number }, cards: DealtView[]): HTMLElement {
+function handCell(hand: { id?: string; boxId?: string; gameId: string; title?: string; tags: Record<string, string>; slots?: number }, cards: DealtView[]): HTMLElement {
   // The running position (run-marks.ts): the hand the last play came from is
   // live, hands played from earlier keep a muted mark. Quiet by design - this
   // reports where the run is, it does not ask for anything.
@@ -742,8 +743,15 @@ function handCell(hand: { gameId: string; title?: string; tags: Record<string, s
             tip: here ? "The last card was played from here." : "Played from here earlier this run.",
           })
         : null,
-      el("span", { className: "hname", text: hand.title ?? hand.gameId, tip: "A place on the board that cards are dealt into." }),
+      el("span", { className: "hname", text: hand.title ?? hand.gameId, tip: "A place on the board that cards are dealt into. Double-click to open it in the editor." }),
       el("span", { className: "htags" }, ...Object.values(hand.tags).map(chip))));
+  // Double-click the header reveals the hand in the editor, on what can come up
+  // there: the gesture a pin and a card already use here. A hand the bundle does
+  // not know (Live mode, a game's own) has no page to open.
+  const { id, boxId } = hand;
+  if (id !== undefined && boxId !== undefined) {
+    cell.querySelector(".hhead")!.addEventListener("dblclick", () => { void studio.searchReveal({ kind: "hand", box: boxId, hand: id }); });
+  }
   const row = el("div", { className: "hcards" });
   for (const c of cards) {
     const isOpen = open?.card === c.id && open.hand === hand.gameId;

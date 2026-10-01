@@ -29,15 +29,36 @@ const box: BoxDto = {
 const project: ProjectDto = { dir: "/p", name: "Saltmarsh", threads: {}, storyPropertyCount: 0, play: "venue", boxes: [box] };
 
 const stubActions = (over: Partial<ViewActions> = {}): ViewActions => ({
-  openThreads: () => 0, showComments: vi.fn(), focus: vi.fn(), toggleNav: vi.fn(), openProjectSettings: vi.fn(), revealProject: vi.fn(), inspectCard: vi.fn(), inspectTemplate: vi.fn(), inspectTagGroup: vi.fn(), inspectHand: vi.fn(),
+  openThreads: () => 0, showComments: vi.fn(), focus: vi.fn(), toggleNav: vi.fn(), openProjectSettings: vi.fn(), revealProject: vi.fn(), inspectCard: vi.fn(), inspectTemplate: vi.fn(), inspectTagGroup: vi.fn(), inspectHand: vi.fn(), openHand: vi.fn(),
   newCard: vi.fn(), newDeck: vi.fn(), newBox: vi.fn(), newTemplate: vi.fn(), newTagGroup: vi.fn(), newMap: vi.fn(), newHand: vi.fn(), editBox: vi.fn(), saveDeck: vi.fn(), saveBox: vi.fn(),
   duplicateBox: vi.fn(), deleteBox: vi.fn(), moveBox: vi.fn(), moveDeck: vi.fn(), moveHand: vi.fn(),
-  duplicateCard: vi.fn(), deleteCard: vi.fn(), showLinks: vi.fn(), selectCard: vi.fn(), setViewMode: vi.fn(), mountNodeView: vi.fn(), mountMapView: vi.fn(), moveCard: vi.fn(),
+  duplicateCard: vi.fn(), deleteCard: vi.fn(), showLinks: vi.fn(), selectCard: vi.fn(), setViewMode: vi.fn(), mountNodeView: vi.fn(), mountBoxSites: vi.fn(), openMap: vi.fn(), useProjectMap: vi.fn(), cardGroup: () => undefined, setCardGroup: vi.fn(), deckCatalogue: () => [], moveCard: vi.fn(),
   duplicateDeck: vi.fn(), deleteDeck: vi.fn(), duplicateTemplate: vi.fn(), deleteTemplate: vi.fn(),
   duplicateHand: vi.fn(), deleteHand: vi.fn(), duplicateTagGroup: vi.fn(), deleteTagGroup: vi.fn(), ...over,
 });
 
 describe("navigator", () => {
+  it("has a Map row after Story and before the boxes, only when the project has a map", () => {
+    // Structure rule 8, amended by the surfacing review: one row for the project
+    // map, never a tree of zones or sites.
+    const host = document.createElement("div");
+    const focusFn = vi.fn();
+    renderNav(host, project, undefined, new Set(), stubActions({ focus: focusFn }));
+    expect(host.querySelector(".nav-maprow")).toBeNull();
+    const onMap: BoxDto = { ...box, usesMap: true };
+    const mapped: ProjectDto = { ...project, map: { groupId: "d_map", gameId: "district", zones: 5 }, boxes: [onMap, { ...box, id: "b_2", gameId: "news" }] };
+    renderNav(host, mapped, undefined, new Set(), stubActions({ focus: focusFn }));
+    const rows = [...host.querySelectorAll(".nav-d0 .nav-label")].map((r) => r.textContent);
+    expect(rows.slice(0, 2)).toEqual(["Story", "Map"]);
+    const mapRow = host.querySelector<HTMLButtonElement>(".nav-maprow")!;
+    expect(mapRow.querySelector(".nav-n")!.textContent).toBe("5");
+    mapRow.click();
+    expect(focusFn).toHaveBeenCalledWith({ kind: "map" });
+    // The glyph marks the box on the map, and only that one.
+    const marks = [...host.querySelectorAll<HTMLElement>(".nav-boxrow")].map((r) => r.querySelector(".nav-mark") !== null);
+    expect(marks).toEqual([true, false]);
+  });
+
   it("shows only the CONTENT collections of an expanded box (setup stays off the nav)", () => {
     const host = document.createElement("div");
     const expanded = new Set([navId.box("b_1")]);
@@ -212,10 +233,10 @@ describe("box page", () => {
     const tabs = [...host.querySelectorAll(".doc-tab")].map((t) => t.textContent);
     // Zero counts SHOW (audit C15): a dimmed tab with no number read as
     // disabled, and dim-with-a-zero is learnable as "empty".
-    // Maps leads and is ALWAYS offered, with no count when there is none: the tab
-    // used to appear only once a spatial group existed, which left the word "map"
-    // nowhere in the editor until after you had made one.
-    expect(tabs).toEqual(["Maps", "Contents", "Dealing", "Card template0", "Hand templates1", "Tags1", "Properties0"]);
+    // A box NOT on the project map has no Map tab at all (the surfacing
+    // review's plan item 2): the map is offered once, as a quiet line under its
+    // purpose, and the tab bar is the box's own.
+    expect(tabs).toEqual(["Contents", "Dealing", "Card template0", "Hand templates1", "Tags1", "Properties0"]);
     const rows = [...host.querySelectorAll(".listrow .listname")].map((r) => r.textContent);
     expect(rows).toEqual(["Decks", "Hands"]);
   });
@@ -259,50 +280,69 @@ describe("box page", () => {
     expect([...host.querySelectorAll(".listrow.ghost")].map((g) => g.textContent)).toEqual(["+ New hand template"]);
   });
 
-  it("a box with a map LEADS with it, and lands on it", () => {
-    // A place that has been drawn is what the box is: opening it to two rows
-    // saying Decks and Hands, with the drawing behind a tab, buries it.
+  it("a box on the project map LEADS with its Map tab, and lands on it", () => {
+    // Its sites are what the box is: the tab lists them and opens the map.
     const host = document.createElement("div");
     const mounted = vi.fn();
+    const openMap = vi.fn();
     // The DEFAULT is what is under test, so the type-level tab memory (which
     // deliberately follows the author from page to page) is reset to the
     // fresh-sitting state a project open gives it.
     resetDocTabMemory();
-    const mapped: BoxDto = { ...box, id: "b_map", tagGroups: [{ ...box.tagGroups[0]!, spatial: true }] };
-    renderBoxCentre(host, mapped, () => {}, stubActions({ mountMapView: mounted }));
+    const mapped: BoxDto = { ...box, id: "b_map", usesMap: true };
+    renderBoxCentre(host, mapped, () => {}, stubActions({ mountBoxSites: mounted, openMap }), { users: [mapped] });
     const tabs = [...host.querySelectorAll(".doc-tab")].map((t) => t.textContent);
-    // "Maps", plural and counted like its siblings: the tab holds one map per
-    // spatial group, with a picker inside it.
-    expect(tabs[0]).toMatch(/^Maps/);
-    expect(host.querySelector(".doc-tab.on")?.textContent).toMatch(/^Maps/);
+    expect(tabs[0]).toBe("Map");
+    expect(host.querySelector(".doc-tab.on")?.textContent).toBe("Map");
+    expect(host.textContent).toContain("This box's sites on the project map");
     expect(mounted).toHaveBeenCalled();
+    [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Open map")!.click();
+    expect(openMap).toHaveBeenCalled();
+    // And no opt-in line: it is on the map already.
+    expect(host.querySelector(".box-mapline")).toBeNull();
   });
 
   it("holds the tab the author picked, map or not", () => {
     const host = document.createElement("div");
-    const mapped: BoxDto = { ...box, id: "b_map2", tagGroups: [{ ...box.tagGroups[0]!, spatial: true }] };
+    const mapped: BoxDto = { ...box, id: "b_map2", usesMap: true };
     setDocTab("box:b_map2", "dealing");
-    renderBoxCentre(host, mapped, () => {}, stubActions());
+    renderBoxCentre(host, mapped, () => {}, stubActions(), { users: [mapped] });
     expect(host.querySelector(".doc-tab.on")?.textContent).toBe("Dealing");
   });
 
-  it("stays on Maps when the remembered map has stopped being one, and explains itself", () => {
-    // This USED to fall back to Contents, and that was right while unmarking a
-    // group took the tab away with it: a page remembering its way somewhere that
-    // no longer existed was how a stale memory emptied a screen.
-    //
-    // The tab is permanent now and has something to say, so falling back would
-    // move somebody without telling them why their map went. Staying put and
-    // explaining is the better answer, and it names the way back.
+  it("offers a box off the map ONE quiet line: join the map there is, or make one", () => {
+    // A remembered Map tab on a box that has left the map falls back to
+    // Contents rather than to a page that no longer exists.
     const host = document.createElement("div");
+    const useProjectMap = vi.fn();
+    const newMap = vi.fn();
     setDocTab("box:b_1", "map");
+    renderBoxCentre(host, box, () => {}, stubActions({ useProjectMap, newMap }), { users: [] });
+    expect(host.querySelector(".doc-tab.on")?.textContent).toBe("Contents");
+    const line = host.querySelector<HTMLElement>(".box-mapline")!;
+    expect(line.textContent).toBe("Use the project map");
+    line.querySelector<HTMLButtonElement>("button")!.click();
+    expect(useProjectMap).toHaveBeenCalledWith("b_1", true);
+    // With no project map, the same line makes one, and the Tags tab keeps its
+    // "+ New map" row; with one, that row goes (a project has one map).
+    renderBoxCentre(host, box, () => {}, stubActions({ useProjectMap, newMap }));
+    host.querySelector<HTMLButtonElement>(".box-mapline button")!.click();
+    expect(newMap).toHaveBeenCalledWith("b_1");
+    setDocTab("box:b_1", "tags");
+    renderBoxCentre(host, box, () => {}, stubActions(), { users: [] });
+    expect([...host.querySelectorAll(".listrow.ghost")].map((r) => r.textContent)).toEqual(["+ New tag group"]);
     renderBoxCentre(host, box, () => {}, stubActions());
-    const notes = [...host.querySelectorAll(".doc-tab-note")].map((n) => n.textContent ?? "");
-    expect(notes[0]).toContain("A map is a tag group you can draw");
-    // And that it need not be geography, which the words around it all imply.
-    expect(notes[1]).toContain("doesn't have to be geography");
-    expect([...host.querySelectorAll(".listrow")].map((r) => r.textContent)).toEqual(["+ New map"]);
+    expect([...host.querySelectorAll(".listrow.ghost")].map((r) => r.textContent)).toEqual(["+ New tag group", "+ New map"]);
     setDocTab("box:b_1", "contents");
+  });
+
+  it("puts Leave the project map in an opted-in box's menu, and only there", () => {
+    const host = document.createElement("div");
+    const mapped: BoxDto = { ...box, id: "b_map3", usesMap: true };
+    renderBoxCentre(host, mapped, () => {}, stubActions(), { users: [mapped] });
+    host.querySelector<HTMLButtonElement>(".doc-menu")!.click();
+    expect(document.body.textContent).toContain("Leave the project map");
+    document.body.querySelectorAll(".ctx-menu, .shell-ctx").forEach((n) => n.remove());
   });
 
   it("the Tags tab lists tag groups with their tags as chips", () => {
@@ -618,5 +658,53 @@ describe("the topbar's project name", () => {
     const lead = projectLead(project, { status: "In sync", edits: 0 }, go);
     expect(lead.textContent).toBe("This Room - Storyletter");
     expect(lead.querySelector(".pname-note")).toBeNull();
+  });
+});
+
+// Group by on the card views (the surfacing review's plan item 3). The rules are
+// card-groups.ts's; what is pinned here is the page: where the control sits,
+// what it remembers, and that a box with nothing to group by is unchanged.
+describe("Group by", () => {
+  const talk: BoxDto = {
+    ...box, id: "b_t", templates: [], tagGroups: [{ id: "g_npc", gameId: "npc", values: ["gareth", "mira"], chosen: true }],
+    hands: [],
+    decks: [{ ...deck, id: "k_t", gameId: "topics", cards: [
+      { ...deck.cards[0]!, id: "c_r", title: "Rumour", tags: [{ group: "npc", values: ["gareth", "mira"] }] },
+      { ...deck.cards[0]!, id: "c_w", title: "Weather", tags: [] },
+    ] }],
+  };
+
+  it("draws nothing on a deck whose box has nothing to group by", () => {
+    const host = document.createElement("div");
+    renderDeckCentre(host, { ...box, tagGroups: [], hands: [] }, deck, [], new Set(), "cards", () => {}, stubActions());
+    expect(host.querySelector(".groupby")).toBeNull();
+    expect(host.querySelectorAll(".gb-head")).toHaveLength(0);
+  });
+
+  it("groups a deck by the remembered choice, with also-under and Untagged last, and remembers a new one", () => {
+    const host = document.createElement("div");
+    const setCardGroup = vi.fn();
+    const t = talk.decks[0]!;
+    renderDeckCentre(host, talk, t, [], new Set(), "cards", () => {}, stubActions({ cardGroup: () => "tag:g_npc", setCardGroup }));
+    const opts = [...host.querySelectorAll<HTMLButtonElement>(".groupby .seg-opt")];
+    expect(opts.map((b) => b.textContent)).toEqual(["None", "npc"]);
+    expect(opts[1]!.getAttribute("aria-selected")).toBe("true");
+    expect([...host.querySelectorAll(".gb-head .gb-name")].map((h) => h.textContent)).toEqual(["gareth", "mira", "Untagged"]);
+    expect([...host.querySelectorAll(".gb-head")].pop()!.classList.contains("rest")).toBe(true);
+    const also = [...host.querySelectorAll(".card-also")].map((n) => n.textContent);
+    expect(also).toEqual(["also under mira", "also under gareth"]);
+    // Grouped cards do not drag: their order is the deck's, not the heading's.
+    expect(host.querySelector(".scard:not(.ghost) .cardgrip")).toBeNull();
+    opts[0]!.click();
+    expect(setCardGroup).toHaveBeenCalledWith("b_t", "deck", "none");
+  });
+
+  it("puts the box's cards under its Contents rows, by deck until chosen otherwise", () => {
+    const host = document.createElement("div");
+    setDocTab("box:b_t", "contents");
+    renderBoxCentre(host, talk, () => {}, stubActions());
+    expect(host.querySelectorAll(".listrow").length).toBeGreaterThan(0);   // the rows stay
+    expect([...host.querySelectorAll(".groupby .seg-opt")].map((b) => b.textContent)).toEqual(["Deck", "npc"]);
+    expect([...host.querySelectorAll(".gb-head .gb-name")].map((h) => h.textContent)).toEqual(["Docks"]);
   });
 });

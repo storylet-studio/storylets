@@ -28,8 +28,13 @@ import { NOTES_SCHEMA, SHARD_EXTENSIONS, commentsOf } from "@storylet-studio/mod
 import type { Comment, NotesShard } from "@storylet-studio/model";
 import type { PlannedWrite } from "./write.js";
 
-/** Where a box keeps its comment threads. */
-export function notesPath(dir: string, box: SourceBox): string {
+/** Whatever keeps a notes shard: a box, or the project root (whose `path` is
+ *  "", which is where threads about the project map live, design/project-map-
+ *  contract.md 1.1). */
+export type NotesOwner = Pick<SourceBox, "notes" | "path">;
+
+/** Where a box (or the root) keeps its comment threads. */
+export function notesPath(dir: string, box: NotesOwner): string {
   return join(dir, box.path, `notes${SHARD_EXTENSIONS.notes}`);
 }
 
@@ -46,7 +51,7 @@ export function notesPath(dir: string, box: SourceBox): string {
  * leave a diff.
  */
 export function planComments(
-  dir: string, box: SourceBox, comments: Comment[],
+  dir: string, box: NotesOwner, comments: Comment[],
 ): PlannedWrite | undefined {
   const clean = comments.filter((c) => c.messages.length > 0).map(tidy);
   if (canonicalStringify(commentsOf(box.notes)) === canonicalStringify(clean)) return undefined;

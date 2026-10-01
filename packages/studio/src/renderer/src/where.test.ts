@@ -77,3 +77,26 @@ describe("the Where model", () => {
     expect(whereWarning(model([{ group: PLACE_GROUP, values: ["the-inn", "the-tree"] }]))).toBeUndefined();
   });
 });
+
+describe("a group a hand template chooses", () => {
+  // The Conversation topics shape: no map at all, one hand per person.
+  const talk = {
+    ...box,
+    tagGroups: [
+      { id: "d_npc", gameId: "npc", values: ["gareth", "mira"], chosen: true },
+      { id: "d_mood", gameId: "mood", values: ["tense", "calm"] },
+    ],
+    hands: [{ id: "h_g", gameId: "talking-to-gareth", title: "Talking to Gareth", tags: { npc: "gareth" } }],
+  } as unknown as BoxDto;
+
+  it("is a place axis: a topic for Gareth does not read Anywhere", () => {
+    const m = whereModel(talk, [{ group: "npc", values: ["gareth"] }]);
+    expect(whereSentence(m)).toBe("Npc: gareth");
+    expect(m.placeGroups).toEqual(["npc"]);
+  });
+
+  it("warns when the place chosen is for somebody else", () => {
+    const m = whereModel(talk, [{ group: PLACE_GROUP, values: ["talking-to-gareth"] }, { group: "npc", values: ["mira"] }]);
+    expect(whereWarning(m)).toBe("Talking to Gareth is for gareth, not the selected tag, so this card can never come up there.");
+  });
+});

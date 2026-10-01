@@ -195,7 +195,15 @@ export function toDto(loaded: LoadedProject): ProjectDto {
     // Every box's note counts in one map. Cheap (a count per noted id, and most
     // projects note a handful of things) and it saves the editor asking main
     // about each row it draws.
-    threads: Object.assign({}, ...source.boxes.map((b) => openThreadCounts(b.notes))) as Record<string, number>,
+    // The ROOT notes too: threads about the project map and its zones live
+    // there (design/project-map-contract.md 1.1), and the Map page's bubble
+    // counts them like any other.
+    threads: Object.assign({}, openThreadCounts(source.notes), ...source.boxes.map((b) => openThreadCounts(b.notes))) as Record<string, number>,
+    // The project map, for the navigator's Map row: present only when there is
+    // one, as a box's Maps tab once was only once a map existed.
+    ...(source.map !== undefined
+      ? { map: { groupId: source.map.group.id, gameId: effectiveGameId(source.map.group), zones: source.map.group.tags.length } }
+      : {}),
     // The game's shared scopes folder, for the expression editors' dialect (the catalogue
     // itself travels with each card, as every property does).
     ...(() => { const g = gameScopesDto(loaded); return g !== undefined ? { gameScopes: g } : {}; })(),
@@ -209,6 +217,7 @@ export function toDto(loaded: LoadedProject): ProjectDto {
       ...(box.box.box.title !== undefined ? { title: box.box.box.title } : {}),
       ...(box.box.box.purpose !== undefined ? { purpose: box.box.box.purpose } : {}),
       ranking: { specificity: box.box.box.ranking?.specificity ?? true },
+      ...(box.box.box.usesMap === true && source.map !== undefined ? { usesMap: true } : {}),
       ...(source.project.patter !== undefined ? { patter: { performed: (source.project.patterBoxes ?? []).includes(box.box.box.id) } } : {}),
       ...(noted(`box:${effectiveGameId(box.box.box)}`) !== undefined
         ? { contract: noted(`box:${effectiveGameId(box.box.box)}`)! } : {}),
@@ -248,6 +257,8 @@ export function toDto(loaded: LoadedProject): ProjectDto {
         // that, and it asks separately (boxMap). The project map's group is a
         // map whether or not it carries the marker.
         ...(isSpatial(group) || group === source.map?.group ? { spatial: true } : {}),
+        // Chosen by a hand template: a place axis on the card's Where row.
+        ...(box.hands.templates.some((t) => (t.chooses ?? []).includes(group.id)) ? { chosen: true } : {}),
       })),
       hands: byDisplay(box.hands.hands)
         .map((h) => ({

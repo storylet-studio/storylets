@@ -17,7 +17,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createAppStore, resetWindows, windowSlice } from "@wildwinter/app-shell/app-store";
 import type { AppStore, WindowSlice } from "@wildwinter/app-shell/app-store";
-import type { CoverageOrder, LastPlace, PaneState, StudioState, ThemeChoice, ViewMode, WindowBounds } from "../shared/api.js";
+import type { CardGroupPrefs, CoverageOrder, LastPlace, MapLayerPrefs, PaneState, StudioState, ThemeChoice, ViewMode, WindowBounds } from "../shared/api.js";
 
 /** The settings that are OURS rather than the family's: everything the shell
  *  has no opinion about. */
@@ -41,7 +41,10 @@ interface StudioSlice {
   /** The Coverage window's card table order ("least" reached first, or "deck"). */
   coverageOrder: CoverageOrder;
   navExpanded?: string[];
-  mapGroups?: Record<string, string>;
+  /** Per project map, keyed by its zone group id (see StudioState). */
+  mapLayers?: Record<string, MapLayerPrefs>;
+  /** Group by on the card views, per box id (see StudioState). */
+  cardGroups?: Record<string, CardGroupPrefs>;
   canvasCameras?: Record<string, { x: number; y: number; scale: number }>;
   /** The keys a pack exchange was paired with, by address and then by ROLE.
    *  Here and never in a project: a key belongs to the person at the keyboard,
@@ -163,7 +166,6 @@ function migrateFlatFile(file: string): void {
         reviewWalk: (raw["reviewWalk"] as boolean | undefined) ?? DEFAULTS.reviewWalk,
         coverageOverlay: (raw["coverageOverlay"] as boolean | undefined) ?? DEFAULTS.coverageOverlay,
         ...keep("navExpanded", "navExpanded"),
-        ...keep("mapGroups", "mapGroups"),
         ...keep("canvasCameras", "canvasCameras"),
       },
     };
@@ -303,7 +305,17 @@ export class StudioStore {
   setCoverageOrder(order: CoverageOrder): void { this.store.patchApp({ coverageOrder: order }); }
 
   setNavExpanded(ids: string[]): void { this.store.patchApp({ navExpanded: ids }); }
-  setMapGroups(groups: Record<string, string>): void { this.store.patchApp({ mapGroups: groups }); }
+  /** One project map's layers, for this person. Whole, not merged: the
+   *  prefs are one small record the renderer already holds. */
+  setMapLayers(groupId: string, prefs: MapLayerPrefs): void {
+    const all = this.store.get().app.mapLayers ?? {};
+    this.store.patchApp({ mapLayers: { ...all, [groupId]: prefs } });
+  }
+  /** One box's Group by on one of its card views, for this person. */
+  setCardGroup(boxId: string, page: "contents" | "deck", key: string): void {
+    const all = this.store.get().app.cardGroups ?? {};
+    this.store.patchApp({ cardGroups: { ...all, [boxId]: { ...all[boxId], [page]: key } } });
+  }
   setCanvasCameras(cameras: Record<string, { x: number; y: number; scale: number }>): void {
     this.store.patchApp({ canvasCameras: cameras });
   }

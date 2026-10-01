@@ -6,7 +6,7 @@
 // property without changing any setting first.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderHandWorkspace } from "./inspector.js";
+import { renderHandWorkspace, resetDocTabMemory, setDocTab } from "./inspector.js";
 import type { InspectorHost } from "./inspector.js";
 import { setPlayRung } from "./play-ladder.js";
 import type { BoxDto, HandDetail } from "../../shared/api.js";
@@ -35,10 +35,14 @@ const host = (): InspectorHost => ({
   saveBox: vi.fn(), saveBoxIdentity: vi.fn(), saveTemplate: vi.fn(), saveTagGroup: vi.fn(), saveHand: vi.fn(),
   createTemplate: vi.fn(), deleteTemplate: vi.fn(), createTagGroup: vi.fn(), createMap: vi.fn(),
   deleteTagGroup: vi.fn(), setGroupSpatial: vi.fn(), createHand: vi.fn(), deleteHand: vi.fn(),
+  handCards: async () => null, deckCatalogue: async () => [], openCardFromHand: vi.fn(), newCardAtHand: vi.fn(), openHand: vi.fn(),
 } as InspectorHost);
 
 const draw = (d: HandDetail): HTMLElement => {
   const centre = document.createElement("div");
+  // The hole picker is on Dealing; a hand page opens on Cards.
+  resetDocTabMemory();
+  setDocTab(`hand:${d.id}`, "dealing");
   renderHandWorkspace(centre, box, d, [], host());
   return centre;
 };

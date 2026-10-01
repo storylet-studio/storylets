@@ -37,7 +37,9 @@ describe("migrating a pre-shell settings file", () => {
     expect(s.lastPlace?.tab).toBe("map");
     expect(s.identity).toEqual({ name: "Ada" });
     expect(s.navExpanded).toEqual(["b:b_1"]);
-    expect(s.mapGroups).toEqual({ b_1: "d_zone" });
+    // Which of a box's maps it showed is not carried: there is one project map
+    // now, and that choice no longer exists to remember.
+    expect((s as unknown as Record<string, unknown>)["mapGroups"]).toBeUndefined();
     expect(s.canvasCameras).toEqual({ "node:k_1": { x: 1, y: 2, scale: 0.5 } });
     expect(s.searchBounds).toEqual({ x: 10, y: 20, width: 440, height: 480 });
     // A pin somebody turned OFF has to survive: defaulting it back to true

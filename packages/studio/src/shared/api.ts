@@ -131,12 +131,17 @@ export interface StudioState {
   coverageBounds?: WindowBounds;
   /** Expanded nav nodes (disclosure is the user's, not the focus's). */
   navExpanded?: string[];
-  /** Which spatial group's map a box was last showing, keyed by box. A box can
-   *  carry several maps and the choice is the person's, not the project's; the
-   *  map is a box's landing page now, so arriving at the wrong one of two is an
-   *  arrival at the wrong page. An id that no longer exists falls back to the
-   *  box's first spatial group, so a deleted group cannot strand the view. */
-  mapGroups?: Record<string, string>;
+  /** How each person looks at a project map (MapLayerPrefs), keyed by the
+   *  map's zone group id, which names one project's map. Replaced `mapGroups`
+   *  (which of a box's maps it was showing) when the per-box maps gave way to
+   *  the project map: there is one map now, and the choice left to a person is
+   *  what of it to look at. */
+  mapLayers?: Record<string, MapLayerPrefs>;
+  /** Group by on the card views, per box (keyed by box id): what its Contents
+   *  tab and its decks' cards are grouped by. A person's way of looking, like
+   *  the layers above, so it is never written to the project. Absent is the
+   *  default, Deck on Contents and None on a deck (card-groups.ts). */
+  cardGroups?: Record<string, CardGroupPrefs>;
   /** Where each canvas was looking, keyed by view ("node:<deck>",
    *  "map:<box>:<group>"). UI memory like the pane widths: reopening on the page
    *  you left (rule 13) is half the trick if the map reopens zoomed out to
@@ -164,6 +169,10 @@ export interface LastPlace {
   };
   /** The open document's tab ("map" on a box, "outcomes" on a card). */
   tab?: string;
+  /** Written by a build whose hand page leads with its Cards tab. A hand place
+   *  without it was left on the old page, whose first tab was Dealing, so its
+   *  tab is not restored once: see `restoredPlace` in renderer.ts. */
+  handCards?: boolean;
 }
 
 /** The centre's view of a collection. "node" is the deck's canvas: an ordinary
@@ -425,6 +434,12 @@ export interface TagGroupDto {
   /** The group is a MAP: its tags carry geometry and the box offers a Map tab
    *  (the spatial template of play). */
   spatial?: boolean;
+  /** Some hand template in the box CHOOSES this group: each hand of that kind
+   *  fills it with one tag, so a card tagged here is a card for those hands.
+   *  That makes it a place axis on the card's Where row (where.ts), map or no
+   *  map: a topic tagged `npc: gareth` is a card for the hand talking to Gareth,
+   *  not a card that comes up anywhere. */
+  chosen?: boolean;
 }
 
 export interface FieldDeclDto {
@@ -469,6 +484,9 @@ export interface BoxDto {
   title?: string;
   purpose?: string;
   ranking: { specificity: boolean };
+  /** The box has opted in to the project map (and the project has one): its
+   *  card pages lead with Where, and its hand pages tier cards by zone. */
+  usesMap?: boolean;
   /** Present only when the project is paired with a Patter project (its `patter`): whether this
    *  box is one the game performs through it (the project's `patterBoxes`). */
   patter?: { performed: boolean };
@@ -509,6 +527,8 @@ export interface ProjectDto {
    *  the window can ask `play-ladder.ts` what it may draw. */
   play: PlayRung;
   boxes: BoxDto[];
+  /** The project map, when there is one: the navigator's Map row. */
+  map?: { groupId: string; gameId: string; zones: number };
   /** The game's shared scopes folder, when the project has one (patterkit
    *  design/shared-scopes.md). What the expression editors need beyond the catalogue: the
    *  tokens it declares, so the dialect accepts them, and which of them are opaque (any
@@ -798,7 +818,9 @@ export type SearchSelection =
 export type ReviewAt =
   | SearchSelection
   | { kind: "box"; box: string }
-  | { kind: "outcome"; box: string; deck: string; card: string; outcome: string };
+  | { kind: "outcome"; box: string; deck: string; card: string; outcome: string }
+  /** The project map: a thread about the map itself or one of its zones. */
+  | { kind: "map" };
 
 /** One stop on the Review Feedback walk. */
 export interface ReviewItemDto {
@@ -1090,6 +1112,8 @@ export interface MapSiteDto {
   /** The hand's id: what the pin is keyed by in the sidecar. */
   id: string;
   gameId: string;
+  /** The hand's title, which is what a pin and a list row say when it has one. */
+  title?: string;
   x: number;
   y: number;
   /** The zone this hand is BOUND to, from the hand itself rather than from the
@@ -1125,9 +1149,119 @@ export interface BoxMapDto {
   backgrounds: MapBackgroundDto[];
   sites: MapSiteDto[];
   /** Hands with no pin yet: what "place a hand" can offer. */
-  unplaced: { id: string; gameId: string }[];
+  unplaced: { id: string; gameId: string; title?: string }[];
   /** What the author has drawn around all this. */
   furniture: CanvasFurnitureDto;
+}
+
+/** The canvas id of the PROJECT map, for its comment markers: `map`, the
+ *  canvas `storyletengine format` moves map threads onto
+ *  (design/project-map-contract.md 1.1). Not under `MAP_CANVAS`, whose
+ *  `map:<box>` names the per-box maps that came before it. */
+export const PROJECT_MAP_CANVAS_ID = "map";
+
+/** The host a project map picture is served under (`assetUrl`): the pictures
+ *  are the project's, in its one assets folder, and belong to no box. */
+export const PROJECT_MAP_ASSETS = "map";
+
+/** A site on the project map: a hand pinned there, with what its row says. */
+export interface ProjectMapSiteDto extends MapSiteDto {
+  /** How many cards name this hand as their place: the "only here" tier. */
+  only: number;
+}
+
+/** One LAYER of the project map: a box on it, and its own sites (the
+ *  surfacing review's layered map view, 2026-10-01). Boxes not on the map have
+ *  no layer and are never sent. */
+export interface ProjectMapLayerDto {
+  box: string;
+  gameId: string;
+  title?: string;
+  sites: ProjectMapSiteDto[];
+  /** The box's hands with no site yet. */
+  unplaced: { id: string; gameId: string; title?: string }[];
+}
+
+/** The project map: zones and pictures once, every box on it as a layer. */
+export interface ProjectMapViewDto {
+  /** False when the project has no map: the page has nothing to show. */
+  hasMap: boolean;
+  /** The zone group. */
+  groupId: string;
+  groupGameId: string;
+  zones: MapZoneDto[];
+  undrawn: { id: string; gameId: string }[];
+  backgrounds: MapBackgroundDto[];
+  /** In project order; the person's own layer order is applied in the view. */
+  layers: ProjectMapLayerDto[];
+  furniture: CanvasFurnitureDto;
+  /** The group's property names, for the edit panel's quiet line ("Each zone
+   *  has danger, a number"). */
+  properties: { name: string; type: string }[];
+}
+
+/** One property a zone has: declared on the group (every zone has it) or on
+ *  the zone itself, with the value this zone starts at. */
+export interface MapZonePropertyDto {
+  name: string;
+  type: string;
+  /** An enum's values, a quality's stages, in order. */
+  values?: string[];
+  /** The value this zone starts at: its own, else the declaration's default. */
+  start: string;
+  shared?: boolean;
+  /** Declared on this zone alone rather than on the group. */
+  own?: boolean;
+}
+
+/** One box's share of a zone: its sites there, and the cards filed to it. */
+export interface MapZoneBoxDto {
+  box: string;
+  gameId: string;
+  title?: string;
+  /** Hands of this box bound to the zone, with their "only here" counts. */
+  sites: { id: string; gameId: string; title?: string; only: number }[];
+  /** Cards with no place, tagged with this zone: "anywhere in it". */
+  cards: HandCardRef[];
+}
+
+/** A zone, as the project map's side panel shows it. */
+export interface MapZoneDetailDto {
+  id: string;
+  gameId: string;
+  /** The group's purpose: what the zones are a map OF. */
+  purpose?: string;
+  properties: MapZonePropertyDto[];
+  /** The boxes on the map with a site in the zone or a card filed to it, in
+   *  project order. */
+  byBox: MapZoneBoxDto[];
+}
+
+/**
+ * One person's way of looking at the project map: which layers are showing,
+ * their order, and which one "+ Site" adds to.
+ *
+ * APP state, never the project's (the surfacing review's ruling): two people
+ * on one project focus on different boxes, and a shard that carried this would
+ * make one person's focus the other's surprise. Layer ids are box ids, plus
+ * `zones` and `pictures` (MAP_LAYER_ZONES, MAP_LAYER_PICTURES in map-layers.ts).
+ */
+export interface MapLayerPrefs {
+  hidden?: string[];
+  /** Box layers, top first. A box not named sits below the named ones, in
+   *  project order. */
+  order?: string[];
+  active?: string;
+  /** What an Option-click solo put aside, so the second Option-click on the
+   *  same eye can put it back. */
+  solo?: { layer: string; hidden: string[] };
+}
+
+/** One box's Group by choices (StudioState.cardGroups): a group key
+ *  ("deck", "none", "place", or `tag:<group id>`) per page. */
+export interface CardGroupPrefs {
+  contents?: string;
+  deck?: string;
 }
 
 /** The Links window's whole state for one card. */
@@ -1246,6 +1380,22 @@ export interface HandDetail {
    *  (design/engine-server.md 4.11): "Dealt at the-park". Derived, like
    *  `movableFrom`: it exists for the editor and is stored nowhere. */
   contract?: string[];
+}
+
+/** One card on a hand page: where it lives, so the row can find its DTO. */
+export interface HandCardRef { deck: string; card: string }
+
+/** What could come up at one hand, by tags and place alone (ops `placeTiers`):
+ *  the hand page's Cards tab. Conditions are not evaluated. */
+export interface HandCardsDto {
+  /** Cards whose place names this hand. */
+  only: HandCardRef[];
+  /** One tier per zone the hand can be in: the one it binds, or each one a
+   *  roaming hand's property can name. `zone` is the tag's gameId. Empty off
+   *  the map. */
+  zones: { zone: string; cards: HandCardRef[] }[];
+  /** Cards with no place that no zone tier took: a count on the page. */
+  anywhere: HandCardRef[];
 }
 
 export interface HandEdit {
@@ -1420,8 +1570,11 @@ export interface StudioApi {
   setNavExpanded(ids: string[]): Promise<void>;
   /** The whole camera map, written through on a debounce (canvas-memory.ts). */
   setCanvasCameras(cameras: Record<string, { x: number; y: number; scale: number }>): Promise<void>;
-  /** Which map each box is showing. Written on the pick, which is rare. */
-  setMapGroups(groups: Record<string, string>): Promise<void>;
+  /** One project map's layer visibility, order and active layer, for this
+   *  person (MapLayerPrefs). Written on each change, which is a click. */
+  setMapLayers(groupId: string, prefs: MapLayerPrefs): Promise<void>;
+  /** One box's Group by on one of its card views (StudioState.cardGroups). */
+  setCardGroup(boxId: string, page: "contents" | "deck", key: string): Promise<void>;
   /** The current project settings (name / gameId / version / world + story
    *  properties / export). Null when nothing is open. */
   projectSettings(): Promise<ProjectSettingsDto | null>;
@@ -1448,8 +1601,13 @@ export interface StudioApi {
   duplicateHand(boxId: string, handId: string): Promise<{ result: OpenResult; handId: string } | { error: string }>;
   duplicateTagGroup(boxId: string, groupId: string): Promise<{ result: OpenResult; groupId: string } | { error: string }>;
   handDetail(boxId: string, handId: string): Promise<HandDetail | null>;
+  /** What could come up at a hand, tiered for its Cards tab (ops `placeTiers`).
+   *  Null when the hand is gone. */
+  handCards(boxId: string, handId: string): Promise<HandCardsDto | null>;
   saveHand(boxId: string, handId: string, edit: HandEdit): Promise<OpenResult | { error: string }>;
-  createHand(boxId: string): Promise<{ result: OpenResult; handId: string } | { error: string }>;
+  /** A new standalone hand. `site` also pins it on the project map there, in
+   *  the same undo step, binding the zone it lands in: the map's "+ Site". */
+  createHand(boxId: string, site?: { x: number; y: number }): Promise<{ result: OpenResult; handId: string } | { error: string }>;
   deleteHand(boxId: string, handId: string): Promise<OpenResult | { error: string }>;
   tagGroupDetail(boxId: string, groupId: string): Promise<TagGroupDetail | null>;
   saveTagGroup(boxId: string, groupId: string, edit: TagGroupEdit): Promise<OpenResult | { error: string }>;
@@ -1460,7 +1618,9 @@ export interface StudioApi {
   /** Apply a card edit, write canonically, re-validate. */
   saveCard(deckId: string, cardId: string, edit: CardEdit): Promise<OpenResult | { error: string }>;
   /** Add a new card to a deck; the result carries the new card's id. */
-  createCard(deckId: string): Promise<{ result: OpenResult; cardId: string } | { error: string }>;
+  /** A new card in a deck. `place` is a hand id the card is made AT (the hand
+   *  page's "+ New card here"), written as its place tag. */
+  createCard(deckId: string, place?: string): Promise<{ result: OpenResult; cardId: string } | { error: string }>;
   /** Clone a card (fresh id, deduped gameId), inserted after the original. */
   duplicateCard(deckId: string, cardId: string): Promise<{ result: OpenResult; cardId: string } | { error: string }>;
   deleteCard(deckId: string, cardId: string): Promise<OpenResult | { error: string }>;
@@ -1600,6 +1760,14 @@ export interface StudioApi {
   /** Every spatial group in the project, for a surface that has to offer a
    *  choice of maps (the Board). Empty when nothing is mapped. */
   projectMaps(): Promise<ProjectMapDto[]>;
+  /** The project map, as the editor's Map page draws it: zones and pictures
+   *  once, a layer per box on it. */
+  projectMapView(): Promise<ProjectMapViewDto>;
+  /** One zone of the project map, for its side panel. Null when it is gone. */
+  mapZone(tagId: string): Promise<MapZoneDetailDto | null>;
+  /** Put a box on the project map, or take it off. Leaving is refused, with a
+   *  sentence, while the box's hands or cards still reference a zone. */
+  useProjectMap(boxId: string, on: boolean): Promise<OpenResult | { error: string }>;
   /** Mark a tag group spatial, or stop. Geometry already traced is left alone. */
   setGroupSpatial(boxId: string, groupId: string, on: boolean): Promise<OpenResult | { error: string }>;
   /** A traced outline for a zone that does not exist yet: declares the tag and

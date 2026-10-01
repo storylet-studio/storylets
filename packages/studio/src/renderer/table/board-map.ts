@@ -98,7 +98,7 @@ export function mountBoardMap(
     ...current.sites.map((site): BoardItem => ({
       kind: "site",
       ...siteShape({
-        id: site.id, title: site.gameId, name: site.gameId, at: { x: site.x, y: site.y },
+        id: site.id, title: site.title ?? site.gameId, name: site.gameId, at: { x: site.x, y: site.y },
         ...(site.zone !== undefined
           ? { zone: site.zone, ...(zoneName(site.zone) !== undefined ? { zoneName: zoneName(site.zone)! } : {}) }
           : {}),
