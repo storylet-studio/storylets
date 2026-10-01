@@ -99,10 +99,10 @@ time.
 
 A quality can be declared in any scope, including on a tag, and a tag ladder is worth
 knowing about. `@hand` is assembled fresh for each deal from whichever tags that hand
-binds, so a quality declared on a tag group gives every place its own copy of the same
+binds, so a quality declared on a tag group gives every zone its own copy of the same
 ladder. One card can then say `@hand.haunting >= "screaming"` and mean "wherever I am, if
-it's got that bad", and an outcome's `advance(@hand.haunting)` moves the stage of the place
-the hand belongs to, leaving every other place alone.
+it's got that bad", and an outcome's `advance(@hand.haunting)` moves the stage of the zone
+the hand is in, leaving every other zone alone.
 
 ### Why not just a number?
 

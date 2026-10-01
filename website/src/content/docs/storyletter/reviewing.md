@@ -34,13 +34,17 @@ file.
 
 ## Markers on a canvas
 
-On a deck's [node canvas](/storyletter/node-canvas/) or a box's [map](/storyletter/maps/),
-**Comment** in the strip drops a thread onto the drawing itself. Click where it goes. The
-marker is a small pin you can hover to read and drag to move.
+On a deck's [node canvas](/storyletter/node-canvas/) or the
+[project map](/storyletter/maps/) (in **Edit layout**), **Comment** in the strip drops a
+thread onto the drawing itself. Click where it goes. The marker is a small pin you can
+hover to read and drag to move.
 
-Drop a marker on a card (or, on a map, on a site) and it sticks to it. Move the card and
-the comment moves too. Drop it on empty canvas and it stays where the canvas is. Dragging
-a marker onto or off a card switches between the two.
+Drop a marker on a card (or, on the map, on a hand's pin) and it sticks to it. Move the
+card and the comment moves too. Drop it on empty canvas and it stays where the canvas is.
+Dragging a marker onto or off a card switches between the two.
+
+A comment on the map itself, or on one of its zones, belongs to the project and is kept in
+its own notes file. A comment on a hand is kept with the hand's box.
 
 ## The walk
 

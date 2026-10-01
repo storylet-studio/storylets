@@ -9,7 +9,7 @@ The whole model is a card game, and the words are the card game's words. Learn t
 the editor, the files, the runtime API, and the CLI all read the same way.
 
 > A **box** holds **decks** of **cards**. Cards carry **tags** saying what they're about. A
-> **hand** is a named place on the **board** that your game deals cards to. **Deal** a hand
+> **hand** is a named spot on the **board** that your game deals cards to. **Deal** a hand
 > and the engine fills it with the cards that fit right now, best first. **Play** a card and
 > the world remembers the **outcome** that was picked.
 
@@ -56,8 +56,8 @@ reads them.
 
 ## Hands, hand templates, and the Board
 
-A **hand** is a named place your game deals to. "The inn", "encounters in the forest", and
-"what's next" are all hands. A hand says which tags it wants and how many cards it holds. For
+A **hand** is a named spot on the board that your game deals to. "The inn", "encounters in
+the forest", "Gareth's topics", and "what's next" are all hands. A hand says which tags it wants and how many cards it holds. For
 example, `zone = forest` might mean "deal encounters in the forest to this hand", and a limit
 of five means at most five things can be available in the forest at the same time. A **hand
 template** is a kind of hand you define once and reuse, choosing the tags per hand. Your game
@@ -74,8 +74,17 @@ A **tag group** is a named axis for sorting cards, such as zone, npc, trigger, o
 quietly never comes up. A card that leaves a group blank matches any value of it.
 
 Every box has a built-in **place** group whose tags are the box's hands, so a card tagged
-`place: the-inn` comes up only there. That is the direct answer to "where does this card come
-up?". Tagging it with a region instead says "anywhere in there".
+`place: the-inn` comes up only at that hand. That is the direct answer to "where does this card
+come up?". Tagging it with a zone instead says "anywhere in there".
+
+## The project map
+
+A project can have one **map**, drawn above the boxes. Its **zones** (the village, the
+forest, the docks) are a tag group that belongs to the project, and a box **uses the map** to
+share them. Each box on the map lays out its own hands in the zones, and its cards can be
+filed to a zone to come up anywhere in it. A zone's properties are one value for every box
+that uses it. A box that doesn't use the map never sees it.
+[The project map](/storyletter/maps/) is the editor's side of this.
 
 ## Peek, deal, play
 

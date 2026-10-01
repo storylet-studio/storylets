@@ -21,8 +21,8 @@ const SAMPLES: Record<string, string> = {
   "stray-file": "unexpected file in decks/ (not *.storyletdeck); ignored",
   "map-in-box": 'tag group "zone" in box "village" is a map: a map belongs to the project now; run `storyletengine format` to move it',
   "map-frames-in-box": "the map's frames belong to the project map now, and these are ignored; run `storyletengine format` to move them",
-  "map-pins-off-map": '3 hands are placed on the map, but box "news" is not on the project map, so their pins are not drawn or shipped; turn on "Uses the project map" or take them off the map',
-  "map-group-off-map": 'box "codex" is not on the project map, so it cannot use the zone group "district"; turn on "Uses the project map" or remove the reference',
+  "map-pins-off-map": '3 hands are placed on the map, but box "news" is not on the project map, so their pins are not drawn or shipped; turn on "Use the project map" or take them off the map',
+  "map-group-off-map": 'box "codex" is not on the project map, so it cannot use the zone group "district"; turn on "Use the project map" or remove the reference',
   "duplicate-id": 'duplicate id "c_1" (also in encounters/decks/street.storyletdeck)',
   "duplicate-gameid": 'duplicate card gameId "ambush" (also in encounters/decks/street.storyletdeck)',
   "invalid-gameid": 'card gameId "Am bush" is not a legal address (lower case letters, digits and hyphens; must start and end with a letter or digit)',
@@ -167,7 +167,7 @@ describe("problemText", () => {
     const text = problemText(problem(SAMPLES["map-pins-off-map"]!, { severity: "warning", path: "news/map" }), { title: "News" });
     expect(text).toBe("“News” has 3 hands placed on the map, but isn’t on the project map, so those pins aren’t drawn or shipped. "
       + "Turn on Use the project map on the box’s page, or upgrade the project if it was made before maps belonged to the project.");
-    expect(problemText(problem('1 hand is placed on the map, but box "news" is not on the project map, so its pin is not drawn or shipped; turn on "Uses the project map" or take them off the map')))
+    expect(problemText(problem('1 hand is placed on the map, but box "news" is not on the project map, so its pin is not drawn or shipped; turn on "Use the project map" or take them off the map')))
       .toMatch(/^“news” has a hand placed on the map, but isn’t on the project map, so that pin isn’t drawn/);
     for (const code of ["map-pins-off-map", "map-group-off-map", "dangling-place", "place-from-property"]) {
       expect(problemText(problem(SAMPLES[code]!), { title: "News" }), code).not.toMatch(/\bsites?\b|\ba place\b/);

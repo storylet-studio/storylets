@@ -247,7 +247,7 @@ describe("the project map's errors", () => {
         },
       ],
     }));
-    const said = 'box "news" is not on the project map, so it cannot use the zone group "district"; turn on "Uses the project map" or remove the reference';
+    const said = 'box "news" is not on the project map, so it cannot use the zone group "district"; turn on "Use the project map" or remove the reference';
     // Once per reference: the card's tag, the template's choice, the rule's
     // binding. The instance's `chosen` is not said again: its template is
     // where the hole is declared, and one message there names the fix.
@@ -258,7 +258,7 @@ describe("the project map's errors", () => {
   it("E7: a box that uses the map needs a project that has one", () => {
     const { issues } = compile(project({ boxes: [{ folder: "news", id: "b_news", usesMap: true }] }));
     expect(errors(issues)).toEqual([
-      'box "news" uses the project map, and the project has none; draw one, or turn "Uses the project map" off',
+      'box "news" uses the project map, and the project has none; draw one, or turn "Use the project map" off',
     ]);
     expect(issues[0]!.field).toBe("usesMap");
   });
@@ -300,7 +300,7 @@ describe("the project map's warnings", () => {
     const { issues, bundle } = compile(project({ map: projectMap(), boxes: [{ folder: "news", id: "b_news" }] }));
     expect(bundle).toBeDefined();
     expect(warnings(issues)).toEqual([
-      'no box uses the project map, so nothing is ever dealt to its zones; turn on "Uses the project map" on the boxes that belong on it',
+      'no box uses the project map, so nothing is ever dealt to its zones; turn on "Use the project map" on the boxes that belong on it',
     ]);
   });
 
@@ -317,7 +317,7 @@ describe("the project map's warnings", () => {
       ],
     }));
     expect(warnings(issues)).toEqual([
-      '1 hand is placed on the map, but box "news" is not on the project map, so its pin is not drawn or shipped; turn on "Uses the project map" or take them off the map',
+      '1 hand is placed on the map, but box "news" is not on the project map, so its pin is not drawn or shipped; turn on "Use the project map" or take them off the map',
     ]);
     expect(issues[0]!.path).toBe("news/map");
   });

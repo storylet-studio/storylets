@@ -2015,8 +2015,8 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
     view.append(section("Map", undefined, cfgRow(
       "A map",
       spatial
-        ? "Its tags are zones with outlines, drawn on the box's Map. It can be geography or any other two-dimensional layout, such as acts, a cast, or a tech tree."
-        : "Turn on to draw these tags as a map. It need not be geography. Acts and their beats, a cast and who is close to whom, or anything else you can lay out will do.",
+        ? "This is the project map: its tags are zones with outlines, drawn once for the whole project. Boxes that use the map place their hands on it."
+        : "Turn on to make these tags the project's map: zones with outlines, drawn once, where boxes that use the map place their hands.",
       cfgCheck(spatial, (on) => h.setGroupSpatial(boxId, detail.id, on)),
     )));
 

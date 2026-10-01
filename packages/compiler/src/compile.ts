@@ -717,7 +717,7 @@ export function compileProject(source: SourceProject): CompileResult {
       if (mapGroup !== undefined) groupsById.set(mapGroup.id, mapGroup);
       else {
         report({ severity: "error", path: boxPath, where: effectiveGameId(boxDecl), field: "usesMap",
-          message: `box "${effectiveGameId(boxDecl)}" uses the project map, and the project has none; draw one, or turn "Uses the project map" off` });
+          message: `box "${effectiveGameId(boxDecl)}" uses the project map, and the project has none; draw one, or turn "Use the project map" off` });
       }
     }
     /** Is this group the project map's, named from a box that is not on it?
@@ -726,7 +726,7 @@ export function compileProject(source: SourceProject): CompileResult {
     const offMap = (groupId: string, path: string, where: string, field?: string): boolean => {
       if (onMap || mapGroup === undefined || groupId !== mapGroup.id) return false;
       report({ severity: "error", path, where, ...(field !== undefined ? { field } : {}),
-        message: `box "${effectiveGameId(boxDecl)}" is not on the project map, so it cannot use the zone group "${mapName}"; turn on "Uses the project map" or remove the reference` });
+        message: `box "${effectiveGameId(boxDecl)}" is not on the project map, so it cannot use the zone group "${mapName}"; turn on "Use the project map" or remove the reference` });
       return true;
     };
     // A box's sites ship only when it is on the map (W2), and the map's frames
@@ -735,7 +735,7 @@ export function compileProject(source: SourceProject): CompileResult {
     const placed = Object.keys(boxMapOf(sourceBox)?.sites ?? {}).length;
     if (placed > 0 && !onMap) {
       report({ severity: "warning", path: `${sourceBox.path}/map`, where: effectiveGameId(boxDecl),
-        message: `${placed === 1 ? "1 hand is" : `${placed} hands are`} placed on the map, but box "${effectiveGameId(boxDecl)}" is not on the project map, so ${placed === 1 ? "its pin is" : "their pins are"} not drawn or shipped; turn on "Uses the project map" or take them off the map` });
+        message: `${placed === 1 ? "1 hand is" : `${placed} hands are`} placed on the map, but box "${effectiveGameId(boxDecl)}" is not on the project map, so ${placed === 1 ? "its pin is" : "their pins are"} not drawn or shipped; turn on "Use the project map" or take them off the map` });
     }
     const frames = (sourceBox.map?.map as { frames?: unknown } | undefined)?.frames;
     // `format` can move them only to a project map that exists: with none, it
@@ -1234,7 +1234,7 @@ export function compileProject(source: SourceProject): CompileResult {
   // is almost always a box somebody forgot to put on it.
   if (mapGroup !== undefined && boxesOnMap === 0) {
     report({ severity: "warning", path: MAP_PATH, where: mapName,
-      message: `no box uses the project map, so nothing is ever dealt to its zones; turn on "Uses the project map" on the boxes that belong on it` });
+      message: `no box uses the project map, so nothing is ever dealt to its zones; turn on "Use the project map" on the boxes that belong on it` });
   }
 
   // The play ladder (design/engine-server.md 4.10). The editor refuses a move

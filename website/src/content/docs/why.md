@@ -43,7 +43,7 @@ one box each.
 - **Which conversation topics an NPC should offer.** A deck per character, a card per topic,
   each gated on what the player knows and has done. A topic that's been raised stays raised;
   a standing offer keeps coming back until the player takes it.
-- **Which encounters should spawn in a particular location.** Every place on your map deals
+- **Which encounters should spawn in a particular location.** Every location on your map deals
   its own hand from a shared pool, so the roadside ambush turns up on roads, once, and never
   in two places on the same night.
 - **Which items should spawn to be picked up.** There's one copy of a unique reward, so it
@@ -69,7 +69,7 @@ manager's laptop or an operator's tablet:
 - **What topic your actor should raise with this visitor, right now.** Each visitor is a
   run of their own, so what they've seen and done gates what an actor takes to them next,
   and a revelation that's been delivered stays delivered.
-- **Where to send your visitor next.** Rooms and stations are places, each dealing from the
+- **Where to send your visitor next.** Each room and station deals its own hand from the
   pool of what's ready. Nobody's sent to a scene that's already claimed, and the quiet room
   gets the visitor the busy one can't take.
 
@@ -125,9 +125,10 @@ take the top one, or pick at random is your call.
 **It doesn't change its mind behind your back.** What's on the table changes when you ask for
 a new hand, and at no other time.
 
-**The map is up to you.** You can tag cards to belong to notional places on a map, and
-Storyletter can give you a way to visualise it, but that could be a physical space, or a
-timeline, or a series of concepts. The geography of this is entirely up to you.
+**One map for the whole project.** Draw your zones once, and every box that uses the map lays
+out its own hands on them, so the encounters, the quest givers and the news screens all sit on
+the same town. A box with no use for a map never sees it, and tags sort its cards by character
+or by act instead.
 
 ## How it compares
 

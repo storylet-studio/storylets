@@ -64,6 +64,9 @@ Storyletter. It shows:
   `deal()`.
 - The boxes, tag groups, and tags by gameId, plus each box's ranking policy. This is what you
   can `peek()`.
+- The **project map**, when the bundle has one: its zone group and zones, the boxes that use
+  it, and how much of the drawing the build carried (zones, pictures, and pins per box), which
+  the engine ignores. A zone's properties are listed with the rest, under its own name.
 - The declared properties per scope with their types, what conditions read and what your game
   may set, with the
   [durable](/play/world-state/#durable-state-that-outlives-a-run) ones marked, since those are

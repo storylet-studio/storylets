@@ -54,7 +54,7 @@ them. `vcs-setup.md` has the one-time `git config` lines.
 
 ## 2. See what the starter box already does
 
-The starter box has one hand, `whats-next`, and two cards. A hand is a place on the board,
+The starter box has one hand, `whats-next`, and two cards. A hand is a named spot on the board,
 and it holds whatever it's dealt. `deal` refills it by name:
 
 ```
@@ -236,9 +236,10 @@ $ storyletengine new box tavern.storylets --kit rpg
 added box "new-box" (rpg kit) in .../tavern.storylets
 ```
 
-The RPG kit gives you an `area` tag group (tavern, market), a reusable `encounters-at` hand
-template that leaves the place for each hand to choose, one hand that chooses the tavern,
-and a sample deck. The market has no hand yet, and the template's own note says so. Adding
+The RPG kit gives you an `area` map with two zones (tavern, market), a reusable
+`encounters-at` hand template that leaves the zone for each hand to choose, one hand that
+chooses the tavern, and a sample deck. The project had no map yet, so the kit's zones become
+the [project map](/storyletter/maps/) and the new box is put on it. The market has no hand yet, and the template's own note says so. Adding
 one is the first edit the kit invites you to make. It deals straight away:
 
 ```

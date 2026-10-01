@@ -46,14 +46,15 @@ and the strip says so.
 
 Positions live in `view.storyletview`, the
 [arrangement shard](/format/shards/#the-two-arrangement-shards), which holds card
-positions and never content. Delete it and you lose a layout, never a card. The map's
-sites aren't in there. They have [their own shard](/storyletter/maps/#where-the-map-is-stored).
+positions and never content. Delete it and you lose a layout, never a card. Where hands
+stand on the project map isn't in there; that has
+[files of its own](/storyletter/maps/#where-the-map-is-stored).
 
 Where you were looking is remembered per deck and restored when you come back.
 
 ## The rest of the canvas
 
-Everything a [map](/storyletter/maps/) offers on its canvas, this one offers too. Right-click
+The tools the [project map](/storyletter/maps/) has for frames and comments are here too. Right-click
 for **New card here**. **Frame** draws a titled frame behind a group of cards, and **Comment**
 drops a [comment marker](/storyletter/reviewing/) on the canvas or on a card. The zoom
 control sits bottom right. `Home` fits everything and `F` fits the selection. The full key

@@ -19,13 +19,42 @@ preview beneath, its **purpose** as body text, and its **tag chips**. Each tag k
 colour, so you learn your zones and your cast by colour and can scan a deck fast.
 
 **Table view** puts title, gameId, When, Where, and Tags down columns, for scanning a long
-deck. Where is the card's placement (its home hands and regions), and Tags is everything
-else, the same split the card's own Dealing tab draws.
+deck. Where is where the card can come up (the hands it names, and its zones or other tags
+that decide where), and Tags is everything else, the same split the card's own Dealing tab
+draws.
 
 **Node view** shows the cards as nodes, with the arrows between them worked out for you.
 This is a deck's default view, and it has [its own page](/storyletter/node-canvas/).
 
 The switch is remembered, so a deck opens the way you left it.
+
+### Group by
+
+<figure class="doc-shot">
+  <img src="/doc-images/GroupBy.png" alt="The Village box's Contents in Storyletter with Group by set to Hand: the Group by control offering Deck, Hand, thread and zone, and the cards under one heading per hand, such as Miners Camp in cave with 4 cards and Market in village with 6, each card face showing its title, its condition and its tags." />
+  <figcaption>The Village's cards grouped by Hand: a heading per hand, with the zone it stands in and its count.</figcaption>
+</figure>
+
+**Group by**, above the cards in Card and Table view, sorts the same cards under headings.
+It's on a deck's Cards tab and on a box's Contents tab, which shows every card in the box.
+
+- **Deck** is the default. On a deck that's the deck as you arranged it, and on a box's
+  Contents it's a heading per deck.
+- **Hand** gives a heading per hand, with the zone the hand is in beside it, holding the
+  cards that name that hand. After those come **Anywhere in** a zone for cards filed to a
+  zone, and **Anywhere** last. It's offered when the box has hands and something places cards
+  at them: a card that names a hand, or the project map.
+- **Any of the box's tag groups**, by name, such as `npc` or `act`, gives a heading per tag
+  and **Untagged** last. In a box on the map the zone group is one of them, and a card that
+  names a hand is filed under the zone that hand is in.
+
+A card that belongs under more than one heading is shown under each, and says what else it's
+under. A heading that names a deck or a hand opens it when clicked. You can only drag cards
+into a new order when they're grouped by Deck, because that order is the deck's.
+
+Group by works the same in a box with no map at all: a box of conversation topics grouped by
+`npc` reads as one heading per character. Your choice is remembered per box and per page, and
+is yours, not the project's.
 
 A card carries no player-facing text. Its purpose is its story as far as your team is
 concerned, and reading a deck top to bottom reads the story's beats. Priority, redraw, and
@@ -58,13 +87,26 @@ The identity heading holds the title, the gameId chip, and the purpose. Below it
 tabs.
 
 <figure class="doc-shot">
-  <img src="/doc-images/Card.png" alt="A card document in Storyletter: The Moneylender's Men from the Hamlet example, on its Dealing tab. The When section shows the condition as pills (deck.debt is troubled), then Priority 5, Redraw set to never, Copies 1, and a Where row reading 'anywhere in village' with a Change button." />
-  <figcaption>A card's Dealing tab: the condition (labelled <strong>When</strong>), then Priority, Redraw and Copies, then the Where row saying where the card can come up.</figcaption>
+  <img src="/doc-images/Card.png" alt="A card document in Storyletter: The Moneylender's Men from the Hamlet example, on its Dealing tab. It opens with the sentence Comes up anywhere in village when deck.debt is troubled, the zone as a chip, with In Gareth's Debt, Village beneath and a Change button; then the When section with the condition as pills, then Priority 5, Redraw set to never, and Copies." />
+  <figcaption>A card's Dealing tab in a box on the map: where and when the card comes up, in one sentence, above the condition (labelled <strong>When</strong>), Priority, Redraw and Copies.</figcaption>
 </figure>
 
 ### Dealing
 
 Everything about how this card gets dealt is on one page.
+
+In a box where something decides where a card comes up, the tab opens with one sentence
+saying where and when: **Comes up at** *The Inn* **when** *the condition*, or **Comes up
+anywhere in** *village*, or **Comes up anywhere, always.** That's any box on the project
+map, and any box with a hand that binds one of its tag groups, such as a box of conversations
+whose hands each bind an `npc`. The hand in the sentence is a chip that opens the hand, and
+**Change** opens the picker described below. The condition part follows the When row as you
+edit it.
+
+**anywhere** is shown in amber, because in such a box it's usually the answer nobody chose.
+A card you make in a deck names no hand, so it comes up at every hand in the box until you
+say otherwise. Open a card you've just made in a deck and the tab says so, with **Choose
+where** and **Anywhere is right**.
 
 - The When row is the condition to be dealt, written in the expression editor. It knows your project's
   declared properties, so it offers the names that exist. A property pill answers for
@@ -94,16 +136,20 @@ Everything about how this card gets dealt is on one page.
   needs nothing set.
 - **Durable** appears on a project whose Play setting reads Venue, beside Shared and in the
   same three settings. The value survives the run boundary the server it came from draws.
-- The Where row is the one you reach for most. It answers "where does this card come up?" in a
-  sentence, such as **Anywhere**, or **The Inn**, or **anywhere in the forest**, or a
-  combination. **Change** opens a picker with two sections, **Places** (the box's hands,
-  each showing the region it sits in) and the region groups. Choosing a place pins the card
-  to exactly that place; choosing a region lets it come up anywhere inside one. Choosing
-  both means BOTH must match, which is usually a mistake, so the row says so when the place
-  you picked isn't in the region you picked.
-- The Tags section is one row per remaining tag group, each a strip of chips you toggle. Place and
-  region groups aren't here, because the Where row above owns them. When a card has no
-  tags the section collapses to one line reading "untagged", with a `+` to open it.
+- **Where**, in a box where nothing decides where a card comes up, is a row at the foot of
+  the tab instead of the opening sentence. It reads **Anywhere** until you choose otherwise.
+- **Change**, on the sentence or the row, opens the picker. Its first section, **Hands**,
+  lists the box's hands, each showing the zone it's in; choosing one means the card comes up
+  at exactly that hand. Below it is a section for each group that decides where, such as the
+  map's zones or `npc`; choosing a zone lets the card come up at any hand in it. Choosing a
+  hand and a zone means both must match, which is usually a mistake, so the tab says so when
+  the hand you picked isn't in the zone you picked.
+- The Tags section is one row per remaining tag group, each a strip of chips you toggle.
+  The groups the Where picker owns aren't here. When a card has no tags the section
+  collapses to one line reading "untagged", with a `+` to open it.
+
+To see every card that can come up at one hand, open the hand. It opens on its
+[Cards tab](/storyletter/box-setup/#what-can-come-up-at-a-hand).
 
 ### Outcomes
 

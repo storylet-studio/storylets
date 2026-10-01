@@ -5,54 +5,66 @@ sidebar:
   label: The shards
 ---
 
-A project is made of eight kinds of file, one extension each. Every one is JSON5 with trailing
-commas, and every expression is stored as plain source text, never as a syntax tree. Seven of
-them are yours. The eighth, the installation contract, is written by a venue's server.
+A project is made of nine kinds of file. Every one is JSON5 with trailing commas, and every
+expression is stored as plain source text, never as a syntax tree. Eight of them are yours.
+The ninth, the installation contract, is written by a venue's server.
 
-| File | Extension | Holds |
+| File | Name | Holds |
 |---|---|---|
 | project | `<name>.storyletproj` | settings, `@world` and `@story` declarations, coverage drivers, export config |
-| box | `box.storyletbox` | the card template, `@box` properties, the ranking toggle, whether the box is timed |
-| tags | `tags.storylettags` | tag groups: their tags and each tag's properties |
+| project map | `map.storyletmap`, at the root | the project map: its zone group, each zone's outline, the zone properties, the pictures and the frames |
+| box | `box.storyletbox` | the card template, `@box` properties, the ranking toggle, whether the box is timed, and whether it uses the project map |
+| tags | `tags.storylettags` | the box's own tag groups: their tags and each tag's properties |
 | hands | `hands.storylethands` | hand templates and hands |
 | deck | `<name>.storyletdeck` | the cards, and the deck's own gate and `@deck` properties |
-| view | `view.storyletview` | the canvases: where cards sit on a deck's node canvas, and nothing about what they are |
-| map | `map.storyletmap` | the box's map: where its hands stand in space |
+| view | `view.storyletview` | the canvases: where cards sit on a deck's node canvas, and the box's colour on the map |
+| map | `map.storyletmap`, in a box | where the box's hands stand on the project map, and nothing else |
+| notes | `notes.storyletnotes` | comment threads: one per box, and one at the root for the project, its map and its zones |
 | contract | `contracts/<installation>.storyletcontract` | what a venue this project is installed at depends on. Not yours: the server writes it |
+
+The two `map.storyletmap` files are told apart by their `schema` tag:
+`storylets/projectmap@0` at the root, `storylets/map@0` in a box. The map's pictures live in
+an `assets/` folder at the root of the project.
 
 ### How they sit on disk
 
-<svg viewBox="0 0 620 290" role="img" aria-labelledby="sy-tree-title" style="width:100%;height:auto;font-family:var(--sl-font-mono,monospace)">
-  <title id="sy-tree-title">A project folder: the .storyletproj file at the root, then one folder per box containing box.storyletbox, tags.storylettags, hands.storylethands, an optional view.storyletview and map.storyletmap, and a decks folder holding one .storyletdeck file per deck. A dist folder holds the compiled .storyletsc bundle.</title>
+<svg viewBox="0 0 620 356" role="img" aria-labelledby="sy-tree-title" style="width:100%;height:auto;font-family:var(--sl-font-mono,monospace)">
+  <title id="sy-tree-title">A project folder: the .storyletproj file at the root, beside the project map's map.storyletmap, the project's notes.storyletnotes and an assets folder for the map's pictures; then one folder per box containing box.storyletbox, tags.storylettags, hands.storylethands, an optional view.storyletview and map.storyletmap, and a decks folder holding one .storyletdeck file per deck. A dist folder holds the compiled .storyletsc bundle.</title>
   <g font-size="12.5" fill="var(--sl-color-white)">
     <rect x="8" y="10" width="252" height="26" rx="6" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 14%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
-    <text x="20" y="28">the-hamlet.storylets/</text>
+    <text x="20" y="28">the-village.storylets/</text>
     <text x="290" y="28" fill="var(--sl-color-gray-3)" font-size="11.5">the project: a folder, opened as one document</text>
-    <text x="40" y="60">the-hamlet.storyletproj</text>
+    <text x="40" y="60">the-village.storyletproj</text>
     <text x="290" y="60" fill="var(--sl-color-gray-3)" font-size="11.5">settings, @world and @story, export config</text>
-    <rect x="30" y="72" width="230" height="26" rx="6" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 16%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
-    <text x="42" y="90">village/</text>
-    <text x="290" y="90" fill="var(--sl-color-gray-3)" font-size="11.5">one folder per box</text>
-    <text x="62" y="118">box.storyletbox</text>
-    <text x="290" y="118" fill="var(--sl-color-gray-3)" font-size="11.5">card template, @box properties, ranking</text>
-    <text x="62" y="140">tags.storylettags</text>
-    <text x="290" y="140" fill="var(--sl-color-gray-3)" font-size="11.5">tag groups, and their outlines if it's a map</text>
-    <text x="62" y="162">hands.storylethands</text>
-    <text x="290" y="162" fill="var(--sl-color-gray-3)" font-size="11.5">hand templates and hands</text>
-    <text x="62" y="184">view.storyletview</text>
-    <text x="290" y="184" fill="var(--sl-color-gray-3)" font-size="11.5">card positions, and safe to lose</text>
-    <text x="62" y="206">map.storyletmap</text>
-    <text x="290" y="206" fill="var(--sl-color-gray-3)" font-size="11.5">where the hands stand on the map</text>
-    <text x="62" y="228">decks/</text>
-    <text x="84" y="250">arrival.storyletdeck</text>
-    <text x="290" y="250" fill="var(--sl-color-gray-3)" font-size="11.5">one file per deck: the cards live inside</text>
-    <text x="40" y="278" fill="var(--sl-color-gray-2)">dist/the-hamlet.storyletsc</text>
-    <text x="290" y="278" fill="var(--sl-color-gray-3)" font-size="11.5">the compiled bundle your game loads</text>
+    <text x="40" y="82">map.storyletmap</text>
+    <text x="290" y="82" fill="var(--sl-color-gray-3)" font-size="11.5">the project map: zones, outlines, pictures</text>
+    <text x="40" y="104">notes.storyletnotes</text>
+    <text x="290" y="104" fill="var(--sl-color-gray-3)" font-size="11.5">comments on the project and its map</text>
+    <text x="40" y="126">assets/</text>
+    <text x="290" y="126" fill="var(--sl-color-gray-3)" font-size="11.5">the map's pictures</text>
+    <rect x="30" y="138" width="230" height="26" rx="6" fill="color-mix(in oklab, var(--sy-plum-tint,#9a89b5) 16%, var(--sl-color-bg-sidebar))" stroke="var(--sy-plum-tint,#9a89b5)"/>
+    <text x="42" y="156">village/</text>
+    <text x="290" y="156" fill="var(--sl-color-gray-3)" font-size="11.5">one folder per box</text>
+    <text x="62" y="184">box.storyletbox</text>
+    <text x="290" y="184" fill="var(--sl-color-gray-3)" font-size="11.5">card template, @box, ranking, uses the map</text>
+    <text x="62" y="206">tags.storylettags</text>
+    <text x="290" y="206" fill="var(--sl-color-gray-3)" font-size="11.5">the box's own tag groups</text>
+    <text x="62" y="228">hands.storylethands</text>
+    <text x="290" y="228" fill="var(--sl-color-gray-3)" font-size="11.5">hand templates and hands</text>
+    <text x="62" y="250">view.storyletview</text>
+    <text x="290" y="250" fill="var(--sl-color-gray-3)" font-size="11.5">card positions and the box's colour</text>
+    <text x="62" y="272">map.storyletmap</text>
+    <text x="290" y="272" fill="var(--sl-color-gray-3)" font-size="11.5">where this box's hands stand on the map</text>
+    <text x="62" y="294">decks/</text>
+    <text x="84" y="316">arrival.storyletdeck</text>
+    <text x="290" y="316" fill="var(--sl-color-gray-3)" font-size="11.5">one file per deck: the cards live inside</text>
+    <text x="40" y="344" fill="var(--sl-color-gray-2)">dist/the-village.storyletsc</text>
+    <text x="290" y="344" fill="var(--sl-color-gray-3)" font-size="11.5">the compiled bundle your game loads</text>
   </g>
   <g stroke="var(--sl-color-gray-4)" fill="none">
-    <path d="M22 42 V 274 M22 54 H 36 M22 84 H 26 M22 272 H 36"/>
-    <path d="M44 102 V 244 M44 114 H 58 M44 136 H 58 M44 158 H 58 M44 180 H 58 M44 202 H 58 M44 224 H 58"/>
-    <path d="M66 234 V 246 H 80"/>
+    <path d="M22 42 V 340 M22 54 H 36 M22 76 H 36 M22 98 H 36 M22 120 H 36 M22 150 H 26 M22 338 H 36"/>
+    <path d="M44 168 V 290 M44 180 H 58 M44 202 H 58 M44 224 H 58 M44 246 H 58 M44 268 H 58 M44 290 H 58"/>
+    <path d="M66 300 V 312 H 80"/>
   </g>
 </svg>
 
@@ -62,24 +74,30 @@ different files and never meet. That's most of why everyday edits merge on their
 
 ### The two arrangement shards
 
-Positions live apart from content, in two shards of their own, and neither holds anything
+Positions live apart from content, in two shards of each box's own, and neither holds anything
 about what a thing *is*.
 
 `view.storyletview` is the one shard you can ignore. It holds where a card sits on a deck's
-node canvas, and the frames drawn round them. Delete the file and you lose a layout, never
-content.
+node canvas, the frames drawn round them, and the box's colour on the map. Delete the file and
+you lose a layout and a colour choice, never content.
 
-`map.storyletmap` holds where a box's hands stand on its map. That one is not safe to lose,
-because a site leaves the project. It ships in the bundle's `maps` block when you export
-with the map, and it's where a screen or a kiosk stands. Which zone a site belongs to isn't
-recorded here either, since that's the hand's own tag binding, in `hands.storylethands`.
+A box's `map.storyletmap` holds where its hands stand on the project map. That one is not safe
+to lose, because the positions leave the project: they ship in the bundle when you export with
+the map, and they're where a screen or a kiosk stands. Which zone a hand is in isn't recorded
+here, since that's the hand's own tag binding, in `hands.storylethands`.
 
 Because of that split, two people arranging the same canvas can only produce a position
 conflict, never a content conflict.
 
-The map lived inside `view.storyletview` until September 2026. It is still read from there,
-for one release. Storyletter moves it the first time you touch the map, and
-`storyletengine format` moves a whole project at once.
+The root `map.storyletmap` is different: the zones are content, because cards and hands use
+them. See [The project map](#the-project-map) below.
+
+Before October 2026 a map belonged to one box, held in its tags shard with the pictures in
+the box's own `assets/` folder, and boxes that shared a map each kept a copy. Earlier still,
+before September 2026, the positions lived inside `view.storyletview`. Such a project doesn't
+compile until it's moved on: Storyletter offers the upgrade when you open it, and
+`storyletengine format` does the same from the command line (see
+[Projects made before the project map](/storyletter/maps/#projects-made-before-the-project-map)).
 
 The fixed basenames (`box`, `tags`, `hands`) are kept even though the extension already
 carries the type, so a box folder reads the same in a file browser and a diff.
@@ -256,9 +274,13 @@ instead, and a card's `redraw: 30` reads as thirty minutes. See
 [Dealing](/play/dealing/#a-box-that-counts-in-time). Leave it out and a turn is a play, which
 is the ordinary box.
 
+**`usesMap: true`** puts the box on the [project map](#the-project-map). Its hands may then be
+bound to the map's zones and its cards filed to them. Leave it out and the box can't name the
+map at all; a reference to it from a box that isn't on the map is an error.
+
 ## The tags shard
 
-Tag groups and their tags. Tags are declared values, so a typo is a validation error, not a
+A box's own tag groups and their tags. Tags are declared values, so a typo is a validation error, not a
 card that never deals. A tag may carry properties of its own.
 
 ```json5
@@ -299,6 +321,104 @@ with no address of its own. Rename one of them, or pin a distinct `gameId` on on
 warns about it in this release and refuses it in the next. Ids are unique across the whole
 project.
 
+The project map's names are reserved across the whole project. No box may have a group with
+the map's group name, or a tag with a zone's name, because those names mean one thing
+everywhere, and `place` can't name the map's group. A box's own group can't be a map: there's
+one map, and it's in the project map shard.
+
+## The project map
+
+One file at the root of the project, `map.storyletmap`, holds the project map. This one is
+from the Village example, shortened:
+
+```json5
+{
+  schema: "storylets/projectmap@0",
+  group: {
+    gameId: "zone",
+    id: "d_0001",
+    properties: [
+      {
+        default: "quiet",
+        name: "haunting",
+        stages: [
+          "quiet",
+          "restless",
+          "screaming",
+        ],
+        type: "quality",
+      },
+    ],
+    purpose: "Where in the world a beat belongs.",
+    tags: [
+      {
+        gameId: "lair",
+        id: "v_0003",
+        templates: {
+          spatial: {
+            polygon: [
+              { x: 870, y: -1559 },
+              { x: 871, y: -1069 },
+              { x: 1754, y: -1067 },
+              { x: 1750, y: -1554 },
+            ],
+          },
+        },
+      },
+      // ... village, forest, mountain, cave
+    ],
+    templates: {
+      spatial: {
+        backgrounds: [
+          { file: "lair.jpg", id: "g_bglair", x: 870, y: -1559, width: 884, height: 492 },
+          // ...
+        ],
+        map: true,
+      },
+    },
+  },
+}
+```
+
+**`group`** is the zone group, the same shape as a group in a tags shard. Its tags are the
+zones, each with its outline under `templates.spatial.polygon`. Its `properties` are declared
+once for every zone, and a zone's own starting values sit in its `values`, as on any tag. A
+zone property is one value for every box on the map; `shared` still decides whether it's one
+value for every flow too. **`templates.spatial.backgrounds`** are the pictures behind the
+map, each naming a file in the project's `assets/` folder. An optional **`frames`** list
+holds the map's frames, which never reach the bundle.
+
+A box joins the map with `usesMap: true` in its box shard. Its hands and cards then name the
+zones by id, exactly as they name a box's own tags:
+
+```json5
+// a hand in hands.storylethands
+chosen: { d_0001: "v_0004" },     // stands in the village zone
+
+// a card in a deck
+tags: { d_0001: ["v_0003"] },     // can come up anywhere in the lair
+```
+
+Each box keeps where its hands stand in its own `map.storyletmap`, keyed by hand id:
+
+```json5
+{
+  schema: "storylets/map@0",
+  map: {
+    sites: {
+      h_000b: { x: 446, y: -803 },
+      h_000c: { x: 839, y: -25 },
+    },
+  },
+}
+```
+
+`sites` is the format's word for those positions. A box that isn't on the map has nothing
+here, and pins left in such a box are a warning, because they aren't drawn or shipped.
+
+Comments on the map itself, or on a zone, are kept in the root `notes.storyletnotes`; a
+comment on a hand stays in its box's notes.
+
 ## The hands shard
 
 Hand templates, and the hands made from them.
@@ -326,7 +446,7 @@ Hand templates, and the hands made from them.
       gameId: "whats-happening",
       id: "t_whats_happening",
       properties: [],
-      purpose: "The main lens: which story beat happens at a place now. One hand per place.",
+      purpose: "The main lens: which story beat happens at a location now. One hand per location.",
       slots: 3,
     },
   ],

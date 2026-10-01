@@ -133,8 +133,10 @@ it an ordinary miss.
 coverage hand by hand, which matters because a hand is the contract between your designer and
 your programmer. One row per hand, named as the navigator names it, with its game ID and its
 number of deals quietly beneath. The count is out of the cards that could ever come up in that
-hand, not out of every card in its box. A card pinned to another place, or tagged for a
-different slice, doesn't count against it. A card's conditions aren't considered, and a tag
+hand, not out of every card in its box: the cards its
+[Cards tab](/storyletter/box-setup/#what-can-come-up-at-a-hand) lists. A card that names
+another hand, or is filed to a different zone or tag from the one this hand is bound to,
+doesn't count against it. A card's conditions aren't considered, and a tag
 group chosen as the game runs counts as matching anything, so nothing a run could deal there is
 left out. A full hand highlights, and a short bar means cards that could come up in that hand
 never did in any run. A hand that no card's tags can reach says so instead of
@@ -143,10 +145,11 @@ name.
 
 ## On the canvases
 
-With **View ▸ Coverage Overlay** on, the node canvas and the map wear the last run. A card
-face carries a band reading **never dealt** or **never played**, a map site is haloed by how
-much play reached it, and hovering a card shows how often it was dealt and played. A card
-that's fine shows nothing, so the overlay only ever points at a problem.
+With **View ▸ Coverage Overlay** on, the node canvas and the project map wear the last run. A
+card face carries a band reading **never dealt** or **never played**, a hand's pin on the map
+is ringed by how much play reached it (dashed when nothing was ever dealt there), and
+hovering a card shows how often it was dealt and played. A card that's fine shows nothing,
+so the overlay only ever points at a problem.
 
 ## Content gated on your game's state
 

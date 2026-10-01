@@ -9,7 +9,7 @@ Storyletter has two panes, the navigator down the left and the document you're e
 the centre. A problems bar appears along the bottom only when something needs fixing.
 
 <figure class="doc-shot">
-  <img src="/doc-images/Workspace.png" alt="The Storyletter workspace: the back and forward arrows at the top left, the navigator on the left with the Story row and The Hamlet's decks and hands, and the Arrival deck open in the centre as four cards, each showing its title, its When condition, its purpose and its tags." />
+  <img src="/doc-images/Workspace.png" alt="The Storyletter workspace: the back and forward arrows at the top left, the navigator on the left with the Story and Map rows and The Hamlet's Village box with its decks and hands, and the Arrival deck open in the centre with Group by set to Deck above four cards, each showing its title, its When condition, its purpose and its tags." />
   <figcaption>The navigator (left) and the document (centre): here, the Arrival deck from the example project, in its Cards view. The <strong>▶ Play</strong> button in the top bar opens the Board.</figcaption>
 </figure>
 
@@ -21,6 +21,7 @@ would be), a label, and a count:
 ```
 The Hamlet                  ← the project
   Story              12      ← the @story properties
+  Map                 2      ← the project map, and its zones
   Village                    ← a box
     Decks              5
       Arrival          4
@@ -50,6 +51,10 @@ properties aren't here; they're a contract with the game and stay in
 Each row also carries a quiet **uses** chip (the count of everything in the project that
 reads or writes the property), and clicking it opens [Find](#find) on exactly that list.
 Worth a glance before renaming anything.
+
+**Map** sits between Story and the boxes once the project has a map, with a count of its
+zones. It opens [the project map](/storyletter/maps/), the one map every box on it shares. A
+box on the map wears a small map mark in its own colour.
 
 A box expands to **Decks** and **Hands**. Its setup (the card template, hand templates,
 tags, and box properties) isn't in the tree. It lives as tabs on the box's own page.
@@ -91,10 +96,10 @@ Each kind of document has a fixed set of tabs:
 
 | Document | Tabs |
 |---|---|
-| Box | Contents · Dealing · Card template · Hand templates · Tags · Properties (plus **Maps** when the box has one) |
+| Box | Map (when the box uses the project map) · Contents · Dealing · Card template · Hand templates · Tags · Properties |
 | Deck | Cards · Dealing · Properties |
 | Card | Dealing · Outcomes · Fields |
-| Hand | Dealing · Slots · Properties |
+| Hand | Cards · Dealing · Slots · Properties |
 | Hand template | Dealing · Bindings · Properties |
 
 **Dealing** always holds how the thing gets dealt. A tab shows a count where one makes
@@ -195,8 +200,8 @@ Outcomes, Hands, and Tag groups, for a review meeting or a producer's filter. Se
 your edits settle, so the `.storyletsc` on disk never goes stale.
 
 **Project Overview** opens the project's own page, and clicking the project name in the top
-bar does the same. **Coverage Overlay** tints the node canvas and maps by how much play
-reached each card or site in your last coverage run (see
+bar does the same. **Coverage Overlay** tints the node canvas and the map by how much play
+reached each card or hand in your last coverage run (see
 [Coverage testing](/production/coverage-testing/)). A **▶ Play** button in the top bar
 opens the Board, the same as `Cmd+T`.
 

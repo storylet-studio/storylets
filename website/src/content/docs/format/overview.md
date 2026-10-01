@@ -30,8 +30,8 @@ shows one openable document. Everywhere else, and to your version control, it's 
 folder of files.
 
 A box is a folder, not one file, because its parts change at different rates and often have
-different owners. A day of moving map geometry about in `tags.storylettags` can't collide
-with the card template in `box.storyletbox` or the hands in `hands.storylethands`.
+different owners. A day of moving hands about on the map in `map.storyletmap` can't collide
+with the card template in `box.storyletbox` or the hands themselves in `hands.storylethands`.
 
 A deck is one file, and its cards live inside it. When two people's changes meet, they meet
 in a deck file, so that's the file the merge tooling is built around.
@@ -50,7 +50,7 @@ into that form, and `format --check` makes it a CI gate.
 
 **Everything sorted by id.** Nothing in a source file depends on the order things appear
 in, because a deck is a pool and ranking happens when you deal. Every list you can arrange
-(cards, places, outcomes, hand templates, tag groups and their tags) is stored sorted by id,
+(cards, hands, outcomes, hand templates, tag groups and their tags) is stored sorted by id,
 so two people adding one at the same time land at different places in the file instead of
 both at the end, and that conflict never arises. The order you arranged rides alongside in
 an `order` field, so it survives the sort. Any order you see in the editor is presentation,

@@ -116,7 +116,7 @@ Storyletter fixes.
 Rewrite shards into canonical form: sorted keys, one field per line, trailing commas, LF, a
 final newline. Files that are always written the same way are files that merge cleanly.
 
-Every list you can arrange is sorted by id here (cards, places, outcomes, hand templates, tag
+Every list you can arrange is sorted by id here (cards, hands, outcomes, hand templates, tag
 groups and their tags), and the order you arranged is written into an `order` field first, so
 running this never changes what the editor shows you.
 
@@ -127,6 +127,19 @@ formatted 1 shard(s)
 
 `--check` reports what would change and writes nothing, exiting 1 if anything isn't
 canonical. That's the CI form. `fmt` is an alias.
+
+`format` is also how a project from before the [project map](/storyletter/maps/) moves onto
+it, the same upgrade Storyletter offers when it opens one. The map kept in a box becomes the
+root `map.storyletmap`, every box that held a copy or placed a hand is put on the map, the
+other boxes' references are rewritten to the kept map's zones, frames and map comments move
+to the project, and the pictures move to the project's `assets/` folder. It prints what it
+did.
+
+It refuses, writing nothing, when the copies of a map disagree (a zone one has and another
+hasn't, a zone drawn differently, different zone properties or starting values), when the
+project has more than one map, or when a group or tag in some box already has the map's or a
+zone's name. Each refusal is one sentence saying what to change, and you run `format` again
+once it's fixed. The compiler names this command when it meets a project that needs it.
 
 ## export
 
@@ -140,12 +153,14 @@ exported .../storylet-dist/the-tavern.storyletsc
 It writes to the path the project shard declares. `-o file` overrides it; `-o -` writes to
 standard output. Export validates first and refuses to write anything on an error.
 
-`--map` carries the maps, meaning the zone shapes and background pictures of every spatial
-tag group, with the pictures written to `assets/<box>/` beside the bundle. `--no-map` leaves
-them out. Without either, the project's own `export.map` setting decides, and its default is
+`--map` carries the project map's drawing, meaning the zone shapes, the background pictures,
+and where each box's hands stand, with the pictures written to `assets/` beside the bundle.
+`--no-map` leaves them out. The zones themselves always ship, because cards and hands use
+them. Without either, the project's own `export.map` setting decides, and its default is
 off, because geometry is authoring data and a shipping build needn't carry anything it
 doesn't use.
-The engine never reads a shipped map; it's there for a host that draws its own.
+The engine never reads the drawing; it's there for a host that draws its own map. See
+[the bundle](/format/bundle/#the-project-map).
 
 Where the game [shares its scopes](/play/with-patter/#sharing-scopes-between-the-editors), export
 also brings `game-scopes/storylets.scopes.json` up to date (your `@story` declarations, for the
@@ -167,9 +182,9 @@ wrote The Hamlet.html (78 KB)
 | `-o FILE` | Where to write the page. Without it, the page lands beside the bundle under the bundle's name (`storylet-dist/the-hamlet.html` for the example). `-o -` writes it to standard output. |
 
 The page is the Board, with every hand as a labelled group of cards, outcomes under the open
-card, **Deal all hands**, **Next turn**, **Restart**, and a transcript. The project's maps
-are drawn above each box's hands with the background pictures inlined as data, and a pin per
-placed hand carries its live card count. The bundle inside it
+card, **Deal all hands**, **Next turn**, **Restart**, and a transcript. The project map
+is drawn once with every box's hands on it, the background pictures inlined as data, and a
+pin per placed hand carries its live card count. The bundle inside it
 is compiled with full metadata whatever the project's setting, so titles and purposes show,
 and the player's place is saved in that browser. Storyletter's **Publish ▸ Publish Playable
 HTML…** writes the same page; there's more about what to do with it in
@@ -240,7 +255,8 @@ declares, so the content plays. `--set` can move one of them (`--set patter.visi
 `--set` takes the same paths the runtime does, the owner named as you name it in a shard:
 `story.started`, `world.market_day`, `value.docks.danger`, `box.street.heat`. Where two boxes
 name a tag the same way, say which box the tag is in:
-`--set value.harbour/docks.danger=3`.
+`--set value.harbour/docks.danger=3`. A zone of the project map is always the short form, `value.docks.danger`,
+because it belongs to no box.
 
 `--deal-all` is how you see exclusivity from the command line. With every other hand dealt
 first, the cards they hold don't come up in yours.
@@ -351,7 +367,7 @@ packed outbox/village.storyletpack
 | Flag | Does |
 |---|---|
 | `-o FILE` | Where to write the pack. Required. |
-| `--assets` / `--no-assets` | Carry the maps' background pictures too, or leave them out. Without either, the project's `export.packAssets` setting decides (off unless set). |
+| `--assets` / `--no-assets` | Carry the map's background pictures too, or leave them out. Without either, the project's `export.packAssets` setting decides (off unless set). |
 
 The pack carries the source shards and a manifest. It doesn't carry the compiled bundle,
 which is generated and would only go stale in transit. Packing an unchanged project twice

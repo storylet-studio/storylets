@@ -93,7 +93,7 @@ expression language a designer writes in; the API takes a plain path. The paths 
 | `box.<box>.<name>` | a box's properties |
 | `deck.<deck>.<name>` | a deck's properties |
 | `hand.<hand>.<name>` | a hand's properties |
-| `value.<tag>.<name>` | a tag's own properties (see below when two boxes share a tag name) |
+| `value.<tag>.<name>` | a tag's own properties, or a zone's on the project map (see below when two boxes share a tag name) |
 
 The owner is named by the name you gave it. A box, deck, hand, or tag is addressed by the same
 gameId you write in a shard and read on a card. So the Elder's zone is
@@ -106,6 +106,12 @@ box: `value.harbour/docks.danger`. The slash sits inside the owner segment, so t
 still has its three parts. You can always write the long form, whether or not you need it. The
 short one is refused where it would name two tags at once, and the refusal tells you both
 addresses to choose from. A project whose tag names happen to be unique sees none of this.
+
+**A zone of the [project map](/storyletter/maps/) has one address**, `value.<zone>.<name>`,
+such as `value.docks.danger`. A zone belongs to the project, not to a box, so it's one value
+whichever box's hand is dealt there, and there's no box to name: `value.harbour/docks.danger`
+for a zone is refused, and the refusal gives the address that works. No box's tag may share
+a zone's name, so the short form always names the zone.
 
 `getProperty` reads the same paths, and `listProperties()` returns every declared property
 with its path, type, current value and default. That list is what the in-engine
@@ -147,9 +153,11 @@ the scopes:
 |---|---|
 | `@world` | always shared (the game owns it, not the player) |
 | `@story` | shared |
-| box, deck, hand, and tag properties | a copy per flow |
+| box, deck, hand, tag, and zone properties | a copy per flow |
 
-A single-flow game never notices any of this. With several flows, the narrow scopes are where
+A zone property is always one value for every box on the map; `shared` decides only whether
+it's also one value for every flow. A single-flow game never notices any of this. With
+several flows, the narrow scopes are where
 personal experience lives (*this* participant's danger in the docks), while `@story` and any
 property flagged `shared` is the world every flow moves together. Flows meet only through
 shared state. There's no message-passing between them, and no flow can read another's copies.

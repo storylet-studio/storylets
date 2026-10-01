@@ -177,6 +177,34 @@ Nothing else changes. The unit is a convention the tools spell out, and the time
 per flow, so "the goblin comes back for everyone after half an hour" is a job for `@world`
 as above.
 
+## Play history
+
+Four functions let a condition ask what has been played. They count plays, not deals, and
+they're per flow.
+
+| Function | Answers |
+|---|---|
+| `count_played("card")` | how many times that card has been played |
+| `turns_since_played("card")` | how many of the card's box's turns since it was last played |
+| `count_played_in("group", "tag")` | how many plays there have been of cards tagged with that tag |
+| `turns_since_played_in("group", "tag")` | how many turns since the last play of a card tagged with that tag |
+
+Cards, groups and tags are named by gameId. The turn counts are `0` straight after the play
+and go up by one with each turn of the box's clock. Before anything has been played they
+read **`9999`**, so `turns_since_played("ambush") > 5` is true for a card never played, and
+`turns_since_played_in("zone", "docks") == 9999` asks "has nothing happened in the docks
+yet?".
+
+`count_played_in` and `turns_since_played_in` count the **card's** tags, not the hand it was
+played from. A card with no tag in the group never counts towards it, wherever it was dealt.
+
+**They answer for the asking box.** The group name is looked up in the box whose card or hand
+is being asked about, and only that box's own plays are counted, on that box's clock. Two boxes
+that each declare a `zone` group keep separate histories, and so do two boxes on the project
+map: a news card read at the docks in one box isn't an encounter at the docks in another.
+Zone properties are shared across boxes; zone play history isn't. A name the asking box
+doesn't know reads as never played: `0` from a count, `9999` from a turns-since.
+
 ## Hand templates
 
 A hand template is a kind of hand you define once: "NPCs you can talk to" fixes some tags,
@@ -200,11 +228,17 @@ earlier ones where names collide:
 3. What the deal or peek asked for, by group name. `peek("village", { npc: "elder" })`
    makes `@hand.npc` read `elder`. A hand that pins a group itself reads the same way.
 
-Every name remembers where it came from, so a write goes back to the right place:
+Every name remembers where it came from, so a write goes back to the right owner:
 `@hand.peril = @hand.peril + 1` raises the peril of the zone the card was dealt into. That's
-how place-like state works without a separate scope for places. A [quality](/format/property-types/#quality-the-stage-of-a-story)
-works the same way, so each place can sit at its own stage of one shared ladder, and
-`advance(@hand.haunting)` moves only the place the hand belongs to.
+how state about where things happen works without a scope of its own. A
+[quality](/format/property-types/#quality-the-stage-of-a-story) works the same way, so each
+zone can sit at its own stage of one shared ladder, and `advance(@hand.haunting)` moves only
+the zone the hand is in.
+
+On the [project map](/storyletter/maps/), a zone is one tag for the whole project, so its
+properties are one value for every box that uses it. A hand in one box and a hand in another,
+both in the docks, read and write the same `@hand.danger`. Everything else stays with the
+box: a hand still deals only from its own box's decks.
 
 `@hand` names are checked when you publish, the same as any other scope, so a misspelt
 `@hand.perl` is an error rather than a card that quietly never comes up, and a comparison

@@ -12,8 +12,8 @@ This isn't a preview. It's the same engine your game ships with, so if a card is
 here it's dealt in your build.
 
 <figure class="doc-shot">
-  <img src="/doc-images/Board.png" alt="The Board window: the session controls along the top, three hands (The Forge, The Inn, The Mystic Tree) each holding its dealt cards as buttons, a filter for the area tag group, and the journal of the session down the right." />
-  <figcaption>The Board on the example project at turn 0: every hand with what it was just dealt, and the journal recording each deal.</figcaption>
+  <img src="/doc-images/Board.png" alt="The Board window on the Port Meridian example in Map view: the box navigator on the left with Everything selected, the five box clocks at turn 2 each with a +1, and the project map's three zones, docks, strip and oldgrid, with hands from Contracts, Encounters, Items and News standing as pins in their boxes' colours, each wearing its card count. A district filter sits top right, and the journal of the session runs down the right." />
+  <figcaption>The Board on Port Meridian after two turns: Everything on the map, every box's hands on it in its own colour, the clocks above, and the journal recording each deal and turn.</figcaption>
 </figure>
 
 The Board puts you in the player's seat. The diagnostics are all there, but they wait
@@ -40,20 +40,19 @@ area shows), with a count of the cards its hands hold and, after each action, a 
 badge counting what changed there. Visiting a box and moving on clears its badge.
 **Everything** at the top shows the whole board as one list. Picking a box scopes the
 view to it, and the Board reopens on the box you were watching, remembered per project.
-This is how you notice a box you weren't watching react: play a contract on one box's
-map and another box's badge lights.
+This is how you notice a box you weren't watching react: play a contract in one box
+and another box's badge lights.
 
-**List and Map.** A box with a [map](/storyletter/maps/) offers itself as a **List**
-of hands or as the **Map**, seen from above, and a project with a map opens on it.
-Your choice is remembered per project, so preferring the list in one project doesn't
-decide another's first impression. Pick a site on the map and its cards pop up over
-the bottom of the map, where you're already looking.
+**List and Map.** In a project with a [map](/storyletter/maps/), a box on the map
+offers itself as a **List** of hands or as the **Map**, seen from above, and the
+project opens on the map. Your choice is remembered per project, so preferring the list
+in one project doesn't decide another's first impression. Pick a hand's pin and its
+cards pop up over the bottom of the map, where you're already looking.
 
-**One place, drawn once.** Boxes that share the same drawn space (the same group,
-the same zones, identical shapes) are one place, and **Everything** offers that map
-with every box's hands pinned together. Play a contract loud and the news screens
-ring on the same picture, which is the whole cross-box story in one glance. A project
-like that opens there first.
+**Every box on one map.** When more than one box is on the map, **Everything** draws it
+once with every box's hands on it, each pin in its box's colour, and the project opens
+there. Play a contract loud and the news screens ring on the same picture, which is the
+whole cross-box story in one glance. Pick a box in the navigator to see only its hands.
 
 **Playing a card.** Click a card and it opens: its title, its purpose, and its outcomes,
 one full-width button per option. The open card floats over the bottom of the view
@@ -89,7 +88,7 @@ A play carries its own story. Its writes sit indented beneath it, and under thos
 that took the slot the played card freed. In a project with several boxes this is where
 the cross-box story shows itself: play a contract's outcome and read the headlines it
 caused appearing on the screens, three sections away. The hands that changed also pulse
-briefly, the map marks their sites with a pulsing ring, and each box's header carries a
+briefly, the map marks their pins with a pulsing ring, and each box's header carries a
 quiet "changed" count until the next action. A full every-box turn collapses to one
 line, and advancing one box alone keeps its own.
 

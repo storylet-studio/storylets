@@ -39,7 +39,7 @@ a finished project**, and **Recent**. Click a kit or an example to see what it h
 what pressing Play shows, before anything is made.
 
 Four example projects ship with the app, each copied somewhere you choose so you can pull
-it apart without worrying. **The Hamlet** is the small worked project, with places, hands,
+it apart without worrying. **The Hamlet** is the small worked project, with a map, hands,
 and decks to deal from, and the place to start, because the idea is much easier to read than
 to describe. **The Village** is the full demo, thirteen decks over a drawn map. **Port
 Meridian** shows the engine standing beside an action game, with five boxes driving
@@ -93,11 +93,25 @@ Then the **Dealing** tab, which is everything about when this card comes up.
 - **Redraw** is whether it can come back after it's been played. It can be always, never, or
   after a number of turns.
 
-If the property you want doesn't exist yet, click **Story** at the top of the navigator and
-add it there if the story owns it. Give it a purpose while you're at it, one line that becomes
-the hover tip wherever the property appears. If your **game** owns it, `Cmd+,` opens
-**Project Settings** and it goes under **World**. The difference matters later, and
-[Core concepts](/concepts/) explains it.
+If the property you want doesn't exist yet, decide who owns it.
+
+- If your **game** owns it (the time of day, the player's gold), `Cmd+,` opens **Project
+  Settings** and it goes under **World**.
+- If the **story** owns it (the act, what the player has learned), click **Story** at the top
+  of the navigator and add it there.
+- If it belongs to one part of the story, add it on that box's, deck's or hand's
+  **Properties** tab instead.
+
+Give it a purpose while you're at it, one line that becomes the hover tip wherever the
+property appears. [Core concepts](/concepts/#the-five-scopes) explains the scopes.
+
+On a project with more than one player at once (**Play** set to **Shared world** in Project
+Settings), every property row also says whose the value is. A story property reads **One value
+for every guest.** by default, which is right for a fact about the world, such as a gate
+being opened. It's wrong for something one player carries, such as a key they found. Left
+that way, one player finding the key opens the door for everyone. Expand the row and untick
+**Shared**, and it reads **Each guest has their own.** Box, deck, hand and tag properties start that
+way. A solo project has one player and nothing to choose.
 
 There's no save button to hunt for. Your edits are written to the files as you make them, and
 the top bar shows where that's got to. `Cmd+S` flushes anything still pending.

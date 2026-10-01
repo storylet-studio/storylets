@@ -14,8 +14,8 @@ It:
 
 1. **Compiles every expression** from source text into a `{ src, ast }` envelope, so no
    runtime ever ships a parser.
-2. **Assembles the shards**, the project file plus every box folder and deck file, into one
-   JSON document, all collections sorted by id.
+2. **Assembles the shards**, the project file, the project map, and every box folder and deck
+   file, into one JSON document, all collections sorted by id.
 3. **Validates**, refusing to write anything on an error. It checks for property references
    nothing declares, tag references that point nowhere, hands that don't fill in every group
    their template asks for, and field values against the box's card template.
@@ -33,7 +33,7 @@ Patterpad publishes to `../patter-dist/` in the same way.
 
 ```json5
 {
-  schema: "storylets/bundle@0",
+  schema: "storylets/bundle@1",
   content: {
     project: "proj_salt",        // immutable project id
     version: "0.3.0",            // authored project version
@@ -51,7 +51,7 @@ Patterpad publishes to `../patter-dist/` in the same way.
     properties: [ /* the @story declarations */ ],
   },
   boxes: [ /* each box, with its tag groups, decks, templates and hands */ ],
-  maps: [ /* only when the project asked: see below */ ],
+  map: { /* the project map, when there is one: see below */ },
   externalScopes: ["patter"],          // other engines' scopes the content names, when any
 }
 ```
@@ -65,42 +65,68 @@ Author metadata is kept. Titles and purposes ship by default because they make a
 readable: "why did *Ambush at the ford* get dealt here?" is a question the log can then
 answer in words.
 
-## Maps, when you ask for them
+## The project map
 
-Maps are off by default, because geometry is authoring data, the engine deals in tag names,
-and a shipping build needn't carry anything it doesn't use. Turn on `export.map` in the project
-shard (or pass `--map` to one export) and the bundle gains a `maps` block, one entry per
-spatial tag group:
+A project with a [map](/storyletter/maps/) has a `map` block, with its zone group in it:
 
 ```
-maps: [{
-  box: "village",              // the owning box, by gameId
-  group: "zone",               // the tag group, by gameId
-  zones: [
+map: {
+  group: { /* the zone group: its id, gameId, and tags, each zone with its properties */ },
+  geometry: { /* the drawing, only when the project asked: see below */ },
+}
+```
+
+The zone group always ships, because hands and cards name its zones by id, just as they name
+a box's own tags. It's in no box's `tagGroups`. A box that uses the map says so with
+`usesMap: true`, and only those boxes may name the map's zones. Each zone is one tag for the
+whole bundle, so a zone property is one value whichever box's hand is dealt there, at the
+address `value.<zone>.<name>` (see [Your game's state](/play/world-state/#writing-it-from-your-game)).
+
+A bundle with no map has no `map` block, and no box carries `usesMap`.
+
+### The drawing, when you ask for it
+
+The drawing is off by default, because geometry is authoring data, the engine deals in tag
+names, and a shipping build needn't carry anything it doesn't use. Turn on `export.map` in
+the project shard (or pass `--map` to one export) and the block gains `geometry`:
+
+```
+geometry: {
+  zones: [                     // drawn zones only, by tag gameId
     { tag: "tavern", polygon: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 30 }] },
   ],
   backgrounds: [
-    { file: "assets/village/plan.png", x: 0, y: 0, width: 800, height: 600, opacity: 0.6 },
+    { file: "assets/plan.png", x: 0, y: 0, width: 800, height: 600, opacity: 0.6 },
   ],
-  sites: [                     // where the placed hands stand
-    { hand: "the-forge", x: 210, y: 340 },
-    { hand: "the-well", x: 120, y: 80 },
-  ],
-}]
+  sites: {                     // where each box's placed hands stand, by box gameId
+    village: [
+      { hand: "the-forge", x: 210, y: 340 },
+      { hand: "the-well", x: 120, y: 80 },
+    ],
+  },
+}
 ```
 
 Everything is named by gameId, the same names `peek` takes, so a host can match a shape to
 the tag it draws. Background pictures are written as files next to the bundle at the path
 each entry names, ready for an engine to import.
 
-`sites` is where each placed hand stands on the map, sorted by hand gameId so the bytes
-don't move when a shard is reordered. A hand nobody has placed has no entry, and a map with
-no placed hand has no `sites` key at all. Which zone a hand belongs to isn't repeated here,
-because the hand's own binding is what the engine deals from.
+`sites` is where each placed hand stands, box by box, each list sorted by hand gameId so the
+bytes don't move when a shard is reordered. A hand nobody has placed has no entry, a box with
+no placed hand has no key, and a map with no placed hand has no `sites` at all. Which zone a
+hand is in isn't repeated here, because the hand's own binding is what the engine deals from.
 
-**The engine never reads any of it.** It's there for a host that wants to draw an in-game
-map without building its own export. `describeBundle` reports whether a bundle carries maps,
-so one can't slip into a build unnoticed.
+**The engine never reads the geometry.** It's there for a host that wants to draw an in-game
+map without building its own export. `describeBundle` reports which boxes use the map and how
+much of the drawing a bundle carries, so geometry can't slip into a build unnoticed.
+
+### What a runtime refuses
+
+A runtime refuses, when the engine is made, a bundle that breaks the map's rules, naming the
+box and the group or tag: a box without `usesMap` that names the map's zones, a box with
+`usesMap` in a bundle with no map, a box group with the map's group name, a box tag with a
+zone's name, or a map group named `place`. The compiler refuses all of these first, so a
+bundle Storyletter or the CLI wrote never meets them.
 
 ## The staleness check
 
@@ -123,8 +149,9 @@ against.
 
 ## Versioning
 
-The `schema` tag (`storylets/bundle@0`) versions the format, and runtimes refuse a major
-version they don't speak. Canonical source serialisation is versioned the same way, in each
+The `schema` tag (`storylets/bundle@1`) versions the format, and runtimes refuse a version
+they don't speak. Today's runtimes read `@1` and `@0`; the project map brought `@1`, and a
+bundle with no map differs from an `@0` one only in its tag. Canonical source serialisation is versioned the same way, in each
 shard's own `schema` tag. A change to how shards serialise is a schema bump even if no field
 changed, because the bytes are part of the contract.
 

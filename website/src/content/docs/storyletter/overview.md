@@ -26,7 +26,7 @@ and Linux).
 From there you land on the **welcome screen**. **Open a project…** opens one you already
 have, and **New project…** makes one. Under **Start from a kit** are the game kits you can
 start a project from, and under **Learn from a finished project** are the four worked
-examples. *The Hamlet* is small, with places, hands, and a deck to deal. *The Village* is the
+examples. *The Hamlet* is small, with a map, hands, and a deck to deal. *The Village* is the
 full demo. *Port Meridian* is the engine beside an action game. *The Hamlet (Patter Version)*
 is the Hamlet with a Patter scene for each card, its Patter project copied beside it. Click any of them to see what
 it holds and what pressing Play shows, before anything is made. A kit asks for a name; an
@@ -39,7 +39,7 @@ watch it deal.
 ### Creating a project
 
 **File ▸ New Project…** (`Cmd+N` / `Ctrl+N`) asks for a name, then where to put the folder.
-A new project isn't empty. It lands one box, one place to deal to, and two cards that
+A new project isn't empty. It lands one box, one hand to deal to, and two cards that
 already work together, so it plays straight away. Add kits to it as you go (see
 [Setting up a box](/storyletter/box-setup/#starting-a-box-from-a-box-kit)).
 
@@ -126,15 +126,15 @@ and **Restart**, and a transcript of what happened. Titles and purposes always s
 page is for people), and the player's place is saved in that browser, so closing the tab
 isn't losing the game. Restart clears it.
 
-A project with [maps](/storyletter/maps/) carries them into the page, pictures included,
+A project with a [map](/storyletter/maps/) carries it into the page, pictures included,
 and the map takes the left of the screen with the cards in a column beside it, the same
-arrangement as the Board's Map view. Zones are tinted, every placed hand is a pin wearing
-its live card count, and you can zoom with the wheel or the buttons and drag to pan. Tap
-a pin and the column jumps to that hand's cards. On a phone the map sits on top with the
-cards below. The pictures ride inside the file as data. The Village and its five
-paintings publish to a single 5MB page that still opens from disk with no internet. A
-multi-box project gets a heading per box, so you can watch one box's play light another
-box's pin.
+arrangement as the Board's Map view. The map is drawn once, with the hands of every box on
+it. Zones are tinted, every placed hand is a pin wearing its live card count, and you can
+zoom with the wheel or the buttons and drag to pan. Tap a pin and the column jumps to that
+hand's cards. On a phone the map sits on top with the cards below. The pictures ride inside
+the file as data. The Village and its five paintings publish to a single 5MB page that still
+opens from disk with no internet. A multi-box project gets a heading per box, so you can
+watch one box's play light another box's pin.
 
 There are three ways to get it to people.
 
@@ -205,13 +205,14 @@ you'll need to fetch new versions from the [download page](/download/) instead.
 
 - [The workspace](/storyletter/workspace/): the navigator, the document and its tabs, the
   problems bar, Find, the menus and the themes.
-- [Designing cards](/storyletter/cards/): the deck, the card document, conditions, priority,
-  tags and outcomes.
+- [Designing cards](/storyletter/cards/): the deck, Group by, the card document, where a card
+  comes up, conditions, priority, tags and outcomes.
 - [The node canvas](/storyletter/node-canvas/): a deck's cards as nodes, with the arrows
   worked out for you.
 - [Setting up a box](/storyletter/box-setup/): the card template, hand templates, tags,
-  hands, and starting a box from a kit.
-- [Maps](/storyletter/maps/): draw a tag group as zones and pin hands inside them.
+  hands and what can come up at each, and starting a box from a kit.
+- [The project map](/storyletter/maps/): draw the project's zones once, put boxes on the
+  map, and see what can come up at each hand.
 - [The Board](/storyletter/board/): play the project on the real runtime, and see why a
   card was or wasn't dealt.
 - [Working with Patter](/storyletter/patter/): pair the project with the Patter project that
