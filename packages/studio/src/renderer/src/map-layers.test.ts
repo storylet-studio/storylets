@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAP_LAYER_PICTURES, MAP_LAYER_ZONES, activeBox, hideAll, isShown, moveLayer, orderedBoxes, setActive,
-  showAll, soloLayer, toggleLayer,
+  showAll, showLayer, soloLayer, toggleLayer,
 } from "./map-layers.js";
 
 const boxes = ["village", "news", "talk"];
@@ -64,5 +64,13 @@ describe("the project map's layers", () => {
   it("moves a box layer before or after another", () => {
     expect(moveLayer({}, boxes, "talk", "village", true).order).toEqual(["talk", "village", "news"]);
     expect(moveLayer({}, boxes, "village", "news", false).order).toEqual(["news", "village", "talk"]);
+  });
+
+  it("shows one hidden layer for a new site, leaving the rest hidden", () => {
+    const hidden = hideAll({}, boxes);
+    const shown = showLayer(hidden, "news");
+    expect(isShown(shown, "news")).toBe(true);
+    expect(isShown(shown, "village")).toBe(false);
+    expect(showLayer({}, "news")).toEqual({});
   });
 });

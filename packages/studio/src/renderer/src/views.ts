@@ -396,7 +396,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
     host.append(row({
       depth: 0, label: "Map", cls: "nav-maprow",
       lead: mapGlyph("map", 13, "map-glyph nav-glyph"),
-      tip: "The project map: zones drawn once, and every box that uses it a layer of its own sites.",
+      tip: "The project map: zones drawn once, and every box that uses it a layer of its own hands.",
       count: project.map.zones,
       sel: focus?.kind === "map",
       onClick: () => actions.focus({ kind: "map" }),
@@ -431,7 +431,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
         depth: 1, label, ...(fill ? { node } : {}), count,
         // The same sentence the Hands master and the box page use (B3): the
         // one line that unlocks the model, at the point of first contact.
-        ...(kind === "hands" ? { tip: "The places on the board. Each hand holds the cards it's dealt." } : {}),
+        ...(kind === "hands" ? { tip: "Where cards are dealt on the board. Each hand holds the cards it's dealt." } : {}),
         // Hands all live in one shard, so the collection carries its badge;
         // decks are a shard each and badge on their own rows below.
         ...(kind === "hands" ? { vc: vcKeys.hands(box.id) } : {}),
@@ -783,7 +783,7 @@ function groupHead(box: BoxDto, g: CardGroup, actions: ViewActions, page: GroupP
     : el("button", {
         className: "linkbtn gb-name",
         text: g.label,
-        tip: go.kind === "deck" ? "Open this deck" : go.kind === "hand" ? "Open this place" : "Group by it instead",
+        tip: go.kind === "deck" ? "Open this deck" : go.kind === "hand" ? "Open this hand" : "Group by it instead",
         onClick: () => {
           if (go.kind === "deck") actions.focus({ kind: "deck", box: box.id, deck: go.deck });
           else if (go.kind === "hand") actions.openHand(box.id, go.hand);
@@ -818,9 +818,9 @@ function deckTable(
   // machinery (priority / redraw / outcomes live in the inspector).
   // Where and Tags are DIFFERENT answers and shared one column: the audit
   // read a card's home hand under "TAGS" and learned a false model (that
-  // placement is a tag). Where = the home group plus every spatial group and
-  // every group a hand template chooses, the same rule the card's own Where
-  // sentence uses (where.ts).
+  // placement is a tag). Where = the home group plus every place axis of the
+  // box (ops place-axis.ts), the same rule the card's own Where sentence uses
+  // (where.ts).
   const cols = ["", "Title", "gameId", "When", "Where", "Tags", ""];
   table.append(el("thead", {}, el("tr", {}, ...cols.map((c) => el("th", { className: "overline", text: c })))));
   const axes = placeGroupsOf(box);
@@ -952,13 +952,13 @@ export function renderBoxCentre(
     const others = (projectMap?.users ?? []).filter((b) => b.id !== box.id);
     const intro = el("p", { className: "doc-tab-note" }, "The zones are the project's, drawn once",
       ...(others.length > 0 ? [", and shared with ", ...others.flatMap((b, i) => [...(i > 0 ? [" "] : []), boxChip(b)])] : []),
-      ". Where this box's sites stand on them is its own.");
+      ". Where this box's hands lie on them is its own.");
     const sites = el("div", { className: "rowlist boxsites" });
     actions.mountBoxSites(sites, box);
     body = el("div", { className: "doc-sect" },
       el("div", { className: "doc-panel boxsites-head" },
         el("div", { className: "boxsites-title" },
-          el("span", { className: "insp-label", text: "This box's sites on the project map" }),
+          el("span", { className: "insp-label", text: "This box's hands on the project map" }),
           el("span", { className: "crumb-spacer" }),
           el("button", { className: "btn primary", onClick: () => actions.openMap() }, mapGlyph("map", 13, "map-glyph"), "Open map")),
         intro),
@@ -978,14 +978,14 @@ export function renderBoxCentre(
     // row used to say hands "own cards", which is the misconception the model
     // most needs to avoid: a deck owns cards, a hand owns what it was DEALT.
     // Two definitions forty lines apart, and the wrong one came first.
-    row("Hands", box.hands.length, "The places on the board. Each hand holds the cards it's dealt.", "hands");
+    row("Hands", box.hands.length, "Where cards are dealt on the board. Each hand holds the cards it's dealt.", "hands");
     // Named here so a box says what it HAS. Only when it is on the map: a box
     // off it is offered the map once, under its purpose, and a contents list
     // that advertises what is absent is a different job.
     if (onMap) {
       list.append(el("button", { className: "listrow", onClick: () => { setDocTab(tabKey, "map"); actions.focus({ kind: "box", box: box.id }); } },
         el("span", { className: "listname", text: "Map" }),
-        listMeta(["This box's sites on the project map"])));
+        listMeta(["This box's hands on the project map"])));
     }
     // Then the box's cards themselves, grouped (plan item 3): by deck until the
     // author chooses otherwise, or by place, or by any of the box's tag groups.
@@ -1033,7 +1033,7 @@ function boxTemplatesBody(box: BoxDto, actions: ViewActions): HTMLElement {
     // hands" - six format terms in the one document a narrative designer has no
     // prior model for. The Copies row is the voice to match: a rule and a reason,
     // no jargon.
-    el("p", { className: "doc-tab-note", text: "A kind of place. Write the rule once and every hand of this kind follows it, filling in its own choices." }),
+    el("p", { className: "doc-tab-note", text: "A kind of hand. Write the rule once and every hand of this kind follows it, filling in its own choices." }),
     list);
   // This tab of the box page writes the HANDS shard, not the box shard, so it
   // takes its read-only state from there (see applyVc in renderer.ts).
@@ -1190,7 +1190,7 @@ export function renderProjectCentre(host: HTMLElement, project: ProjectDto, acti
 
 /** Hands: the places on the board; each holds the cards it is dealt. */
 export function renderHandsCentre(host: HTMLElement, box: BoxDto, actions: ViewActions): void {
-  const head = masterHeading({ id: box.id, label: box.title ?? box.gameId }, "Hands", actions, "The places on the board. Each hand holds the cards it's dealt.");
+  const head = masterHeading({ id: box.id, label: box.title ?? box.gameId }, "Hands", actions, "Where cards are dealt on the board. Each hand holds the cards it's dealt.");
   const list = el("div", { className: "rowlist" });
   for (const hand of box.hands) {
     const kind = hand.template !== undefined ? hand.template : "standalone rule";
@@ -1290,6 +1290,7 @@ export function fixLabel(fix: NonNullable<Problem["fix"]>): string {
   if (fix.kind === "repoint-tag") return "Choose a tag…";
   if (fix.kind === "add-outcome") return `Add outcome “${fix.gameId}”`;
   if (fix.kind === "create-scene") return "Create the scene in Patter";
+  if (fix.kind === "upgrade-project") return "Upgrade the project…";
   return "Fix";
 }
 
@@ -1304,6 +1305,7 @@ function fixButton(
     tip: fix.kind === "declare-property" ? "Declare it, then take me to it"
       : fix.kind === "add-outcome" ? "Give this card the outcome its Patter scene names, then open it"
       : fix.kind === "create-scene" ? "Write a stub scene for this card into the Patter project, one option per outcome, then open it in Patterpad"
+      : fix.kind === "upgrade-project" ? "Move this project onto the project map, after showing what will change"
       : "Point this at a tag that exists",
   });
   button.addEventListener("click", () => onFix(problem, fix, button));

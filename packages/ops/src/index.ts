@@ -38,7 +38,10 @@ export type {
 export { leastReachedFirst, rarelyDealt, sharePct, RARE_DEALT_PCT } from "./coverage-order.js";
 // What could come up at a hand, statically: coverage's per-hand reach and the editor's hand page
 export { handReach, placeTiers, zonesOfHand } from "./reach.js";
-export type { FixedBinding, HandReach, HoleDecls, PlaceTiers, ReachBox, ReachCard, ReachMap } from "./reach.js";
+export type { FixedBinding, HandReach, HoleDecls, NeverHere, PlaceTiers, ReachBox, ReachCard, ReachMap } from "./reach.js";
+// The one definition of a place axis: the Where row, Group by and the hand page's tiers all read it
+export { bindingsOfHand, isPlaceAxis, movesIn, placeAxes, tagsOfHand, zoneGroupOf } from "./place-axis.js";
+export type { PlaceAxisBox, PlaceAxisMap } from "./place-axis.js";
 export type { CoverageOrder } from "./coverage-order.js";
 export {
   runMerge, detectMergeType, conflictSidecar, MergeInputError, CONFLICT_SIDECAR_EXTENSION,
@@ -60,7 +63,7 @@ export {
 } from "./assets.js";
 export { contractIssues, contractNotes } from "./contract.js";
 export type { ContractNote } from "./contract.js";
-export { canvasFurniture, cardPositions, deckCanvas, planCanvasFurniture, planCardPositions, planForgetCanvas, viewPath } from "./view.js";
+export { boxColourOf, canvasFurniture, cardPositions, deckCanvas, planBoxColour, planCanvasFurniture, planCardPositions, planForgetCanvas, viewPath } from "./view.js";
 export type { CanvasRef } from "./view.js";
 export {
   boxMap, boxesOnMap, mapPath, mapSites, planForgetSites, planMapMigration, planMapSites,

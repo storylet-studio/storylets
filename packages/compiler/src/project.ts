@@ -49,7 +49,11 @@ export type IssueFix =
   | { kind: "add-outcome"; card: string; gameId: string }
   /** A card in a box Patter performs has no scene: write a stub one into the paired Patter project,
    *  named after the card, one option per outcome (Patter core's `planScene`). */
-  | { kind: "create-scene"; card: string };
+  | { kind: "create-scene"; card: string }
+  /** A project from before the project map (a box group still marked as a map,
+   *  or map frames left in a box): run `format`'s project map migration, the
+   *  one planner the CLI runs, after showing the author what it will do. */
+  | { kind: "upgrade-project" };
 
 export interface Issue {
   /** A one-click repair, when one is canonical (storyletter.md section 4). */

@@ -6,16 +6,16 @@
 // ---------------------------------------------------------------------------
 
 import { basename, dirname, join } from "node:path";
-import { contractNotes, defaultGameScopesParent, loadProject, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate } from "@storylet-studio/ops";
+import { boxColourOf, contractNotes, defaultGameScopesParent, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate } from "@storylet-studio/ops";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { planProject } from "@patterkit/core";
 import { planCardScene } from "./patter-scene.js";
-import type { LoadedProject, PatterReport, PatterScenes } from "@storylet-studio/ops";
+import type { HoleDecls, LoadedProject, PatterReport, PatterScenes, PlaceAxisBox, PlaceAxisMap } from "@storylet-studio/ops";
 import { writeBinaryFile, writeTextFiles as vcWrite } from "@wildwinter/simple-vc-lib";
 import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, worldDeclarations } from "@storylet-studio/compiler";
 import { writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { SHARD_EXTENSIONS, effectiveGameId, isSpatial, openThreadCounts, PLACE_GROUP } from "@storylet-studio/model";
-import type { Bundle, Card, CoverageDriver, HandTemplate, PlayRung, PropertyDecl } from "@storylet-studio/model";
+import type { Bundle, Card, CoverageDriver, Hand, HandTemplate, PlayRung, PropertyDecl } from "@storylet-studio/model";
 import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
 import { boardScopes, gameScopesDto, worldFileLabel } from "./game-scopes.js";
 import type {
@@ -49,6 +49,30 @@ export function boxWithMap(source: SourceProject | undefined, box: SourceBox): S
   const group = source?.map?.group;
   if (group === undefined || box.box.box.usesMap !== true) return box;
   return { ...box, tags: { ...box.tags, groups: [...box.tags.groups, group] } };
+}
+
+/** A source box as the place-axis rule and the tiers read it (ops place-axis.ts,
+ *  reach.ts): its own groups, its hands and templates, and whether it is on the
+ *  map. The map's group comes from `axisMap`, never from the box's own list. */
+export function axisBox(box: SourceBox): PlaceAxisBox<string> {
+  return {
+    tagGroups: box.tags.groups,
+    ...(box.box.box.usesMap === true ? { usesMap: true as const } : {}),
+    handTemplates: box.hands.templates,
+    hands: box.hands.hands,
+  };
+}
+
+/** The project map, as the place-axis rule and the tiers read it. */
+export function axisMap(source: SourceProject): PlaceAxisMap {
+  return source.map !== undefined ? { map: { group: source.map.group } } : {};
+}
+
+/** What a moving hand's hole may be filled from, as the compiler reads it: its
+ *  template's (or its own) properties as @hand, the story's, the world's. */
+export function holeDecls(source: SourceProject, box: SourceBox, hand: Hand<string>): HoleDecls {
+  const template = hand.template !== undefined ? box.hands.templates.find((t) => t.id === hand.template) : undefined;
+  return { hand: template?.properties ?? hand.properties ?? [], story: source.project.story?.properties ?? [], world: worldDeclarations(source) };
 }
 
 const chipValues = (
@@ -155,6 +179,7 @@ export const byDisplay = <T extends { order?: number }>(items: T[]): T[] =>
 const templateDto = (box: SourceBox, template: HandTemplate<string>): BoxDto["templates"][number] => ({
   id: template.id,
   gameId: effectiveGameId(template),
+  ...(template.title !== undefined ? { title: template.title } : {}),
   ...(template.purpose !== undefined ? { purpose: template.purpose } : {}),
   bindings: [
     ...Object.entries(template.bindings ?? {}).map(([groupId, tagId]) => {
@@ -210,7 +235,9 @@ export function toDto(loaded: LoadedProject): ProjectDto {
     boxes: source.boxes
       .map((box, i) => ({ box: boxWithMap(source, box), o: box.box.box.order ?? i }))
       .sort((a, b) => a.o - b.o)
-      .map(({ box }): BoxDto => ({
+      .map(({ box }): BoxDto => {
+      const axes = new Set(placeAxes(axisMap(source), axisBox(box)));
+      return {
       id: box.box.box.id,
       gameId: effectiveGameId(box.box.box),
       ...(!blank(box.box.box.gameId) ? { gameIdPinned: box.box.box.gameId } : {}),
@@ -222,6 +249,7 @@ export function toDto(loaded: LoadedProject): ProjectDto {
       ...(noted(`box:${effectiveGameId(box.box.box)}`) !== undefined
         ? { contract: noted(`box:${effectiveGameId(box.box.box)}`)! } : {}),
       ...(box.box.box.turn !== undefined ? { turn: { seconds: box.box.box.turn.seconds } } : {}),
+      ...(boxColourOf(box) !== undefined ? { colour: boxColourOf(box)! } : {}),
       fields: (box.box.box.fields ?? []).map(declDto),
       // Absent on every box that declares none, which is every box older than
       // 2026-09-13; an empty list is what the editor draws for that.
@@ -257,8 +285,9 @@ export function toDto(loaded: LoadedProject): ProjectDto {
         // that, and it asks separately (boxMap). The project map's group is a
         // map whether or not it carries the marker.
         ...(isSpatial(group) || group === source.map?.group ? { spatial: true } : {}),
-        // Chosen by a hand template: a place axis on the card's Where row.
-        ...(box.hands.templates.some((t) => (t.chooses ?? []).includes(group.id)) ? { chosen: true } : {}),
+        // A place axis, by the one rule (ops place-axis.ts): the Where row and
+        // Group by read this flag, the hand page's tiers the rule itself.
+        ...(axes.has(group.id) ? { placeAxis: true } : {}),
       })),
       hands: byDisplay(box.hands.hands)
         .map((h) => ({
@@ -284,8 +313,23 @@ export function toDto(loaded: LoadedProject): ProjectDto {
           }
           return out;
         })(),
+        // A moving hand: each group it fills from a property, with every tag
+        // that property can name, so Group by can file its cards under each.
+        ...((): { moving?: Record<string, string[]> } => {
+          const moving: Record<string, string[]> = {};
+          const t = h.template !== undefined ? box.hands.templates.find((x) => x.id === h.template) : undefined;
+          for (const [groupId, tag] of Object.entries({ ...(t?.bindings ?? {}), ...(h.chosen ?? {}), ...(h.rule?.bindings ?? {}) })) {
+            if (!tag.startsWith("@")) continue;
+            const group = box.tags.groups.find((g) => g.id === groupId);
+            if (!group) continue;
+            moving[effectiveGameId(group)] = tagsOfHand(axisBox(box), h, group, holeDecls(source, box, h))
+              .map((id) => effectiveGameId(group.tags.find((v) => v.id === id)!));
+          }
+          return Object.keys(moving).length > 0 ? { moving } : {};
+        })(),
       })),
-    })),
+    };
+    }),
   };
 }
 

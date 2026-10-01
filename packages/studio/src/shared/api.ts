@@ -419,6 +419,9 @@ export interface DeckEdit {
 export interface TemplateDto {
   id: string;
   gameId: string;
+  /** What the designer calls this kind of hand ("Places in the village"):
+   *  shown under each of its hands' titles. */
+  title?: string;
   purpose?: string;
   /** Display lines: fixed bindings ("zone = docks") and holes ("npc = ?"). */
   bindings: string[];
@@ -434,12 +437,14 @@ export interface TagGroupDto {
   /** The group is a MAP: its tags carry geometry and the box offers a Map tab
    *  (the spatial template of play). */
   spatial?: boolean;
-  /** Some hand template in the box CHOOSES this group: each hand of that kind
-   *  fills it with one tag, so a card tagged here is a card for those hands.
-   *  That makes it a place axis on the card's Where row (where.ts), map or no
-   *  map: a topic tagged `npc: gareth` is a card for the hand talking to Gareth,
-   *  not a card that comes up anywhere. */
-  chosen?: boolean;
+  /** A PLACE AXIS for this box (ops place-axis.ts, the one definition): some
+   *  hand in the box binds the group (a template's bindings or chooses, a
+   *  standalone hand's rule, or a hole filled from a property), or it is the
+   *  project map's zone group in a box on the map. A card's tag here decides
+   *  which hands it can come up at, so the Where row, Group by and the hand
+   *  page all read it as "where": a topic tagged `npc: gareth` is a card for
+   *  the hand talking to Gareth, not a card that comes up anywhere. */
+  placeAxis?: boolean;
 }
 
 export interface FieldDeclDto {
@@ -490,6 +495,10 @@ export interface BoxDto {
   /** Present only when the project is paired with a Patter project (its `patter`): whether this
    *  box is one the game performs through it (the project's `patterBoxes`). */
   patter?: { performed: boolean };
+  /** The box's colour on the project map, a palette slot (model
+   *  `ViewShard.colour`), once it has one: stored, never worked out from the
+   *  box's position, so it does not move when the boxes do. */
+  colour?: number;
   /** Set on a TIMED box (design/engine-server.md 4.8): a turn here is that
    *  many seconds of the run rather than a play. Absent is the ordinary box. */
   turn?: { seconds: number };
@@ -506,7 +515,13 @@ export interface BoxDto {
   /** `tags`: the hand's bound tags (group gameId -> tag gameId), template
    *  bindings under chosen for an instance, rule bindings for a standalone.
    *  The Where row shows a place's region from it and warns on contradictions. */
-  hands: { id: string; gameId: string; title?: string; template?: string; slots?: number; tags: Record<string, string> }[];
+  hands: {
+    id: string; gameId: string; title?: string; template?: string; slots?: number; tags: Record<string, string>;
+    /** A MOVING hand's groups: those it fills from a property at ask time, each
+     *  with every tag (gameId) that property can name (ops `tagsOfHand`).
+     *  Absent for a hand whose every binding is fixed. */
+    moving?: Record<string, string[]>;
+  }[];
   /** What a VENUE depends on about this box, one line per installation
    *  (design/engine-server.md 4.11): "Ticked at the-park every 60s". Absent on
    *  every project that has never met a server, which is all of them so far. */
@@ -759,6 +774,19 @@ export interface PackOffer {
   pack: { path: string; address: string };
 }
 
+/** What upgrading a project from before the project map would do (main
+ *  `map-upgrade.ts`, the planner `storyletengine format` runs). */
+export interface MapUpgradeDto {
+  /** A line each: which map survives, which copies fold into it, the boxes
+   *  that join the map, frames and pictures moved. */
+  report: string[];
+  /** Planned anyway, and said: a picture a copy loses, say. */
+  warnings: string[];
+  /** Why it cannot be done yet, one sentence each, naming the fix. Non-empty
+   *  means nothing would be written. */
+  refusals: string[];
+}
+
 export interface OpenResult {
   project: ProjectDto;
   problems: Problem[];
@@ -855,6 +883,10 @@ export interface BindingDto { group: string; value?: string; hole?: boolean; }
 export interface TemplateDetail {
   id: string;
   gameId: string;
+  /** The raw pinned gameId, absent when derived. */
+  gameIdPinned?: string;
+  /** What the designer calls this kind of hand, shown under each instance's title. */
+  title?: string;
   purpose?: string;
   /** One row per tag group: fixed tag, hole, or unbound. */
   bindings: BindingDto[];
@@ -870,6 +902,7 @@ export interface TemplateDetail {
 }
 export interface TemplateEdit {
   gameId?: string;
+  title?: string;
   purpose?: string;
   /** Shared condition source; blank clears it. */
   condition?: string;
@@ -1121,6 +1154,9 @@ export interface MapSiteDto {
    *  binding, or the fixed binding its template gives every instance. Absent when
    *  the hand has no route to this group, or has one and has not filled it. */
   zone?: string;
+  /** The colour of the box the hand belongs to, a palette slot, when it has
+   *  one stored: what the Board's map tints the pin with, as the editor's does. */
+  colour?: number;
   /** Can dragging this pin rebind the hand? False in two different ways, and the
    *  wording has to tell them apart: a hand whose template BINDS this group for
    *  every instance (moving one would move them all), and a hand with no
@@ -1168,6 +1204,9 @@ export const PROJECT_MAP_ASSETS = "map";
 export interface ProjectMapSiteDto extends MapSiteDto {
   /** How many cards name this hand as their place: the "only here" tier. */
   only: number;
+  /** What kind of hand it is, in the designer's own words: its template's
+   *  title, else its gameId. Absent for a standalone hand. */
+  kind?: string;
 }
 
 /** One LAYER of the project map: a box on it, and its own sites (the
@@ -1177,6 +1216,9 @@ export interface ProjectMapLayerDto {
   box: string;
   gameId: string;
   title?: string;
+  /** The box's stored colour, a palette slot (model `ViewShard.colour`). Always
+   *  present: the map stores one for any box that has none before it is sent. */
+  colour: number;
   sites: ProjectMapSiteDto[];
   /** The box's hands with no site yet. */
   unplaced: { id: string; gameId: string; title?: string }[];
@@ -1219,13 +1261,28 @@ export interface MapZoneBoxDto {
   box: string;
   gameId: string;
   title?: string;
-  /** Hands of this box bound to the zone, with their "only here" counts. */
-  sites: { id: string; gameId: string; title?: string; only: number }[];
+  /** The box's stored colour (see ProjectMapLayerDto.colour). */
+  colour?: number;
+  /** Hands of this box bound to the zone, with their "only here" counts. A
+   *  MOVING hand (its zone comes from a property) is listed at every zone it
+   *  can be in, marked `moving`. */
+  sites: { id: string; gameId: string; title?: string; only: number; moving?: true }[];
   /** Cards with no place, tagged with this zone: "anywhere in it". */
   cards: HandCardRef[];
 }
 
 /** A zone, as the project map's side panel shows it. */
+/** Why a box cannot leave the project map yet, as the app asks it: a title, a
+ *  sentence naming the thing in the way by its title, and that thing to open
+ *  when there is one to open. */
+export interface LeaveRefusalDto {
+  title: string;
+  body: string;
+  open?:
+    | { kind: "hand" | "template" | "deck"; box: string; id: string; label: string }
+    | { kind: "card"; box: string; deck: string; id: string; label: string };
+}
+
 export interface MapZoneDetailDto {
   id: string;
   gameId: string;
@@ -1385,17 +1442,30 @@ export interface HandDetail {
 /** One card on a hand page: where it lives, so the row can find its DTO. */
 export interface HandCardRef { deck: string; card: string }
 
+/** One card on a hand page, gated by a `boundBy` group the hand does not bind:
+ *  the gate as a badge ("act: act-2"), never a tier of its own. */
+export interface HandCardGate { group: string; tags: string[] }
+
 /** What could come up at one hand, by tags and place alone (ops `placeTiers`):
  *  the hand page's Cards tab. Conditions are not evaluated. */
 export interface HandCardsDto {
-  /** Cards whose place names this hand. */
+  /** Cards whose place names this hand, which can be dealt here. */
   only: HandCardRef[];
-  /** One tier per zone the hand can be in: the one it binds, or each one a
-   *  roaming hand's property can name. `zone` is the tag's gameId. Empty off
-   *  the map. */
-  zones: { zone: string; cards: HandCardRef[] }[];
-  /** Cards with no place that no zone tier took: a count on the page. */
+  /** Cards whose place names this hand but which can NEVER be dealt here, each
+   *  with the sentence that says why. */
+  never: (HandCardRef & { why: string })[];
+  /** One tier per tag of each group the hand binds or can bind: the zone it
+   *  stands in, the npc it is for, or each zone a moving hand can be in.
+   *  `group` and `tag` are gameIds; `zone` marks the project map's group. */
+  tiers: { group: string; tag: string; zone?: true; cards: HandCardRef[] }[];
+  /** Cards with no place and no tag in any group in `bound`: a count on the page. */
   anywhere: HandCardRef[];
+  /** The groups the hand binds (gameIds), in tier order: what Anywhere leaves out. */
+  bound: string[];
+  /** Gates by card id (see HandCardGate). */
+  gated: Record<string, HandCardGate[]>;
+  /** The hand takes a group's tag from a property: it moves. */
+  moving?: true;
 }
 
 export interface HandEdit {
@@ -1420,6 +1490,9 @@ export interface ValueDetail {
 }
 export interface TagGroupDetail {
   id: string; gameId: string; purpose?: string;
+  /** The project map's zone group, which every box on the map shares: its
+   *  properties then say who shares each value (the round-3 ruling). */
+  projectMap?: true;
   /** Declared once here, held by every tag in the group. */
   properties: PropertyDeclDto[];
   values: ValueDetail[];
@@ -1718,6 +1791,12 @@ export interface StudioApi {
   /** The Patter quick fix for a card with no scene: write a stub scene into the paired Patter
    *  project (Patter core's planScene). Says the scene's address and the files it wrote. */
   createPatterScene(card: string): Promise<{ address: string; files: string[] } | { error: string }>;
+  /** A project from before the project map: what upgrading it would do, or null
+   *  when it needs no upgrade. Read-only. */
+  planMapUpgrade(): Promise<MapUpgradeDto | null>;
+  /** Run that upgrade, one undo step; refused, nothing is written and the
+   *  planner's sentences come back. */
+  upgradeProjectMap(): Promise<OpenResult | { error: string } | { refused: string[] }>;
   /** A sweep finished anywhere (it is run from the Coverage window): the editor
    *  re-reads the overlay so it is never showing the run before last. Returns
    *  its own unsubscribe. */
@@ -1766,8 +1845,13 @@ export interface StudioApi {
   /** One zone of the project map, for its side panel. Null when it is gone. */
   mapZone(tagId: string): Promise<MapZoneDetailDto | null>;
   /** Put a box on the project map, or take it off. Leaving is refused, with a
-   *  sentence, while the box's hands or cards still reference a zone. */
-  useProjectMap(boxId: string, on: boolean): Promise<OpenResult | { error: string }>;
+   *  sentence, while the box's hands, cards or expressions still reference the
+   *  map; a box with hands placed on the map answers `confirm` first, and
+   *  leaves when asked again with `confirmed`. */
+  useProjectMap(boxId: string, on: boolean, confirmed?: boolean): Promise<OpenResult | { error: string } | { confirm: { title: string; body: string } } | { refused: LeaveRefusalDto }>;
+  /** A box's layer colour, picked from its swatch: a palette slot, stored in
+   *  the box's view sidecar, one undo step. */
+  setBoxColour(boxId: string, colour: number): Promise<OpenResult | { error: string }>;
   /** Mark a tag group spatial, or stop. Geometry already traced is left alone. */
   setGroupSpatial(boxId: string, groupId: string, on: boolean): Promise<OpenResult | { error: string }>;
   /** A traced outline for a zone that does not exist yet: declares the tag and

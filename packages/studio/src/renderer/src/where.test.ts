@@ -11,7 +11,7 @@ import type { BoxDto } from "../../shared/api.js";
 const box = {
   id: "b", gameId: "village", ranking: { specificity: true }, fields: [], properties: [], decks: [], templates: [],
   tagGroups: [
-    { id: "d_zone", gameId: "zone", values: ["village", "forest"], spatial: true },
+    { id: "d_zone", gameId: "zone", values: ["village", "forest"], spatial: true, placeAxis: true },
     { id: "d_mood", gameId: "mood", values: ["tense", "calm"] },
   ],
   hands: [
@@ -83,7 +83,7 @@ describe("a group a hand template chooses", () => {
   const talk = {
     ...box,
     tagGroups: [
-      { id: "d_npc", gameId: "npc", values: ["gareth", "mira"], chosen: true },
+      { id: "d_npc", gameId: "npc", values: ["gareth", "mira"], placeAxis: true },
       { id: "d_mood", gameId: "mood", values: ["tense", "calm"] },
     ],
     hands: [{ id: "h_g", gameId: "talking-to-gareth", title: "Talking to Gareth", tags: { npc: "gareth" } }],

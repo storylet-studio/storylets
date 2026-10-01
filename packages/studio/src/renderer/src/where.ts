@@ -2,15 +2,17 @@
 // The Where row's model (design/where-and-selectors.md, Part A).
 //
 // "Where does this card come up?" answered as a sentence, built from the home
-// group plus every SPATIAL tag group. Spatial-means-place is the rule that
-// scales: a group that draws on a map is a place axis; one that does not
-// (mood, pacing) stays in the ordinary Tags rows.
+// group plus every PLACE AXIS of the box: a group some hand in the box binds, or
+// the project map's zone group in a box on the map. That definition is ops
+// place-axis.ts, the only one; main sets `TagGroupDto.placeAxis` from it, and
+// this file, Group by and the hand page's tiers all read the same answer. A
+// group nothing binds (mood, pacing) stays in the ordinary Tags rows.
 //
-// AND every group a hand template CHOOSES (2026-10, plan item 0). A template
-// that chooses `npc` makes one hand per person, and a topic tagged
-// `npc: gareth` comes up only where Gareth is: that is a place answer, and
-// leaving it out had the row read "Anywhere" over a card that is anything but.
-// No map is needed for it, which is the conversation writer's whole case.
+// The map's zone group reads as a region ("anywhere in docks"); every other
+// axis reads as who or what ("npc: gareth"). A topic tagged `npc: gareth` comes
+// up only where Gareth is: that is a place answer, and leaving it out had the
+// row read "Anywhere" over a card that is anything but. No map is needed for
+// it, which is the conversation writer's whole case.
 //
 // Pure functions over the DTOs, no DOM, so the sentence and the conflict rule
 // are testable the way the ranking hints are not. The chips and the popover
@@ -25,13 +27,14 @@ export interface WhereModel {
   places: { gameId: string; title: string }[];
   /** Selected region tags per spatial group, in group order. */
   regions: { group: string; values: string[] }[];
-  /** Selected tags per group a hand template chooses that is NOT a map, in
-   *  group order: "npc: gareth". Read as who or what, never as "anywhere in". */
+  /** Selected tags per place axis that is NOT the map's zone group, in group
+   *  order: "npc: gareth". Read as who or what, never as "anywhere in". */
   chosen: { group: string; values: string[] }[];
-  /** The spatial group gameIds. */
+  /** The zone group's gameId, when the box is on the map (a list, for the
+   *  callers that read it as one). */
   spatialGroups: string[];
-  /** Every place axis but the home group (spatial, then chosen), so the caller
-   *  can leave them out of Tags: the Where row owns them. */
+  /** Every place axis but the home group (the zone group, then the rest), so
+   *  the caller can leave them out of Tags: the Where row owns them. */
   placeGroups: string[];
   /** Home selections whose own region contradicts the selected regions: that
    *  place binds a region the card does not list, so the card can never be
@@ -41,17 +44,21 @@ export interface WhereModel {
 
 type CardTags = { group: string; values: string[] }[];
 
-/** The groups that answer "where", besides the home group: every map, and
- *  every group a hand template chooses. Also what the deck table's Where column
+/** The groups that answer "where", besides the home group: the box's place
+ *  axes (TagGroupDto.placeAxis). Also what the deck table's Where column
  *  reads, so the two say the same thing. */
 export function placeGroupsOf(box: Pick<BoxDto, "tagGroups">): Set<string> {
-  return new Set(box.tagGroups.filter((g) => g.spatial === true || g.chosen === true).map((g) => g.gameId));
+  return new Set(box.tagGroups.filter((g) => g.placeAxis === true).map((g) => g.gameId));
 }
 
+/** A place axis that is the map's zone group (read as a region), as against
+ *  one read as who or what. */
+export const isZoneAxis = (g: BoxDto["tagGroups"][number]): boolean => g.placeAxis === true && g.spatial === true;
+
 export function whereModel(box: BoxDto, tags: CardTags): WhereModel {
-  const spatial = box.tagGroups.filter((g) => g.spatial === true);
+  const spatial = box.tagGroups.filter(isZoneAxis);
   const spatialIds = spatial.map((g) => g.gameId);
-  const chosenGroups = box.tagGroups.filter((g) => g.chosen === true && g.spatial !== true);
+  const chosenGroups = box.tagGroups.filter((g) => g.placeAxis === true && !isZoneAxis(g));
   const homes = tags.find((t) => t.group === PLACE_GROUP)?.values ?? [];
   const places = box.hands
     .filter((h) => homes.includes(h.gameId))

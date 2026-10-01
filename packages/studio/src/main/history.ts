@@ -73,6 +73,24 @@ export class History {
     this.redoStack = [];
   }
 
+  /**
+   * Fold a write the app made on its own into the step the author took last,
+   * rather than recording a step of its own. For a write nobody asked for
+   * (a box's first colour, stored when the map is first drawn): a step of its
+   * own would be undone by the author's next Undo, which would then undo the
+   * thing they meant. Folded, undoing the step that put a box on the map takes
+   * its colour with it, and a box folder that step created is never left
+   * holding nothing but the colour's sidecar. With nothing to undo yet, there
+   * is nothing to fold into, and the write simply stands.
+   */
+  fold(before: FileState[], after: FileState[]): void {
+    const top = this.undoStack[this.undoStack.length - 1];
+    if (!top) return;
+    const known = new Set(top.before.map((s) => s.path));
+    top.before = [...top.before, ...before.filter((s) => !known.has(s.path))];
+    top.after = mergeStates(top.after, after);
+  }
+
   /** Move the top undo entry to redo and return its before-states to apply. */
   undo(): FileState[] | undefined {
     const entry = this.undoStack.pop();

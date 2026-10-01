@@ -50,18 +50,23 @@ describe("placeTiers", () => {
   it("splits a hand's cards into only here, anywhere in its zone, and anywhere", () => {
     expect(placeTiers(project, village, inn, cards)).toEqual({
       only: ["c_inn", "c_inn_or_forge"],
-      zones: [{ zone: "v_village", cards: ["c_square", "c_two"] }],
-      // An act is not a tier: it is bound at run time, so it filters nothing here.
+      // Placed here but in another zone: shown, with the zone that rules it out.
+      never: [{ card: "c_dead", group: "d_zone", bound: "v_village" }],
+      tiers: [{ group: "d_zone", tag: "v_village", cards: ["c_square", "c_two"] }],
+      // An act is not a tier: it is bound at run time from state, for every hand.
       anywhere: ["c_rumour", "c_act2"],
+      bound: ["d_zone"],
+      // ...so the card it gates carries the gate as a badge instead.
+      gated: { c_act2: [{ group: "d_act", tags: ["v_a2"] }] },
     });
   });
 
   it("gives a roaming hand a tier for each zone its enum can name, in map order", () => {
     const decls = { story: [{ name: "elder_at", type: "enum" as const, default: "village", values: ["cave", "village"] }] };
     const tiers = placeTiers(project, village, elder, cards, decls);
-    expect(tiers.zones).toEqual([
-      { zone: "v_village", cards: ["c_square", "c_two"] },
-      { zone: "v_cave", cards: [] },
+    expect(tiers.tiers).toEqual([
+      { group: "d_zone", tag: "v_village", cards: ["c_square", "c_two"] },
+      { group: "d_zone", tag: "v_cave", cards: [] },
     ]);
     // The forest is somewhere the elder can never be.
     expect(tiers.anywhere).toEqual(["c_rumour", "c_act2"]);
@@ -75,13 +80,14 @@ describe("placeTiers", () => {
 
   it("puts a zone-tagged card under Anywhere at a hand that binds no zone", () => {
     const tiers = placeTiers(project, village, loose, cards);
-    expect(tiers.zones).toEqual([]);
+    expect(tiers.tiers).toEqual([]);
+    expect(tiers.bound).toEqual([]);
     expect(tiers.anywhere).toEqual(["c_square", "c_woods", "c_two", "c_rumour", "c_act2"]);
   });
 
-  it("has no zone tiers in a box off the map, and filters by its own groups", () => {
+  it("tiers a box off the map by the groups its hands bind: Gareth's topics, not Mira's", () => {
     const talking: Hand<string> = { id: "h_gareth", gameId: "talking-to-gareth", template: "t_topics", chosen: { d_npc: "v_gareth" } };
-    const talk: ReachBox<string> = { tagGroups: [npc], handTemplates: [{ id: "t_topics" }], hands: [talking] };
+    const talk: ReachBox<string> = { tagGroups: [npc], handTemplates: [{ id: "t_topics", chooses: ["d_npc"] }], hands: [talking] };
     const topics: ReachCard[] = [
       { id: "c_shoulder", tags: { d_npc: ["v_gareth"] } },
       { id: "c_roads", tags: { d_npc: ["v_gareth", "v_mira"] } },
@@ -89,16 +95,41 @@ describe("placeTiers", () => {
       { id: "c_weather" },
     ];
     expect(placeTiers(project, talk, talking, topics)).toEqual({
-      only: [], zones: [], anywhere: ["c_shoulder", "c_roads", "c_weather"],
+      only: [], never: [], gated: {}, bound: ["d_npc"],
+      tiers: [{ group: "d_npc", tag: "v_gareth", cards: ["c_shoulder", "c_roads"] }],
+      anywhere: ["c_weather"],
     });
+  });
+
+  it("tiers a standalone hand's rule binding the same way", () => {
+    const docks: Hand<string> = { id: "h_docks", gameId: "docks", rule: { slots: 2, bindings: { d_npc: "v_mira" } } };
+    const talk: ReachBox<string> = { tagGroups: [npc], handTemplates: [], hands: [docks] };
+    expect(placeTiers(project, talk, docks, [{ id: "c_m", tags: { d_npc: ["v_mira"] } }]).tiers)
+      .toEqual([{ group: "d_npc", tag: "v_mira", cards: ["c_m"] }]);
   });
 
   it("refuses an untagged card where a required group is bound, as the runtime does", () => {
     const strict: TagGroup = { ...npc, required: true };
     const talking: Hand<string> = { id: "h_gareth", gameId: "talking-to-gareth", rule: { slots: 1, bindings: { d_npc: "v_gareth" } } };
     const talk: ReachBox<string> = { tagGroups: [strict], handTemplates: [], hands: [talking] };
-    expect(placeTiers(project, talk, talking, [{ id: "c_weather" }, { id: "c_g", tags: { d_npc: ["v_gareth"] } }]).anywhere)
-      .toEqual(["c_g"]);
+    const tiers = placeTiers(project, talk, talking, [
+      { id: "c_weather" }, { id: "c_g", tags: { d_npc: ["v_gareth"] } }, { id: "c_here", tags: { place: ["h_gareth"] } },
+    ]);
+    expect(tiers.anywhere).toEqual([]);
+    expect(tiers.tiers[0]!.cards).toEqual(["c_g"]);
+    // Placed here, but the required group is left out: never here, and why.
+    expect(tiers.never).toEqual([{ card: "c_here", group: "d_npc" }]);
+  });
+
+  it("calls a placed card never here when a moving hand can never be in its zone", () => {
+    const decls = { story: [{ name: "elder_at", type: "enum" as const, default: "village", values: ["cave", "village"] }] };
+    const placed: ReachCard[] = [
+      { id: "c_elder_woods", tags: { place: ["h_elder"], d_zone: ["v_forest"] } },
+      { id: "c_elder_cave", tags: { place: ["h_elder"], d_zone: ["v_cave"] } },
+    ];
+    const tiers = placeTiers(project, village, elder, placed, decls);
+    expect(tiers.only).toEqual(["c_elder_cave"]);
+    expect(tiers.never).toEqual([{ card: "c_elder_woods", group: "d_zone" }]);
   });
 });
 

@@ -670,7 +670,8 @@ export function compileProject(source: SourceProject): CompileResult {
       // and the formatter is what moves it; the compiler never writes.
       if (isSpatial(group)) {
         report({ severity: "error", path, where: effectiveGameId(group),
-          message: `tag group "${effectiveGameId(group)}" in box "${effectiveGameId(boxDecl)}" is a map: a map belongs to the project now; run \`storyletengine format\` to move it` });
+          message: `tag group "${effectiveGameId(group)}" in box "${effectiveGameId(boxDecl)}" is a map: a map belongs to the project now; run \`storyletengine format\` to move it`,
+          fix: { kind: "upgrade-project" } });
       }
       // One namespace of group names in an opted-in box, and a host or a
       // server resolving the name anywhere must find one thing: so the project
@@ -749,9 +750,16 @@ export function compileProject(source: SourceProject): CompileResult {
         message: `${placed === 1 ? "1 hand is" : `${placed} hands are`} placed on the map, but box "${effectiveGameId(boxDecl)}" is not on the project map, so no site of it ships; turn on "Uses the project map" or take them off the map` });
     }
     const frames = (sourceBox.map?.map as { frames?: unknown } | undefined)?.frames;
+    // `format` can move them only to a project map that exists: with none, it
+    // has nowhere to put them, and saying "run format" would send the author
+    // round a loop (the round-3 review, 1.2b).
     if (Array.isArray(frames) && frames.length > 0) {
-      report({ severity: "warning", path: `${sourceBox.path}/map`, where: effectiveGameId(boxDecl), field: "frames",
-        message: "the map's frames belong to the project map now, and these are ignored; run `storyletengine format` to move them" });
+      report(source.map !== undefined
+        ? { severity: "warning", path: `${sourceBox.path}/map`, where: effectiveGameId(boxDecl), field: "frames",
+            message: "the map's frames belong to the project map now, and these are ignored; run `storyletengine format` to move them",
+            fix: { kind: "upgrade-project" } }
+        : { severity: "warning", path: `${sourceBox.path}/map`, where: effectiveGameId(boxDecl), field: "frames",
+            message: "the map's frames belong to the project map now, and this project has none, so these are ignored; draw the project map, then run `storyletengine format` to move them" });
     }
     // Hand ids, up front: card home tags reference them (schema 2.4).
     const handIds = new Set(sourceBox.hands.hands.map((h) => h.id));

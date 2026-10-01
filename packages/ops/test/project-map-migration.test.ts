@@ -12,13 +12,17 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { canonicalStringify, compileProject, parseSource } from "@storylet-studio/compiler";
+import { backgroundsOf } from "@storylet-studio/model";
+import type { TagGroup } from "@storylet-studio/model";
 import type { FormatResult } from "../src/format.js";
 import { runFormat } from "../src/format.js";
 import { loadProject } from "../src/load.js";
+import { runValidate } from "../src/validate.js";
 
 const write = (path: string, value: unknown): void => {
   mkdirSync(dirname(path), { recursive: true });
@@ -363,5 +367,255 @@ describe("what moves with the map", () => {
     expect(read(join(dir, "map.storyletmap"))).toEqual(before);
     const hands = read(join(dir, "news", "hands.storylethands")) as { hands: { id: string }[] };
     expect(hands.hands.find((h) => h.id === "h_news_quay")).toMatchObject({ rule: { bindings: { d_root_district: "v_root_quay" } } });
+  });
+});
+
+/** Every file under `dir`, path -> bytes, for "nothing was written". */
+function snapshot(dir: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const walk = (at: string): void => {
+    for (const name of readdirSync(at)) {
+      const path = join(at, name);
+      if (statSync(path).isDirectory()) walk(path); else out.set(path, readFileSync(path, "latin1"));
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+/** Add an ordinary group to a box's tags shard after `project` wrote it. */
+function addGroup(dir: string, folder: string, group: unknown): void {
+  const path = join(dir, folder, "tags.storylettags");
+  const tags = read(path) as { groups: unknown[] };
+  write(path, { ...tags, groups: [...tags.groups, group] });
+}
+
+describe("the pre-flight refuses a move that would break the compile (round-3 review, 1.2a)", () => {
+  const refused = (dir: string): string[] => {
+    const before = snapshot(dir);
+    const result = runFormat(loadProject(dir));
+    expect(result.changed).toEqual([]);
+    expect(result.removed).toEqual([]);
+    expect(result.moved).toEqual([]);
+    apply(result);
+    expect(snapshot(dir)).toEqual(before);
+    return errors(result);
+  };
+
+  it("E4: a tag in another box, on the map or not, with a zone's name", () => {
+    // The antagonist's vC: legal before (two boxes, box-qualified addresses),
+    // and an error the moment "quay" becomes a zone of the project.
+    const dir = project([
+      { folder: "contracts", id: "b_con", p: "con", group: districtCopy("con") },
+      { folder: "codex", id: "b_codex", p: "codex" },
+    ]);
+    addGroup(dir, "codex", { id: "d_codex_area", gameId: "area", tags: [{ id: "v_codex_quay", gameId: "quay" }] });
+    expect(compileProject(loadProject(dir).source!).issues.filter((i) => i.message.includes("zone of the project map"))).toEqual([]);
+    expect(refused(dir)).toEqual([
+      'box "codex" has a tag "quay" in its group "area", and "quay" is a zone of the map, whose name will mean one thing across the project;'
+        + ' rename the tag in "codex", then run format again',
+    ]);
+  });
+
+  it("E4 in a box that held a copy: its other group's tag", () => {
+    const dir = project([{ folder: "contracts", id: "b_con", p: "con", group: districtCopy("con") }]);
+    addGroup(dir, "contracts", { id: "d_con_area", gameId: "area", tags: [{ id: "v_con_hill2", gameId: "hill" }] });
+    expect(refused(dir)).toEqual([
+      'box "contracts" has a tag "hill" in its group "area", and "hill" is a zone of the map, whose name will mean one thing across the project;'
+        + ' rename the tag in "contracts", then run format again',
+    ]);
+  });
+
+  it("E3: a group in another box with the map's name", () => {
+    const dir = project([
+      { folder: "contracts", id: "b_con", p: "con", group: districtCopy("con") },
+      { folder: "codex", id: "b_codex", p: "codex" },
+    ]);
+    addGroup(dir, "codex", { id: "d_codex_district", gameId: "district", tags: [{ id: "v_codex_old", gameId: "old-town" }] });
+    expect(refused(dir)).toEqual([
+      'box "codex" has a tag group "district", the name the project map takes, and a group name will mean one thing across the project;'
+        + ' rename the group in "codex", then run format again',
+    ]);
+  });
+
+  it("a box joining the map for its placed hands, declaring a map property as another type", () => {
+    const dir = project([
+      { folder: "contracts", id: "b_con", p: "con", group: districtCopy("con") },
+      { folder: "items", id: "b_items", p: "items", sites: { h_items_any: { x: 3, y: 3 } } },
+    ]);
+    addGroup(dir, "items", {
+      id: "d_items_kind", gameId: "kind",
+      properties: [{ name: "danger", type: "string", default: "" }],
+      tags: [{ id: "v_items_blade", gameId: "blade" }],
+    });
+    expect(refused(dir)).toEqual([
+      'box "items" joins the project map because it has hands placed on it, and it declares @hand.danger as string on the group "kind" where the map declares it as number;'
+        + ' rename the property in "items", or make the two agree, then run format again',
+    ]);
+  });
+
+  it("refuses every clash at once, and alongside a differing copy", () => {
+    const dir = project([
+      { folder: "contracts", id: "b_con", p: "con", group: districtCopy("con") },
+      { folder: "news", id: "b_news", p: "news", group: districtCopy("news", { danger: 2 }) },
+      { folder: "codex", id: "b_codex", p: "codex" },
+    ]);
+    addGroup(dir, "codex", { id: "d_codex_area", gameId: "area", tags: [{ id: "v_codex_quay", gameId: "quay" }, { id: "v_codex_hill", gameId: "hill" }] });
+    expect(refused(dir)).toHaveLength(3);
+  });
+});
+
+describe("W3 sends the author to format, so format moves the frames (round-3 review, 1.2b)", () => {
+  const frame = (id: string): unknown => ({ id, x: 0, y: 0, w: 10, h: 10, title: id });
+  const w3 = (dir: string): string[] => compileProject(loadProject(dir).source!).issues
+    .filter((i) => i.field === "frames").map((i) => i.message);
+
+  it("moves stray frames up to a project map already there, and touches nothing else", () => {
+    const root = { schema: "storylets/projectmap@0", group: { ...(districtCopy("root") as object), templates: { spatial: { map: true } } }, frames: [frame("f_root")] };
+    const dir = project([{ folder: "news", id: "b_news", p: "news", sites: { h_news_any: { x: 1, y: 1 } }, frames: [frame("f_late")] }], { rootMap: root });
+    // On the map already (the project was migrated; a collaborator then drew a frame the old way).
+    const boxPath = join(dir, "news", "box.storyletbox");
+    const box = read(boxPath) as { box: Record<string, unknown> };
+    write(boxPath, { ...box, box: { ...box.box, usesMap: true } });
+    expect(w3(dir)).toHaveLength(1);
+
+    const result = runFormat(loadProject(dir));
+    expect(errors(result)).toEqual([]);
+    expect(result.migrated).toEqual(["1 frame(s) moved to the project map"]);
+    apply(result);
+    expect((read(join(dir, "map.storyletmap")) as { frames: { id: string }[] }).frames.map((f) => f.id)).toEqual(["f_root", "f_late"]);
+    expect(read(join(dir, "news", "map.storyletmap"))).toEqual({ schema: "storylets/map@0", map: { sites: { h_news_any: { x: 1, y: 1 } } } });
+    expect(w3(dir)).toEqual([]);
+    const again = runFormat(loadProject(dir));
+    expect([again.changed, again.removed, again.moved, again.migrated]).toEqual([[], [], [], []]);
+  });
+
+  it("does not opt a box in while it moves only frames", () => {
+    const root = { schema: "storylets/projectmap@0", group: districtCopy("root") };
+    const dir = project([
+      { folder: "news", id: "b_news", p: "news", frames: [frame("f_late")] },
+      { folder: "codex", id: "b_codex", p: "codex", sites: { h_codex_any: { x: 1, y: 1 } } },
+    ], { rootMap: root });
+    apply(runFormat(loadProject(dir)));
+    expect((read(join(dir, "codex", "box.storyletbox")) as { box: { usesMap?: true } }).box.usesMap).toBeUndefined();
+    expect(existsSync(join(dir, "news", "map.storyletmap"))).toBe(false);
+  });
+
+  it("with no project map to move them to, W3 says so rather than naming a command that cannot", () => {
+    const dir = project([{ folder: "news", id: "b_news", p: "news", frames: [frame("f_late")] }]);
+    expect(w3(dir)).toEqual([
+      "the map's frames belong to the project map now, and this project has none, so these are ignored; draw the project map, then run `storyletengine format` to move them",
+    ]);
+  });
+});
+
+// The property the pre-flight exists for: whatever `format` accepts compiles.
+// Every shipped example and test fixture, as it is AND as it was before the
+// project map (its map pushed back down into every box on it, the first box's
+// copy keeping the map's ids and every other box a copy of its own, references
+// and all), goes through format and then validate with no errors.
+describe("format, then validate, compiles clean for every example and fixture", () => {
+  const roots = [
+    fileURLToPath(new URL("../../../examples", import.meta.url)),
+    fileURLToPath(new URL("./fixtures", import.meta.url)),
+  ];
+  const projects = roots.flatMap((root) => readdirSync(root)
+    .filter((name) => name.endsWith(".storylets") && statSync(join(root, name)).isDirectory())
+    .map((name) => join(root, name)));
+
+  const copyOf = (from: string): string => {
+    const dir = join(mkdtempSync(join(tmpdir(), "pm-property-")), "p.storylets");
+    cpSync(from, dir, { recursive: true });
+    return dir;
+  };
+  const clean = (dir: string): void => {
+    const result = runFormat(loadProject(dir));
+    expect(errors(result)).toEqual([]);
+    apply(result);
+    const issues = runValidate(loadProject(dir), { checkBundle: false }).issues;
+    expect(issues.filter((i) => i.severity === "error").map((i) => `${i.path}: ${i.message}`)).toEqual([]);
+    expect(issues.filter((i) => i.field === "frames")).toEqual([]);
+  };
+
+  /** The project as it was before the project map, from the project as it is. */
+  const unmigrate = (dir: string): boolean => {
+    const map = existsSync(join(dir, "map.storyletmap")) ? read(join(dir, "map.storyletmap")) as { group: TagGroup; frames?: unknown[] } : undefined;
+    if (map === undefined) return false;
+    const onMap = readdirSync(dir).filter((f) => existsSync(join(dir, f, "box.storyletbox"))).sort()
+      .filter((f) => (read(join(dir, f, "box.storyletbox")) as { box: { usesMap?: boolean } }).box.usesMap === true);
+    if (onMap.length === 0) return false;
+    onMap.forEach((folder, n) => {
+      // The first box keeps the map's ids; every other one a copy of its own.
+      const ids = new Map<string, string>();
+      const copy = structuredClone(map.group);
+      if (n > 0) {
+        ids.set(copy.id, `${copy.id}_${n}`); copy.id = `${copy.id}_${n}`;
+        for (const tag of copy.tags) { ids.set(tag.id, `${tag.id}_${n}`); tag.id = `${tag.id}_${n}`; }
+      }
+      const re = (s: string): string => ids.get(s) ?? s;
+      const reRecord = (r: Record<string, string> | undefined): Record<string, string> | undefined =>
+        r === undefined ? undefined : Object.fromEntries(Object.entries(r).map(([k, v]) => [re(k), re(v)]));
+      const tagsPath = join(dir, folder, "tags.storylettags");
+      const tags = read(tagsPath) as { groups: unknown[] };
+      write(tagsPath, { ...tags, groups: [copy, ...tags.groups] });
+      const boxPath = join(dir, folder, "box.storyletbox");
+      const box = read(boxPath) as { box: Record<string, unknown> };
+      delete box.box["usesMap"];
+      write(boxPath, box);
+      const handsPath = join(dir, folder, "hands.storylethands");
+      if (existsSync(handsPath)) {
+        const hands = read(handsPath) as { templates?: { bindings?: Record<string, string>; chooses?: string[] }[]; hands?: { chosen?: Record<string, string>; rule?: { bindings?: Record<string, string> } }[] };
+        for (const t of hands.templates ?? []) {
+          if (t.bindings) t.bindings = reRecord(t.bindings)!;
+          if (t.chooses) t.chooses = t.chooses.map(re);
+        }
+        for (const h of hands.hands ?? []) {
+          if (h.chosen) h.chosen = reRecord(h.chosen)!;
+          if (h.rule?.bindings) h.rule.bindings = reRecord(h.rule.bindings)!;
+        }
+        write(handsPath, hands);
+      }
+      const decks = join(dir, folder, "decks");
+      for (const file of existsSync(decks) ? readdirSync(decks) : []) {
+        const deck = read(join(decks, file)) as { cards: { tags?: Record<string, string[]> }[] };
+        for (const card of deck.cards) {
+          if (card.tags) card.tags = Object.fromEntries(Object.entries(card.tags).map(([g, ts]) => [re(g), ts.map(re)]));
+        }
+        write(join(decks, file), deck);
+      }
+      if (n === 0) {
+        // The frames and the pictures were the first box's.
+        if (map.frames !== undefined) {
+          const mapPath = join(dir, folder, "map.storyletmap");
+          const own = existsSync(mapPath) ? read(mapPath) as { map: Record<string, unknown> } : { schema: "storylets/map@0", map: {} };
+          write(mapPath, { ...own, map: { ...own.map, frames: map.frames } });
+        }
+        for (const bg of backgroundsOf(map.group)) {
+          const from = join(dir, "assets", bg.file);
+          if (!existsSync(from)) continue;
+          mkdirSync(join(dir, folder, "assets"), { recursive: true });
+          renameSync(from, join(dir, folder, "assets", bg.file));
+        }
+      }
+    });
+    rmSync(join(dir, "map.storyletmap"));
+    return true;
+  };
+
+  it("finds them (a rename must break this, not silently empty it)", () => {
+    expect(projects.map((p) => p.split("/").pop())).toEqual(expect.arrayContaining(["the-village.storylets", "port-meridian.storylets", "the-hamlet.storylets"]));
+  });
+
+  const named = projects.map((path) => [path.split("/").pop()!, path] as const);
+
+  it.each(named)("%s as it is", (_name, path) => { clean(copyOf(path)); });
+
+  it.each(named)("%s as it was before the project map", (_name, path) => {
+    const dir = copyOf(path);
+    const group = existsSync(join(dir, "map.storyletmap")) ? (read(join(dir, "map.storyletmap")) as { group: unknown }).group : undefined;
+    if (!unmigrate(dir)) return;
+    expect(compileProject(loadProject(dir).source!).issues.some((i) => i.message.includes("a map belongs to the project now"))).toBe(true);
+    clean(dir);
+    expect((read(join(dir, "map.storyletmap")) as { group: unknown }).group).toEqual(group);
   });
 });

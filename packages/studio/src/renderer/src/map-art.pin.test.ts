@@ -135,3 +135,47 @@ describe("a site inside more than one zone", () => {
     expect(site({ x: 0, y: 0 }).alsoInside).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// A pin OFF ITS ZONE: bound to one zone, drawn in another or in none. Pins wear
+// their box's colour now and zones are neutral, so "a colour that disagrees
+// with the ground" is gone, and this warning ring replaces it (the round-3
+// ruling). Hand-written cases from the rule, not read off the code.
+// ---------------------------------------------------------------------------
+
+import { pinPlacement } from "./map-art.js";
+
+describe("a pin off its zone", () => {
+  const square = (x: number, y: number) => [{ x, y }, { x: x + 100, y }, { x: x + 100, y: y + 100 }, { x, y: y + 100 }];
+  const zones = [
+    { id: "z_docks", polygon: square(0, 0) },
+    { id: "z_town", polygon: square(200, 0) },
+    { id: "z_market", polygon: square(220, 20), z: 1 },
+  ];
+  const name = (id: string): string | undefined => ({ z_docks: "docks", z_town: "town", z_market: "market", z_far: "far" })[id];
+
+  it("is not off it standing inside the zone it is bound to", () => {
+    expect(pinPlacement({ x: 50, y: 50 }, "z_docks", zones, name).strayFrom).toBeUndefined();
+  });
+
+  it("is off it standing in another zone, and the ring names the zone it is bound to", () => {
+    expect(pinPlacement({ x: 250, y: 10 }, "z_docks", zones, name).strayFrom).toBe("docks");
+  });
+
+  it("is off it standing in no zone while its own is drawn", () => {
+    expect(pinPlacement({ x: 500, y: 500 }, "z_docks", zones, name).strayFrom).toBe("docks");
+  });
+
+  it("is not off a zone nobody has drawn while it stands in none, nor with nothing bound", () => {
+    expect(pinPlacement({ x: 500, y: 500 }, "z_far", zones, name).strayFrom).toBeUndefined();
+    expect(pinPlacement({ x: 50, y: 50 }, undefined, zones, name).strayFrom).toBeUndefined();
+  });
+
+  it("goes by the FRONTMOST zone, as a drop binds", () => {
+    // Inside town and the market on top of it: bound to town, it stands in the
+    // market as far as the model is concerned.
+    const p = pinPlacement({ x: 250, y: 50 }, "z_town", zones, name);
+    expect(p.strayFrom).toBe("town");
+    expect(pinPlacement({ x: 250, y: 50 }, "z_market", zones, name)).toEqual({ alsoInside: ["town"] });
+  });
+});

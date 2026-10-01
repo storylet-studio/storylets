@@ -83,7 +83,7 @@ function rpgKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckSha
   };
   tags.groups.push(zone);
   const template: HandTemplate<string> = {
-    id: newId("t"), gameId: "encounters-at",
+    id: newId("t"), gameId: "encounters-at", title: "Places things happen",
     purpose: "What could happen in a place. One place per area, each choosing its own. "
       + "Only the tavern is seated so far: the market has no hand yet, so add one choosing market to put the second place on the board.",
     chooses: [zone.id], slots: 3, properties: [],
@@ -133,7 +133,7 @@ function dialogueKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): De
   };
   tags.groups.push(npc);
   const template: HandTemplate<string> = {
-    id: newId("t"), gameId: "topics-for",
+    id: newId("t"), gameId: "topics-for", title: "People you can talk to",
     purpose: "The fan of topics in an NPC's pocket. One hand per NPC keeps continuity: return to Gareth and his remaining topics are still his.",
     chooses: [npc.id], slots: 3, properties: [],
   };
@@ -203,7 +203,7 @@ function jobsKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckSh
   const d = districts("Where the boards are, drawn on the project map. A job tagged with a district is posted there.", "docks", "old-town");
   tags.groups.push(d.group);
   const template: HandTemplate<string> = {
-    id: newId("t"), gameId: "job-board",
+    id: newId("t"), gameId: "job-board", title: "Job boards",
     purpose: "A board jobs are posted on: what work is on offer here, now. One per district.",
     chooses: [d.group.id], slots: 2, properties: [],
   };
@@ -264,7 +264,7 @@ function stashKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckS
   };
   tags.groups.push(place);
   const template: HandTemplate<string> = {
-    id: newId("t"), gameId: "stash",
+    id: newId("t"), gameId: "stash", title: "Hiding places",
     purpose: "A hiding place: deal it when the player searches. One slot, so the best find there wins.",
     chooses: [place.id], slots: 1, properties: [],
   };
@@ -323,12 +323,12 @@ function codexKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckS
   };
   tags.groups.push(kind);
   const archive: HandTemplate<string> = {
-    id: newId("t"), gameId: "archive",
+    id: newId("t"), gameId: "archive", title: "The codex page",
     purpose: "The codex page: every unlocked entry, in priority order. Slots is the page size; grow it with the content.",
     chooses: [], bindings: { [kind.id]: entryTag }, slots: 12, properties: [],
   };
   const leadsTemplate: HandTemplate<string> = {
-    id: newId("t"), gameId: "leads",
+    id: newId("t"), gameId: "leads", title: "Leads to follow",
     purpose: "Stand-in for the rest of the game: things the player can follow up, each of which teaches them something.",
     chooses: [], bindings: { [kind.id]: leadTag }, slots: 2, properties: [],
   };
@@ -400,12 +400,12 @@ function newsKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckSh
   };
   tags.groups.push(feed);
   const screen: HandTemplate<string> = {
-    id: newId("t"), gameId: "screen",
+    id: newId("t"), gameId: "screen", title: "Public screens",
     purpose: "A public screen: its top-priority story, with the background chatter underneath.",
     chooses: [d.group.id], bindings: { [feed.id]: headlineTag }, slots: 2, properties: [],
   };
   const happenings: HandTemplate<string> = {
-    id: newId("t"), gameId: "happenings",
+    id: newId("t"), gameId: "happenings", title: "Happenings",
     purpose: "Stand-in for the rest of the game: things that happen, which the news then reports.",
     chooses: [], bindings: { [feed.id]: happeningTag }, slots: 2, properties: [],
   };

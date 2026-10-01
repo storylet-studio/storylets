@@ -26,7 +26,7 @@ const village: BoxDto = {
   ],
   tagGroups: [
     { id: "g_t", gameId: "thread", values: ["treasure", "market"] },
-    { id: "g_map", gameId: "district", values: ["square", "edge"], spatial: true },
+    { id: "g_map", gameId: "district", values: ["square", "edge"], spatial: true, placeAxis: true },
   ],
   hands: [
     { id: "h_w", gameId: "well", title: "The Wishing Well", tags: { district: "square" } },
@@ -43,7 +43,7 @@ const talk: BoxDto = {
     card("shoulder", [{ group: "npc", values: ["gareth"] }]),
     card("weather"),
   ] }],
-  tagGroups: [{ id: "g_npc", gameId: "npc", values: ["gareth", "mira"], chosen: true }],
+  tagGroups: [{ id: "g_npc", gameId: "npc", values: ["gareth", "mira"], placeAxis: true }],
   hands: [
     { id: "h_g", gameId: "talk-gareth", template: "talk", tags: { npc: "gareth" } },
     { id: "h_m", gameId: "talk-mira", template: "talk", tags: { npc: "mira" } },
@@ -54,13 +54,15 @@ const labels = (box: BoxDto, key: string): [string, string[]][] =>
   groupEntries(box, boxEntries(box), key).map((g) => [g.label, g.entries.map((e) => e.card.id)]);
 
 describe("the options", () => {
-  it("leads with Deck on a box and None on a deck, then Place, then every group by name", () => {
-    expect(groupOptions(village, "contents").map((o) => o.label)).toEqual(["Deck", "Place", "thread", "district"]);
-    expect(groupOptions(village, "deck").map((o) => o.label)).toEqual(["None", "Place", "thread", "district"]);
+  it("leads with Deck on a box and on a deck alike, then Hand, then every group by name", () => {
+    expect(groupOptions(village, "contents").map((o) => o.label)).toEqual(["Deck", "Hand", "thread", "district"]);
+    expect(groupOptions(village, "deck").map((o) => o.label)).toEqual(["Deck", "Hand", "thread", "district"]);
+    // The deck page's first option keeps its stored key, so a remembered choice carries over.
+    expect(groupOptions(village, "deck")[0]!.key).toBe("none");
   });
 
-  it("offers a chosen group by its own name and no Place when that is the only where", () => {
-    // Mock-up screen 5b: Deck | npc. Place would only repeat npc under another name.
+  it("offers a chosen group by its own name and no Hand when that is the only where", () => {
+    // Mock-up screen 5b: Deck | npc. Hand would only repeat npc under another name.
     expect(hasPlaces(talk)).toBe(false);
     expect(groupOptions(talk, "contents").map((o) => o.label)).toEqual(["Deck", "npc"]);
   });
@@ -134,5 +136,25 @@ describe("the headings", () => {
     expect(groupEntries(talk, boxEntries(talk), "none")).toEqual([
       { key: "all", label: "", entries: boxEntries(talk) },
     ]);
+  });
+});
+
+describe("grouping by a place axis by name", () => {
+  it("files a card placed at a hand under the hand's zone when it names none itself", () => {
+    // The theme park review, round 3: a contract standing at a site in a
+    // district was "Untagged" under Group by district.
+    expect(labels(village, "tag:g_map")).toEqual([
+      ["square", ["inn-only", "two-places", "in-square"]],
+      ["Untagged", ["loose", "arrive"]],
+    ]);
+  });
+
+  it("files a moving hand's card under every zone it can be in", () => {
+    const moving: BoxDto = {
+      ...village,
+      hands: [...village.hands, { id: "h_c", gameId: "courier", tags: {}, moving: { district: ["square", "edge"] } }],
+      decks: [{ id: "k_m", gameId: "m", properties: [], cards: [card("courier-card", [{ group: "place", values: ["courier"] }])] }],
+    };
+    expect(labels(moving, "tag:g_map")).toEqual([["square", ["courier-card"]], ["edge", ["courier-card"]]]);
   });
 });

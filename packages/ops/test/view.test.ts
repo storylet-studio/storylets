@@ -24,7 +24,7 @@ import type { Comment, NotesShard, ViewPoint, ViewShard } from "@storylet-studio
 import { parseSource } from "@storylet-studio/compiler";
 import { planComments } from "../src/comments.js";
 import type { PlannedWrite } from "../src/write.js";
-import { canvasFurniture, cardPositions, planCanvasFurniture, planCardPositions, planForgetCanvas, viewPath } from "../src/view.js";
+import { boxColourOf, canvasFurniture, cardPositions, planBoxColour, planCanvasFurniture, planCardPositions, planForgetCanvas, viewPath } from "../src/view.js";
 
 const box = (view?: ViewShard): SourceBox => ({
   path: "village",
@@ -199,6 +199,48 @@ describe("the sidecar never reaches the bundle", () => {
     const arranged = compileProject(onMap(box(view)));
     expect(arranged.issues).toEqual(plain.issues);
     expect(JSON.stringify(arranged.bundle)).toBe(JSON.stringify(plain.bundle));
+  });
+
+  it("never ships the box's colour, even when the map's geometry does", () => {
+    // The round-3 ruling: a box's colour is the editor's, kept beside its
+    // canvases. `export.map` is the one path that carries anything of the map
+    // into the bundle, so it is asked for here, where a leak would show.
+    const withMap = (b: SourceBox): SourceProject => {
+      const p = project({ ...b, box: { ...b.box, box: { ...b.box.box, usesMap: true } } });
+      return {
+        ...p,
+        project: { ...p.project, export: { ...p.project.export, map: true } },
+        map: {
+          schema: PROJECTMAP_SCHEMA,
+          group: { id: "d_zone", gameId: "zone", templates: { spatial: { map: true } }, tags: [{ id: "t_docks", gameId: "docks" }] },
+        },
+      };
+    };
+    const plain = compileProject(withMap(box()));
+    const coloured = compileProject(withMap(box({ schema: VIEW_SCHEMA, colour: 7 })));
+    expect(coloured.issues).toEqual(plain.issues);
+    expect(JSON.stringify(coloured.bundle)).toBe(JSON.stringify(plain.bundle));
+  });
+});
+
+describe("the box's colour", () => {
+  it("reads a stored slot, and nothing that is not one", () => {
+    expect(boxColourOf(box())).toBeUndefined();
+    expect(boxColourOf(box({ schema: VIEW_SCHEMA, colour: 3 }))).toBe(3);
+    expect(boxColourOf(box({ schema: VIEW_SCHEMA, colour: 12 }))).toBeUndefined();
+    expect(boxColourOf(box({ schema: VIEW_SCHEMA, colour: 1.5 }))).toBeUndefined();
+  });
+
+  it("is written beside the canvases, which survive it", () => {
+    const canvases = { k_arrival: { cards: { c_gate: { x: 1, y: 2 } } } };
+    const shard = written(planBoxColour("/p", box({ schema: VIEW_SCHEMA, canvases }), 4));
+    expect(shard.colour).toBe(4);
+    expect(shard.canvases).toEqual(canvases);
+  });
+
+  it("plans no write for the colour it already has, and forgets one on undefined", () => {
+    expect(planBoxColour("/p", box({ schema: VIEW_SCHEMA, colour: 4 }), 4)).toBeUndefined();
+    expect(written(planBoxColour("/p", box({ schema: VIEW_SCHEMA, colour: 4 }), undefined)).colour).toBeUndefined();
   });
 });
 

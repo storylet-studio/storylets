@@ -2,51 +2,57 @@
 // A box's colour: the one the project map tints its layer, its pins, its chips
 // and its navigator glyph with.
 //
-// Assigned from the curated palette by the box's place in the project, not
-// hashed from its name. Every other identity colour in the app is a hash
-// (design-language.md: "a hash-selected index into the curated palette"), and
-// for decks and tags that is right: there are many, and a stable colour per
-// name is worth the odd collision. Boxes are few and sit side by side on one
-// map, where a collision is the whole reading lost: Port Meridian's Contracts
-// and News hashed to the same colour, and two layers that look alike are one
-// layer as far as the eye is concerned. So the first PALETTE_SIZE boxes each
-// take a palette slot of their own, which can never collide, and only a box
-// beyond it falls back to the hash.
+// STORED, never computed here (the surfacing review's round-3 ruling). Main
+// gives a box the first palette slot no other box on the map uses when it
+// joins, saves it in the box's view sidecar, and the author can change it from
+// the swatch on its layer (main box-colours.ts). This file only remembers what
+// main said. Working it out from the box's place in the project, as this file
+// used to, recoloured every layer when a box was added above or the boxes were
+// reordered, and the Board never knew.
 //
-// Not the slots in order: the palette is a hue wheel, and neighbouring slots
-// (an orange and an ochre) are the next-worst thing to a collision. The order
-// below halves, then quarters the wheel, so the first two boxes are opposite
-// each other, the first four a quarter turn apart, and so on.
+// A box with no stored colour is one that has never been on a map that was
+// drawn, so nothing shows it as a layer; it falls back to the hash every other
+// identity colour in the app uses, which is stable by id.
 //
-// Module state, set by the renderer whenever a project result lands (the same
-// shape as views.ts `setCameFrom`): every caller has a box id to hand and
-// nothing else, and threading the order through each of them would be a
+// Module state, set by the renderer whenever a project result or a map lands
+// (the same shape as views.ts `setCameFrom`): every caller has a box id to hand
+// and nothing else, and threading the colours through each of them would be a
 // parameter none of them decides.
 // ---------------------------------------------------------------------------
 
-import { colourIndex, PALETTE_SIZE } from "../../shell/colour.js";
+import { colourIndex } from "../../shell/colour.js";
 
-let order: readonly string[] = [];
+const stored = new Map<string, number>();
 
-/** The palette slots in the order boxes take them (PALETTE_SIZE is 12). */
-const SPREAD = [0, 6, 3, 9, 1, 7, 4, 10, 2, 8, 5, 11];
+/** What main says each box's colour is. Boxes it names with no colour keep
+ *  whatever this already knew (a project result is older than a map that has
+ *  just stored one), and an answer that changes nothing reports false, so the
+ *  caller repaints only when something did change. */
+export function setBoxColours(boxes: readonly { id: string; colour?: number }[]): boolean {
+  let changed = false;
+  for (const b of boxes) {
+    if (b.colour === undefined || stored.get(b.id) === b.colour) continue;
+    stored.set(b.id, b.colour);
+    changed = true;
+  }
+  return changed;
+}
 
-/** The project's boxes, in the project's order. */
-export function setBoxOrder(boxes: readonly { id: string }[]): void {
-  order = boxes.map((b) => b.id);
+/** A different project: what the last one's boxes were is no answer here. */
+export function forgetBoxColours(): void {
+  stored.clear();
 }
 
 /** The palette index for a box, by id. */
 export function boxColourIndex(boxId: string): number {
-  const at = order.indexOf(boxId);
-  return at >= 0 && at < Math.min(PALETTE_SIZE, SPREAD.length) ? SPREAD[at]! : colourIndex(boxId);
+  return stored.get(boxId) ?? colourIndex(boxId);
 }
 
 /** The same, as a CSS colour. */
 export const boxColour = (boxId: string): string => `var(--char-${boxColourIndex(boxId)})`;
 
-/** The ring a site row leads with, in its box's colour: the pin on the map in
- *  small, so a list of sites reads as the map's own. */
+/** The ring a hand's row leads with, in its box's colour: the pin on the map in
+ *  small, so a list of hands reads as the map's own. */
 export function boxPin(boxId: string): HTMLElement {
   const ring = document.createElement("i");
   ring.className = "mapside-pin";

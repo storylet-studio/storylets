@@ -9,28 +9,33 @@
 // groups (project.ts `boxWithMap`), so the zones are offered by name like any
 // other group.
 //
-// PLACE, and why a chosen group is never offered twice. The Where row
-// (where.ts) counts three things as answering "where": the home group (the
-// hands a card names), every map, and every group a hand template chooses. Place
-// here takes the first two and leaves the third to its own option. A chosen
-// group's values are already headings when grouped by that group by name
-// ("gareth", "mira"), and repeating them inside Place would offer the same
-// grouping twice under two names. So:
+// PLACE AXES are the one rule in ops place-axis.ts (TagGroupDto.placeAxis): the
+// home group (the hands a card names), the map's zone group in a box on the
+// map, and every group a hand in the box binds. Place here takes the first two
+// and leaves the rest to their own options. Such a group's values are already
+// headings when grouped by that group by name ("gareth", "mira"), and repeating
+// them inside Place would offer the same grouping twice under two names. So:
 //   - Place is offered when the box has hands and something to place cards at
 //     them by: a card that names a hand, or a map. A conversation box, whose
 //     only "where" is `npc`, offers `npc` and no Place (mock-up screen 5b).
-//   - Under Place, a card whose only answer is a chosen group is not called
+//   - Under Place, a card whose only answer is another place axis is not called
 //     "Anywhere", which would be false: it goes under one heading per such
 //     group, "By npc", which switches the grouping to that group.
+//
+// GROUPING BY A PLACE AXIS BY NAME files a card placed at a hand under the tag
+// that hand binds in that group, when the card names none itself: a contract
+// standing at a site in the docks is a docks card, and calling it Untagged
+// (the theme park review, round 3) said the opposite of the truth. A moving
+// hand's card goes under every tag the hand can bind.
 //
 // Pure over the DTOs, no DOM, as where.ts is; views.ts draws what this decides.
 // ---------------------------------------------------------------------------
 
 import { PLACE_GROUP } from "@storylet-studio/model";
 import type { BoxDto, CardDto, DeckDto } from "../../shared/api.js";
+import { isZoneAxis } from "./where.js";
 
-/** Which page the control is on: a box's Contents leads with Deck, a deck's
- *  cards with None (they are all one deck). */
+/** Which page the control is on: a box's Contents, or one deck's cards. */
 export type GroupPage = "contents" | "deck";
 
 /** A grouping, as remembered: "deck", "none", "place", or `tag:<group id>`.
@@ -72,16 +77,30 @@ export const defaultGroup = (page: GroupPage): GroupKey => (page === "deck" ? "n
  *  at them: a card naming one, or a map (see the head of this file). */
 export function hasPlaces(box: BoxDto): boolean {
   if (box.hands.length === 0) return false;
-  if (box.tagGroups.some((g) => g.spatial === true)) return true;
+  if (box.tagGroups.some(isZoneAxis)) return true;
   return box.decks.some((d) => d.cards.some((c) => valuesIn(c, PLACE_GROUP).length > 0));
 }
 
-/** The options, in the control's order: Deck (or None), Place, then each of the
- *  box's tag groups by its own name, the project map's zone group included. */
+/**
+ * The options, in the control's order: Deck, Hand, then each of the box's tag
+ * groups by its own name, the project map's zone group included.
+ *
+ * DECK FIRST ON BOTH PAGES (the round-3 reviews). It was "Deck" on a box and
+ * "None" on a deck, and the swap made the switch read as two controls glued
+ * together. "Deck" names what the first option IS on either page, the cards as
+ * their decks hold them: deck by deck on a box's Contents, and on a deck's own
+ * page, that one deck in its own order with no heading. "None" named nothing,
+ * and "Group by: None" is a sentence nobody says. The deck page keeps its
+ * stored key, `none`, so a remembered choice carries over.
+ *
+ * "Hand", never "Place" (the round-3 ruling: one noun). Tag groups are shown by
+ * their gameId as the author typed it, case and all: the format gives a group
+ * no title, and capitalising "npc" to "Npc" would show a name nobody wrote.
+ */
 export function groupOptions(box: BoxDto, page: GroupPage): GroupOption[] {
   return [
-    page === "deck" ? { key: "none", label: "None" } : { key: "deck", label: "Deck" },
-    ...(hasPlaces(box) ? [{ key: "place", label: "Place" }] : []),
+    page === "deck" ? { key: "none", label: "Deck" } : { key: "deck", label: "Deck" },
+    ...(hasPlaces(box) ? [{ key: "place", label: "Hand" }] : []),
     ...box.tagGroups.map((g) => ({ key: `tag:${g.id}`, label: g.gameId })),
   ];
 }
@@ -116,16 +135,32 @@ export function groupEntries(box: BoxDto, entries: GroupEntry[], key: GroupKey):
   if (key === "place") return byPlace(box, entries);
   const group = box.tagGroups.find((g) => `tag:${g.id}` === key);
   if (group === undefined) return [{ key: "all", label: "", entries }];
+  const filed = new Map(entries.map((e) => [e.card.id, filedUnder(box, e.card, group.gameId)]));
   const out: CardGroup[] = group.values.map((v) => ({
-    key: `tag:${v}`, label: v, entries: entries.filter((e) => valuesIn(e.card, group.gameId).includes(v)),
+    key: `tag:${v}`, label: v, entries: entries.filter((e) => filed.get(e.card.id)!.includes(v)),
   }));
-  out.push({ key: "rest", label: "Untagged", rest: true, entries: entries.filter((e) => valuesIn(e.card, group.gameId).length === 0) });
+  out.push({ key: "rest", label: "Untagged", rest: true, entries: entries.filter((e) => filed.get(e.card.id)!.length === 0) });
   return out.filter((g) => g.entries.length > 0);
 }
 
+/** The values a card is filed under when grouping by one group: its own tags
+ *  there, or, when it names none and stands at hands, the tags those hands bind
+ *  in the group (every one a moving hand can bind). See the head of this file. */
+export function filedUnder(box: BoxDto, card: CardDto, group: string): string[] {
+  const own = valuesIn(card, group);
+  if (own.length > 0) return own;
+  const homes = valuesIn(card, PLACE_GROUP);
+  const out: string[] = [];
+  for (const h of box.hands) {
+    if (!homes.includes(h.gameId)) continue;
+    for (const v of h.moving?.[group] ?? (h.tags[group] !== undefined ? [h.tags[group]!] : [])) if (!out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
 function byPlace(box: BoxDto, entries: GroupEntry[]): CardGroup[] {
-  const spatial = box.tagGroups.filter((g) => g.spatial === true);
-  const chosen = box.tagGroups.filter((g) => g.chosen === true && g.spatial !== true);
+  const spatial = box.tagGroups.filter(isZoneAxis);
+  const chosen = box.tagGroups.filter((g) => g.placeAxis === true && !isZoneAxis(g));
   const homeless = entries.filter((e) => valuesIn(e.card, PLACE_GROUP).length === 0);
   const unzoned = homeless.filter((e) => spatial.every((g) => valuesIn(e.card, g.gameId).length === 0));
   const out: CardGroup[] = [];

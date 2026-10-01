@@ -294,7 +294,8 @@ describe("box page", () => {
     const tabs = [...host.querySelectorAll(".doc-tab")].map((t) => t.textContent);
     expect(tabs[0]).toBe("Map");
     expect(host.querySelector(".doc-tab.on")?.textContent).toBe("Map");
-    expect(host.textContent).toContain("This box's sites on the project map");
+    expect(host.textContent).toContain("This box's hands on the project map");
+    expect(host.textContent).not.toMatch(/\bsites?\b/);
     expect(mounted).toHaveBeenCalled();
     [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Open map")!.click();
     expect(openMap).toHaveBeenCalled();
@@ -666,7 +667,7 @@ describe("the topbar's project name", () => {
 // what it remembers, and that a box with nothing to group by is unchanged.
 describe("Group by", () => {
   const talk: BoxDto = {
-    ...box, id: "b_t", templates: [], tagGroups: [{ id: "g_npc", gameId: "npc", values: ["gareth", "mira"], chosen: true }],
+    ...box, id: "b_t", templates: [], tagGroups: [{ id: "g_npc", gameId: "npc", values: ["gareth", "mira"], placeAxis: true }],
     hands: [],
     decks: [{ ...deck, id: "k_t", gameId: "topics", cards: [
       { ...deck.cards[0]!, id: "c_r", title: "Rumour", tags: [{ group: "npc", values: ["gareth", "mira"] }] },
@@ -687,7 +688,7 @@ describe("Group by", () => {
     const t = talk.decks[0]!;
     renderDeckCentre(host, talk, t, [], new Set(), "cards", () => {}, stubActions({ cardGroup: () => "tag:g_npc", setCardGroup }));
     const opts = [...host.querySelectorAll<HTMLButtonElement>(".groupby .seg-opt")];
-    expect(opts.map((b) => b.textContent)).toEqual(["None", "npc"]);
+    expect(opts.map((b) => b.textContent)).toEqual(["Deck", "npc"]);
     expect(opts[1]!.getAttribute("aria-selected")).toBe("true");
     expect([...host.querySelectorAll(".gb-head .gb-name")].map((h) => h.textContent)).toEqual(["gareth", "mira", "Untagged"]);
     expect([...host.querySelectorAll(".gb-head")].pop()!.classList.contains("rest")).toBe(true);

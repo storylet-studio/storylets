@@ -142,6 +142,7 @@
       properties: [],
       purpose: "A place in the village, which is open from the start.",
       slots: 5,
+      title: "Places in the village",
     },
     {
       chooses: [
@@ -153,6 +154,7 @@
       properties: [],
       purpose: "A place beyond the village. The wilds open in act 2, so every one of these is unavailable until then.",
       slots: 5,
+      title: "Places in the wilds",
     },
   ],
 }

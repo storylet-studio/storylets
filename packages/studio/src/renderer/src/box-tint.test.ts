@@ -1,23 +1,28 @@
-// A box's colour is assigned by its place in the project, not hashed from its
-// name (box-tint.ts): Port Meridian's Contracts and News hashed alike, and two
-// layers in one colour read as one layer.
+// A box's colour is STORED (main box-colours.ts) and this module only remembers
+// it: never worked out from the box's place in the project, so reordering the
+// boxes changes nothing (the round-3 ruling).
 
 import { describe, expect, it } from "vitest";
-import { boxColour, boxColourIndex, setBoxOrder } from "./box-tint.js";
-import { colourIndex, PALETTE_SIZE } from "../../shell/colour.js";
+import { boxColour, boxColourIndex, setBoxColours } from "./box-tint.js";
+import { colourIndex } from "../../shell/colour.js";
 
 describe("box colours", () => {
-  it("gives each of the first boxes a slot of its own, spread round the wheel", () => {
-    const boxes = Array.from({ length: PALETTE_SIZE }, (_, i) => ({ id: `b_${i}` }));
-    setBoxOrder(boxes);
-    expect(new Set(boxes.map((b) => boxColourIndex(b.id))).size).toBe(PALETTE_SIZE);
-    expect(boxColour("b_0")).toBe("var(--char-0)");
-    expect(boxColour("b_1")).toBe("var(--char-6)");   // the far side, not the next hue
+  it("uses the colour main stored, whatever order the boxes come in", () => {
+    setBoxColours([{ id: "b_a", colour: 6 }, { id: "b_b", colour: 0 }]);
+    expect(boxColour("b_a")).toBe("var(--char-6)");
+    setBoxColours([{ id: "b_b", colour: 0 }, { id: "b_a", colour: 6 }]);
+    expect(boxColourIndex("b_a")).toBe(6);
+    expect(boxColourIndex("b_b")).toBe(0);
   });
 
-  it("falls back to the hash beyond the palette, and for a box it has not been told about", () => {
-    setBoxOrder(Array.from({ length: PALETTE_SIZE + 1 }, (_, i) => ({ id: `b_${i}` })));
-    expect(boxColourIndex(`b_${PALETTE_SIZE}`)).toBe(colourIndex(`b_${PALETTE_SIZE}`));
+  it("keeps a known colour when told about a box with none, and says when anything changed", () => {
+    expect(setBoxColours([{ id: "b_c", colour: 3 }])).toBe(true);
+    expect(setBoxColours([{ id: "b_c" }])).toBe(false);
+    expect(setBoxColours([{ id: "b_c", colour: 3 }])).toBe(false);
+    expect(boxColourIndex("b_c")).toBe(3);
+  });
+
+  it("falls back to the hash for a box that has never had one", () => {
     expect(boxColourIndex("b_unknown")).toBe(colourIndex("b_unknown"));
   });
 });

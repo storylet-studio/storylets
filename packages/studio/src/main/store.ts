@@ -41,9 +41,17 @@ interface StudioSlice {
   /** The Coverage window's card table order ("least" reached first, or "deck"). */
   coverageOrder: CoverageOrder;
   navExpanded?: string[];
-  /** Per project map, keyed by its zone group id (see StudioState). */
+  /** How each project's map is looked at, PER PROJECT (keyed by path, as
+   *  `boardViews` is), then by its zone group id (see StudioState.mapLayers). */
+  projectMapLayers?: Record<string, Record<string, MapLayerPrefs>>;
+  /** Group by on the card views, PER PROJECT (keyed by path), then by box id
+   *  (see StudioState.cardGroups). */
+  projectCardGroups?: Record<string, Record<string, CardGroupPrefs>>;
+  /** The first shape of the two records above, keyed by group or box id alone.
+   *  Ids are not unique across projects (everyone who starts from the Village
+   *  has its `d_0001` and `b_0000`), so two projects shared one setting. Read
+   *  once, folded into the last project's entry, and deleted (`migrateViewPrefs`). */
   mapLayers?: Record<string, MapLayerPrefs>;
-  /** Group by on the card views, per box id (see StudioState). */
   cardGroups?: Record<string, CardGroupPrefs>;
   canvasCameras?: Record<string, { x: number; y: number; scale: number }>;
   /** The keys a pack exchange was paired with, by address and then by ROLE.
@@ -228,6 +236,30 @@ export class StudioStore {
       defaults: DEFAULTS,
       panes: { nav: true, inspector: false },
     });
+    this.migrateViewPrefs();
+  }
+
+  /**
+   * Fold the id-keyed layer and Group by records into per-project ones, once.
+   * Which project an old entry was made in cannot be told, so they go to the
+   * last project open, which is the one most likely to have made them (they
+   * shipped on 2026-10-01, a day before this); with no last project they are
+   * dropped, which costs a person a remembered eye or grouping and nothing else.
+   */
+  private migrateViewPrefs(): void {
+    const s = this.store.get();
+    const { mapLayers, cardGroups } = s.app;
+    if (mapLayers === undefined && cardGroups === undefined) return;
+    const last = s.lastProject;
+    const into = <T>(all: Record<string, Record<string, T>> | undefined, old: Record<string, T> | undefined): Record<string, Record<string, T>> | undefined =>
+      (last === undefined || old === undefined || Object.keys(old).length === 0 ? all : { ...all, [last]: { ...old, ...all?.[last] } });
+    const projectMapLayers = into(s.app.projectMapLayers, mapLayers);
+    const projectCardGroups = into(s.app.projectCardGroups, cardGroups);
+    this.store.patchApp({
+      mapLayers: undefined, cardGroups: undefined,
+      ...(projectMapLayers !== undefined ? { projectMapLayers } : {}),
+      ...(projectCardGroups !== undefined ? { projectCardGroups } : {}),
+    });
   }
 
   /**
@@ -251,11 +283,17 @@ export class StudioStore {
     // `servers` is stripped with `boardViews`, and for a stronger reason than
     // shape: this object crosses to the renderer, and a key has no business
     // over there. What the renderer is told about a server is its status line.
-    const { boardViews, servers, ...app } = s.app;
-    void servers;
+    const { boardViews, servers, projectMapLayers, projectCardGroups, mapLayers: _layers, cardGroups: _groups, ...app } = s.app;
+    void servers; void _layers; void _groups;
     const boardPlace = s.lastProject !== undefined ? boardViews[s.lastProject] : undefined;
+    // The layers and Group by, likewise for the CURRENT project only, in the
+    // id-keyed shape the renderer has always been sent.
+    const mapLayers = s.lastProject !== undefined ? projectMapLayers?.[s.lastProject] : undefined;
+    const cardGroups = s.lastProject !== undefined ? projectCardGroups?.[s.lastProject] : undefined;
     return {
       ...app,
+      ...(mapLayers !== undefined ? { mapLayers } : {}),
+      ...(cardGroups !== undefined ? { cardGroups } : {}),
       boardView: boardPlace?.view ?? "map",
       ...(boardPlace?.box !== undefined ? { boardBox: boardPlace.box } : {}),
       recents: s.recents,
@@ -308,13 +346,19 @@ export class StudioStore {
   /** One project map's layers, for this person. Whole, not merged: the
    *  prefs are one small record the renderer already holds. */
   setMapLayers(groupId: string, prefs: MapLayerPrefs): void {
-    const all = this.store.get().app.mapLayers ?? {};
-    this.store.patchApp({ mapLayers: { ...all, [groupId]: prefs } });
+    const s = this.store.get();
+    if (s.lastProject === undefined) return;   // no project, nothing to key by
+    const all = s.app.projectMapLayers ?? {};
+    this.store.patchApp({ projectMapLayers: { ...all, [s.lastProject]: { ...all[s.lastProject], [groupId]: prefs } } });
   }
-  /** One box's Group by on one of its card views, for this person. */
+  /** One box's Group by on one of its card views, for this person, in the
+   *  current project. */
   setCardGroup(boxId: string, page: "contents" | "deck", key: string): void {
-    const all = this.store.get().app.cardGroups ?? {};
-    this.store.patchApp({ cardGroups: { ...all, [boxId]: { ...all[boxId], [page]: key } } });
+    const s = this.store.get();
+    if (s.lastProject === undefined) return;
+    const all = s.app.projectCardGroups ?? {};
+    const mine = all[s.lastProject] ?? {};
+    this.store.patchApp({ projectCardGroups: { ...all, [s.lastProject]: { ...mine, [boxId]: { ...mine[boxId], [page]: key } } } });
   }
   setCanvasCameras(cameras: Record<string, { x: number; y: number; scale: number }>): void {
     this.store.patchApp({ canvasCameras: cameras });
@@ -326,12 +370,24 @@ export class StudioStore {
   touchProject(path: string, name?: string): void { this.store.touchProject(path, name); this.pruneBoardViews(); }
   forgetProject(path: string): void { this.store.forgetProject(path); this.pruneBoardViews(); }
   /** Board view choices follow recents, the places rule: prune whenever the
-   *  recents list changes, so forgetting a project forgets its choice too. */
+   *  recents list changes, so forgetting a project forgets its choice too. The
+   *  map's layers and Group by are per project too, and go the same way. */
   private pruneBoardViews(): void {
     const s = this.store.get();
-    const kept = Object.fromEntries(Object.entries(s.app.boardViews)
-      .filter(([path]) => s.recents.some((r) => r.path === path)));
-    if (Object.keys(kept).length !== Object.keys(s.app.boardViews).length) this.store.patchApp({ boardViews: kept });
+    const keep = <T>(all: Record<string, T>): Record<string, T> =>
+      Object.fromEntries(Object.entries(all).filter(([path]) => s.recents.some((r) => r.path === path)));
+    const patch: Partial<StudioSlice> = {};
+    const views = keep(s.app.boardViews);
+    if (Object.keys(views).length !== Object.keys(s.app.boardViews).length) patch.boardViews = views;
+    if (s.app.projectMapLayers !== undefined) {
+      const layers = keep(s.app.projectMapLayers);
+      if (Object.keys(layers).length !== Object.keys(s.app.projectMapLayers).length) patch.projectMapLayers = layers;
+    }
+    if (s.app.projectCardGroups !== undefined) {
+      const groups = keep(s.app.projectCardGroups);
+      if (Object.keys(groups).length !== Object.keys(s.app.projectCardGroups).length) patch.projectCardGroups = groups;
+    }
+    if (Object.keys(patch).length > 0) this.store.patchApp(patch);
   }
   clearLastProject(): void { this.store.clearLastProject(); }
   setLastPlace(place: LastPlace): void { this.store.setPlace(place); }

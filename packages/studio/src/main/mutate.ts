@@ -8,13 +8,13 @@
 
 import { basename, join } from "node:path";
 import { canonicalStringify, parseSource, worldDeclarations } from "@storylet-studio/compiler";
-import type { SourceBox, SourceDeck } from "@storylet-studio/compiler";
+import type { SourceBox, SourceDeck, SourceProject } from "@storylet-studio/compiler";
 import {
   analyseInfluence, ASSETS_DIR, contractNotes, freeAssetName, imageSize, isSafeAssetName, layoutByDependency, mapSites, newId,
   planCanvasFurniture, planCardPositions, planComments, planForgetSites, planMapSites, proposeCoverage, runNewBox,
-  assetPath, boxFolderWrites, placeTiers, projectMapPath,
+  assetPath, bindingsOfHand, boxColourOf, boxFolderWrites, mapPath, movesIn, placeTiers, projectMapPath, tagsOfHand,
 } from "@storylet-studio/ops";
-import type { CanvasRef, CardPlacement, NotesOwner, PlaceTiers } from "@storylet-studio/ops";
+import type { CanvasRef, CardPlacement, NeverHere, NotesOwner, PlaceTiers } from "@storylet-studio/ops";
 import { gameWorldWrite, otherToolsCatalogue, withGameScopes } from "./game-scopes.js";
 
 /** A pin's new home on the map. Where it is; which zone that turns out to be is
@@ -86,7 +86,7 @@ function bindSitesToZones(
 import {
   DECK_SCHEMA, PLACE_GROUP, PROJECTMAP_SCHEMA, SHARD_EXTENSIONS, backgroundsOf, bindHand, droppedRect, effectiveGameId, freeGameId, freeTitle, isHoleRef, isValidGameId, gameIdify,
   handBinding, isSpatial, polygonOf, restack, unbindHand, withBackgrounds, withPolygon, withSpatialGroup, withZ,
-  framesOf, stacked, zOf, zoneAt,
+  framesOf, groupsOfBox, stacked, zOf, zoneAt,
 } from "@storylet-studio/model";
 import type {
   BoxShard, CoverageConfig, CoverageDriver, Hand, HandsShard, HandTemplate, Polygon, ProjectMapShard, ProjectShard, PropertyDecl,
@@ -99,12 +99,13 @@ import { commentsOf } from "@storylet-studio/model";
 import type { CanvasFurniture, Card, Comment, CommentMark, DeckShard, Outcome, RedrawPolicy, ScalarValue } from "@storylet-studio/model";
 import { MAP_CANVAS, PROJECT_MAP_ASSETS, PROJECT_MAP_CANVAS_ID, assetUrl } from "../shared/api.js";
 import type { BindingDto, BoxEdit, BoxKit, CardEdit, ConditionProperty, CoverageDriverDto, DeckEdit, HandCardRef, HandCardsDto, HandDetail, HandEdit,
-  MapBackgroundDto, MapZoneBoxDto, MapZoneDetailDto, MapZoneDto, MapZonePropertyDto, ProjectMapLayerDto, ProjectMapSiteDto, ProjectMapViewDto, ProjectSettingsDto, PropertyDeclDto, TagGroupDetail, TagGroupEdit, TemplateDetail, TemplateEdit } from "../shared/api.js";
+  MapBackgroundDto, MapZoneBoxDto, MapZoneDetailDto, MapZoneDto, MapZonePropertyDto, LeaveRefusalDto, ProjectMapLayerDto, ProjectMapSiteDto, ProjectMapViewDto, ProjectSettingsDto, PropertyDeclDto, TagGroupDetail, TagGroupEdit, TemplateDetail, TemplateEdit } from "../shared/api.js";
 import type { ProjectSession } from "./project.js";
-import { boxWithMap, byDisplay, toDto } from "./project.js";
+import { axisBox, axisMap, boxWithMap, byDisplay, holeDecls, toDto } from "./project.js";
 import { validate } from "./project.js";
 import type { OpenResult } from "../shared/api.js";
 import { openResult } from "./project.js";
+import { colourWrite, joiningColour, missingColours } from "./box-colours.js";
 
 interface Located {
   box: SourceBox;
@@ -321,6 +322,32 @@ function reload(session: ProjectSession): OpenResult {
   return result;
 }
 
+/**
+ * Store a colour for every box on the map that has none yet (box-colours.ts),
+ * the first time the map is drawn. Not an undo step of its own: it is folded
+ * into the author's last one (History.fold), so the next Undo undoes what they
+ * did rather than a colour they never chose. The colours are in memory either
+ * way, so a project the far end will not let us write still draws them.
+ */
+export function ensureBoxColours(session: ProjectSession): void {
+  const writes = missingColours(session);
+  if (writes.length === 0) return;
+  if (refuseWrite(readRemote(session.loaded.dir)?.role, writes.map((w) => w.path)) !== undefined) return;
+  const before = captureBefore(writes.map((w) => w.path));
+  if (!applyStates(writes)) return;
+  session.history.fold(before, writes);
+}
+
+/** The author picked a colour for a box's layer: stored, and undoable. */
+export function setBoxColour(session: ProjectSession, boxId: string, colour: number): OpenResult | { error: string } {
+  const box = locateBox(session, boxId);
+  if (!box) return { error: `unknown box (id ${boxId})` };
+  if (!Number.isInteger(colour) || colour < 0 || colour > 11) return { error: `not a palette colour (${colour})` };
+  const write = colourWrite(session, box, colour);
+  if (write === undefined) return reload(session);
+  return commit(session, "Change the layer's colour", `struct:${structCounter++}`, [write]);
+}
+
 const deckFileState = (session: ProjectSession, deck: SourceDeck, content: string | null): FileState =>
   ({ path: join(session.loaded.dir, deck.path), content });
 
@@ -390,11 +417,42 @@ export function createCard(session: ProjectSession, deckId: string, place?: stri
   // real title the author types (never a stuck "new-card"). Dedupe the
   // placeholder title so freshly-made cards start valid and unique.
   const card = newCard(session);
-  if (place !== undefined) card.tags = { [PLACE_GROUP]: [place] };
+  if (place !== undefined) card.tags = tagsToComeUpAt(session, found.box, found.box.hands.hands.find((h) => h.id === place)!);
   found.deck.shard.cards.push(card);
   const result = commit(session, "New card", `struct:${structCounter++}`,
     [deckFileState(session, found.deck, deckContent(found.deck))]);
   return "error" in result ? result : { result, cardId: card.id };
+}
+
+/**
+ * The tags that make a new card come up at one hand, by that hand's own binding
+ * rule (the antagonist review, round 3, 1.4): what "+ New card here" writes.
+ *
+ * A hand on the map (pinned, or standing in a zone) is a place, and a card for
+ * it names it: `place`.
+ * A hand that is FOR something it binds (the conversation kit's "Talking to
+ * Gareth" chooses `npc: gareth`; a standalone hand's rule binds `area: docks`)
+ * takes that group's tag instead, which is the kit's own convention: the topic
+ * joins Gareth's conversations wherever they are dealt, and Group by npc files
+ * it under Gareth rather than under Untagged. A hand with neither, or one whose
+ * only binding is filled from a property, is named by its place, as before.
+ */
+function tagsToComeUpAt(session: ProjectSession, box: SourceBox, hand: Hand<string>): Record<string, string[]> {
+  const map = box.box.box.usesMap === true ? session.loaded.source!.map : undefined;
+  if (map !== undefined && (mapSites(box)[hand.id] !== undefined || bindingsOfHand(axisBox(box), hand).has(map.group.id))) {
+    return { [PLACE_GROUP]: [hand.id] };
+  }
+  // Its own bindings (an instance's chosen, a standalone hand's rule), not a
+  // template's fixed ones: those are every instance's alike, and leave a card
+  // that omits them free to come up at all of them.
+  const own = hand.template !== undefined ? hand.chosen : hand.rule?.bindings;
+  const groups = groupsOfBox(axisMap(session.loaded.source!), { tagGroups: box.tags.groups, ...(box.box.box.usesMap === true ? { usesMap: true as const } : {}) });
+  const tags: Record<string, string[]> = {};
+  for (const [group, tag] of Object.entries(own ?? {})) {
+    if (group === PLACE_GROUP || isHoleRef(tag)) continue;
+    if (groups.some((g) => g.id === group && g.tags.some((t) => t.id === tag))) tags[group] = [tag];
+  }
+  return Object.keys(tags).length > 0 ? tags : { [PLACE_GROUP]: [hand.id] };
 }
 
 export function duplicateCard(session: ProjectSession, deckId: string, cardId: string): { result: OpenResult; cardId: string } | { error: string } {
@@ -1168,6 +1226,8 @@ export function templateDetail(session: ProjectSession, boxId: string, templateI
   if (!box || !template) return null;
   return {
     id: template.id, gameId: effectiveGameId(template),
+    ...(!blank(template.gameId) ? { gameIdPinned: template.gameId } : {}),
+    ...(template.title !== undefined ? { title: template.title } : {}),
     ...(template.purpose !== undefined ? { purpose: template.purpose } : {}),
     bindings: bindingRows(box, template.bindings, template.chooses),
     ...(!blank(template.condition) ? { condition: template.condition } : {}),
@@ -1183,6 +1243,7 @@ export function saveTemplate(session: ProjectSession, boxId: string, templateId:
   const template = box?.hands.templates.find((t) => t.id === templateId);
   if (!box || !template) return { error: `unknown hand template (id ${templateId})` };
   if (edit.gameId !== undefined) { const g = gameIdify(edit.gameId); if (g) template.gameId = g; else delete template.gameId; }
+  if (edit.title !== undefined) { if (edit.title.trim()) template.title = edit.title; else delete template.title; }
   if (edit.purpose !== undefined) { if (edit.purpose.trim()) template.purpose = edit.purpose; else delete template.purpose; }
   if (edit.condition !== undefined) { if (blank(edit.condition)) delete template.condition; else template.condition = edit.condition; }
   if (edit.slots !== undefined) template.slots = edit.slots === "unbounded" ? "unbounded" : (Number.isInteger(Number(edit.slots)) && edit.slots.trim() ? Number(edit.slots) : "unbounded");
@@ -1373,14 +1434,43 @@ export function handCards(session: ProjectSession, boxId: string, handId: string
   const { cards, deckOf } = boxCards(box);
   const tiers = tiersAt(session, box, hand, cards);
   const ref = (card: string): HandCardRef => ({ deck: deckOf.get(card)!, card });
-  const zoneName = (id: string): string => {
-    const tag = source.map?.group.tags.find((t) => t.id === id);
+  const groups = groupsOfBox(axisMap(source), { tagGroups: box.tags.groups, ...(box.box.box.usesMap === true ? { usesMap: true as const } : {}) });
+  const groupOf = (id: string): TagGroup | undefined => groups.find((g) => g.id === id);
+  const groupName = (id: string): string => { const g = groupOf(id); return g ? effectiveGameId(g) : id; };
+  const tagName = (group: string, id: string): string => {
+    const tag = groupOf(group)?.tags.find((t) => t.id === id);
     return tag ? effectiveGameId(tag) : id;
+  };
+  const zoneId = source.map !== undefined && box.box.box.usesMap === true ? source.map.group.id : undefined;
+  const handName = hand.title ?? effectiveGameId(hand);
+  const cardsById = new Map(cards.map((c) => [c.id, c]));
+  // Why a card placed here can never be dealt here, in the Where row's terms.
+  const why = (n: NeverHere): string => {
+    const card = cardsById.get(n.card);
+    const group = groupName(n.group);
+    if (n.bound === undefined && n.group === "") return `${handName} can never be where this card is filed.`;
+    if (n.bound === undefined) {
+      const tags = card?.tags?.[n.group];
+      return tags === undefined || tags.length === 0
+        ? `${group} is required, and this card has no ${group} tag.`
+        : `${handName} can never be in ${tags.map((t) => tagName(n.group, t)).join(" or ")}.`;
+    }
+    const tags = (card?.tags?.[n.group] ?? []).map((t) => tagName(n.group, t));
+    return n.group === zoneId
+      ? `${handName} is in ${tagName(n.group, n.bound)}, but this card is filed to ${tags.join(" or ")}.`
+      : `${handName} is for ${group}: ${tagName(n.group, n.bound)}, but this card is tagged ${group}: ${tags.join(" or ")}.`;
   };
   return {
     only: tiers.only.map(ref),
-    zones: tiers.zones.map((z) => ({ zone: zoneName(z.zone), cards: z.cards.map(ref) })),
+    never: tiers.never.map((n) => ({ ...ref(n.card), why: why(n) })),
+    tiers: tiers.tiers.map((t) => ({
+      group: groupName(t.group), tag: tagName(t.group, t.tag), ...(t.group === zoneId ? { zone: true as const } : {}), cards: t.cards.map(ref),
+    })),
     anywhere: tiers.anywhere.map(ref),
+    bound: tiers.bound.map(groupName),
+    gated: Object.fromEntries(Object.entries(tiers.gated).map(([card, gates]) => [card,
+      gates.map((g) => ({ group: groupName(g.group), tags: g.tags.map((t) => tagName(g.group, t)) }))])),
+    ...([...bindingsOfHand(axisBox(box), hand).values()].some(isHoleRef) ? { moving: true as const } : {}),
   };
 }
 
@@ -1397,19 +1487,7 @@ function boxCards(box: SourceBox): { cards: Card<string>[]; deckOf: Map<string, 
  *  reads them: the one place the editor asks what could come up at a hand. */
 function tiersAt(session: ProjectSession, box: SourceBox, hand: Hand<string>, cards: Card<string>[]): PlaceTiers {
   const source = session.loaded.source!;
-  const template = hand.template !== undefined ? box.hands.templates.find((t) => t.id === hand.template) : undefined;
-  return placeTiers(
-    source.map !== undefined ? { map: { group: source.map.group } } : {},
-    {
-      tagGroups: box.tags.groups,
-      ...(box.box.box.usesMap === true ? { usesMap: true as const } : {}),
-      handTemplates: box.hands.templates,
-      hands: box.hands.hands,
-    },
-    hand, cards,
-    // What a roaming hand's hole may be filled from, as the compiler reads it.
-    { hand: template?.properties ?? hand.properties ?? [], story: source.project.story?.properties ?? [], world: worldDeclarations(source) },
-  );
+  return placeTiers(axisMap(source), axisBox(box), hand, cards, holeDecls(source, box, hand));
 }
 
 // --- the project map page ----------------------------------------------------------
@@ -1427,6 +1505,7 @@ export function projectMapView(session: ProjectSession | undefined): ProjectMapV
     furniture: { frames: [] }, properties: [],
   };
   if (!source || source.map === undefined) return empty;
+  ensureBoxColours(session!);
   const group = source.map.group;
   const zones: MapZoneDto[] = [];
   const undrawn: { id: string; gameId: string }[] = [];
@@ -1468,13 +1547,19 @@ export function projectMapView(session: ProjectSession | undefined): ProjectMapV
           id: hand.id, gameId: effectiveGameId(hand), ...title, x: at.x, y: at.y,
           ...(binding.kind !== "none" && binding.tag !== undefined ? { zone: binding.tag } : {}),
           rebinds: binding.editable,
-          ...(binding.kind === "fixed" && template ? { fixedBy: effectiveGameId(template) } : {}),
+          // The template by its TITLE, as every refusal names a thing.
+          ...(binding.kind === "fixed" && template ? { fixedBy: template.title ?? effectiveGameId(template) } : {}),
+          // The designer's own word for what this hand is ("Places in the
+          // village"): its template's title, under its own on the panel.
+          ...(template ? { kind: template.title ?? effectiveGameId(template) } : {}),
           only: tiersAt(session!, box, hand, cards).only.length,
         });
       }
       return {
         box: box.box.box.id, gameId: effectiveGameId(box.box.box),
         ...(box.box.box.title !== undefined ? { title: box.box.box.title } : {}),
+        // Stored by ensureBoxColours above, so every layer has one.
+        colour: boxColourOf(box) ?? 0,
         sites, unplaced,
       };
     });
@@ -1509,15 +1594,16 @@ export function mapZoneDetail(session: ProjectSession, tagId: string): MapZoneDe
   for (const { b: box } of byDisplay(source.boxes.map((b, i) => ({ b, order: b.box.box.order ?? i })))) {
     if (box.box.box.usesMap !== true) continue;
     const { cards, deckOf } = boxCards(box);
+    // A hand bound to this zone, and a MOVING hand (its zone comes from a
+    // property) at every zone that property can name: a performer who walks
+    // the docks and the market is in both zones' lists, marked as moving, and
+    // in neither before this (the antagonist review, round 3, 1.7).
     const sites = byDisplay(box.hands.hands)
-      .filter((hand) => {
-        const template = box.hands.templates.find((t) => t.id === hand.template);
-        const binding = handBinding(hand, template, group.id);
-        return binding.kind !== "none" && binding.tag === tagId;
-      })
+      .filter((hand) => tagsOfHand(axisBox(box), hand, group, holeDecls(source, box, hand)).includes(tagId))
       .map((hand) => ({
         id: hand.id, gameId: effectiveGameId(hand), ...(hand.title !== undefined ? { title: hand.title } : {}),
         only: tiersAt(session, box, hand, cards).only.length,
+        ...(movesIn(axisBox(box), hand, group.id) ? { moving: true as const } : {}),
       }));
     // Filed to the zone and nowhere narrower: a card with a place is a card for
     // that hand, and is that site's, not the zone's.
@@ -1527,6 +1613,7 @@ export function mapZoneDetail(session: ProjectSession, tagId: string): MapZoneDe
     if (sites.length === 0 && filed.length === 0) continue;
     byBox.push({
       box: box.box.box.id, gameId: effectiveGameId(box.box.box),
+      ...(boxColourOf(box) !== undefined ? { colour: boxColourOf(box)! } : {}),
       ...(box.box.box.title !== undefined ? { title: box.box.box.title } : {}),
       sites, cards: filed,
     });
@@ -1611,7 +1698,7 @@ export function createHand(
     return { error: "this box is not on the project map" };
   }
   const taken = new Set(box.hands.hands.map((h) => effectiveGameId(h)));
-  const title = freeTitle(site !== undefined ? "New site" : "New hand", taken);
+  const title = freeTitle("New hand", taken);
   // Standalone by default (an empty rule pulls the whole stock); pick a
   // template in the editor to instance one instead.
   const hand: Hand<string> = { id: newId("h"), title, rule: { slots: "unbounded" } };
@@ -1626,7 +1713,7 @@ export function createHand(
   // here cannot come to different conclusions about the same spot.
   const at = { x: Math.round(site.x), y: Math.round(site.y) };
   bindSitesToZones(boxWithMap(session.loaded.source, box), map!.group.id, { [hand.id]: at });
-  const result = commit(session, "New site", `map:${structCounter++}`, [
+  const result = commit(session, "New hand on the map", `map:${structCounter++}`, [
     { path: handsFile(session, box), content: canonicalStringify(box.hands) },
     ...planMapSites(session.loaded.dir, box, [{ id: hand.id, ...at }]).map((w) => ({ path: w.path, content: w.content })),
   ]);
@@ -1646,55 +1733,183 @@ export function createHand(
  * the map with sites in its map shard is only a warning (W2) about positions
  * nothing reads, and one undo puts both back.
  */
-export function useProjectMap(session: ProjectSession, boxId: string, on: boolean): OpenResult | { error: string } {
+export function useProjectMap(
+  session: ProjectSession, boxId: string, on: boolean, confirmed = false,
+): OpenResult | { error: string } | { confirm: { title: string; body: string } } | { refused: LeaveRefusalDto } {
   const box = locateBox(session, boxId);
   if (!box) return { error: `unknown box (id ${boxId})` };
-  const map = session.loaded.source!.map;
+  const source = session.loaded.source!;
+  const map = source.map;
   if (map === undefined) return { error: "this project has no map yet" };
   const name = box.box.box.title ?? effectiveGameId(box.box.box);
   const boxShard: FileState = { path: boxFile(session, box), content: "" };
   if (on) {
     if (box.box.box.usesMap === true) return reload(session);
+    // Its colour comes with it, in the same step: the first one no other box
+    // on the map uses, or the one it had if that is still free (box-colours.ts).
+    const colour = joiningColour(session, box);
     box.box.box.usesMap = true;
+    const coloured = colourWrite(session, box, colour);
     return commit(session, "Use the project map", `struct:${structCounter++}`,
-      [{ ...boxShard, content: canonicalStringify(box.box) }]);
+      [{ ...boxShard, content: canonicalStringify(box.box) }, ...(coloured ? [coloured] : [])]);
   }
   if (box.box.box.usesMap !== true) return reload(session);
-  const why = mapReferences(box, map.group);
-  if (why !== undefined) return { error: `${name} can't leave the map while ${why}. Change ${why.startsWith("its cards") ? "them" : "it"} first.` };
+  const why = mapReferences(box, map.group) ?? mapExpressionReference(source, box, map.group);
+  if (why !== undefined) {
+    // Named by titles, quoted, and with the way to the thing to change: a
+    // refusal that only says "change it first" leaves the author hunting
+    // (the round-3 reviews).
+    return {
+      refused: {
+        title: `"${name}" is still using the map`,
+        body: `It can't leave the project map while ${why.said}. Change that first, then try again.`,
+        ...(why.open !== undefined ? { open: why.open } : {}),
+      },
+    };
+  }
+  // The pins go with it (a box off the map has nowhere to draw them), so the
+  // author is asked first, saying how many: one undo puts them back, but a menu
+  // item that silently deleted a layout was the antagonist review's 1.3.
+  const pinned = box.hands.hands.filter((h) => mapSites(box)[h.id] !== undefined).length;
+  if (pinned > 0 && !confirmed) {
+    return {
+      confirm: {
+        title: `Take "${name}" off the project map?`,
+        body: `Its ${pinned === 1 ? "hand's position" : `${pinned} hands' positions`} on the map will be deleted, and the game can no longer ask this box about a zone. You can undo this.`,
+      },
+    };
+  }
   delete box.box.box.usesMap;
   const forget = planForgetSites(session.loaded.dir, box, box.hands.hands.map((h) => h.id));
+  // With every pin gone, the box's map shard holds nothing at all, so it goes
+  // in the same step rather than staying as an empty husk in the folder. Not
+  // when it still carries frames from before the project map, which are the
+  // upgrade's to move and not this step's to throw away.
+  const shardPath = mapPath(session.loaded.dir, box);
+  const legacyFrames = (box.map?.map as { frames?: unknown[] } | undefined)?.frames ?? [];
+  const husk = legacyFrames.length === 0 && (existsSync(shardPath) || forget.some((w) => w.path === shardPath));
   return commit(session, "Leave the project map", `struct:${structCounter++}`, [
     { ...boxShard, content: canonicalStringify(box.box) },
-    ...forget.map((w) => ({ path: w.path, content: w.content })),
+    ...forget.filter((w) => !husk || w.path !== shardPath).map((w) => ({ path: w.path, content: w.content })),
+    ...(husk ? [{ path: shardPath, content: null }] : []),
   ]);
 }
 
-/** What in a box still names the project map, as the end of a sentence
- *  ("its hand The Inn is in the zone village"), or undefined when nothing does. */
-function mapReferences(box: SourceBox, group: TagGroup): string | undefined {
+/** What still ties a box to the map: the end of a sentence ("its hand "The
+ *  Inn" is in the zone "village""), and the thing to open to change it. */
+interface MapTie { said: string; open?: LeaveRefusalDto["open"] }
+
+/** A name as a refusal quotes it: the title, else the address. */
+const quotedName = (x: { title?: string; gameId?: string; id: string }): string => `"${x.title ?? effectiveGameId(x)}"`;
+
+/** What in a box still names the project map (see `MapTie`), or undefined when
+ *  nothing does. */
+function mapReferences(box: SourceBox, group: TagGroup): MapTie | undefined {
+  const boxId = box.box.box.id;
   const zone = (id: string): string => {
     const tag = group.tags.find((t) => t.id === id);
-    return tag ? effectiveGameId(tag) : id;
+    return `"${tag ? effectiveGameId(tag) : id}"`;
   };
   for (const hand of box.hands.hands) {
     const tag = hand.chosen?.[group.id] ?? hand.rule?.bindings?.[group.id];
     if (tag !== undefined) {
       const at = isHoleRef(tag) ? "takes its zone from a property" : `is in the zone ${zone(tag)}`;
-      return `its hand ${hand.title ?? effectiveGameId(hand)} ${at}`;
+      return { said: `its hand ${quotedName(hand)} ${at}`, open: { kind: "hand", box: boxId, id: hand.id, label: hand.title ?? effectiveGameId(hand) } };
     }
   }
   for (const template of box.hands.templates) {
     const fixed = template.bindings?.[group.id];
     if (fixed !== undefined || (template.chooses ?? []).includes(group.id)) {
-      return `its hand template ${effectiveGameId(template)} ${fixed !== undefined ? `binds the zone ${zone(fixed)}` : "chooses a zone"}`;
+      return {
+        said: `its hand template ${quotedName(template)} ${fixed !== undefined ? `binds the zone ${zone(fixed)}` : "chooses a zone"}`,
+        open: { kind: "template", box: boxId, id: template.id, label: template.title ?? effectiveGameId(template) },
+      };
     }
   }
-  const filed = box.decks.flatMap((d) => d.shard.cards).filter((c) => (c.tags?.[group.id] ?? []).length > 0);
+  const filed = box.decks.flatMap((d) => d.shard.cards.map((card) => ({ card, deck: d.shard.deck.id })))
+    .filter(({ card }) => (card.tags?.[group.id] ?? []).length > 0);
   if (filed.length > 0) {
-    return filed.length === 1
-      ? `its cards are filed to a zone (${filed[0]!.title ?? effectiveGameId(filed[0]!)})`
-      : `its cards are filed to zones (${filed.length} of them, ${filed[0]!.title ?? effectiveGameId(filed[0]!)} first)`;
+    const first = filed[0]!;
+    return {
+      said: filed.length === 1
+        ? `its card ${quotedName(first.card)} is filed to a zone`
+        : `${filed.length} of its cards are filed to zones, ${quotedName(first.card)} first`,
+      open: { kind: "card", box: boxId, deck: first.deck, id: first.card.id, label: first.card.title ?? effectiveGameId(first.card) },
+    };
+  }
+  return undefined;
+}
+
+/**
+ * An EXPRESSION in a box that reads the project map (see `MapTie`: "its card
+ * \"Cold run\" reads @hand.patrolled in its When"), or undefined.
+ *
+ * In a box on the map the @hand bag carries the zone group and its properties
+ * (design/project-map-contract.md 4.1), and the play log is kept by zone; off
+ * the map those names resolve to nothing, and the box would stop compiling
+ * somewhere the guard promised it would not (the antagonist review, round 3,
+ * 1.3). So every condition, priority and change of the box is read for:
+ *   - `@hand.<zone property>` or `@hand.<zone group>`, and the bare `@name`
+ *     form of either when nothing else in scope declares that name;
+ *   - `count_played_in("<zone group>", ...)` and `turns_since_played_in(...)`;
+ *   - a zone's value address, `value.<zone>.`.
+ */
+function mapExpressionReference(source: SourceProject, box: SourceBox, group: TagGroup): MapTie | undefined {
+  const boxId = box.box.box.id;
+  const groupName = effectiveGameId(group);
+  const zoneProps = new Set([...(group.properties ?? []), ...group.tags.flatMap((t) => t.properties ?? [])].map((p) => p.name));
+  const handNames = new Set([...zoneProps, groupName]);
+  // Declared elsewhere, so a bare `@name` resolves to that instead.
+  const elsewhere = new Set([
+    ...(source.project.story?.properties ?? []), ...worldDeclarations(source), ...(box.box.box.properties ?? []),
+    ...box.decks.flatMap((d) => d.shard.deck.properties ?? []),
+    ...box.hands.templates.flatMap((t) => t.properties ?? []), ...box.hands.hands.flatMap((h) => h.properties ?? []),
+  ].map((p) => p.name));
+  const esc = (x: string): string => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const zones = group.tags.map((t) => effectiveGameId(t));
+  const tests: { re: RegExp; said: (m: RegExpExecArray) => string }[] = [
+    { re: /@hand\.([A-Za-z_][A-Za-z0-9_-]*)/g, said: (m) => (handNames.has(m[1]!) ? `@hand.${m[1]}` : "") },
+    { re: /@([A-Za-z_][A-Za-z0-9_-]*)(?![.\w])/g, said: (m) => (handNames.has(m[1]!) && !elsewhere.has(m[1]!) ? `@${m[1]}` : "") },
+    { re: new RegExp(`\\b(count_played_in|turns_since_played_in)\\(\\s*["']${esc(groupName)}["']`, "g"), said: (m) => `${m[1]}("${groupName}")` },
+    ...(zones.length > 0
+      ? [{ re: new RegExp(`\\bvalue\\.(${zones.map(esc).join("|")})\\.`, "g"), said: (m: RegExpExecArray) => `value.${m[1]}.` }]
+      : []),
+  ];
+  const find = (text: string | number | undefined): string | undefined => {
+    if (typeof text !== "string") return undefined;
+    for (const t of tests) {
+      t.re.lastIndex = 0;
+      for (let m = t.re.exec(text); m !== null; m = t.re.exec(text)) { const said = t.said(m); if (said !== "") return said; }
+    }
+    return undefined;
+  };
+  const named = quotedName;
+  const label = (x: { title?: string; gameId?: string; id: string }): string => x.title ?? effectiveGameId(x);
+  for (const { shard } of box.decks) {
+    const deck = shard.deck;
+    const gate = find(deck.condition);
+    if (gate !== undefined) return { said: `its deck ${named(deck)} reads ${gate} in its gate`, open: { kind: "deck", box: boxId, id: deck.id, label: label(deck) } };
+    for (const card of shard.cards) {
+      const when = find(card.condition) ?? find(card.priority as string | number | undefined);
+      const open = { kind: "card" as const, box: boxId, deck: deck.id, id: card.id, label: label(card) };
+      if (when !== undefined) return { said: `its card ${named(card)} reads ${when} in its ${find(card.condition) !== undefined ? "When" : "priority"}`, open };
+      for (const o of card.outcomes) {
+        const oWhen = find(o.condition);
+        if (oWhen !== undefined) return { said: `its card ${named(card)} reads ${oWhen} in the When of its outcome ${named(o)}`, open };
+        for (const [target, value] of Object.entries(o.changes)) {
+          const hit = find(target) ?? find(value);
+          if (hit !== undefined) return { said: `its card ${named(card)} reads ${hit} in a change of its outcome ${named(o)}`, open };
+        }
+      }
+    }
+  }
+  for (const t of box.hands.templates) {
+    const hit = find(t.condition);
+    if (hit !== undefined) return { said: `its hand template ${named(t)} reads ${hit} in its When`, open: { kind: "template", box: boxId, id: t.id, label: label(t) } };
+  }
+  for (const h of box.hands.hands) {
+    const hit = find(h.rule?.condition);
+    if (hit !== undefined) return { said: `its hand ${named(h)} reads ${hit} in its When`, open: { kind: "hand", box: boxId, id: h.id, label: label(h) } };
   }
   return undefined;
 }
@@ -1716,7 +1931,8 @@ export function deleteTemplate(session: ProjectSession, boxId: string, templateI
 
 export function tagGroupDetail(session: ProjectSession, boxId: string, groupId: string): TagGroupDetail | null {
   const box = locateBox(session, boxId);
-  const group = groupHome(session, box, groupId)?.group;
+  const home = groupHome(session, box, groupId);
+  const group = home?.group;
   if (!box || !group) return null;
   const asString = (v: unknown): string => (typeof v === "string" ? v : JSON.stringify(v));
   const declDtoOf = (p: PropertyDecl): PropertyDeclDto => ({
@@ -1731,6 +1947,7 @@ export function tagGroupDetail(session: ProjectSession, boxId: string, groupId: 
   return {
     id: group.id, gameId: effectiveGameId(group),
     ...(group.purpose !== undefined ? { purpose: group.purpose } : {}),
+    ...(home?.project === true ? { projectMap: true as const } : {}),
     properties: (group.properties ?? []).map(declDtoOf),
     values: byDisplay(group.tags).map((v) => ({
       id: v.id, gameId: effectiveGameId(v),
@@ -1811,6 +2028,13 @@ export function setGroupSpatial(
     if (source.map !== undefined) {
       return { error: `this project has a map already ("${effectiveGameId(source.map.group)}"), and a project has one map` };
     }
+    // A project from before the project map keeps its maps in its boxes. Making
+    // another here would start a second map beside them; the upgrade lifts the
+    // ones it has (main map-upgrade.ts), so that comes first.
+    const old = source.boxes.find((b) => b.tags.groups.some((g) => g !== group && isSpatial(g)));
+    if (old !== undefined) {
+      return { error: `this project still keeps its map in the box "${effectiveGameId(old.box.box)}", from before the project map: upgrade the project first` };
+    }
     box.tags.groups = box.tags.groups.filter((g) => g.id !== groupId);
     group.templates = withSpatialGroup(group, true)!;
     box.box.box.usesMap = true;
@@ -1825,6 +2049,17 @@ export function setGroupSpatial(
     const others = source.boxes.filter((b) => b !== box && b.box.box.usesMap === true);
     if (others.length > 0) {
       return { error: `${others.map((b) => `"${effectiveGameId(b.box.box)}"`).join(", ")} ${others.length === 1 ? "is" : "are"} on the map too, so it cannot become this box's own group` };
+    }
+    // The pictures and the frames belong to the map, and a box's own group has
+    // nowhere to keep them: turning the switch off used to delete both without a
+    // word (the antagonist review, round 3, 1.3). Refused instead, saying what
+    // would go; the zones' outlines are the group's and are kept either way.
+    const pictures = backgroundsOf(group).length;
+    const frames = framesOf(source.map).length;
+    if (pictures > 0 || frames > 0) {
+      const count = (n: number, word: string): string => (n === 0 ? "" : `${n} ${word}${n === 1 ? "" : "s"}`);
+      const what = [count(pictures, "picture"), count(frames, "frame")].filter((x) => x !== "").join(" and ");
+      return { error: `the map has ${what}, which a box's own tag group cannot keep. Remove ${pictures + frames === 1 ? "it" : "them"} from the map first, or leave it as the project's map` };
     }
     const templates = withSpatialGroup(group, false);
     if (templates === undefined) delete group.templates;
@@ -2145,7 +2380,7 @@ export function moveSitesOnMap(
   ];
   // Named for what the author did, since it is what an undo will offer back. One
   // commit: a position and a binding from the same gesture undo as one gesture.
-  const result = commit(session, rebound.length > 0 ? "Move a hand on the map" : "Move sites",
+  const result = commit(session, rebound.length > 0 ? "Move a hand on the map" : "Move hands on the map",
     `map:${structCounter++}`, writes);
   return "error" in result ? result : { result, rebound };
 }

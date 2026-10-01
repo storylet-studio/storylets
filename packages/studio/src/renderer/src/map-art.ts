@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// What the map draws: zone shapes and hand sites. The behaviour lives in
+// What the map draws: zone shapes and hands' pins. The behaviour lives in
 // canvas-surface, the geometry in @storylet-studio/model; this is the ink.
 //
 // Beside node-art rather than inside it: a zone is not a card, and the two share
@@ -8,16 +8,18 @@
 // carries which thing a shape belongs to, chrome holds a floor in screen pixels,
 // and a label is a title and never a gameId.
 //
-// Zone colour comes from the shell's `colourIndex` by zone NAME, the same hash
-// that gives a deck its stripe, so a zone is the same colour on the map as its tag
-// chip is in the inspector.
+// ZONES ARE NEUTRAL, and only pins carry colour (the round-3 ruling). A zone
+// belongs to the project, not to any box, and the colour a pin wears says whose
+// it is (its box's stored colour, box-tint.ts). When zones wore a hash of their
+// names from the same palette, a pin and the outline it stood in came out the
+// same salmon, and the eye could not tell a layer from the ground.
 // ---------------------------------------------------------------------------
 
 import Konva from "konva";
 import { imageFor } from "./image-cache.js";
 import type { CanvasItem, DrawContext } from "./canvas-surface.js";
-import { charColour, type CanvasTokens } from "./canvas-tokens.js";
-import { labelPoint, polygonBounds } from "@storylet-studio/model";
+import type { CanvasTokens } from "./canvas-tokens.js";
+import { labelPoint, polygonBounds, zonesAt } from "@storylet-studio/model";
 import type { Polygon, ViewPoint } from "@storylet-studio/model";
 
 /** A site is a point, so its "size" is chrome rather than content. */
@@ -25,45 +27,49 @@ export const PIN_R = 9;
 const PIN_LABEL_GAP = 6;
 /** Below this a zone's name is mush, so it goes rather than shrinking. */
 export const LABEL_FLOOR = 0.35;
-/** A zone's fill is a wash: the background (later) and the sites on top have to
- *  read through it. */
-const ZONE_FILL_ALPHA = 0.18;
-const ZONE_FILL_ALPHA_HOVER = 0.3;
+/** A zone's fill is a wash: the pictures under it and the pins on top have to
+ *  read through it. Neutral (see the head of this file), so it is lighter than
+ *  a coloured wash would be: a grey that strong reads as a shadow. */
+const ZONE_FILL_ALPHA = 0.1;
 
 /** A zone as the canvas holds it: an item positioned at its bounding box's
  *  top-left, with the outline relative to that origin. */
 export interface ZoneShape extends CanvasItem {
   /** What the author called it. Drawn; never the gameId. */
   title: string;
-  /** For the identity colour, so it agrees with the tag chip elsewhere. */
+  /** The zone's gameId. */
   name: string;
   /** The outline, relative to the item's origin (CanvasItem.outline's contract). */
   outline: ViewPoint[];
 }
 
-/** A hand's site: where a standing hand sits on this map. */
+/** A hand's pin: where a hand stands on this map. */
 export interface SiteShape extends CanvasItem {
   /** The hand's title or gameId. */
   title: string;
-  /** For the identity colour. */
+  /** The hand's gameId. */
   name: string;
-  /** The id of the zone the hand sits in, when it sits in one on THIS map. For
-   *  logic, never for ink. */
+  /** The id of the zone the hand is BOUND to, from the hand itself. For logic,
+   *  never for ink. */
   zone?: string;
-  /** That zone's NAME, which is what the site is coloured by, so a site matches
-   *  the ground under it and one that has drifted off its zone is visible as
-   *  whose colour disagrees with it. Hashing the zone's ID would give a colour
-   *  from an opaque string that agrees with nothing (the zone's own colour comes
-   *  from its name, as every identity colour in this app does). */
+  /** That zone's name, for the words beside the pin. */
   zoneName?: string;
   /** Nothing is holding this hand's binding: drawn hollow. */
   unbound?: boolean;
-  /** A palette INDEX to colour the disc by instead of its zone: the project map
-   *  tints a site by its BOX, since there the question a pin answers first is
-   *  whose it is (the surfacing review's plan item 2). The zone is the ground
-   *  it stands on, which the map already shows. An index rather than a name
-   *  because a box's colour is assigned, not hashed (box-tint.ts). */
+  /** The palette INDEX of the box the hand belongs to: what the disc is filled
+   *  with, since the question a pin answers first is whose it is. The box's
+   *  stored colour (box-tint.ts); absent, the disc is the accent. */
   tint?: number;
+  /**
+   * The hand is bound to one zone and drawn in another, or in none: the NAME of
+   * the zone it is bound to. Drawn as a warning ring round the disc.
+   *
+   * The pin used to be coloured by its zone, so a pin off its zone showed as a
+   * colour that disagreed with the ground. Pins wear their box's colour now and
+   * zones are neutral, so that cue went with it and this one replaces it: a
+   * ring that says so outright, rather than a disagreement to spot.
+   */
+  strayFrom?: string;
   /**
    * The NAMES of the other zones whose outlines this site also falls inside,
    * when there is more than one. Empty or absent means no ambiguity to report.
@@ -106,7 +112,8 @@ export function zoneShape(zone: { id: string; title: string; name: string; polyg
 export function drawZone(item: ZoneShape, ctx: DrawContext): Konva.Group {
   const { tokens, scale } = ctx;
   const group = new Konva.Group();
-  const ink = charColour(tokens, item.name);
+  // Neutral: the project's ground, which no box owns (see the head of this file).
+  const ink = tokens.muted;
   const points: number[] = [];
   for (const p of item.outline) points.push(p.x, p.y);
 
@@ -190,22 +197,22 @@ function halo(text: Konva.Text, tokens: CanvasTokens, scale: number): Konva.Text
   return text;
 }
 
-/** A site: a disc at the hand's point, with its name beside it. The disc holds a
- *  constant size on screen, because it is a marker rather than a place. */
+/** A pin: a disc at the hand's point, with its name beside it. The disc holds a
+ *  constant size on screen, because it is a marker rather than a region. */
 export function drawSite(item: SiteShape, ctx: DrawContext): Konva.Group {
   const { tokens, scale } = ctx;
   const group = new Konva.Group();
   // Quiet, never hidden. A filtered map that dropped its sites would change
   // SHAPE as you filtered it, and a map you cannot recognise is not a map.
   if (item.quiet === true) group.opacity(0.35);
-  const ink = item.tint !== undefined ? (tokens.chars[item.tint % tokens.chars.length] ?? tokens.accent)
-    : item.zoneName !== undefined ? charColour(tokens, item.zoneName) : tokens.muted;
+  const ink = item.tint !== undefined ? (tokens.chars[item.tint % tokens.chars.length] ?? tokens.accent) : tokens.accent;
   const r = PIN_R / scale;
 
-  // The coverage HALO, outside the disc. The disc keeps its zone colour, because
-  // that is the site's identity and losing it would cost more than the reading
-  // gains: a map whose colours mean deal counts is no longer a map of the place.
-  // A ring around it can be read alongside, the way a highlight is.
+  // The coverage HALO, outside the disc. The disc keeps its box's colour,
+  // because that is whose the pin is and losing it would cost more than the
+  // reading gains: a map whose colours mean deal counts is no longer a map of
+  // whose hand stands where. A ring around it can be read alongside, the way a
+  // highlight is.
   if (item.heat !== undefined) {
     const cold = item.heat < 0;
     group.add(new Konva.Circle({
@@ -221,12 +228,21 @@ export function drawSite(item: SiteShape, ctx: DrawContext): Konva.Group {
     }));
   }
 
-  // AMBIGUOUS CONTAINMENT: this site sits inside more than one outline, and only
-  // the frontmost owns it. A small warn-toned ring OUTSIDE the disc, so it reads
-  // as an annotation on the site rather than as part of its identity - the disc
-  // keeps its zone colour, which is what the site IS. Not danger: nothing is
-  // broken, the rule resolved it, and the author may well have meant it.
-  if (item.alsoInside !== undefined && item.alsoInside.length > 0) {
+  // OFF ITS ZONE: the hand is bound to one zone and the pin stands in another,
+  // or in none. A solid warning ring, wider and heavier than the one below,
+  // because this one is a mistake to put right: the game deals the hand where
+  // it is bound, not where the pin is.
+  if (item.strayFrom !== undefined) {
+    group.add(new Konva.Circle({
+      x: item.width / 2, y: item.height / 2, radius: r + 4 / scale,
+      stroke: tokens.warn, strokeWidth: 2.5 / scale,
+    }));
+  } else if (item.alsoInside !== undefined && item.alsoInside.length > 0) {
+    // AMBIGUOUS CONTAINMENT: this pin sits inside more than one outline, and
+    // only the frontmost owns it. A small dashed ring OUTSIDE the disc, so it
+    // reads as an annotation rather than as part of the pin's colour. Not
+    // danger: nothing is broken, the rule resolved it, and the author may well
+    // have meant it.
     group.add(new Konva.Circle({
       x: item.width / 2, y: item.height / 2, radius: r + 3 / scale,
       stroke: tokens.warn, strokeWidth: 1.5 / scale,
@@ -345,7 +361,7 @@ export function drawBackground(item: BackgroundShape, ctx: DrawContext): Konva.G
   return group;
 }
 
-/** The site's item box: a point has no extent, so it gets a square the size of its
+/** The pin's item box: a point has no extent, so it gets a square the size of its
  *  disc, centred on the point, which is what the surface drags and marquees. */
 export function siteShape(
   site: { id: string; title: string; name: string; at: ViewPoint; zone?: string; zoneName?: string },
@@ -365,6 +381,32 @@ export function siteShape(
     ...(site.zone !== undefined
       ? { zone: site.zone, ...(site.zoneName !== undefined ? { zoneName: site.zoneName } : {}) }
       : { unbound: true }),
+  };
+}
+
+/**
+ * What a pin's position says about its hand, against the zones drawn on the
+ * map: the zones it ALSO falls inside (overlaps the frontmost one wins, so the
+ * others count for nothing), and whether it stands somewhere other than the
+ * zone its hand is bound to. Named for the words; `zoneName` turns an id into one.
+ *
+ * Off its zone means: bound to a zone, and the frontmost zone under the pin is
+ * a different one, or there is none while the bound zone is drawn. A hand bound
+ * to a zone nobody has drawn yet, standing in no zone, is not off it: there is
+ * nowhere on the map it could stand instead.
+ */
+export function pinPlacement(
+  at: ViewPoint, bound: string | undefined,
+  zones: { id: string; polygon: Polygon; z?: number }[], zoneName: (id: string) => string | undefined,
+): { alsoInside?: string[]; strayFrom?: string } {
+  const under = zonesAt(at, zones);
+  const others = under.filter((id) => id !== bound).map((id) => zoneName(id) ?? "a zone");
+  const front = under[0];
+  const drawn = bound !== undefined && zones.some((z) => z.id === bound);
+  const stray = bound !== undefined && front !== bound && (front !== undefined || drawn);
+  return {
+    ...(others.length > 0 ? { alsoInside: others } : {}),
+    ...(stray ? { strayFrom: zoneName(bound) ?? "its zone" } : {}),
   };
 }
 

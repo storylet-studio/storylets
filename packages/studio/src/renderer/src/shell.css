@@ -314,11 +314,18 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .maplayer-grip { flex: none; width: 12px; display: inline-flex; color: var(--muted); opacity: 0.6; cursor: grab; }
 .maplayer-grip.none { cursor: default; }
 .maplayer-swatch { flex: none; display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--muted); }
+/* A box layer's swatch is a BUTTON: the colour is the box's, stored, and the
+   author changes it here (map-view.ts `colourSwatch`). A ring on hover and
+   focus says it does something; at rest it is the same small square. */
+.maplayer-swatch.pick { padding: 0; border: 0; cursor: pointer; width: 11px; height: 11px; }
+.maplayer-swatch.pick:hover, .maplayer-swatch.pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1.5px; }
 .maplayer-swatch.zones { background: none; border: 1.5px solid var(--muted); }
 .maplayer-swatch.pictures { background: repeating-linear-gradient(135deg, var(--muted) 0 1.5px, transparent 1.5px 4px); }
 .maplayer-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .maplayer-n { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .mapside-row.sub { padding-left: 42px; }
+/* A zone's row: neutral, as the zone is on the map (only pins wear a box's colour). */
+.mapside-dot.zone { background: none; border: 1.5px solid var(--muted); width: 8px; height: 8px; border-radius: 2px; }
 .mapside-meta { flex: none; font-size: 11.5px; color: var(--muted); }
 .mapside-note { margin: 4px 12px 2px 42px; font-size: 12px; line-height: 1.45; color: var(--muted); font-style: italic; }
 .mapside-teach { margin: 14px 12px 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
@@ -327,6 +334,8 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .mapside-headrow { display: flex; align-items: center; gap: 8px; padding: 0 12px; }
 .mapside-h { flex: 1; min-width: 0; margin: 0; display: flex; align-items: center; gap: 7px; font: 600 17px/1.3 var(--font-read); color: var(--ink); }
 .mapside-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 12px 0; font-size: 12.5px; }
+/* What kind of hand it is, in the designer's words: its template's title. */
+.mapside-kind { margin: 1px 12px 0; font-size: 12.5px; color: var(--muted); }
 .mapside-label { color: var(--muted); }
 .mapside-body { display: flex; flex-direction: column; }
 .mapside-tier { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 0; }
@@ -346,7 +355,9 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .mapzone-prop-type { font-size: 12px; font-style: italic; color: var(--muted); }
 .mapzone-prop-vals { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12.5px; color: var(--ink); }
 .mapzone-prop-start { color: var(--muted); }
-/* Edit layout's toggle, while in it, and "+ Site" naming the active layer. */
+/* Who shares the value: one plain line per property (zone-share.ts). */
+.mapzone-prop-share { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
+/* Edit layout's toggle, while in it, and "+ Hand" naming the active layer. */
 .stripbtn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .stripbtn.on [data-icon] { color: inherit; }
 .stripbtn .maplayer-swatch { width: 8px; height: 8px; border-radius: 50%; margin-left: 2px; }
@@ -815,6 +826,16 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 .handcard-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .handcard-n { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .handcard-any { margin: 0; font-size: 13px; color: var(--muted); }
+/* A card's gate from a group bound by state ("when act: act-2"): a quiet
+   outlined badge after its deck, because it says WHEN the card can come up and
+   not where, so it must not read as one of the tiers' own chips. */
+.handcard-gate { padding: 0 7px; font-size: 11px; border-style: dashed; color: var(--muted); }
+/* Placed here but never dealt here: the tier is a mistake to put right, so its
+   caption and its rows carry the warning colour along a left rule, and each
+   row says why in the Where row's warning voice (.where-warn). */
+.handcards-never > .doc-sect-head .insp-label { color: var(--warn); }
+.handcards-never .handcards { border-left: 2px solid var(--warn); padding-left: 8px; }
+.handcard.never .listname { text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--warn) 70%, transparent); }
 .handcard-any .linkbtn { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
 .handcard-any .linkbtn:hover { text-decoration: underline; }
 /* "Which deck": Patterpad's jump picker, the family's anchored one-choice list. */
@@ -870,6 +891,9 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 .doc-titlerow { display: flex; align-items: baseline; gap: 12px; }
 .doc-titlerow .doc-title { flex: 1; min-width: 0; }
 .doc-gid { align-self: baseline; flex: 0 1 auto; min-width: 0; max-width: 45%; }
+/* What kind of thing this is, in the author's own words (a hand's template
+   title), quiet under the title it describes. */
+.doc-kind { margin: -2px 0 0; font-size: 13px; color: var(--muted); }
 /* An outcome's identity row carries its comment bubble, because an outcome is a
    sub-item with no topline of its own (design/annotation.md 2). Pushed to the
    right of the row so it sits where a document's bubble sits. */
@@ -984,6 +1008,32 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 
 .set-uses { font: 11.5px var(--font-mono); color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: var(--radius-pill); padding: 1.5px 9px; cursor: pointer; white-space: nowrap; }
 .set-uses:hover { color: var(--accent); border-color: var(--accent); }
+
+
+/* --- The upgrade prompt (map-upgrade-dialog.ts) --------------------------- */
+/* The shell's dialog frame again; ours is only the planner's lines, a list
+   between the question and the note about undo. Refusals read in the danger
+   colour, as the push dialog's refusal does. */
+.map-upgrade-dialog ul { margin: 6.5px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px;
+  max-height: 40vh; overflow-y: auto; line-height: 1.35; }
+.map-upgrade-dialog .map-upgrade-refusals { color: var(--danger); }
+.map-upgrade-dialog .map-upgrade-warnings { color: var(--muted); }
+
+
+/* --- The layer colour picker (map-view.ts `colourSwatch`) -------------------- */
+/* The deck picker's anchored panel, holding the twelve identity colours as a
+   grid of swatches. The current one is ringed in ink; one another layer
+   already wears carries a small dot, and can still be chosen. */
+.swatchpick-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; padding: 2px; }
+.swatchpick-opt { position: relative; width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; }
+.swatchpick-opt:hover, .swatchpick-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swatchpick-opt.sel { outline: 2px solid var(--ink); outline-offset: 2px; }
+.swatchpick-opt.taken::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px;
+  border-radius: 50%; background: var(--surface); opacity: 0.9; }
+
+
+/* --- A refusal that offers the way out (refusal-dialog.ts) ------------------ */
+.refusal-dialog .confirm-body { line-height: 1.45; }
 
 
 /* --- The push dialog's breaks ---------------------------------------------- */

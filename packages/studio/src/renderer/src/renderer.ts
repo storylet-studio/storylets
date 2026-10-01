@@ -36,11 +36,13 @@ import "@wildwinter/app-shell/link-status.css";
 import "@wildwinter/app-shell/job.css";
 import "@wildwinter/expr-editor/styles.css";
 import { applyTheme } from "./theme.js";
-import { boxPin, setBoxOrder } from "./box-tint.js";
+import { boxPin, forgetBoxColours, setBoxColours } from "./box-tint.js";
 import { baseName } from "./paths.js";
 import { el } from "./dom.js";
 import { hydrateCameras } from "./canvas-memory.js";
 import { confirmDialog } from "./confirm.js";
+import { refusalDialog } from "./refusal-dialog.js";
+import { askMapUpgrade } from "./map-upgrade-dialog.js";
 
 import {
   askIdentity, closeAnchoredPanel, createSaveController, iconNode, initTooltips, mountPaneShell, openComments, saveIndicator, showAbout,
@@ -464,7 +466,16 @@ const actions: ViewActions = {
   },
   newTemplate(box) { inspectorHost.createTemplate(box); },
   newTagGroup(box) { inspectorHost.createTagGroup(box); },
-  newMap(box) { inspectorHost.createMap(box); },
+  // On a project from before the project map, its maps are still in its boxes,
+  // and "Make a map" would start a second one beside them: the way on is the
+  // upgrade, which lifts the map it already has (part A's dialog).
+  newMap(box) {
+    if (project !== undefined && project.map === undefined && project.boxes.some((b) => b.tagGroups.some((g) => g.spatial === true))) {
+      void offerMapUpgrade(true);
+      return;
+    }
+    inspectorHost.createMap(box);
+  },
   newHand(box) { inspectorHost.createHand(box); },
   editBox(box) { setDocTab(`box:${box}`, "template"); actions.focus({ kind: "box", box }); },
   toggleNav(id) {
@@ -714,12 +725,13 @@ const actions: ViewActions = {
     void (async () => {
       const map = await studio.projectMapView();
       if (!host.isConnected) return;
+      if (setBoxColours(map.layers.map((l) => ({ id: l.box, colour: l.colour })))) { renderNavPane(); renderCentre(); return; }
       const layer = map.layers.find((l) => l.box === box.id);
       const zoneName = (id: string | undefined): string | undefined =>
         (id === undefined ? undefined : (map.zones.find((z) => z.id === id) ?? map.undrawn.find((z) => z.id === id))?.gameId);
       if (!layer) { host.replaceChildren(); return; }
-      // One row a site, as the hand page and the map name it: title, its zone,
-      // and how many cards are only here. A row opens the place's own page.
+      // One row a hand, as the hand page and the map name it: title, its zone,
+      // and how many cards are only here. A row opens the hand's own page.
       const rows = layer.sites.map((site) => el("button", {
         className: "listrow boxsite",
         onClick: () => arriveFrom(box.title ?? box.gameId, () => { setDocTab(`box:${box.id}`, "map"); actions.focus({ kind: "box", box: box.id }); },
@@ -732,7 +744,7 @@ const actions: ViewActions = {
       const waiting = layer.unplaced.length > 0
         ? [el("p", { className: "doc-tab-note", text: `${plural(layer.unplaced.length, "hand")} not on the map yet. Place ${layer.unplaced.length === 1 ? "it" : "them"} from the map, in Edit layout.` })]
         : [];
-      host.replaceChildren(...(rows.length > 0 ? rows : [el("p", { className: "doc-tab-note", text: "No sites yet. Open the map and add one in Edit layout." })]), ...waiting);
+      host.replaceChildren(...(rows.length > 0 ? rows : [el("p", { className: "doc-tab-note", text: "No hands on the map yet. Open the map and add one in Edit layout." })]), ...waiting);
     })();
   },
   cardGroup(box, page) { return state.cardGroups?.[box]?.[page]; },
@@ -751,7 +763,28 @@ const actions: ViewActions = {
   useProjectMap(box, on) {
     void (async () => {
       await flushSaves();
-      const result = await studio.useProjectMap(box, on);
+      let result = await studio.useProjectMap(box, on);
+      // Refused while something still names the map: main says what, by its
+      // title, and the prompt offers to open it.
+      if ("refused" in result) {
+        const r = result.refused;
+        const open = await refusalDialog({ title: r.title, body: r.body, ...(r.open !== undefined ? { openLabel: `Open "${r.open.label}"` } : {}) });
+        if (!open || r.open === undefined) return;
+        const at = r.open;
+        if (at.kind === "hand") actions.openHand(at.box, at.id);
+        else if (at.kind === "template") actions.inspectTemplate(at.box, at.id);
+        else if (at.kind === "card") actions.inspectCard(at.box, at.deck, at.id);
+        else actions.focus({ kind: "deck", box: at.box, deck: at.id });
+        return;
+      }
+      // Leaving deletes the box's positions on the map: main says how many and
+      // asks, and only a yes sends it again.
+      if ("confirm" in result) {
+        const ok = await confirmDialog({ title: result.confirm.title, body: result.confirm.body, confirmLabel: "Leave the map" });
+        if (!ok) return;
+        result = await studio.useProjectMap(box, on, true);
+        if ("confirm" in result || "refused" in result) return;
+      }
       if (!applied(result)) return;
       // Joining lands on the box's new Map tab, which is what it now leads
       // with; leaving goes back to Contents, the tab having gone.
@@ -1184,7 +1217,7 @@ const AUTOSAVE_MS = 700;
  */
 function applyResult(result: OpenResult): void {
   project = result.project;
-  setBoxOrder(project.boxes);
+  setBoxColours(project.boxes);
   remote = result.remote;
   // The game's shared scopes folder, for the expression editors' dialect: seeded on every
   // result, since sharing the project's scopes comes back through here.
@@ -1799,6 +1832,9 @@ function applyFix(problem: Problem, fix: NonNullable<Problem["fix"]>, anchor: HT
     })();
     return;
   }
+  // A project from before the project map: the same prompt it opened with,
+  // which says what will change before anything does (the ellipsis promised it).
+  if (fix.kind === "upgrade-project") { void offerMapUpgrade(true); return; }
   // The tag repair ASKS, because there is no single right answer: the group has
   // several tags and only the author knows which was meant. The ellipsis on the
   // button already promised this.
@@ -1851,6 +1887,11 @@ function renderMapCentre(host: HTMLElement): void {
       import("./map-view.js"), import("./map-panel.js"), studio.projectMapView(),
     ]);
     if (!viewHost.isConnected || !map.hasMap) return;
+    // The first drawing stores a colour for any box on the map with none
+    // (main box-colours.ts). Everything already drawn in the old colours (the
+    // navigator's glyphs, this page's "Used by" chips) is drawn again; the
+    // second drawing finds nothing new, so this happens once.
+    if (setBoxColours(map.layers.map((l) => ({ id: l.box, colour: l.colour })))) { renderNavPane(); renderCentre(); return; }
     mapView?.destroy();
     const redraw = (result: OpenResult | { error: string }): void => {
       if (!applied(result)) return;
@@ -1928,6 +1969,7 @@ function renderMapCentre(host: HTMLElement): void {
         redraw(moved.result);
       })(),
       removeSite: (box, handId) => void (async () => redraw(await studio.removeSitesFromMap(box, [handId])))(),
+      setColour: (box, colour) => void (async () => redraw(await studio.setBoxColour(box, colour)))(),
       movedSites: (box, moves) => void (async () => {
         const moved = await studio.moveSitesOnMap(box, group, moves);
         if ("error" in moved) { flashError(moved.error); return; }
@@ -2081,7 +2123,7 @@ function problemNames(p: Problem): ProblemNames | undefined {
   if (p.path.endsWith(".storylethands")) {
     const hand = box.hands.find((h) => h.gameId === p.where);
     const template = box.templates.find((t) => t.gameId === p.where);
-    return { where: boxName, ...(hand ? { title: hand.title ?? hand.gameId } : template ? { title: template.gameId } : p.where ? { title: p.where } : {}) };
+    return { where: boxName, ...(hand ? { title: hand.title ?? hand.gameId } : template ? { title: template.title ?? template.gameId } : p.where ? { title: p.where } : {}) };
   }
   if (p.path.endsWith(".storylettags")) {
     // `where` is the group, or "group/tag" for a problem on one of its tags.
@@ -2091,6 +2133,8 @@ function problemNames(p: Problem): ProblemNames | undefined {
     return { where: boxName, ...(group ? { title: group.gameId } : p.where ? { title: p.where } : {}) };
   }
   if (p.path.endsWith(".storyletbox")) return { title: boxName };
+  // The box's map shard (compile.ts W2 and W3): the box is what it is about.
+  if (p.path.endsWith("/map")) return { title: boxName };
   return undefined;
 }
 
@@ -2516,7 +2560,7 @@ const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter" | "map-story" | "acti
     tile: "A village on a map that opens up as the story goes.",
     play: "Press Play: arrive at the well, and the mill and the woods open to you.",
     features: ["Explorable map", "Places that open up", "Character conversations"],
-    lands: ["One box on a drawn map of three zones", "A site in each: the well, the mill race, the woodcutter's hut", "Five scenes and conversations, one opening the rest", "A story act and the leads the scenes wait on"] },
+    lands: ["One box on a drawn map of three zones", "A hand in each zone: the well, the mill race, the woodcutter's hut", "Five scenes and conversations, one opening the rest", "A story act and the leads the scenes wait on"] },
   // Port Meridian trimmed to a beginning (the author's specification, released
   // 2026-09-27): five boxes on one district map, talking only through story
   // state. ops/test/game-kits.test.ts plays the chain below.
@@ -2728,11 +2772,12 @@ async function adopt(pending: Promise<OpenResult | { error: string } | null>): P
   // one's are read rather than being overwritten a line at a time.
   if (project !== undefined && project.dir !== result.project.dir) {
     resetDocTabMemory();
+    forgetBoxColours();
     remote = undefined;
     problems = [];
   }
   project = result.project;
-  setBoxOrder(project.boxes);
+  setBoxColours(project.boxes);
   remote = result.remote;
   setGameScopes(result.project.gameScopes);
   setPlayRung(result.project.play);
@@ -2764,6 +2809,34 @@ async function adopt(pending: Promise<OpenResult | { error: string } | null>): P
   // A `--at` launch: the item named on the command line, over the remembered place.
   if (result.at) goTo(result.at);
   void refreshVc();   // badge the shards + apply read-only from the VC snapshot
+  // A project from before the project map is asked about once, as it opens:
+  // otherwise it opens on errors and a map that has vanished.
+  void offerMapUpgrade(false);
+}
+
+/**
+ * Upgrade a project from before the project map (main `map-upgrade.ts`): the
+ * planner `storyletengine format` runs, shown first, refused in its own
+ * sentences, one undo step when it runs. `asked` is the problems bar's button,
+ * which deserves an answer even when there turns out to be nothing to do.
+ */
+async function offerMapUpgrade(asked: boolean): Promise<void> {
+  if (!project) return;
+  await flushSaves();
+  const plan = await studio.planMapUpgrade();
+  if (plan === null) {
+    if (asked) { flash("This project is already on the project map.", "ok"); await revalidate(); }
+    return;
+  }
+  if (!(await askMapUpgrade(plan))) return;
+  const result = await studio.upgradeProjectMap();
+  if ("refused" in result) { await askMapUpgrade({ report: [], warnings: [], refusals: result.refused }); return; }
+  if (!applied(result)) return;
+  repaintReplacedProject();
+  void refreshVc();
+  flash("Upgraded: the map belongs to the project now. Undo puts it back.", "ok");
+  // To the map, which is the thing that had vanished.
+  if (project?.map !== undefined) actions.focus({ kind: "map" });
 }
 
 async function revalidate(): Promise<void> {

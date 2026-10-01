@@ -74,6 +74,15 @@ export function toggleLayer(prefs: MapLayerPrefs, layer: string): MapLayerPrefs 
   return withHidden(unsolo(prefs), hidden);
 }
 
+/** Show one layer, leaving the rest as they are: what "+ Site" does to a hidden
+ *  active layer, so the site it makes is drawn where the click put it (a pin
+ *  made into a hidden layer was created and never seen). Ends a solo, as any
+ *  change but the restoring click does. */
+export function showLayer(prefs: MapLayerPrefs, layer: string): MapLayerPrefs {
+  if (isShown(prefs, layer) && prefs.solo === undefined) return prefs;
+  return withHidden(unsolo(prefs), (prefs.hidden ?? []).filter((l) => l !== layer));
+}
+
 /** Show every layer. */
 export function showAll(prefs: MapLayerPrefs): MapLayerPrefs {
   return withHidden(unsolo(prefs), []);

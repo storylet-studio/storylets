@@ -8,7 +8,7 @@
 // drags, and no gesture here is an undo step. "It is the Board" says NOT AN
 // EDITOR without a word of explanation, so two maps never confuse.
 //
-// What it adds is the run: a site wears the same running-position mark a row
+// What it adds is the run: a pin wears the same running-position mark a row
 // wears in the list (run-marks.ts), because a map that cannot show you where the
 // playthrough is would only be a picture.
 // ---------------------------------------------------------------------------
@@ -103,6 +103,9 @@ export function mountBoardMap(
           ? { zone: site.zone, ...(zoneName(site.zone) !== undefined ? { zoneName: zoneName(site.zone)! } : {}) }
           : {}),
       }),
+      // In its box's stored colour, as on the editor's map (box-tint.ts): the
+      // same pin is one colour wherever it is drawn.
+      ...(site.colour !== undefined ? { tint: site.colour } : {}),
       // Filtered to one zone: everything else goes quiet rather than away.
       ...(where.filtered !== undefined && site.zone !== where.filtered ? { quiet: true } : {}),
     })),

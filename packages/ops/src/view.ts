@@ -165,3 +165,29 @@ export function planCanvasFurniture(
 const tidyFrame = (r: Frame): Frame => ({
   ...r, x: whole(r.x), y: whole(r.y), w: whole(r.w), h: whole(r.h),
 });
+
+// --- the box's colour on the project map ----------------------------------------
+//
+// One slot of the identity palette, stored here because it is the AUTHOR's
+// arrangement and never content (model `ViewShard.colour`). Choosing WHICH slot
+// a box gets is the editor's business; this module only reads and writes it.
+
+/** The colour stored for a box, or undefined when it has none yet. Anything that
+ *  is not a whole number in the palette's range reads as none. */
+export function boxColourOf(box: SourceBox, paletteSize = 12): number | undefined {
+  const c = box.view?.colour;
+  return typeof c === "number" && Number.isInteger(c) && c >= 0 && c < paletteSize ? c : undefined;
+}
+
+/** Plan the write that stores a box's colour (or forgets it, for undefined).
+ *  Merges into the sidecar like every other write here, and returns undefined
+ *  when nothing would change, so storing the colour a box already has is not a
+ *  write. A sidecar that would be left holding nothing but its schema is
+ *  written anyway: it is one line, and deleting a file is not this function's
+ *  business. */
+export function planBoxColour(dir: string, box: SourceBox, colour: number | undefined): PlannedWrite | undefined {
+  if (box.view?.colour === colour) return undefined;
+  const shard: ViewShard = { ...box.view, schema: VIEW_SCHEMA };
+  if (colour === undefined) delete shard.colour; else shard.colour = colour;
+  return { path: viewPath(dir, box), content: canonicalStringify(shard) };
+}

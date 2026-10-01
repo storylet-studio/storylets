@@ -235,12 +235,12 @@ function mapStoryParts(): KitParts {
     schema: "storylets/hands@0",
     templates: [
       {
-        id: first, gameId: "starting-place",
+        id: first, gameId: "starting-place", title: "Where the story starts",
         purpose: "The place the story starts, open from the start.",
         chooses: [region.id], slots: 3, properties: [],
       },
       {
-        id: beyond, gameId: "place-beyond-the-well",
+        id: beyond, gameId: "place-beyond-the-well", title: "Places beyond the well",
         purpose: "A place beyond the well. Closed until the story reaches exploring, so every one of these waits for the arrival scene.",
         chooses: [region.id], condition: '@story.act >= "exploring"', slots: 3, properties: [],
       },
@@ -379,7 +379,7 @@ function actionGameParts(): KitParts {
     tags: { schema: "storylets/tags@0", groups: [] },
     hands: {
       schema: "storylets/hands@0",
-      templates: [{ id: board, gameId: "job-board", purpose: "A board jobs are posted on: what work is on offer here, now.", chooses: [d.group.id], slots: 2, properties: [] }],
+      templates: [{ id: board, gameId: "job-board", title: "Job boards", purpose: "A board jobs are posted on: what work is on offer here, now.", chooses: [d.group.id], slots: 2, properties: [] }],
       hands: [
         { id: newId("h"), order: 0, title: "Dockside board", template: board, chosen: { [d.group.id]: d.docks } },
         { id: newId("h"), order: 1, title: "Old town board", template: board, chosen: { [d.group.id]: d.oldTown } },
@@ -421,7 +421,7 @@ function actionGameParts(): KitParts {
     tags: { schema: "storylets/tags@0", groups: [] },
     hands: {
       schema: "storylets/hands@0",
-      templates: [{ id: street, gameId: "street", purpose: "The street the player is on: what trouble finds them here, now.", chooses: [d.group.id], slots: 1, properties: [] }],
+      templates: [{ id: street, gameId: "street", title: "Streets", purpose: "The street the player is on: what trouble finds them here, now.", chooses: [d.group.id], slots: 1, properties: [] }],
       hands: [
         { id: newId("h"), order: 0, title: "Dockside streets", template: street, chosen: { [d.group.id]: d.docks } },
         { id: newId("h"), order: 1, title: "Old town streets", template: street, chosen: { [d.group.id]: d.oldTown } },
@@ -455,7 +455,7 @@ function actionGameParts(): KitParts {
     tags: { schema: "storylets/tags@0", groups: [] },
     hands: {
       schema: "storylets/hands@0",
-      templates: [{ id: stash, gameId: "stash", purpose: "A hiding place the level marks: what is tucked away there, if anything.", chooses: [d.group.id], slots: 1, properties: [] }],
+      templates: [{ id: stash, gameId: "stash", title: "Hiding places", purpose: "A hiding place the level marks: what is tucked away there, if anything.", chooses: [d.group.id], slots: 1, properties: [] }],
       hands: [
         { id: newId("h"), order: 0, title: "Container 7", template: stash, chosen: { [d.group.id]: d.docks } },
         { id: newId("h"), order: 1, title: "The back room", template: stash, chosen: { [d.group.id]: d.oldTown } },
@@ -490,7 +490,7 @@ function actionGameParts(): KitParts {
     tags: { schema: "storylets/tags@0", groups: [] },
     hands: {
       schema: "storylets/hands@0",
-      templates: [{ id: archive, gameId: "archive", purpose: "The codex page: every unlocked entry. Slots is the page size.", chooses: [], slots: 12, properties: [] }],
+      templates: [{ id: archive, gameId: "archive", title: "The codex page", purpose: "The codex page: every unlocked entry. Slots is the page size.", chooses: [], slots: 12, properties: [] }],
       hands: [{ id: newId("h"), title: "Codex", template: archive, chosen: {} }],
     },
     deck: {
@@ -527,7 +527,7 @@ function actionGameParts(): KitParts {
     tags: { schema: "storylets/tags@0", groups: [] },
     hands: {
       schema: "storylets/hands@0",
-      templates: [{ id: screen, gameId: "screen", purpose: "A public screen: the story of the moment, over the background chatter.", chooses: [d.group.id], slots: 2, properties: [] }],
+      templates: [{ id: screen, gameId: "screen", title: "Public screens", purpose: "A public screen: the story of the moment, over the background chatter.", chooses: [d.group.id], slots: 2, properties: [] }],
       hands: [
         { id: newId("h"), order: 0, title: "Dock screen", template: screen, chosen: { [d.group.id]: d.docks } },
         { id: newId("h"), order: 1, title: "Old town screen", template: screen, chosen: { [d.group.id]: d.oldTown } },

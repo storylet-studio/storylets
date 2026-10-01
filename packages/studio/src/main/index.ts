@@ -39,7 +39,7 @@ import { launchLocation, launchLocationFromArgv, launchPathFromArgv, sameProject
 import {
   addCoverageDrivers, cardCatalogue, createBox, createCard, createDeck, createTagGroup, createTemplate,
   boxCatalogue, createHand, deleteBox, deleteCard, deleteDeck, deleteTagGroup, deleteHand, deleteTemplate, tagGroupDetail, duplicateBox, duplicateCard,
-  duplicateDeck, duplicateTagGroup, duplicateHand, duplicateTemplate, handCards, handDetail, mapZoneDetail, projectMapView, useProjectMap, moveBox, moveCard, moveDeck, moveHand, templateDetail, redo, renameDeck,
+  duplicateDeck, duplicateTagGroup, duplicateHand, duplicateTemplate, handCards, handDetail, mapZoneDetail, projectMapView, setBoxColour, useProjectMap, ensureBoxColours, moveBox, moveCard, moveDeck, moveHand, templateDetail, redo, renameDeck,
   saveHand,
   declareProperty, deleteCommentMessage, repointTag, addNamedOutcome,
   saveBox, saveCard, saveTagGroup, saveProjectSettings, saveTemplate, proposeDrivers, undo, moveCardsOnCanvas, createCardOnCanvas, layoutDeck,
@@ -50,8 +50,9 @@ import { applyReplace, propertyUsage, propertyUsageMany, replacePreview } from "
 import { pinForPublish } from "./pin.js";
 import { findPatterpad, launchPatterpad, patterpadExecutable } from "./patterpad.js";
 import { createPatterScene } from "./patter-scene.js";
+import { planMapUpgrade, upgradeProjectMap } from "./map-upgrade.js";
 import { findScene, readPatterLink } from "@storylet-studio/ops";
-import { analyseInfluence, canvasFurniture, cardNeighbourhood, cardPositions, clearCanonicalCache, describeContribution, mapSites, runCoverage, runCoverageAsync, projectFolderName, runPack, runUnpack, runUnpackMerge, PACK_EXTENSION, PROJECT_MAP_CANVAS, assetPath, orphanAssetPaths } from "@storylet-studio/ops";
+import { analyseInfluence, boxColourOf, canvasFurniture, cardNeighbourhood, cardPositions, clearCanonicalCache, describeContribution, mapSites, runCoverage, runCoverageAsync, projectFolderName, runPack, runUnpack, runUnpackMerge, PACK_EXTENSION, PROJECT_MAP_CANVAS, assetPath, orphanAssetPaths } from "@storylet-studio/ops";
 import { clearParseCache } from "@storylet-studio/compiler";
 import type { UnpackMergeResult } from "@storylet-studio/ops";
 import { createJobHost } from "@wildwinter/app-shell/job";
@@ -1293,6 +1294,12 @@ function wireIpc(): void {
     (session ? declareProperty(session, scope, name, owner, guess) : { error: "no project open" }));
   ipcMain.handle("problem:repointTag", (_event, holder: string, group: string, from: string, to: string) =>
     (session ? repointTag(session, holder, group, from, to) : { error: "no project open" }));
+  // A project from before the project map (map-upgrade.ts): asked about when it
+  // opens, and the quick-fix on E2 and W3. The plan is read-only; the upgrade is
+  // one undo step.
+  ipcMain.handle("project:planMapUpgrade", () => (session ? planMapUpgrade(session) ?? null : null));
+  ipcMain.handle("project:upgradeProjectMap", () =>
+    (session ? upgradeProjectMap(session) : { error: "no project open" }));
   // The Patter quick fix: give a card the outcome its paired scene names (ops patter-link.ts).
   ipcMain.handle("problem:addOutcome", (_event, card: string, gameId: string) =>
     (session ? addNamedOutcome(session, card, gameId) : { error: "no project open" }));
@@ -1761,6 +1768,10 @@ function wireIpc(): void {
     const source = session?.loaded.source;
     const box = source?.boxes.find((b) => b.box.box.id === boxId);
     if (!source || !box) return base;
+    // The Board draws pins in the boxes' stored colours, as the editor's map
+    // does, so a box drawn here first gets its colour here.
+    ensureBoxColours(session!);
+    const colour = boxColourOf(box);
 
     // The map a box shows is the PROJECT map, when the box is on it
     // (design/project-map-contract.md): its zones and pictures once for the
@@ -1821,8 +1832,9 @@ function wireIpc(): void {
       sites.push({
         id: hand.id, gameId: effectiveGameId(hand), ...title, x: at.x, y: at.y,
         ...(binding.kind !== "none" && binding.tag !== undefined ? { zone: binding.tag } : {}),
+        ...(colour !== undefined && group === source.map?.group ? { colour } : {}),
         rebinds: binding.editable,
-        ...(binding.kind === "fixed" && template ? { fixedBy: effectiveGameId(template) } : {}),
+        ...(binding.kind === "fixed" && template ? { fixedBy: template.title ?? effectiveGameId(template) } : {}),
       });
     }
 
@@ -1852,10 +1864,12 @@ function wireIpc(): void {
   // `handCards`, which it shares the tiering with.
   ipcMain.handle("map:view", (): ProjectMapViewDto => projectMapView(session));
   ipcMain.handle("map:zone", (_event, tagId: string) => (session ? mapZoneDetail(session, tagId) : null));
-  ipcMain.handle("map:use", (_event, boxId: string, on: boolean) =>
-    (session ? useProjectMap(session, boxId, on) : { error: "no project open" }));
+  ipcMain.handle("map:use", (_event, boxId: string, on: boolean, confirmed?: boolean) =>
+    (session ? useProjectMap(session, boxId, on, confirmed === true) : { error: "no project open" }));
   ipcMain.handle("state:setMapLayers", (_event, groupId: string, prefs: MapLayerPrefs) => store.setMapLayers(groupId, prefs));
   ipcMain.handle("state:setCardGroup", (_event, boxId: string, page: "contents" | "deck", key: string) => store.setCardGroup(boxId, page, key));
+  ipcMain.handle("map:colour", (_event, boxId: string, colour: number) =>
+    (session ? setBoxColour(session, boxId, colour) : { error: "no project open" }));
 
   ipcMain.handle("map:setSpatial", (_event, boxId: string, groupId: string, on: boolean) => {
     if (!session) return { error: "no project open" };

@@ -115,6 +115,8 @@ const api: StudioApi = {
   repointTag: (holder, group, from, to) => ipcRenderer.invoke("problem:repointTag", holder, group, from, to),
   addOutcome: (card, gameId) => ipcRenderer.invoke("problem:addOutcome", card, gameId),
   createPatterScene: (card) => ipcRenderer.invoke("problem:createScene", card),
+  planMapUpgrade: () => ipcRenderer.invoke("project:planMapUpgrade"),
+  upgradeProjectMap: () => ipcRenderer.invoke("project:upgradeProjectMap"),
   coverageOverlay: () => ipcRenderer.invoke("coverage:overlay"),
   onCoverageDone: (handler) => {
     const listener = (): void => handler();
@@ -142,7 +144,8 @@ const api: StudioApi = {
   projectMaps: () => ipcRenderer.invoke("map:project"),
   projectMapView: () => ipcRenderer.invoke("map:view"),
   mapZone: (tagId: string) => ipcRenderer.invoke("map:zone", tagId),
-  useProjectMap: (boxId: string, on: boolean) => ipcRenderer.invoke("map:use", boxId, on),
+  useProjectMap: (boxId: string, on: boolean, confirmed?: boolean) => ipcRenderer.invoke("map:use", boxId, on, confirmed),
+  setBoxColour: (boxId: string, colour: number) => ipcRenderer.invoke("map:colour", boxId, colour),
   setGroupSpatial: (boxId: string, groupId: string, on: boolean) => ipcRenderer.invoke("map:setSpatial", boxId, groupId, on),
   createZone: (boxId: string, groupId: string, polygon: { x: number; y: number }[]) =>
     ipcRenderer.invoke("map:createZone", boxId, groupId, polygon),

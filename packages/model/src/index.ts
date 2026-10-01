@@ -1400,6 +1400,17 @@ export interface ViewShard {
   schema: typeof VIEW_SCHEMA;
   /** Keyed by DECK id: one node canvas each. */
   canvases?: Record<string, DeckCanvas>;
+  /** The box's colour on the project map: its layer swatch, its pins and its
+   *  chips. A slot of the theme's 12-colour identity palette (0-11), not a hex
+   *  value, so it follows light, dark and the colour themes, as a Patter
+   *  writing status's `colour` does.
+   *
+   *  STORED, not computed (the surfacing review's round-3 ruling): a box takes
+   *  the first slot no other box on the map uses when it joins, and keeps it
+   *  however the boxes are reordered, added or removed, until the author picks
+   *  another. Arrangement like everything else here, so it never reaches the
+   *  bundle. */
+  colour?: number;
   /** @deprecated The box map's old address, kept for one release and READ ONLY.
    *  A reader that meets it uses it when the box has no `MapShard`, and the
    *  formatter moves it; nothing writes it any more. Removed after the next

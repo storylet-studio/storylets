@@ -47,6 +47,14 @@ const SHAPES: [RegExp, string][] = [
   [/^box folder has no box\.storyletbox$/, "box-without-shard"],
   [/^the map lives in map\.storyletmap now|^this project's map lives in the view shard/, "stale-view-map"],
   [/^unexpected file in decks\/|^unrecognised file in a box folder/, "stray-file"],
+  // the project map (design/project-map-contract.md 4.1, E2 and W3): a project
+  // from before it, which the problems bar's "Upgrade the project" moves
+  [/^tag group "[^"]*" in box "[^"]*" is a map: a map belongs to the project now/, "map-in-box"],
+  [/^the map's frames belong to the project map now/, "map-frames-in-box"],
+  // compile.ts W2 and E6: a box that is not on the project map, with hands
+  // placed on it, or naming its zone group
+  [/^(1 hand is|\d+ hands are) placed on the map, but box "[^"]*" is not on the project map/, "map-pins-off-map"],
+  [/^box "[^"]*" is not on the project map, so it cannot use the zone group "/, "map-group-off-map"],
   // compile.ts: ids and addresses
   [/^duplicate id "/, "duplicate-id"],
   [/^duplicate \S+ gameId "/, "duplicate-gameid"],
@@ -204,6 +212,27 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
   "stale-view-map": (p) => (p.message.includes("still carries a copy")
     ? { text: "An old copy of the map is still in the view file; it’s ignored.", next: "Run storyletengine format to remove it." }
     : { text: "This project’s map is still stored the old way.", next: "Open the map once in Storyletter, or run storyletengine format, to move it." }),
+  "map-in-box": (p) => ({
+    text: `This project was made before maps belonged to the project, so the map ${quoted(pick(p, /^tag group "([^"]*)"/))} in ${quoted(pick(p, /in box "([^"]*)"/))} isn’t drawn or played.`,
+    next: "Upgrade the project to move it onto the project map.",
+  }),
+  "map-frames-in-box": (p) => (p.message.includes("this project has none")
+    ? { text: "Some of the map’s frames were drawn the old way, inside a box, and aren’t shown.", next: "Draw the project map, then upgrade the project to move them onto it." }
+    : { text: "Some of the map’s frames were drawn the old way, inside a box, and aren’t shown.", next: "Upgrade the project to move them onto the project map." }),
+  // W2. On a project from before the project map, every box with pins says
+  // this until the upgrade puts it on the map, so the next step is the upgrade.
+  "map-pins-off-map": (p) => {
+    const n = pick(p, /^(\d+) hands? (?:is|are) placed/);
+    return {
+      text: `${p.title ? problemName(p) : quoted(pick(p, /but box "([^"]*)"/))} has ${n === "1" ? "a hand" : `${n} hands`} placed on the map, but isn’t on the project map, so ${n === "1" ? "that pin isn’t" : "those pins aren’t"} drawn or played.`,
+      next: "Turn on Use the project map on the box’s page, or upgrade the project if it was made before maps belonged to the project.",
+    };
+  },
+  // E6.
+  "map-group-off-map": (p) => ({
+    text: `${quoted(pick(p, /^box "([^"]*)"/))} isn’t on the project map, so it can’t use its zones (${quoted(pick(p, /the zone group "([^"]*)"/))}).`,
+    next: "Turn on Use the project map on the box’s page, or remove the reference.",
+  }),
   "stray-file": (p) => ({
     text: `The file ${fileName(p)} isn’t something Storyletter knows, so it’s ignored.`,
     next: "Move it out of the project, or delete it.",
@@ -299,8 +328,8 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
   // lifts it out of the message), so "(id ...)" names the thing that has no
   // name any more, never the holder, which is named by its title.
   "dangling-place": (p) => ({
-    text: `${owner(p)} place points at a hand that’s no longer in this box${idTail(p)}.`,
-    next: "Choose a place for it.",
+    text: `${problemName(p)} names a hand that’s no longer in this box${idTail(p)}.`,
+    next: "Choose where it comes up.",
     dangling: true,
   }),
   "dangling-tag-group": (p) => ({
@@ -384,8 +413,8 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
 
   // --- hands and templates -----------------------------------------------------
   "place-from-property": (p) => ({
-    text: `${problemName(p)} fills its place from a property, but a place is the hand’s own name, not an axis.`,
-    next: "Choose a place directly.",
+    text: `${problemName(p)} fills its “place” tag from a property, but that tag is a hand’s own name, not an axis.`,
+    next: "Name the hand directly.",
   }),
   "hole-not-ref": (p) => ({
     text: `${problemName(p)} fills ${quoted(pick(p, /^"[^"]*" for "([^"]*)"/))} from ${quoted(pick(p, /^"([^"]*)" for/))}, which isn’t a @hand, @world or @story property.`,

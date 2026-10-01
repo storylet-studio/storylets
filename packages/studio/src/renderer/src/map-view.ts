@@ -1,7 +1,9 @@
 // ---------------------------------------------------------------------------
 // The project map: its zones seen from above, once for the project, with every
-// box on the map as a LAYER of its own sites (the surfacing review's plan item
+// box on the map as a LAYER of its own hands (the surfacing review's plan item
 // 2, design/surfacing-review-2026-10/README.md, "Direction: back to basics").
+// A pin is where a hand lies on the board laid out; "site" is the format's key
+// for that position and never a word on screen (the round-3 ruling: one noun).
 //
 // An ORDINARY view, and the same gesture grammar as the other two canvases:
 // click selects, double-click opens the thing in the editor, right-click offers
@@ -36,15 +38,14 @@
 // ---------------------------------------------------------------------------
 
 import { el } from "./dom.js";
-import { iconNode, plural, tipWithKey, wireReorder } from "@wildwinter/app-shell";
-import { colourIndex } from "../../shell/colour.js";
+import { iconNode, openAnchoredPanel, plural, tipWithKey, wireReorder } from "@wildwinter/app-shell";
 import { boxColour, boxColourIndex, boxPin } from "./box-tint.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface, type DrawContext } from "./canvas-surface.js";
 import { mapCameraKey, recallCamera, rememberCamera } from "./canvas-memory.js";
 import { readCanvasTokens, watchCanvasTokens } from "./canvas-tokens.js";
 import {
-  backgroundShape, drawBackground, drawSite, drawZone, paintZoneLabels, sitePoint, siteShape, zoneShape,
+  backgroundShape, drawBackground, drawSite, drawZone, paintZoneLabels, pinPlacement, sitePoint, siteShape, zoneShape,
   LABEL_FLOOR, type BackgroundShape, type SiteShape, type ZoneShape,
 } from "./map-art.js";
 import { onImageReady } from "./image-cache.js";
@@ -57,10 +58,9 @@ import {
 } from "./map-edit.js";
 import {
   MAP_LAYER_PICTURES, MAP_LAYER_ZONES, activeBox, hideAll, isShown, moveLayer, orderedBoxes, setActive,
-  showAll, soloLayer, toggleLayer,
+  showAll, showLayer, soloLayer, toggleLayer,
 } from "./map-layers.js";
 import { mapGlyph } from "./map-glyphs.js";
-import { zonesAt } from "@storylet-studio/model";
 import type { Polygon, ViewPoint } from "@storylet-studio/model";
 import type {
   CanvasFurnitureDto, CommentMarkerDto, CoverageOverlayDto, MapBackgroundDto, MapLayerPrefs,
@@ -102,10 +102,12 @@ export interface MapViewActions {
    *  that turns out to be, and therefore which hands are rebound, is decided in
    *  main from the position over the geometry: one rule, one place (mutate.ts). */
   movedSites: (box: string, moves: { id: string; x: number; y: number }[]) => void;
-  /** "+ Site": a new hand in `box`, pinned here, in one undo step. */
+  /** "+ Hand": a new hand in `box`, pinned here, in one undo step. */
   newSite: (box: string, at: { x: number; y: number }) => void;
-  /** Take a hand off the map. The hand itself stays; only its site goes. */
+  /** Take a hand off the map. The hand itself stays; only its pin goes. */
   removeSite: (box: string, handId: string) => void;
+  /** The author picked a colour for a box's layer from its swatch. */
+  setColour: (box: string, colour: number) => void;
   /** The furniture changed: the whole list, with the gesture named for undo. */
   setFurniture: (furniture: CanvasFurnitureDto, label: string, coalesce?: string) => void;
   /** The comment markers on this map, as main resolved them. The same four calls
@@ -197,17 +199,25 @@ export function mountMapView(
   };
 
   /**
-   * The zones a site sits inside that are NOT the one its hand belongs to.
+   * What a pin's position says about its hand (map-art `pinPlacement`): the
+   * other zones it also falls inside, and whether it stands off the zone its
+   * hand is bound to.
    *
    * Overlapping outlines are legitimate (a market square inside a district) and
    * the model resolves a point to the frontmost: that is `zoneAt`, and it is what
    * a DRAG binds to. What the picture cannot say is that the other outlines count
-   * for nothing, so the site is marked and the strip explains. Excluding the
-   * site's OWN zone rather than the frontmost: a site's zone comes from its
-   * hand's binding, not from geometry, so the two can disagree.
+   * for nothing, so the pin is marked and the strip explains. A pin's zone comes
+   * from its hand's binding, not from geometry, so the two can disagree, and
+   * when they do the pin wears a warning ring.
    */
-  const alsoInside = (at: ViewPoint, own: string | undefined): string[] =>
-    zonesAt(at, map.zones).filter((id) => id !== own).map((id) => zoneName(id) ?? "a zone");
+  const placeOf = (item: { x: number; y: number; width: number; height: number; zone?: string }): { alsoInside?: string[]; strayFrom?: string } =>
+    pinPlacement({ x: item.x + item.width / 2, y: item.y + item.height / 2 }, item.zone, map.zones, zoneName);
+  /** Put a pin's placement on it, after it moved or its hand was rebound. */
+  const replace = (item: SiteShape): void => {
+    const p = placeOf(item);
+    if (p.alsoInside !== undefined) item.alsoInside = p.alsoInside; else delete item.alsoInside;
+    if (p.strayFrom !== undefined) item.strayFrom = p.strayFrom; else delete item.strayFrom;
+  };
 
   // --- the items, filtered by the layers --------------------------------------
   let items: MapItem[] = [];
@@ -221,13 +231,9 @@ export function mountMapView(
           : {}),
       }),
       // Tinted by BOX: on the project map the first thing a pin answers is
-      // whose it is (map-art.ts, `tint`).
+      // whose it is (map-art.ts, `tint`), in the box's stored colour.
       tint: boxColourIndex(layer.box),
-      ...((): { alsoInside?: string[] } => {
-        const others = alsoInside({ x: site.x, y: site.y }, site.zone);
-        return others.length > 0 ? { alsoInside: others } : {};
-      })(),
-    }));
+    })).map((item) => { replace(item as SiteShape); return item; });
     // Box layers bottom first, so the TOP layer's pins draw last, over the rest:
     // the layer order is the pin draw order.
     const shownBoxes = orderedBoxes(prefs, boxIds).filter((b) => isShown(prefs, b)).reverse();
@@ -363,15 +369,18 @@ export function mountMapView(
     paintStrip();
   }
 
-  /** "+ Site": a new hand in the ACTIVE layer's box, made where the click lands. */
+  /** "+ Hand": a new hand in the ACTIVE layer's box, made where the click lands. */
   function newSite(): void {
     const box = activeBox(prefs, boxIds);
     if (box === undefined) return;
-    busy = { label: `a new site for ${layerName(layerOf.get(box)!)}`, drawing: false };
+    busy = { label: `a new hand for ${layerName(layerOf.get(box)!)}`, drawing: false };
     surface.setTool({
       cursor: "crosshair",
       onClick: (at) => {
         stopTool();
+        // Into a hidden layer, the layer is shown: the new hand appears where
+        // it was put, rather than being made out of sight.
+        if (!isShown(prefs, box)) keep(showLayer(prefs, box));
         actions.newSite(box, { x: Math.round(at.x), y: Math.round(at.y) });
       },
       onCancel: () => stopTool(),
@@ -411,18 +420,17 @@ export function mountMapView(
       el("span", { className: "mapside-title", text: "Layers" }),
       el("span", { className: "crumb-spacer" }),
       el("button", { className: "maplayers-all", text: "Show all", onClick: () => keep(showAll(prefs)) }),
-      el("button", { className: "maplayers-all", text: "Hide all", tip: "Hide every box's sites. Zones stay.", onClick: () => keep(hideAll(prefs, boxIds)) }));
+      el("button", { className: "maplayers-all", text: "Hide all", tip: "Hide every box's hands. Zones stay.", onClick: () => keep(hideAll(prefs, boxIds)) }));
     const rows: HTMLElement[] = [];
     for (const box of orderedBoxes(prefs, boxIds)) {
       const layer = layerOf.get(box)!;
-      const swatch = el("i", { className: "maplayer-swatch" });
-      swatch.style.background = boxColour(layer.box);
+      const swatch = colourSwatch(layer);
       const row = el("div", {
         className: `maplayer${box === active ? " active" : ""}${isShown(prefs, box) ? "" : " hidden"}`,
-        tip: box === active ? "The active layer: + Site adds here." : "Make this the active layer",
+        tip: box === active ? "The active layer: + Hand adds here." : "Make this the active layer",
       }, eye(box, layerName(layer)), el("span", { className: "maplayer-grip" }, iconNode("grip", 12)), swatch,
         el("span", { className: "maplayer-name", text: layerName(layer) }),
-        el("span", { className: "maplayer-n", text: plural(layer.sites.length, "site") }));
+        el("span", { className: "maplayer-n", text: plural(layer.sites.length, "hand") }));
       row.addEventListener("click", () => keep(setActive(prefs, box)));
       // The person's order, by drag: the pin draw order follows it.
       wireReorder(row, box, "y", (from, before, to) => keep(moveLayer(prefs, boxIds, from, to, before)));
@@ -442,7 +450,7 @@ export function mountMapView(
       ...(editing
         ? []
         : [el("p", { className: "mapside-teach", text: boxIds.length > 0
-            ? "Choose a site to see what can come up there, or a zone for its properties and everything filed to it."
+            ? "Choose a hand to see what can come up there, or a zone for its properties and everything filed to it."
             : "No box uses the map yet. A box joins it from its own page." })]));
   }
 
@@ -451,7 +459,44 @@ export function mountMapView(
       el("span", { className: "mapside-name", text: label }),
       ...(meta !== undefined ? [el("span", { className: "mapside-meta", text: meta })] : []));
 
-  /** The active layer's sites and its hands still waiting for a pin. */
+  /**
+   * A layer's colour, as a swatch that changes it: the box's STORED colour
+   * (box-tint.ts), picked from the identity palette in an anchored panel, the
+   * app's one-choice picker (the deck picker's shape, inspector.ts). Patterpad
+   * picks a writing status's colour the same way, a swatch that opens the
+   * twelve slots. A slot another layer already wears says so, and can still be
+   * chosen: the colours are the author's.
+   */
+  function colourSwatch(layer: ProjectMapLayerDto): HTMLElement {
+    const swatch = el("button", { className: "maplayer-swatch pick", tip: `${layerName(layer)}'s colour. Click to change it.` });
+    swatch.style.background = boxColour(layer.box);
+    swatch.setAttribute("aria-label", `${layerName(layer)}'s colour`);
+    swatch.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const panel = openAnchoredPanel({ anchor: swatch, className: "swatchpick", title: `${layerName(layer)}'s colour`, width: 196, prefer: "below" });
+      if (!panel) return;
+      const grid = el("div", { className: "swatchpick-grid" });
+      const now = boxColourIndex(layer.box);
+      let focus: HTMLElement | undefined;
+      for (let slot = 0; slot < 12; slot++) {
+        const wearing = map.layers.filter((l) => l.box !== layer.box && boxColourIndex(l.box) === slot).map(layerName);
+        const opt = el("button", {
+          className: `swatchpick-opt${slot === now ? " sel" : ""}${wearing.length > 0 ? " taken" : ""}`,
+          tip: wearing.length > 0 ? `Colour ${slot + 1}, which ${wearing.join(" and ")} ${wearing.length === 1 ? "wears" : "wear"}` : `Colour ${slot + 1}`,
+          onClick: () => { panel.close(); if (slot !== now) actions.setColour(layer.box, slot); },
+        });
+        opt.style.background = `var(--char-${slot})`;
+        opt.setAttribute("aria-label", `Colour ${slot + 1}`);
+        if (slot === now) focus = opt;
+        grid.append(opt);
+      }
+      panel.body.append(grid);
+      focus?.focus();
+    });
+    return swatch;
+  }
+
+  /** The active layer's pinned hands and its hands still waiting for a pin. */
   function activeContents(layer: ProjectMapLayerDto): HTMLElement[] {
     return [
       ...layer.sites.map((site) => {
@@ -474,9 +519,9 @@ export function mountMapView(
     const rows = [
       ...map.zones.map((z) => {
         const r = subRow(z.gameId, "Show it on the map", () => { surface.select([z.id]); surface.showSelection(); });
-        const dot = el("i", { className: "mapside-dot" });
-        dot.style.color = `var(--char-${colourIndex(z.gameId)})`;
-        r.prepend(dot);
+        // Neutral, as the zone is on the map: zones are the project's, and only
+        // pins wear a box's colour.
+        r.prepend(el("i", { className: "mapside-dot zone" }));
         return r;
       }),
       ...map.undrawn.map((z) => {
@@ -504,7 +549,7 @@ export function mountMapView(
 
   /** Which panel is up, so a repaint of the same selection does not refetch it. */
   let panelFor: string | undefined;
-  /** The panel: the selected site or zone while reading, else the layers. Edit
+  /** The panel: the selected hand or zone while reading, else the layers. Edit
    *  layout keeps the layers up whatever is selected: the content panel is for
    *  reading, and editing wants the contents to hand. */
   function paintSide(): void {
@@ -540,6 +585,9 @@ export function mountMapView(
     const where = site.zone === undefined ? "no zone yet" : (zoneName(site.zone) ?? "a zone");
     const others = site.alsoInside ?? [];
     const also = others.length === 0 ? "" : ` Also inside ${listNames(others)}, which does not count.`;
+    if (site.strayFrom !== undefined) {
+      return `"${site.title}" is dealt in ${site.strayFrom}, but its pin stands outside it. Drag it back into ${site.strayFrom}${rule?.rebinds === true ? ", or into another zone to move the hand" : ""}.`;
+    }
     if (rule?.rebinds === true) {
       return site.zone === undefined
         ? `${site.title} is in ${where}. Drag it into one to bind it.${also}`
@@ -631,7 +679,7 @@ export function mountMapView(
       : [];
     const toggle = el("button", {
       className: `stripbtn${editing ? " on" : ""}`,
-      tip: editing ? "Back to reading the map" : "Draw zones, place sites, add pictures, frames and comments",
+      tip: editing ? "Back to reading the map" : "Draw zones, place hands, add pictures, frames and comments",
       onClick: () => actions.setEditing(!editing),
     }, editing ? iconNode("tick", 12) : iconNode("add", 12), editing ? "Done" : "Edit layout");
 
@@ -640,14 +688,14 @@ export function mountMapView(
       const shown = items.filter((i) => i.kind === "site").length;
       const zones = map.zones.length;
       strip.replaceChildren(toggle,
-        el("span", { className: "hint", text: refused ?? `${plural(zones, "zone")}, ${plural(shown, "site")} shown.` }),
+        el("span", { className: "hint", text: refused ?? `${plural(zones, "zone")}, ${plural(shown, "hand")} shown.` }),
         ...legend, el("span", { className: "stripgap" }));
       return;
     }
 
     const what = chosen.length === 1 ? byId(chosen[0]!) : undefined;
     const said = refused ?? (what === undefined
-      ? (chosen.length > 1 ? `${chosen.length} selected` : "Zones are the project's. Sites go to the active layer.")
+      ? (chosen.length > 1 ? `${chosen.length} selected` : "Zones are the project's. Hands go to the active layer.")
       : what.kind === "background"
         ? `${what.title} is a picture behind the map. Drag it, or lock it once it's right.`
         : what.kind === "frame"
@@ -667,8 +715,8 @@ export function mountMapView(
         el("button", { className: "stripbtn", tip: "Trace a new zone on the map", onClick: () => trace(undefined, "New zone") },
           iconNode("add", 12), "Zone"),
         ...(activeLayer
-          ? [el("button", { className: "stripbtn", tip: `A new site for ${layerName(activeLayer)}, the active layer. Click where it goes.`, onClick: () => newSite() },
-              iconNode("add", 12), "Site", siteDot, el("span", { className: "stripbtn-sub", text: layerName(activeLayer) }))]
+          ? [el("button", { className: "stripbtn", tip: `A new hand for ${layerName(activeLayer)}, the active layer. Click where it goes.`, onClick: () => newSite() },
+              iconNode("add", 12), "Hand", siteDot, el("span", { className: "stripbtn-sub", text: layerName(activeLayer) }))]
           : []),
         el("button", {
           className: "stripbtn",
@@ -687,7 +735,7 @@ export function mountMapView(
         }, iconNode("add", 12), "Picture"),
         el("button", { className: "stripbtn", tip: "Draw a titled frame behind part of the map", onClick: () => furniture?.drawFrame() },
           iconNode("add", 12), "Frame"),
-        el("button", { className: "stripbtn", tip: "Drop a comment on the map or on a site", onClick: () => armComment() },
+        el("button", { className: "stripbtn", tip: "Drop a comment on the map or on a hand", onClick: () => armComment() },
           iconNode("add", 12), "Comment"),
       ),
       el("span", { className: "hint", text: said }),
@@ -713,11 +761,14 @@ export function mountMapView(
     // Below the label floor the map is shapes and dots with no names: the
     // rollover is how you ask which is which without zooming back in.
     hoverTip: (item, scale) => {
+      if (item.kind === "site" && item.strayFrom !== undefined) {
+        return `${item.title} is dealt in ${item.strayFrom}, but its pin stands outside it.`;
+      }
       if (item.kind === "site" && item.alsoInside !== undefined && item.alsoInside.length > 0) {
         const own = item.zone === undefined ? undefined : zoneName(item.zone);
         return own === undefined
           ? `${item.title} sits inside ${listNames(item.alsoInside)}. Zones don't nest, so dropping it binds to the frontmost one only.`
-          : `${item.title} belongs to ${own}. It also sits inside ${listNames(item.alsoInside)}, which counts for nothing. Zones are tags, so they don't nest, and a site belongs to the frontmost zone around it.`;
+          : `${item.title} belongs to ${own}. It also sits inside ${listNames(item.alsoInside)}, which counts for nothing. Zones are tags, so they don't nest, and a hand belongs to the frontmost zone around it.`;
       }
       if (item.kind === "site" && scale >= LABEL_FLOOR) {
         // The box is the one thing the label never says, and the tint only
@@ -736,7 +787,7 @@ export function mountMapView(
     },
     onSelectionChange: () => {
       pickedVertex = undefined;
-      // Selecting a site makes its box the active layer: the next "+ Site" goes
+      // Selecting a pin makes its box the active layer: the next "+ Hand" goes
       // where the author was just looking.
       const chosen = surface.selection();
       const only = chosen.length === 1 ? byId(chosen[0]!) : undefined;
@@ -826,10 +877,11 @@ export function mountMapView(
         for (const site of dropped) {
           const rule = siteRule.get(site.id);
           if (rule?.fixedBy !== undefined) {
-            refused = `${site.title} goes where "${rule.fixedBy}" says, because every hand from that template shares one zone.`;
+            refused = `"${site.title}" stays in the zone its template "${rule.fixedBy}" gives every hand it makes, so moving its pin moves nothing.`;
           }
           const dto = siteDto.get(site.id);
           if (dto) { const at = sitePoint(site); dto.x = at.x; dto.y = at.y; }
+          replace(site);
         }
         const byBox = new Map<string, { id: string; x: number; y: number }[]>();
         for (const site of dropped) {
@@ -1063,6 +1115,7 @@ export function mountMapView(
         site.zone = change.zone ?? undefined;
         site.zoneName = change.zone === null ? undefined : zoneName(change.zone);
         site.unbound = change.zone === null;
+        replace(site);
       }
       surface.setItems(items);
       panelFor = undefined;

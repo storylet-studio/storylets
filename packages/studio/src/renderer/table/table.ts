@@ -743,7 +743,7 @@ function handCell(hand: { id?: string; boxId?: string; gameId: string; title?: s
             tip: here ? "The last card was played from here." : "Played from here earlier this run.",
           })
         : null,
-      el("span", { className: "hname", text: hand.title ?? hand.gameId, tip: "A place on the board that cards are dealt into. Double-click to open it in the editor." }),
+      el("span", { className: "hname", text: hand.title ?? hand.gameId, tip: "A hand on the board: where cards are dealt. Double-click to open it in the editor." }),
       el("span", { className: "htags" }, ...Object.values(hand.tags).map(chip))));
   // Double-click the header reveals the hand in the editor, on what can come up
   // there: the gesture a pin and a card already use here. A hand the bundle does

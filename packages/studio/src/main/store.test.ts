@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StudioStore } from "./store.js";
@@ -64,23 +64,33 @@ describe("studio store", () => {
     expect(new StudioStore(dir).get().boardFollow).toBe(true);
   });
 
-  it("keeps each project map's layers, per map", () => {
+  it("keeps each project map's layers, per project and per map", () => {
     // How a person looks at the map (what is hidden, the order, the active
-    // layer) is theirs, and two projects' maps are kept apart by group id.
+    // layer) is theirs, and kept per PROJECT: two projects started from the
+    // same example share its group id, and once shared one setting.
     const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
     const store = new StudioStore(dir);
+    store.touchProject("/a/one.storylets", "One");
     store.setMapLayers("d_town", { hidden: ["b_2"], order: ["b_2", "b_1"], active: "b_1" });
     store.setMapLayers("d_castle", { hidden: ["pictures"] });
     expect(new StudioStore(dir).get().mapLayers).toEqual({
       d_town: { hidden: ["b_2"], order: ["b_2", "b_1"], active: "b_1" },
       d_castle: { hidden: ["pictures"] },
     });
+    // A copy of the same project, with the same ids: its own, empty, record.
+    store.touchProject("/a/copy.storylets", "Copy");
+    expect(store.get().mapLayers).toBeUndefined();
+    store.setMapLayers("d_town", { hidden: ["zones"] });
+    expect(store.get().mapLayers).toEqual({ d_town: { hidden: ["zones"] } });
+    store.touchProject("/a/one.storylets");
+    expect(store.get().mapLayers?.["d_town"]).toEqual({ hidden: ["b_2"], order: ["b_2", "b_1"], active: "b_1" });
   });
 
-  it("keeps each box's Group by, per page", () => {
+  it("keeps each box's Group by, per project and per page", () => {
     // Like the layers: a person's way of looking at a box, never the project's.
     const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
     const store = new StudioStore(dir);
+    store.touchProject("/a/one.storylets", "One");
     store.setCardGroup("b_1", "contents", "place");
     store.setCardGroup("b_1", "deck", "tag:g_npc");
     store.setCardGroup("b_2", "deck", "none");
@@ -88,6 +98,39 @@ describe("studio store", () => {
       b_1: { contents: "place", deck: "tag:g_npc" },
       b_2: { deck: "none" },
     });
+    store.touchProject("/a/copy.storylets", "Copy");
+    expect(store.get().cardGroups).toBeUndefined();
+  });
+
+  it("folds the id-keyed layers and Group by into the last project's, once", () => {
+    const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+    const store = new StudioStore(dir);
+    store.touchProject("/a/one.storylets", "One");
+    const file = join(dir, "studio-state.json");
+    const raw = JSON.parse(readFileSync(file, "utf8")) as { app: Record<string, unknown> };
+    raw.app["mapLayers"] = { d_0001: { hidden: ["pictures"] } };
+    raw.app["cardGroups"] = { b_0000: { contents: "place" } };
+    writeFileSync(file, JSON.stringify(raw));
+    const again = new StudioStore(dir);
+    expect(again.get().mapLayers).toEqual({ d_0001: { hidden: ["pictures"] } });
+    expect(again.get().cardGroups).toEqual({ b_0000: { contents: "place" } });
+    const after = JSON.parse(readFileSync(file, "utf8")) as { app: Record<string, unknown> };
+    expect(after.app["mapLayers"]).toBeUndefined();
+    expect(after.app["cardGroups"]).toBeUndefined();
+    expect(after.app["projectMapLayers"]).toEqual({ "/a/one.storylets": { d_0001: { hidden: ["pictures"] } } });
+  });
+
+  it("forgets a project's layers and Group by with the project", () => {
+    const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+    const store = new StudioStore(dir);
+    store.touchProject("/a/one.storylets", "One");
+    store.setMapLayers("d_town", { hidden: ["zones"] });
+    store.setCardGroup("b_1", "contents", "place");
+    store.touchProject("/a/two.storylets", "Two");
+    store.forgetProject("/a/one.storylets");
+    const raw = JSON.parse(readFileSync(join(dir, "studio-state.json"), "utf8")) as { app: Record<string, Record<string, unknown>> };
+    expect(raw.app["projectMapLayers"]).toEqual({});
+    expect(raw.app["projectCardGroups"]).toEqual({});
   });
 
   it("caps recents and forgets unopenable projects", () => {
