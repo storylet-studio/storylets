@@ -100,6 +100,56 @@ describe("one registry per game: the Storylet Engine", () => {
     expect(JSON.parse(JSON.stringify(restored.saveGame()))).toEqual(save);
   });
 
+  // The corpus pins that a flow replaced in place saves the bytes a load would
+  // (2026-10-01). These pin the two edges the corpus cannot reach: a save
+  // written in the old, drifted order still loads, and a standalone hotSwap
+  // after a replace writes the same bytes as a load of that run.
+  describe("the registry section is written in flow order, whatever the history", () => {
+    const replaced = (): Engine => {
+      const engine = new Engine(bundle, { seed: 1 });
+      heist(engine.openFlow("a"));
+      heist(engine.openFlow("b"));
+      heist(engine.openFlow("a"));   // replaces a in place: its keys re-register last
+      return engine;
+    };
+
+    it("keys every flow's values in flows() order", () => {
+      const keys = Object.keys(replaced().saveGame().registry!);
+      expect(keys).toEqual([
+        "story", "world",
+        "storylets/flow/a/story", "storylets/flow/a/deck/k_main", "storylets/flow/a/value/v_docks",
+        "storylets/flow/b/story", "storylets/flow/b/deck/k_main", "storylets/flow/b/value/v_docks",
+      ]);
+    });
+
+    it("loads a save written in the old order, and saves it back in the new one", () => {
+      const engine = replaced();
+      const canonical = JSON.stringify(engine.saveGame());
+      const save = engine.saveGame();
+      // The order the reference wrote before the fix: b's keys before a's.
+      const reg = save.registry!;
+      const drifted = Object.fromEntries([
+        ...Object.entries(reg).filter(([k]) => !k.startsWith("storylets/flow/a/")),
+        ...Object.entries(reg).filter(([k]) => k.startsWith("storylets/flow/a/")),
+      ]);
+      expect(Object.keys(drifted)).not.toEqual(Object.keys(reg));
+      const restored = new Engine(bundle, { seed: 1 });
+      expect(restored.loadGame({ ...save, registry: drifted }).exact).toBe(true);
+      expect(restored.getFlow("a")!.getProperty("story.steps")).toBe(1);
+      expect(restored.getFlow("b")!.getProperty("story.steps")).toBe(1);
+      expect(JSON.stringify(restored.saveGame())).toBe(canonical);
+    });
+
+    it("a standalone hotSwap after a replace saves the bytes a load would", () => {
+      const engine = replaced();
+      const loaded = new Engine(bundle, { seed: 1 });
+      loaded.loadGame(engine.saveGame());
+      const { engine: swapped } = engine.hotSwap(bundle);
+      expect(JSON.stringify(swapped.saveGame())).toBe(JSON.stringify(loaded.saveGame()));
+      expect(JSON.stringify(engine.saveGame())).toBe(JSON.stringify(loaded.saveGame()));
+    });
+  });
+
   describe("one save for the game, loaded in either order", () => {
     const session1 = () => {
       const g = game();

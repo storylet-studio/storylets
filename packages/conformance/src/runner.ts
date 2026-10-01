@@ -459,7 +459,8 @@ export function runScriptedCase(c: ScriptedCase): string[] {
       }
       case "saveLoad": {
         // Serialise the WHOLE engine, discard it, restore into a fresh one
-        // (semantic parity, not byte parity). `into: "B"` restores into the
+        // (semantic parity, not byte parity, unless the op asks for
+        // `expectSameBytes`). `into: "B"` restores into the
         // case's EDITED bundle: the drifted-content contract. loadGame
         // rebuilds every flow, so the script's handles are re-taken.
         const envelope = engine.saveGame();
@@ -480,13 +481,23 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         engine = target;
         checkReport(at, op.expectReport, engine.loadGame(envelope), failures);
         handles = new Map(engine.flows().map((f) => [f.id, f]));
+        if (op.expectSameBytes) {
+          // Byte parity, this once: the loaded engine must write back exactly
+          // what it was given. A save that differs by the road taken to it
+          // fails here even when every value is right.
+          const before = JSON.stringify(envelope);
+          const after = JSON.stringify(engine.saveGame());
+          if (after !== before) {
+            failures.push(`${at}: the loaded engine saves different bytes: before ${before}, after ${after}`);
+          }
+        }
         break;
       }
       case "parkFlow": {
         // Park: take the blob, then close. Closing is what releases the shared
         // claims, which is the whole reason a visit parks rather than idling.
         parked.set(op.flow, engine.saveFlow(op.flow));
-        engine.closeFlow(op.flow);
+        if (!op.keepOpen) engine.closeFlow(op.flow);
         break;
       }
       case "resumeFlow": {

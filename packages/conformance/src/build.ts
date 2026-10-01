@@ -32,8 +32,11 @@ import type {
 
 /** 10: the project map (design/project-map-contract.md 2.4): the fixture
  *  fields, `bundle.map`, `box.usesMap`, the @1 schema tag on the bundles that
- *  carry them, and the `load` case kind. No earlier expectation changed. */
-export const CORPUS_VERSION = 10;
+ *  carry them, and the `load` case kind. No earlier expectation changed.
+ *  11: a save is history-independent: `saveLoad`'s `expectSameBytes` and
+ *  `parkFlow`'s `keepOpen`, and two cases replacing a flow in place. No
+ *  earlier expectation changed. */
+export const CORPUS_VERSION = 11;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>

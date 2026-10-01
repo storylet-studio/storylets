@@ -2156,6 +2156,59 @@ export const fixtures: Fixtures = {
         { op: "assertState", flow: "alice", expect: { "turn.b_x": 0 } },
       ] },
 
+    // A save must not depend on the road taken to it. Since save@2 a standalone
+    // engine's per-flow values live in its registry, and `saveGame` writes that
+    // section; a flow replaced in place kept its slot in `flows` (2026-08-29)
+    // but its registry keys went to the END, while a load rebuilds them in flow
+    // order. So the save of a run with a replace in it, loaded and saved again,
+    // came back different bytes, and the Storylet Server compares saves by
+    // bytes (2026-10-01). Both roads to a replace: a bare re-open, and a resume
+    // over a flow that is still open.
+    { name: "a flow re-opened in place saves the bytes a load would",
+      story: [
+        { name: "gold", type: "number", default: 0 },                    // shared
+        { name: "steps", type: "number", default: 0, shared: false },    // per flow
+      ],
+      cards: [{ id: "c_plain" }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "openFlow", flow: "alice" },
+        { op: "openFlow", flow: "bob" },
+        { op: "setState", flow: "alice", story: { gold: 2, steps: 4 } },
+        { op: "setState", flow: "bob", story: { steps: 3 } },
+        { op: "openFlow", flow: "alice" },   // replaces, and stays where it was
+        { op: "setState", flow: "alice", story: { steps: 1 } },
+        { op: "assertFlows", expect: ["alice", "bob"] },
+        { op: "saveLoad", expectSameBytes: true },
+        { op: "assertFlows", expect: ["alice", "bob"] },
+        { op: "assertState", flow: "alice", expect: { "story.gold": 2, "story.steps": 1 } },
+        { op: "assertState", flow: "bob", expect: { "story.gold": 2, "story.steps": 3 } },
+      ] },
+
+    { name: "a flow resumed over itself saves the bytes a load would",
+      story: [
+        { name: "gold", type: "number", default: 0 },                    // shared
+        { name: "steps", type: "number", default: 0, shared: false },    // per flow
+      ],
+      cards: [{ id: "c_plain" }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "openFlow", flow: "alice" },
+        { op: "openFlow", flow: "bob" },
+        { op: "setState", flow: "alice", story: { gold: 2, steps: 1 } },
+        { op: "setState", flow: "bob", story: { steps: 3 } },
+        // A checkpoint taken while alice plays on, then rolled back to.
+        { op: "parkFlow", flow: "alice", keepOpen: true },
+        { op: "setState", flow: "alice", story: { steps: 9 } },
+        { op: "resumeFlow", flow: "alice", expectReport: { exact: true } },
+        { op: "assertFlows", expect: ["alice", "bob"] },
+        { op: "assertState", flow: "alice", expect: { "story.steps": 1 } },
+        { op: "saveLoad", expectSameBytes: true },
+        { op: "assertFlows", expect: ["alice", "bob"] },
+        { op: "assertState", flow: "alice", expect: { "story.gold": 2, "story.steps": 1 } },
+        { op: "assertState", flow: "bob", expect: { "story.gold": 2, "story.steps": 3 } },
+      ] },
+
     { name: "a parked flow holds no shared claim, and may find its card gone when it comes back",
       decks: [{ id: "k_rare", shared: true, cards: [{ id: "c_relic" }] }],
       hands: [{ id: "h_q", rule: {}, slots: 1 }],

@@ -1353,9 +1353,35 @@ func save_game() -> Dictionary:
 		"content": (_bundle["content"] as Dictionary).duplicate(true),
 	}
 	if _owns_registry:
-		out["registry"] = _registry.save()
+		out["registry"] = _registry_section()
 	out["shared"] = {"spent": _spent_ids()}
 	out["flows"] = out_flows
+	return out
+
+
+## The registry's values in CANONICAL order, the order a load rebuilds them in:
+## the engine-wide keys as the constructor registered them, then each flow's
+## keys in flows() order (each flow's own registration order), then anything
+## else the registry holds (values still waiting for a key), as the registry
+## lists it. The registry itself lists keys in registration order, and a flow
+## replaced in place (open_flow keeps its slot in _flows) re-registers its keys
+## at the END, so open_flow("a"); open_flow("b"); open_flow("a") saved b's keys
+## before a's while a load rebuilt a's first: the same run, different
+## .storyletsave bytes, and a save loaded and saved again no longer equal to
+## itself. Order does not matter on READ, so a save written in the old order
+## loads as before (2026-10-01).
+func _registry_section() -> Dictionary:
+	var all: Dictionary = _registry.save()
+	var out := {}
+	var keys: Array = []
+	for m in _shared_mounts:
+		keys.append(m["key"])
+	for flow in _flows.values():
+		keys.append_array((flow as StoryletFlow).registered_keys())
+	keys.append_array(all.keys())
+	for key in keys:
+		if all.has(key) and not out.has(key):
+			out[key] = all[key]
 	return out
 
 

@@ -1026,11 +1026,19 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
         else if (kind == "saveLoad")
         {
             // Serialise the WHOLE engine, discard it, restore into a fresh
-            // one (semantic parity, not byte parity). into: "B" restores into
+            // one (semantic parity, not byte parity, unless the op asks for
+            // expectSameBytes). into: "B" restores into
             // the case's EDITED bundle: the drifted-content contract.
             // loadGame rebuilds every flow, so the script's handles are
             // re-taken.
             SaveEnvelope envelope = engine->saveGame();
+            // expectSameBytes: this port's own serialised save text, taken
+            // before the load, must equal what the loaded engine writes
+            // straight after. A save that differs by the road taken to it
+            // fails here even when every value is right.
+            const JsonValue* sameBytes = op.find("expectSameBytes");
+            const bool expectSameBytes = sameBytes && sameBytes->b;
+            const std::string bytesBefore = expectSameBytes ? serializeState(*engine) : std::string();
             BundlePtr into = op.strOr("into") == "B" ? bundleB : bundle;
             auto target = std::make_unique<Engine>(into, opts);
             const JsonValue* previewOnly = op.find("previewOnly");
@@ -1055,6 +1063,15 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
                 checkReport(at, op.find("expectReport"), engine->loadGame(envelope), failures);
                 handles.clear();
                 for (const FlowPtr& f : engine->flows()) handles[f->id()] = f;
+                if (expectSameBytes)
+                {
+                    const std::string bytesAfter = serializeState(*engine);
+                    if (bytesAfter != bytesBefore)
+                    {
+                        failures.push_back(at + ": the loaded engine saves different bytes: before "
+                            + bytesBefore + ", after " + bytesAfter);
+                    }
+                }
             }
         }
         else if (kind == "parkFlow")
@@ -1070,7 +1087,10 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             // in `parked` is the one that survived the round trip, so a
             // divergence shows up as a failing case rather than a UE-only bug.
             parked[name] = deserializeFlow(serializeFlow(engine->saveFlow(name)));
-            engine->closeFlow(name);
+            // keepOpen takes the blob WITHOUT closing, so the resumeFlow after
+            // it replaces a live flow in place (rolling back to a checkpoint).
+            const JsonValue* keepOpen = op.find("keepOpen");
+            if (!(keepOpen && keepOpen->b)) engine->closeFlow(name);
         }
         else if (kind == "resumeFlow")
         {

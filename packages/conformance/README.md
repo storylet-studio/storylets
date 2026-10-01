@@ -8,7 +8,7 @@ behaviour lands here as a case first, then in the implementations
 
 ## The corpus
 
-[`corpus.json`](./corpus.json) (`version: 10`) is the portable artifact. It
+[`corpus.json`](./corpus.json) (`version: 11`) is the portable artifact. It
 carries **compiled** forms only (`{ src, ast }` envelopes, whole bundles),
 so a runtime-only port consumes it with no parser or compiler. Five case
 kinds - `expressions`, `specificity`, `peek`, `scripted`, `load` - specified in
@@ -25,6 +25,13 @@ bundles that carry `map` (the project's zone group) or a box's `usesMap` are
 written at schema `storylets/bundle@1`, every other bundle stays at `@0`, so
 the corpus holds both tags a runtime must accept.
 
+Version 11 made a save history-independent: a scripted `saveLoad` may carry
+`expectSameBytes`, and then the envelope saved before the load must equal,
+byte for byte, what the freshly loaded engine saves straight after (each
+runtime's own serialised save text). `parkFlow` may carry `keepOpen`, which
+takes the blob without closing the flow, so the `resumeFlow` after it
+replaces a live flow in place.
+
 ## PRNG
 
 Seeded cases pin **mulberry32** (schema doc 3.3): default seed 0,
@@ -37,7 +44,7 @@ verify first are tabled in the design notes, section 3.
   with **hand-authored** expectations - the expectations are the contract,
   never derived from an engine (PRNG-dependent ones are computed from the
   pinned algorithm and marked `PRNG-computed`). `src/cases.ts` is the live
-  contract - 183 cases (10 expressions, 8 specificity, 32 peek, 127 scripted,
+  contract - 185 cases (10 expressions, 8 specificity, 32 peek, 129 scripted,
   6 load);
   the design notes' sections 1-5 specify the shapes, and its section 6 listing
   is the round-1 draft, awaiting re-transcription.

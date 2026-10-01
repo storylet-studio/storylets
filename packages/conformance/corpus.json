@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 11,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -19577,6 +19577,347 @@
           "flow": "alice",
           "expect": {
             "turn.b_x": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "a flow re-opened in place saves the bytes a load would",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "gold",
+              "type": "number",
+              "default": 0
+            },
+            {
+              "name": "steps",
+              "type": "number",
+              "default": 0,
+              "shared": false
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_plain",
+                    "gameId": "plain",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "openFlow",
+          "flow": "alice"
+        },
+        {
+          "op": "openFlow",
+          "flow": "bob"
+        },
+        {
+          "op": "setState",
+          "flow": "alice",
+          "story": {
+            "gold": 2,
+            "steps": 4
+          }
+        },
+        {
+          "op": "setState",
+          "flow": "bob",
+          "story": {
+            "steps": 3
+          }
+        },
+        {
+          "op": "openFlow",
+          "flow": "alice"
+        },
+        {
+          "op": "setState",
+          "flow": "alice",
+          "story": {
+            "steps": 1
+          }
+        },
+        {
+          "op": "assertFlows",
+          "expect": [
+            "alice",
+            "bob"
+          ]
+        },
+        {
+          "op": "saveLoad",
+          "expectSameBytes": true
+        },
+        {
+          "op": "assertFlows",
+          "expect": [
+            "alice",
+            "bob"
+          ]
+        },
+        {
+          "op": "assertState",
+          "flow": "alice",
+          "expect": {
+            "story.gold": 2,
+            "story.steps": 1
+          }
+        },
+        {
+          "op": "assertState",
+          "flow": "bob",
+          "expect": {
+            "story.gold": 2,
+            "story.steps": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "a flow resumed over itself saves the bytes a load would",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "gold",
+              "type": "number",
+              "default": 0
+            },
+            {
+              "name": "steps",
+              "type": "number",
+              "default": 0,
+              "shared": false
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_plain",
+                    "gameId": "plain",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "openFlow",
+          "flow": "alice"
+        },
+        {
+          "op": "openFlow",
+          "flow": "bob"
+        },
+        {
+          "op": "setState",
+          "flow": "alice",
+          "story": {
+            "gold": 2,
+            "steps": 1
+          }
+        },
+        {
+          "op": "setState",
+          "flow": "bob",
+          "story": {
+            "steps": 3
+          }
+        },
+        {
+          "op": "parkFlow",
+          "flow": "alice",
+          "keepOpen": true
+        },
+        {
+          "op": "setState",
+          "flow": "alice",
+          "story": {
+            "steps": 9
+          }
+        },
+        {
+          "op": "resumeFlow",
+          "flow": "alice",
+          "expectReport": {
+            "exact": true
+          }
+        },
+        {
+          "op": "assertFlows",
+          "expect": [
+            "alice",
+            "bob"
+          ]
+        },
+        {
+          "op": "assertState",
+          "flow": "alice",
+          "expect": {
+            "story.steps": 1
+          }
+        },
+        {
+          "op": "saveLoad",
+          "expectSameBytes": true
+        },
+        {
+          "op": "assertFlows",
+          "expect": [
+            "alice",
+            "bob"
+          ]
+        },
+        {
+          "op": "assertState",
+          "flow": "alice",
+          "expect": {
+            "story.gold": 2,
+            "story.steps": 1
+          }
+        },
+        {
+          "op": "assertState",
+          "flow": "bob",
+          "expect": {
+            "story.gold": 2,
+            "story.steps": 3
           }
         }
       ]

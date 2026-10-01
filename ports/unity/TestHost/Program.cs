@@ -1375,14 +1375,16 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     case "saveLoad":
                     {
                         // Serialise the WHOLE engine, discard it, restore into a
-                        // fresh one (semantic parity, not byte parity). into: "B"
+                        // fresh one (semantic parity, not byte parity, unless the op
+                        // asks for expectSameBytes). into: "B"
                         // restores into the case's EDITED bundle: the
                         // drifted-content contract. LoadGame rebuilds every flow,
                         // so the script's handles are re-taken. The envelope
                         // crosses the JSON layer on the way, as a game's save
                         // does, so every scripted save also holds the wire
                         // shape (storylets/save@2) to the engine's own.
-                        var envelope = StoryletSave.FromJson(JObject.Parse(StoryletSave.ToJson(engine.SaveGame()).ToString()));
+                        var savedText = StoryletSave.ToJson(engine.SaveGame()).ToString();
+                        var envelope = StoryletSave.FromJson(JObject.Parse(savedText));
                         var into = op.Value<string>("into") == "B" ? bundleB : bundle;
                         var target = new StoryletStudio.StoryletEngine.Engine(into, new EngineOptions { Seed = seed });
                         if (op.Value<bool?>("previewOnly") == true)
@@ -1405,6 +1407,18 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         CheckReport(at, op["expectReport"], engine.LoadGame(envelope), failures);
                         handles = new Dictionary<string, Flow>();
                         foreach (var f in engine.Flows()) handles[f.Id] = f;
+                        if (op.Value<bool?>("expectSameBytes") == true)
+                        {
+                            // Byte parity, this once: the loaded engine must
+                            // write back exactly what it was given. A save that
+                            // differs by the road taken to it fails here even
+                            // when every value is right.
+                            var savedAgain = StoryletSave.ToJson(engine.SaveGame()).ToString();
+                            if (savedAgain != savedText)
+                            {
+                                failures.Add($"{at}: the loaded engine saves different bytes: before {savedText}, after {savedAgain}");
+                            }
+                        }
                         break;
                     }
 
@@ -1412,10 +1426,12 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     {
                         // Park: take the blob, then close. Closing is what
                         // releases the shared claims, which is the whole reason a
-                        // visit parks rather than idling.
+                        // visit parks rather than idling. keepOpen takes the blob
+                        // and leaves the flow open, so a resumeFlow after it
+                        // replaces a LIVE flow: a rollback to a checkpoint.
                         var name = op.Value<string>("flow");
                         parked[name] = engine.SaveFlow(name);
-                        engine.CloseFlow(name);
+                        if (op.Value<bool?>("keepOpen") != true) engine.CloseFlow(name);
                         break;
                     }
 

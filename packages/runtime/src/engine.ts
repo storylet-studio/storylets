@@ -1240,7 +1240,10 @@ export class Engine {
     // [a, b] on all three ports - a different `flows()` order and, since
     // `saveGame` keys its flows in that order, a different `.storyletsave`
     // byte stream for the same run (2026-08-29). markClosed without dropFlow
-    // is the difference: the old handle goes inert, the slot stays put.
+    // is the difference: the old handle goes inert, the slot stays put. The
+    // registry cannot keep a key's place the same way (the old flow's keys are
+    // removed and the new flow's appended), so `saveGame` writes the registry
+    // section in flow order itself: see `registrySection` (2026-10-01).
     const existing = this.flowsById.get(id);
     if (existing) {
       // Say so BEFORE the old flow goes inert, while its board is still readable.
@@ -1606,10 +1609,35 @@ export class Engine {
     return structuredClone({
       schema: SAVE_SCHEMA,
       content: this.internals.bundle.content,
-      ...(this.internals.ownsRegistry ? { registry: this.internals.registry.save() } : {}),
+      ...(this.internals.ownsRegistry ? { registry: this.registrySection() } : {}),
       shared: { spent: [...this.spent].sort() },
       flows: Object.fromEntries([...this.flowsById].map(([id, flow]) => [id, flow.snapshot(false)])),
     });
+  }
+
+  /** The registry's values in CANONICAL order, the order a load rebuilds them
+   *  in: the engine-wide keys as the constructor registered them, then each
+   *  flow's keys in `flows()` order (each flow's own registration order), then
+   *  anything else the registry holds (values still waiting for a key), as the
+   *  registry lists it. The registry itself lists keys in registration order,
+   *  and a flow replaced in place (`open()` above keeps its slot in
+   *  `flowsById`) re-registers its keys at the END, so `openFlow("a");
+   *  openFlow("b"); openFlow("a")` saved b's keys before a's while a load
+   *  rebuilt a's first: the same run, different `.storyletsave` bytes, and a
+   *  save loaded and saved again no longer equal to itself. It is the
+   *  2026-08-29 rule carried into the section save@2 moved the per-flow values
+   *  to (2026-10-01). Order does not matter on READ (`partitionsFromSections`
+   *  sorts by key shape), so a save written in the old order loads as before. */
+  private registrySection(): Sections {
+    const all = this.internals.registry.save() as Sections;
+    const out: Sections = {};
+    const take = (key: string): void => {
+      if (Object.prototype.hasOwnProperty.call(all, key) && !Object.prototype.hasOwnProperty.call(out, key)) out[key] = all[key]!;
+    };
+    for (const { key } of this.sharedMounts) take(key);
+    for (const flow of this.flowsById.values()) for (const key of flow.registeredKeys()) take(key);
+    for (const key of Object.keys(all)) take(key);
+    return out;
   }
 
   /** ONE flow's blob, to park a visit that is walking away: the same shape

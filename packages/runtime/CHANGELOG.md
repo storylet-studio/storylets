@@ -29,6 +29,16 @@ section for it.
 - **Upgrading a project**: run `storyletengine format` once. It folds per-box copies of a map into
   the project map and refuses copies that disagree, saying how.
 
+### Fixed
+
+- **A save no longer depends on the road taken to it** (2026-10-01). A standalone engine's
+  `saveGame()` wrote its `registry` section in the order the keys were registered, and a flow
+  replaced in place (`openFlow` on an open id, with or without `restore`) re-registered its keys
+  last, while a load rebuilds them in `flows()` order. So the same run saved different bytes, and a
+  save loaded and saved again was not equal to itself. The section is now written in that canonical
+  order: the engine-wide keys, then each flow's in `flows()` order, then anything still waiting. A
+  save written in the old order loads exactly as before. Corpus version 11.
+
 ## [0.8.2] - 2026-09-27
 
 ### Changed

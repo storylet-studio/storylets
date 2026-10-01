@@ -1730,6 +1730,8 @@ namespace storylets
         bool selfWorld_ = false;
         /** The keys the engine itself registered (flows keep their own), in order. */
         std::vector<std::string> registered_;
+        /** saveGame's `registry` section, in the order a load rebuilds it. */
+        OrderedMap<std::string, OrderedMap<std::string, StoryletValue>> registrySection() const;
         mutable int viewRevision_ = -1;
         mutable RegistryView view_;
         /** The walk both entry points share, and what the apply half writes. */
@@ -4371,10 +4373,40 @@ namespace storylets
         SaveEnvelope envelope;
         envelope.schema = SAVE_SCHEMA;
         envelope.content = bundle_->content;
-        if (ownsRegistry_) envelope.registry = registry_->save();
+        if (ownsRegistry_) envelope.registry = registrySection();
         envelope.shared.spent = spentIds();
         for (const auto& pair : flows_) envelope.flows.set(pair.first, pair.second->snapshot(false));
         return envelope;
+    }
+
+    /** The registry's values in CANONICAL order, the order a load rebuilds
+     *  them in: the engine-wide keys as the constructor registered them, then
+     *  each flow's keys in flows() order (each flow's own registration order),
+     *  then anything else the registry holds (values still waiting for a key),
+     *  as the registry lists it. The registry itself lists keys in
+     *  registration order, and a flow replaced in place (open() keeps its slot
+     *  in flows_) re-registers its keys at the END, so openFlow("a");
+     *  openFlow("b"); openFlow("a") saved b's keys before a's while a load
+     *  rebuilt a's first: the same run, different .storyletsave bytes, and a
+     *  save loaded and saved again no longer equal to itself (2026-10-01).
+     *  Order does not matter on READ, so a save written in the old order loads
+     *  as before. */
+    inline OrderedMap<std::string, OrderedMap<std::string, StoryletValue>> Engine::registrySection() const
+    {
+        const OrderedMap<std::string, OrderedMap<std::string, StoryletValue>> all = registry_->save();
+        OrderedMap<std::string, OrderedMap<std::string, StoryletValue>> out;
+        auto take = [&all, &out](const std::string& key)
+        {
+            const OrderedMap<std::string, StoryletValue>* found = all.get(key);
+            if (found && !out.contains(key)) out.set(key, *found);
+        };
+        for (const auto& key : registered_) take(key);
+        for (const auto& pair : flows_)
+        {
+            for (const auto& key : pair.second->registered_) take(key);
+        }
+        for (const auto& pair : all) take(pair.first);
+        return out;
     }
 
     inline FlowSave Engine::saveFlow(const std::string& id) const

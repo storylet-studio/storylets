@@ -843,7 +843,8 @@ func _run_scripted_case(c: Dictionary) -> Array:
 
 			"saveLoad":
 				# Serialise the WHOLE engine, discard it, restore into a fresh
-				# one (semantic parity, not byte parity). into: "B" restores
+				# one (semantic parity, not byte parity, unless the op asks for
+				# expectSameBytes). into: "B" restores
 				# into the case's EDITED bundle: the drifted-content contract.
 				# load_game rebuilds every flow, so the handles are re-taken.
 				var envelope: Dictionary = (rc["engine"] as StoryletEngine).save_game()
@@ -867,14 +868,25 @@ func _run_scripted_case(c: Dictionary) -> Array:
 					for f in next_engine.flows():
 						next_handles[(f as StoryletFlow).id] = f
 					rc["handles"] = next_handles
+					if op.get("expectSameBytes", false):
+						# Byte parity, this once: the loaded engine must write
+						# back exactly what it was given. A save that differs by
+						# the road taken to it fails here even when every value
+						# is right.
+						var bytes_before := JSON.stringify(envelope, "", false, true)
+						var bytes_after := JSON.stringify(next_engine.save_game(), "", false, true)
+						if bytes_after != bytes_before:
+							failures.append("%s: the loaded engine saves different bytes: before %s, after %s" % [at, bytes_before, bytes_after])
 
 			"parkFlow":
 				# Park: take the blob, then close. Closing is what releases the
 				# shared claims, which is the whole reason a visit parks rather
-				# than idling.
+				# than idling. keepOpen takes the blob without closing, so the
+				# resumeFlow after it replaces a live flow in place.
 				var park_name := str(op["flow"])
 				(rc["parked"] as Dictionary)[park_name] = (rc["engine"] as StoryletEngine).save_flow(park_name)
-				(rc["engine"] as StoryletEngine).close_flow(park_name)
+				if not op.get("keepOpen", false):
+					(rc["engine"] as StoryletEngine).close_flow(park_name)
 
 			"resumeFlow":
 				var resume_name := str(op["flow"])

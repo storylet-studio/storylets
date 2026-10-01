@@ -22,6 +22,16 @@
   box tag's name, a map group called `place`). One `StoryletError` starting `bundle refused: ` names
   every problem. Corpus version 10.
 
+### Fixed
+
+- **A save no longer depends on the road taken to it** (2026-10-01). A standalone engine's
+  `SaveGame()` wrote its `Registry` section in the order the keys were registered, and a flow
+  replaced in place (`OpenFlow` on an open id, with or without `Restore`) re-registered its keys
+  last, while a load rebuilds them in `Flows()` order. So the same run saved different bytes, and a
+  save loaded and saved again was not equal to itself. The section is now written in that canonical
+  order: the engine-wide keys, then each flow's in `Flows()` order, then anything still waiting. A
+  save written in the old order loads exactly as before. Corpus version 11.
+
 ## [0.8.2] - 2026-09-27
 
 ### Changed

@@ -234,12 +234,25 @@ export type ScriptOp =
    *  `expectReport` pins the LoadReport the load returns, field by field: only
    *  the named fields are checked, arrays compared sorted. `previewOnly` calls
    *  `previewLoad` and NOT `loadGame`, so the ops after it prove the preview
-   *  touched nothing. */
-  | { op: "saveLoad"; into?: "B"; expectReport?: Partial<LoadReport>; previewOnly?: true }
+   *  touched nothing.
+   *
+   *  `expectSameBytes` pins that a save does not depend on the road taken to
+   *  it: the envelope saved before the load must equal, byte for byte, the
+   *  envelope the freshly loaded engine saves straight after (each runtime's
+   *  own serialised save text, compared whole). Only meaningful on a full load
+   *  into the same bundle, so it is not combined with `into` or `previewOnly`.
+   *  Added 2026-10-01: a flow replaced in place left its registry keys at the
+   *  END of the save's `registry` section while a load rebuilds them in flow
+   *  order, and the Storylet Server compares saves by bytes. */
+  | { op: "saveLoad"; into?: "B"; expectReport?: Partial<LoadReport>; previewOnly?: true; expectSameBytes?: true }
   /** Park a flow: `saveFlow(flow)` kept under that name in the runner, then
    *  `closeFlow(flow)`. A parked flow is gone from the engine, so it holds no
-   *  shared claim - which is the whole point of parking one (4.1). */
-  | { op: "parkFlow"; flow: string }
+   *  shared claim - which is the whole point of parking one (4.1).
+   *
+   *  `keepOpen` takes the blob and does NOT close the flow, so a `resumeFlow`
+   *  after it replaces a LIVE flow of that name (`openFlow` with `restore` on
+   *  an open id): the road a host takes to roll a flow back to a checkpoint. */
+  | { op: "parkFlow"; flow: string; keepOpen?: true }
   /** Resume a parked flow: `openFlow(flow, { restore: <the parked blob> })`.
    *  The runner asks `previewFlowRestore` first and requires it to equal the
    *  report the restore itself produces, then checks `expectReport`. */

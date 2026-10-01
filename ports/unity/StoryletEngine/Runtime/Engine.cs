@@ -1228,6 +1228,10 @@ namespace StoryletStudio.StoryletEngine
             // the flow it is replacing (which is about to release everything).
             var otherClaims = opts.Restore != null ? SharedClaimsExcept(id) : null;
             var existing = _flows.GetOrDefault(id);
+            // A replace keeps the flow's slot in _flows, but the registry cannot
+            // keep its keys' places (the old flow's are removed and the new
+            // flow's appended), so SaveGame writes the registry section in flow
+            // order itself: see RegistrySection (2026-10-01).
             if (existing != null)
             {
                 // Say so BEFORE the old flow goes inert, while its board is readable.
@@ -1754,10 +1758,37 @@ namespace StoryletStudio.StoryletEngine
                     Hash = _bundle.Content.Hash,
                 },
             };
-            if (_ownsRegistry) envelope.Registry = _registry.Save();
+            if (_ownsRegistry) envelope.Registry = RegistrySection();
             envelope.Shared.Spent = SpentIds();
             foreach (var pair in _flows) envelope.Flows.Set(pair.Key, pair.Value.Snapshot(false));
             return envelope;
+        }
+
+        /// <summary>The registry's values in CANONICAL order, the order a load
+        /// rebuilds them in: the engine-wide keys as the constructor registered
+        /// them, then each flow's keys in Flows() order (each flow's own
+        /// registration order), then anything else the registry holds (values
+        /// still waiting for a key), as the registry lists it. The registry
+        /// itself lists keys in registration order, and a flow replaced in place
+        /// (OpenFlow keeps its slot in _flows) re-registers its keys at the END,
+        /// so OpenFlow("a"); OpenFlow("b"); OpenFlow("a") saved b's keys before
+        /// a's while a load rebuilt a's first: the same run, different
+        /// .storyletsave bytes, and a save loaded and saved again no longer equal
+        /// to itself. It is the 2026-08-29 rule carried into the section save@2
+        /// moved the per-flow values to (2026-10-01). Order does not matter on
+        /// READ, so a save written in the old order loads as before.</summary>
+        private OrderedMap<string, OrderedMap<string, ExprValue>> RegistrySection()
+        {
+            var all = _registry.Save();
+            var output = new OrderedMap<string, OrderedMap<string, ExprValue>>();
+            void Take(string key)
+            {
+                if (all.TryGetValue(key, out var bag) && !output.ContainsKey(key)) output.Set(key, bag);
+            }
+            foreach (var m in _sharedMounts) Take(m.Key);
+            foreach (var pair in _flows) foreach (var key in pair.Value.RegisteredKeys()) Take(key);
+            foreach (var pair in all) Take(pair.Key);
+            return output;
         }
 
         /// <summary>ONE flow's blob, to park a visit that is walking away: the
