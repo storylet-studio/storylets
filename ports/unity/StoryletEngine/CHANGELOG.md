@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-02
+
 ### Changed
 
 - **The release zip carries the demo project again**, `StoryletEngineDemo/` beside the package, as the Unreal and Godot zips do.

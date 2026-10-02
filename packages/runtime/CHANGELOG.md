@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-02
+
 ### Changed
 
 - **The bundle inspector counts hands on the map**, where it said "sites", in line with the editor.
