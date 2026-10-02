@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-10-02
+
 ### Changed
 
 - **The Board's map shows each hand's card count inside its pin.** The number used to sit on a
