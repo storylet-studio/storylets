@@ -15,7 +15,7 @@
 
 import Konva from "konva";
 import { mountCanvasSurface, type CanvasSurface, type DrawContext } from "../src/canvas-surface.js";
-import { readCanvasTokens, watchCanvasTokens } from "../src/canvas-tokens.js";
+import { readCanvasTokens, readableOn, watchCanvasTokens } from "../src/canvas-tokens.js";
 import {
   backgroundShape, drawBackground, drawSite, drawZone, paintZoneLabels, siteShape, zoneShape, LABEL_FLOOR,
   type BackgroundShape, type SiteShape, type ZoneShape,
@@ -208,8 +208,11 @@ export function mountBoardMap(
         const item = at(site.id);
         if (item?.kind !== "site") continue;
 
-        // What this hand is holding. Drawn beside the site rather than on it: a
-        // site is a point on a map and a number inside one is a different object.
+        // What this hand is holding, as a number inside its disc. It used to sit
+        // on a plate above the pin, and that plate kept its size on screen at
+        // every zoom, so zoomed out it covered the hands beside it. Inside the
+        // disc it costs no room at all; the rings around it (the ripple, the
+        // live and visited marks) stay outside, so nothing collides with it.
         const held = where.held(site.gameId);
         const dimmed = where.filtered !== undefined && site.zone !== where.filtered;
         // The ripple's ring: this hand changed in the last refresh. A quiet
@@ -228,33 +231,26 @@ export function mountBoardMap(
           layer.add(ring);
         }
         if (held > 0) {
+          // The disc is the hand's box colour (or hollow when nothing binds it),
+          // so the number takes whichever of ink or surface reads on it. More
+          // than two digits will not fit an 18px disc; a hand that full says 99+.
+          const disc = item.unbound === true ? tokens.surface
+            : item.tint !== undefined ? (tokens.chars[item.tint % tokens.chars.length] ?? tokens.accent)
+            : tokens.accent;
           const text = new Konva.Text({
-            text: String(held),
-            fontSize: 11 / scale, fontFamily: tokens.fontUi, fontStyle: "600",
-            fill: dimmed ? tokens.muted : tokens.ink,
+            text: held > 99 ? "99+" : String(held),
+            fontSize: (held > 99 ? 8 : held > 9 ? 9.5 : 11) / scale,
+            fontFamily: tokens.fontUi, fontStyle: "600",
+            fill: readableOn(tokens, disc),
+            opacity: dimmed ? 0.6 : 1,
             listening: false,
           });
           text.position({
             x: item.x + item.width / 2 - text.width() / 2,
-            // 17 rather than 13: the selection ring reaches a few pixels
-            // above the pin, and a plate the ring cuts through reads broken.
-            y: item.y - (17 / scale),
+            y: item.y + item.height / 2 - text.height() / 2,
           });
-          // On a plate, not floating: bare ink over a background picture had
-          // no contrast to count on (the author could not read it at all over
-          // the Village's art). The plate is the theme ground, so on a bare
-          // map it reads as a quiet pill and over a picture it carries the
-          // number.
-          const padX = 4 / scale, padY = 1.5 / scale;
-          layer.add(new Konva.Rect({
-            x: text.x() - padX, y: text.y() - padY,
-            width: text.width() + padX * 2, height: text.height() + padY * 2,
-            fill: tokens.bg, stroke: tokens.lineSoft, strokeWidth: 1 / scale,
-            cornerRadius: 7 / scale,
-            opacity: dimmed ? 0.5 : 0.92,
-            listening: false,
-          }));
-          text.opacity(dimmed ? 0.5 : 1);
+          // In front of the disc: the pins are drawn in the layer below, so this
+          // foreground text sits on top of its own pin.
           layer.add(text);
         }
 

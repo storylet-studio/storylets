@@ -68,6 +68,29 @@ export function charColour(tokens: CanvasTokens, name: string): string {
   return ramp[colourIndex(name) % ramp.length] ?? tokens.accent;
 }
 
+/** Which of the theme's ink or surface reads better on `fill`: the one with
+ *  the higher WCAG contrast. For a number drawn on a coloured disc, where the
+ *  disc is one of twelve stored box colours in either theme, so neither ink
+ *  nor white can be assumed. A colour it cannot read (not #rgb or #rrggbb)
+ *  gets the ink. */
+export function readableOn(tokens: CanvasTokens, fill: string): string {
+  const lf = luminance(fill), li = luminance(tokens.ink), ls = luminance(tokens.surface);
+  if (lf === undefined || li === undefined || ls === undefined) return tokens.ink;
+  const contrast = (a: number, b: number): number => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  return contrast(lf, ls) > contrast(lf, li) ? tokens.surface : tokens.ink;
+}
+
+function luminance(colour: string): number | undefined {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(colour.trim())?.[1];
+  if (hex === undefined) return undefined;
+  const full = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const c = parseInt(full.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+}
+
 /** Call `onChange` whenever the theme changes: the editor's own switch (which
  *  sets `data-theme` on the root) and the OS preference behind `system`.
  *  Returns a teardown. */

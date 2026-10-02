@@ -10,6 +10,13 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Board's map shows each hand's card count inside its pin.** The number used to sit on a
+  plate above the pin at a fixed size, so zoomed out it covered the hands beside it. It now sits
+  in the disc, in whichever colour reads on that box's colour, and a hand holding more than 99
+  cards shows 99+.
+
 ## [0.17.0] - 2026-10-02
 
 ### Added
