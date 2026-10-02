@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.18.2] - 2026-10-02
+
 ### Added
 
 - **The Why not? tab links into the editor.** A card's name opens the card, and its reason opens where the reason lives: "condition not met" lands on the card's When condition on its Dealing tab, lit for a moment, "deck condition not met" on its deck's When, and a full hand, a cooldown or a copy held elsewhere on the card's Dealing tab, where priority, redraw and copies are set.
