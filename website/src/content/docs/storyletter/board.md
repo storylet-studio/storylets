@@ -138,10 +138,6 @@ rebuilds. A run is reproducible, because the same seed always deals the same car
 
 **Restart** discards the session and its journal and starts again.
 
-A project whose Play setting reads Venue gets a second pair of buttons here instead, because a
-run boundary then means something. **New run** is the next day, and **Forget everyone** empties
-what the run boundary would otherwise keep.
-
 The Board pins itself above the editor by default, and the pin is remembered. Turn on
 **Follow in the editor** and the editor opens each card as you play it, without taking
 focus from the Board.

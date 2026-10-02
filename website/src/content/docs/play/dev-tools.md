@@ -110,7 +110,7 @@ retained log, a flow does no trace work at all, so leaving it off costs nothing.
 
 The whole play loop as one clickable board, in all four runtimes, with the same
 content, the same control labels in the same order, the same transcript, and one idiom each. The
-Unreal and Godot zips carry theirs; the JavaScript and Unity demos are in the
+Unity, Unreal and Godot zips carry theirs; the JavaScript demo is in the
 [repository](https://github.com/storylet-studio/storylets).
 
 - Every hand from `board()` is a labelled group of card buttons. An empty hand says

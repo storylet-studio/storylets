@@ -13,8 +13,9 @@ sidebar:
 ## Install
 
 Download the Unity zip from the [download page](/download/). It holds **`StoryletEngine/`**,
-the package (`com.storylet-studio.storyletengine`). The demo project is in the
-[repository](https://github.com/storylet-studio/storylets) (see [The demo project](#the-demo-project)).
+the package (`com.storylet-studio.storyletengine`), and **`StoryletEngineDemo/`**, a
+ready-to-open demo project that finds the package in the folder beside it (see
+[The demo project](#the-demo-project)).
 
 Install the package **as a package**, any of:
 
@@ -275,8 +276,7 @@ engine and the registry are left exactly as they were.
 
 ## The demo project
 
-The demo isn't in the release zip. Open `ports/unity/StoryletEngineDemo/` from the
-[repository](https://github.com/storylet-studio/storylets) and press **Play**. There's nothing to
+Open `StoryletEngineDemo/` from the zip and press **Play**. There's nothing to
 install and no sample to import, because its `Packages/manifest.json` points at the package
 folder beside it.
 It runs the **Board demo** over the Hamlet bundle: every hand a labelled group, every dealt

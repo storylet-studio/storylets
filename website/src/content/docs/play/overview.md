@@ -19,7 +19,7 @@ cards everywhere, right down to the random draws. All four ship today.
 | Engine | Language | What you get | Getting started |
 |---|---|---|---|
 | **JavaScript / Web** | TS/JS | A release zip with the runtime build, the play-helpers build, and a browser drop-in | [JavaScript](/play/javascript/) |
-| **Unity** | C# | A package folder for `Packages/`, with a `.storyletsc` importer and the Runtime State window | [Unity](/play/unity/) |
+| **Unity** | C# | A package folder for `Packages/`, with a `.storyletsc` importer, the Runtime State window, and a demo project | [Unity](/play/unity/) |
 | **Unreal** | C++ / Blueprint | A source plugin for `Plugins/`, with a `.storyletsc` factory, an editor state panel, and a demo project | [Unreal](/play/unreal/) |
 | **Godot** | GDScript | An addon for `addons/`, with a `.storyletsc` importer, an in-game state panel, and a demo scene | [Godot](/play/godot/) |
 

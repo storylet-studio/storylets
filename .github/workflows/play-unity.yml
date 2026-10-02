@@ -32,12 +32,16 @@ jobs:
       - name: Verify parity (the corpus gates the release)
         run: dotnet run --project ports/unity/TestHost
 
-      - name: Package the UPM package
+      - name: Package the UPM package and its demo
         run: |
           version="${GITHUB_REF_NAME#play-unity-v}"
           echo "ASSET=storyletengine-unity-${version}.zip" >> "$GITHUB_ENV"
-          ( cd ports/unity && zip -rq "../../storyletengine-unity-${version}.zip" StoryletEngine \
-              -x "*/.DS_Store" )
+          # The demo sits beside the package, as in the Unreal and Godot zips, and finds it at
+          # ../../StoryletEngine from its Packages/manifest.json. Source only, always: never ship
+          # Unity's generated folders, even if a checkout carries them.
+          ( cd ports/unity && zip -rq "../../storyletengine-unity-${version}.zip" StoryletEngine StoryletEngineDemo \
+              -x "*/.DS_Store" -x "StoryletEngineDemo/Library/*" -x "StoryletEngineDemo/Temp/*" \
+              -x "StoryletEngineDemo/Logs/*" -x "StoryletEngineDemo/UserSettings/*" -x "StoryletEngineDemo/obj/*" )
 
       - name: Release notes = this version's changelog section
         id: relnotes

@@ -55,13 +55,6 @@ and badges is converted to outlines, so nothing needs a font installed to render
 The full audit, with every licence named and instructions for reproducing it, is in
 [THIRD-PARTY-NOTICES.md](https://github.com/storylet-studio/storylets/blob/main/THIRD-PARTY-NOTICES.md).
 
-## Not open
-
-A hosted tier (accounts, a hosted project store, online editing, a server-side runtime) may
-come later, and it won't be MIT. It will never fork the core, because every online piece would
-be a shell around the same MIT packages. Nothing of the kind exists today, and there's nothing to
-sign up for.
-
 ## A credit is a favour, never a requirement
 
 Nothing obliges you to credit anything. There's no attribution clause on a shipped game and

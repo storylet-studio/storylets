@@ -55,7 +55,7 @@ Each runtime, the editor, and the CLI otherwise version on their own.
 | Runtime | Ships as | Get it |
 |---|---|---|
 | **Storylet Engine JS** | Release zip: `@storylet-studio/runtime`, `@storylet-studio/play-helpers`, and a browser drop-in | [Download](/download/) |
-| **Storylet Engine Unity** | Release zip: the package folder | [Download](/download/) |
+| **Storylet Engine Unity** | Release zip: the package folder and a demo project | [Download](/download/) |
 | **Storylet Engine Unreal** | Release zip: the plugin folder and a demo project | [Download](/download/) |
 | **Storylet Engine Godot** | Release zip: the addon folder | [Download](/download/) |
 | **`storyletengine` CLI** | Standalone binaries, one per platform | [Download](/download/) |
