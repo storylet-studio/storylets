@@ -10,6 +10,14 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **The Why not? tab links into the editor.** A card's name opens the card, and its reason opens where the reason lives: "condition not met" lands on the card's When condition on its Dealing tab, lit for a moment, "deck condition not met" on its deck's When, and a full hand, a cooldown or a copy held elsewhere on the card's Dealing tab, where priority, redraw and copies are set.
+
+### Fixed
+
+- **Update prompts come to the front.** Check for Updates, and the prompt that says an update is ready, opened in the main window even when the Board or another pinned window was covering it, so the editor dimmed behind a prompt you could not see. The main window now comes forward, above pinned windows, until you answer, and the pins go back afterwards. A prompt that arrives while Storyletter is in the background waits until you come back to it. The "Update ready to install" prompt starts on Later, so a key pressed for the window it covered cannot restart Storyletter by accident.
+
 ## [0.18.1] - 2026-10-02
 
 ### Changed
