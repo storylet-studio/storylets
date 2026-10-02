@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-10-02
+
 ### Changed
 
 - **The Why not? tab reads as a list.** The hand is a heading with its deal beneath it, each section counts its cards, and each card stands on its own with its reason indented beneath it, rather than one run of names and reasons in a monospace column. The cards under Not for this hand line up with the fold's title.
