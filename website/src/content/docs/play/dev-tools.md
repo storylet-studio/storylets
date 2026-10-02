@@ -12,7 +12,8 @@ one runtime has a surface, they all do, as [Compatibility](/compatibility/) expl
 
 A live view of a running flow's state, editable in place.
 
-One widget per engine: the **Runtime State** window in Unity, the **Runtime State** panel in
+One widget per engine: the **Runtime State** window in Unity (**Window ▸ Storylet Engine ▸
+Runtime State**, its tab reading **Storylet State**), the **Runtime State** panel in
 Unreal, the in-game `StoryletStatePanel` in Godot, and `createPropertyInspector` in
 JavaScript. All four show the same thing:
 
@@ -25,15 +26,16 @@ JavaScript. All four show the same thing:
 - The view refreshes a few times a second, skipping whichever control has focus so a
   half-typed value survives.
 - The per-box turn clocks and the current board are shown too.
-- The retained log is there, with **Save State… / Load State…** buttons.
+- The retained log is there, with **Save State…** and **Load State…** buttons (**Save state**
+  and **Load state** in JavaScript).
 
 There are **two logs**, and the difference matters once a run has more than one
 flow. Each flow's section carries its own log, what that participant did. The
 engine carries the **run log**, every flow's events in one order with each line
 naming the flow that caused it. You need both, because a story action in one
 flow can move state another flow reads, and the second flow's own log would say
-nothing about it, because their value changes with nothing to explain it. The
-run log is where a run is legible.
+nothing about it, because their value changes with nothing to explain it. Read
+the run log to follow a whole run.
 
 In the three native runtimes your game finds the panel through a small static registry,
 **`StoryletDebug`**. Register your **engine** under a label and the panel picks it up. You
@@ -60,24 +62,26 @@ Storyletter. It shows:
 
 - The bundle's identity, which is its schema, project name, version, content hash, and
   whether metadata is full or stripped.
-- The hands, each with its gameId, title, box, slots, and template. This is what you can
-  `deal()`.
-- The boxes, tag groups, and tags by gameId, plus each box's ranking policy. This is what you
-  can `peek()`.
-- The **project map**, when the bundle has one: its zone group and zones, the boxes that use
-  it, and how much of the drawing the build carried (zones, pictures, and pins per box), which
-  the engine ignores. A zone's properties are listed with the rest, under its own name.
+- The hands, each with its gameId, title, box, slots, and template, and, for a hand that
+  moves, the property that moves it. This is what you can `deal()`.
+- The boxes, tag groups, and tags by gameId, plus each box's ranking policy and, for a timed
+  box, how long its turn is. This is what you can `peek()`.
 - The declared properties per scope with their types, what conditions read and what your game
   may set, with the
   [durable](/play/world-state/#durable-state-that-outlives-a-run) ones marked, since those are
   the values somebody will expect back after a restart.
+- The **project map**, when the bundle has one: its zone group and zones, the boxes that use
+  it, and how much of the drawing the build carried (zones, pictures, and hands placed on the
+  map, per box), which the engine ignores. A zone's properties are listed with the rest, under
+  its own name.
 - **Counts** of decks, cards, and templates, for orientation, plus how many of a box's cards are
   durable. Not card lists, because cards are the engine's business.
 
 The runtime half is `describeBundle(bundle)`, a bundle-level function in all four languages.
 The view sits on the imported asset, read-only, where each engine makes it natural: Unity's
 Inspector, Unreal's Details panel, Godot's Inspector, and `createBundleInspector` in
-play-helpers. The sections and their names are the same in all four.
+play-helpers. The sections are the same in all four, in the same order: identity, hands, tags
+by box, declared properties, the project map when there is one, and counts.
 
 It serves everyone. An integrator reads the callable names. A designer debugging "why can't I
 deal that hand" sees that the name they typed isn't in the list.
@@ -104,8 +108,10 @@ retained log, a flow does no trace work at all, so leaving it off costs nothing.
 
 ## The Board demo
 
-The whole play loop as one clickable board, shipped with all four runtimes, with the same
-content, the same control labels in the same order, the same transcript, and one idiom each.
+The whole play loop as one clickable board, in all four runtimes, with the same
+content, the same control labels in the same order, the same transcript, and one idiom each. The
+Unreal and Godot zips carry theirs; the JavaScript and Unity demos are in the
+[repository](https://github.com/storylet-studio/storylets).
 
 - Every hand from `board()` is a labelled group of card buttons. An empty hand says
   `(nothing here right now)`.
@@ -115,8 +121,8 @@ content, the same control labels in the same order, the same transcript, and one
   a time.
 - The three controls are **Deal all hands**, **Next turn**, and **Restart**.
 - A transcript records one line per action, newest last.
-- The engine is created with the log on and the ENGINE registered with `StoryletDebug`, so the
-  examiner fills as you play.
+- The engine is created with the log on, and in the three native runtimes it's registered with
+  `StoryletDebug`, so the examiner fills as you play.
 
 Every Board demo uses seed 7 over the same compiled Hamlet bundle, so all four runtimes deal
 the same cards in the same order. You can watch cross-runtime determinism instead of taking it

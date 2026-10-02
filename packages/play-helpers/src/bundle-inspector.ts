@@ -165,7 +165,7 @@ export function createBundleInspector(
     line(mapBody, `boxes on the map: ${map.boxes.length > 0 ? map.boxes.join(", ") : "none"}`);
     const sites = Object.entries(map.sites).map(([box, n]) => `${box} ${n}`).join(", ");
     line(mapBody, `geometry carried (the engine ignores it): zones ${map.zones}, pictures ${map.backgrounds}`
-      + `, sites ${sites === "" ? "0" : sites}`, "sl-line sl-note");
+      + `, hands ${sites === "" ? "0" : sites}`, "sl-line sl-note");
   }
 
   // --- counts: orientation, not inventory ---------------------------------

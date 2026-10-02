@@ -26,8 +26,9 @@ dependencies.
 
 Drag a `.storyletsc` into the Content Browser. The plugin's factory builds a
 **`UStoryletBundle`** asset holding the raw JSON, compiled when it loads. A broken bundle
-still imports, with the error readable on the asset as `LoadError`. Right-click ▸ Reimport
-refreshes it from the source file.
+still imports, with the error readable on the asset as `LoadError`. A bundle of a schema this
+runtime doesn't read lands the same way, with `LoadError` naming the schema. Right-click ▸
+Reimport refreshes it from the source file.
 
 For DLC or downloaded content, `UStoryletBundle::LoadFromJsonString` (Blueprint-callable)
 compiles a bundle from a string at runtime.
@@ -40,13 +41,17 @@ UStoryletFlow*   Flow   = Engine->OpenFlow(TEXT("main"));
 Engine->RegisterForDebug(TEXT("main"));   // optional: lets the state panel watch it
 ```
 
+`Create` returns null, and logs why, when the bundle is uncompiled or is one the engine can't
+read faithfully, such as a bundle that breaks the project map's rules. That error starts
+`bundle refused:` and lists every problem, so check the result before opening a flow.
+
 The **engine** owns the bundle, the shared state, and `@world`. A **flow** is one playthrough
 across it, and all the dealing and playing happens on a flow, so a single-player game opens
 one, calls it what it likes, and never thinks about it again. The same seed always deals the
 same cards. `bRetainLog` keeps the event logs so the state panel, or a Blueprint polling
 `Log()`, can read them. There are two. `Flow->Log()` is that flow's own, and
-`Engine->GetRunLog()` is the RUN's, every flow's events in one order with each entry naming
-its `Flow`. The run log is the only place a story action in another flow moving shared state
+`Engine->GetRunLog()` is the run's: every flow's events in one order, each entry naming its
+`Flow`. The run log is the only place a story action in another flow moving shared state
 is visible.
 
 Open as many flows as you have parallel plays. `OpenFlow` / `GetFlow` / `Flows` / `CloseFlow`
@@ -82,7 +87,8 @@ outcome fields. `BoardForBox(BoxRef)` sits beside
 `Board()` and `PlayAdvancing` beside `Play` because Blueprint pins take no optional arguments.
 `Play` returns false and fills `Error` if the outcome is gated shut or the card isn't in that
 hand. Nothing changes in that case. A card with no outcomes is played with an empty
-`OutcomeGameId`.
+`OutcomeGameId`. A box on the project map can also name the map's zone group in `Peek`
+criteria, beside its own tag groups.
 
 ## Your game's state
 
@@ -114,6 +120,7 @@ The other properties cross the Blueprint boundary through typed accessors, path-
 Flow->SetPropertyNumber(TEXT("story.gold"), 5);
 double Gold = Flow->GetPropertyNumber(TEXT("story.gold"));
 // Also GetPropertyBool / GetPropertyString / GetPropertyFlags and their setters.
+// A zone of the project map has one address for every box using it: TEXT("value.docks.danger").
 
 Flow->AdvanceTurns(TEXT("village"), 1);
 double Turn = Flow->GetTurn(TEXT("village"));
@@ -181,20 +188,25 @@ built, `CreateWithRegistry` returns null and logs who holds it, and the registry
 was. When a `UStoryletEngine` goes away, its values leave the registry with it.
 `ApplyLiveBundle` works on your registry as on the engine's own: the new engine core carries the
 run across, a property the edit dropped leaves the registry, and nothing another engine keeps
-there is touched. From C++, the core's `hotSwap(Bundle)` does the same and hands back the load
-report too. The replacement keeps the options the engine was built with; to change one, pass a
-callback that edits a copy of them, `hotSwap(Bundle, [](storylets::EngineOptions& O) { O.log = true; })`,
-and everything it does not touch stays as it was.
+there is touched. If you drive the engine core directly rather than through
+`UStoryletEngine`, its `hotSwap(Bundle)` does the same and hands back the replacement engine and
+its load report. Don't call it on `GetCoreEngine()`: the wrapper keeps the old core, which the
+swap leaves spent, so use `ApplyLiveBundle` there. The replacement keeps the options the engine
+was built with. To change one, pass a callback that edits a copy of them,
+`hotSwap(Bundle, [](storylets::EngineOptions& O) { O.log = true; })`, and everything it doesn't
+touch stays as it was.
 
 ## Save and load
 
 `UStoryletSave::SaveStateToJson(Engine)` and `LoadStateFromJson(Engine, Json)` are the
 `.storyletsave` string boundary, in the runtime module and Blueprint-callable (the shape of
 Patterplay's `UPatterSave`). The file carries the engine's envelope, `storylets/save@2`, with
-every live flow inside it, plus the current `@world` values, and a load applies all of it. The
+every live flow inside it, plus a bound `UStoryletWorld`'s values, and a load applies all of it. The
 envelope holds what isn't a property: boards, clocks, cooldowns, random streams, play logs, and
 spent cards. An engine made with `Create` also carries its registry's values in the envelope, a
-self-backed `@world` included, so a round trip preserves the whole run. With a `UStoryletWorld`
+self-backed `@world` included, so a round trip preserves the whole run. The registry section is
+written in a fixed order, engine-wide values first and then each flow's in flow order, so the
+same run always saves the same text. With a `UStoryletWorld`
 bound, the load restores its values as you would, so your read-only names are restored too
 ([why a world you keep rides beside the envelope](/play/world-state/#saving-it)). A
 foreign or malformed blob returns false and leaves the engine untouched. Flow objects your
@@ -225,18 +237,18 @@ it. A flow you open fresh with `OpenFlow` never picks up a value a load left for
 A load is forgiving. A card your edit deleted drops off the board, a property you added takes
 its default, and a save from an older build goes in without a word.
 `UStoryletSave::PreviewLoadFromJson(Engine, Json)` says what that would cost before you spend
-it, and changes nothing. It hands back a report as a JSON string (`exact`, `evicted`,
-`droppedProperties`, `defaultedProperties`, `retypedProperties`, and the `version` / `hash`
-pairs), because no report struct crosses a Blueprint pin.
+it, and changes nothing. It hands back a report as a JSON string (`exact`, `project`, the
+`version` / `hash` pairs, `flows`, `evicted`, `droppedCooldowns`, `droppedSpent`,
+`droppedProperties`, `defaultedProperties`, and `retypedProperties`), because no report struct crosses a Blueprint pin.
 
-To park ONE playthrough rather than the whole run, `SaveFlowToJson(Id)` on the engine takes
+To park one playthrough rather than the whole run, `SaveFlowToJson(Id)` on the engine takes
 that flow's state, its property values included, and `OpenFlowFromJson(Id, Json)` puts it
 back. `CloseFlow` in between is what releases the cards it was holding and takes its values out
 of the registry, and `PreviewFlowRestoreJson(Id, Json)` says what coming back would cost.
 
 ## The Runtime State panel
 
-**Window ▸ Storylet Engine Runtime State** opens the examiner. Register an engine with
+**Tools ▸ Storylet Engine Runtime State** opens the examiner. Register an engine with
 `RegisterForDebug("label")` (or `FStoryletDebug::Register` from C++) and the panel shows it
 live: the shared properties with type-aware editors behind a search filter and per-row
 reset-to-default and the **run log** (every flow's events in one order), then each open flow
@@ -258,8 +270,10 @@ build. The wiring, and what carries across, are on
 ## The bundle inspector
 
 Select a `UStoryletBundle` and its Details panel shows what the bundle offers your code:
-hands, boxes, tags, declared properties. Nothing running needed. `UStoryletBundle::DescribeBundle()`
-is Blueprint-callable too. See [the bundle inspector](/play/dev-tools/#the-bundle-inspector).
+hands, boxes, tags, declared properties, and the project map when the bundle has one (its zone
+group and zones, and which boxes use it). Nothing running needed.
+`UStoryletBundle::DescribeBundle()` is Blueprint-callable too: the map is `bHasMap` and `Map` on
+the description, and `bUsesMap` on each box. See [the bundle inspector](/play/dev-tools/#the-bundle-inspector).
 
 ## The demo project
 
@@ -280,12 +294,14 @@ integration, and [Running it with Patter](/play/with-patter/) explains the hando
 The plugin is two layers. `Source/StoryletEngineRuntime/Public/Storylets/` is the engine core,
 header-only standard C++17 with no Unreal types in it, keeping the structure of the JavaScript
 reference runtime. Everything else is the Unreal wrapper: `UStoryletBundle`, `UStoryletEngine`,
-`UStoryletFlow`, `UStoryletSave`, the Blueprint structs, the factory, and the editor panel. Exceptions from the core are caught
+`UStoryletFlow`, `UStoryletWorld`, `UStoryletSave`, `FStoryletLiveLink`, `FStoryletDebug`, the
+Blueprint structs, the factory, the bundle's Details panel, and the Runtime State panel. Exceptions from the core are caught
 at that boundary and surfaced as error strings and logs, so Blueprint never sees one.
 
-Four things stay C++ only: `SubscribeTrace` (Blueprint polls `Log()` instead), the generic
-value type (Blueprint uses the typed accessors above), `ListBags`, and the registry
-(`CreateWithRegistry` and `GetRegistry`). Numbers cross the boundary as `double`.
+Some things stay C++ only: `SubscribeTrace` (Blueprint polls `Log()` instead), a generic value
+on the flow and engine property calls (Blueprint uses the typed accessors above), the registry
+(`CreateWithRegistry` and `GetRegistry`), and the engine core itself (`GetCoreEngine()`,
+`GetCoreFlow()`, and the core's `listBags()`). Numbers cross the boundary as `double`.
 
 ## Next
 

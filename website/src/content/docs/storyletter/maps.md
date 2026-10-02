@@ -45,7 +45,8 @@ A project has one map, so these are offered only while it has none.
 ## Putting a box on the map
 
 A box joins the map from its own page. Click **Use the project map**, the line under the
-box's purpose. The box gains a **Map** tab and opens on it from then on. The tab lists where
+box's purpose. The box gains a **Map** tab, first among its tabs, and opens on it unless you last chose
+another tab on a box's page. The tab lists where
 this box's hands stand, and **Open map** takes you to the map itself.
 
 A box on the map wears a small map mark in its colour in the navigator, so you can see which
@@ -146,7 +147,7 @@ chooses, or the zone its template fixes for every hand it makes. Its pin shows w
 put it.
 
 **Drag a hand's pin into another zone and the hand moves there.** That's a real change to
-the hand, and one undo step. Select a pin and the strip says what dragging it will do. A
+the hand, and one undo step. In **Edit layout**, select a pin and the strip says what dragging it will do. A
 hand whose template fixes its zone can't be moved this way, and a hand that doesn't use the
 map's zones only marks a spot.
 
@@ -158,8 +159,8 @@ one outline inside another doesn't make it a sub-zone, so a hand standing inside
 
 The map marks what you can't see on a drawing:
 
-- **A dashed ring** round a pin means it stands inside more than one outline. Select it and
-  the strip names the zones that don't count. It's a note, not an error.
+- **A dashed ring** round a pin means it stands inside more than one outline. Hover it, or
+  select it in **Edit layout**, to see which zones don't count. It's a note, not an error.
 - **A solid warning ring** means the hand is in one zone and its pin stands in another, or in
   none. The game deals the hand in the zone it's in, not where the pin is. Drag the pin back,
   or into another zone to move the hand.

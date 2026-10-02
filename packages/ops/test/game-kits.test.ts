@@ -40,6 +40,30 @@ describe("the game kits", () => {
   }
 });
 
+describe("the editor and git files init writes", () => {
+  const files = (): Map<string, string> => {
+    const result = runInit({ dir: mkdtempSync(join(tmpdir(), "init-files-")), name: "Kit" });
+    return new Map(result.writes.map((w) => [w.path.slice(result.dir.length + 1).replaceAll("\\", "/"), w.content]));
+  };
+  const EXTENSIONS = [
+    "storyletproj", "storyletbox", "storylettags", "storylethands", "storyletdeck",
+    "storyletview", "storyletmap", "storyletnotes", "storyletcontract",
+  ];
+
+  it("pin every shard extension to LF, the merge driver and JSON5", () => {
+    const f = files();
+    const attrs = f.get(".gitattributes")!;
+    const editor = f.get(".editorconfig")!;
+    const vscode = f.get(".vscode/settings.json")!;
+    for (const ext of EXTENSIONS) {
+      expect(attrs, ext).toMatch(new RegExp(`^\\*\\.${ext} +text eol=lf$`, "m"));
+      expect(attrs, ext).toMatch(new RegExp(`^\\*\\.${ext} +merge=storylets$`, "m"));
+      expect(editor, ext).toMatch(new RegExp(`[{,]${ext}[,}]`));
+      expect(vscode, ext).toContain(`"*.${ext}": "json5"`);
+    }
+  });
+});
+
 describe("Map-based Story", () => {
   it("is one box on a drawn map, with a site for each of three places across two regions", () => {
     const source = fresh("map-story").source!;

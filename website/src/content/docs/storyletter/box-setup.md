@@ -12,19 +12,25 @@ cast). All of its setup lives on one page, so the navigator stays a tree of cont
 
 A box has six tabs, plus **Map** when the box uses the [project map](/storyletter/maps/).
 
-- **Map** comes first on a box that uses the project map, and the box opens on it. It lists
+- **Map** comes first on a box that uses the project map, and the box opens on it unless you
+  last chose another tab on a box's page. It lists
   where this box's hands stand on the map, and **Open map** goes to the map itself. A box
   that isn't on the map has no Map tab, only a quiet line under its purpose: **Use the
   project map** when the project has one, **Make a map** when it hasn't.
 - **Contents** lists the box's Decks and Hands, each with a count and a one-line
   description, then every card in the box, which you can sort into headings with
   [Group by](/storyletter/cards/#group-by).
-- **Dealing** is how the box puts cards in order. There's one setting, **Rank by
-  specificity**, which decides whether a card that asks for more beats a card that asks
-  for less. It's on by default, and while it's on, a card's priority is the tie-break.
+- **Dealing** is how the box deals. **Rank by specificity** decides whether a card that
+  asks for more beats a card that asks for less. It's on by default, and while it's on, a
+  card's priority is the tie-break. **Turns** says what a turn is in this box: **a play**,
+  or **every N seconds of play** for a box the game's clock advances, in which case Redraw
+  numbers on its cards are read as time. Once the project is
+  [paired with Patter](/storyletter/patter/#boxes-patter-performs), **Performed by Patter**
+  is here too.
 - **Card template** declares what every card in this box carries. A card's fields are its
   game data, and there's no other mechanism for attaching any. Each field has a name, a
-  type (`boolean`, `number`, `string`, `enum`, `flags`, or `quality`, and
+  type (**Number**, **True / False**, **Text**, **List**, **Flags** or **Quality**, which the
+  files call `number`, `boolean`, `string`, `enum`, `flags` and `quality`;
   [Property types](/format/property-types/) says which to use), a default, and optional
   values.
   Change a field's name or type and you reshape every card in the box, so in a team this
@@ -45,11 +51,11 @@ A **hand template** is a kind of hand. Give it a title in your own words, such a
 the village" or "People you can talk to", and that title is shown under the name of every
 hand made from it, and offered when you add a hand on the map. Its document has three tabs.
 
-- **Dealing** holds the template's **bindings** (tag groups pinned to one tag for every
-  hand made from it), the groups each hand fills in for itself, and the shared **When**
-  condition. That condition is written once and checked for each hand against that hand's
-  own tags, so one condition covers every hand it governs.
-- **Bindings** shows what's pinned and what's left for each hand to choose, with a count.
+- **Dealing** holds the shared **When** condition and the default **Slots**. The condition
+  is written once and checked for each hand against that hand's own tags, so one condition
+  covers every hand it governs.
+- **Bindings** sets each tag group to one fixed tag for every hand of this kind, leaves it
+  for each hand to choose, or ignores it.
 - **Properties** declares the `@hand` state every hand made from this template carries.
 
 Edit a template's condition and every hand that uses it follows straight away. A hand can
@@ -70,7 +76,9 @@ A hand's document has four tabs, and opens on **Cards**.
   "(standalone, its own rule)". Pick a template and you get one **Chosen tags** row per
   group the template leaves open, each a picker of that group's declared tags. In a box on
   the map, that's where the hand's zone is chosen. Choose its own rule instead and you get
-  the bindings and the condition inline.
+  the bindings and the condition inline. Where the project declares a property that can
+  name a tag, the picker also offers it under **from a property**, and the hand then moves to
+  wherever that property says.
 - **Slots** is how many cards the hand holds. A hand with its own rule switches between
   `unbounded` and a bounded count. A hand made from a template has a single override
   field; leave it blank and the template's value applies.
@@ -94,6 +102,9 @@ alone. Each row is the card's title, its deck, and its condition as an `if` line
 plus **also at** for a card that names other hands too. Clicking a row opens the card. The lists are:
 
 - **Only here**: the cards that name this hand, so they come up here and nowhere else.
+- **Placed here but can never come up here**, shown only when there are any: cards that name
+  this hand but have a tag that rules it out, each with the reason. This is where that
+  mistake gets caught.
 - **Anywhere in** a zone, such as **Anywhere in village**: the cards filed to the zone this
   hand is in, which can come up here and at every other hand in that zone.
 - **Wherever** a group **is** a tag, such as **Wherever npc is gareth**: for any other group
@@ -102,9 +113,6 @@ plus **also at** for a card that names other hands too. Clicking a row opens the
 - A count of the cards that can come up **anywhere**, those that name no hand and have no tag
   in any group this hand binds. **Show** lists them. In a big box that's most of the box, so
   it starts folded.
-- **Placed here but can never come up here**, shown only when there are any: cards that name
-  this hand but have a tag that rules it out, each with the reason. This is where that
-  mistake gets caught.
 
 A card gated on a group the game sets from its state, such as the current act, carries a
 badge like **when act: act-2**, because that decides when it comes up, not where.
@@ -171,13 +179,10 @@ cards and hands start untagged, ready for you to file to your own zones.
 Every narrated kit carries a purpose note on every piece, including the outcomes,
 explaining what it's for.
 
-Each teaches something the other doesn't, so working through both covers the model. RPG has
-the outcome that writes state, Dialogue has copies and exclusivity. Where a box kit has no use
-for a concept, it doesn't declare it.
+Where a box kit has no use for a concept, it doesn't declare it.
 
-There was a Barks kit, and it has been withdrawn, because **barks belong in
-[Patter](https://patterkit.dev)**, which is built for lines of performed dialogue, and a kit
-here would have encouraged writing them in the wrong tool.
+For barks, use [Patter](https://patterkit.dev), which is built for lines of performed
+dialogue.
 
 `storyletengine new box --kit <name>` scaffolds the same box from the
 [command line](/cli/#new-box).

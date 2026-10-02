@@ -48,13 +48,17 @@ contracts, street encounters, found items, a codex, and city news screens. **The
 **Help ▸ Open an Example** opens another one from inside a project, and **File ▸ Close Project** brings you
 back to this screen.
 
-**New project…** starts a project of your own, asking for a name and a **game kit**. It isn't
-empty. You get one box, one hand called **What's next?**, and two sample cards that show the
-loop working. The first flips a piece of story state when you play it, and the second is
-waiting for exactly that, so you can press Play straight away and watch one card open the way
-to another. Once something's already open, **File ▸ New Project…** (`Cmd+N`) does the same.
+**New project…** starts a project of your own, asking for a name and a **game kit**. Pick
+**Starter project** and you get one box, one hand called **What's next?**, and two sample cards
+that show the loop working. The first flips a piece of story state when you play it, and the
+second is waiting for exactly that, so you can press Play straight away and watch one card open
+the way to another. **Starter project with Patter** is the same with a Patter project beside it
+for the dialogue, and the other kits start you on a story told across a map, or on the story
+side of an action game. Once something's already open, **File ▸ New Project…** (`Cmd+N`) does
+the same.
 
-**Open Project…** (`Cmd+O`) opens one you already have. Recent projects are listed underneath.
+**Open a project…** opens one you already have (**File ▸ Open Project…**, `Cmd+O`, from inside a
+project). Recent projects are listed underneath.
 
 A project is a folder on disk (a package on macOS, so it opens with a double-click). There's
 no server, no account, and no import step, and your version control sees plain text files.
@@ -77,15 +81,18 @@ outcomes, then look at the hands the box declares.
 
 ## 4. Design a card
 
-Open a deck and click the faded **+ New card** at the end of the list. **File ▸ New Card**
-(`Shift+Cmd+N`) does the same thing.
+Open a deck and click the faded **+ New card** at the end of the cards, or, in the node view,
+right-click the canvas and choose **New card here**. **File ▸ New Card** (`Shift+Cmd+N`) does
+the same thing.
 
 Give it a **title**, and a **purpose**, which is one line for you and your team saying what
 happens in this beat. (A card carries no text for the player. What your game gets from a card
 is its fields, such as a scene to play, an animation, or a key into your own text. Putting
 those words on screen is your game's job.)
 
-Then the **Dealing** tab, which is everything about when this card comes up.
+Then the **Dealing** tab, which is everything about when this card comes up. In a box whose
+hands are bound to a place, such as the map's zones or the people you can talk to, it opens
+with one sentence saying where the card **Comes up**, which you can change from there.
 
 - The When row is the condition. Type it into the expression editor, which knows the
   properties your project has declared, so you pick from a list rather than remembering names.
@@ -110,8 +117,10 @@ Settings), every property row also says whose the value is. A story property rea
 for every guest.** by default, which is right for a fact about the world, such as a gate
 being opened. It's wrong for something one player carries, such as a key they found. Left
 that way, one player finding the key opens the door for everyone. Expand the row and untick
-**Shared**, and it reads **Each guest has their own.** Box, deck, hand and tag properties start that
-way. A solo project has one player and nothing to choose.
+**Shared**, and it reads **Each guest has their own.** Box and deck properties start that way.
+A hand's or a tag's property starts as one value per hand or per tag, each guest with their
+own, and a zone's is one value for every box. A solo project has one player and nothing to
+choose.
 
 There's no save button to hunt for. Your edits are written to the files as you make them, and
 the top bar shows where that's got to. `Cmd+S` flushes anything still pending.
@@ -128,7 +137,7 @@ commit to it. The journal down the right-hand side records everything that happe
 can copy it straight into a bug report.
 
 The interesting part is one tab over. The rail on the right pairs the journal with a
-**State** tab. Press **Peek** there and **Not listed · why** tells you, for every card the
+**State** tab. Press **Peek** there and **Not listed, and why** tells you, for every card the
 deal passed over, exactly which rule stopped it. That's the answer to "why isn't my card
 showing up?", and it's the reason the Board exists.
 
@@ -137,18 +146,19 @@ from under a run in progress.
 
 ## 6. Find what never comes up
 
-Playing walks one route. **Review ▸ Coverage** (`Shift+Cmd+C`) walks hundreds. It plays the
+Playing walks one route. **Review ▸ Coverage Test…** (`Shift+Cmd+C`) walks hundreds. It plays the
 project over and over, taking different turnings each time, and reports what actually came
 up.
 
 Set how many runs you want and press **Run coverage**. You can keep working while it goes,
 and cancelling still reports as far as it got.
 
-The report has four parts. **Never dealt** lists cards nothing ever reached, with a reason
-where one is known. **Dealt but never played** lists cards that come up and are never chosen,
-which usually means an outcome's condition is too tight. **Outcomes never played** is the
-same question one level down. **By hand** shows how much of what each hand could hold it
-actually held.
+The report opens with how many cards were dealt, and counts of those **Never dealt**,
+**Rarely dealt**, and **Dealt, never played** (which usually means an outcome's condition is
+too tight). Under it, a table of every card shows how often each came up, least reached first,
+and a card that was never dealt carries its reason where one is known. **Outcomes never
+played** asks the same question one level down. **Cards seen in each hand**, folded away, shows
+how much of what each hand could hold it actually held.
 
 Every row is a way back into the project. Click it and the editor opens that card.
 

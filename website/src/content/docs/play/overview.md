@@ -19,13 +19,13 @@ cards everywhere, right down to the random draws. All four ship today.
 | Engine | Language | What you get | Getting started |
 |---|---|---|---|
 | **JavaScript / Web** | TS/JS | A release zip with the runtime build, the play-helpers build, and a browser drop-in | [JavaScript](/play/javascript/) |
-| **Unity** | C# | A package folder for `Packages/`, with a `.storyletsc` importer, the Runtime State window, and a demo project | [Unity](/play/unity/) |
+| **Unity** | C# | A package folder for `Packages/`, with a `.storyletsc` importer and the Runtime State window | [Unity](/play/unity/) |
 | **Unreal** | C++ / Blueprint | A source plugin for `Plugins/`, with a `.storyletsc` factory, an editor state panel, and a demo project | [Unreal](/play/unreal/) |
 | **Godot** | GDScript | An addon for `addons/`, with a `.storyletsc` importer, an in-game state panel, and a demo scene | [Godot](/play/godot/) |
 
 Every runtime is a zip on [GitHub Releases](https://github.com/storylet-studio/storylets/releases),
-linked from the [download page](/download/). Nothing is published to npm, UPM, Fab, or the
-Godot Asset Library. Each zip carries everything it needs, including its licence, so no
+linked from the [download page](/download/). The JavaScript runtime and its helpers are also
+on npm. Nothing is published to UPM, Fab, or the Godot Asset Library. Each zip carries everything it needs, including its licence, so no
 package manager is assumed.
 
 ## The shape of an integration
@@ -33,8 +33,10 @@ package manager is assumed.
 It's the same five steps in all four engines. Learn them once here and each engine page is
 mostly install notes and the local spelling.
 
-1. Load a bundle. Every engine imports `.storyletsc` files as assets. A broken bundle still
-   imports, with the error readable on the asset.
+1. Load a bundle. Every engine imports `.storyletsc` files as assets, and a broken file still
+   imports, with the error readable on the asset. A bundle the runtime can't read (a schema it
+   doesn't know, or a project map whose rules the bundle breaks) is refused when you build the
+   engine, with one error naming every problem, before anything changes.
 2. Create an engine over the bundle, with a seed, and open a flow on it by name.
 3. Deal a hand by name, or peek at a box by tag. You get back ranked card views, each with an
    id, a gameId, a title and purpose (unless the bundle was stripped), and the card's fields.
@@ -68,16 +70,17 @@ On the **engine** (the world):
 
 | Call | Does |
 |---|---|
-| `new Engine(bundle, { seed, log, world })` | Build the engine; `world` binds your game's `@world` resolver |
+| `new Engine(bundle, { seed, log, world, registry })` | Build the engine. `world` binds your game's `@world` resolver, and `registry` hands it your game's registry. A bundle it can't read is refused here |
 | `openFlow(id, { seed, restore })` | Open (or replace) a named flow. All play happens on the flow it returns, and `restore` opens it as it was |
 | `getFlow(id)` / `flows()` / `closeFlow(id)` | Find, list, and close flows; a closed flow's handle refuses every call |
 | `reset()` | Close every flow and reseed shared state |
+| `hotSwap(bundle, options)` | A new engine over an edited bundle, carrying the run; returns it with the load report ([Live Link](/play/live-link/#live-refresh)) |
 | `saveGame()` / `loadGame(envelope)` | The whole run (shared state plus every flow) in and out. The load returns a report |
 | `saveFlow(id)` | One flow's state on its own, to park a playthrough that is stepping away |
 | `previewLoad(envelope)` / `previewFlowRestore(id, save)` | What that load would change, without changing it |
 | `getProperty(path)` / `setProperty(path, value)` | Shared state and `@world` only; a per-flow path is refused |
 | `subscribeTrace(handler)` | Every flow's events, one stream, tagged with the flow id |
-| `log()` / `clearLog()` | The RUN's retained log, if you asked for one: every flow's entries in one order, each naming its flow |
+| `log()` / `clearLog()` | The run's retained log, if you asked for one: every flow's entries in one order, each naming its flow |
 | `listProperties()` / `listBags()` | Every shared property, and the shared bags behind them |
 | `sharedClaims()` | How many copies of each card the world's flows are holding (shared scarcity) |
 
@@ -152,5 +155,5 @@ saves reach the run without a restart while the Board shows the game's deals as 
 
 If you just want it running, jump to your engine's page in the table above. If you're wiring
 up your state first, start with [Your game's state](/play/world-state/). To see the whole
-loop, open the Board demo that ships with every runtime and press Play. Why it matches
+loop, open the Board demo for your runtime and press Play. Why it matches
 everywhere is on [Compatibility & conformance](/compatibility/).

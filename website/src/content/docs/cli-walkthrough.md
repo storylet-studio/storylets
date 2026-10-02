@@ -133,7 +133,7 @@ It ranks first because priority 2 beats priority 1.
 
 ```
 $ storyletengine export tavern.storylets
-exported .../tavern.storylets/dist/the-tavern.storyletsc
+exported .../storylet-dist/the-tavern.storyletsc
 $ storyletengine validate tavern.storylets
 ok: .../tavern.storylets
 ```
@@ -144,7 +144,7 @@ again. An out-of-date bundle can't ship unnoticed:
 
 ```
 $ storyletengine validate tavern.storylets     # after editing a card
-error: dist/the-tavern.storyletsc: bundle is stale (content hash does not
+error: ../storylet-dist/the-tavern.storyletsc: bundle is stale (content hash does not
   match the shards); run: storyletengine export
 ```
 
@@ -244,6 +244,7 @@ one is the first edit the kit invites you to make. It deals straight away:
 
 ```
 $ storyletengine export tavern.storylets
+exported .../storylet-dist/the-tavern.storyletsc
 $ storyletengine deal tavern-encounters tavern.storylets
 1. a-strangers-wager  "A stranger's wager"
 ```

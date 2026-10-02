@@ -48,7 +48,7 @@ run="$(mktemp -d)"                     # deliberately NOT under $proj: no projec
 trap 'rm -rf "$proj" "$run"' EXIT
 
 cp -R "$root/ports/godot/addons" "$proj/addons"
-cp "${EXPORT_BUNDLE:-$root/examples/the-hamlet.storylets/dist/the-hamlet.storyletsc}" "$proj/game.storyletsc"
+cp "${EXPORT_BUNDLE:-$root/examples/storylet-dist/the-hamlet.storyletsc}" "$proj/game.storyletsc"
 
 cat > "$proj/project.godot" <<CFG
 config_version=5

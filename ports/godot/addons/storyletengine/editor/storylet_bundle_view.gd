@@ -93,7 +93,7 @@ func _render(res: Resource) -> void:
 		var sites: Array = []
 		for box_game_id in map["sites"]:
 			sites.append("%s %d" % [str(box_game_id), int(map["sites"][box_game_id])])
-		_add_row("geometry carried (the engine ignores it): zones %d, pictures %d, sites %s" % [
+		_add_row("geometry carried (the engine ignores it): zones %d, pictures %d, hands %s" % [
 			int(map["zones"]), int(map["backgrounds"]), ", ".join(sites) if not sites.is_empty() else "0",
 		], true)
 

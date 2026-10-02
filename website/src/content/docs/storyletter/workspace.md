@@ -44,13 +44,13 @@ properties aren't here; they're a contract with the game and stay in
 [Project settings](#project-settings).)
 
 <figure class="doc-shot">
-  <img src="/doc-images/Story.png" alt="The Story document in Storyletter: the Story row selected in the navigator, and the Hamlet's seven story properties as rows. The first row, act, is expanded to show its Purpose field and its Values chips (arrival, act-1, act-2); the rest show their name, type, starting value and a uses count. A note beneath points to Project Settings for the game's own world state." />
-  <figcaption>The Story document: the story's shared state as a page of its own. Expand a row for its <strong>Purpose</strong> and, for an enum or quality, its values.</figcaption>
+  <img src="/doc-images/Story.png" alt="The Story document in Storyletter: the Story row selected in the navigator, and the Hamlet's seven story properties as rows. The first row, act, is expanded to show its Stages, in order (arrival, act-1, act-2), and its Purpose field; the rest show their name, type, starting value and a uses count. A note beneath points to Project Settings for the game's own world state." />
+  <figcaption>The Story document: the story's shared state as a page of its own. Expand a row for its <strong>Purpose</strong> and, for a list or quality, its values or stages.</figcaption>
 </figure>
 
 Each row also carries a quiet **uses** chip (the count of everything in the project that
 reads or writes the property), and clicking it opens [Find](#find) on exactly that list.
-Worth a glance before renaming anything.
+Check it before you rename a property.
 
 **Map** sits between Story and the boxes once the project has a map, with a count of its
 zones. It opens [the project map](/storyletter/maps/), the one map every box on it shares. A
@@ -66,25 +66,27 @@ open document's row is highlighted strongly, and each ancestor softly. When the 
 document has no row of its own (a card, a hand, a tag group), its nearest ancestor takes the
 strong highlight, so you can always see which deck you're in.
 
-Right-click a row for **Duplicate** and **Delete**. Drag to reorder. Toggle the pane with
+Right-click a box or deck row for **Duplicate** and **Delete**. To reorder boxes, decks or
+hands, drag them on the project's page, the box's Decks page or its Hands page. Toggle the pane with
 **View ▸ Show Navigator** (`Cmd+1`).
 
 Beside the toggle in the top bar sit a quiet **← →** pair, **Back** and **Forward**
 through the documents you've visited, each greyed when there's nowhere to go. They're
 what rescues you after a jump (a Find hit, Go to definition, a warning click), and
 they're on **View ▸ Back / Forward** (`Ctrl+Cmd+←` / `Ctrl+Cmd+→`; `Alt+←` / `Alt+→` on
-Windows and Linux). Arrows retrace your steps, while chevrons and **Up a Level** climb the
-structure. Two different journeys, two different symbols.
+Windows and Linux). The arrows retrace your steps. The chevrons and **Up a Level** move up
+and down the structure.
 
 ## The document
 
 The centre is where everything is edited. There's no inspector pane. A container's
 document lists its children, and a card's document holds everything the card owns.
 
-Every page opens with two things above its tabs. The first is **the trail**, clickable
-ancestor segments (`Village › Decks`). The current document is the heading beneath, not a
-segment. **View ▸ Up a Level** (`Cmd+[`) goes up one level. Page-level controls, like the
-card/table/node switch and the card stepper, sit to the right of the trail.
+Every page opens with two things above its tabs. The first is **the way back**: a button
+naming the level above (**‹ Decks** on a deck, **‹ Gareth's Debt** on a card), which `Esc`
+also takes. When you arrived from somewhere else, such as a map or a hand, a second button
+(**↩ Map**) takes you back there. **View ▸ Up a Level** (`Cmd+[`) goes up one level.
+Page-level controls, like the card/table/node switch and the card stepper, sit to the right.
 
 The second is **the identity heading**, which holds the item's type, its title, its gameId
 as a chip (worked out from the title until it's first published, and shown faded until then; after that it's pinned), and its purpose. An overflow menu beside
@@ -108,13 +110,11 @@ with nothing in it stays clickable, with the explanation inside.
 
 Your tab choice follows you between pages of the same kind. Pick **Outcomes** on one
 card and the next card you open (from the navigator, a link, a coverage row) opens on
-Outcomes too, because moving card to card on the same tab is usually a comparison.
+Outcomes too.
 
 Two words are kept apart. **Fields** means card fields, declared by the box's card
 template and filled in on each card. **Properties** means the state declarations of a
 scope (`@box`, `@deck`, `@hand`).
-
-Each document remembers which tab you left it on.
 
 ### Conditions
 
@@ -139,7 +139,7 @@ that outcome expanded. Errors and warnings are told apart by colour, and a quick
 rides on the bar when one exists.
 
 [Coverage](/production/coverage-testing/) is a bigger job than validation, so it runs on
-demand (**Review ▸ Coverage…**) instead of live.
+demand (**Review ▸ Coverage Test…**) instead of live.
 
 ## Find
 
@@ -177,17 +177,18 @@ show, on [Keyboard shortcuts](/storyletter/shortcuts/).
 | Menu | Items |
 |---|---|
 | Storyletter (macOS only) | About Storyletter · User Information… |
-| File | New Project… (`Cmd+N`) · Open Project… (`Cmd+O`) · New Card (`Shift+Cmd+N`) · Save (`Cmd+S`) · Open Recent · Project Settings… (`Cmd+,`) · User Information… (Windows and Linux) · Close Project · Open Storyletpack… · Export as Storyletpack… · Merge Returned Storyletpack… · Connect to a server… |
+| File | New Project… (`Cmd+N`) · Open Project… (`Cmd+O`) · New Card (`Shift+Cmd+N`) · Save (`Cmd+S`) · Open Recent · Project Settings… (`Cmd+,`) · Share Scopes with Other Tools… · User Information… (Windows and Linux) · Close Project · Open Storyletpack… · Export as Storyletpack… · Merge Returned Storyletpack… · Connect to a Server… · Exit (Windows and Linux) |
 | Edit | Undo (`Cmd+Z`) · Redo (`Shift+Cmd+Z`) · Duplicate (`Cmd+D`) · Edit Scene in Patterpad (when the project is [paired with Patter](/storyletter/patter/)) · Cut · Copy · Paste · Select All · Find… (`Cmd+F`) · Replace… (`Cmd+Alt+F`; `Ctrl+H` on Windows and Linux) |
 | Play | The Board (`Cmd+T`) · Live Link |
-| Review | Review Feedback (`Shift+Cmd+R`) · Next Feedback (`F8`) · Previous Feedback (`Shift+F8`) · Coverage… (`Shift+Cmd+C`) · Links… · Find Property Usage… · Show Resolved Comments |
+| Review | Review Feedback (`Shift+Cmd+R`) · Next Feedback (`F8`) · Previous Feedback (`Shift+F8`) · Coverage Test… (`Shift+Cmd+C`) · Links… · Find Property Usage… · Show Resolved Comments |
 | Publish | Publish Playable HTML… · Publish Spreadsheet… · Publish Bundle (`Shift+Cmd+B`) · Auto Rebuild |
-| View | Show Navigator (`Cmd+1`) · Back · Forward · Up a Level (`Cmd+[`) · Project Overview · Reset View · Coverage Overlay · Colour Theme |
-| Help | Storyletter Documentation · Storylet Studio Documentation Home · Open an Example ▸ (The Hamlet, The Village, Port Meridian) · Check for Updates… · About Storyletter (Windows and Linux) |
+| View | Show Navigator (`Cmd+1`) · Back · Forward · Up a Level (`Cmd+[`) · Project Overview · Reset View · Coverage Overlay · Colour Theme · Actual Size · Zoom In · Zoom Out · Toggle Full Screen |
+| Window | the platform's own window items |
+| Help | Open an Example ▸ (The Hamlet…, The Village…, Port Meridian…, The Hamlet (Patter Version)…) · Storyletter Documentation · Storylet Studio Documentation Home · Check for Updates… · About Storyletter (Windows and Linux) |
 
 A few of these deserve a note. **Undo** and **Redo** reverse any edit to any kind of item,
 through the same version-control path a save takes, not just the text field you're in.
-**Connect to a server…** asks for an address and a code.
+**Connect to a Server…** asks for an address and a code.
 
 **Publish Playable HTML…** writes one self-contained `.html` file that plays the project
 in any browser, with no engine, server, or install. It's the Board, with the player's place
@@ -218,15 +219,17 @@ See [Live Link](/play/live-link/).
   warning switch. **Warn about unread state** also flags state an outcome writes that no
   condition reads. It's off by default, because cards are often written ahead of the
   content that will read them; a gate on state nothing writes always warns, whatever
-  this says.
+  this says. It also holds **Patter project**, the Patter project this one is paired with
+  (see [Working with Patter](/storyletter/patter/#pairing-the-projects)).
 - **World** holds the `@world` property declarations (your game's state), and the
   [coverage drivers](/production/coverage-testing/#writing-drivers-by-hand) that stand in
   for them during a test run. Where the game shares its scopes (below), these are the
   game's: saving writes them to `game-scopes/game.scopes.json` first, leaving every other
   scope in that file as it was, and then copies them into the project.
-- **Publish** (under Project, as in Patterpad) holds the bundle path (by default a
-  `storylet-dist/` folder beside the project, never inside it), whether metadata is `full`
-  or `stripped`, and how many turns a play advances.
+- **Publish** holds the bundle path (by default a `storylet-dist/` folder beside the
+  project, never inside it), whether metadata is `full` or `stripped`, **Include the maps**
+  (whether the zone shapes and pictures ship with the bundle, for a game that draws its own
+  map), and how many turns a play advances.
 
 ### Sharing scopes with the game's other tools
 
@@ -250,7 +253,7 @@ setting with two rungs, and the second shows everything the first shows.
 | Play | For | What it adds |
 |---|---|---|
 | **Solo** | one player, one playthrough | nothing extra, this is the plain editor |
-| **Shared world** | several players over one world | **Shared** on declarations and decks, the Shared choice and **In the world** on cards |
+| **Shared world** | several players over one world | **Shared** on declarations and decks, a line on every property saying who shares its value, and the Shared choice and **In the world** on cards |
 
 Hidden means absent, not greyed out. A solo project has no Shared checkbox to read past.
 Nothing about the compiled bundle changes (both rungs run on the same engine), so this is

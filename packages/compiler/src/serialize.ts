@@ -15,13 +15,12 @@
 //   4. two-space indent; double-quoted strings; keys quoted only when not
 //      identifier-safe;
 //   5. UTF-8, no BOM, LF, final newline;
-//   6. the collections that carry a display `order` field (`cards`, `hands`)
-//      are stored sorted by immutable id, so two people adding one each land
-//      at different places in the file. A collection that arrives unsorted
-//      and with no `order` on any item (hand-authored, or from before this
-//      rule) gets `order` stamped from its file position first, so what the
-//      author had is what the editor keeps showing. Outcomes, templates, tag
-//      groups and tags have no `order` field yet and keep authored order.
+//   6. the id-keyed collections (`cards`, `hands`, `outcomes`, `templates`,
+//      `groups`, `tags`) are stored sorted by immutable id, so two people
+//      adding one each land at different places in the file. Before an
+//      unsorted collection is sorted, any item with no `order` gets `order`
+//      stamped from its file position, so what the author had is what the
+//      editor keeps showing. A collection already in id order is left alone.
 //
 // The compiled bundle is the exception: it must stay STRICT JSON (runtime
 // ports use stock JSON parsers), so `serialiseBundle` emits no trailing
@@ -44,7 +43,7 @@ export interface StringifyOptions {
    *  Defaults to true; the bundle passes false to stay strict JSON. */
   json5?: boolean;
   /** Run the id-sorting pass. Defaults to true; the BUNDLE passes false.
-   *  Rule 5 is a property of source files, where it keeps two authors adding
+   *  Rule 6 is a property of source files, where it keeps two authors adding
    *  an item each from colliding. A bundle has no merge story, and its
    *  `outcomes` arrays deliberately carry DISPLAY order (the player's menu),
    *  so id-sorting them here would undo what the compiler just did. */
@@ -59,7 +58,7 @@ export function canonicalStringify(value: unknown, opts?: StringifyOptions): str
   return write(prepared, "", json5, true) + "\n";
 }
 
-/** The collections rule 5 stores id-sorted: each names a list whose items
+/** The collections rule 6 stores id-sorted: each names a list whose items
  *  carry a display `order`, so sorting the file loses nothing.
  *
  *  Source keys only. `outcomes` and `tags` also name lists in the compiled

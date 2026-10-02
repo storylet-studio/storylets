@@ -23,7 +23,7 @@ to copy into another project first.
    `Demos/the-hamlet.storyletsc` straight from disk (nothing to import or place),
    deals every hand, and gives you a board you can play with the mouse.
 
-While it runs, **Window > Storylet Engine Runtime State** shows the run live: the flow's
+While it runs, **Tools > Storylet Engine Runtime State** shows the run live: the flow's
 properties (with type-aware editors, per-row reset and a search filter), per-box turns,
 the board, and **Save State... / Load State...** for the whole run as a
 `.storyletsave` file.
@@ -40,7 +40,7 @@ appends a line to the transcript pane (the Output Log mirrors it line for line).
 all it takes. From a command line you can name it explicitly in the map URL:
 `?game=/Script/StoryletEngineDemo.StoryletBoardDemoGameMode`.
 
-**Window > Storylet Engine Runtime State** sits beside it;
+**Tools > Storylet Engine Runtime State** sits beside it;
 the Board demo registers its engine under the label `board demo`, and runs with the
 retained log on, so the examiner's log panel fills as you play.
 

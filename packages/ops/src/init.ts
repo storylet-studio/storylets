@@ -555,7 +555,8 @@ function actionGameParts(): KitParts {
 
 // --- emitted file bodies (the extension ruling + merge hygiene) --------------
 
-const SHARD_GLOB = "storyletproj,storyletbox,storylettags,storylethands,storyletdeck,storyletview,storyletmap";
+const SHARD_GLOB =
+  "storyletproj,storyletbox,storylettags,storylethands,storyletdeck,storyletview,storyletmap,storyletnotes,storyletcontract";
 
 const EDITORCONFIG = `# Storylet Studio source is UTF-8 + LF, always (the validator enforces this).
 root = true
@@ -578,6 +579,8 @@ const GITATTRIBUTES = `# Storylet Studio source is UTF-8 + LF text (pinned; neve
 *.storyletdeck    text eol=lf
 *.storyletview    text eol=lf
 *.storyletmap     text eol=lf
+*.storyletnotes   text eol=lf
+*.storyletcontract text eol=lf
 
 # Id-keyed structured merge for storylets source (the 'storyletengine merge'
 # driver; see vcs-setup.md). Until it is registered, git falls back to a
@@ -592,6 +595,10 @@ const GITATTRIBUTES = `# Storylet Studio source is UTF-8 + LF text (pinned; neve
 # tidying different corners of a canvas, or of the map, must not conflict.
 *.storyletview    merge=storylets
 *.storyletmap     merge=storylets
+# Comments on the project, and an installation contract (every key merged
+# atomically).
+*.storyletnotes   merge=storylets
+*.storyletcontract merge=storylets
 
 # The compiled bundle is committed but REGENERATED, never hand-merged - keep
 # ours on conflict and rebuild ('storyletengine validate' catches a stale
@@ -621,7 +628,9 @@ const VSCODE_SETTINGS = `{
     "*.storylethands": "json5",
     "*.storyletdeck": "json5",
     "*.storyletview": "json5",
-    "*.storyletmap": "json5"
+    "*.storyletmap": "json5",
+    "*.storyletnotes": "json5",
+    "*.storyletcontract": "json5"
   }
 }
 `;

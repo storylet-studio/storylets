@@ -6,8 +6,8 @@ sidebar:
 ---
 
 Review ▸ Links… opens a lens on the card you're looking at, with what can turn it on or off
-to the left and what it turns on or off to the right. It follows the editor's selection, so it
-is cheap to leave open in a corner and cheap to ignore.
+to the left and what it turns on or off to the right. It follows the editor's selection, so you
+can leave it open beside you.
 
 It answers the question you cannot answer by reading one card: **what breaks if I delete this?**
 
@@ -17,9 +17,8 @@ The focus card sits in the middle, its neighbours either side. Cards wear the sa
 the links the same four inks as [the node canvas](/storyletter/node-canvas/), so learning one
 teaches you the other.
 
-Neighbours are found **across every deck and box**, not just the current deck. That is
-deliberate. A card in one deck can perfectly well be the only thing that opens a card in
-another, and "what breaks if I delete this" does not respect deck boundaries.
+Neighbours are found **across every deck and box**, not just the current deck, because a
+card in one deck can be the only thing that opens a card in another.
 
 ## The four kinds of link
 
@@ -32,10 +31,10 @@ Each link is classified, and the window words it as a sentence rather than a fie
 | influence | *… **changes what is true for** …* | it writes state the other card reads, without deciding it either way |
 | reference | *… **shares state with** …* | neither writes it; both read it |
 
-A reference is not directional. Neither card acts on the other, they merely both care about the
-same property, so it is phrased as a state of affairs rather than as an effect.
+A reference has no direction: neither card acts on the other, they both read the same
+property.
 
-Select a link and the window explains it: a lead naming both cards and what one does to the
+Select a neighbouring card and the window explains its link: a lead naming both cards and what one does to the
 other, then a row per contributing property, in the mono voice (`@story.world_events`) with the
 outcome that writes it named.
 
@@ -43,28 +42,19 @@ outcome that writes it named.
 
 The window follows the editor. Click a different card in the editor and the lens moves with it.
 
-You can also walk away from that: **Centre on this card** re-focuses on a neighbour, and the
-window then shows a **Follow the editor** button to get back. Walking away is a state worth
-showing, because otherwise a window that has stopped tracking just looks stuck.
+Right-click a neighbour for **Centre on this card**, which re-focuses the window on it, and
+the window then shows a **Follow the editor** button to get back. The same menu has **Open
+in the editor**, and double-clicking a card opens it too.
 
-**Open in the editor** takes you to the card you are looking at.
+## Arranging
 
-## Why nothing here is draggable
+The window lays the cards out for you each time the focus moves, so nothing in it can be
+dragged.
 
-Unlike the node canvas, nothing in this window is arranged by you. The layout is generated from
-the graph every time the focus moves, so there is nothing to persist and nothing to drag.
+## One step at a time
 
-**The arrangement is the answer.** It is a reading of the project as it stands, not a diagram
-you maintain.
-
-## One hop, on purpose
-
-The window shows the focus card's **immediate** neighbours and stops there. It does not walk
-the chain outward.
-
-A whole-project graph is a hairball. The previous generation of this tool drew one and learned
-that it looks impressive and tells you nothing. One hop across the project stays readable, and
-you get the chain by walking it a card at a time with **Centre on this card**.
+The window shows the focus card's immediate neighbours and stops there. To follow a chain,
+walk it a card at a time with **Centre on this card**.
 
 ## What it cannot see
 

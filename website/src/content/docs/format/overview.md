@@ -16,10 +16,16 @@ save](/format/bundle/) covers what the compiler writes.
 ```
 saltmarsh.storylets/
   saltmarsh.storyletproj     settings, @world and @story declarations
+  map.storyletmap            the project map: its zones and pictures (optional)
+  notes.storyletnotes        comments on the project and its map (optional)
+  assets/                    the map's pictures
   encounters/                one folder per box
     box.storyletbox          the card template and the ranking toggle
-    tags.storylettags        tag groups: tags and their properties
+    tags.storylettags        the box's own tag groups
     hands.storylethands      hand templates and hands
+    view.storyletview        where cards sit on each deck's canvas (optional)
+    map.storyletmap          where this box's hands stand on the map (optional)
+    notes.storyletnotes      comments on the box (optional)
     decks/
       docks.storyletdeck     one file per deck: the cards
       market.storyletdeck
@@ -67,7 +73,7 @@ sort key, and the state key, and references between shards store the id.
 **The directory is the registry.** A box exists because its folder exists. A deck exists
 because its file exists. There's no central list of decks to conflict on. Folder and file
 names follow the entity's name and the editor keeps them in step. The name inside the file
-is the one that counts, and `validate` warns when the two disagree.
+is the one that counts.
 
 **No derived data in source.** If it can be recomputed, it isn't in a shard. Conditions
 and changes are stored as expression text, never as syntax trees.
@@ -136,6 +142,6 @@ merge](/setup/version-control/), where the shard is written with your version an
 ## Editor associations
 
 `storyletengine init` also writes `.editorconfig` and `.vscode/settings.json`, registering
-the six shard extensions as JSON5 so that syntax highlighting and validation work in a plain
+the shard extensions as JSON5 so that syntax highlighting and validation work in a plain
 text editor. Shards are meant to be hand-editable, so run `format` and `validate` afterwards
 to check the edit.

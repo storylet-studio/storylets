@@ -75,11 +75,11 @@ yes, flags. If the property can only ever be one of them, enum.
 
 A quality is an **ordered ladder of named stages**, and its value is always exactly one of
 them. Declare `debt`, pick **quality**, and add the stages in story order, `quiet`, then
-`troubled`, then `confronted`. The order you give them IS the ladder. That is why the stage
+`troubled`, then `confronted`. The order you give them is the ladder. That is why the stage
 chips can be reordered and the other lists can't, and the default is the first stage unless
 you pick another.
 
-The order is the point, so a card's condition can ask about position rather than listing
+Because the stages are ordered, a card's condition can ask about position instead of listing
 names.
 
 - `@deck.debt == "troubled"` means exactly there

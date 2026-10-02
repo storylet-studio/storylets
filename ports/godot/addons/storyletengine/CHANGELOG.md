@@ -6,6 +6,10 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Changed
+
+- **The bundle inspector counts hands on the map**, where it said "sites", in line with the editor.
+
 ## [0.9.0] - 2026-10-02
 
 ### Changed

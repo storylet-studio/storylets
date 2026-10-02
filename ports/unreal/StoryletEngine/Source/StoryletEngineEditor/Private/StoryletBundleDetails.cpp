@@ -190,7 +190,7 @@ void FStoryletBundleDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 			Sites.Add(FString::Printf(TEXT("%s %d"), *Entry.Box, Entry.Sites));
 		}
 		AddLine(MapCategory, FString::Printf(
-			TEXT("geometry carried (the engine ignores it): zones %d, pictures %d, sites %s"),
+			TEXT("geometry carried (the engine ignores it): zones %d, pictures %d, hands %s"),
 			D.Map.Zones, D.Map.Backgrounds, Sites.Num() > 0 ? *FString::Join(Sites, TEXT(", ")) : TEXT("0")), true);
 	}
 

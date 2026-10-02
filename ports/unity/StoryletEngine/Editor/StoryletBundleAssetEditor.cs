@@ -177,7 +177,7 @@ namespace StoryletStudio.StoryletEngine.Editor
                 $"{map.Group}: {string.Join(", ", map.Tags)}",
                 $"boxes on the map: {(map.Boxes.Count > 0 ? string.Join(", ", map.Boxes) : "none")}",
                 $"geometry carried (the engine ignores it): zones {map.Zones}, pictures {map.Backgrounds}"
-                    + $", sites {(sites.Count == 0 ? "0" : string.Join(", ", sites))}",
+                    + $", hands {(sites.Count == 0 ? "0" : string.Join(", ", sites))}",
             };
         }
 

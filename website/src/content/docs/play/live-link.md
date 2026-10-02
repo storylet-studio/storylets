@@ -13,7 +13,7 @@ The run carries across (same turns, same hands, same state).
 
 The second is **live debug**. The game streams what it deals and plays back to the editor,
 and the Board shows the game's run instead of its own. You see the hands as the game has
-them, the journal of what the game did, and "Not listed · why" for the game's own deals.
+them, the journal of what the game did, and "Not listed, and why" for the game's own deals.
 
 The debug half is observe-only, so the game stays in control and the editor is a passive
 mirror. The link is a loopback-only WebSocket (`127.0.0.1`), which only processes on your
@@ -57,7 +57,7 @@ the fix on the next deal, no rebuild, no restart, no losing your place.
 
 The run carries across the swap the same way a save does. Turns, properties, cooldowns, and
 the hands on the table all survive. A new property takes its default. A card you deleted
-leaves the table. A card whose When you changed stays on the table until its hand is next
+leaves the table. A card whose condition you changed stays on the table until its hand is next
 dealt, and is dropped then if it no longer passes.
 
 **JavaScript** wiring, via `applyLiveBundle` (a one-time developer task; designers just save):
@@ -101,7 +101,7 @@ draws.
 ## Live debug on the Board
 
 With a game connected and the Board open, the Board enters **Live** mode. It renders the hands
-as the game has them, its journal fills with what the game deals and plays, "Not listed ·
+as the game has them, its journal fills with what the game deals and plays, "Not listed, and
 why" answers for the game's own deals, and **Follow in the editor** opens each card as the game
 deals it. The Board's own controls (deal, Next turn, play, the raw state) are off, because the
 game is in control. Seed, Save state, Restore, and Restart hide. When the link drops, or you
@@ -168,7 +168,7 @@ void Update()
     if (_link.TryReceive(out var raw) && StoryletLiveBundle.TryParsePush(raw, out var build, out var data))
     {
         var r = StoryletLiveBundle.Apply(_engine, data);    // the engine keeps its own options
-        if (!r.Ok) { Debug.LogWarning(r.Error); return; }   // another project, bad JSON: keep yours
+        if (!r.Ok) { Debug.LogWarning(r.Error); return; }   // another project, bad JSON, a bundle refused: keep yours
         _engine = r.Engine;                                  // re-bind your handles and anything over them
         _flow = _engine.GetFlow("main") ?? _engine.OpenFlow("main");
         _link.Attach(_engine);
@@ -218,31 +218,39 @@ swaps the new bundle in **in place**. Your `UStoryletEngine` and `UStoryletFlow`
 debug registration, and the link's attachment all stay valid, so there's nothing to re-bind
 (the Unreal difference from the JavaScript shape above, and the same in-place swap Patterplay
 does).
-It returns false with the error and leaves the run untouched if the bundle won't compile or belongs to
-another project. `UStoryletEngine::ApplyLiveBundle(NewBundle, Error)` is Blueprint-callable
+It returns false with the error and leaves the run untouched if the bundle won't compile, is one
+the engine refuses to read, or belongs to another project. `UStoryletEngine::ApplyLiveBundle(NewBundle, Error)` is Blueprint-callable
 too, for a bundle you've loaded yourself.
 
 **Godot**: a `StoryletLiveLink` node. It only opens the link in a debug build
 (`OS.is_debug_build()`), so it is inert in a release export:
 
 ```gdscript
-var link := StoryletLiveLink.new(bundle["content"]["hash"], "My Game")
-add_child(link)                       # starts polling; a missing editor is a silent no-op
-link.attach(engine)                   # forward every flow's trace; a board each goes first
-# ...play as normal; every deal, play and turn reaches the editor as it happens.
+var engine: StoryletEngine                # members, so the refresh below can replace them
+var flow: StoryletFlow
+var link: StoryletLiveLink
+
+func _start_link(bundle: Dictionary) -> void:
+    link = StoryletLiveLink.new(str(bundle["content"]["hash"]), "My Game")
+    add_child(link)                       # starts polling; a missing editor is a silent no-op
+    link.attach(engine)                   # forward every flow's trace; a board each goes first
+    link.bundle_pushed.connect(_on_bundle_pushed)
+    # ...play as normal; every deal, play and turn reaches the editor as it happens.
 
 # Live refresh: the editor saved and pushed a new bundle.
-link.bundle_pushed.connect(func(build: String, data: String) -> void:
+func _on_bundle_pushed(build: String, data: String) -> void:
     var r := StoryletLiveLink.apply_live_bundle(engine, data)
     if not r["ok"]:
-        push_warning(r["error"])      # another project, bad JSON: keep yours
+        push_warning(r["error"])          # another project, bad JSON, a bundle refused: keep yours
         return
-    engine = r["engine"]              # re-bind your handles and anything over them
+    StoryletDebug.unregister(engine)      # the old engine is spent
+    engine = r["engine"]                  # re-bind your handles and anything over them
     flow = engine.get_flow("main")
     if flow == null:
         flow = engine.open_flow("main")
+    StoryletDebug.register(engine, "main")
     link.attach(engine)
-    link.set_build(build))            # the editor's icon goes back to green
+    link.set_build(build)                 # the editor's icon goes back to green
 ```
 
 `apply_live_bundle` never `push_error`s. A bundle it can't apply comes back as
@@ -276,12 +284,12 @@ Editor to game:
 | bundle | `{ "t":"bundle", "v":1, "build":"<new content.hash>", "data":"<the full .storyletsc JSON as a string>" }` | after a save, when the connected client's build differs from the editor's current compiled hash |
 
 Identity in frames is by **gameId** (hands, boxes, cards), never by opaque id, because that is
-what the game's own code already speaks and what the bundle inspector lists. That now holds
-for the trace event inside `trace` as well. It's the runtime's own object, and every hand,
-box, and card in it's a gameId.
+what the game's own code already speaks and what the bundle inspector lists. The same holds
+for the trace event inside `trace`: it is the runtime's own object, and it names every hand,
+box, and card by gameId.
 
 A trace event fires after the state it reports has landed, so the board snapshot that follows
-it shows the deal, play, eviction, or turn it describes. The server binds to `127.0.0.1` only,
+it shows the deal, play, eviction, or turn it describes. Storyletter listens on `127.0.0.1` only,
 so no pairing token is needed.
 
 Every client is held to one shared fixture (`packages/conformance/live-link/` in the repo), a

@@ -16,9 +16,9 @@ the editor, the files, the runtime API, and the CLI all read the same way.
 ## Projects and files
 
 A project is a folder of plain text files that you own and keep in version control. There is
-one file per deck, a few per box, and one for the project. There's no database and no server,
-so you can diff it, merge it, zip it, and send it. Storyletter and the CLI both respect your
-version control's locks. [The format](/format/overview/) describes every file.
+one file per deck, a few per box, one for the project, and one for its map when it has one.
+There's no database and no server, so you can diff it, merge it, zip it, and send it.
+Storyletter and the CLI both respect your version control's locks. [The format](/format/overview/) describes every file.
 
 ## Boxes, decks, and cards
 
@@ -60,7 +60,9 @@ A **hand** is a named spot on the board that your game deals to. "The inn", "enc
 the forest", "Gareth's topics", and "what's next" are all hands. A hand says which tags it wants and how many cards it holds. For
 example, `zone = forest` might mean "deal encounters in the forest to this hand", and a limit
 of five means at most five things can be available in the forest at the same time. A **hand
-template** is a kind of hand you define once and reuse, choosing the tags per hand. Your game
+template** is a kind of hand you define once and reuse, choosing the tags per hand. Its title
+is the kind in your own words, such as "Places in the village" or "People you can talk to",
+and Storyletter shows it under each hand's name. Your game
 asks the engine what's in a specific hand.
 
 The **board** is everything currently dealt, across every hand. Hands change only when your
@@ -73,9 +75,11 @@ A **tag group** is a named axis for sorting cards, such as zone, npc, trigger, o
 **tags** are declared values, so a typo is an error in the editor rather than a card that
 quietly never comes up. A card that leaves a group blank matches any value of it.
 
-Every box has a built-in **place** group whose tags are the box's hands, so a card tagged
-`place: the-inn` comes up only at that hand. That is the direct answer to "where does this card
-come up?". Tagging it with a zone instead says "anywhere in there".
+Every box also has a built-in group, named `place` in its files, whose tags are the box's own
+hands, so a card tagged `place: the-inn` comes up only at that hand. That is the direct answer
+to "where does this card come up?". Tagging it with a zone instead says "anywhere in there".
+In Storyletter you never pick from it by name: a card's Dealing tab says **Comes up at** the
+hand.
 
 ## The project map
 

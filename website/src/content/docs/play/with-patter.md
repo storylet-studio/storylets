@@ -77,7 +77,7 @@ for (;;) {
   if (step.type === "end") break;
 }
 
-// Which outcome, by the three steps above, then play it through the Storylet Engine.
+// Which outcome, by the four steps above, then play it through the Storylet Engine.
 storyFlow.play(card.id, outcome ?? labelled ?? onlyOutcome, handId);
 storyFlow.dealMany();   // refresh every hand; a card still eligible keeps its place
 ```
@@ -122,8 +122,7 @@ each own its own. Patter's `eligible` is its own condition on the option. The St
 condition on `@story` or `@deck` is invisible to Patter.
 
 Offer an option only when both agree. Show the rest greyed rather than hidden, as Patter's own
-runtime does with an ineligible option: a player who can see the door they cannot open is being
-told something, and a player who sees nothing is being told nothing. The Hamlet's Moneylenders'
+runtime does with an ineligible option. The Hamlet's Moneylenders'
 Men is the worked case, where paying the debt off needs a reputation you may not have yet.
 
 ## One registry
@@ -134,10 +133,12 @@ makes it, registers `@world` in it, and hands it to both engines:
 
 ```ts
 import { ScopeRegistry } from "@wildwinter/scoperegistry";
+import { Engine } from "@storylet-studio/runtime";
+import { Engine as PatterEngine } from "@patterkit/runtime";
 
 const registry = new ScopeRegistry()
   .defineOwned("world", worldDeclarations, { owner: "Game" });   // stored and saved with the rest
-const story = new StoryletEngine(storyBundle, { seed, registry });
+const story = new Engine(storyBundle, { seed, registry });
 const patter = new PatterEngine(patterBundle, { seed, registry });
 ```
 
@@ -295,8 +296,9 @@ that part in your build. See [Working with Patter](/storyletter/patter/).
 The same game four times, each a project you open and read.
 
 The JavaScript version is `packages/hamlet-client`, plain JavaScript with no build step: a
-page, two script tags for the runtimes' browser files, three plain scripts. Read `src/world.js`
-(the shared world) then `src/performance.js` (the handoff).
+page, script tags for the two runtimes' browser files and the `with-patter` drop-in, and two
+plain scripts. Read `src/world.js` (the shared world), then `src/main.js` (the game, handing
+each card to the `Performer`).
 
 For Godot 4.7+, open `ports/godot/HamletDemo` and press Play. `hamlet_game.gd` is the whole
 integration.
@@ -305,8 +307,10 @@ Unity 6000.4+ has `ports/unity/HamletDemo`. Press Play. `HamletGame.cs` and `Ham
 hold it, with Patterplay embedded in `Packages/`.
 
 On Unreal 5.7+, open the `.uproject` in `ports/unreal/HamletDemo`, let it build, and press
-Play. `HamletGame.cpp` makes two `Create` calls with one world,
-`UStoryletEngine::Create(Bundle, Seed, false, World)` and `UPatterEngine::Create(Bundle, World)`.
+Play. `HamletGame.cpp` makes two `Create` calls over one world,
+`UStoryletEngine::Create(Bundle, Seed, false, World.Store)` and
+`UPatterEngine::Create(Bundle, World.Mirror)`, with `UHamletWorldSync` keeping the two
+containers equal.
 
 Each ships with Patter's plugin from its pinned release, so the zip runs as downloaded. All
 four read the same two published bundles, `storylet-dist/the-hamlet-patter.storyletsc` from

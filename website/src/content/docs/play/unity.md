@@ -12,10 +12,9 @@ sidebar:
 
 ## Install
 
-Download the Unity zip from the [download page](/download/). It holds two folders side by
-side. **`StoryletEngine/`** is the package (`com.storylet-studio.storyletengine`), and
-**`StoryletEngineDemo/`** is a ready-to-open demo project that finds the package in the
-sibling folder.
+Download the Unity zip from the [download page](/download/). It holds **`StoryletEngine/`**,
+the package (`com.storylet-studio.storyletengine`). The demo project is in the
+[repository](https://github.com/storylet-studio/storylets) (see [The demo project](#the-demo-project)).
 
 Install the package **as a package**, any of:
 
@@ -33,14 +32,19 @@ loose scripts, the package manifest is ignored, and the Newtonsoft dependency ne
 
 Drop a `.storyletsc` into your project. A ScriptedImporter turns it into a
 **`StoryletBundleAsset`**, which holds the raw JSON and rebuilds the compiled bundle on load.
-A broken bundle still imports, with the error readable on the asset as `LoadError`, so a bad
-file is something you can look at, not something that breaks your project.
+A file that isn't valid JSON still imports, with the error readable on the asset as
+`LoadError`, so a bad file is something you can look at, not something that breaks your
+project. A bundle this runtime can't read (a schema it doesn't know, or one that breaks the
+project map's rules) is refused when you build the engine on it: `new Engine` throws a
+`StoryletError` naming every problem, before anything is registered.
 
 ## Create an engine and a flow
 
 ```csharp
+using System.Collections.Generic;
 using UnityEngine;
 using StoryletStudio.StoryletEngine;
+using Wildwinter.Expr;
 
 public sealed class StoryRunner : MonoBehaviour
 {
@@ -63,8 +67,8 @@ name. A single-player game opens `"main"` and never thinks about it again. Sever
 parallel playthroughs over the same shared state ([the sharing rules](/play/world-state/)).
 `Bundle.CreateEngine(seed)` is the one-line form. The same seed always deals the same cards.
 `Log = true` keeps the event logs so the state window can show them. `flow.Log()` is that
-flow's own, and `engine.Log()` is the RUN's, every flow's events in one order with each entry
-naming its `Flow` (capped at 1000 entries, and `LogCap` sets your own).
+flow's own, and `engine.Log()` is the run's: every flow's events in one order, each entry
+naming its `Flow`. Each log keeps the last 1000 entries, and `LogCap` sets your own.
 
 ## Deal, peek, outcomes, play
 
@@ -79,9 +83,11 @@ List<DealtCard> inn = _flow.Deal("the-inn");                  // one hand
 OrderedMap<string, List<DealtCard>> board = _flow.Board();    // what's out right now
 OrderedMap<string, List<DealtCard>> barks = _flow.Board("barks");
 
-RankedList looks = _flow.Peek("village",                      // look, don't deal
-    new OrderedMap<string, string> { { "area", "forest" } }, 3);
+var criteria = new OrderedMap<string, string>();
+criteria.Set("area", "forest");
+RankedList looks = _flow.Peek("village", criteria, 3);        // look, don't deal
 
+DealtCard card = inn[0];                                      // one the player picked
 foreach (var o in _flow.Outcomes(card.Id, "the-inn"))         // ask when you show them
     if (o.Available) _flow.Play(card.Id, o.GameId, "the-inn");
 ```
@@ -104,9 +110,11 @@ double turn = _flow.Turn("village");
 List<BoxView> boxes = _flow.ListBoxes();      // id, gameId, title, turn
 ```
 
-The paths, and when to write them, are on [Your game's state](/play/world-state/). `ExprValue`,
-the value type, is in the `Wildwinter.Expr` namespace (`using Wildwinter.Expr;`), with the
-registry and the rest of the shared expression kernel.
+The paths, and when to write them, are on [Your game's state](/play/world-state/). `ExprValue`
+(the value type), `OrderedMap` and `PropertyRow` are in the `Wildwinter.Expr` namespace, with
+the registry and the rest of the shared expression kernel, so add `using Wildwinter.Expr;` (and
+`using System.Collections.Generic;`) beside `using StoryletStudio.StoryletEngine;`, as the
+first sample does.
 
 `@world` is your game's. Hand the engine a resolver, an `IScopeResolver` with `Get`, `CanSet`,
 and `Set`, and conditions read your live game state directly:
@@ -197,7 +205,7 @@ what that would cost before you spend it and changes nothing. `LoadGame` returns
 otherwise `Evicted`, `DroppedProperties`, `DefaultedProperties`, `RetypedProperties`, and the
 `Version` / `Hash` pairs say what moved.
 
-`SaveFlow(id)` takes ONE flow's state, its property values included, for a playthrough
+`SaveFlow(id)` takes one flow's state, its property values included, for a playthrough
 stepping away, and `OpenFlow(id, new OpenFlowOptions { Restore = saved })` puts it back. Closing
 the flow in between is what releases the cards it was holding, and takes its values out of the
 registry. On the way back, a shared card another flow
@@ -211,7 +219,8 @@ blob throws, so a bad file can't corrupt a run.
 
 ## The Runtime State window
 
-**Window ▸ Storylet Engine ▸ Runtime State** lists every engine registered with
+**Window ▸ Storylet Engine ▸ Runtime State** (its tab reads **Storylet State**) lists every
+engine registered with
 `StoryletDebug`, with **Save State… / Load State…** (the whole run as a `.storyletsave` file)
 under its name, then a section per open flow. One registration covers every flow. The window
 reads them off the engine, so a flow you open later appears on its own.
@@ -223,12 +232,17 @@ per-box **turn clocks** and the current **board** come next. **The log** is that
 retained event log, with per-kind filters, Autoscroll, Copy, and Clear. The **run log**
 (every flow's events in one order) sits under the engine's name, above the flow sections.
 
+A **Filter properties** field at the top narrows every flow's rows by name or path, and a game
+that registered its `StoryletLiveLink` with `StoryletDebug.RegisterLink` gets a **Live Link**
+line above it showing the connection and the build.
+
 It's an editor window, so it never ships in a player build.
 
 ## The bundle inspector
 
-Select an imported bundle asset and its Inspector shows what the bundle offers your code:
-hands, boxes, tags, declared properties. Nothing running needed. See
+Select an imported bundle asset and its Inspector shows what the bundle offers your code: its
+identity, the hands, the tags by box, the declared properties, the project map when the bundle
+has one, and counts. Nothing running needed. See
 [the bundle inspector](/play/dev-tools/#the-bundle-inspector).
 
 ## Live Link to Storyletter
@@ -256,19 +270,21 @@ It works on your game's registry too. The old engine hands its values to the rep
 registry, the report says which properties the edit dropped, defaulted, or retyped, values still
 waiting for a flow keep waiting, and nothing belonging to Patter or your game is touched; the old
 engine is spent, its flows closed. A bundle for another project is refused before anything moves,
-and if the rebuild fails for any other reason, the old engine and the registry are left exactly as
-they were.
+and if the rebuild fails for any other reason, a bundle this runtime refuses included, the old
+engine and the registry are left exactly as they were.
 
 ## The demo project
 
-Open `StoryletEngineDemo/` from the zip and press **Play**. There's nothing to install and no
-sample to import, because its `Packages/manifest.json` points at the sibling package folder.
+The demo isn't in the release zip. Open `ports/unity/StoryletEngineDemo/` from the
+[repository](https://github.com/storylet-studio/storylets) and press **Play**. There's nothing to
+install and no sample to import, because its `Packages/manifest.json` points at the package
+folder beside it.
 It runs the **Board demo** over the Hamlet bundle: every hand a labelled group, every dealt
 card a button, every outcome beneath its card, with a transcript of each deal, play, and turn. Open
 the Runtime State window beside it to watch the run live.
 
-The smallest part to read first is `Start()` plus `DealAllHands()` in `Assets/Demo/BoardDemo.cs`:
-load the bundle, build an engine, open a flow, deal, read `Board()`. Everything else in that file is UI.
+The smallest part to read first is `Start()`, `StartSession()` and `DealAllHands()` in
+`Assets/Demo/BoardDemo.cs`: load the bundle, build an engine, open a flow, deal, read `Board()`. Everything else in that file is UI.
 
 **The Hamlet on Unity** is the second demo, the same project with [Patter](https://patterkit.dev)
 performing each card's dialogue, two engines in one game. It ships as a project zip on the
@@ -277,12 +293,13 @@ integration, and [Running it with Patter](/play/with-patter/) explains the hando
 
 ## How it's built
 
-The package is four assemblies, so the boundaries are enforced by the compiler.
-`StoryletEngine.Runtime` is pure C#, with no `UnityEngine` and no JSON library (the engine, the
-flow, and everything under it). `StoryletEngine.Runtime.Json` is the Newtonsoft layer
-(`BundleLoader` and `StoryletSave`). `StoryletEngine.Runtime.Unity` holds `StoryletBundleAsset`
-and `StoryletDebug`, and `StoryletEngine.Editor` holds the importer, the bundle inspector, and
-the state window. The C# keeps the structure of the JavaScript reference runtime, so the two
+The package is four assemblies over the shared expression kernel, so the boundaries are
+enforced by the compiler. `StoryletEngine.Runtime` is pure C#, with no `UnityEngine` and no
+JSON library (the engine, the flow, and everything under it). `StoryletEngine.Runtime.Json` is
+the Newtonsoft layer (`BundleLoader`, `StoryletSave` and `StoryletLiveBundle`).
+`StoryletEngine.Runtime.Unity` holds `StoryletBundleAsset` and `StoryletDebug`, and
+`StoryletEngine.Editor` holds the importer, the bundle inspector, and the state window. The
+kernel is `StoryletEngine.Expr`, or Patterplay's `Patterplay.Expr` when that is installed. The C# keeps the structure of the JavaScript reference runtime, so the two
 stay in step.
 
 ## Next

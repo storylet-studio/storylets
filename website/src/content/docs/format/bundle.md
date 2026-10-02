@@ -15,13 +15,15 @@ It:
 1. **Compiles every expression** from source text into a `{ src, ast }` envelope, so no
    runtime ever ships a parser.
 2. **Assembles the shards**, the project file, the project map, and every box folder and deck
-   file, into one JSON document, all collections sorted by id.
+   file, into one JSON document, with every collection sorted by id except a card's
+   outcomes, which keep the order you gave them.
 3. **Validates**, refusing to write anything on an error. It checks for property references
    nothing declares, tag references that point nowhere, hands that don't fill in every group
    their template asks for, and field values against the box's card template.
 4. **Computes a content hash** over the canonical source shards and embeds it.
-5. **Carries author metadata through** by default. A `stripped` build omits every `title`
-   and `purpose`.
+5. **Carries author metadata through** by default. A `stripped` build omits the `title` and
+   `purpose` of every box, deck, card, outcome, hand template, hand and tag group. Property
+   and field declarations keep their `purpose`.
 
 The output is a single strict-JSON `.storyletsc` file at the path the project shard's
 `export.bundle` names. New projects point it at a `storylet-dist/` folder beside the project,
@@ -135,7 +137,7 @@ recomputes it and **errors if a committed bundle doesn't match the shards**:
 
 ```
 $ storyletengine validate the-hamlet.storylets
-error: dist/the-hamlet.storyletsc: bundle is stale (content hash does not
+error: ../storylet-dist/the-hamlet.storyletsc: bundle is stale (content hash does not
   match the shards); run: storyletengine export
 ```
 
@@ -159,7 +161,9 @@ changed, because the bytes are part of the contract.
 
 A running engine snapshots to a `storylets/save@2` envelope, which holds what is not a
 property: what a shared one-shot spent, then every flow's own blob, keyed by the flow's name.
-Every id in it is immutable, so renaming things in the project doesn't break a save.
+Boards, cooldowns and spent cards are keyed by immutable id, so renaming things in the project
+doesn't break a save. The play log is the exception: it records cards and outcomes by gameId,
+the names the play-history functions take.
 
 Property values live in the game's **registry** (a `ScopeRegistry`, one per game, see
 [Running it with Patter](/play/with-patter/#one-registry)). An engine built without one makes
@@ -170,7 +174,7 @@ registry once, beside every engine's envelope. The keys are the same on every ru
 value bag, and `storylets/flow/<flow>/story` or `storylets/flow/<flow>/<kind>/<id>` for a
 flow's own. A bag with no declared properties isn't registered.
 
-Claims aren't in it, deliberately. A claim is just "this card is on that hand right now", so
+Claims aren't in it. A claim is just "this card is on that hand right now", so
 it is read back off the boards rather than stored twice. What a shared one-shot **spent** is
 durable, so that does ride the shared half.
 

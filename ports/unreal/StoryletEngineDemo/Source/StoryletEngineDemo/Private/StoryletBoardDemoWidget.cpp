@@ -382,7 +382,7 @@ void UStoryletBoardDemoWidget::BuildUI()
 	// Where the examiner lives, said on screen as well as in the README.
 	{
 		UTextBlock* Hint = MakeLabel(
-			TEXT("Window > Storylet Engine Runtime State shows this session live."), 9.f, BoardPalette::Muted);
+			TEXT("Tools > Storylet Engine Runtime State shows this session live."), 9.f, BoardPalette::Muted);
 		UVerticalBoxSlot* Slot = Root->AddChildToVerticalBox(Hint);
 		Slot->SetPadding(FMargin(0.f, 0.f, 0.f, 10.f));
 	}

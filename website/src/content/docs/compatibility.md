@@ -46,14 +46,16 @@ pass, so this is something you can check, not something you hope for.
 ## The bundle schema is the contract
 
 A compiled [bundle](/format/bundle/) declares a **schema version** (`storylets/bundle@N`). A
-runtime plays any bundle whose schema it supports. That version is the one thing that cuts
+runtime plays any bundle whose schema it supports and refuses any other by name. The current
+runtimes read `storylets/bundle@1`, the bundle that can carry the project map, and the earlier
+`@0`. That version is the one thing that cuts
 across everything, because bumping it is the one change that moves every runtime together.
 Each runtime, the editor, and the CLI otherwise version on their own.
 
 | Runtime | Ships as | Get it |
 |---|---|---|
 | **Storylet Engine JS** | Release zip: `@storylet-studio/runtime`, `@storylet-studio/play-helpers`, and a browser drop-in | [Download](/download/) |
-| **Storylet Engine Unity** | Release zip: the package folder and a demo project | [Download](/download/) |
+| **Storylet Engine Unity** | Release zip: the package folder | [Download](/download/) |
 | **Storylet Engine Unreal** | Release zip: the plugin folder and a demo project | [Download](/download/) |
 | **Storylet Engine Godot** | Release zip: the addon folder | [Download](/download/) |
 | **`storyletengine` CLI** | Standalone binaries, one per platform | [Download](/download/) |
@@ -85,8 +87,9 @@ so state belonging to something that no longer exists drops harmlessly, never a 
 Every runtime carries the same API and the same [dev tools](/play/dev-tools/). A few places
 differ because the host language differs, and these are the only ones.
 
-**Godot** has no exceptions, so errors come back as values, and `play()`, `load()`, and
-`set_property()` return an error string. The state kernel's accessors are `get_value` and
+**Godot** has no exceptions, so errors come back as values. `play()` and `set_property()`
+return an error string. `StoryletEngine.create()` returns `null` for a bundle it refuses, and
+`load_game()` returns an empty report, both with a `push_error`. The state kernel's accessors are `get_value` and
 `set_value`, because `get` and `set` collide with Godot's own `Object` methods.
 
 **Unbounded slots** are the string `"unbounded"` in JavaScript and positive infinity in the

@@ -14,7 +14,7 @@
 // The bundle is Demos/the-hamlet.storyletsc, read straight from disk beside
 // the project: no import, no asset. Seed 7, retained log on, and the session
 // is registered with the editor examiner under the label "board demo", so
-// Window > Storylet Engine Runtime State follows the play.
+// Tools > Storylet Engine Runtime State follows the play.
 //
 // Outside Shipping the demo also opens a Live Link to Storyletter
 // (FStoryletLiveLink, ws://127.0.0.1:4472): with the editor listening, its

@@ -70,7 +70,7 @@ const bundle = await fetch("the-hamlet.storyletsc").then((r) => r.json());
 
 ```js
 const engine = new Engine(bundle, { seed: 7, log: true });
-const flow = engine.openFlow("main");
+let flow = engine.openFlow("main");
 ```
 
 The engine is the world. It holds the bundle, the shared state, and your game's `@world`
@@ -79,6 +79,10 @@ single-player game opens `"main"` and never thinks about it again. An experience
 participants opens one flow each, all over the same shared world
 ([the sharing rules](/play/world-state/)). Re-opening a name replaces that flow with a fresh
 one, and a closed flow's handle refuses every call.
+
+`new Engine` throws if the bundle is one this runtime can't read: an unknown schema
+(`unsupported bundle schema`), or a project map whose rules the bundle breaks
+(`bundle refused:`, naming every problem). Nothing is registered or changed when it does.
 
 `seed` defaults to 0 and seeds each flow's own generator (override per flow:
 `openFlow("bob", { seed: 3 })`), so the same seed always deals the same cards. `log: true`
@@ -165,7 +169,9 @@ if (!report.exact) {
 }
 ```
 
-A save for a different `project` is the one thing both calls refuse.
+Both calls refuse a save for a different `project`, or in a save schema this runtime doesn't
+read. `loadGame` also refuses content that names another engine's scope when no engine on the
+registry provides it.
 
 ### Parking one flow
 
@@ -193,9 +199,13 @@ its own registry saves that registry once, beside the envelope
 the string boundary, which wraps the envelope together with your world values:
 
 ```js
+import { Engine } from "@storylet-studio/runtime";
 import { serializeState, deserializeState, createWorldContainer } from "@storylet-studio/play-helpers";
 
-const world = createWorldContainer(bundle);     // or bind your own resolver
+const world = createWorldContainer(bundle);                  // or bind your own resolver
+const engine = new Engine(bundle, { seed: 7, world: world.resolver });
+let flow = engine.openFlow("main");
+
 const text = serializeState(engine, world.values());   // write this to a .storyletsave
 const savedWorld = deserializeState(engine, text);     // read one back...
 if (savedWorld) world.load(savedWorld);                // ...and apply the world half yourself
@@ -249,7 +259,7 @@ createBundleInspector(bundle, { container: document.getElementById("bundle") });
 ```
 
 The property examiner shows and edits a running flow's state, turns, and board, with
-**Save State… / Load State…** buttons. The bundle inspector shows what a bundle offers your
+**Save state** and **Load state** buttons. The bundle inspector shows what a bundle offers your
 code, with no flow running. Leave both out of a shipping build. [Dev tools](/play/dev-tools/)
 describes what each one shows.
 
@@ -259,18 +269,18 @@ deals. [Live Link](/play/live-link/) has the wiring and the protocol.
 
 ## The Board demo
 
-The helpers package carries a `demo` folder, the whole play loop as one clickable page, with
-every hand a labelled group of card buttons, outcomes revealed beneath the open card, a
-transcript, and both examiners mounted beside the board. Its README has the two commands that
-build and serve it.
+The repository carries the JavaScript Board demo, in `packages/play-helpers/demo`: the whole
+play loop as one clickable page, with every hand a labelled group of card buttons, outcomes
+revealed beneath the open card, a transcript, and both examiners mounted beside the board. Its
+README has the two commands that build and serve it. It isn't in the zip or the npm package.
 
-The same Board demo ships with the Unity, Unreal, and Godot runtimes, with the same content,
-the same control labels, the same transcript, and one idiom each.
+The Unity, Unreal, and Godot runtimes have the same Board demo, with the same content, the
+same control labels, the same transcript, and one idiom each.
 
 **The Hamlet on the web** is the second demo, the same project with [Patter](https://patterkit.dev)
 performing each card's dialogue, two engines in one game. It ships as a project zip on the
-[download page](/download/#the-hamlet-patter-version-two-engines-in-one-game); `src/performance.ts` is the whole
-integration, and [Running it with Patter](/play/with-patter/) explains the handoff.
+[download page](/download/#the-hamlet-patter-version-two-engines-in-one-game); `src/world.js` is the world both
+engines share and `src/main.js` the game around them, handing each card to Patter, and [Running it with Patter](/play/with-patter/) explains the handoff.
 
 ## Next
 

@@ -27,12 +27,6 @@ what it deals.
   of cards (When, priority, tags, purpose, outcomes), plus Outcomes, Hands and Tag groups
   sheets. Sort it, filter it, or read it in a meeting.
 
-[A spreadsheet of the whole project](/storyletter/overview/#a-spreadsheet-of-the-whole-project)
-is the other report. **Publish ▸ Publish Spreadsheet…** in Storyletter, or
-[`storyletengine export-xlsx`](/cli/#export-xlsx) in a script, writes every deck as a sheet of
-cards (When, priority, tags, purpose, outcomes), plus Outcomes, Hands, and Tag groups sheets.
-Sort it, filter it, or read it in a meeting.
-
 ## Where the rest lives
 
 Two things a producer usually wants are documented on the surface they happen on. Comments

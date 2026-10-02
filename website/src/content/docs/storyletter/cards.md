@@ -26,7 +26,7 @@ draws.
 **Node view** shows the cards as nodes, with the arrows between them worked out for you.
 This is a deck's default view, and it has [its own page](/storyletter/node-canvas/).
 
-The switch is remembered, so a deck opens the way you left it.
+The switch is remembered, and every deck opens in the view you last chose.
 
 ### Group by
 
@@ -42,15 +42,17 @@ It's on a deck's Cards tab and on a box's Contents tab, which shows every card i
   Contents it's a heading per deck.
 - **Hand** gives a heading per hand, with the zone the hand is in beside it, holding the
   cards that name that hand. After those come **Anywhere in** a zone for cards filed to a
-  zone, and **Anywhere** last. It's offered when the box has hands and something places cards
+  zone, a **By** heading for cards placed only by another group a hand binds (**By npc**,
+  which switches to grouping by that group when clicked), and **Anywhere** last. It's offered when the box has hands and something places cards
   at them: a card that names a hand, or the project map.
 - **Any of the box's tag groups**, by name, such as `npc` or `act`, gives a heading per tag
   and **Untagged** last. In a box on the map the zone group is one of them, and a card that
   names a hand is filed under the zone that hand is in.
 
 A card that belongs under more than one heading is shown under each, and says what else it's
-under. A heading that names a deck or a hand opens it when clicked. You can only drag cards
-into a new order when they're grouped by Deck, because that order is the deck's.
+under. A heading that names a deck or a hand opens it when clicked. You can drag cards into
+a new order only on a deck's own Cards tab with Group by set to **Deck**, because that order
+is the deck's.
 
 Group by works the same in a box with no map at all: a box of conversation topics grouped by
 `npc` reads as one heading per character. Your choice is remembered per box and per page, and
@@ -68,7 +70,7 @@ Getting around and editing works like this.
 - Drag to reorder. The order is only how the editor lists the cards; it has no effect on
   which card comes up. (Outcomes are the one place where the order you choose does reach
   the game. Right-click one for **Move up** and **Move down**.)
-- Right-click a card for **Duplicate** and **Delete**. `Cmd+D` duplicates the selection.
+- Right-click a card for **Links…**, **Duplicate** and **Delete**. `Cmd+D` duplicates the selection.
 - Inside a card, `Esc` goes back to the deck, and the stepper beside the trail (`↑` / `↓`)
   moves to the previous or next card without going back.
 
@@ -134,8 +136,8 @@ where** and **Anywhere is right**.
   effectively shared. It's offered only then, because on an unshared card it does
   nothing. It defaults to **Copies**, so the common "one in the world, one to a customer"
   needs nothing set.
-- **Durable** appears on a project whose Play setting reads Venue, beside Shared and in the
-  same three settings. The value survives the run boundary the server it came from draws.
+- **Durable** appears on a project whose Play setting reads Venue, on a card whose Redraw is
+  **never**, beside Shared and in the same three settings. The value survives the run boundary the server it came from draws.
 - **Where**, in a box where nothing decides where a card comes up, is a row at the foot of
   the tab instead of the opening sentence. It reads **Anywhere** until you choose otherwise.
 - **Change**, on the sentence or the row, opens the picker. Its first section, **Hands**,
@@ -169,8 +171,8 @@ none shows no block.
 ### Fields
 
 The box's card template, as label-and-control rows, one row per declared field. The
-control follows the field's type, so boolean and enum fields offer their values in a
-picker, while string, number, and flags fields are text.
+control follows the field's type. True / False fields, and List fields with values, offer
+them in a picker. Every other field is typed.
 
 If the box declares no fields, the tab says so and points you at the box's **Card
 template** tab.

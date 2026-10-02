@@ -38,9 +38,12 @@ watch it deal.
 
 ### Creating a project
 
-**File ▸ New Project…** (`Cmd+N` / `Ctrl+N`) asks for a name, then where to put the folder.
-A new project isn't empty. It lands one box, one hand to deal to, and two cards that
-already work together, so it plays straight away. Add kits to it as you go (see
+**File ▸ New Project…** (`Cmd+N` / `Ctrl+N`) opens the **New project** picker. Under
+**Start from a kit**, pick **Starter project**, **Starter project with Patter**, **Map-based
+story** or **Action game**, give it a **Project name**, and choose where to put the folder.
+The Starter project isn't empty: it has one box, one hand to deal to, and two cards that
+already work together, so it plays straight away. Under **Learn from a finished project**,
+**Open a Copy** copies one of the examples instead. Add box kits to a project as you go (see
 [Setting up a box](/storyletter/box-setup/#starting-a-box-from-a-box-kit)).
 
 A Storylet Studio project is a real folder of files (see [the format](/format/overview/)).
@@ -217,6 +220,8 @@ you'll need to fetch new versions from the [download page](/download/) instead.
   card was or wasn't dealt.
 - [Working with Patter](/storyletter/patter/): pair the project with the Patter project that
   holds its dialogue, and let Storyletter check each card against its scene.
+- [The Links window](/storyletter/links/): one card's neighbours across the project, what
+  can turn it on or off and what it turns on or off.
 - [Reviewing](/storyletter/reviewing/): comments on any item, markers on a canvas, and the
   walk through open feedback.
 - [Keyboard shortcuts](/storyletter/shortcuts/): the full reference.

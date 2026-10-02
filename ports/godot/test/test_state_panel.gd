@@ -15,7 +15,7 @@ extends SceneTree
 # frame read as both states at once.
 
 const PANEL := preload("res://addons/storyletengine/ui/storylet_state_panel.gd")
-const BUNDLE_PATH := "res://../../examples/the-hamlet.storylets/dist/the-hamlet.storyletsc"
+const BUNDLE_PATH := "res://../../examples/storylet-dist/the-hamlet.storyletsc"
 
 var _fails := 0
 var _step := 0

@@ -150,7 +150,7 @@ describe("a project map", () => {
     const lines = text(insp.el, ".sl-maps .sl-line").join("\n");
     expect(lines).toContain("district: quay, hill");
     expect(lines).toContain("boxes on the map: box");
-    expect(lines).toContain("zones 0, pictures 0, sites 0");
+    expect(lines).toContain("zones 0, pictures 0, hands 0");
     insp.destroy();
   });
 
@@ -158,7 +158,7 @@ describe("a project map", () => {
     const insp = createBundleInspector(withGeometry);
     const lines = text(insp.el, ".sl-maps .sl-line").join("\n");
     expect(lines).toContain("The engine ignores it".toLowerCase());
-    expect(lines).toContain("zones 1, pictures 1, sites box 2");
+    expect(lines).toContain("zones 1, pictures 1, hands box 2");
     insp.destroy();
   });
 

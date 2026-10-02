@@ -14,7 +14,7 @@ is what a CI gate sees.
 
 ## In Storyletter
 
-**Review ▸ Coverage** (`Shift+Cmd+C`) opens the **Coverage** window.
+**Review ▸ Coverage Test…** (`Shift+Cmd+C`) opens the **Coverage** window.
 
 Three fields, **runs**, **max turns**, and **seed**, and a **Run coverage** button. The same
 seed always reproduces the same run.
@@ -37,8 +37,8 @@ and reopening the window shows you what you last measured. Opening a different p
 it.
 
 Under the bar, one line says whether you've told it how your game's own state moves: either
-*"3 coverage drivers feeding `@world`"* or *"No coverage drivers: content gated on `@world`
-will read as never dealt."* Beside it, **Coverage drivers…** takes you straight to where
+*"3 coverage drivers feeding @world."* or *"No coverage drivers. Content gated on @world will
+read as never dealt."* Beside it, **Coverage drivers…** takes you straight to where
 they're edited.
 
 <figure class="doc-shot">
@@ -124,10 +124,10 @@ while one of its outcomes is unreachable.
 
 **Warnings** collects two things the counts alone would hide. Any diagnostic the runtime
 actually raised during the runs (a faulting condition, an undeclared name), deduplicated and
-counted by run. And the composed-name check, which needs no runs at all. A card or deck gate
-reading `@hand.something` that some hand able to ask it never composes faults at evaluation,
-so the content silently never deals from that hand, and a plain gap count would have called
-it an ordinary miss.
+counted by run. And a check that needs no runs at all: a card or deck gate reading
+`@hand.something` where some hand able to deal it has no such property. The gate faults
+whenever that hand asks, so the content silently never deals from it, and a plain gap count
+would have called it an ordinary miss.
 
 **Cards seen in each hand, over 200 runs** sits at the bottom, folded away. Open it to see
 coverage hand by hand, which matters because a hand is the contract between your designer and
@@ -174,7 +174,7 @@ Each driver is a property, a pool of values, and when it fires:
 |---|---|
 | Property | The `@world` property to drive. Only `@world` is drivable: `@story` is written by your outcomes, so play already covers it. |
 | Values | The pool, comma separated. `true, false` drives a flag; `0, 50, 51` drives a number; anything else is text. A run picks from the pool at random. |
-| When | *Once, at the start* fixes the value for a whole playthrough (a difficulty setting, a chosen class). *Each turn* re-rolls it as the run goes (weather, time of day). |
+| When | *at the start* fixes the value for a whole playthrough (a difficulty setting, a chosen class). *each turn* re-rolls it as the run goes (weather, time of day). |
 | How often | For *each turn* drivers: rarely, sometimes, or often. |
 
 **Propose from the cards** reads your conditions and fills the list in. For `@world.danger >= 2`
@@ -219,7 +219,7 @@ lists it deck by deck instead, under a heading per deck that counts its gaps. Ea
 is out of the cards that could come up there, as in the window.
 
 Never-dealt cards carry the same reasons the window shows, on the lines under them. Here is
-the Saltmarsh example, which has two:
+the Saltmarsh example, run with `--runs 20 --seed 1`, which has two:
 
 ```
 least reached first

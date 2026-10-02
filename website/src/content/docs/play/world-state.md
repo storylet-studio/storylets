@@ -52,9 +52,7 @@ engines sees one rule:
    game's. `setProperty("world.chapter", ...)` writes, whether you bound a resolver or let the
    engine keep its stand-in bag, and so do the coverage driver and the CLI's `--set`, which
    exist to move exactly these values. The examiner still shows the property as read-only,
-   because that is what the flag means: read by the story, moved by the game. (Until 2026-09-05
-   the stand-in bag refused the game as well, which locked the game's own tools out of its own
-   clock. That was a bug in the shared kernel, fixed in scoperegistry 0.6.0 and here.)
+   because that is what the flag means: read by the story, moved by the game.
 
 There's no write-only, because a declared property can always be read by the story. If the
 game holds a value the story shouldn't see, don't declare it.
@@ -117,11 +115,11 @@ a zone's name, so the short form always names the zone.
 with its path, type, current value and default. That list is what the in-engine
 [examiners](/play/dev-tools/#the-property-examiner) are built from.
 
-:::caution[Addresses used to take an internal id]
-Before this release the owner segment was the entity's internal id (`hand.h_elder.zone`), the
+:::caution[Addresses that use an internal id]
+Before runtime 0.5.0 the owner segment was the entity's internal id (`hand.h_elder.zone`), the
 id shards use to survive renames, not the name you write. That form still resolves, and the
-runtime tells you on the trace which address to move to. It is refused after the next release,
-so run your game once with the trace on and fix what it names.
+runtime names the address to move to on the trace. A later release will refuse it, so run your
+game once with the trace on and fix what it names.
 :::
 
 ## When to write it
@@ -146,8 +144,10 @@ If you'd rather the story never touched a value, keep it in your own code and pu
 ## Shared or per flow
 
 Every property is either **shared** (one value across every flow) or a **copy per flow**,
-set on the declaration with a `shared` flag, never by a different name. The defaults follow
-the scopes:
+set on the declaration with a `shared` flag, never by a different name. In Storyletter it's
+the **Shared** tick-box on the property, shown once **Play** is set to **Shared world** in
+Project Settings, and the row says whose the value is, such as **One value for every guest.**
+or **Each guest has their own.** The defaults follow the scopes:
 
 | Scope | Default |
 |---|---|
@@ -195,7 +195,9 @@ one rides the engine's spent set, and both go back with `openFlow(id, { restore 
 
 `saveGame()` returns the whole run: the shared state once (with anything a shared one-shot has
 taken out of the world), then every flow's own state, turn counters, cooldowns, board contents,
-and random stream position. `loadGame(envelope)` restores it, rebuilding every flow, so
+and random stream position. The same run always saves the same text, in every runtime: the
+registry's values are written engine-wide first, then each flow's in flow order.
+`loadGame(envelope)` restores it, rebuilding every flow, so
 re-take your handles with `getFlow`, never `openFlow`, which would replace the restored flow
 and its dealt hand (see [JavaScript, Save and load](/play/javascript/#save-and-load)).
 
@@ -203,7 +205,7 @@ A load is deliberately forgiving about content that has moved underneath a save,
 lets a save survive an edit, and is also what hides the cost of one. So it tells you what it
 did. `loadGame` returns a report of everything it dropped, defaulted, or reset, and
 `previewLoad(envelope)` computes the same report without applying anything. `saveFlow(id)` and
-`openFlow(id, { restore })` do the same for ONE flow, for a playthrough that steps away and
+`openFlow(id, { restore })` do the same for one flow, for a playthrough that steps away and
 comes back.
 
 **A `@world` your game binds is deliberately not in the envelope.** It's your game's state (the

@@ -19,14 +19,14 @@ chmod +x ./storyletengine-macos-arm64
 ./storyletengine-macos-arm64 validate ./my-project.storylets
 ```
 
-The binaries are the distribution. The packages are not published to npm, so put the binary
-somewhere on your `PATH` and call it `storyletengine` if you want the short form.
+The binaries are the distribution. Neither the CLI nor the runtimes are published to npm, so
+put the binary somewhere on your `PATH` and call it `storyletengine` if you want the short
+form. The runtimes ship as zips on the Download page.
 
-The CLI package is public on npm. The runtimes aren't, and ship as zips on the Download
-page.
-
-Every command writes through your version control (checking a file out first, adding new
-files), so a locked or read-only file fails the write instead of being overwritten. **Exit
+Every command that writes a project file writes through your version control (checking a file
+out first, adding new files), so a locked or read-only file fails the write instead of being
+overwritten. `merge` is the exception: it runs inside your version control's own merge, so it
+writes its output directly. **Exit
 codes** are consistent: **0** success, **1** the operation found problems or failed, **2** a
 usage error. `fmt` is an alias for `format`.
 
@@ -98,9 +98,12 @@ ok: .../tavern.storylets
 ```
 
 It checks for property references nothing declares, tag references that point nowhere, hands
-that don't fill in every group their template asks for, card field values against the box's
-card template, canonical form, a leftover merge conflict file, and **bundle staleness** (a
-committed `.storyletsc` whose content hash no longer matches the shards is an error).
+that don't fill in every group their template asks for, card and outcome field values against
+the box's templates, map pictures missing from `assets/`, canonical form, a leftover merge
+conflict file, and **bundle staleness** (a committed `.storyletsc` whose content hash no
+longer matches the shards is an error). It also warns about a condition reading state nothing
+writes and a condition that can never hold, and, when the project is paired with Patter,
+checks each card against its scene.
 
 Problems print as `severity: path [where]: message`. Any error exits 1, which makes this the
 natural pre-commit hook and CI gate.
@@ -133,12 +136,15 @@ it, the same upgrade Storyletter offers when it opens one. The map kept in a box
 root `map.storyletmap`, every box that held a copy or placed a hand is put on the map, the
 other boxes' references are rewritten to the kept map's zones, frames and map comments move
 to the project, and the pictures move to the project's `assets/` folder. It prints what it
-did.
+did. It also moves hand positions still kept in an old `view.storyletview` into the box's
+`map.storyletmap`.
 
 It refuses, writing nothing, when the copies of a map disagree (a zone one has and another
-hasn't, a zone drawn differently, different zone properties or starting values), when the
-project has more than one map, or when a group or tag in some box already has the map's or a
-zone's name. Each refusal is one sentence saying what to change, and you run `format` again
+hasn't, a zone drawn differently, different zone properties or starting values, or a map
+bound to state or required in one box and not another), when the project has more than one
+map, when a group or tag in some box already has the map's or a zone's name, or when a box
+that joins the map for its placed hands declares a property the map also declares,
+differently. Each refusal is one sentence saying what to change, and you run `format` again
 once it's fixed. The compiler names this command when it meets a project that needs it.
 
 ## export
@@ -174,7 +180,7 @@ anyone.
 
 ```
 $ storyletengine export-html the-hamlet.storylets -o "The Hamlet.html"
-wrote The Hamlet.html (78 KB)
+wrote The Hamlet.html (128 KB)
 ```
 
 | Flag | Does |
@@ -197,7 +203,7 @@ meeting, or a producer who wants to sort and filter.
 
 ```
 $ storyletengine export-xlsx the-hamlet.storylets -o "The Hamlet.xlsx"
-wrote The Hamlet.xlsx: 16 card(s) on 5 deck sheet(s), 24 outcome(s), 3 hand(s), 1 tag group(s)
+wrote The Hamlet.xlsx: 17 card(s) on 5 deck sheet(s), 25 outcome(s), 3 hand(s), 1 tag group(s)
 ```
 
 | Flag | Does |
@@ -225,14 +231,13 @@ the project in memory, stand up an engine and a flow, apply any overrides, and a
 ```
 $ storyletengine deal the-inn the-hamlet.storylets
 1. arrive-at-the-gate  "Arrive at the Village Gate"
-2. settle-at-the-inn  "Get Settled at the Inn"
+
+$ storyletengine deal the-inn the-hamlet.storylets --set 'story.act="act-1"'
+1. settle-at-the-inn  "Get Settled at the Inn"
+2. market-bustle  "Market Bustle"
 
 $ storyletengine peek village the-hamlet.storylets --where area=village
 1. arrive-at-the-gate  "Arrive at the Village Gate"
-2. settle-at-the-inn  "Get Settled at the Inn"
-3. known-at-the-forge  "Make Yourself Known at the Forge"
-4. market-bustle  "Market Bustle"
-5. ring-of-the-anvil  "The Ring of the Anvil"
 ```
 
 `deal <hand>` refreshes one hand by name. `peek <box>` lists every card the box could deal
@@ -271,8 +276,8 @@ c_arrive  [card]  "Arrive at the Village Gate"  arrive-at-the-gate  Village > Ar
 
 $ storyletengine resolve inn the-hamlet.storylets
 c_inn_first  [card]  "Get Settled at the Inn"  settle-at-the-inn  Village > Arrival  (village/decks/arrival.storyletdeck)
-c_inn_warm  [outcome]  "Ask warmly about the village's history"  ask-about-history  Village > Arrival > Get Settled at the Inn  (village/decks/arrival.storyletdeck)
 c_inn_road  [outcome]  "Ask only about the road north"  ask-about-the-road-north  Village > Arrival > Get Settled at the Inn  (village/decks/arrival.storyletdeck)
+c_inn_warm  [outcome]  "Ask warmly about the village's history"  ask-about-history  Village > Arrival > Get Settled at the Inn  (village/decks/arrival.storyletdeck)
 h_inn  [hand]  "The Inn"  the-inn  Village  (village/hands.storylethands)
 ```
 
@@ -307,7 +312,7 @@ the-park  (Storylet Server 0.1.0, revision 12)  (contracts/the-park.storyletcont
 
 Name an installation to show only that one. There's no verb for the breaks, because
 `validate` already reports them, as errors, each one naming the venue that cares. A project with no
-contract prints nothing and exits 1.
+contract says so and exits 1.
 
 ## merge
 
@@ -323,7 +328,7 @@ driver where that real shard is, because your version control system hands it te
 filenames.
 
 Without `-o` it prints the merge result as JSON. `--json` prints it as well as writing.
-Warnings (including hand and tag renames, which break game code that uses the old name) go
+Warnings (including a hand rename, which breaks game code that deals it by its old name) go
 to standard error. It exits 1 when there are conflicts and 2 on unparseable input, so a
 version control driver falls back to its own behaviour instead of trusting a guess.
 
@@ -385,10 +390,11 @@ Explode a pack back into shards, or fold a returned one into your project.
 
 ```
 $ storyletengine unpack village.storyletpack -o ./village
-unpacked: village/saltmarsh.storyletproj
 unpacked: village/encounters/box.storyletbox
+unpacked: village/encounters/decks/docks.storyletdeck
 ...
-9 shard(s) -> ./village
+unpacked: village/saltmarsh.storyletproj
+6 shard(s) -> ./village
 ```
 
 | Flag | Does |
@@ -408,8 +414,10 @@ and both edits survive. A conflict writes your version plus a `.storyletconflict
 
 ```
 $ storyletengine unpack returned.storyletpack -o . --merge --base outbox/village.storyletpack
+merged: encounters/box.storyletbox
 merged: encounters/decks/docks.storyletdeck
-9 shard(s) -> .; 0 conflict(s), 0 warning(s)
+...
+6 shard(s) -> .; 0 conflict(s), 0 warning(s)
 ```
 
 `--merge` without `--base` is a usage error, because with no ancestor there's no merge to do,
@@ -423,9 +431,11 @@ edit without a word:
 
 ```
 $ storyletengine unpack returned.storyletpack -o . --merge --base outbox/village.storyletpack
+merged: encounters/box.storyletbox
+...
 merged: saltmarsh.storyletproj
 updated the game's World properties: /work/village/game-scopes/game.scopes.json
-9 shard(s) -> .; 0 conflict(s), 0 warning(s)
+6 shard(s) -> .; 0 conflict(s), 0 warning(s)
 ```
 
 If `game.scopes.json` won't parse, the merge leaves it alone and warns instead.
@@ -439,11 +449,14 @@ Which cards can turn which other cards on and off, worked out from conditions an
 alone. No playthrough, no simulation, nothing written.
 
 ```
-$ storyletengine links the-hamlet.storylets
-links: 17 card(s), 19 edge(s) - 18 enable, 1 disable, 0 influence, 0 reference
-  Arrive at the Village Gate enable Gareth Looks Troubled  [@story.act by step-through]
-  Arrive at the Village Gate enable Mira Seems Distracted  [@story.act by step-through]
-  Answer Bryna's Summons disable Arrive at the Village Gate  [@story.act by keep-your-distance; @story.act by pledge-your-help]
+$ storyletengine links saltmarsh.storylets
+links: 4 card(s), 6 edge(s) - 4 enable, 2 disable, 0 influence, 0 reference
+  Ambush at the ford disable A light-fingered stranger  [@story.reputation by flee through the deck gate]
+  Ambush at the ford enable A light-fingered stranger  [@story.reputation by stand-and-fight through the deck gate]
+  Ambush at the ford disable The mysterious stranger  [@story.reputation by flee through the deck gate]
+  Ambush at the ford enable The mysterious stranger  [@story.reputation by stand-and-fight through the deck gate]
+  A light-fingered stranger enable Ambush at the ford  [@story.reputation by caught through an outcome gate]
+  A light-fingered stranger enable The mysterious stranger  [@story.reputation by caught through the deck gate]
 ```
 
 | Flag | Does |

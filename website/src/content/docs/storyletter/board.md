@@ -93,7 +93,7 @@ quiet "changed" count until the next action. A full every-box turn collapses to 
 line, and advancing one box alone keeps its own.
 
 Editing state from the State tab is on the record too. It journals as **meddled**, so
-the story never silently lies about who wrote what.
+the journal shows that you, not the game, wrote it.
 
 Filter chips at the top hide kinds of event: `dealt`, `played`, `wrote` (meddled rides
 with it), `left`, `turns`, and a warning chip that carries a count when there is
@@ -157,20 +157,21 @@ Board can show **its** run instead of its own. A banner offers it: "A game is co
 Watch it?" Click **Watch it**, or use the **Live** / **Local** switch in the session strip.
 
 In **Live** mode the Board is a mirror. The hands, the cards on them, the journal, and
-"Not listed · why" all come from the game, live, and the clocks read the game's own.
-It's observe-only, so the game stays in control. Seed, Deal, Next turn, playing a card, the
-State tab, Save state, Restore, and Restart all step aside.
+"Not listed, and why" all come from the game, live, and the clocks read the game's own.
+It's observe-only, so the game stays in control. The seed, Next turn, playing a card, the
+State tab, Save state, Restore and Restart all step aside, and so do the box navigator and
+the List/Map switch: Live mode shows the game's run as a list. **Not listed, and why** sits
+under the hands and follows the game's latest deals.
 
 **If the game is running several playthroughs at once**, a picker appears beside the switch
-naming each one, and the Board follows whichever you choose. It shows one at a time on
-purpose, because a Board mirroring four runs at once mirrors none of them legibly. Switching is
+naming each one, and the Board follows whichever you choose. The Board shows one
+playthrough at a time. Switching is
 instant, because the editor keeps each playthrough's last table as it arrives rather than
 waiting for that participant to move. An ordinary single-player game never sees the picker.
 
 The rest keeps working. The filter bar still narrows the board, the journal still copies,
 and **Follow in the editor** still opens each card the game deals or plays, without taking
-focus from the game. That's the point of it for a designer: the game deals a card, and the
-card opens in your editor.
+focus from the game. The game deals a card, and the card opens in your editor.
 
 Switch back to **Local**, or disconnect the game, and your own session comes back exactly
 as you left it.
@@ -184,7 +185,7 @@ At the top is the raw state, which is every declared property with its current v
 editable in place. Changing a value simulates your game writing it. The hands re-deal
 straight away, the changed ones pulse, and the edit joins the journal as a **meddled** line,
 so you can ask "what would happen at night?" without writing a line of game code, and the
-record stays honest about the answer's cause.
+journal records that you made the change.
 
 Below it you can peek the stock. Choose a box, pick a tag per group, and press **Peek**. You
 see every card that could come up, in the order it would come up, each showing the numbers
@@ -192,7 +193,7 @@ it was ranked on and labelled "looked at, put back". Peeking doesn't deal anythi
 nothing here's playable. You never play a card from inside the deck. The listing is stamped
 with the clock it was taken at, and greys out the moment the session moves on.
 
-Last comes **Not listed · why**, which gives, for every card the deal looked at and
+After a peek, **Not listed, and why** gives, for every card the deal looked at and
 rejected, the reason: cooldown, deck gate, tags, condition, priority, claimed, capped, and
 for shared piles “another playthrough is holding it” and “taken out of the world by another
 playthrough”. This is the trace the runtime emits for exactly this purpose, and it's the

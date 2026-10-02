@@ -24,7 +24,7 @@ Shortcuts are shown for macOS (`Cmd`). On Windows and Linux, use Ctrl wherever y
 | `Cmd+T` | The Board |
 | `Shift+Cmd+R` | Review Feedback (toggle the [review walk](/storyletter/reviewing/)) |
 | `F8` / `Shift+F8` | Next / Previous Feedback |
-| `Shift+Cmd+C` | Coverage |
+| `Shift+Cmd+C` | Coverage Test |
 | `Shift+Cmd+B` | Publish Bundle |
 | `Cmd+1` | Show or hide the navigator |
 | `Ctrl+Cmd+←` / `Ctrl+Cmd+→` | Back / Forward through the documents you've visited (`Alt+←` / `Alt+→` on Windows and Linux) |
@@ -40,18 +40,21 @@ a save takes, not just the text field you're in.
 | `Esc` | In a field, leave the field. In a card, go back to its deck |
 | `↑` / `↓` | In a card, step to the previous or next card in the deck |
 | `Cmd+↑` / `Cmd+←` | Up a Level, the same as `Cmd+[` (when no field has the cursor) |
+| `↑` `↓` `←` `→` | In a deck's Card or Table view, move the selection |
+| `Enter` | In a deck's Card or Table view, open the selected card |
+| `Delete` / `Backspace` | In a deck's Card or Table view, delete the selected cards |
 
 ## On a canvas
 
-These work on a deck's [node canvas](/storyletter/node-canvas/) and on a box's
-[map](/storyletter/maps/). They're the keys other node and 3D tools use, so they're plain
+These work on a deck's [node canvas](/storyletter/node-canvas/) and on
+[the project map](/storyletter/maps/). They're the keys other node and 3D tools use, so they're plain
 letters, not chords.
 
 | Key | Action |
 |---|---|
 | `F` | Fit the selection |
 | `Home` | Fit everything |
-| `L` | Arrange by links (node canvas only): the selection, or every card when nothing is selected |
+| `L` | Arrange by links (node canvas only): two or more selected cards, or every card otherwise |
 | `Cmd+0` | Back to 100% |
 | `Cmd+=` / `Cmd+-` | Zoom in and out |
 | `Cmd+A` | Select everything that isn't locked |

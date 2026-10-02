@@ -43,10 +43,10 @@ Usage:
   storyletengine validate [path]      Validate a project: the publish gate, bundle
                                       staleness, canonical form
   storyletengine format [path]        Rewrite shards to canonical form, and move a
-                                     project from before the project map onto it
-                                     (zones to the root map.storyletmap, pictures
-                                     to the root assets/), refusing copies of a
-                                     map that disagree (alias: fmt)
+                                      project from before the project map onto it
+                                      (zones to the root map.storyletmap, pictures
+                                      to the root assets/), refusing copies of a
+                                      map that disagree (alias: fmt)
                  [--check]            Report what would change; write nothing (for CI)
   storyletengine export [path]        Compile to the .storyletsc bundle (the project's
                  [-o file]            declared path, or -o; -o - for stdout), and bring

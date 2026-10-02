@@ -29,7 +29,7 @@ an `assets/` folder at the root of the project.
 ### How they sit on disk
 
 <svg viewBox="0 0 620 356" role="img" aria-labelledby="sy-tree-title" style="width:100%;height:auto;font-family:var(--sl-font-mono,monospace)">
-  <title id="sy-tree-title">A project folder: the .storyletproj file at the root, beside the project map's map.storyletmap, the project's notes.storyletnotes and an assets folder for the map's pictures; then one folder per box containing box.storyletbox, tags.storylettags, hands.storylethands, an optional view.storyletview and map.storyletmap, and a decks folder holding one .storyletdeck file per deck. A dist folder holds the compiled .storyletsc bundle.</title>
+  <title id="sy-tree-title">A project folder: the .storyletproj file at the root, beside the project map's map.storyletmap, the project's notes.storyletnotes and an assets folder for the map's pictures; then one folder per box containing box.storyletbox, tags.storylettags, hands.storylethands, an optional view.storyletview and map.storyletmap, and a decks folder holding one .storyletdeck file per deck. Beside the project, a storylet-dist folder holds the compiled .storyletsc bundle.</title>
   <g font-size="12.5" fill="var(--sl-color-white)">
     <rect x="8" y="10" width="252" height="26" rx="6" fill="color-mix(in oklab, var(--sy-amber,#c8902f) 14%, var(--sl-color-bg-sidebar))" stroke="var(--sy-amber,#c8902f)"/>
     <text x="20" y="28">the-village.storylets/</text>
@@ -58,11 +58,11 @@ an `assets/` folder at the root of the project.
     <text x="62" y="294">decks/</text>
     <text x="84" y="316">arrival.storyletdeck</text>
     <text x="290" y="316" fill="var(--sl-color-gray-3)" font-size="11.5">one file per deck: the cards live inside</text>
-    <text x="40" y="344" fill="var(--sl-color-gray-2)">dist/the-village.storyletsc</text>
+    <text x="8" y="344" fill="var(--sl-color-gray-2)">../storylet-dist/the-village.storyletsc</text>
     <text x="290" y="344" fill="var(--sl-color-gray-3)" font-size="11.5">the compiled bundle your game loads</text>
   </g>
   <g stroke="var(--sl-color-gray-4)" fill="none">
-    <path d="M22 42 V 340 M22 54 H 36 M22 76 H 36 M22 98 H 36 M22 120 H 36 M22 150 H 26 M22 338 H 36"/>
+    <path d="M22 42 V 150 M22 54 H 36 M22 76 H 36 M22 98 H 36 M22 120 H 36 M22 150 H 26"/>
     <path d="M44 168 V 290 M44 180 H 58 M44 202 H 58 M44 224 H 58 M44 246 H 58 M44 268 H 58 M44 290 H 58"/>
     <path d="M66 300 V 312 H 80"/>
   </g>
@@ -79,7 +79,9 @@ about what a thing *is*.
 
 `view.storyletview` is the one shard you can ignore. It holds where a card sits on a deck's
 node canvas, the frames drawn round them, and the box's colour on the map. Delete the file and
-you lose a layout and a colour choice, never content.
+you lose a layout and a colour choice, never content. The colour is `colour`, a number from 0
+to 11 naming a slot in the theme's palette rather than a hex value, so it follows light, dark
+and the colour themes.
 
 A box's `map.storyletmap` holds where its hands stand on the project map. That one is not safe
 to lose, because the positions leave the project: they ship in the bundle when you export with
@@ -93,14 +95,15 @@ The root `map.storyletmap` is different: the zones are content, because cards an
 them. See [The project map](#the-project-map) below.
 
 Before October 2026 a map belonged to one box, held in its tags shard with the pictures in
-the box's own `assets/` folder, and boxes that shared a map each kept a copy. Earlier still,
-before September 2026, the positions lived inside `view.storyletview`. Such a project doesn't
-compile until it's moved on: Storyletter offers the upgrade when you open it, and
-`storyletengine format` does the same from the command line (see
+the box's own `assets/` folder, and boxes that shared a map each kept a copy. Such a project
+doesn't compile until it's moved on. Earlier still, before September 2026, the positions lived
+inside `view.storyletview`; that still compiles, with a warning, for one more release.
+Storyletter offers the upgrade when you open either kind, and `storyletengine format` does the
+same from the command line (see
 [Projects made before the project map](/storyletter/maps/#projects-made-before-the-project-map)).
 
-The fixed basenames (`box`, `tags`, `hands`) are kept even though the extension already
-carries the type, so a box folder reads the same in a file browser and a diff.
+Inside a box folder the file names are fixed: `box`, `tags`, `hands`, `view`, `map` and
+`notes`, with the decks in `decks/`.
 
 ## The project shard
 
@@ -186,8 +189,11 @@ of itself Storyletter shows. It is authoring configuration and is never compiled
 bundle. A project that contains more than its rung shows is a validation warning naming the
 rung.
 
-**`export`** names where the compiled bundle goes and whether author metadata rides along
-(`full`) or is stripped for size (`stripped`).
+**`export`** names where the compiled bundle goes (`bundle`) and whether author metadata
+rides along (`metadata: "full"`) or is stripped for size (`"stripped"`). Two optional switches
+sit beside them, both off unless set: `map: true` carries the project map's drawing in the
+bundle (see [the bundle](/format/bundle/#the-drawing-when-you-ask-for-it)), and
+`packAssets: true` makes a `.storyletpack` carry the map's pictures (see [pack](/cli/#pack)).
 
 **`settings.playAdvancesTurns`** is the default number of turns a play advances its box's
 clock. A host can override it per call.
@@ -213,6 +219,15 @@ this one is paired with, relative to the folder holding the project file:
 `patter: "../story/the-hamlet.patter"`. With it, `validate` checks each card against the scene
 of the same name in that project's published bundle. A path that doesn't exist is a warning,
 not an error, since a writer may have the cards without the dialogue. It never reaches the bundle.
+
+**`patterBoxes`** (optional, beside `patter`) lists, by box id, the boxes your game performs
+through the paired Patter project. With it, `validate` checks only those boxes, and also
+reports a card in them that has no scene. It never reaches the bundle.
+
+**`validation.warnUnreadWrites`** (optional) also warns when an outcome writes state that
+nothing reads. It's off unless set, because content is often written ahead of the cards that
+will read it. The other half, a condition reading state nothing writes, always warns. It never
+reaches the bundle.
 
 Where the game shares its scopes and its `game.scopes.json` declares `@world`, the project's
 **`world`** declarations are a synced copy of those. Storyletter rewrites the copy from the
@@ -288,24 +303,24 @@ card that never deals. A tag may carry properties of its own.
   schema: "storylets/tags@0",
   groups: [
     {
-      gameId: "zone",
+      gameId: "area",
       id: "d_zone",
-      purpose: "Where in the world this beat belongs.",
+      purpose: "Where in the town.",
       tags: [
         {
-          gameId: "village",
-          id: "v_village",
-        },
-        {
-          gameId: "forest",
-          id: "v_forest",
+          gameId: "docks",
+          id: "v_docks",
           properties: [
             {
               default: 0,
-              name: "peril",
+              name: "danger",
               type: "number",
             },
           ],
+        },
+        {
+          gameId: "market",
+          id: "v_market",
         },
       ],
     },
@@ -320,6 +335,14 @@ and no further, so two groups in one box that both name a tag `docks` leave the 
 with no address of its own. Rename one of them, or pin a distinct `gameId` on one. Validation
 warns about it in this release and refuses it in the next. Ids are unique across the whole
 project.
+
+A group may also carry **`boundBy`**, a `@story` or `@world` property reference
+(`"@story.act"`) whose value names one of the group's tags by gameId. The engine binds the
+group to that tag every time a hand is dealt, as if the hand had chosen it, so an axis driven
+by state, such as an act or a difficulty band, needs no condition on every card. A hand's own
+binding wins. The property has to be a string or an enum. **`required: true`** turns the
+group's wildcard round: a card that names no tag in it is unavailable wherever the group is
+bound.
 
 The project map's names are reserved across the whole project. No box may have a group with
 the map's group name, or a tag with a zone's name, because those names mean one thing
@@ -413,8 +436,8 @@ Each box keeps where its hands stand in its own `map.storyletmap`, keyed by hand
 }
 ```
 
-`sites` is the format's word for those positions. A box that isn't on the map has nothing
-here, and pins left in such a box are a warning, because they aren't drawn or shipped.
+`sites` is the format's word for those positions. Only a box on the map ships them: positions
+left in a box that isn't on the map are a warning, because they aren't drawn or shipped.
 
 Comments on the map itself, or on a zone, are kept in the root `notes.storyletnotes`; a
 comment on a hand stays in its box's notes.
@@ -463,8 +486,8 @@ the template lists in `chooses`) or written out in full (a `rule` object with it
 override only `slots`; everything else comes from the template.
 
 A hand's `gameId` is the name `deal` is called with from game code, so renaming one is a
-breaking change beyond the project's own borders, which `validate` and the merge driver both
-flag. A hand with no `gameId` of its own gets one derived from its title.
+breaking change beyond the project's own borders. The merge driver warns when a merge renames
+one. A hand with no `gameId` of its own gets one derived from its title.
 
 The scaffolded starter hand shows the written-out form:
 
@@ -481,11 +504,11 @@ The scaffolded starter hand shows the written-out form:
 }
 ```
 
-### A hole filled from a property
+### A tag group chosen from a property
 
 A `chosen` value is normally a tag id. It can instead be a **property reference**, and then
-the hole moves. The engine resolves the reference each time the hand is asked and binds the
-hole to the tag the value names.
+the hand moves with the property. The engine resolves the reference each time the hand is
+asked and binds the group to the tag the value names.
 
 ```json5
 {
@@ -515,9 +538,10 @@ which is how a party gets a "what is around me" hand that follows them about.
 
 The reference may be `@hand.<name>` (a property this hand or its template declares),
 `@story.<name>`, or `@world.<name>`. It has to be a string or an enum, because the value has to
-be able to name a tag. A value that names no tag in the group leaves the hole unbound, which
-is a wildcard rather than an empty hand, and the deal says so on its
-[trace](/play/dev-tools/). A standalone hand does the same thing with a `rule` binding.
+be able to name a tag. A value that names no tag in the group leaves the group unbound for
+that hand, which is a wildcard rather than an empty hand, and the deal says so on its
+[trace](/play/dev-tools/). A hand written out in full does the same thing with a `rule`
+binding.
 `place` is the one group this never applies to, because it's the hand's own name.
 
 ## A deck shard
@@ -550,7 +574,7 @@ otherwise (one of each in the world, rather than one each per participant). It m
       outcomes: [
         {
           changes: {
-            "@story.act": "\"act-1\"",
+            "@story.act": "advance(@story.act)",
           },
           fields: {
             after: "The gate swings shut behind you.",
@@ -586,7 +610,7 @@ Reading a card top to bottom:
   within one playthrough.
 - **`shared`** makes the card scarce across [flows](/play/world-state/#shared-or-per-flow),
   one goblin in the whole world rather than one each. Absent, it takes its deck's flag, so the
-  usual place to write it's on a deck whose whole pile is scarce. On the card it's the
+  usual place to write it is on a deck whose whole pile is scarce. On the card it's the
   override for a single unique card sitting in an ordinary deck. **`sharedCopies`** is then
   how many hands may hold it anywhere, defaulting to `copies`, so `copies: 1, sharedCopies: 5`
   is five in the world, one to a customer.
@@ -624,6 +648,8 @@ without one.
 | `default` | required, so a declared property always has a value |
 | `values` | for `enum` and `flags`. On a TAG, `values` means something else: this tag's starting values for the properties its group declares |
 | `stages` | for `quality`: the ladder, in order, lowest first |
+| `shared` | not on `@world`. `true` is one value across every flow, `false` a copy per flow; absent takes the scope default |
+| `durable` | not on `@world`. The value [outlives a run](/play/world-state/#durable-state-that-outlives-a-run); the engine never reads it |
 | `writable` | `@world` only. `false` makes the property read-only to the story: a condition may read it, an outcome that writes it is a compile error. The game still moves it through its resolver. Default `true` |
 | `purpose` | author metadata |
 

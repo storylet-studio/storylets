@@ -16,7 +16,8 @@ detected from the folder, so there's nothing to configure.
 ## How merges work
 
 A project isn't one big file. It's split into [small pieces](/format/overview/): one file per
-deck, one folder per box, and a separate file for positions on a canvas. Because of [the way
+deck, one folder per box, and separate files for where things sit on a canvas and on the map.
+Because of [the way
 those files are written](/format/overview/#the-rules-that-make-it-merge), the everyday
 cases merge cleanly under any version control system's ordinary text merge, with nothing
 extra installed:
@@ -119,9 +120,9 @@ Hand names and tag names cross the boundary into your game code: `deal("the-inn"
 `peek("village", { area: "forest" })` are both written in game source that no merge tool can
 see.
 
-So a hand or tag rename gets its own warning. The merge driver flags it and `validate` flags
-it. It isn't an error, because renaming is legitimate. It's a warning, because someone needs
-to go and change the other side of the contract.
+So a hand rename gets its own warning when a merge brings one in. It isn't an error, because
+renaming is legitimate. It's a warning, because someone needs to go and change the other side
+of the contract. A tag rename has no such warning, so search your game code for the old name.
 
 The [bundle inspector](/play/dev-tools/#the-bundle-inspector) is the other half of this. It
 shows an integrator every callable name in a shipped bundle, so "the name I typed isn't in

@@ -4,10 +4,11 @@ name: Release
 # "Version Packages" PR (consuming the accumulated changesets) or, once that PR is
 # merged, builds + publishes the bumped @storylet-studio/* packages to npm.
 #
-# THREE packages reach npm: model, dialect and runtime. Everything else in packages/
-# is `private` and listed in .changeset/config.json's `ignore`. Several of them sit at
-# 0.0.0, so `private` is doing real work here, not tidiness: a public 0.0.0 package is
-# one workflow run away from being on the registry forever.
+# FIVE packages reach npm: model, dialect, runtime, play-helpers and with-patter.
+# Everything else in packages/ is `private` and listed in .changeset/config.json's
+# `ignore`. Several of them sit at 0.0.0, so `private` is doing real work here, not
+# tidiness: a public 0.0.0 package is one workflow run away from being on the registry
+# forever.
 #
 # @storylet-studio/runtime is NOT versioned by Changesets. It is the JS member of the
 # lockstep runtime set, versioned by `npm run bump:play` with the Unity, Unreal and

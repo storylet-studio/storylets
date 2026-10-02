@@ -98,7 +98,7 @@ transliteration in C#; the three stay in lockstep.
   WebSockets dependency is dropped there). The frames it sends are held to
   the shared fixture `packages/conformance/live-link/` by the TestHost. See
   [Live Link](https://storylets.dev/play/live-link/).
-- **The examiner**: Window > Storylet Engine Runtime State (a nomad tab).
+- **The examiner**: Tools > Storylet Engine Runtime State (a nomad tab).
   Register engines with `RegisterForDebug("label")` (or
   `FStoryletDebug::Register`); the panel shows each live engine's shared
   properties, Save State... / Load State... buttons and the run log

@@ -24,8 +24,8 @@ Linux). It belongs to you, not the project, so it isn't stored in the project fi
 
 ## Resolving and deleting
 
-Mark a thread **resolved** when it's dealt with. That hides it from the walk without losing
-it. **Review ▸ Show Resolved Comments** brings resolved threads back into view.
+Click **Mark complete** on a thread when it's dealt with (**Reopen** brings it back). That
+hides it from the walk without losing it. **Review ▸ Show Resolved Comments** brings resolved threads back into view.
 
 You can delete a single message. Delete the only message in a thread and the thread goes.
 Delete one message from a longer conversation and a marker is left saying something was

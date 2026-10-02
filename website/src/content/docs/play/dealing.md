@@ -7,7 +7,7 @@ sidebar:
 
 [Core concepts](/concepts/) gives you the words. This page is the mechanics behind `deal`
 and `peek`. It says exactly which cards are considered, in what order, and why a card that
-looks right sometimes doesn't come up. It's the page to read when the Board's **Not listed ·
+looks right sometimes doesn't come up. It's the page to read when the Board's **Not listed, and
 why** fold names a reason and you want to know what that reason means.
 
 ## The stock
@@ -141,10 +141,9 @@ another, and a one-shot spent by one participant is still there for the next.
 On a **shared** card, `redraw: never` is the exception. The first participant to play it takes
 it out of the world for everyone, permanently, and the others are told `taken` rather than
 `cooldown` (they have no cooldown, because it isn't there any more). A *finite* `redraw` stays
-personal even on a shared card, and that combination is a good rule rather than a gap. The
-goblin goes straight back in the pool for whoever is next, while the participant who just
-fought it waits their own three turns. There is no shared clock to count anything else
-against, so a world-wide timer belongs in `@world`, where your game already keeps the time
+personal even on a shared card. The goblin goes straight back in the pool for whoever is
+next, while the participant who just fought it waits their own three turns. For a world-wide
+timer, use `@world`, where your game already keeps the time
 (`@world.now >= @world.goblin_returns_at`).
 
 **And `never` is the one that can outlive the run.** Mark a deck or a card **`durable`** and
@@ -202,7 +201,7 @@ played from. A card with no tag in the group never counts towards it, wherever i
 is being asked about, and only that box's own plays are counted, on that box's clock. Two boxes
 that each declare a `zone` group keep separate histories, and so do two boxes on the project
 map: a news card read at the docks in one box isn't an encounter at the docks in another.
-Zone properties are shared across boxes; zone play history isn't. A name the asking box
+A zone property is one value for every box that uses it; zone play history isn't. A name the asking box
 doesn't know reads as never played: `0` from a count, `9999` from a turns-since.
 
 ## Hand templates
@@ -226,7 +225,8 @@ earlier ones where names collide:
    `@hand.peril`.
 2. The hand's own properties come next, declared on the hand or its template.
 3. What the deal or peek asked for, by group name. `peek("village", { npc: "elder" })`
-   makes `@hand.npc` read `elder`. A hand that pins a group itself reads the same way.
+   makes `@hand.npc` read `elder`. A hand that pins a group itself reads the same way, and so
+   does a group bound to a `@world` or `@story` property.
 
 Every name remembers where it came from, so a write goes back to the right owner:
 `@hand.peril = @hand.peril + 1` raises the peril of the zone the card was dealt into. That's
@@ -237,7 +237,9 @@ the zone the hand is in.
 
 On the [project map](/storyletter/maps/), a zone is one tag for the whole project, so its
 properties are one value for every box that uses it. A hand in one box and a hand in another,
-both in the docks, read and write the same `@hand.danger`. Everything else stays with the
+both in the docks, read and write the same `@hand.danger`. Each playthrough still has its own
+value unless the property is marked `shared` (see
+[Shared or per flow](/play/world-state/#shared-or-per-flow)). Everything else stays with the
 box: a hand still deals only from its own box's decks.
 
 `@hand` names are checked when you publish, the same as any other scope, so a misspelt
@@ -255,5 +257,5 @@ reason it was kept or dropped: `dealt`, `capped` (ranked but outside the hand's 
 `cooldown`, `deck-gate`, `tags`, `condition`, `priority`, `claimed`,
 `claimed-elsewhere` (another playthrough holds the world's copies) and `taken` (a shared
 one-shot spent, by anyone, for everyone). The Board's **Not
-listed · why** fold shows it. In your game, `subscribeTrace` streams it and a retained log
+listed, and why** fold shows it. In your game, `subscribeTrace` streams it and a retained log
 keeps it, as [Dev tools](/play/dev-tools/) describes.

@@ -10,7 +10,7 @@ extends SceneTree
 # hand it a bundle and read the rows back out.
 
 const VIEW := preload("res://addons/storyletengine/editor/storylet_bundle_view.gd")
-const BUNDLE_PATH := "res://../../examples/the-hamlet.storylets/dist/the-hamlet.storyletsc"
+const BUNDLE_PATH := "res://../../examples/storylet-dist/the-hamlet.storyletsc"
 
 var _fails := 0
 
@@ -51,8 +51,13 @@ func _run() -> void:
 	await process_frame          # _ready builds the labels
 
 	# An ordinary bundle: no map section at all, since most bundles carry none
-	# and an always-empty section teaches people to skip it.
-	var plain := StoryletBundleResource.from_json_text(text)
+	# and an always-empty section teaches people to skip it. The Hamlet is on a
+	# project map now, so the map is taken off it here to make the plain case.
+	var stripped: Dictionary = JSON.parse_string(text)
+	stripped.erase("map")
+	for box in stripped["boxes"]:
+		box.erase("usesMap")
+	var plain := StoryletBundleResource.from_json_text(JSON.stringify(stripped))
 	view.set_bundle_resource(plain)
 	var plain_text := _text_of(view)
 	_check("the view renders a bundle", plain_text.contains("HANDS (DEAL)"), plain_text.substr(0, 80))
@@ -85,7 +90,7 @@ func _run() -> void:
 		mapped_text.substr(0, 120))
 	_check("it names the boxes on the map", mapped_text.contains("boxes on the map: " + box_name))
 	_check("it counts the geometry and says the engine ignores it",
-		mapped_text.contains("geometry carried (the engine ignores it): zones 1, pictures 1, sites %s 2" % box_name))
+		mapped_text.contains("geometry carried (the engine ignores it): zones 1, pictures 1, hands %s 2" % box_name))
 
 
 	# The two states the SHARED frame owns (expr/bundle_view.gd), rather than

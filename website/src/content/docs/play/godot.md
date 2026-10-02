@@ -7,8 +7,8 @@ sidebar:
 
 <p><img class="sy-engine" src="/plugin-godot.svg" alt="" width="48" height="48" />The pure GDScript runtime. No native extension to compile, no web view. It loads a <code>.storyletsc</code> bundle and deals from it directly, held to the same <a href="/compatibility/">shared test suite</a> as every other engine.</p>
 
-> Needs Godot 4.7 or newer, which is the version the addon declares and the one every
-> release is tested against. The runtime uses only plain GDScript, so it also runs headless.
+> Needs Godot 4.7 or newer. Every release is tested against Godot 4.7, and the runtime uses
+> only plain GDScript, so it also runs headless.
 
 ## Install
 
@@ -33,26 +33,37 @@ if not loaded["ok"]:
 var bundle = loaded["bundle"]
 ```
 
+`load_from_string` reads `storylets/bundle@1` and the earlier `storylets/bundle@0`, and refuses
+any other schema by name.
+
 Or, with the plugin enabled, `load("res://story.storyletsc")` gives you a
-`StoryletBundleResource` carrying `json_text` and `get_bundle()`.
+`StoryletBundleResource` carrying `json_text` and `get_bundle()`. A broken bundle still
+imports, so check `is_valid()` (and `get_errors()` for why) before you use it.
 
 ## Build an engine, open a flow
 
 ```gdscript
 var engine := StoryletEngine.create(bundle, {"seed": 7, "log": true})
+if engine == null:
+    return                                  # create has already said why
 var flow := engine.open_flow("main")
 StoryletDebug.register(engine, "main")     # optional: lets the state panel find it
 ```
+
+`create` returns null, with a `push_error`, for a bundle it can't read faithfully. An unknown
+schema is named as `unsupported bundle schema`, and a project map whose rules the bundle breaks
+gives an error starting `bundle refused: ` that names every problem it found. Check for null
+before you open a flow.
 
 The engine is the world. Every play call lives on a **flow** (one playthrough) opened by
 name. A single-player game opens `"main"` and never thinks about it again. Several flows run
 parallel playthroughs over the same shared state ([the sharing rules](/play/world-state/)).
 
 The same seed always deals the same cards. `"log": true` keeps the event logs. `flow.log()`
-is that flow's own, and `engine.log()` is the RUN's, every flow's events in one order with
+is that flow's own, and `engine.log()` is the run's, every flow's events in one order with
 each entry naming its `flow`. That last one is the only place a story action in another flow
-moving shared state is visible, and the state panel shows both (capped at 1000; `{"cap": n}`
-sets your own). An unknown key in the options Dictionary is an error, so a typo tells you
+moving shared state is visible, and the state panel shows both (capped at 1000;
+`"log": {"cap": n}` sets your own). An unknown key in the options Dictionary is an error, so a typo tells you
 instead of doing nothing.
 
 ## Deal, peek, outcomes, play
@@ -64,16 +75,19 @@ for hand in board:
     for card in board[hand]:
         print("%s holds %s" % [hand, card["gameId"]])
 
-var looks := flow.peek("village", {"area": "forest"}, 3)   # look, don't deal
+var looks := flow.peek("village", {"area": "forest"}, 3)   # look, don't deal: looks["cards"]
 
+var hand_id: String = board.keys()[0]
+var card_id: String = board[hand_id][0]["gameId"]
 for outcome in flow.outcomes(card_id, hand_id):            # ask when you show them
     if outcome["available"]:
         var err := flow.play(card_id, outcome["gameId"], hand_id)
 ```
 
-Card views and outcome views are Dictionaries. A card carries `id`, `gameId`, `title`,
-`purpose`, and `fields`. An outcome carries `available`, and `fields` too when the box
-declares outcome fields. `play()` returns an error String, empty on
+Card views and outcome views are Dictionaries. A card carries `id` and `gameId`, plus `title`,
+`purpose`, and `fields` when the card has them. An outcome carries `id`, `gameId`, and
+`available`, plus `title` and `purpose` when it has them, and `fields` when the box declares
+outcome fields. `play()` returns an error String, empty on
 success, and changes nothing if the outcome is gated shut or the card isn't in that hand. A
 card with no outcomes is played with `""` as the outcome.
 
@@ -82,6 +96,7 @@ card with no outcomes is played with `""` as the outcome.
 ```gdscript
 flow.set_property("world.time_of_day", "night")   # write before you deal
 flow.get_property("story.reputation")
+flow.get_property("value.docks.danger")           # a zone's value: one for every box on the map
 flow.list_properties()                            # every declared property
 
 flow.advance_turns("village", 1.0)
@@ -101,7 +116,8 @@ flow = engine.get_flow("main")               # ...so re-take your handles
 
 An engine built on its own carries every property value in its envelope, a self-backed
 `@world` included, so those two calls are the whole run. The envelope is `storylets/save@2`,
-and a `storylets/save@1` envelope or file from an earlier release still loads. A game that
+written in the same order every time, so the same run always saves the same bytes, and a
+`storylets/save@1` envelope or file from an earlier release still loads. A game that
 hands the engine its own registry saves that registry once, beside the envelope
 ([below](#one-registry-for-the-game)).
 
@@ -110,10 +126,10 @@ its default, and a save from an older build goes in without a word. `preview_loa
 says what that would cost before you spend it and changes nothing. `load_game` returns the
 same report Dictionary once it has, with `"exact"` true when the save goes back exactly as it
 was and `"evicted"`, `"droppedProperties"`, `"defaultedProperties"`, `"retypedProperties"`, and
-the `"version"` / `"hash"` pairs naming what moved. A save for another project is refused, with
-an empty Dictionary and a `push_error`.
+the `"version"` / `"hash"` pairs naming what moved. A save for another project, or in a save
+schema this runtime doesn't read, is refused, with an empty Dictionary and a `push_error`.
 
-`save_flow(id)` takes ONE flow's state, for a playthrough stepping away, and
+`save_flow(id)` takes one flow's state, for a playthrough stepping away, and
 `open_flow(id, {"restore": saved})` puts it back. Closing the flow in between is what releases
 the cards it was holding. On the way back, a shared card another flow now holds is dropped and
 reported (`preview_flow_restore(id, saved)` asks in advance, and
@@ -123,8 +139,9 @@ reported (`preview_flow_restore(id, saved)` asks in advance, and
 `StoryletSave.deserialize_state(engine, text)` are the `.storyletsave` string boundary. The
 second hands back the file's `@world` values for your game to apply, which matters when your
 game binds `@world` to a resolver of its own: those values are your game's, and the engine
-never saves them ([why](/play/world-state/#saving-it)). A foreign, malformed, or
-wrong-project blob is refused, so a bad file can't corrupt a run.
+never saves them ([why](/play/world-state/#saving-it)). Like `load_game`, it rebuilds every
+flow, so take your handles again from `engine.get_flow()`. A foreign, malformed, or
+wrong-project blob is refused with a `push_error` and null, so a bad file can't corrupt a run.
 
 ### One registry for the game
 
@@ -177,14 +194,19 @@ over, and works on your registry too. It returns `{"ok": true, "engine", "report
 replacement, on the same registry, and the load report, which names the properties the edit
 dropped or defaulted. The old engine hands its own values over and is spent, its flows closed,
 so re-take every handle from the new one; nothing belonging to Patter or your game is touched.
-A bundle for another project comes back as `{"ok": false, "error"}` before anything moves, and a
-rebuild that fails part way puts the old engine and the registry back exactly as they were.
+A bundle for another project, or one the engine can't read, comes back as
+`{"ok": false, "error"}` with a `push_error` before anything moves, and a rebuild that fails
+part way puts the old engine and the registry back exactly as they were.
 
 ## Errors
 
 GDScript has no exceptions, so the addon reports errors as values:
 
-- `play()`, `load()`, and `set_property()` return an error String, empty on success.
+- `play()` and `set_property()` return an error String, empty on success.
+- `StoryletEngine.create` returns null with a `push_error` for a bad option, a scope token
+  another engine already holds, or a bundle it can't read.
+- `load_game()` and `preview_load()` return the load report, or an empty Dictionary with a
+  `push_error` when they refuse.
 - Bad references and bad option Dictionaries `push_error`.
 - An unknown box on `board(box_ref)` is refused with `push_error` and an empty Dictionary.
 - An evaluation error inside a deal or peek makes that card or deck unavailable and puts a
@@ -205,17 +227,22 @@ its per-box turns, its board, and its own retained log, each log behind per-kind
 Autoscroll, Copy, and Clear. It reads the flows off the engine, so one
 registration covers every flow, however many you open later.
 
+To watch one engine without the registry, set the panel's `engine` property instead. Register a
+Live Link with `StoryletDebug.register_link(link)` and the panel shows whether it is connected,
+and to which build.
+
 To watch the game from Storyletter instead, and to have saves reach the run without a
-restart, add a `StoryletLiveLink` node and attach your ENGINE (the link finds your flows
+restart, add a `StoryletLiveLink` node and attach your engine (the link finds your flows
 itself). It opens only in a debug
 build. A pushed bundle goes in through `StoryletLiveLink.apply_live_bundle(engine, data)`,
-which calls `hot_swap`, so a refresh works whether the engine made its own registry or shares
-yours with Patterplay. [Live Link](/play/live-link/) has the wiring and the protocol.
+which does what `hot_swap` does but hands a refusal back instead of raising a `push_error`, so
+a refresh works whether the engine made its own registry or shares yours with Patterplay. [Live Link](/play/live-link/) has the wiring and the protocol.
 
 ## The bundle inspector
 
 Select an imported bundle in the FileSystem dock and the Inspector shows what the bundle offers
-your code: hands, boxes, tags, declared properties. Nothing running needed. See
+your code: hands, boxes, tags, declared properties, and the project map when there is one.
+Nothing running needed. See
 [the bundle inspector](/play/dev-tools/#the-bundle-inspector).
 
 ## Exporting your game
@@ -233,7 +260,7 @@ leaves it out of the export. In that case add `*.storyletsc` to your export pres
 
 `addons/storyletengine/demo/board_demo.tscn` is the **Board demo**, the Hamlet bundle dealt
 onto a board you can play, with the same hands, control labels, and transcript as the other
-three runtimes. Open the scene and press Play. The smallest part to read first in
+three runtimes. Open the scene and press **Run Current Scene** (F6). The smallest part to read first in
 `board_demo.gd` is building the engine, opening a flow, dealing, and reading `board()`. The
 rest is UI. Delete
 the folder freely, since nothing depends on it.
