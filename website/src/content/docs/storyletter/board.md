@@ -153,11 +153,11 @@ Board can show **its** run instead of its own. A banner offers it: "A game is co
 Watch it?" Click **Watch it**, or use the **Live** / **Local** switch in the session strip.
 
 In **Live** mode the Board is a mirror. The hands, the cards on them, the journal, and
-"Not listed, and why" all come from the game, live, and the clocks read the game's own.
+**Why not?** all come from the game, live, and the clocks read the game's own.
 It's observe-only, so the game stays in control. The seed, Next turn, playing a card, the
 State tab, Save state, Restore and Restart all step aside, and so do the box navigator and
-the List/Map switch: Live mode shows the game's run as a list. **Not listed, and why** sits
-under the hands and follows the game's latest deals.
+the List/Map switch: Live mode shows the game's run as a list. **Why not?** follows the
+game's latest deals: select a hand, as locally.
 
 **If the game is running several playthroughs at once**, a picker appears beside the switch
 naming each one, and the Board follows whichever you choose. The Board shows one
@@ -174,25 +174,29 @@ as you left it.
 
 ## The State tab
 
-Beside the Journal on the rail, in List and Map alike, the **State** tab holds the
-diagnostics.
-
-At the top is the raw state, which is every declared property with its current value,
+Beside the Journal on the rail, in List and Map alike, the **State** tab holds the raw
+state, which is every declared property with its current value,
 editable in place. Changing a value simulates your game writing it. The hands re-deal
 straight away, the changed ones pulse, and the edit joins the journal as a **meddled** line,
 so you can ask "what would happen at night?" without writing a line of game code, and the
 journal records that you made the change.
 
-Below it you can peek the stock. Choose a box, pick a tag per group, and press **Peek**. You
-see every card that could come up, in the order it would come up, each showing the numbers
-it was ranked on and labelled "looked at, put back". Peeking doesn't deal anything, so
-nothing here's playable. You never play a card from inside the deck. The listing is stamped
-with the clock it was taken at, and greys out the moment the session moves on.
+## Why not?
 
-After a peek, **Not listed, and why** gives, for every card the deal looked at and
-rejected, the reason: cooldown, deck gate, tags, condition, priority, claimed, capped, and
-for shared piles “another playthrough is holding it” and “taken out of the world by another
-playthrough”. This is the trace the runtime emits for exactly this purpose, and it's the
-answer to "why is this card not here?". A card whose condition reads composed hand state
-that a box-wide peek doesn't bind says "depends on the asking hand", because the peek asked
-without one, and that is the peek's limitation, not a fault in your content.
+The third tab answers "why isn't my card showing up here?" for one hand. Select the hand
+first: click its name, click its pin on the map, or open one of its cards. The selected hand
+is outlined. With nothing selected, the tab says so.
+
+It reads that hand's latest deal, and says when it was and how many cards came up. Under
+**Could have come up here** is every card whose tags fit the hand but which still didn't
+come up, each with the reason: the hand was full (it lost on priority to the cards that
+did), its condition wasn't met, it's on cooldown, its deck's condition wasn't met, a copy is
+held elsewhere on the board, and for shared piles "another playthrough is holding it" or
+"taken out of the world by another playthrough". A full hand comes first, since those cards
+were the nearest miss. **Not for this hand**, folded away underneath, lists the box's other
+cards, whose tags never fit it.
+
+Because it's the hand's own deal, everything that decided it counts: conditions that read
+the hand, how many cards it holds, and the copies already on the board. It explains what is
+on the table now. Play a card or change the state, and the next deal is the one to read.
+This is the trace the runtime emits for exactly this purpose.

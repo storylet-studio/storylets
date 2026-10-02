@@ -2,16 +2,16 @@
 // The Board's Live mode (design/live-link.md): a session the Board did not
 // create, rebuilt from the game's frames. `board` snapshots say what each hand
 // holds and where every clock is; `trace` events are the story, and they are
-// the runtime's own TraceEvents, so the journal and "Not listed, and why" read
+// the runtime's own TraceEvents, so the journal and the Why not? tab read
 // them with the code they already have. Pure over the frames, so it tests
 // headlessly; the DOM layer in table.ts renders what this holds.
 // ---------------------------------------------------------------------------
 
 import { LIVE_LOG_CAP } from "../../shared/api.js";
-import type { LogEntry, TraceEvent } from "@storylet-studio/runtime";
+import type { LogEntry, TraceEvent, TraceVerdict } from "@storylet-studio/runtime";
 import type { LiveLinkFrame } from "../../shared/api.js";
-import { verdictReason } from "./model.js";
-import type { NotDealt } from "./model.js";
+import { whyNotOf } from "./model.js";
+import type { WhyNot } from "./model.js";
 
 export interface LiveRunDeps {
   /** The box a hand belongs to (both gameIds), for stamping a deal with its
@@ -39,9 +39,9 @@ export interface LiveRun {
   /** The journal, oldest first: every trace event the game sent, stamped with
    *  a sequence and the turn its box was on. */
   readonly log: readonly LogEntry[];
-  /** For each hand the game has dealt, the cards its LATEST deal looked at and
-   *  rejected, with why: the Board's "Not listed, and why", for the game's deals. */
-  readonly notDealt: Readonly<Record<string, NotDealt[]>>;
+  /** For each hand the game has dealt, its LATEST deal read back as "why not?":
+   *  the Board's Why not? tab, for the game's deals. */
+  readonly whyNot: Readonly<Record<string, WhyNot>>;
   /** The project the game named in its hello, if it did. */
   readonly project: string | undefined;
   /** The flow this view is following. One playhead, pointed at one
@@ -63,7 +63,10 @@ export function createLiveRun(deps: LiveRunDeps): LiveRun {
   let hands: Record<string, string[]> = {};
   let turns: Record<string, number> = {};
   let log: LogEntry[] = [];
-  let notDealt: Record<string, NotDealt[]> = {};
+  /** Each hand's latest deal as the game traced it, read into a WhyNot only
+   *  when asked: the board frame that brings the hand's contents arrives after
+   *  the deal's trace, so reading at trace time would read the old hand. */
+  let lastDeals: Record<string, { cards: readonly { id: string; verdict: TraceVerdict }[]; turn: number | undefined }> = {};
   let project: string | undefined;
   let following: string | null = null;
   let seq = 0;
@@ -73,7 +76,7 @@ export function createLiveRun(deps: LiveRunDeps): LiveRun {
 
   const reset = (): void => {
     following = null;
-    hands = {}; turns = {}; log = []; notDealt = {}; playTurn = undefined;
+    hands = {}; turns = {}; log = []; lastDeals = {}; playTurn = undefined;
   };
 
   const turnFor = (event: TraceEvent): number | undefined => {
@@ -97,7 +100,16 @@ export function createLiveRun(deps: LiveRunDeps): LiveRun {
     get hands() { return hands; },
     get turns() { return turns; },
     get log() { return log; },
-    get notDealt() { return notDealt; },
+    get whyNot() {
+      const out: Record<string, WhyNot> = {};
+      for (const [hand, d] of Object.entries(lastDeals)) {
+        // The game's own report of the hand; the deal's own cards stand in
+        // until a board frame has arrived.
+        const here = hands[hand] ?? d.cards.filter((c) => c.verdict === "dealt").map((c) => c.id);
+        out[hand] = whyNotOf(d.cards, deps.label, here, d.turn);
+      }
+      return out;
+    },
     get project() { return project; },
     get following() { return following; },
     follow(flowId, board) {
@@ -137,13 +149,7 @@ export function createLiveRun(deps: LiveRunDeps): LiveRun {
             out.dealt = event.cards.filter((c) => c.verdict === "dealt").map((c) => c.id);
             // The latest deal for this hand is the one that explains what is
             // on the table now; an earlier deal's reasons are history.
-            notDealt = {
-              ...notDealt,
-              [event.hand]: event.cards.filter((c) => c.verdict !== "dealt").map((c) => {
-                const label = deps.label(c.id);
-                return { gameId: label.gameId, ...(label.title !== undefined ? { title: label.title } : {}), reason: verdictReason(c.verdict) };
-              }),
-            };
+            lastDeals = { ...lastDeals, [event.hand]: { cards: event.cards, turn: turnFor(event) } };
           } else if (event.type === "play") {
             out.played = event.card;
           }

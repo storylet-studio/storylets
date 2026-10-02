@@ -7,8 +7,8 @@ sidebar:
 
 [Core concepts](/concepts/) gives you the words. This page is the mechanics behind `deal`
 and `peek`. It says exactly which cards are considered, in what order, and why a card that
-looks right sometimes doesn't come up. It's the page to read when the Board's **Not listed, and
-why** fold names a reason and you want to know what that reason means.
+looks right sometimes doesn't come up. It's the page to read when the Board's **Why not?** tab
+names a reason and you want to know what that reason means.
 
 ## The stock
 

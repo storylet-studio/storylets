@@ -48,6 +48,39 @@ describe("the Board model", () => {
     expect(dealt.every((c) => c.from === undefined)).toBe(true);
   });
 
+  it("answers Why not? for a hand from its latest deal, the near misses apart from the cards never meant for it", () => {
+    const table = new Table(exampleBundle(), 0);
+    // Nothing dealt yet: there is no deal to explain.
+    expect(table.whyNot("docks-street")).toBeUndefined();
+    const board = table.dealAll();
+    const why = table.whyNot("docks-street")!;
+    const held = board.find((b) => b.hand === "docks-street")!.cards;
+    expect(why.here).toBe(held.length);
+    expect(why.looked).toBeGreaterThan(0);
+    // The hand's own cards are neither a miss nor a mismatch.
+    const listedIds = new Set([...why.couldHave, ...why.notHere].map((n) => n.gameId));
+    expect(held.some((c) => listedIds.has(c.gameId))).toBe(false);
+    // The market's cards were never candidates for a docks hand: set apart, never a near miss.
+    expect(why.notHere.length).toBeGreaterThan(0);
+    expect(why.notHere.every((n) => n.reason === "its tags don't match this slice")).toBe(true);
+    expect(why.couldHave.every((n) => n.reason !== "its tags don't match this slice" && n.reason !== "dealt")).toBe(true);
+    // Every card the box holds is accounted for exactly once.
+    const listed = [...why.couldHave, ...why.notHere].map((n) => n.gameId);
+    expect(new Set(listed).size).toBe(listed.length);
+  });
+
+  it("puts a full hand's eligible cards first among the near misses", () => {
+    const table = new Table(exampleBundle(), 0);
+    table.session.setProperty("value.v_docks.danger", 3); // the danger-gated docks cards open too
+    table.dealAll();
+    const why = table.whyNot("docks-street")!;
+    const reasons = why.couldHave.map((n) => n.reason);
+    const firstOther = reasons.findIndex((r) => r !== "hand full (lower priority)");
+    const lastFull = reasons.lastIndexOf("hand full (lower priority)");
+    expect(lastFull).toBeGreaterThanOrEqual(0); // the hand does overflow here, or this test proves nothing
+    if (firstOther >= 0) expect(lastFull).toBeLessThan(firstOther);
+  });
+
   it("reports considered-but-not-listed cards with a plain reason", () => {
     const table = new Table(exampleBundle(), 0);
     // A card gated on danger: with danger low, a docks card fails its condition

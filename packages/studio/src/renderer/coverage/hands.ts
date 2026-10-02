@@ -28,8 +28,8 @@ export type OpenRow = (className: string, selection: SearchSelection, ...childre
  *  ids. The window decides whether it opens unfolded. */
 export function handsBlock(r: CoverageReport, openRow: OpenRow): HTMLDetailsElement {
   const block = el("details", { className: "block hands" },
-    // The vocabulary's chevron, rotated open by the stylesheet (the Table's
-    // "Not listed, and why" fold).
+    // The vocabulary's chevron, rotated open by the stylesheet (the Board's
+    // "Not for this hand" fold uses it too).
     el("summary", { className: "caption" }, iconNode("collapsed", 12), `Cards seen in each hand, over ${plural(r.runs, "run")}`));
   const boxes = new Set(r.hands.map((h) => h.box));
   let lastBox: string | undefined;

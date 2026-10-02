@@ -4,8 +4,8 @@
 // pick a card, read its outcomes, play one and watch the world change; time
 // passes on the turn dial. The journal keeps the story of the session
 // (deals, plays, property changes, turns); snapshots save and restore the
-// whole game. Everything diagnostic - the stock peek, why-not reasons, the
-// raw state - waits behind the curtain. You never play a card from inside
+// whole game. The diagnostics have rail tabs of their own: the raw state, and
+// why the selected hand's near misses did not come up. You never play a card from inside
 // the deck (schema 3.1): plays come from hands on the board.
 // ---------------------------------------------------------------------------
 
@@ -25,7 +25,7 @@ import { playChoices, playedTail } from "./play-choices.js";
 import { setPlayRung, shows } from "../src/play-ladder.js";
 import { createLiveRun } from "./live.js";   // Live Link: the game's run, rebuilt from its frames
 import type { LiveRun } from "./live.js";
-import type { BoardLogEntry, DealtView, LogEntry, NotDealt } from "./model.js";
+import type { BoardLogEntry, DealtView, LogEntry } from "./model.js";
 import type { BoardSaveFile } from "./model.js";
 import type { Performance } from "@storylet-studio/with-patter";
 import { createDebugLink } from "@patterkit/play-helpers";
@@ -115,17 +115,14 @@ let snapPanel: "save" | "restore" | undefined;
 let snapshots: { name: string; file: BoardSaveFile }[] = [];
 /** Journal kinds hidden by the filter chips (empty = the full story). */
 const journalHidden = new Set<LogEntry["type"]>();
-/** The rail's open tab: the record (journal) or the state (the old curtain). */
-let railTab: "journal" | "state" = "journal";
-/** State-tab state (the diagnostic surfaces). */
-let peekBox = "";
-const criteria: Record<string, string> = {};
-let peeked: DealtView[] = [];
-let notDealt: NotDealt[] = [];
-/** When the last peek was taken: the box, its clock, and the log's last seq -
- *  so a listing the session has moved past can say so instead of standing
- *  there looking fresh (the antagonist review's stale-peek finding). */
-let peekStamp: { box: string; clock: number; lastSeq: number } | undefined;
+/** The rail's open tab: the record (journal), the state (the old curtain), or
+ *  why the selected hand's near misses did not come up. */
+let railTab: "journal" | "state" | "why" = "journal";
+/** What the list and the rail panel were showing at the last render, so a
+ *  render that only changes what is in them keeps their scroll (selecting a
+ *  hand or opening a card low in the list used to throw the reader back to the
+ *  top), while moving to another box, view, tab or hand starts at the top. */
+let scrollKeys = { list: "", panel: "" };
 let loadError = "";
 /** Where this run has been: the live position and its trail (run-marks.ts).
  *  Marking, never navigating: the editor's selection is nobody's business here. */
@@ -169,8 +166,10 @@ const currentPick = (): (typeof maps)[number] | undefined => mapChoices()[mapPic
  *  honours the remembered List|Map preference; anything else is the list. */
 const effectiveView = (): "list" | "map" => (mapChoices().length > 0 ? view : "list");
 let mapData: BoxMapDto | undefined;
-/** The hand whose cards the side column is showing, in map mode. */
-let onMap: string | undefined;
+/** The selected hand, the same in both views: whose cards the map's float
+ *  shows, and whose latest deal the Why not? tab explains. Chosen by clicking
+ *  a hand's name or its pin, or by opening one of its cards. */
+let selectedHand: string | undefined;
 /** Hands changed by the LAST board refresh (a play or a turn): the pulse and
  *  the box-header badges. Replaced by the next refresh, cleared on rebuild -
  *  no memory to manage (design/board-ripple.md). */
@@ -255,16 +254,13 @@ async function build(): Promise<void> {
     return;
   }
   watchPatterpad();
-  peekBox = table.boxes()[0]?.gameId ?? "";
-  for (const k of Object.keys(criteria)) delete criteria[k];
   for (const k of Object.keys(filters)) delete filters[k];
   open = undefined; pending = undefined; snapPanel = undefined;
-  peeked = []; notDealt = []; peekStamp = undefined;
   stale = false;   // this bundle is fresh as of now
   marks.reset();   // a new run: nowhere has been anywhere yet
   board = table.dealAll();   // the game starts with the board dealt
   setPulsed(new Set());        // an opening deal is a curtain up, not a ripple
-  onMap = undefined;
+  selectedHand = undefined;
   maps = await studio.projectMaps();
   if (maps.length === 0) view = "list";
   // The remembered box wins when it still exists in this bundle ("" is an
@@ -462,7 +458,6 @@ function newRun(): void {
   table.newRun();
   performing = undefined;
   open = undefined; pending = undefined; snapPanel = undefined;
-  peeked = []; notDealt = []; peekStamp = undefined;
   marks.reset();   // a new run: nowhere has been anywhere yet
   board = table.dealAll();
   setPulsed(new Set());
@@ -483,18 +478,6 @@ function forgetEveryone(): void {
       + "(every pocket and the installation's own memory). The next run is the first day again.",
     confirmLabel: "Forget everyone",
   }).then((ok) => { if (ok) void build(); });
-}
-
-function peek(): void {
-  if (!table) return;
-  const bound = Object.fromEntries(Object.entries(criteria).filter(([, v]) => v !== ""));
-  try {
-    const r = table.peek(peekBox, bound);
-    peeked = r.dealt; notDealt = r.notDealt;
-    peekStamp = { box: peekBox, clock: table.turn(peekBox), lastSeq: table.log[table.log.length - 1]?.seq ?? -1 };
-  }
-  catch (e) { loadError = e instanceof Error ? e.message : String(e); }
-  render();
 }
 
 // --- little pieces -------------------------------------------------------------
@@ -620,7 +603,6 @@ function journalText(): string {
       if (journalHidden.has("turns")) continue;
       lines.push(item.uniform !== undefined ? `T${item.uniform}\tturn\tevery box -> ${item.uniform}` : `--\tturn\tevery box +1`);
     } else {
-      if (item.entry.type === "diagnostic" && !liveMode && table?.isPeekDiagnostic(item.entry.seq)) continue;
       const gate = item.entry.type === "meddle" ? "write" : item.entry.type;
       if (journalHidden.has(gate)) continue;
       const line = journalTextLine(item.entry);
@@ -674,12 +656,12 @@ function showMap(): void {
     changedStamp: pulseStamp,
     ...(filtered !== undefined ? { filtered } : {}),
   };
-  if (mapView) { mapView.update(mapData, onMap, state); return; }
+  if (mapView) { mapView.update(mapData, selectedHand, state); return; }
   void (async () => {
     const { mountBoardMap } = await import("./board-map.js");
     if (!mapData || mapView) return;
-    mapView = mountBoardMap(mapHost, mapData, onMap, state, {
-      select: (hand) => { onMap = hand; open = undefined; pending = undefined; render(); },
+    mapView = mountBoardMap(mapHost, mapData, selectedHand, state, {
+      select: (hand) => { selectedHand = hand; open = undefined; pending = undefined; render(); },
       // Clicking a zone IS the Board's filter for that tag group: the same state
       // the dropdown writes, so the two always agree and either can clear it.
       filter: (zoneId) => {
@@ -712,7 +694,7 @@ function showMap(): void {
 function mapFloat(): HTMLElement | null {
   const panel = playPanel();
   if (panel) return el("div", { className: "stagefloat" }, panel);
-  const hand = onMap === undefined ? undefined : table?.hands().find((h) => h.gameId === onMap);
+  const hand = selectedHand === undefined ? undefined : table?.hands().find((h) => h.gameId === selectedHand);
   if (!hand) return null;
   return el("div", { className: "stagefloat" },
     handCell(hand, board.find((b) => b.hand === hand.gameId)?.cards ?? []));
@@ -735,7 +717,7 @@ function handCell(hand: { id?: string; boxId?: string; gameId: string; title?: s
   // reports where the run is, it does not ask for anything.
   const here = marks.now() === hand.gameId;
   const been = marks.visitedHand(hand.gameId);
-  const cell = el("div", { className: `hcell${here ? " here" : been ? " been" : ""}${pulsed.has(hand.gameId) ? " rippled" : ""}` },
+  const cell = el("div", { className: `hcell${here ? " here" : been ? " been" : ""}${pulsed.has(hand.gameId) ? " rippled" : ""}${selectedHand === hand.gameId ? " sel" : ""}` },
     el("div", { className: "hhead" },
       here || been
         ? el("span", {
@@ -743,11 +725,16 @@ function handCell(hand: { id?: string; boxId?: string; gameId: string; title?: s
             tip: here ? "The last card was played from here." : "Played from here earlier this run.",
           })
         : null,
-      el("span", { className: "hname", text: hand.title ?? hand.gameId, tip: "A hand on the board: where cards are dealt. Double-click to open it in the editor." }),
+      el("span", { className: "hname", text: hand.title ?? hand.gameId, tip: "A hand on the board: where cards are dealt. Click to select it, and Why not? explains what did not come up here; double-click to open it in the editor." }),
       el("span", { className: "htags" }, ...Object.values(hand.tags).map(chip))));
   // Double-click the header reveals the hand in the editor, on what can come up
   // there: the gesture a pin and a card already use here. A hand the bundle does
   // not know (Live mode, a game's own) has no page to open.
+  // A click selects the hand (never toggles it off, so the two clicks of a
+  // double-click both select, and the reveal still lands).
+  cell.querySelector(".hhead")!.addEventListener("click", () => {
+    if (selectedHand !== hand.gameId) { selectedHand = hand.gameId; render(); }
+  });
   const { id, boxId } = hand;
   if (id !== undefined && boxId !== undefined) {
     cell.querySelector(".hhead")!.addEventListener("dblclick", () => { void studio.searchReveal({ kind: "hand", box: boxId, hand: id }); });
@@ -764,8 +751,11 @@ function handCell(hand: { id?: string; boxId?: string; gameId: string; title?: s
       if (liveMode) {
         const home = table?.home(c.id);
         if (home) void studio.searchReveal({ kind: "card", box: home.box, deck: home.deck, card: home.card });
+        if (selectedHand !== hand.gameId) { selectedHand = hand.gameId; render(); }
         return;
       }
+      // Opening a card selects its hand, so Why not? is about where it came from.
+      selectedHand = hand.gameId;
       open = isOpen ? undefined : { card: c.id, hand: hand.gameId };
       pending = undefined;
       render();
@@ -946,27 +936,6 @@ function liveCells(): HTMLElement {
   return cells;
 }
 
-/** "Not listed, and why" in Live mode: every hand's latest deal, and the cards it
- *  looked at and rejected. The Board's own version lives behind the curtain; in
- *  Live mode the curtain is closed, so this stands on its own. */
-function liveNotDealt(): HTMLElement | null {
-  const byHand = Object.entries(liveRun?.notDealt ?? {}).filter(([, ns]) => ns.length > 0);
-  if (byHand.length === 0) return null;
-  const nd = el("details", { className: "curtain" }) as HTMLDetailsElement;
-  nd.append(el("summary", {}, iconNode("collapsed", 12), "Not listed, and why"));
-  for (const [hand, ns] of byHand) {
-    const block = el("div", { className: "notdealt" });
-    block.append(el("span", { className: "caption", text: hand }));
-    for (const n of ns) {
-      block.append(el("div", { className: "ndrow" },
-        el("span", { className: "ndname", text: n.title ?? n.gameId }),
-        el("span", { className: "ndreason", text: n.reason })));
-    }
-    nd.append(block);
-  }
-  return nd;
-}
-
 /** The Live / Local switch (the session strip), and the "Watch it?" banner.
  *  Offered whenever a game is connected, or while Live mode is on. */
 function liveSwitch(): HTMLElement | null {
@@ -1081,11 +1050,60 @@ function snapshotPanel(): HTMLElement | null {
   return list;
 }
 
-/** The State tab: the raw state and the stock peek. This was "Behind the
+/** The Why not? tab: the selected hand's latest deal, read back. Every card
+ *  that could have come up there and did not, with the reason, nearest misses
+ *  first (a full hand); the box's cards that were never meant for this hand
+ *  folded away beneath. From the session's own record locally, from the
+ *  game's trace in Live mode: the same reading either way (model `whyNotOf`). */
+function whyPanel(): HTMLElement {
+  const panel = el("div", { className: "whypanel" });
+  if (selectedHand === undefined) {
+    panel.append(el("p", { className: "empty", text: "Select a hand to see why the cards that could have come up there didn't. Click a hand's name, or its pin on the map." }));
+    return panel;
+  }
+  const name = table?.hands().find((h) => h.gameId === selectedHand)?.title ?? selectedHand;
+  const why = liveMode ? liveRun?.whyNot[selectedHand] : table?.whyNot(selectedHand);
+  panel.append(el("span", { className: "caption", text: name }));
+  if (why === undefined) {
+    panel.append(el("p", { className: "empty", text: liveMode ? "The game hasn't dealt this hand yet." : "Nothing has been dealt here yet." }));
+    return panel;
+  }
+  const when = `As of its latest deal${why.turn !== undefined ? `, on turn ${why.turn}` : ""}`;
+  if (why.looked === 0) {
+    // An empty deal is not "every card came up": nothing was looked at.
+    panel.append(el("p", { className: "whymeta", text: `${when}, no card was looked at: the hand's own condition wasn't met, or its box has no cards.` }));
+    return panel;
+  }
+  panel.append(el("p", { className: "whymeta", text: `${when}. ${plural(why.here, "card")} here now.` }));
+  const could = el("div", { className: "notdealt" });
+  could.append(el("span", { className: "caption", text: "Could have come up here" }));
+  if (why.couldHave.length === 0) could.append(el("span", { className: "empty", text: "Every card that could come up here did." }));
+  for (const n of why.couldHave) {
+    could.append(el("div", { className: "ndrow" },
+      el("span", { className: "ndname", text: n.title ?? n.gameId }),
+      el("span", { className: "ndreason", text: n.reason })));
+  }
+  panel.append(could);
+  if (why.notHere.length > 0) {
+    // Folded: the box's other cards are an inventory, not an explanation, and
+    // listing them open under every hand buried the near misses.
+    const rest = el("details", { className: "curtain whyrest" }) as HTMLDetailsElement;
+    rest.append(el("summary", {}, iconNode("collapsed", 12), `Not for this hand (${why.notHere.length})`));
+    rest.append(el("p", { className: "whymeta", text: "Their tags don't fit it." }));
+    for (const n of why.notHere) rest.append(el("div", { className: "ndrow" }, el("span", { className: "ndname", text: n.title ?? n.gameId })));
+    panel.append(rest);
+  }
+  return panel;
+}
+
+/** The State tab: the raw story state, pokeable. This was "Behind the
  *  curtain", a collapsed fold at the bottom of one view behind a coy name -
  *  and the antagonist review found it was the single most valuable designer
  *  surface in the window, invisible in Map view and nearly invisible in List
- *  (design/board-legibility.md piece 2). Now a rail tab, in both views. */
+ *  (design/board-legibility.md piece 2). Now a rail tab, in both views. The
+ *  stock peek that sat under it gave way to the Why not? tab (2026-10-02): an
+ *  author testing asks why a HAND did not get a card, which a box-wide look
+ *  without a hand could only half answer. */
 function statePanel(): HTMLElement {
   const details = el("div", { className: "statepanel" });
 
@@ -1127,65 +1145,6 @@ function statePanel(): HTMLElement {
   }
   details.append(stateEl);
 
-  // The stock peek: look without touching (nothing here can be played).
-  const runner = el("div", { className: "runner" });
-  const select = el("select", { className: "qselect" });
-  const info = table!.boxes().find((b) => b.gameId === peekBox);
-  for (const b of table!.boxes()) {
-    const opt = el("option", { text: b.gameId });
-    opt.value = b.gameId;
-    if (b.gameId === peekBox) opt.selected = true;
-    select.append(opt);
-  }
-  select.addEventListener("change", () => { peekBox = select.value; render(); });
-  runner.append(el("span", { className: "caption", text: "Peek the stock" }), select);
-  for (const group of info?.groups ?? []) {
-    const sel = el("select", { className: "arg" });
-    const any = el("option", { text: `${group.gameId}: any` }); any.value = "";
-    if ((criteria[group.gameId] ?? "") === "") any.selected = true;
-    sel.append(any);
-    for (const v of group.values) {
-      const o = el("option", { text: `${group.gameId}: ${v}` }); o.value = v;
-      if (criteria[group.gameId] === v) o.selected = true;
-      sel.append(o);
-    }
-    sel.addEventListener("change", () => { criteria[group.gameId] = sel.value; });
-    runner.append(sel);
-  }
-  runner.append(el("button", { className: "btn", text: "Peek", onClick: peek }));
-  details.append(runner);
-
-  if (peekStamp !== undefined && (peeked.length > 0 || notDealt.length > 0)) {
-    // Stamped, and honest about age: the moment the session moves on, the
-    // listing greys out and says so - it used to contradict the visible
-    // board while looking perfectly fresh.
-    const lastSeq = table!.log[table!.log.length - 1]?.seq ?? -1;
-    const staleP = lastSeq !== peekStamp.lastSeq;
-    const results = el("div", { className: `peekresults${staleP ? " stale" : ""}` });
-    results.append(el("div", { className: "peeknote" },
-      el("span", { className: "caption", text: `Peeked ${peekStamp.box} at clock ${peekStamp.clock}` }),
-      staleP ? el("span", { className: "empty", text: "The session has moved on. Peek again." }) : null));
-    if (peeked.length > 0) {
-      const list = el("div", { className: "peeked" });
-      for (const c of peeked) {
-        list.append(el("div", { className: "ndrow" },
-          el("span", { className: "ndname", text: c.title ?? c.gameId }),
-          el("span", { className: "ndreason" }, metaLine([`priority ${c.priority ?? 0}`, c.specificity !== undefined ? `specificity ${c.specificity}` : undefined, "looked at, put back"]))));
-      }
-      results.append(list);
-    }
-    if (notDealt.length > 0) {
-      const nd = el("div", { className: "notdealt" });
-      nd.append(el("span", { className: "caption", text: "Not listed, and why" }));
-      for (const n of notDealt) {
-        nd.append(el("div", { className: "ndrow" },
-          el("span", { className: "ndname", text: n.title ?? n.gameId }),
-          el("span", { className: "ndreason", text: n.reason })));
-      }
-      results.append(nd);
-    }
-    details.append(results);
-  }
   return details;
 }
 
@@ -1240,7 +1199,7 @@ function render(): void {
     });
     sel.addEventListener("change", () => {
       mapPick = Number(sel.value);
-      onMap = undefined;
+      selectedHand = undefined;
       void loadMap();
     });
     return sel;
@@ -1266,7 +1225,7 @@ function render(): void {
       const leaving = new Set(table!.hands().filter((h) => h.box === boxSel).map((h) => h.gameId));
       pulsed = new Set([...pulsed].filter((h) => !leaving.has(h)));
     }
-    boxSel = sel; mapPick = 0; onMap = undefined; open = undefined; pending = undefined;
+    boxSel = sel; mapPick = 0; selectedHand = undefined; open = undefined; pending = undefined;
     mapData = undefined;
     rememberedBox = sel ?? "";
     void studio.setBoardBox(rememberedBox);   // remembered per project, "" = Everything
@@ -1344,8 +1303,7 @@ function render(): void {
 
   // The journal (right): the story of the session so far. The filter chips
   // mute kinds of beat (a muted chip greys out); Copy takes what you see.
-  const warnCount = activeLog().filter((e) =>
-    e.type === "diagnostic" && !(!liveMode && table?.isPeekDiagnostic(e.seq))).length;
+  const warnCount = activeLog().filter((e) => e.type === "diagnostic").length;
   // A chip is its word, except the warning chip, which is the vocabulary's
   // warning sign and the count: the count keeps a warning that scrolled away
   // from being missed, and the word stays in its tooltip.
@@ -1407,9 +1365,6 @@ function render(): void {
           ? el("span", { className: "jp" }, "every box", becomes(), String(item.uniform))
           : el("span", { className: "jp", text: "every box +1" })));
     } else {
-      // A diagnostic the peek produced belongs to the peek's results, not the
-      // journal (live mode's seqs are the game's own, never peek-marked).
-      if (item.entry.type === "diagnostic" && !liveMode && table?.isPeekDiagnostic(item.entry.seq)) continue;
       const gate = item.entry.type === "meddle" ? "write" : item.entry.type;
       if (journalHidden.has(gate)) continue;
       const row = journalRow(item.entry);
@@ -1419,26 +1374,33 @@ function render(): void {
   if (rows.length === 0) journal.append(el("span", { className: "empty", text: journalHidden.size > 0 ? "Nothing matches these filters." : "Nothing has happened yet." }));
   for (const r of rows.slice(-80)) journal.append(r);
 
-  // The rail: Journal and State as tabs, in both views (design/
+  // The rail: Journal, State and Why not? as tabs, in both views (design/
   // board-legibility.md piece 2). Live mode is observe-only - nothing to
-  // poke - so its rail is the journal alone.
+  // poke - so it has no State tab; Why not? reads the game's own deals there.
   const withState = !liveMode;
-  const showJournal = railTab === "journal" || !withState;
+  const tab = railTab === "state" && !withState ? "journal" : railTab;
+  const showJournal = tab === "journal";
+  const tabButton = (id: typeof railTab, text: string, tip?: string): HTMLElement =>
+    el("button", { className: `seg-opt railtab${tab === id ? " on" : ""}`, text, ...(tip !== undefined ? { tip } : {}),
+      onClick: () => { railTab = id; render(); } });
   const rail = el("aside", { className: "rail" },
     el("div", { className: "railtabs" },
       el("div", { className: "seg" },
-        el("button", { className: `seg-opt railtab${showJournal ? " on" : ""}`, text: "Journal",
-          onClick: () => { railTab = "journal"; render(); } }),
-        withState ? el("button", { className: `seg-opt railtab${railTab === "state" ? " on" : ""}`, text: "State",
-          tip: "The live story state, and the stock peek",
-          onClick: () => { railTab = "state"; render(); } }) : null),
+        tabButton("journal", "Journal"),
+        withState ? tabButton("state", "State", "The live story state") : null,
+        tabButton("why", "Why not?", "Why the cards that could have come up in the selected hand didn't")),
       el("span", { className: "railgap" }),
       showJournal ? el("button", { className: "btn mini", text: "Copy", tip: "Copy the journal (as filtered)",
         onClick: () => void navigator.clipboard.writeText(journalText()) }) : null),
     // The filter chips stay put while the story scrolls beneath them.
     showJournal ? jfilters : null,
-    showJournal ? journal : statePanel());
+    showJournal ? journal : tab === "state" ? statePanel() : whyPanel());
 
+  const listKey = `${liveMode ? "live" : "local"}|${boxSel ?? ""}|${effectiveView()}`;
+  const panelKey = `${tab}|${selectedHand ?? ""}`;
+  const keepList = listKey === scrollKeys.list ? root.querySelector(".tscroll")?.scrollTop : undefined;
+  const keepPanel = panelKey === scrollKeys.panel ? root.querySelector(".statepanel, .whypanel")?.scrollTop : undefined;
+  scrollKeys = { list: listKey, panel: panelKey };
   root.replaceChildren(
     // TWO BARS, because there were two kinds of thing in one (A16). The window's
     // chrome - what this window IS and how it sits beside the editor - is the
@@ -1505,14 +1467,13 @@ function render(): void {
         ),
     liveMode
       // Live mode: the game's run, always as a list (its board, its journal,
-      // its "Not listed, and why"). The List/Map switch, the box navigator and
+      // its Why not?, in the rail). The List/Map switch, the box navigator and
       // the local controls step aside; the turn dial is read-only.
       ? el("div", { className: "tbody nonav" },
           el("main", { className: "tmain" },
             bannerNote,
             el("div", { className: "boardbar" }, liveTurnDial(), filterBar),
-            liveCells(),
-            liveNotDealt()),
+            liveCells()),
           rail,
         )
       : effectiveView() === "map"
@@ -1551,6 +1512,8 @@ function render(): void {
   }
   // Keep the journal reading like a story: newest visible.
   if (showJournal) journal.scrollTop = journal.scrollHeight;
+  if (keepList !== undefined) { const sc = root.querySelector(".tscroll"); if (sc) sc.scrollTop = keepList; }
+  if (keepPanel !== undefined) { const sc = root.querySelector(".statepanel, .whypanel"); if (sc) sc.scrollTop = keepPanel; }
   // The map is a live view of the same session: a play moves the running mark,
   // a deal changes what a pin holds. Never in Live mode, which is list-only.
   if (!liveMode && view === "map") showMap();

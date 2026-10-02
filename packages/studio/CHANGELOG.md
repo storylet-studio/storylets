@@ -10,6 +10,14 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Board's Why not? tab replaces Peek.** Select a hand (click its name, its pin on the map, or open one of its cards) and the new tab beside Journal and State reads that hand's latest deal back: every card that could have come up there and didn't, with the reason, a full hand's near misses first, and the box's cards that were never meant for the hand folded away beneath. Because it is the hand's own deal, conditions that read the hand, its size and the copies held elsewhere all count, which a box-wide peek could not see. Live mode uses the same tab for the game's deals, in place of its "Not listed, and why" fold.
+
+### Fixed
+
+- **The Board keeps its place.** Opening a card, or selecting a hand, low in the list no longer jumps the list back to the top, and editing a value in the State tab no longer scrolls it away.
+
 ## [0.17.1] - 2026-10-02
 
 ### Changed

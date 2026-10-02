@@ -124,9 +124,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .maphere-of { font: 600 11.5px/1 var(--font-ui); color: var(--muted); }
 .maphere-name { font-family: var(--font-mono); font-size: 13px; }
 
-.runner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.qselect { font-family: var(--font-mono); font-size: 13.5px; }
-.runner .arg, .filters .arg { width: 150px; font-family: var(--font-mono); font-size: 13px; }
+.filters .arg { width: 150px; font-family: var(--font-mono); font-size: 13px; }
 
 /* --- the turn dial + filter bar ---------------------------------------------- */
 .boardbar { display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
@@ -159,7 +157,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
   padding: 10px 14px 12px;
   display: flex; flex-direction: column; gap: 8px;
 }
-.hhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.hhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; cursor: pointer; }
 .hname { font-family: var(--font-read); font-weight: 600; font-size: 15px; }
 .htags { display: inline-flex; gap: 6px; }
 .hcards { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
@@ -196,6 +194,9 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
   border-color: color-mix(in oklab, var(--accent) 45%, var(--line-soft));
   background: color-mix(in oklab, var(--accent) 5%, var(--surface));
 }
+/* The selected hand (Why not? explains it): an outline in the open card's
+   grammar, so it reads beside the run's wash rather than as another one. */
+.hcell.sel { border-color: var(--accent); outline: 1px solid var(--accent); }
 
 /* --- the play panel: read, choose, continue ----------------------------------- */
 .playpanel {
@@ -261,7 +262,6 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .curtain > summary [data-icon] { transition: transform var(--dur-quick) var(--ease-standard); }
 .curtain[open] > summary [data-icon] { transform: rotate(90deg); }
 .curtain > *:not(summary) { margin-top: 12px; }
-.peeked { display: flex; flex-direction: column; gap: 4px; }
 
 .statestrip {
   display: flex;
@@ -306,19 +306,23 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
   font-size: 12px;
 }
 
-/* --- the State tab: the raw state and the stock peek --------------------------- */
-.statepanel {
+/* --- the State and Why not? tabs ------------------------------------------------- */
+.statepanel, .whypanel {
   flex: 1; min-height: 0;
   padding: 12px 16px;
   overflow-y: auto;
   display: flex; flex-direction: column; gap: 12px;
   font-size: 13px;
 }
-.statepanel .runner { border-top: 1px solid var(--line-soft); padding-top: 12px; }
-/* Peek results: stamped, and greyed the moment the session moves past them. */
-.peekresults { display: flex; flex-direction: column; gap: 10px; }
-.peeknote { display: flex; flex-direction: column; gap: 2px; }
-.peekresults.stale .peeked, .peekresults.stale .notdealt { opacity: 0.45; }
+.whymeta { margin: 0; color: var(--muted); }
+/* The fold sits under the near misses, not pushed to the panel's foot as the
+   curtain it borrows its look from is. */
+.whyrest { margin-top: 0; }
+/* The rail is narrow: the reason goes under its card rather than beside it,
+   where a two-word name and a four-word reason both wrapped. */
+.whypanel .ndrow { flex-direction: column; gap: 1px; }
+.whypanel .ndname { min-width: 0; color: var(--ink); }
+
 /* Filter chips: which kinds of beat the journal tells. Muted = hidden.
    Pinned in the rail under the tabs, not scrolling with the story. */
 .jfilters { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 16px 8px 14px; border-bottom: 1px solid var(--line-soft); }

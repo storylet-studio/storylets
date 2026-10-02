@@ -136,10 +136,10 @@ Deal, click a card, and choose an outcome. You read what the outcome will change
 commit to it. The journal down the right-hand side records everything that happened, and you
 can copy it straight into a bug report.
 
-The interesting part is one tab over. The rail on the right pairs the journal with a
-**State** tab. Press **Peek** there and **Not listed, and why** tells you, for every card the
-deal passed over, exactly which rule stopped it. That's the answer to "why isn't my card
-showing up?", and it's the reason the Board exists.
+The interesting part is two tabs over. The rail on the right pairs the journal with
+**State** and **Why not?**. Click a hand's name, and **Why not?** tells you, for every card
+that could have come up there and didn't, exactly which rule stopped it. That's the answer
+to "why isn't my card showing up?", and it's the reason the Board exists.
 
 Edit the project and the Board notices and offers you a restart. It won't swap the story out
 from under a run in progress.

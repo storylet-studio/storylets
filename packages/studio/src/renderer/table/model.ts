@@ -43,6 +43,50 @@ const VERDICT_REASON: Record<TraceVerdict, string> = {
  *  with the same words the Board's own peek uses). */
 export const verdictReason = (verdict: TraceVerdict): string => VERDICT_REASON[verdict] ?? verdict;
 
+/** One hand's latest deal, read back as "why not?" (the Board's Why not? tab).
+ *  `couldHave` is every card the deal looked at whose tags fit this hand and
+ *  that still did not come up, with the reason, nearest misses first (a full
+ *  hand); `notHere` is the box's other cards, whose tags never fit it. */
+export interface WhyNot {
+  /** The turn the deal happened on, when the record carries one. */
+  turn?: number;
+  /** How many cards the hand holds now. */
+  here: number;
+  /** How many cards the deal looked at. None means the hand's own condition
+   *  failed (it then looks at nothing, and holds nothing), or its box is empty. */
+  looked: number;
+  couldHave: NotDealt[];
+  notHere: NotDealt[];
+}
+
+/** Read a deal's trace into a WhyNot. Shared by the local Board (its own log)
+ *  and Live mode (the game's trace, live.ts), so the two say the same thing.
+ *  `here` is the hand's contents now, by gameId: a card already in the hand is
+ *  traced as "claimed" (it may not come twice), which is not a miss, and a deal
+ *  into a hand that already held some cards only records the ones it added. */
+export function whyNotOf(
+  cards: readonly { id: string; verdict: TraceVerdict }[],
+  label: (gameId: string) => { gameId: string; title?: string },
+  here: readonly string[],
+  turn?: number,
+): WhyNot {
+  const held = new Set(here);
+  const row = (c: { id: string; verdict: TraceVerdict }): NotDealt => {
+    const l = label(c.id);
+    return { gameId: l.gameId, ...(l.title !== undefined ? { title: l.title } : {}), reason: verdictReason(c.verdict) };
+  };
+  const missed = cards.filter((c) => c.verdict !== "dealt" && c.verdict !== "tags" && !held.has(c.id));
+  return {
+    ...(turn !== undefined ? { turn } : {}),
+    here: here.length,
+    looked: cards.length,
+    // A full hand first: those cards were eligible and lost only on rank, the
+    // nearest miss and the one an author most often means by "why not".
+    couldHave: [...missed.filter((c) => c.verdict === "capped"), ...missed.filter((c) => c.verdict !== "capped")].map(row),
+    notHere: cards.filter((c) => c.verdict === "tags" && !held.has(c.id)).map(row),
+  };
+}
+
 export interface BoxInfo {
   gameId: string;
   title?: string;
@@ -525,6 +569,24 @@ export class Table {
         return { gameId, ...(label?.title !== undefined ? { title: label.title } : {}), reason };
       });
     return { dealt, notDealt };
+  }
+
+  /** The hand's latest deal on this run, as a WhyNot; undefined until it has
+   *  been dealt. The latest deal is the one that explains what is on the table
+   *  there now; an earlier one's reasons are history. Read from the session's
+   *  own record, which the engine keeps whole (eligible cards it could not fit
+   *  are marked "capped", not dropped), so a deal's `@hand` conditions, its
+   *  hand size and the copies held elsewhere all count, as a box-wide peek's
+   *  cannot. */
+  whyNot(handGameId: string): WhyNot | undefined {
+    const log = this.log;
+    for (let i = log.length - 1; i >= 0; i--) {
+      const e = log[i]!;
+      if (e.type !== "deal" || e.hand !== handGameId) continue;
+      const here = (this.session.board()[handGameId] ?? []).map((c) => c.gameId);
+      return whyNotOf(e.cards, (id) => this.cardLabels.get(this.cardKey(id)) ?? { gameId: id }, here, e.turn);
+    }
+    return undefined;
   }
 
   /** Every hand the bundle declares - the valid hands for this board,

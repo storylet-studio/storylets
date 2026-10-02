@@ -1,5 +1,5 @@
 // The Board's Live mode, fed a fixed set of Live Link frames: the hands and
-// clocks come from `board` snapshots, the journal and "Not listed, and why" from
+// clocks come from `board` snapshots, the journal and Why not? from
 // the game's own trace events, a hello clears the table for a new run, and the
 // frame a deal or play names is reported so Follow in the editor can open it.
 
@@ -63,15 +63,22 @@ describe("the Board's Live mode", () => {
     ]);
   });
 
-  it("answers Not listed, and why for each hand from its latest deal", () => {
+  it("answers Why not? for each hand from its latest deal", () => {
     const { run, table } = villageRun();
     const [a, b] = twoCards(table);
     const hand = table.hands()[0]!.gameId;
     run.apply({ t: "trace", flow: "main", event: { type: "deal", hand, cards: [{ id: a, verdict: "dealt" }, { id: b, verdict: "condition" }] } });
-    expect(run.notDealt[hand]).toEqual([{ gameId: table.label(b).gameId, ...(table.label(b).title !== undefined ? { title: table.label(b).title } : {}), reason: "condition not met" }]);
+    expect(run.whyNot[hand]!.couldHave).toEqual([{ gameId: table.label(b).gameId, ...(table.label(b).title !== undefined ? { title: table.label(b).title } : {}), reason: "condition not met" }]);
+    expect(run.whyNot[hand]!.here).toBe(1);   // no board frame yet: the dealt card stands in
+    // A card already in the hand is traced "claimed" by the next deal; it is here, not a miss.
+    run.apply({ t: "board", flow: "main", hands: { [hand]: [a] }, turns: {} });
+    run.apply({ t: "trace", flow: "main", event: { type: "deal", hand, cards: [{ id: a, verdict: "claimed" }, { id: b, verdict: "condition" }] } });
+    expect(run.whyNot[hand]!.couldHave.map((n) => n.gameId)).toEqual([table.label(b).gameId]);
     // A second deal of the same hand replaces the first's reasons.
     run.apply({ t: "trace", flow: "main", event: { type: "deal", hand, cards: [{ id: a, verdict: "capped" }, { id: b, verdict: "dealt" }] } });
-    expect(run.notDealt[hand]!.map((n) => n.reason)).toEqual(["hand full (lower priority)"]);
+    // The game's board frame follows its trace, as on the wire; read after it.
+    run.apply({ t: "board", flow: "main", hands: { [hand]: [b] }, turns: {} });
+    expect(run.whyNot[hand]!.couldHave.map((n) => n.reason)).toEqual(["hand full (lower priority)"]);
   });
 
   it("reports the played card, and a hello clears the run", () => {
@@ -91,7 +98,8 @@ describe("the Board's Live mode", () => {
     const frame = { t: "trace", flow: "main", event: { type: "deal", hand: "nowhere", cards: [{ id: "ghost", verdict: "tags" }] } } as LiveLinkFrame;
     run.apply(frame);
     expect(run.log[0]!.turn).toBeUndefined();
-    expect(run.notDealt["nowhere"]).toEqual([{ gameId: "ghost", reason: "its tags don't match this slice" }]);
+    // A card whose tags never fit the hand is not a near miss: it is set apart.
+    expect(run.whyNot["nowhere"]).toEqual({ here: 0, looked: 1, couldHave: [], notHere: [{ gameId: "ghost", reason: "its tags don't match this slice" }] });
   });
 
   it("names a card face by gameId for a snapshot, known or not", () => {

@@ -13,7 +13,7 @@ The run carries across (same turns, same hands, same state).
 
 The second is **live debug**. The game streams what it deals and plays back to the editor,
 and the Board shows the game's run instead of its own. You see the hands as the game has
-them, the journal of what the game did, and "Not listed, and why" for the game's own deals.
+them, the journal of what the game did, and **Why not?** for the game's own deals.
 
 The debug half is observe-only, so the game stays in control and the editor is a passive
 mirror. The link is a loopback-only WebSocket (`127.0.0.1`), which only processes on your
@@ -101,8 +101,8 @@ draws.
 ## Live debug on the Board
 
 With a game connected and the Board open, the Board enters **Live** mode. It renders the hands
-as the game has them, its journal fills with what the game deals and plays, "Not listed, and
-why" answers for the game's own deals, and **Follow in the editor** opens each card as the game
+as the game has them, its journal fills with what the game deals and plays, **Why not?**
+answers for the game's own deals, and **Follow in the editor** opens each card as the game
 deals it. The Board's own controls (deal, Next turn, play, the raw state) are off, because the
 game is in control. Seed, Save state, Restore, and Restart hide. When the link drops, or you
 click **Local**, the Board goes back to its own session.
