@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-02
+
 ### Changed
 
 - **Breaking: the project map** (2026-10-01). A project has at most one map, above the boxes:

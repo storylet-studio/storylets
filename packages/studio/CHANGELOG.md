@@ -10,6 +10,40 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-02
+
+### Added
+
+- **One map for the whole project.** A project now has a single map, above its boxes, with a
+  **Map** row in the navigator under Story. Zones are drawn once; each box that uses the map lays
+  out its own hands on it, so a story box and a news box can share one town. Turn it on for a box
+  with **Use the project map** on the box's page, and take it off from the box's **...** menu.
+- **Layers on the map.** Each box on the map is a layer of its hands, in a colour of its own, with
+  Zones and Pictures beneath. Hide or show a layer with its eye, use **Show all** and **Hide all**,
+  or Option-click an eye to see that layer alone. **+ Hand** adds to the active layer and offers
+  the box's kinds of hand by title. Hiding a layer hides its hands from the panels too, and the
+  panel says how many are hidden. Your layers are remembered per project and never saved into it.
+- **A hand opens on its cards.** Click a hand on the map, in the navigator or on the Board, and its
+  **Cards** tab lists what can come up there: **Only here**, **Anywhere in** a zone, **Wherever**
+  an npc or area is, and a count of the rest, with **+ New card here**. A card placed at a hand
+  that can never deal it is shown with the reason.
+- **Group by.** A box's Contents and a deck's cards can be grouped by deck, by hand, or by any of
+  the box's tag groups, such as an npc or an act.
+- **Upgrading older projects.** A project whose map belonged to one box opens with an offer to
+  upgrade it, listing what will change. It's one step you can undo; where it can't go ahead, it
+  says what to rename first.
+
+### Changed
+
+- **A card says where it comes up first.** Its Dealing tab opens with **Comes up at** a hand, or
+  anywhere in a zone, **when** its condition, before When, Priority and Redraw.
+- **Every property says whose it is.** On a project set to **Shared world**, each property reads
+  "One value for every guest." or "Each guest has their own.", following its Shared box. A zone's
+  property also says it is one value for every box that uses the zone.
+- **"Hand" is the one word for where cards are dealt.** A hand's own kind (its template's title,
+  such as "Places in the village") shows under its name.
+- **This release includes the Electron 42.11.10 security update** from 0.14.2.
+
 ## [0.14.2] - 2026-09-30
 
 ### Security

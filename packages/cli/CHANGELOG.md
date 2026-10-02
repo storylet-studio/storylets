@@ -20,8 +20,19 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-02
+
+### Added
+
+- **`format` upgrades a project to the project map.** A project whose boxes each kept a copy of
+  the map is folded into one map above the boxes, and the boxes that had hands on it are put on
+  it. Pictures move to the project's `assets/` folder. Where the copies disagree, or a name would
+  clash once they are one, `format` refuses and says what to change first.
+
 ### Changed
 
+- **Bundles are `storylets/bundle@1`**, carrying the project map once, with zones addressed as
+  `value.<zone>.<name>`. Runtimes from 0.9.0 read them.
 - **`coverage` leads with the cards it reached least.** After the summary, a table lists every
   card under headed columns, **runs dealt**, **dealt**, and **played**, with the never dealt
   first, then the rarest, down to the ones every run deals. `--order deck` lists them deck by

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-02
+
 ### Added
 
 - **The project map** (design/project-map-contract.md). A bundle may carry one zone group above the boxes, `Bundle::map` (a `ProjectMap`: the `group`, always, and inert `geometry` with zones, pictures and sites keyed by box, only when the build asked for it), and a box opts in with `Box::usesMap`. An opted-in box sees the map's group name beside its own groups' names, in peek criteria, `boundBy`, and `count_played_in` / `turns_since_played_in`; its hands bind zones and its cards are tagged with them by id, as with any group. Each zone is ONE value bag, so a zone property written by one box's outcome is the value every opted-in box reads through `@hand`; the `shared` flag still decides per flow against one for the engine. A zone's address is `value.<zone>.<name>` whichever boxes use it, and the box-qualified form is refused naming that address (`"value.box/quay.danger": "quay" is a zone of the project map, which belongs to no box; write "value.quay.danger"`). A hand still deals only from its own box's decks, and play history stays the asking box's own: a play of another box's card at the same zone does not count. `GroupsOfBox(bundle, box)` and `AllTagGroups(bundle)` in `Storylets/Bundle.h` answer which groups a box sees and which groups own value bags.
