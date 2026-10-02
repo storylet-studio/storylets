@@ -196,6 +196,12 @@ held elsewhere on the board, and for shared piles "another playthrough is holdin
 were the nearest miss. **Not for this hand**, folded away underneath, lists the box's other
 cards, whose tags never fit it.
 
+Each card's name opens it in the editor, and so does its reason, at the place the reason is
+about. "Condition not met" opens the card's **Dealing** tab at its **When** condition, lit for
+a moment, and "deck condition not met" opens its deck at the deck's own **When**. The rest (a
+full hand, a cooldown, a copy held elsewhere) open the card's **Dealing** tab, where its
+priority, redraw and copies are set.
+
 Because it's the hand's own deal, everything that decided it counts: conditions that read
 the hand, how many cards it holds, and the copies already on the board. It explains what is
 on the table now. Play a card or change the state, and the next deal is the one to read.

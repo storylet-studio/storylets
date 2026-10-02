@@ -825,10 +825,16 @@ export type SearchMode = "find" | "replace" | "property";
  *  Coverage window's gate links open the Property tab on a ref). */
 export interface SearchOpen { mode?: SearchMode; query?: string }
 
+/** Where on a card's or deck's Dealing tab a navigation lands: the tab itself,
+ *  or its When condition. */
+export type DealingSection = "dealing" | "when";
+
 /** Where a Find hit navigates (the Find window drives the editor over IPC). */
 export type SearchSelection =
-  | { kind: "card"; box: string; deck: string; card: string }
-  | { kind: "deck"; box: string; deck: string }
+  /** `section` opens the document on its Dealing tab, and "when" lands on the
+   *  When condition there: where the Board's Why not? sends a reason. */
+  | { kind: "card"; box: string; deck: string; card: string; section?: DealingSection }
+  | { kind: "deck"; box: string; deck: string; section?: DealingSection }
   | { kind: "template"; box: string; template: string }
   | { kind: "hand"; box: string; hand: string }
   | { kind: "tagGroup"; box: string; group: string };

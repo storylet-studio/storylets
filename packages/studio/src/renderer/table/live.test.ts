@@ -68,7 +68,8 @@ describe("the Board's Live mode", () => {
     const [a, b] = twoCards(table);
     const hand = table.hands()[0]!.gameId;
     run.apply({ t: "trace", flow: "main", event: { type: "deal", hand, cards: [{ id: a, verdict: "dealt" }, { id: b, verdict: "condition" }] } });
-    expect(run.whyNot[hand]!.couldHave).toEqual([{ gameId: table.label(b).gameId, ...(table.label(b).title !== undefined ? { title: table.label(b).title } : {}), reason: "condition not met" }]);
+    // The verdict rides with the reason: it is what the tab's reason links to.
+    expect(run.whyNot[hand]!.couldHave).toEqual([{ gameId: table.label(b).gameId, ...(table.label(b).title !== undefined ? { title: table.label(b).title } : {}), reason: "condition not met", verdict: "condition" }]);
     expect(run.whyNot[hand]!.here).toBe(1);   // no board frame yet: the dealt card stands in
     // A card already in the hand is traced "claimed" by the next deal; it is here, not a miss.
     run.apply({ t: "board", flow: "main", hands: { [hand]: [a] }, turns: {} });
@@ -99,7 +100,7 @@ describe("the Board's Live mode", () => {
     run.apply(frame);
     expect(run.log[0]!.turn).toBeUndefined();
     // A card whose tags never fit the hand is not a near miss: it is set apart.
-    expect(run.whyNot["nowhere"]).toEqual({ here: 0, looked: 1, couldHave: [], notHere: [{ gameId: "ghost", reason: "its tags don't match this slice" }] });
+    expect(run.whyNot["nowhere"]).toEqual({ here: 0, looked: 1, couldHave: [], notHere: [{ gameId: "ghost", reason: "its tags don't match this slice", verdict: "tags" }] });
   });
 
   it("names a card face by gameId for a snapshot, known or not", () => {

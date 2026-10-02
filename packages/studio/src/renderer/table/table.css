@@ -320,6 +320,19 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .whylist { display: flex; flex-direction: column; gap: 10px; }
 .whylist.tight { gap: 4px; }
 .whyitem { display: flex; flex-direction: column; gap: 2px; }
+/* The name and the reason are each a link into the editor: plain text until
+   pointed at, then underlined, as a link in running text is. */
+.whylink {
+  align-self: flex-start; text-align: left;
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: inherit; cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.whylink:hover { text-decoration: underline; text-underline-offset: 2px; }
+.whylink:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.whylink.whycard { font-family: var(--font-read); font-size: 14px; color: var(--ink); }
+.whylink.whyreason { margin-left: 14px; padding-left: 0; font-size: 12.5px; color: var(--muted); }
+.whylink.whyreason:hover { color: var(--ink); }
 .whycard { font-family: var(--font-read); font-size: 14px; color: var(--ink); }
 .whyreason { padding-left: 14px; font-size: 12.5px; color: var(--muted); }
 /* The fold sits under the near misses, not pushed to the panel's foot as the

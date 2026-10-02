@@ -25,7 +25,7 @@ import { playChoices, playedTail } from "./play-choices.js";
 import { setPlayRung, shows } from "../src/play-ladder.js";
 import { createLiveRun } from "./live.js";   // Live Link: the game's run, rebuilt from its frames
 import type { LiveRun } from "./live.js";
-import type { BoardLogEntry, DealtView, LogEntry } from "./model.js";
+import type { BoardLogEntry, DealtView, LogEntry, NotDealt } from "./model.js";
 import type { BoardSaveFile } from "./model.js";
 import type { Performance } from "@storylet-studio/with-patter";
 import { createDebugLink } from "@patterkit/play-helpers";
@@ -1080,10 +1080,42 @@ function whyPanel(): HTMLElement {
   head.append(el("span", { className: "whymeta", text: `${when}. ${plural(why.here, "card")} here now.` }));
   // One block per card: its name, and the reason indented beneath it, so the
   // list reads as cards with their reasons rather than as one run of text.
-  const item = (n: { gameId: string; title?: string; reason?: string }): HTMLElement =>
-    el("div", { className: "whyitem" },
-      el("span", { className: "whycard", text: n.title ?? n.gameId }),
-      n.reason !== undefined ? el("span", { className: "whyreason", text: n.reason }) : null);
+  // Both are ways into the editor (the author's ask, 2026-10-02): the name
+  // opens the card, and the reason opens where it lives - a failed condition
+  // lands on that When, the card's own or its deck's, and the rest (a full
+  // hand, a cooldown, a copy held elsewhere) on the card's Dealing tab, where
+  // priority, redraw and copies are set. A card the build doesn't know (a
+  // game's own, in Live mode) has nowhere to go, and stays plain text.
+  const reasonTarget = (v: NotDealt["verdict"]): { section: "when" | "dealing"; deck: boolean; tip: string } | undefined => {
+    if (v === undefined || v === "tags") return undefined;
+    if (v === "condition") return { section: "when", deck: false, tip: "Open its When condition" };
+    if (v === "deck-gate") return { section: "when", deck: true, tip: "Open the deck's When condition" };
+    return { section: "dealing", deck: false, tip: "Open its dealing settings: priority, redraw and copies" };
+  };
+  const link = (text: string, className: string, tip: string, go: () => void): HTMLElement =>
+    el("button", { className: `whylink ${className}`, text, tip, onClick: go });
+  const item = (n: NotDealt | { gameId: string; title?: string }): HTMLElement => {
+    const name = n.title ?? n.gameId;
+    const reason = "reason" in n ? n.reason : undefined;
+    const home = table?.home(n.gameId);
+    if (home === undefined) {
+      return el("div", { className: "whyitem" },
+        el("span", { className: "whycard", text: name }),
+        reason !== undefined ? el("span", { className: "whyreason", text: reason }) : null);
+    }
+    const target = "verdict" in n ? reasonTarget(n.verdict) : undefined;
+    return el("div", { className: "whyitem" },
+      link(name, "whycard", "Open the card in the editor", () => {
+        void studio.searchReveal({ kind: "card", box: home.box, deck: home.deck, card: home.card });
+      }),
+      reason === undefined ? null
+        : target === undefined ? el("span", { className: "whyreason", text: reason })
+        : link(reason, "whyreason", target.tip, () => {
+          void studio.searchReveal(target.deck
+            ? { kind: "deck", box: home.box, deck: home.deck, section: target.section }
+            : { kind: "card", box: home.box, deck: home.deck, card: home.card, section: target.section });
+        }));
+  };
   const could = el("section", { className: "whysection" },
     el("span", { className: "caption", text: `Could have come up here (${why.couldHave.length})` }));
   if (why.couldHave.length === 0) could.append(el("span", { className: "empty", text: "Every card that could come up here did." }));

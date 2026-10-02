@@ -73,7 +73,7 @@ export function whyNotOf(
   const held = new Set(here);
   const row = (c: { id: string; verdict: TraceVerdict }): NotDealt => {
     const l = label(c.id);
-    return { gameId: l.gameId, ...(l.title !== undefined ? { title: l.title } : {}), reason: verdictReason(c.verdict) };
+    return { gameId: l.gameId, ...(l.title !== undefined ? { title: l.title } : {}), reason: verdictReason(c.verdict), verdict: c.verdict };
   };
   const missed = cards.filter((c) => c.verdict !== "dealt" && c.verdict !== "tags" && !held.has(c.id));
   return {
@@ -130,6 +130,8 @@ export interface NotDealt {
   gameId: string;
   title?: string;
   reason: string;
+  /** The verdict behind the reason: what the Why not? tab's reason links to. */
+  verdict?: TraceVerdict;
 }
 
 

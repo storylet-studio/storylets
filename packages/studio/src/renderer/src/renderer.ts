@@ -860,11 +860,60 @@ async function loadTagGroupDetail(boxId: string, groupId: string): Promise<void>
 // Hits arrive over IPC from the detached Find window (Cmd+F).
 function applySearchSelection(sel: SearchSelection): void {
   if (!project) return;
+  // A section opens the document on its Dealing tab first, and "when" then
+  // lands on its condition: the Board's Why not? sending a reason home.
+  if ((sel.kind === "card" || sel.kind === "deck") && sel.section !== undefined) {
+    setDocTab(sel.kind === "card" ? `card:${sel.deck}/${sel.card}` : `deck:${sel.deck}`, "dealing");
+  }
   if (sel.kind === "card") actions.inspectCard(sel.box, sel.deck, sel.card);
   else if (sel.kind === "deck") actions.focus({ kind: "deck", box: sel.box, deck: sel.deck });
   else if (sel.kind === "template") actions.inspectTemplate(sel.box, sel.template);
   else if (sel.kind === "hand") actions.openHand(sel.box, sel.hand);
   else actions.inspectTagGroup(sel.box, sel.group);
+  if ((sel.kind === "card" || sel.kind === "deck") && sel.section === "when") {
+    void landOnSection("when", sel.kind === "card" ? `card:${sel.deck}/${sel.card}` : `deck:${sel.deck}`);
+  }
+}
+
+/** Bring a marked section of a document (`data-land`, on the document named by
+ *  `data-land-for`) to the middle of the page and light it for a moment, as
+ *  app-shell's `revealRowWhenReady` does for a settings row. Retried over the
+ *  next frames, since a card's detail arrives on its own time after the
+ *  navigation; matching the document as well as the section is what stops it
+ *  lighting the When of the card that was showing before. Giving up is quiet. */
+function landOnSection(name: string, owner: string, tries = 30): Promise<boolean> {
+  const find = (): HTMLElement | undefined =>
+    [...document.querySelectorAll<HTMLElement>("[data-land]")].find((e) => e.dataset.land === name && e.dataset.landFor === owner);
+  const light = (sect: HTMLElement, scroll: boolean): void => {
+    if (scroll) {
+      const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      sect.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
+    }
+    sect.classList.remove("landed");
+    void sect.offsetWidth;
+    sect.classList.add("landed");
+    sect.addEventListener("animationend", () => sect.classList.remove("landed"), { once: true });
+  };
+  // A page can draw twice as it finishes loading (a deck's does), replacing the
+  // section that was just lit. For a moment after landing, a replaced section's
+  // successor is lit in its place, so the mark survives the redraw.
+  const follow = (sect: HTMLElement, left: number): void => {
+    if (left <= 0) return;
+    requestAnimationFrame(() => {
+      if (sect.isConnected) { follow(sect, left - 1); return; }
+      const next = find();
+      if (next) { light(next, false); follow(next, left - 1); } else follow(sect, left - 1);
+    });
+  };
+  return new Promise((resolve) => {
+    const attempt = (left: number): void => {
+      const sect = find();
+      if (sect) { light(sect, true); follow(sect, 60); resolve(true); return; }
+      if (left <= 0) { resolve(false); return; }
+      requestAnimationFrame(() => attempt(left - 1));
+    };
+    attempt(tries);
+  });
 }
 
 // --- inspector host (editing) --------------------------------------------------

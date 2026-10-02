@@ -537,7 +537,12 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     if (lead) view.append(lead.root);
     const condHost = el("div", { className: "insp-exed" });
     mountCondition(condHost, { src: edit.condition ?? "", properties: catalogue, onChange: (src) => { edit.condition = src; commit(); lead?.paintWhen(); } });
-    view.append(section("When", "the condition to be dealt", condHost));
+    const whenSect = section("When", "the condition to be dealt", condHost);
+    // Where a Why not? reason lands (renderer landOnSection), named with its
+    // card, so a landing never lights the When of the card that was showing.
+    whenSect.dataset.land = "when";
+    whenSect.dataset.landFor = `card:${deck.id}/${card.id}`;
+    view.append(whenSect);
 
     const priority = textField(edit.priority ?? "", "insp-input insp-mono insp-short", (v) => { edit.priority = v; }, commit);
     priority.placeholder = "0";
@@ -1743,8 +1748,11 @@ export function renderDeckTabBody(host: HTMLElement, box: BoxDto, deck: DeckDto,
     let gate = deck.gate ?? "";
     const gateHost = el("div", { className: "insp-exed" });
     mountCondition(gateHost, { src: gate, properties: catalogue, onChange: (src) => { gate = src; h.saveDeckConfig(deck.id, { gate }); } });
-    view.append(section("When", "the condition for any card in this deck", gateHost,
-      el("p", { className: "insp-note", text: "Evaluated once per deal. When false, none of this deck's cards are dealt." })));
+    const gateSect = section("When", "the condition for any card in this deck", gateHost,
+      el("p", { className: "insp-note", text: "Evaluated once per deal. When false, none of this deck's cards are dealt." }));
+    gateSect.dataset.land = "when";   // where a Why not? "deck condition" lands
+    gateSect.dataset.landFor = `deck:${deck.id}`;
+    view.append(gateSect);
 
     // Scarcity across playthroughs (design/shared-scarcity.md). The deck is
     // where this normally goes: a pile that is scarce AS A PILE says so once,

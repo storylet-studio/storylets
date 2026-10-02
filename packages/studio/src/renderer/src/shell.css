@@ -562,6 +562,14 @@ button.chip { cursor: pointer; }
 /* two materials (centre-clarity 1): paper (prose, chromeless, on the page)
    and panel - ONE container material for every machinery cluster. */
 .doc-sect { display: flex; flex-direction: column; gap: 6px; }
+/* Where a jump landed (renderer landOnSection, the Board's Why not? sending a
+   reason home): the panel lit for a moment, as app-shell's revealRow lights a
+   settings row. A colour fade, so it stays under reduced motion. */
+.doc-sect.landed > .doc-panel { animation: doc-landed 1.8s var(--ease-standard) both; }
+@keyframes doc-landed {
+  0%, 35% { box-shadow: 0 0 0 2px var(--accent); }
+  100% { box-shadow: 0 0 0 2px transparent; }
+}
 .doc-sect-head { display: flex; align-items: baseline; gap: 8px; }
 .doc-sect-hint { font-size: 12px; color: var(--muted); }
 /* Density (design language: quiet chrome - furniture recessive, shown on
