@@ -1,6 +1,6 @@
-// The Table model driven against the real example project, compiled: peek a
-// box's stock with criteria, read ranking keys from the trace, deal the
-// board's hands, play an outcome from a hand and watch state + trace change.
+// The Table model driven against the real example project, compiled: deal the
+// board's hands, read a hand's latest deal back as Why not?, play an outcome
+// from a hand and watch state + trace change.
 
 import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
@@ -19,7 +19,7 @@ function exampleBundle(): Bundle {
 }
 
 describe("the Board model", () => {
-  it("lists boxes with their tag groups, for the peek criteria pickers", () => {
+  it("lists boxes with their tag groups, for the filter bar", () => {
     const table = new Table(exampleBundle(), 0);
     const enc = table.boxes().find((b) => b.gameId === "encounters")!;
     expect(enc.groups).toEqual([{ gameId: "area", values: ["docks", "market"] }]);
@@ -34,18 +34,6 @@ describe("the Board model", () => {
     expect(docks.chosen).toEqual(["area = docks"]);
     expect(docks.slots).toBe(2);
     expect(docks.box).toBe("encounters");
-  });
-
-  it("peeks the stock with criteria and annotates the list with ranking keys", () => {
-    const table = new Table(exampleBundle(), 0);
-    table.session.setProperty("value.v_docks.danger", 3);
-    const { dealt } = table.peek("encounters", { area: "docks" });
-    const ambush = dealt.find((c) => c.gameId === "ambush-at-the-ford")!;
-    expect(ambush).toBeDefined();
-    expect(ambush.priority).toBe(2);
-    expect(ambush.specificity).toBe(1);
-    // Peeked, not dealt: nothing carries a `from` hand (the look/use rule).
-    expect(dealt.every((c) => c.from === undefined)).toBe(true);
   });
 
   it("answers Why not? for a hand from its latest deal, the near misses apart from the cards never meant for it", () => {
@@ -79,19 +67,6 @@ describe("the Board model", () => {
     const lastFull = reasons.lastIndexOf("hand full (lower priority)");
     expect(lastFull).toBeGreaterThanOrEqual(0); // the hand does overflow here, or this test proves nothing
     if (firstOther >= 0) expect(lastFull).toBeLessThan(firstOther);
-  });
-
-  it("reports considered-but-not-listed cards with a plain reason", () => {
-    const table = new Table(exampleBundle(), 0);
-    // A card gated on danger: with danger low, a docks card fails its condition
-    // rather than being listed, and shows up in notDealt with a reason.
-    table.session.setProperty("value.v_docks.danger", 0);
-    const { notDealt } = table.peek("encounters", { area: "docks" });
-    expect(notDealt.length).toBeGreaterThan(0);
-    for (const n of notDealt) {
-      expect(typeof n.gameId).toBe("string");
-      expect(n.reason.length).toBeGreaterThan(0);
-    }
   });
 
   it("deals every hand and reads the board's contents", () => {

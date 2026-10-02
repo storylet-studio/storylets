@@ -1063,34 +1063,40 @@ function whyPanel(): HTMLElement {
   }
   const name = table?.hands().find((h) => h.gameId === selectedHand)?.title ?? selectedHand;
   const why = liveMode ? liveRun?.whyNot[selectedHand] : table?.whyNot(selectedHand);
-  panel.append(el("span", { className: "caption", text: name }));
+  // The hand as a heading, and when its deal was underneath: the two lines that
+  // say what everything below is about.
+  const head = el("div", { className: "whyhead" }, el("span", { className: "whyhand", text: name }));
+  panel.append(head);
   if (why === undefined) {
-    panel.append(el("p", { className: "empty", text: liveMode ? "The game hasn't dealt this hand yet." : "Nothing has been dealt here yet." }));
+    head.append(el("span", { className: "whymeta", text: liveMode ? "The game hasn't dealt this hand yet." : "Nothing has been dealt here yet." }));
     return panel;
   }
-  const when = `As of its latest deal${why.turn !== undefined ? `, on turn ${why.turn}` : ""}`;
+  const when = `Its latest deal${why.turn !== undefined ? `, on turn ${why.turn}` : ""}`;
   if (why.looked === 0) {
     // An empty deal is not "every card came up": nothing was looked at.
-    panel.append(el("p", { className: "whymeta", text: `${when}, no card was looked at: the hand's own condition wasn't met, or its box has no cards.` }));
+    head.append(el("span", { className: "whymeta", text: `${when} looked at no cards: the hand's own condition wasn't met, or its box has no cards.` }));
     return panel;
   }
-  panel.append(el("p", { className: "whymeta", text: `${when}. ${plural(why.here, "card")} here now.` }));
-  const could = el("div", { className: "notdealt" });
-  could.append(el("span", { className: "caption", text: "Could have come up here" }));
+  head.append(el("span", { className: "whymeta", text: `${when}. ${plural(why.here, "card")} here now.` }));
+  // One block per card: its name, and the reason indented beneath it, so the
+  // list reads as cards with their reasons rather than as one run of text.
+  const item = (n: { gameId: string; title?: string; reason?: string }): HTMLElement =>
+    el("div", { className: "whyitem" },
+      el("span", { className: "whycard", text: n.title ?? n.gameId }),
+      n.reason !== undefined ? el("span", { className: "whyreason", text: n.reason }) : null);
+  const could = el("section", { className: "whysection" },
+    el("span", { className: "caption", text: `Could have come up here (${why.couldHave.length})` }));
   if (why.couldHave.length === 0) could.append(el("span", { className: "empty", text: "Every card that could come up here did." }));
-  for (const n of why.couldHave) {
-    could.append(el("div", { className: "ndrow" },
-      el("span", { className: "ndname", text: n.title ?? n.gameId }),
-      el("span", { className: "ndreason", text: n.reason })));
-  }
+  else could.append(el("div", { className: "whylist" }, ...why.couldHave.map(item)));
   panel.append(could);
   if (why.notHere.length > 0) {
     // Folded: the box's other cards are an inventory, not an explanation, and
-    // listing them open under every hand buried the near misses.
+    // listing them open under every hand buried the near misses. Names only:
+    // their reason is the same for all of them, said once above the list.
     const rest = el("details", { className: "curtain whyrest" }) as HTMLDetailsElement;
     rest.append(el("summary", {}, iconNode("collapsed", 12), `Not for this hand (${why.notHere.length})`));
-    rest.append(el("p", { className: "whymeta", text: "Their tags don't fit it." }));
-    for (const n of why.notHere) rest.append(el("div", { className: "ndrow" }, el("span", { className: "ndname", text: n.title ?? n.gameId })));
+    rest.append(el("span", { className: "whymeta", text: "Their tags don't fit it." }));
+    rest.append(el("div", { className: "whylist tight" }, ...why.notHere.map((n) => item({ gameId: n.gameId, ...(n.title !== undefined ? { title: n.title } : {}) }))));
     panel.append(rest);
   }
   return panel;

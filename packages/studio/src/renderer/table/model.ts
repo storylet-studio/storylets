@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { Engine } from "@storylet-studio/runtime";
-import type { Flow, LogEntry, TraceEvent, TraceVerdict } from "@storylet-studio/runtime";
+import type { Flow, LogEntry, TraceVerdict } from "@storylet-studio/runtime";
 import { SAVEFILE_SCHEMA, effectiveGameId, groupsOfBox, valueAddresses } from "@storylet-studio/model";
 import type { Bundle, PropertyBag, PropertyDecl, SaveFile, ScalarValue, TagGroup } from "@storylet-studio/model";
 import { ENGINE_SCOPES } from "@storylet-studio/dialect";
@@ -39,8 +39,8 @@ const VERDICT_REASON: Record<TraceVerdict, string> = {
   taken: "taken out of the world by another playthrough",
 };
 
-/** The plain-language reason for a verdict (Live mode reads the game's deals
- *  with the same words the Board's own peek uses). */
+/** The plain-language reason for a verdict, the same words for the Board's own
+ *  deals and for a game's in Live mode. */
 export const verdictReason = (verdict: TraceVerdict): string => VERDICT_REASON[verdict] ?? verdict;
 
 /** One hand's latest deal, read back as "why not?" (the Board's Why not? tab).
@@ -90,19 +90,17 @@ export function whyNotOf(
 export interface BoxInfo {
   gameId: string;
   title?: string;
-  /** Tag group gameId -> tag gameIds, for the peek criteria pickers. */
+  /** Tag group gameId -> tag gameIds, for the board's filter bar. */
   groups: { gameId: string; values: string[] }[];
 }
 
-/** A listed card annotated with its ranking keys from the ask trace. */
+/** A card on the board, and the hand it was dealt to. */
 export interface DealtView {
   id: string;
   gameId: string;
   title?: string;
   purpose?: string;
-  priority?: number;
-  specificity?: number;
-  /** from = the hand's gameId; undefined for a peeked list. */
+  /** The hand's gameId. */
   from?: string;
 }
 
@@ -126,19 +124,14 @@ export interface HandView {
   boxId: string;
 }
 
-/** A card the ask considered but did not list, with why (the "not dealt"
- *  panel - the authoring aid lifted from the old Simulate). */
+/** A card a deal considered but did not deal, with why (the Why not? tab -
+ *  the authoring aid lifted from the old Simulate). */
 export interface NotDealt {
   gameId: string;
   title?: string;
   reason: string;
 }
 
-/** An ask's outcome: the list, plus the considered-but-not-listed cards. */
-export interface DealResult {
-  dealt: DealtView[];
-  notDealt: NotDealt[];
-}
 
 export interface StateRow {
   path: string;
@@ -496,79 +489,19 @@ export class Table {
     this.meddles.push({ type: "meddle", seq, label, ...(prev !== undefined ? { prev } : {}), value });
   }
 
-  /** Every box in the bundle with its tag groups, for the peek runner. */
+  /** Every box in the bundle with its tag groups, for the box navigator and
+   *  the filter bar. */
   boxes(): BoxInfo[] {
     return this.bundle.boxes.map((box) => ({
       gameId: box.gameId ?? box.id,
       ...(box.title !== undefined ? { title: box.title } : {}),
-      // The groups the box can peek by: its own, and the project map's when
+      // The groups the box can be filtered by: its own, and the project map's when
       // it is on the map (design/project-map-contract.md 3.1).
       groups: groupsOfBox(this.bundle, box).map((g) => ({
         gameId: g.gameId ?? g.id,
         values: g.tags.map((t) => t.gameId ?? t.id),
       })),
     }));
-  }
-
-  /** Diagnostics that fired during a peek. They belong to the peek's own
-   *  results, never the journal's warning rows: a box-wide peek binds no hand, so a
-   *  condition reading composed @hand state faults THERE without the content
-   *  being wrong anywhere - the false alarm design/board-legibility.md
-   *  records. The journal's warnings stay the ones a real deal or play made. */
-  private readonly peekDiagSeqs = new Set<number>();
-  isPeekDiagnostic(seq: number): boolean {
-    return this.peekDiagSeqs.has(seq);
-  }
-
-  /** Peek a box through raw tag criteria; the list carries each card's
-   *  ranking keys, and the considered-but-not-listed cards a plain reason. */
-  peek(boxGameId: string, criteria: Record<string, string>): DealResult {
-    let peekEvent: Extract<TraceEvent, { type: "peek" }> | undefined;
-    const diags: { where: string; message: string }[] = [];
-    const before = this.session.log();
-    const beforeLast = before.length > 0 ? before[before.length - 1]!.seq : -1;
-    const unsub = this.session.subscribeTrace((e) => {
-      if (e.type === "peek" && e.box === boxGameId) peekEvent = e;
-      if (e.type === "diagnostic") diags.push({ where: e.where, message: e.message });
-    });
-    const list = this.session.peek(boxGameId, criteria);
-    unsub();
-    for (const e of this.session.log()) {
-      if (e.seq > beforeLast && e.type === "diagnostic") this.peekDiagSeqs.add(e.seq);
-    }
-    // The trace keys by gameId; the peek's own list carries both, so the
-    // ranking keys are joined on the gameId the event speaks.
-    const keys = new Map(peekEvent?.cards.map((c) => [c.id, c]));
-    const dealt = list.cards.map((card) => ({
-      id: card.id,
-      gameId: card.gameId,
-      ...(card.title !== undefined ? { title: card.title } : {}),
-      ...(card.purpose !== undefined ? { purpose: card.purpose } : {}),
-      ...(keys.get(card.gameId)?.priority !== undefined ? { priority: keys.get(card.gameId)!.priority } : {}),
-      ...(keys.get(card.gameId)?.specificity !== undefined ? { specificity: keys.get(card.gameId)!.specificity } : {}),
-    }));
-    // A condition that faulted on a composed @hand name is not "condition not
-    // met" and not an authoring error: this peek simply asked without a hand.
-    const diagByCard = new Map<string, string>();
-    for (const d of diags) {
-      const m = /^card (\S+) condition$/.exec(d.where);
-      if (m !== null) diagByCard.set(m[1]!, d.message);
-    }
-    const notDealt: NotDealt[] = (peekEvent?.cards ?? [])
-      .filter((c) => c.verdict !== "dealt")
-      .map((c) => {
-        // `c.id` is the card's gameId (4.4), which is also how a diagnostic's
-        // `where` names it, so the two agree without a second lookup.
-        const label = this.cardLabels.get(this.cardKey(c.id));
-        const gameId = label?.gameId ?? c.id;
-        const msg = diagByCard.get(gameId) ?? diagByCard.get(c.id);
-        const handRef = msg !== undefined ? /@hand\.[a-z0-9_-]+/i.exec(msg)?.[0] : undefined;
-        const reason = msg === undefined ? VERDICT_REASON[c.verdict]
-          : handRef !== undefined ? `depends on the asking hand (reads ${handRef})`
-          : `condition errored: ${msg}`;
-        return { gameId, ...(label?.title !== undefined ? { title: label.title } : {}), reason };
-      });
-    return { dealt, notDealt };
   }
 
   /** The hand's latest deal on this run, as a WhyNot; undefined until it has

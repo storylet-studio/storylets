@@ -244,11 +244,6 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 
 /* The out-of-date banner is the shell's now (app-shell/stale.css). */
 
-/* not-dealt panel: cards the query considered but did not deal, with why */
-.notdealt { display: flex; flex-direction: column; gap: 4px; }
-.ndrow { display: flex; align-items: baseline; gap: 10px; font-size: 13px; }
-.ndname { font-family: var(--font-read); color: var(--muted); min-width: 140px; }
-.ndreason { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 
 /* --- behind the curtain (the diagnostic fold) --------------------------------- */
 .curtain { margin-top: auto; border-top: 1px solid var(--line-soft); padding-top: 10px; }
@@ -314,14 +309,26 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
   display: flex; flex-direction: column; gap: 12px;
   font-size: 13px;
 }
-.whymeta { margin: 0; color: var(--muted); }
+/* The Why not? tab: the hand as a heading, then one block per card - its
+   name, and the reason indented beneath it in a quieter voice. The rail is
+   narrow, so the reason goes under its card rather than beside it. */
+.whypanel { gap: 18px; }
+.whyhead { display: flex; flex-direction: column; gap: 3px; }
+.whyhand { font-family: var(--font-read); font-weight: 600; font-size: 16px; color: var(--ink); }
+.whymeta { display: block; color: var(--muted); font-size: 12.5px; }
+.whysection { display: flex; flex-direction: column; gap: 10px; }
+.whylist { display: flex; flex-direction: column; gap: 10px; }
+.whylist.tight { gap: 4px; }
+.whyitem { display: flex; flex-direction: column; gap: 2px; }
+.whycard { font-family: var(--font-read); font-size: 14px; color: var(--ink); }
+.whyreason { padding-left: 14px; font-size: 12.5px; color: var(--muted); }
 /* The fold sits under the near misses, not pushed to the panel's foot as the
    curtain it borrows its look from is. */
 .whyrest { margin-top: 0; }
-/* The rail is narrow: the reason goes under its card rather than beside it,
-   where a two-word name and a four-word reason both wrapped. */
-.whypanel .ndrow { flex-direction: column; gap: 1px; }
-.whypanel .ndname { min-width: 0; color: var(--ink); }
+/* Under the fold, the note and the names line up with the summary's words,
+   past its chevron. */
+.whyrest > .whymeta, .whyrest .whylist { padding-left: 16px; }
+.whyrest .whycard { color: var(--muted); }
 
 /* Filter chips: which kinds of beat the journal tells. Muted = hidden.
    Pinned in the rail under the tabs, not scrolling with the story. */

@@ -10,6 +10,11 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Why not? tab reads as a list.** The hand is a heading with its deal beneath it, each section counts its cards, and each card stands on its own with its reason indented beneath it, rather than one run of names and reasons in a monospace column. The cards under Not for this hand line up with the fold's title.
+- **The Board model's unused peek is gone**, with the bookkeeping that kept its diagnostics out of the journal. Nothing in the window had called it since the Why not? tab replaced Peek.
+
 ## [0.18.0] - 2026-10-02
 
 ### Changed
