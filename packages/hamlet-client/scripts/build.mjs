@@ -32,7 +32,7 @@ export const published = {
 export const sources = ["world.js", "main.js"].map((f) => [f, join(pkg, "src", f)]);
 const out = join(pkg, "dist");
 
-const PATTER_JS_VERSION = "0.14.0";
+const PATTER_JS_VERSION = "0.19.0";
 const patterMinUrl = `https://github.com/patterkit/patter/releases/download/play-js-v${PATTER_JS_VERSION}/patterplay.min.js`;
 const ourMin = join(root, "packages/play-helpers/dist/storyletengine.min.js");
 /** The Performer, the with-patter package's browser drop-in, built with the libraries. */
