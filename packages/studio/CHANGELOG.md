@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.18.8] - 2026-10-06
+
 ### Fixed
 
 - **Each dialog keeps its own width however the app's styles load** (`@wildwinter/app-shell` 0.46.4). The dialog frame's default width could override a dialog's own when the built styles loaded in a different order, which opened Patterpad's New Project at the width of an ordinary dialog; Storyletter's dialogs are now guarded against the same.
