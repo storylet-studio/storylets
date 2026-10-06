@@ -10,6 +10,12 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.18.5] - 2026-10-06
+
+### Changed
+
+- **The Board performs Patter scenes on Patter's 0.19.0 runtime**, as Patterpad does, in place of 0.14.0: an option greyed out by its condition cannot be chosen, a choice whose every option is greyed out runs dry, and an option's prompt carries its tags. The playable page you publish carries the same runtime, and the Storylet Engine 0.11.1.
+
 ## [0.18.4] - 2026-10-06
 
 ### Changed

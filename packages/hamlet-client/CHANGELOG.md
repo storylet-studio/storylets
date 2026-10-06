@@ -7,6 +7,18 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-06
+
+### Changed
+
+- **Patterplay 0.19.0 and the Storylet Engine 0.11.1 in all four hosts.** The web client, and the Godot, Unity and Unreal projects, pin Patter's released 0.19.0 in place of 0.14.0, on the shared expression kernel `k492cf234`. Patter's play rules since 0.14.0 come with it: an option greyed out by its condition cannot be chosen, and a choice whose every option is greyed out runs dry.
+- **The cross-host saves are current.** The two saves the web client writes for the other hosts' tests were regenerated on these versions, and every host loads both.
+
+### Fixed
+
+- **The Godot project shows each option's words.** It read the option text Patterplay 0.17.0 moved into the option's `prompt`, so on a newer Patterplay every option showed its id.
+- **The Godot project frees both engines when the game goes.** Its `@world` resolver held the game object, which holds the engines, so neither was ever freed.
+
 ## [0.4.1] - 2026-09-30
 
 ### Added
