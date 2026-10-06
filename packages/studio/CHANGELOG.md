@@ -10,6 +10,10 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Fixed
+
+- **"+ Add group" asks for the group's first two conditions.** It used to insert a group starting with a condition you hadn't chosen and an empty second half, which the problems list then flagged. Now you pick both conditions through the usual condition menu, and the group is added only once both are chosen; cancelling at either step adds nothing (`@wildwinter/expr-editor` 0.16.1).
+
 ## [0.18.6] - 2026-10-06
 
 ### Changed
