@@ -446,7 +446,9 @@ func _run_peek(cases: Array) -> int:
 	var pass_count := 0
 	for c in cases:
 		var name: String = c["name"]
-		var engine := StoryletEngine.create(c["bundle"], {"seed": int(c.get("seed", 0))})
+		# The seed as the corpus gives it: the engine reduces it as JS's toUint32
+		# does, and int() here would clamp one of 2^63 or more first.
+		var engine := StoryletEngine.create(c["bundle"], {"seed": c.get("seed", 0)})
 		if engine == null:
 			_fail("peek", name, "engine refused its options")
 			continue
@@ -455,7 +457,9 @@ func _run_peek(cases: Array) -> int:
 			_apply_state(session, c["setup"])
 		var box: String = c["box"]
 		var criteria: Dictionary = c.get("criteria", {})
-		var n = c.get("n")
+		# Absent is no cap (INF); a JSON null is a cap of its own, which returns
+		# nothing (corpus version 12), so it is passed through, never dropped.
+		var n = c["n"] if c.has("n") else INF
 		var expect: Array = c["expect"]
 
 		var ok := true
@@ -537,7 +541,7 @@ func _run_scripted(cases: Array) -> int:
 func _run_scripted_case(c: Dictionary) -> Array:
 	var failures: Array = []
 	var bundle: Dictionary = c["bundle"]
-	var seed := int(c.get("seed", 0))
+	var seed = c.get("seed", 0)
 	var first_engine := StoryletEngine.create(bundle, {"seed": seed})
 	if first_engine == null:
 		_case_finished = true
@@ -665,7 +669,9 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				rc["verdicts"] = {}
 				rc["diagnostics"] = []
 				rc["traces"] = []
-				var list := session.peek(op.get("box", "box"), op.get("criteria", {}), op.get("n"))
+				# A JSON null cap is passed through as null, never dropped: it is a
+				# different cap from an absent one (it returns nothing).
+				var list := session.peek(op.get("box", "box"), op.get("criteria", {}), op["n"] if op.has("n") else INF)
 				check_verdicts.call(at, op, failures)
 				var peek_error: String = list.get("error", "")
 				var expect_peek_error: bool = op.get("expectError", false)
@@ -807,7 +813,7 @@ func _run_scripted_case(c: Dictionary) -> Array:
 			"openFlow":
 				var open_opts := {}
 				if op.has("seed"):
-					open_opts["seed"] = int(op["seed"])
+					open_opts["seed"] = op["seed"]
 				(rc["handles"] as Dictionary)[str(op["flow"])] = (rc["engine"] as StoryletEngine).open_flow(str(op["flow"]), open_opts)
 
 			"closeFlow":
@@ -865,8 +871,11 @@ func _run_scripted_case(c: Dictionary) -> Array:
 					_check_report(at, op.get("expectReport"), next_engine.load_game(envelope), failures)
 					rc["engine"] = next_engine
 					var next_handles := {}
+					# Re-taken AND watched, as a lazily opened flow is (corpus version
+					# 12): a deal straight after a load into an edited build is where
+					# an eviction's reason shows.
 					for f in next_engine.flows():
-						next_handles[(f as StoryletFlow).id] = f
+						next_handles[(f as StoryletFlow).id] = watch.call(f)
 					rc["handles"] = next_handles
 					if op.get("expectSameBytes", false):
 						# Byte parity, this once: the loaded engine must write
@@ -904,7 +913,7 @@ func _run_scripted_case(c: Dictionary) -> Array:
 					var resume_opts := {"restore": saved,
 						"on_restore_report": func(r: Dictionary) -> void: applied.merge(r, true)}
 					if op.has("seed"):
-						resume_opts["seed"] = int(op["seed"])
+						resume_opts["seed"] = op["seed"]
 					(rc["handles"] as Dictionary)[resume_name] = watch.call(live.open_flow(resume_name, resume_opts))
 					if applied.is_empty():
 						failures.append("%s: the restore produced no report" % at)
@@ -920,6 +929,10 @@ func _run_scripted_case(c: Dictionary) -> Array:
 			_:
 				failures.append("%s: unknown op" % at)
 	_case_finished = true
+	# The trace handlers above capture rc, and rc holds the engine and the
+	# handles they are subscribed on: a cycle of the runner's own making. Broken
+	# here, so the exit's leak count speaks for the runtime alone.
+	rc.clear()
 	return failures
 
 

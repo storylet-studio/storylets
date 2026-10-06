@@ -161,8 +161,12 @@ export type ScriptOp =
   /** `expectError` pins the asks that must be REFUSED - notably a tag group
    *  gameId that belongs to another box (group gameIds are box-scoped, so
    *  box-scoping must be a real scope, never a bundle-wide fallback), and
-   *  every verb on a CLOSED flow (the inert-handle rule). */
-  | { op: "peek"; flow?: string; box?: string; criteria?: Record<string, string>; n?: number; expect?: string[]; expectError?: true; expectVerdicts?: Record<string, TraceVerdictKind> }
+   *  every verb on a CLOSED flow (the inert-handle rule).
+   *
+   *  `n` is the cap. JSON `null` is a cap DISTINCT from an absent key (corpus
+   *  version 12): an absent `n` is no cap, and a `null` one returns nothing,
+   *  as JS reads `Math.max(null, 0)`. A runner passes the null through. */
+  | { op: "peek"; flow?: string; box?: string; criteria?: Record<string, string>; n?: number | null; expect?: string[]; expectError?: true; expectVerdicts?: Record<string, TraceVerdictKind> }
   /** `expectVerdicts` pins WHY a card was refused, keyed by card GAMEID,
    *  against the deal's own trace (identity in a trace event is by gameId,
    *  design/engine-server.md 4.4). The reason matters as much as the outcome once
@@ -243,7 +247,11 @@ export type ScriptOp =
    *  into the same bundle, so it is not combined with `into` or `previewOnly`.
    *  Added 2026-10-01: a flow replaced in place left its registry keys at the
    *  END of the save's `registry` section while a load rebuilds them in flow
-   *  order, and the Storylet Server compares saves by bytes. */
+   *  order, and the Storylet Server compares saves by bytes.
+   *
+   *  Every flow the load rebuilds is re-taken AND subscribed to the runner's
+   *  trace sink, exactly as a lazily opened flow is (corpus version 12), so a
+   *  `deal` after the load can pin `expectTrace` and `expectVerdicts`. */
   | { op: "saveLoad"; into?: "B"; expectReport?: Partial<LoadReport>; previewOnly?: true; expectSameBytes?: true }
   /** Park a flow: `saveFlow(flow)` kept under that name in the runner, then
    *  `closeFlow(flow)`. A parked flow is gone from the engine, so it holds no

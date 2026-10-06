@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 
 import { SAVEFILE_SCHEMA, SAVE_SCHEMA, SAVE_SCHEMA_V1 } from "@storylet-studio/model";
-import type { PropertyBag, SaveFile } from "@storylet-studio/model";
+import type { LoadReport, PropertyBag, SaveFile } from "@storylet-studio/model";
 import type { Engine } from "@storylet-studio/runtime";
 
 /** The current engine state (and the host's @world values, if given) as
@@ -39,6 +39,16 @@ export function saveState(engine: Engine, world?: PropertyBag): SaveFile {
   };
 }
 
+/** What a load may be told to do besides restoring. */
+export interface LoadStateOptions {
+  /** Handed the engine's LoadReport for this file as the load happens: what
+   *  the save cost against the running build (cards evicted, properties
+   *  dropped, defaulted or retyped), the same report `engine.loadGame` and
+   *  `engine.previewLoad` return. A callback rather than a return value
+   *  because these functions already return the file's @world values. */
+  onReport?: (report: LoadReport) => void;
+}
+
 /** Restore a {@link saveState} file into an engine. EVERY FLOW IS REBUILT, so
  *  the Flow handles you held before are inert: re-take them with
  *  `engine.getFlow(id)`, NOT `engine.openFlow(id)`. `openFlow` on an existing
@@ -48,25 +58,26 @@ export function saveState(engine: Engine, world?: PropertyBag): SaveFile {
  *  file, and the runtime's own project check still applies. Returns the file's
  *  @world values, if any - the HOST applies them to its container; the engine
  *  never touches them. */
-export function loadState(engine: Engine, file: SaveFile): PropertyBag | undefined {
+export function loadState(engine: Engine, file: SaveFile, opts: LoadStateOptions = {}): PropertyBag | undefined {
   if (!file || typeof file !== "object"
     || file.schema !== SAVEFILE_SCHEMA
     || (file.engine?.schema !== SAVE_SCHEMA && file.engine?.schema !== SAVE_SCHEMA_V1)) {
     throw new Error(`not a storylets save (expected schema "${SAVEFILE_SCHEMA}")`);
   }
-  engine.loadGame(file.engine);
+  const report = engine.loadGame(file.engine);
+  opts.onReport?.(report);
   return file.world;
 }
 
 /** Parse + restore a {@link serializeState} string: the TEXT twin of
  *  loadState, as Patterplay pairs them. Throws on malformed JSON, a foreign
  *  file or a project mismatch. Returns the file's @world values for the host. */
-export function deserializeState(engine: Engine, json: string): PropertyBag | undefined {
+export function deserializeState(engine: Engine, json: string, opts: LoadStateOptions = {}): PropertyBag | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
   } catch {
     throw new Error("not valid JSON");
   }
-  return loadState(engine, parsed as SaveFile);
+  return loadState(engine, parsed as SaveFile, opts);
 }

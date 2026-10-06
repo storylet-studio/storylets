@@ -164,6 +164,9 @@ var _shared_mounts: Array = []
 ## Other engines' game-wide scopes the content names (the bundle's
 ## externalScopes): every one must be registered for a flow to open.
 var _external_scopes: Array = []
+## group_in_box and tag_key_in, memoised: both answer from the bundle alone.
+var _group_memo: Dictionary = {}
+var _tag_key_memo: Dictionary = {}
 
 
 ## The sharing default per scope (design/flows.md): @story shared, the
@@ -488,8 +491,20 @@ static func _is_registry(r) -> bool:
 		and r.has_method("define_foreign") and r.has_method("to_eval_context")
 
 
+## Freed: every flow still open closes, so a handle a host kept refuses (naming
+## the cause) instead of reaching for an engine that is gone. A flow holds its
+## engine weakly (see StoryletFlow), which is what lets this run at all: the
+## two held each other strongly, and neither was ever freed.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		for flow in _flows.values():
+			(flow as StoryletFlow).engine_freed()
+
+
 func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
-	_creation_options = opts
+	# A copy: the host's own Dictionary stays the host's, and an edit to it after
+	# create() must not change what a later hot_swap rebuilds with.
+	_creation_options = opts.duplicate()
 	_bundle = bundle
 	# First, before anything is indexed or registered: a bundle this engine
 	# cannot read faithfully is refused whole (design/project-map-contract.md
@@ -498,7 +513,9 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 	if _init_error != "":
 		return
 	_external_scopes = StoryletBundle.external_scopes(bundle)
-	_seed = int(opts.get("seed", 0))
+	# Reduced as JS's toUint32 reduces it: int() first clamped a seed of 2^63 or
+	# more to int64 before the reduction ever saw it (2026-10-06).
+	_seed = StoryletMulberry32.to_uint32(float(opts.get("seed", 0)))
 	var log_opt = opts.get("log", false)
 	if log_opt is Dictionary:
 		_log_cap = int(log_opt.get("cap", 1000))
@@ -571,8 +588,9 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 			fd["deck"][deck["id"]] = _half("deck", deck.get("properties", []), false)
 			sd["deck"][deck["id"]] = _half("deck", deck.get("properties", []), true)
 		for hand in box["hands"]:
-			fd["hand"][hand["id"]] = _half("hand", hand_decls(hand), false)
-			sd["hand"][hand["id"]] = _half("hand", hand_decls(hand), true)
+			var decls := hand_decls(hand)
+			fd["hand"][hand["id"]] = _half("hand", decls, false)
+			sd["hand"][hand["id"]] = _half("hand", decls, true)
 	# Every box's tags, then the project map's zones ONCE (design/project-map-
 	# contract.md 3.3): a zone is one bag per partition, whichever boxes' hands
 	# are dealt to it.
@@ -747,16 +765,64 @@ func registry_view() -> Dictionary:
 	return _view_cache
 
 
+## @internal - a tag group NAME (or id) resolved inside one box, or null. Tag
+## group names are box-scoped (schema 1), so a name is only ever resolved
+## inside the box being asked, never bundle-wide; ids are project-unique and
+## accepted too, still confined to the box.
+##
+## A box on the project map sees ONE namespace: its own groups, then the map's
+## group (design/project-map-contract.md 3.1). A box that has not opted in does
+## not see the map's name at all, so a peek naming it there is the ordinary
+## unknown-group refusal. Own groups first is stated for determinism only: a
+## bundle that loads never has the two share a name.
+##
+## Memoised, because the answer depends on the bundle alone and the history
+## functions ask it once per candidate card per ask.
+func group_in_box(box: Dictionary, reference: String) -> Variant:
+	var key := "%s%s%s" % [box["id"], REPORT_SEP, reference]
+	if _group_memo.has(key):
+		return _group_memo[key]
+	var found = null
+	var groups := StoryletBundle.groups_of_box(_bundle, box)
+	for group in groups:
+		if StoryletBundle.effective_game_id(group) == reference:
+			found = group
+			break
+	if found == null:
+		for group in groups:
+			if group["id"] == reference:
+				found = group
+				break
+	_group_memo[key] = found
+	return found
+
+
+## @internal - a group NAME and tag name resolved in one box, as a flow's
+## play-history index key, with that box in it: a zone's plays in another box
+## are not this box's history. Null when either is unknown here, which reads as
+## "never". Memoised like group_in_box, for the same reason.
+func tag_key_in(box: Dictionary, group: String, tag: String) -> Variant:
+	var memo_key := "%s%s%s%s%s" % [box["id"], REPORT_SEP, group, REPORT_SEP, tag]
+	if _tag_key_memo.has(memo_key):
+		return _tag_key_memo[memo_key]
+	var key = null
+	var found = group_in_box(box, group)
+	if found != null:
+		for v in found["tags"]:
+			if v.get("gameId") == tag:
+				key = StoryletFlow._tag_key(box["id"], found["id"], v["id"])
+				break
+	_tag_key_memo[memo_key] = key
+	return key
+
+
+## A hand's declarations: its template's, for a template hand. Only ever
+## called once _init has indexed every template, so an unknown template has
+## none.
 func hand_decls(hand: Dictionary) -> Array:
 	if hand.has("template"):
 		var known = _templates_by_id.get(hand["template"])
-		if known != null:
-			return known.get("properties", [])
-		for box in _bundle["boxes"]:
-			for t in box["handTemplates"]:
-				if t["id"] == hand["template"]:
-					return t.get("properties", [])
-		return []
+		return known.get("properties", []) if known != null else []
 	return hand.get("properties", [])
 
 
@@ -862,7 +928,7 @@ func _open(id: String, opts: Dictionary, claim: bool) -> StoryletFlow:
 	# The world's claims as they stand WITHOUT this name, taken before the
 	# replace: a resume competes with the other flows, never with the flow it is
 	# replacing (which is about to release everything it holds).
-	var other_claims = _shared_claims_except(id) if opts.has("restore") else null
+	var other_claims = shared_claims(id) if opts.has("restore") else null
 	var old = _flows.get(id)
 	if old != null:
 		# Say so BEFORE the old flow goes inert, while its board is readable.
@@ -872,7 +938,7 @@ func _open(id: String, opts: Dictionary, claim: bool) -> StoryletFlow:
 		(old as StoryletFlow).mark_closed()
 	if not claim:
 		_registry.discard_parked(flow_prefix(id))
-	var flow := StoryletFlow.new(self, id, int(opts.get("seed", _seed)))
+	var flow := StoryletFlow.new(self, id, StoryletMulberry32.to_uint32(float(opts.get("seed", _seed))))
 	_flows[id] = flow
 	if opts.has("restore"):
 		var draft := _empty_draft()
@@ -959,7 +1025,27 @@ var _engine_seq: int = 0
 
 ## The run's log, oldest first: Array of the flow's log entry plus "flow".
 func log() -> Array:
+	_engine_log = _capped(_engine_log, _log_cap)
 	return _engine_log
+
+
+## @internal - append one entry to a capped log; returns the log to keep.
+## Trimmed back to the cap only once it reaches TWICE the cap, so a full log
+## costs one slice per `cap` events where it used to cost one per event; what
+## reads a log trims it first (_capped), so a reader never sees the slack.
+static func _append_capped(entries: Array, entry: Dictionary, cap: int) -> Array:
+	entries.append(entry)
+	if entries.size() > cap and entries.size() >= cap * 2:
+		return entries.slice(entries.size() - cap)
+	return entries
+
+
+## @internal - a log as its reader sees it: the newest `cap` entries. A
+## negative cap is a log that retains nothing, so it is never trimmed.
+static func _capped(entries: Array, cap: int) -> Array:
+	if cap >= 0 and entries.size() > cap:
+		return entries.slice(entries.size() - cap)
+	return entries
 
 
 func clear_log() -> void:
@@ -974,9 +1060,52 @@ func mark_taken(card_id: String) -> void:
 	_spent[card_id] = true
 
 
-## Shared claims across every LIVE flow, card id -> holders. Derived, which is
-## what makes close_flow and the open_flow replace release what a flow was
-## holding: its board leaves the map with it.
+## @internal - keys in the order a JS object holds them (ruling E,
+## 2026-10-06): the integer-like ones first, ascending, then the rest in the
+## order given. JS is the contract for every keyed result, and any JS that reads
+## a save sees this order whatever wrote it (JSON.parse applies it), so the
+## save's flows, the order a load reopens them and a deal's or a board's hands
+## all follow it.
+static func js_key_order(keys: Array) -> Array:
+	var ints: Array = []
+	var rest: Array = []
+	for k in keys:
+		if _is_array_index(str(k)):
+			ints.append(k)
+		else:
+			rest.append(k)
+	if ints.is_empty():
+		return keys
+	ints.sort_custom(func(a, b) -> bool: return str(a).to_int() < str(b).to_int())
+	return ints + rest
+
+
+## @internal - the same Dictionary in JS object order: itself when no key is
+## integer-like, which is nearly always.
+static func js_ordered(d: Dictionary) -> Dictionary:
+	var keys := js_key_order(d.keys())
+	if keys == d.keys():
+		return d
+	var out := {}
+	for k in keys:
+		out[k] = d[k]
+	return out
+
+
+## A JS array index: "0", or digits with no leading zero, below 2^32 - 1. Only
+## those are ordered first; "007" and "4294967295" are ordinary keys.
+static func _is_array_index(k: String) -> bool:
+	if k == "0":
+		return true
+	if k.is_empty() or k.length() > 10 or k.begins_with("0"):
+		return false
+	for i in k.length():
+		var c := k.unicode_at(i)
+		if c < 48 or c > 57:
+			return false
+	return k.to_int() < 4294967295
+
+
 ## The spent set as a sorted Array, so a save is byte-stable for a diff.
 func _spent_ids() -> Array:
 	var ids: Array = _spent.keys()
@@ -984,20 +1113,15 @@ func _spent_ids() -> Array:
 	return ids
 
 
-func shared_claims() -> Dictionary:
-	var counts := {}
-	for flow in _flows.values():
-		for id in (flow as StoryletFlow).held_card_ids():
-			counts[id] = counts.get(id, 0) + 1
-	return counts
-
-
-## The same ledger with one name left out: what the REST of the world holds,
-## which is the question a resume under that name has to ask.
-func _shared_claims_except(id: String) -> Dictionary:
+## Shared claims across every LIVE flow, card id -> holders. Derived, which is
+## what makes close_flow and the open_flow replace release what a flow was
+## holding: its board leaves the map with it. With `except_id`, that name is
+## left out: what the REST of the world holds, which is the question a resume
+## under that name has to ask.
+func shared_claims(except_id = null) -> Dictionary:
 	var counts := {}
 	for flow_id in _flows:
-		if str(flow_id) == id:
+		if except_id != null and str(flow_id) == str(except_id):
 			continue
 		for card_id in (_flows[flow_id] as StoryletFlow).held_card_ids():
 			counts[card_id] = counts.get(card_id, 0) + 1
@@ -1071,7 +1195,7 @@ func _resolve_shared(path: String) -> Dictionary:
 			if d["name"] == name:
 				return {"error": '"%s" is per-flow state - read it on a Flow, not the Engine' % path}
 		return {"error": 'no property at "%s"' % path}
-	if parts.size() == 3 and ["box", "deck", "hand", "value"].has(parts[0]):
+	if parts.size() == 3 and OWNED_KINDS.has(parts[0]):
 		var kind := parts[0]
 		var segment := parts[1]
 		var name := parts[2]
@@ -1136,25 +1260,25 @@ func list_properties() -> Array:
 		if d.has("stages"):
 			row["stages"] = d["stages"]
 		out.append(row)
-	_add_rows(out, "story", _shared["story"])
-	for kind in ["box", "deck", "hand", "value"]:
+	_add_rows(out, _shared["story"])
+	for kind in OWNED_KINDS:
 		for id in _shared[kind]:
-			_add_rows(out, address_of(kind, id), _shared[kind][id])
+			_add_rows(out, _shared[kind][id])
 	return out
 
 
-static func _add_rows(out: Array, prefix: String, bag: StoryletPropertyBag) -> void:
+## A bag's examiner rows, copied. The bag addresses each row itself (its
+## path_prefix), so there is no mount label to add.
+static func _add_rows(out: Array, bag: StoryletPropertyBag) -> void:
 	for row in bag.rows():
-		var r: Dictionary = row.duplicate()
-		# The bag addressed the row already; prefix stays as the mount label.
-		out.append(r)
+		out.append((row as Dictionary).duplicate())
 
 
 ## The SHARED kernel bags with their store path prefixes (the state logger's
 ## mount surface). The @world container is the host's own bag.
 func list_bags() -> Array:
 	var mounts: Array = [{"prefix": "story", "bag": _shared["story"]}]
-	for kind in ["box", "deck", "hand", "value"]:
+	for kind in OWNED_KINDS:
 		for id in _shared[kind]:
 			mounts.append({"prefix": address_of(kind, id), "bag": _shared[kind][id]})
 	return mounts
@@ -1162,8 +1286,13 @@ func list_bags() -> Array:
 
 ## Every flow's trace, one stream: handler.call(flow_id, event). Returns the
 ## unsubscribe Callable.
+##
+## The same Callable subscribed twice is registered once (ruling F), so one
+## unsubscribe removes it. Delivery is from a copy (emit_engine), so a
+## subscribe or unsubscribe during an event takes effect from the next.
 func subscribe_trace(handler: Callable) -> Callable:
-	_engine_trace_handlers.append(handler)
+	if not _engine_trace_handlers.has(handler):
+		_engine_trace_handlers.append(handler)
 	return func() -> void: _engine_trace_handlers.erase(handler)
 
 
@@ -1179,15 +1308,15 @@ func emit_engine(flow_id: String, event: Dictionary, turn_stamp = null) -> void:
 	# Retain first, then notify: the run's log is the record, subscribers are
 	# the live view, and a handler that reads log() should see its own event.
 	if _log_cap >= 0:
-		var entry: Dictionary = event.duplicate(true)
+		# Shallow, as the flow's own log copies: the entry gets its own keys, and
+		# the event's nested parts (a deal's card list) are shared, never written.
+		var entry: Dictionary = event.duplicate()
 		entry["flow"] = flow_id
 		entry["seq"] = _engine_seq
 		if turn_stamp != null:
 			entry["turn"] = turn_stamp
 		_engine_seq += 1
-		_engine_log.append(entry)
-		if _engine_log.size() > _log_cap:
-			_engine_log = _engine_log.slice(_engine_log.size() - _log_cap)
+		_engine_log = _append_capped(_engine_log, entry, _log_cap)
 	# Over a COPY, and skipping anything freed. Two failures this prevents,
 	# both found by the pre-release audit (2026-08-29):
 	#
@@ -1210,7 +1339,7 @@ func emit_engine(flow_id: String, event: Dictionary, turn_stamp = null) -> void:
 
 func _partition_values(p: Dictionary) -> Dictionary:
 	var out := {"story": (p["story"] as StoryletPropertyBag).save(), "box": {}, "deck": {}, "hand": {}, "value": {}}
-	for kind in ["box", "deck", "hand", "value"]:
+	for kind in OWNED_KINDS:
 		for id in p[kind]:
 			out[kind][id] = (p[kind][id] as StoryletPropertyBag).save()
 	return out
@@ -1240,7 +1369,10 @@ func _partition_values(p: Dictionary) -> Dictionary:
 func hot_swap(bundle: Dictionary, opts: Dictionary = {}) -> Dictionary:
 	var r := _swap(bundle, opts)
 	if not r["ok"]:
-		push_error("StoryletEngine.hot_swap: " + str(r["error"]))
+		# The project refusal already names itself ("hotSwap: the bundle is for
+		# project ...", the text all four runtimes share), so it is not prefixed twice.
+		var message := str(r["error"])
+		push_error(message if message.begins_with("hotSwap:") else "StoryletEngine.hot_swap: " + message)
 	return r
 
 
@@ -1253,7 +1385,9 @@ func _swap(bundle: Dictionary, opts: Dictionary = {}) -> Dictionary:
 	if _init_error != "":
 		return _swap_refused("this engine was refused its registration (%s)" % _init_error)
 	if str(bundle["content"]["project"]) != str(_bundle["content"]["project"]):
-		return _swap_refused('save is for project "%s", bundle is "%s"' % [str(_bundle["content"]["project"]), str(bundle["content"]["project"])])
+		# Names the BUNDLE: there is no save in a hot swap, so the load's own "save
+		# is for project" wording pointed the reader at the wrong thing.
+		return _swap_refused('hotSwap: the bundle is for project "%s", this engine runs "%s"' % [str(bundle["content"]["project"]), str(_bundle["content"]["project"])])
 	var options := _creation_options.duplicate()
 	options.merge(opts, true)
 	options.erase("registry")
@@ -1346,7 +1480,7 @@ static func _swap_refused(message: String) -> Dictionary:
 ## saves it once itself, beside each engine's envelope.
 func save_game() -> Dictionary:
 	var out_flows := {}
-	for id in _flows:
+	for id in js_key_order(_flows.keys()):
 		out_flows[id] = (_flows[id] as StoryletFlow).snapshot(false)
 	var out := {
 		"schema": StoryletBundle.SAVE_SCHEMA,
@@ -1376,8 +1510,12 @@ func _registry_section() -> Dictionary:
 	var keys: Array = []
 	for m in _shared_mounts:
 		keys.append(m["key"])
-	for flow in _flows.values():
-		keys.append_array((flow as StoryletFlow).registered_keys())
+	# In the order the save lists the flows, which is JS object order (ruling E):
+	# a flow id that looks like an integer comes first, and a load reopens the
+	# flows in that order, so flows() order would save "main" before "7" here
+	# and the loaded engine "7" first.
+	for id in js_key_order(_flows.keys()):
+		keys.append_array((_flows[id] as StoryletFlow).registered_keys())
 	keys.append_array(all.keys())
 	for key in keys:
 		if all.has(key) and not out.has(key):
@@ -1420,7 +1558,7 @@ func preview_load(envelope: Dictionary) -> Dictionary:
 ## build and resumed under the next raises the same questions. Pure.
 func preview_flow_restore(id: String, saved: Dictionary) -> Dictionary:
 	var draft := _empty_draft()
-	_plan_flow_restore(id, saved, _shared_claims_except(id), draft)
+	_plan_flow_restore(id, saved, shared_claims(id), draft)
 	return _finish_report(_bundle["content"], _bundle["content"], [id], draft)
 
 
@@ -1588,7 +1726,7 @@ static func _walk_scope(decls: Array, saved: Dictionary, prefix: String, flow, d
 func _walk_partition(decls: Dictionary, values: Dictionary, flow, draft: Dictionary) -> Dictionary:
 	var out := {"story": _walk_scope(decls["story"], values.get("story", {}), "story.", flow, draft),
 		"box": {}, "deck": {}, "hand": {}, "value": {}}
-	for kind in ["box", "deck", "hand", "value"]:
+	for kind in OWNED_KINDS:
 		var decl_kind: Dictionary = decls[kind]
 		var saved_kind: Dictionary = values.get(kind, {})
 		var ids := {}
@@ -1708,7 +1846,9 @@ func _plan_load(envelope: Dictionary) -> Dictionary:
 		_sections_of(shared_clean, null, sections)
 	var flows_clean := {}
 	var ids: Array = []
-	for id in saved_flows:
+	# The flows reopen in the order JS reads the envelope's object in (ruling E),
+	# whatever order this Dictionary was built or parsed in.
+	for id in js_key_order(saved_flows.keys()):
 		var fid := str(id)
 		ids.append(fid)
 		var with_props: Dictionary = (saved_flows[id] as Dictionary).duplicate()

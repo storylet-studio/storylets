@@ -71,11 +71,17 @@ namespace StoryletStudio.StoryletEngine
         }
 
         /// <summary>Construct a play-ready ENGINE on this bundle (all play
-        /// happens on a Flow from OpenFlow - design/flows.md).</summary>
-        public Engine CreateEngine(double seed = 0, EngineOptions opts = null)
+        /// happens on a Flow from OpenFlow - design/flows.md).
+        ///
+        /// <paramref name="seed"/> is a shorthand for EngineOptions.Seed and wins
+        /// over it only when given. It used to default to 0 and always be
+        /// written, so CreateEngine(opts: new EngineOptions { Seed = 7 }) quietly
+        /// played seed 0. Nullable rather than gone, so CreateEngine(42) and
+        /// CreateEngine(seed, opts) still compile as they did.</summary>
+        public Engine CreateEngine(double? seed = null, EngineOptions opts = null)
         {
             opts = opts ?? new EngineOptions();
-            opts.Seed = seed;
+            if (seed.HasValue) opts.Seed = seed.Value;
             return new Engine(Bundle, opts);
         }
 

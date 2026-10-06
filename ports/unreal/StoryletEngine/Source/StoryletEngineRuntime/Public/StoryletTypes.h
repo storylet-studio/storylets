@@ -1,4 +1,4 @@
-// Blueprint-facing types for the Storylet Engine session surface. The pure
+// Blueprint-facing types for the Storylet Engine's engine and flow surface. The pure
 // core's std:: views (DealtCard / OutcomeView / BoxView / PropertyRow)
 // are converted to these at the UObject boundary; nothing std crosses it.
 #pragma once
@@ -178,9 +178,10 @@ enum class EStoryletLogKind : uint8
 };
 
 /** One retained-log entry, flattened for Blueprint: the kind, its place in
- *  session time (Seq orders the whole session; Turn is the clock of the box
- *  the event happened in, bHasTurn false for diagnostics), and the one-line
- *  Summary the examiner's log panel shows (write lines share the state
+ *  the flow's time (Seq orders the whole flow, or the whole run on the
+ *  engine's log; Turn is the clock of the box the event happened in,
+ *  bHasTurn false for diagnostics), and the one-line Summary the
+ *  examiner's log panel shows (write lines share the state
  *  logger's "path: from -> to" reading). The typed per-kind payloads stay on
  *  the core's TraceEvent; no generic value crosses a BP pin. */
 USTRUCT(BlueprintType)
@@ -261,7 +262,7 @@ struct FStoryletPropertyView
 // The bundle-level description, flattened for Blueprint. Read-only by
 // construction: this is the shape that shipped, not live state, so a value
 // struct on a pin carries no mis-set risk (the same call as FStoryletFieldEntry
-// on a dealt card, and unlike the session's typed-only property accessors).
+// on a dealt card, and unlike the engine's and flows' typed-only property accessors).
 // Every struct also carries the ready-made display string its view renders, so
 // a Blueprint can print a row without switching on anything.
 

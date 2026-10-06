@@ -68,7 +68,17 @@ export interface LiveLinkOptions {
   onBundle?: (msg: { build: string; data: string }) => void;
 }
 
+/** Where a link is: the same three words Unity's LiveLinkState, Godot's
+ *  `link_state()` and Unreal's `LinkState` carry. */
+export type LiveLinkState = "connecting" | "connected" | "closed";
+
 export interface LiveLink {
+  /** Where the link is, read at the moment of asking: "connecting" until the
+   *  socket opens, "connected" while it is open, "closed" once it has closed,
+   *  failed, been closed by `close()`, or there was no WebSocket to open. An
+   *  examiner shows it so a host can tell "the editor is not listening" from
+   *  "I never attached". */
+  readonly state: LiveLinkState;
   /** Start forwarding this ENGINE's trace: every flow's events, each frame
    *  naming the flow it came from, so the editor can follow one participant
    *  and switch. An earlier engine is detached first. Sends a board snapshot
@@ -145,7 +155,7 @@ export function createLiveLink(opts: LiveLinkOptions): LiveLink {
 
   if (!Ctor) {
     // No WebSocket available (no global, none passed): a silent no-op link.
-    return { attach() {}, detach() {}, setBuild() {}, close() { closed = true; } };
+    return { state: "closed", attach() {}, detach() {}, setBuild() {}, close() { closed = true; } };
   }
 
   const flush = (): void => {
@@ -253,6 +263,10 @@ export function createLiveLink(opts: LiveLinkOptions): LiveLink {
   };
 
   return {
+    get state(): LiveLinkState {
+      if (closed) return "closed";
+      return sock !== null && sock.readyState === OPEN ? "connected" : "connecting";
+    },
     attach(next: Engine): void {
       if (closed) return;
       detach();

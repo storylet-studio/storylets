@@ -83,7 +83,7 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 	// the intended refusal as a test failure.
 	AddExpectedError(TEXT("failed to compile bundle"), EAutomationExpectedErrorFlags::Contains, 1);
 	// Likewise ApplyLiveBundle refusing a bundle from another project, below.
-	AddExpectedError(TEXT("ApplyLiveBundle - save is for project"), EAutomationExpectedErrorFlags::Contains, 1);
+	AddExpectedError(TEXT("ApplyLiveBundle - hotSwap: the bundle is for project"), EAutomationExpectedErrorFlags::Contains, 1);
 	// And UStoryletSave refusing a save with somebody else's schema tag.
 	AddExpectedError(TEXT("LoadStateFromJson - not a storylets save"), EAutomationExpectedErrorFlags::Contains, 1);
 
@@ -400,9 +400,11 @@ bool FStoryletEngineSmokeTest::RunTest(const FString& Parameters)
 		// place. The handle, the subscription and the run all survive.
 		FString NewJson = FString(SmokeBundleJson).Replace(TEXT("smokehash"), TEXT("smokehash2"));
 		FString ApplyError;
+		FString ApplyReport;
 		TestTrue(TEXT("ApplyLiveBundle applies a pushed bundle"),
-			FStoryletLiveLink::ApplyLiveBundle(Engine, NewJson, ApplyError));
+			FStoryletLiveLink::ApplyLiveBundle(Engine, NewJson, ApplyError, ApplyReport));
 		TestTrue(TEXT("apply error empty"), ApplyError.IsEmpty());
+		TestTrue(TEXT("the swap's report comes back, naming the new build"), ApplyReport.Contains(TEXT("smokehash2")));
 		TestEqual(TEXT("the engine now plays the new bundle"),
 			Engine->GetBundle() ? Engine->GetBundle()->GetBuildId() : FString(), FString(TEXT("smokehash2")));
 		TestFalse(TEXT("the flow wrapper survived the swap, re-bound by name"), MainFlow->IsClosed());

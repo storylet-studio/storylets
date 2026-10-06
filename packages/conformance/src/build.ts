@@ -35,8 +35,17 @@ import type {
  *  carry them, and the `load` case kind. No earlier expectation changed.
  *  11: a save is history-independent: `saveLoad`'s `expectSameBytes` and
  *  `parkFlow`'s `keepOpen`, and two cases replacing a flow in place. No
- *  earlier expectation changed. */
-export const CORPUS_VERSION = 11;
+ *  earlier expectation changed.
+ *  12: the engine review (2026-10-06): a peek consumes no draws, a play is
+ *  all-or-nothing, a taken card is evicted (`taken`), a card whose deck moved
+ *  box is evicted as `vanished`, a NaN priority is not dealt, and the pins
+ *  for value-to-text, the `$` grammars, seeds past 2^63, integer-like flow
+ *  ids and the draw count of a deal. A peek op's `n` may be JSON `null`,
+ *  distinct from absent, and the flows a `saveLoad` rebuilds are watched. Two
+ *  earlier cases advanced the PRNG with a peek and now advance it with a deal
+ *  ("save/load carries the PRNG state", "a parked flow resumes on the same
+ *  stream"); their expectations are unchanged. */
+export const CORPUS_VERSION = 12;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>

@@ -23,6 +23,13 @@ var _panel: PanelContainer = null
 var _engine: StoryletEngine = null
 
 
+## A session whose one property has moved on to "dusk": what the refresh reads.
+class _Dusk:
+	extends RefCounted
+	func get_property(_path: String) -> Variant:
+		return "dusk"
+
+
 func _check(label: String, ok: bool, detail: String = "") -> void:
 	if ok:
 		print("PASS %s" % label)
@@ -111,6 +118,20 @@ func _process(_delta: float) -> bool:
 					"item_count=%d, expected %d" % [ob.item_count, ladder.size()])
 				_check("it opens on the current stage", ob.selected == 1,
 					"selected=%d, expected 1 (noon)" % ob.selected)
+				# ...and FOLLOWS the story, as an enum row does: the refresh redraws
+				# a quality's dropdown from the session's current value. It skipped
+				# qualities until 2026-10-06, so the row kept its first stage.
+				# Alone, because open_flow("alice") above replaced the flow the
+				# panel's own rows read, and the panel's tick rebuilds those first.
+				var reset := Button.new()
+				var rows: Array = _panel._value_widgets
+				_panel._value_widgets = [{"widget": ob, "type": "quality", "session": _Dusk.new(),
+					"path": "story.hour", "default": "dawn", "reset": reset}]
+				_panel._refresh_values()
+				_check("a quality row follows the story's value", ob.selected == 2,
+					"selected=%d, expected 2 (dusk)" % ob.selected)
+				_panel._value_widgets = rows
+				reset.free()
 			StoryletDebug.unregister(_engine)
 		_:
 			_check("unregistering empties the panel", body.contains("No engines registered"), body)

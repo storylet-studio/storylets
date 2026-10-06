@@ -10,14 +10,21 @@
 
 bool FStoryletLiveLink::ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError)
 {
+	FString Report;
+	return ApplyLiveBundle(Engine, Data, OutError, Report);
+}
+
+bool FStoryletLiveLink::ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError, FString& OutReportJson)
+{
+	OutReportJson.Reset();
 	if (!Engine)
 	{
-		OutError = TEXT("no session");
+		OutError = TEXT("no engine");
 		return false;
 	}
 	UStoryletBundle* NewBundle = UStoryletBundle::LoadFromJsonString(Data, OutError);
 	if (!NewBundle) return false;
-	return Engine->ApplyLiveBundle(NewBundle, OutError);
+	return Engine->ApplyLiveBundleWithReport(NewBundle, OutError, OutReportJson);
 }
 
 #if !UE_BUILD_SHIPPING

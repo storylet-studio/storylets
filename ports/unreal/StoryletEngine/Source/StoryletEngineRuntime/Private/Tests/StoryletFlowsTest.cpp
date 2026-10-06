@@ -10,7 +10,10 @@
 // GetFlow("main")). The JS engine.getFlow answers with every restored flow.
 // Beside it, the rule the same list broke from the other side: a wrapper
 // whose flow was replaced or closed stays closed, and the load's re-bind must
-// not point it at the restored flow of the same name.
+// not point it at the restored flow of the same name. Then the surface the
+// October 2026 engine review added or corrected: OnReplacedFlow, the restore
+// report out of OpenFlowFromJson, OpenFlowSeeded, Peek's count, and a closed
+// flow that refuses AND logs with the core's own words.
 
 #include "Misc/AutomationTest.h"
 
@@ -20,6 +23,7 @@
 #include "StoryletEngine.h"
 #include "StoryletSave.h"
 #include "StoryletTypes.h"
+#include "StoryletReplacedFlowListener.h"
 
 #include "Storylets/Kernel.h"   // the shared kernel (Expr/), its names in `storylets`
 #include "Storylets/Save.h"     // saveRegistry / loadRegistry, as the site's example uses them
@@ -116,7 +120,11 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 
 		UStoryletEngine* Fresh = UStoryletEngine::Create(Bundle);
 		if (!TestNotNull(TEXT("a fresh standalone engine"), Fresh)) return false;
-		TestTrue(TEXT("the save loads into an engine that never opened a flow"), UStoryletSave::LoadStateFromJson(Fresh, Saved));
+		FString LoadReport;
+		TestTrue(TEXT("the save loads into an engine that never opened a flow"),
+			UStoryletSave::LoadStateFromJsonWithReport(Fresh, Saved, LoadReport));
+		TestTrue(TEXT("and hands back its report, naming both flows"),
+			LoadReport.Contains(TEXT("\"main\"")) && LoadReport.Contains(TEXT("\"side\"")));
 		TestNotNull(TEXT("GetFlow hands back main"), Fresh->GetFlow(TEXT("main")));
 		TestNotNull(TEXT("GetFlow hands back side"), Fresh->GetFlow(TEXT("side")));
 		TestEqual(TEXT("Flows lists both"), Fresh->Flows().Num(), 2);
@@ -146,6 +154,76 @@ bool FStoryletFlowsTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("GetFlow after the load hands back the held wrapper"), Engine->GetFlow(TEXT("main")), Second);
 		UStoryletFlow* RestoredGone = Engine->GetFlow(TEXT("gone"));
 		TestTrue(TEXT("GetFlow hands back a fresh wrapper for the restored 'gone'"), RestoredGone && RestoredGone != Gone && !RestoredGone->IsClosed());
+	}
+
+	// --- OnReplacedFlow: the core's diagnostic hook reaches Blueprint ------------------
+	{
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		if (!TestNotNull(TEXT("engine"), Engine)) return false;
+		UStoryletReplacedFlowListener* Listener = NewObject<UStoryletReplacedFlowListener>();
+		Engine->OnReplacedFlow.AddDynamic(Listener, &UStoryletReplacedFlowListener::OnReplaced);
+		Engine->OpenFlow(TEXT("main"));
+		Engine->OpenFlow(TEXT("main"));   // nothing dealt yet: no call
+		UStoryletFlow* Flow = Engine->GetFlow(TEXT("main"));
+		TestEqual(TEXT("a hand was dealt"), Flow ? Flow->Deal(TEXT("q")).Num() : 0, 1);
+		Engine->OpenFlow(TEXT("main"));   // replaces a flow holding one card
+		TestEqual(TEXT("OnReplacedFlow fired once, naming the flow and its one card"),
+			FString::Join(Listener->Calls, TEXT(",")), FString(TEXT("main:1")));
+	}
+
+	// --- OpenFlowFromJson hands back the restore's report ------------------------------
+	{
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		if (!TestNotNull(TEXT("engine"), Engine)) return false;
+		UStoryletFlow* Visit = Engine->OpenFlow(TEXT("visit"));
+		if (!TestNotNull(TEXT("visit"), Visit)) return false;
+		Visit->Deal(TEXT("q"));
+		const FString Parked = Engine->SaveFlowToJson(TEXT("visit"));
+		Engine->CloseFlow(TEXT("visit"));
+		FString Report;
+		UStoryletFlow* Back = Engine->OpenFlowFromJson(TEXT("visit"), Parked, Report);
+		TestNotNull(TEXT("the parked visit opens"), Back);
+		TestEqual(TEXT("its report is the preview's"), Report, Engine->PreviewFlowRestoreJson(TEXT("visit"), Parked));
+		TestTrue(TEXT("and it is a report"), Report.Contains(TEXT("\"exact\"")));
+		TestEqual(TEXT("the hand came back"), Back ? Back->Board()[0].Cards.Num() : 0, 1);
+	}
+
+	// --- OpenFlowSeeded: the flow's own seed in place of the engine's -------------------
+	{
+		UStoryletEngine* Seeded = UStoryletEngine::Create(Bundle);
+		UStoryletEngine* ByEngine = UStoryletEngine::Create(Bundle, 7);
+		if (!TestNotNull(TEXT("engines"), Seeded) || !TestNotNull(TEXT("seeded engine"), ByEngine)) return false;
+		Seeded->OpenFlowSeeded(TEXT("f"), 7);
+		ByEngine->OpenFlow(TEXT("f"));
+		Seeded->OpenFlow(TEXT("g"));
+		TestEqual(TEXT("a flow seeded 7 starts where an engine seeded 7 starts"),
+			Seeded->SaveFlowToJson(TEXT("f")), ByEngine->SaveFlowToJson(TEXT("f")));
+		TestNotEqual(TEXT("and not where the engine's own seed starts"),
+			Seeded->SaveFlowToJson(TEXT("f")), Seeded->SaveFlowToJson(TEXT("g")));
+	}
+
+	// --- Peek's count, and a closed flow refusing with the core's words -----------------
+	{
+		UStoryletEngine* Engine = UStoryletEngine::Create(Bundle);
+		if (!TestNotNull(TEXT("engine"), Engine)) return false;
+		UStoryletFlow* Flow = Engine->OpenFlow(TEXT("main"));
+		if (!TestNotNull(TEXT("flow"), Flow)) return false;
+		const TMap<FString, FString> NoCriteria;
+		TestEqual(TEXT("PeekAll sees the heist"), Flow->PeekAll(TEXT("box"), NoCriteria).Num(), 1);
+		TestEqual(TEXT("Peek(1) sees it too"), Flow->Peek(TEXT("box"), NoCriteria, 1).Num(), 1);
+		TestEqual(TEXT("Peek(0) sees nothing"), Flow->Peek(TEXT("box"), NoCriteria, 0).Num(), 0);
+		TestEqual(TEXT("a negative count sees nothing, as everywhere else"), Flow->Peek(TEXT("box"), NoCriteria, -1).Num(), 0);
+
+		Engine->CloseFlow(TEXT("main"));
+		AddExpectedError(TEXT("Board - flow \"main\" is closed"), EAutomationExpectedErrorFlags::Contains, 1);
+		AddExpectedError(TEXT("Play - flow \"main\" is closed"), EAutomationExpectedErrorFlags::Contains, 1);
+		AddExpectedMessage(TEXT("GetPropertyNumber - flow \"main\" is closed"), ELogVerbosity::Warning,
+			EAutomationExpectedMessageFlags::Contains, 1);
+		TestEqual(TEXT("a closed flow's board is empty"), Flow->Board().Num(), 0);
+		FString PlayError;
+		TestFalse(TEXT("a closed flow refuses a play"), Flow->Play(TEXT("heist"), TEXT("go"), TEXT("q"), PlayError));
+		TestEqual(TEXT("in the core's words"), PlayError, FString(TEXT("flow \"main\" is closed")));
+		TestEqual(TEXT("a closed flow reads 0"), Flow->GetPropertyNumber(TEXT("story.steps")), 0.0);
 	}
 	return true;
 }

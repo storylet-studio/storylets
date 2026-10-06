@@ -51,6 +51,22 @@ describe("serialize / load round trip", () => {
     expect(c.getFlow("main")!.getProperty("story.gold")).toBe(9);
   });
 
+  it("hands the load's report to onReport, and still returns the @world values", () => {
+    const a = new Engine(bundle, { seed: 0 });
+    a.openFlow("main").dealMany();
+    const file = saveState(a, { season: "spring" });
+    const b = new Engine(bundle, { seed: 0 });
+    let report: ReturnType<Engine["loadGame"]> | undefined;
+    expect(loadState(b, file, { onReport: (r) => { report = r; } })).toEqual({ season: "spring" });
+    expect(report).toEqual(b.previewLoad(file.engine));
+    expect(report?.exact).toBe(true);
+    expect(report?.flows).toEqual(["main"]);
+    // The text twin passes it through.
+    let fromText: typeof report;
+    deserializeState(new Engine(bundle, { seed: 0 }), JSON.stringify(file), { onReport: (r) => { fromText = r; } });
+    expect(fromText).toEqual(report);
+  });
+
   it("carries the host's @world container beside the envelope, and hands it back on load", () => {
     const engine = new Engine(bundle, { seed: 0 });
     engine.openFlow("main");

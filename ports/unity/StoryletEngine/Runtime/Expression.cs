@@ -23,7 +23,9 @@ namespace StoryletStudio.StoryletEngine
     public class StoryletError : Exception
     {
         public StoryletError(string message) : base(message) { }
-        internal StoryletError(string message, Exception inner) : base(message, inner) { }
+        // Public, as the .NET convention has it, because the Json layer is a
+        // separate assembly in Unity and wraps the kernel's errors too.
+        public StoryletError(string message, Exception inner) : base(message, inner) { }
     }
 
     /// <summary>An expression that cannot be evaluated. The kernel's own
@@ -32,7 +34,7 @@ namespace StoryletStudio.StoryletEngine
     public sealed class EvalError : StoryletError
     {
         public EvalError(string message) : base(message) { }
-        internal EvalError(string message, Exception inner) : base(message, inner) { }
+        public EvalError(string message, Exception inner) : base(message, inner) { }
     }
 
     /// <summary>The kernel's errors, as the engine's. Every call from the engine

@@ -28,14 +28,15 @@
 //   });
 // ---------------------------------------------------------------------------
 
-import type { Bundle } from "@storylet-studio/model";
+import type { Bundle, LoadReport } from "@storylet-studio/model";
 import { Engine } from "@storylet-studio/runtime";
 import type { EngineOptions } from "@storylet-studio/runtime";
 
 export type LiveBundleResult =
-  /** The new engine, carrying the old one's run (all flows), and the bundle
-   *  it runs. */
-  | { ok: true; engine: Engine; bundle: Bundle }
+  /** The new engine, carrying the old one's run (all flows), the bundle it
+   *  runs, and the report its load produced: what the edit cost the run
+   *  (cards evicted, properties dropped, defaulted or retyped). */
+  | { ok: true; engine: Engine; bundle: Bundle; report: LoadReport }
   /** Nothing changed: keep the engine you have. */
   | { ok: false; error: string };
 
@@ -62,8 +63,8 @@ export function applyLiveBundle(engine: Engine, bundleJson: string, opts: Engine
   try {
     // The engine's own hotSwap: on the game's registry the old engine has to hand
     // its keys over, which a plain save and load into a new engine cannot do.
-    const { engine: next } = engine.hotSwap(bundle, opts);
-    return { ok: true, engine: next, bundle };
+    const { engine: next, report } = engine.hotSwap(bundle, opts);
+    return { ok: true, engine: next, bundle, report };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

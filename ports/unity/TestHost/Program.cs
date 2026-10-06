@@ -72,11 +72,12 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 foreach (var f in RunSelfWorldExaminer((JObject)c["bundle"])) { Fail("scripted", cname, f); s = Math.Max(0, s - 1); }
             }
             int d = RunDescribe(peek);
+            int th = RunTraceHandlers(peek);
             int m = RunDescribeMaps();
             int l = RunLiveLinkFixture(path);
 
             Console.WriteLine($"corpus version {version}");
-            Console.WriteLine($"describeBundle checks: {d}/1  maps: {m}/1  live-link fixture: {l}/1");
+            Console.WriteLine($"describeBundle checks: {d}/1  maps: {m}/1  live-link fixture: {l}/1  trace handlers: {th}/1");
             Console.WriteLine(
                 $"expressions: {e}/{expressions.Count}  specificity: {sp}/{specificity.Count}  " +
                 $"peek: {p}/{peek.Count}  scripted: {s}/{scripted.Count}  load: {ld}/{load.Count}");
@@ -152,6 +153,31 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 Fail("live-link", "fixture", ex.Message);
             }
             return 0;
+        }
+
+        /// <summary>A case's seed as the number JS reads. A seed past 2^63
+        /// (1e19 in corpus version 12) is an integer too big for a long, which
+        /// Newtonsoft holds as a BigInteger that Value&lt;double&gt; cannot
+        /// convert; JS sees an ordinary number. Absent is 0, as the reference
+        /// runner has it.</summary>
+        private static double SeedOf(JToken t)
+        {
+            if (t == null || t.Type == JTokenType.Null) return 0;
+            if (t is JValue v && v.Value is System.Numerics.BigInteger big) return (double)big;
+            return t.Value<double>();
+        }
+
+        /// <summary>A peek op's cap. The corpus tells a JSON null from an absent
+        /// key (version 12): absent is no cap, and null is the reference's
+        /// peek(n = null), which Math.max(null, 0) reads as 0 and so returns
+        /// nothing. C#'s int? has one null for both, and it means "no cap", so
+        /// a JSON null reaches the port as the cap JS gives it: 0.</summary>
+        private static int? PeekCap(JToken op)
+        {
+            var t = op["n"];
+            if (t == null) return null;
+            if (t.Type == JTokenType.Null) return 0;
+            return t.Value<int>();
         }
 
         private static void Fail(string family, string name, string detail)
@@ -267,7 +293,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     var node = StoryletJson.ToAst(c["ast"]);
                     var ctx = ScopesContext((JObject)c["scopes"]);
                     // The reference runner always supplies a PRNG (seed ?? 0).
-                    var prng = new Mulberry32(c.Value<double?>("seed") ?? 0);
+                    var prng = new Mulberry32(SeedOf(c["seed"]));
                     ctx.Host = new StoryletsHost { NextRandom = prng.Next };
 
                     ExprValue actual;
@@ -571,11 +597,11 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 try
                 {
                     var bundle = BundleLoader.Parse((JObject)c["bundle"]);
-                    var session = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = c.Value<double?>("seed") ?? 0 }).OpenFlow("main");
+                    var session = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = SeedOf(c["seed"]) }).OpenFlow("main");
                     if (c["setup"] is JObject setup) ApplyState(session, setup);
                     var box = c.Value<string>("box");
                     var criteria = StoryletJson.ToStringMap(c["criteria"]);
-                    var n = c.Value<int?>("n");
+                    var n = PeekCap(c);
                     var expect = StringList(c["expect"]);
 
                     var failures = new List<string>();
@@ -804,6 +830,79 @@ namespace StoryletStudio.StoryletEngine.TestHost
             }
         }
 
+        /// <summary>Ruling F (engine review 2026-10): trace handlers fire once
+        /// each, from a snapshot. Host API, so a check here rather than a corpus
+        /// case, the same three questions on the flow's tap and the engine's:
+        /// the same handler subscribed twice is called once (and either
+        /// unsubscribe removes it); a handler subscribed DURING an event first
+        /// hears the next one; a handler unsubscribed during an event still
+        /// hears that one, and no more.</summary>
+        private static int RunTraceHandlers(JArray peekCases)
+        {
+            var failures = new List<string>();
+            try
+            {
+                var bundle = BundleLoader.Parse((JObject)peekCases[0]["bundle"]);
+                var engine = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = 0 });
+                var flow = engine.OpenFlow("main");
+                var box = flow.ListBoxes()[0].GameId;
+
+                // The flow's tap.
+                int twice = 0;
+                Action<TraceEvent> counted = e => twice++;
+                flow.SubscribeTrace(counted);
+                var off = flow.SubscribeTrace(counted);
+                flow.AdvanceTurns(box);
+                if (twice != 1) failures.Add($"flow: a handler subscribed twice was called {twice} times for one event");
+                off();
+                flow.AdvanceTurns(box);
+                if (twice != 1) failures.Add("flow: the handler still heard events after its unsubscribe");
+
+                int late = 0, leaving = 0;
+                Action unsubscribeLeaving = null;
+                bool joined = false;
+                Action<TraceEvent> lateHandler = e => late++;
+                flow.SubscribeTrace(e =>
+                {
+                    if (!joined) { joined = true; flow.SubscribeTrace(lateHandler); }
+                    unsubscribeLeaving?.Invoke();
+                });
+                unsubscribeLeaving = flow.SubscribeTrace(e => leaving++);
+                flow.AdvanceTurns(box);
+                if (late != 0) failures.Add("flow: a handler subscribed during an event heard that event");
+                if (leaving != 1) failures.Add($"flow: a handler unsubscribed during an event heard it {leaving} times, expected 1");
+                flow.AdvanceTurns(box);
+                if (late != 1) failures.Add($"flow: a handler subscribed during an event heard the next {late} times, expected 1");
+                if (leaving != 1) failures.Add("flow: a handler unsubscribed during an event heard the next one");
+
+                // The engine's tap.
+                int engineTwice = 0;
+                Action<string, TraceEvent> engineCounted = (id, e) => engineTwice++;
+                engine.SubscribeTrace(engineCounted);
+                var engineOff = engine.SubscribeTrace(engineCounted);
+                flow.AdvanceTurns(box);
+                if (engineTwice != 1) failures.Add($"engine: a handler subscribed twice was called {engineTwice} times for one event");
+                engineOff();
+                int engineLate = 0;
+                bool engineJoined = false;
+                engine.SubscribeTrace((id, e) =>
+                {
+                    if (!engineJoined) { engineJoined = true; engine.SubscribeTrace((i2, e2) => engineLate++); }
+                });
+                flow.AdvanceTurns(box);
+                if (engineTwice != 1) failures.Add("engine: the handler still heard events after its unsubscribe");
+                if (engineLate != 0) failures.Add("engine: a handler subscribed during an event heard that event");
+                flow.AdvanceTurns(box);
+                if (engineLate != 1) failures.Add($"engine: a handler subscribed during an event heard the next {engineLate} times, expected 1");
+            }
+            catch (Exception ex)
+            {
+                failures.Add(ex.Message);
+            }
+            foreach (var f in failures) Fail("trace handlers", "ruling F", f);
+            return failures.Count == 0 ? 1 : 0;
+        }
+
         private static int RunDescribe(JArray cases)
         {
             if (cases.Count == 0) return 0;
@@ -986,7 +1085,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             var failures = new List<string>();
             var bundle = BundleLoader.Parse((JObject)c["bundle"]);
             var bundleB = c["bundleB"] is JObject bb ? BundleLoader.Parse(bb) : null;
-            var seed = c.Value<double?>("seed") ?? 0;
+            var seed = SeedOf(c["seed"]);
             var engine = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = seed });
             // Flow handles as the SCRIPT knows them: kept across closeFlow so a
             // later op on a closed name exercises the inert handle, never a
@@ -1145,7 +1244,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         try
                         {
                             var list = session.Peek(op.Value<string>("box") ?? "box",
-                                StoryletJson.ToStringMap(op["criteria"]), op.Value<int?>("n"));
+                                StoryletJson.ToStringMap(op["criteria"]), PeekCap(op));
                             ids = Ids(list.Cards);
                         }
                         catch (Exception ex)
@@ -1405,8 +1504,11 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         }
                         engine = target;
                         CheckReport(at, op["expectReport"], engine.LoadGame(envelope), failures);
+                        // Re-taken AND watched, as a lazily opened flow is
+                        // (corpus version 12): a deal straight after a load into
+                        // an edited build is where an eviction's reason shows.
                         handles = new Dictionary<string, Flow>();
-                        foreach (var f in engine.Flows()) handles[f.Id] = f;
+                        foreach (var f in engine.Flows()) handles[f.Id] = Watch(f);
                         if (op.Value<bool?>("expectSameBytes") == true)
                         {
                             // Byte parity, this once: the loaded engine must
@@ -1449,7 +1551,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         var preview = engine.PreviewFlowRestore(name, saved);
                         LoadReport applied = null;
                         var opts = new OpenFlowOptions { Restore = saved, OnRestoreReport = r => applied = r };
-                        if (op["seed"] != null) opts.Seed = op.Value<double>("seed");
+                        if (op["seed"] != null) opts.Seed = SeedOf(op["seed"]);
                         handles[name] = Watch(engine.OpenFlow(name, opts));
                         if (applied == null)
                         {
@@ -1466,7 +1568,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     case "openFlow":
                     {
                         var opts = new OpenFlowOptions();
-                        if (op["seed"] != null) opts.Seed = op.Value<double>("seed");
+                        if (op["seed"] != null) opts.Seed = SeedOf(op["seed"]);
                         handles[op.Value<string>("flow")] = engine.OpenFlow(op.Value<string>("flow"), opts);
                         break;
                     }

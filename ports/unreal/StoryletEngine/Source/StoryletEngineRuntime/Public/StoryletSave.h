@@ -37,6 +37,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
 	static bool LoadStateFromJson(UStoryletEngine* Engine, const FString& Json);
 
+	/** LoadStateFromJson, handing back what the load cost: OutReportJson is
+	 *  the LoadReport as JSON (the same report PreviewLoadFromJson gives for
+	 *  the same blob, and the other runtimes' loadState onReport), empty on a
+	 *  refusal. The drift a load tolerates is what hides its cost, so the cost
+	 *  comes back with the load whether or not anybody looked first. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
+	static bool LoadStateFromJsonWithReport(UStoryletEngine* Engine, const FString& Json, FString& OutReportJson);
+
 	/** What LoadStateFromJson would change, as a LoadReport JSON string,
 	 *  without changing any of it (design/engine-server.md 4.9): the cards a
 	 *  content update would knock off the board, the properties it would drop,

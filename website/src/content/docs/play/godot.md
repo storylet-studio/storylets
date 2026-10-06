@@ -55,6 +55,14 @@ schema is named as `unsupported bundle schema`, and a project map whose rules th
 gives an error starting `bundle refused: ` that names every problem it found. Check for null
 before you open a flow.
 
+**Keep the engine.** Hold it in a variable or a member for as long as you play, as the
+example does. A flow holds its engine weakly, because GDScript's reference counting can't free
+a cycle and an engine and its flows would otherwise keep each other alive for good. So a flow
+on its own doesn't keep its engine: `StoryletEngine.create(bundle).open_flow("main")`, with
+the engine kept nowhere, gives a flow that is already closed, and every call on it refuses with
+`push_error`, saying its engine was freed. You need the engine anyway, to save the game and to
+open other flows.
+
 The engine is the world. Every play call lives on a **flow** (one playthrough) opened by
 name. A single-player game opens `"main"` and never thinks about it again. Several flows run
 parallel playthroughs over the same shared state ([the sharing rules](/play/world-state/)).

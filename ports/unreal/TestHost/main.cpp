@@ -166,10 +166,15 @@ static OrderedMap<std::string, std::string> criteriaOf(const JsonValue& op)
     return bundleloader::ToStringMap(op.find("criteria"));
 }
 
+/** A peek op's cap. Absent is no cap; a JSON null is a DIFFERENT cap, the
+ *  one JS's Math.max(null, 0) reads as zero, so it returns nothing (corpus
+ *  version 12). */
 static std::optional<int> peekCap(const JsonValue& op)
 {
     const JsonValue* n = op.find("n");
-    if (!n || !n->isNumber()) return std::nullopt;
+    if (!n) return std::nullopt;
+    if (n->type == JsonValue::Null) return 0;
+    if (!n->isNumber()) return std::nullopt;
     return static_cast<int>(n->num);
 }
 
@@ -1061,8 +1066,11 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             {
                 engine = std::move(target);
                 checkReport(at, op.find("expectReport"), engine->loadGame(envelope), failures);
+                // Re-taken AND watched, as a lazily opened flow is (corpus
+                // version 12): a deal straight after a load into an edited
+                // build is where an eviction's reason shows.
                 handles.clear();
-                for (const FlowPtr& f : engine->flows()) handles[f->id()] = f;
+                for (const FlowPtr& f : engine->flows()) handles[f->id()] = watch(f);
                 if (expectSameBytes)
                 {
                     const std::string bytesAfter = serializeState(*engine);
@@ -1670,6 +1678,169 @@ static int runExprPrng(const JsonValue& cases)
     return pass;
 }
 
+/** The port's own fixes from the October 2026 engine review: behaviour the JS
+ *  reference already had and this runtime did not, too host-shaped for the
+ *  shared corpus. Each returns its failures; empty is a pass. */
+static std::vector<std::pair<std::string, std::function<std::vector<std::string>()>>> portFixChecks()
+{
+    using namespace oneregistry;
+    std::vector<std::pair<std::string, std::function<std::vector<std::string>()>>> checks;
+
+    checks.emplace_back("a negative log cap empties the engine's log, as it does a flow's", []
+    {
+        std::vector<std::string> out;
+        EngineOptions opts;
+        opts.log = true;
+        opts.logCap = -1;
+        Engine engine(MakeBundle(), opts);
+        FlowPtr flow = engine.openFlow("f");
+        Heist(*flow);
+        if (!flow->log().empty()) out.push_back("the flow log kept " + std::to_string(flow->log().size()) + " entries");
+        if (!engine.log().empty()) out.push_back("the engine log kept " + std::to_string(engine.log().size()) + " entries");
+        return out;
+    });
+
+    // A host resolver that throws is the game's error. JS swallows it into the
+    // "not declared" diagnostic and deals on; it must not escape the deal.
+    auto throwingWorld = []
+    {
+        WorldResolver world;
+        world.get = [](const std::string&) -> std::optional<StoryletValue> { throw std::runtime_error("host down"); };
+        return world;
+    };
+    auto dealsWithDiagnostic = [](const std::string& json, const WorldResolver& world, const std::string& want)
+    {
+        std::vector<std::string> out;
+        EngineOptions opts;
+        opts.world = world;
+        Engine engine(ParseBundle(JsonParser(json).parse()), opts);
+        FlowPtr flow = engine.openFlow("f");
+        std::vector<std::string> messages;
+        flow->subscribeTrace([&messages](const TraceEvent& e)
+        {
+            if (e.kind == TraceEvent::Kind::Diagnostic) messages.push_back(e.message);
+        });
+        try
+        {
+            if (flow->deal("q").empty()) out.push_back("nothing was dealt");
+        }
+        catch (const std::exception& e)
+        {
+            out.push_back(std::string("the deal threw: ") + e.what());
+            return out;
+        }
+        if (std::find(messages.begin(), messages.end(), want) == messages.end())
+        {
+            out.push_back("no diagnostic \"" + want + "\" (got " + show(messages) + ")");
+        }
+        return out;
+    };
+    checks.emplace_back("a throwing @world resolver binding a boundBy group is the not-declared diagnostic", [=]
+    {
+        std::string json = BundleJson();
+        const std::string from = R"("id":"d_zone","gameId":"zone",)";
+        json.replace(json.find(from), from.size(), from + R"("boundBy":"@world.alarm",)");
+        return dealsWithDiagnostic(json, throwingWorld(), "boundBy \"@world.alarm\" names a property that is not declared");
+    });
+    checks.emplace_back("a throwing @world resolver filling a hole is the not-declared diagnostic", [=]
+    {
+        std::string json = BundleJson();
+        const std::string from = R"("rule":{"slots":"unbounded"})";
+        json.replace(json.find(from), from.size(), R"("rule":{"slots":"unbounded","bindings":{"d_zone":"@world.alarm"}})");
+        return dealsWithDiagnostic(json, throwingWorld(), "\"@world.alarm\" names a property that is not declared");
+    });
+
+    checks.emplace_back("a saved PRNG state reads back through ToUint32", []
+    {
+        std::vector<std::string> out;
+        Engine engine(MakeBundle());
+        engine.openFlow("f");
+        std::string json = serializeFlow(engine.saveFlow("f"));
+        const std::string key = "\"prng\": ";
+        const size_t at = json.find(key);
+        const size_t end = json.find(',', at);
+        json.replace(at + key.size(), end - at - key.size(), "-1");
+        const FlowSave parsed = deserializeFlow(json);
+        if (parsed.prng != 4294967295u) out.push_back("-1 read back as " + std::to_string(parsed.prng));
+        return out;
+    });
+    checks.emplace_back("a write only the landing can refuse puts back what had landed (ruling B)", []
+    {
+        std::vector<std::string> out;
+        // The game's @world says alarm is read-only, which the bundle does not:
+        // only the landing meets it, after @deck.drawn and @story.gold landed.
+        auto registry = std::make_shared<ScopeRegistry>();
+        ScopeDeclaration alarm;
+        alarm.name = "alarm"; alarm.type = PropertyTypes::Number; alarm.defaultValue = StoryletValue::Num(0); alarm.writable = false;
+        OwnedScopeOptions options; options.owner = std::string("Game");
+        registry->defineOwned("world", std::vector<ScopeDeclaration>{alarm}, options);
+        EngineOptions opts; opts.registry = registry; opts.seed = 1;
+        Engine engine(MakeBundle(), opts);
+        FlowPtr flow = engine.openFlow("f");
+        std::vector<std::string> writes;
+        flow->subscribeTrace([&writes](const TraceEvent& e) { if (e.kind == TraceEvent::Kind::Write) writes.push_back(e.path); });
+        const std::vector<DealtCard> dealt = flow->deal("q");
+        try { flow->play(dealt.at(0).gameId, "go", "q"); out.push_back("the play was not refused"); }
+        catch (const StoryletError&) {}
+        if (Show(engine.getProperty("story.gold")) != "0") out.push_back("story.gold is " + Show(engine.getProperty("story.gold")));
+        if (Show(flow->getProperty("deck.main.drawn")) != "0") out.push_back("deck.main.drawn is " + Show(flow->getProperty("deck.main.drawn")));
+        if (!writes.empty()) out.push_back("write events fired for a refused play: " + show(writes));
+        if (flow->board().get("q")->size() != 1) out.push_back("the card left its hand");
+        return out;
+    });
+
+    checks.emplace_back("the same handler identity subscribed twice hears each event once (ruling F)", []
+    {
+        static int heard = 0;
+        heard = 0;
+        void (*handler)(const TraceEvent&) = [](const TraceEvent&) { ++heard; };
+        Engine engine(MakeBundle());
+        FlowPtr flow = engine.openFlow("f");
+        const void* identity = reinterpret_cast<const void*>(handler);
+        auto first = flow->subscribeTrace(handler, identity);
+        auto second = flow->subscribeTrace(handler, identity);
+        flow->advanceTurns("box");
+        std::vector<std::string> out;
+        if (heard != 1) out.push_back("one event was heard " + std::to_string(heard) + " times");
+        second();
+        flow->advanceTurns("box");
+        if (heard != 1) out.push_back("an unsubscribe from either call did not remove it");
+        first();
+        return out;
+    });
+    checks.emplace_back("deserializeState hands its LoadReport to onReport", []
+    {
+        std::vector<std::string> out;
+        Engine engine(MakeBundle());
+        engine.openFlow("f");
+        const std::string text = serializeState(engine);
+        Engine fresh(MakeBundle());
+        std::optional<LoadReport> got;
+        deserializeState(fresh, text, [&got](const LoadReport& r) { got = r; });
+        if (!got.has_value()) out.push_back("onReport was not called");
+        else if (!got->exact || got->flows != std::vector<std::string>{"f"}) out.push_back("the report is not the load's");
+        deserializeState(fresh, text);   // and without one, as before
+        return out;
+    });
+    return checks;
+}
+
+static int runPortFixes(size_t& total)
+{
+    int passed = 0;
+    const auto checks = portFixChecks();
+    total = checks.size();
+    for (const auto& check : checks)
+    {
+        std::vector<std::string> failures;
+        try { failures = check.second(); }
+        catch (const std::exception& e) { failures.push_back(std::string("threw: ") + e.what()); }
+        if (failures.empty()) ++passed;
+        for (const auto& f : failures) fail("port-fixes", check.first, f);
+    }
+    return passed;
+}
+
 int main(int argc, char** argv)
 {
     std::string path = argc > 1 ? argv[1] : "packages/conformance/corpus.json";
@@ -1712,6 +1883,8 @@ int main(int argc, char** argv)
         for (const std::string& f : oneRegistry.failures) fail("one-registry", "engine", f);
         const oneregistry::Result kernelErrors = oneregistry::RunKernelErrors();
         for (const std::string& f : kernelErrors.failures) fail("kernel-errors", "engine", f);
+        size_t portFixTotal = 0;
+        const int portFixes = runPortFixes(portFixTotal);
 
         std::cout << "corpus version " << version << "\n";
         std::cout << "describeBundle checks: " << d << "/1  project map: " << m << "/1  save round trip: " << sv << "/1\n";
@@ -1723,6 +1896,7 @@ int main(int argc, char** argv)
         std::cout << "live-link fixture: " << live << "/" << liveTotal << " frames\n";
         std::cout << "one registry per game: " << oneRegistry.passed << "/" << oneRegistry.total << "\n";
         std::cout << "kernel errors reach the game as the engine's own: " << kernelErrors.passed << "/" << kernelErrors.total << "\n";
+        std::cout << "port fixes (engine review 2026-10): " << portFixes << "/" << portFixTotal << "\n";
 
         // The expr parity corpus sits beside ours, vendored from ../expr.
         // Absent is a FAILURE, not a skip: a parity gate that quietly does

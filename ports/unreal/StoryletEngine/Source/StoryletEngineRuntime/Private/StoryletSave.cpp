@@ -22,6 +22,13 @@ FString UStoryletSave::SaveStateToJson(UStoryletEngine* Engine)
 
 bool UStoryletSave::LoadStateFromJson(UStoryletEngine* Engine, const FString& Json)
 {
+	FString Report;
+	return LoadStateFromJsonWithReport(Engine, Json, Report);
+}
+
+bool UStoryletSave::LoadStateFromJsonWithReport(UStoryletEngine* Engine, const FString& Json, FString& OutReportJson)
+{
+	OutReportJson.Reset();
 	storylets::Engine* Core = Engine ? Engine->GetCoreEngine() : nullptr;
 	if (!Core)
 	{
@@ -30,7 +37,7 @@ bool UStoryletSave::LoadStateFromJson(UStoryletEngine* Engine, const FString& Js
 	}
 	FString Error;
 	storylets::OrderedMap<std::string, storylets::StoryletValue> World;
-	if (!StoryletLoadStateWorld(*Core, Json, World, Error))
+	if (!StoryletLoadStateWorld(*Core, Json, World, Error, &OutReportJson))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: LoadStateFromJson - %s"), *Error);
 		return false;
@@ -95,6 +102,11 @@ FString UStoryletSave::PreviewLoadFromJson(UStoryletEngine* Engine, const FStrin
 	catch (const std::exception& Ex)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: PreviewLoadFromJson - %s"), UTF8_TO_TCHAR(Ex.what()));
+		return FString();
+	}
+	catch (...)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: PreviewLoadFromJson - an unknown exception"));
 		return FString();
 	}
 }

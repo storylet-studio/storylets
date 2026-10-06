@@ -460,17 +460,30 @@ namespace StoryletStudio.StoryletEngine
     {
         /// <summary>Connect in the background; never throws past the ctor.</summary>
         void Start(StoryletLiveLink link, string url);
-        /// <summary>A frame was queued (a polling socket ignores this).</summary>
+        /// <summary>A frame was queued: the real socket wakes its send loop, the
+        /// TestHost's drains the queue there and then. Called from the game
+        /// thread, so it must never throw.</summary>
         void Kick();
         void Close();
     }
 
-    /// <summary>Patterplay's PatterDebugLink transport, verbatim: connect, hello,
-    /// then send and receive loops run concurrently on the thread pool until the
-    /// editor goes away or the link closes.</summary>
+    /// <summary>Patterplay's PatterDebugLink transport: connect, hello, then
+    /// send and receive loops run concurrently on the thread pool until the
+    /// editor goes away or the link closes. Two departures from it: the send
+    /// loop sleeps until Kick says a frame is queued, where Patterplay's polls
+    /// every 15 ms for the life of the link, and the socket and its token
+    /// source are disposed when the run ends.</summary>
     internal sealed class ClientWebSocketLink : ILiveLinkSocket
     {
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+        // Kick's signal to the send loop: an auto-reset event (count 0 or 1), so
+        // any number of frames queued while the loop is busy wake it once, and
+        // a Kick that lands between the loop finding the queue empty and its
+        // wait leaves the count at 1 and is not lost. Never disposed: a
+        // SemaphoreSlim only owns a kernel handle once AvailableWaitHandle is
+        // read, which nothing here does, and Kick must stay callable from the
+        // game thread after the run has ended.
+        private readonly SemaphoreSlim _queued = new SemaphoreSlim(0, 1);
         private ClientWebSocket _ws;
 
         public void Start(StoryletLiveLink link, string url)
@@ -478,10 +491,15 @@ namespace StoryletStudio.StoryletEngine
             _ = RunAsync(link, url, _cts.Token);
         }
 
-        public void Kick() { }
+        public void Kick()
+        {
+            try { _queued.Release(); }
+            catch { /* SemaphoreFullException: already signalled */ }
+        }
 
         public void Close()
         {
+            // Both may already be disposed by a run that ended on its own.
             try { _cts.Cancel(); } catch { /* already disposed */ }
             try { _ws?.Abort(); } catch { /* already gone */ }
         }
@@ -504,6 +522,10 @@ namespace StoryletStudio.StoryletEngine
             finally
             {
                 link.OnSocketClosed();
+                // The run owns both from here: nothing reads them once it is
+                // over, and Close tolerates finding them disposed.
+                try { _ws?.Dispose(); } catch { /* already gone */ }
+                _cts.Dispose();
             }
         }
 
@@ -512,7 +534,7 @@ namespace StoryletStudio.StoryletEngine
             while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
             {
                 if (link.TryDequeueOutgoing(out var msg)) await SendRaw(msg, ct).ConfigureAwait(false);
-                else await Task.Delay(15, ct).ConfigureAwait(false);
+                else await _queued.WaitAsync(ct).ConfigureAwait(false);
             }
         }
 
@@ -522,15 +544,25 @@ namespace StoryletStudio.StoryletEngine
             // Bytes, not text, until the message ends: a pushed bundle spans many
             // chunks and a chunk boundary can fall inside a multi-byte character.
             var frame = new System.IO.MemoryStream();
-            while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
+            try
             {
-                var result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), ct).ConfigureAwait(false);
-                if (result.MessageType == WebSocketMessageType.Close) return;
-                if (result.MessageType != WebSocketMessageType.Text) continue;
-                frame.Write(buffer, 0, result.Count);
-                if (!result.EndOfMessage) continue;
-                link.EnqueueIncoming(Encoding.UTF8.GetString(frame.GetBuffer(), 0, (int)frame.Length));
-                frame.SetLength(0);
+                while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
+                {
+                    var result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), ct).ConfigureAwait(false);
+                    if (result.MessageType == WebSocketMessageType.Close) return;
+                    if (result.MessageType != WebSocketMessageType.Text) continue;
+                    frame.Write(buffer, 0, result.Count);
+                    if (!result.EndOfMessage) continue;
+                    link.EnqueueIncoming(Encoding.UTF8.GetString(frame.GetBuffer(), 0, (int)frame.Length));
+                    frame.SetLength(0);
+                }
+            }
+            finally
+            {
+                // The editor went away. The send loop may be asleep with nothing
+                // queued; wake it so it sees the socket is no longer open and the
+                // run can end. The poll it replaced noticed within 15 ms.
+                Kick();
             }
         }
 

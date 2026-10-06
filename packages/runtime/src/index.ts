@@ -1,4 +1,4 @@
-export { Engine, Flow } from "./engine.js";
+export { Engine, Flow, StoryletError } from "./engine.js";
 // The examiner row listProperties() returns: the shared kernel's
 // (@wildwinter/scoperegistry, the property implementation both product families use),
 // re-exported so a host typing a row needs no dependency on the kernel.

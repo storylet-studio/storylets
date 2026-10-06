@@ -38,55 +38,44 @@ namespace StoryletStudio.StoryletEngine
         /// OrderedMap&lt;string, object&gt; in document order, arrays as
         /// List&lt;object&gt;, scalars as bool / double / string, JSON null as
         /// null) - the shape ScopeRegistry.ReadScopeRegistrySpec consumes.</summary>
-        public static object ToJsonTree(JToken token)
-        {
-            switch (token.Type)
-            {
-                case JTokenType.Object:
-                {
-                    var map = new OrderedMap<string, object>();
-                    foreach (var prop in (JObject)token) map.Set(prop.Key, ToJsonTree(prop.Value));
-                    return map;
-                }
-                case JTokenType.Array:
-                {
-                    var list = new List<object>();
-                    foreach (var item in (JArray)token) list.Add(ToJsonTree(item));
-                    return list;
-                }
-                case JTokenType.Boolean: return token.Value<bool>();
-                case JTokenType.Integer:
-                case JTokenType.Float: return token.Value<double>();
-                case JTokenType.String: return token.Value<string>();
-                case JTokenType.Null: return null;
-                default: throw new StoryletError($"unsupported json token kind: {token.Type}");
-            }
-        }
+        public static object ToJsonTree(JToken token) => ToTree(token, ast: false);
 
         /// <summary>A tagged-tuple AST (JSON array) as the neutral object tree the
         /// pure deserialiser walks, then as an ExprNode.</summary>
         public static ExprNode ToAst(JToken token)
         {
-            // The kernel refuses a malformed tree with its own ExprError; a bundle load throws EvalError.
-            try { return Ast.DeserialiseAst((IReadOnlyList<object>)ToTree(token)); }
-            catch (ExprError e) { throw new EvalError(e.Message); }
+            // The kernel refuses a malformed tree with its own ExprError; a bundle
+            // load throws EvalError, carrying the kernel's as its inner exception.
+            try { return Ast.DeserialiseAst((IReadOnlyList<object>)ToTree(token, ast: true)); }
+            catch (ExprError e) { throw new EvalError(e.Message, e); }
         }
 
-        private static object ToTree(JToken token)
+        /// <summary>The one walk behind ToJsonTree and ToAst. An AST is tagged
+        /// tuples of scalars, so with <paramref name="ast"/> an object or a null
+        /// is refused as an unsupported AST token, as it always has been, rather
+        /// than handed to the deserialiser.</summary>
+        private static object ToTree(JToken token, bool ast)
         {
             switch (token.Type)
             {
+                case JTokenType.Object when !ast:
+                {
+                    var map = new OrderedMap<string, object>();
+                    foreach (var prop in (JObject)token) map.Set(prop.Key, ToTree(prop.Value, ast));
+                    return map;
+                }
+                case JTokenType.Array:
+                {
+                    var list = new List<object>();
+                    foreach (var item in (JArray)token) list.Add(ToTree(item, ast));
+                    return list;
+                }
                 case JTokenType.Boolean: return token.Value<bool>();
                 case JTokenType.Integer:
                 case JTokenType.Float: return token.Value<double>();
                 case JTokenType.String: return token.Value<string>();
-                case JTokenType.Array:
-                {
-                    var list = new List<object>();
-                    foreach (var item in (JArray)token) list.Add(ToTree(item));
-                    return list;
-                }
-                default: throw new StoryletError($"unsupported ast token kind: {token.Type}");
+                case JTokenType.Null when !ast: return null;
+                default: throw new StoryletError($"unsupported {(ast ? "ast" : "json")} token kind: {token.Type}");
             }
         }
 

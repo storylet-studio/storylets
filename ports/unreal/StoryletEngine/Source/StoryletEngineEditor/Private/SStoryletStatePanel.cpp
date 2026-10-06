@@ -37,6 +37,16 @@ namespace
 		return Title.IsEmpty() ? GameId : Title;
 	}
 
+	/** The flow a widget's getter may read, or null once it has closed. A
+	 *  closed flow refuses every call and logs saying so, and a panel row
+	 *  outlives its flow until the next poll rebuilds the panel: without this
+	 *  each paint in between would log once per row. */
+	UStoryletFlow* LiveFlow(const TWeakObjectPtr<UStoryletFlow>& Weak)
+	{
+		UStoryletFlow* Flow = Weak.Get();
+		return Flow && !Flow->IsClosed() ? Flow : nullptr;
+	}
+
 	TArray<FString> ParseFlagsList(const FString& Text)
 	{
 		TArray<FString> Parts;
@@ -174,7 +184,7 @@ public:
 						"Drop the retained log entries. Cosmetic - no game state changes."))
 					.OnClicked_Lambda([this]()
 					{
-						if (UStoryletFlow* S = Session.Get()) { S->ClearLog(); }
+						if (UStoryletFlow* S = LiveFlow(Session)) { S->ClearLog(); }
 						else if (UStoryletEngine* E = Engine.Get()) { E->ClearRunLog(); }
 						Refresh();
 						return FReply::Handled();
@@ -230,7 +240,7 @@ private:
 	/** Whichever log this widget is showing. */
 	TArray<FStoryletLogEntry> Entries() const
 	{
-		if (UStoryletFlow* S = Session.Get()) return S->Log();
+		if (UStoryletFlow* S = LiveFlow(Session)) return S->Log();
 		if (UStoryletEngine* E = Engine.Get()) return E->GetRunLog();
 		return TArray<FStoryletLogEntry>();
 	}
@@ -335,8 +345,43 @@ void SStoryletStatePanel::HandleEndPIE(bool /*bIsSimulating*/)
 	Rebuild();
 }
 
+TSharedRef<SStoryletStatePanel::FBoardText> SStoryletStatePanel::BoardTextFor(UStoryletFlow* Flow)
+{
+	if (const TSharedRef<FBoardText>* Found = BoardTexts.Find(Flow)) return *Found;
+	return BoardTexts.Add(Flow, MakeShared<FBoardText>());
+}
+
+void SStoryletStatePanel::RefreshBoards()
+{
+	for (auto It = BoardTexts.CreateIterator(); It; ++It)
+	{
+		if (!LiveFlow(It.Key())) It.RemoveCurrent();
+	}
+	for (const FStoryletDebug::FEntry& E : FStoryletDebug::List())
+	{
+		UStoryletEngine* Engine = E.Engine.Get();
+		if (!Engine) continue;
+		for (UStoryletFlow* Flow : Engine->Flows())
+		{
+			FBoardText& Texts = BoardTextFor(Flow).Get();
+			Texts.Reset();
+			for (const FStoryletHandContents& Hand : Flow->Board())
+			{
+				FString Joined;
+				for (int32 i = 0; i < Hand.Cards.Num(); ++i)
+				{
+					if (i > 0) Joined += TEXT(", ");
+					Joined += TitleOrGameId(Hand.Cards[i].Title, Hand.Cards[i].GameId);
+				}
+				Texts.Add(Hand.Hand, Hand.Cards.Num() == 0 ? LOCTEXT("EmptyHand", "(empty)") : FText::FromString(Joined));
+			}
+		}
+	}
+}
+
 EActiveTimerReturnType SStoryletStatePanel::OnRefresh(double, float)
 {
+	RefreshBoards();
 	if (Signature() != LastSignature)
 	{
 		Rebuild();
@@ -365,9 +410,10 @@ FString SStoryletStatePanel::Signature() const
 					S += B.GameId + TEXT(",");
 				}
 				S += TEXT("/");
-				for (const FStoryletHandContents& H : Flow->Board())
+				// The hand names from this poll's one board read (RefreshBoards).
+				if (const TSharedRef<FBoardText>* Texts = BoardTexts.Find(Flow))
 				{
-					S += H.Hand + TEXT(",");
+					for (const auto& Pair : Texts->Get()) S += Pair.Key + TEXT(",");
 				}
 				S += TEXT("|");
 			}
@@ -385,6 +431,7 @@ void SStoryletStatePanel::Rebuild()
 	}
 	Body->ClearChildren();
 	EnumSources.Reset();
+	RefreshBoards();
 	LastSignature = Signature();
 
 	// Where the Live Link is, when the game registered one: the same line the
@@ -549,7 +596,7 @@ void SStoryletStatePanel::Rebuild()
 					[
 						SNew(STextBlock).Text_Lambda([WeakFlow, BoxRef]()
 						{
-							UStoryletFlow* S = WeakFlow.Get();
+							UStoryletFlow* S = LiveFlow(WeakFlow);
 							return FText::AsNumber(S ? S->GetTurn(BoxRef) : 0.0);
 						})
 					]
@@ -563,9 +610,10 @@ void SStoryletStatePanel::Rebuild()
 				.Text(LOCTEXT("BoardSection", "Board"))
 				.ColorAndOpacity(FSlateColor::UseSubduedForeground())
 			];
-			for (const FStoryletHandContents& Hand : Flow->Board())
+			const TSharedRef<FBoardText> Texts = BoardTextFor(Flow);
+			for (const auto& HandPair : Texts.Get())
 			{
-				const FString HandKey = Hand.Hand;
+				const FString HandKey = HandPair.Key;
 				Body->AddSlot().AutoHeight().Padding(14.f, 1.f, 10.f, 1.f)
 				[
 					SNew(SHorizontalBox)
@@ -580,23 +628,10 @@ void SStoryletStatePanel::Rebuild()
 					[
 						SNew(STextBlock)
 						.AutoWrapText(true)
-						.Text_Lambda([WeakFlow, HandKey]()
+						.Text_Lambda([Texts, HandKey]()
 						{
-							UStoryletFlow* S = WeakFlow.Get();
-							if (!S) return FText::GetEmpty();
-							for (const FStoryletHandContents& H : S->Board())
-							{
-								if (H.Hand != HandKey) continue;
-								if (H.Cards.Num() == 0) return LOCTEXT("EmptyHand", "(empty)");
-								FString Joined;
-								for (int32 i = 0; i < H.Cards.Num(); ++i)
-								{
-									if (i > 0) Joined += TEXT(", ");
-									Joined += TitleOrGameId(H.Cards[i].Title, H.Cards[i].GameId);
-								}
-								return FText::FromString(Joined);
-							}
-							return LOCTEXT("EmptyHand", "(empty)");
+							const FText* Shown = Texts->Find(HandKey);
+							return Shown ? *Shown : LOCTEXT("EmptyHand", "(empty)");
 						})
 					]
 				];
@@ -637,12 +672,12 @@ TSharedRef<SWidget> SStoryletStatePanel::BuildRow(
 			.IsEnabled(bWritable)
 			.IsChecked_Lambda([Session, Path]()
 			{
-				UStoryletFlow* S = Session.Get();
+				UStoryletFlow* S = LiveFlow(Session);
 				return (S && S->GetPropertyBool(Path)) ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
 			})
 			.OnCheckStateChanged_Lambda([Session, Path](ECheckBoxState State)
 			{
-				if (UStoryletFlow* S = Session.Get()) { S->SetPropertyBool(Path, State == ECheckBoxState::Checked); }
+				if (UStoryletFlow* S = LiveFlow(Session)) { S->SetPropertyBool(Path, State == ECheckBoxState::Checked); }
 			});
 		break;
 
@@ -652,12 +687,12 @@ TSharedRef<SWidget> SStoryletStatePanel::BuildRow(
 			.AllowSpin(false)
 			.Value_Lambda([Session, Path]() -> TOptional<double>
 			{
-				UStoryletFlow* S = Session.Get();
+				UStoryletFlow* S = LiveFlow(Session);
 				return S ? TOptional<double>(S->GetPropertyNumber(Path)) : TOptional<double>();
 			})
 			.OnValueCommitted_Lambda([Session, Path](double NewValue, ETextCommit::Type)
 			{
-				if (UStoryletFlow* S = Session.Get()) { S->SetPropertyNumber(Path, NewValue); }
+				if (UStoryletFlow* S = LiveFlow(Session)) { S->SetPropertyNumber(Path, NewValue); }
 			});
 		break;
 
@@ -675,7 +710,7 @@ TSharedRef<SWidget> SStoryletStatePanel::BuildRow(
 		EnumSources.Add(Options);
 
 		TSharedPtr<FString> Initial;
-		if (UStoryletFlow* S = Session.Get())
+		if (UStoryletFlow* S = LiveFlow(Session))
 		{
 			const FString Cur = S->GetPropertyString(Path);
 			for (const TSharedPtr<FString>& O : *Options) { if (*O == Cur) { Initial = O; break; } }
@@ -691,12 +726,12 @@ TSharedRef<SWidget> SStoryletStatePanel::BuildRow(
 			})
 			.OnSelectionChanged_Lambda([Session, Path](TSharedPtr<FString> In, ESelectInfo::Type)
 			{
-				if (In.IsValid()) { if (UStoryletFlow* S = Session.Get()) { S->SetPropertyString(Path, *In); } }
+				if (In.IsValid()) { if (UStoryletFlow* S = LiveFlow(Session)) { S->SetPropertyString(Path, *In); } }
 			})
 			[
 				SNew(STextBlock).Text_Lambda([Session, Path]()
 				{
-					UStoryletFlow* S = Session.Get();
+					UStoryletFlow* S = LiveFlow(Session);
 					return FText::FromString(S ? S->GetPropertyString(Path) : FString());
 				})
 			];
@@ -709,12 +744,12 @@ TSharedRef<SWidget> SStoryletStatePanel::BuildRow(
 			.HintText(LOCTEXT("FlagsHint", "comma, separated"))
 			.Text_Lambda([Session, Path]()
 			{
-				UStoryletFlow* S = Session.Get();
+				UStoryletFlow* S = LiveFlow(Session);
 				return S ? FText::FromString(FString::Join(S->GetPropertyFlags(Path), TEXT(", "))) : FText::GetEmpty();
 			})
 			.OnTextCommitted_Lambda([Session, Path](const FText& Text, ETextCommit::Type)
 			{
-				if (UStoryletFlow* S = Session.Get()) { S->SetPropertyFlags(Path, ParseFlagsList(Text.ToString())); }
+				if (UStoryletFlow* S = LiveFlow(Session)) { S->SetPropertyFlags(Path, ParseFlagsList(Text.ToString())); }
 			});
 		break;
 
@@ -723,12 +758,12 @@ TSharedRef<SWidget> SStoryletStatePanel::BuildRow(
 			.IsEnabled(bWritable)
 			.Text_Lambda([Session, Path]()
 			{
-				UStoryletFlow* S = Session.Get();
+				UStoryletFlow* S = LiveFlow(Session);
 				return S ? FText::FromString(S->GetPropertyString(Path)) : FText::GetEmpty();
 			})
 			.OnTextCommitted_Lambda([Session, Path](const FText& Text, ETextCommit::Type)
 			{
-				if (UStoryletFlow* S = Session.Get()) { S->SetPropertyString(Path, Text.ToString()); }
+				if (UStoryletFlow* S = LiveFlow(Session)) { S->SetPropertyString(Path, Text.ToString()); }
 			});
 		break;
 	}
@@ -736,7 +771,7 @@ TSharedRef<SWidget> SStoryletStatePanel::BuildRow(
 	const EStoryletPropertyType Type = Row.Type;
 	auto ResetToDefault = [Session, Path, DefaultStr, Type]()
 	{
-		UStoryletFlow* S = Session.Get();
+		UStoryletFlow* S = LiveFlow(Session);
 		if (!S) { return FReply::Handled(); }
 		switch (Type)
 		{
@@ -767,7 +802,7 @@ TSharedRef<SWidget> SStoryletStatePanel::BuildRow(
 			// Disabled while the value already sits at its default.
 			.IsEnabled_Lambda([Session, Path, DefaultStr, bWritable]()
 			{
-				UStoryletFlow* S = Session.Get();
+				UStoryletFlow* S = LiveFlow(Session);
 				return bWritable && S && S->GetPropertyString(Path) != DefaultStr;
 			})
 			.OnClicked_Lambda(ResetToDefault)

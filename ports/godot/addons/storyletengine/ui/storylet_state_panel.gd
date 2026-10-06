@@ -488,7 +488,10 @@ func _refresh_values() -> void:
 				(widget as SpinBox).set_value_no_signal(float(value) if value != null else 0.0)
 			"string":
 				(widget as LineEdit).text = str(value) if value != null else ""
-			"enum":
+			# A quality is the same dropdown (_make_widget builds both), so it
+			# refreshes the same way; it was missing here, and a quality row kept
+			# showing the stage it was built with whatever the story did next.
+			"enum", "quality":
 				var ob := widget as OptionButton
 				var i := ob.get_item_index(ob.get_selected_id())
 				if value != null and ob.get_item_text(maxi(i, 0)) != str(value):

@@ -2,6 +2,7 @@
 
 #include "StoryletCompiledBundle.h"
 #include "StoryletJsonBridge.h"
+#include "StoryletValueConvert.h"
 
 #include "Storylets/DescribeBundle.h"
 #include "Storylets/JsonValue.h"
@@ -10,6 +11,9 @@
 #if WITH_EDITORONLY_DATA
 #include "EditorFramework/AssetImportData.h"
 #endif
+
+using StoryletConvert::Ue;
+using StoryletConvert::PropertyTypeFrom;
 
 UStoryletBundle* UStoryletBundle::LoadFromJsonString(const FString& Json, FString& OutError)
 {
@@ -33,33 +37,20 @@ bool UStoryletBundle::IsCompiled() const
 FString UStoryletBundle::GetProject() const
 {
 	if (!IsCompiled()) return FString();
-	return FString(UTF8_TO_TCHAR(Compiled->Bundle->content.project.c_str()));
+	return Ue(Compiled->Bundle->content.project);
 }
 
 FString UStoryletBundle::GetBuildId() const
 {
 	if (!IsCompiled()) return FString();
-	return FString(UTF8_TO_TCHAR(Compiled->Bundle->content.hash.c_str()));
+	return Ue(Compiled->Bundle->content.hash);
 }
 
 namespace
 {
-	// The Blueprint boundary conversions for the bundle description. Deliberately
-	// local to this translation unit: the session wrapper's copies serve the
-	// session's own views, and neither is worth a shared private header for four
-	// three-line helpers (nothing std may reach a public UE header).
-	FString Ue(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
-
-	EStoryletPropertyType PropertyTypeFrom(const std::string& T)
-	{
-		if (T == storylets::PropertyTypes::Number) return EStoryletPropertyType::Number;
-		if (T == storylets::PropertyTypes::String) return EStoryletPropertyType::String;
-		if (T == storylets::PropertyTypes::Enum) return EStoryletPropertyType::Enum;
-		if (T == storylets::PropertyTypes::Flags) return EStoryletPropertyType::Flags;
-		if (T == storylets::PropertyTypes::Quality) return EStoryletPropertyType::Quality;
-		return EStoryletPropertyType::Boolean;
-	}
-
+	// The value, string and property-type crossings are StoryletValueConvert.h's,
+	// shared with the engine and the world container; the scope kind is the
+	// bundle description's alone.
 	EStoryletScopeKind ScopeKindFrom(const std::string& S)
 	{
 		if (S == storylets::scopekind::Story) return EStoryletScopeKind::Story;
@@ -68,42 +59,6 @@ namespace
 		if (S == storylets::scopekind::Hand) return EStoryletScopeKind::Hand;
 		if (S == storylets::scopekind::Tag) return EStoryletScopeKind::Tag;
 		return EStoryletScopeKind::World;
-	}
-
-	FStoryletValue ConvertValue(const storylets::StoryletValue& V)
-	{
-		FStoryletValue Out;
-		switch (V.kind)
-		{
-			case storylets::StoryletKind::Bool:
-				Out.Kind = EStoryletValueKind::Boolean;
-				Out.bBool = V.asBool();
-				Out.Display = V.asBool() ? TEXT("true") : TEXT("false");
-				break;
-			case storylets::StoryletKind::Number:
-				Out.Kind = EStoryletValueKind::Number;
-				Out.Number = V.asNumber();
-				Out.Display = Ue(storylets::StoryletValue::JsNumber(V.asNumber()));
-				break;
-			case storylets::StoryletKind::Str:
-				Out.Kind = EStoryletValueKind::String;
-				Out.String = Ue(V.asString());
-				Out.Display = Out.String;
-				break;
-			default:
-			{
-				Out.Kind = EStoryletValueKind::Flags;
-				const std::vector<std::string>& Flags = V.asFlags();
-				for (size_t i = 0; i < Flags.size(); ++i)
-				{
-					Out.Flags.Add(Ue(Flags[i]));
-					if (i > 0) Out.Display += TEXT(", ");
-					Out.Display += Ue(Flags[i]);
-				}
-				break;
-			}
-		}
-		return Out;
 	}
 }
 
@@ -185,7 +140,7 @@ FStoryletBundleDescription UStoryletBundle::DescribeBundle() const
 			FStoryletPropertySummary Row;
 			Row.Name = Ue(P.name);
 			Row.Type = PropertyTypeFrom(P.type);
-			Row.Default = ConvertValue(P.defaultValue);
+			Row.Default = StoryletValueToUe(P.defaultValue);
 			for (const std::string& V : P.values) Row.Values.Add(Ue(V));
 			Row.bDurable = P.durable;
 			Row.Purpose = Ue(P.purpose);
@@ -247,7 +202,7 @@ bool UStoryletBundle::Rebuild()
 	}
 	catch (const std::exception& Ex)
 	{
-		LoadError = FString(UTF8_TO_TCHAR(Ex.what()));
+		LoadError = Ue(Ex.what());
 		return false;
 	}
 }

@@ -183,6 +183,28 @@ describe("createLiveLink", () => {
     expect(sock.sent).toEqual([]);
   });
 
+  it("reports its state: connecting, then connected, then closed", () => {
+    const l = link();
+    const sock = FakeSocket.last();
+    expect(l.state).toBe("connecting");
+    sock.open();
+    expect(l.state).toBe("connected");
+    l.close();
+    expect(l.state).toBe("closed");
+    // An editor that is not listening closes the link too.
+    const refused = link();
+    FakeSocket.last().fail();
+    expect(refused.state).toBe("closed");
+    // No WebSocket implementation at all: there is nothing to connect.
+    const saved = (globalThis as { WebSocket?: unknown }).WebSocket;
+    (globalThis as { WebSocket?: unknown }).WebSocket = undefined;
+    try {
+      expect(createLiveLink({ build: "B1" }).state).toBe("closed");
+    } finally {
+      (globalThis as { WebSocket?: unknown }).WebSocket = saved;
+    }
+  });
+
   it("close closes an open socket", () => {
     const l = link();
     const sock = FakeSocket.last();

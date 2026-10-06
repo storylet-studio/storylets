@@ -315,7 +315,9 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         let error: string | undefined;
         const peekVerdicts = collect(() => {
           try {
-            ids = flowOf(op.flow).peek(op.box ?? "box", op.criteria ?? {}, op.n).cards.map((card) => card.id);
+            // A JSON `null` cap is passed through as null, not dropped: it is a
+            // different cap from an absent one (it returns nothing).
+            ids = flowOf(op.flow).peek(op.box ?? "box", op.criteria ?? {}, op.n as number | undefined).cards.map((card) => card.id);
           } catch (e) {
             error = String(e);
           }
@@ -480,7 +482,10 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         }
         engine = target;
         checkReport(at, op.expectReport, engine.loadGame(envelope), failures);
-        handles = new Map(engine.flows().map((f) => [f.id, f]));
+        // Re-taken AND watched, as a lazily opened flow is (corpus version 12):
+        // a deal straight after a load into an edited build is where an
+        // eviction's reason shows, and an unwatched handle would hear nothing.
+        handles = new Map(engine.flows().map((f) => [f.id, watch(f)]));
         if (op.expectSameBytes) {
           // Byte parity, this once: the loaded engine must write back exactly
           // what it was given. A save that differs by the road taken to it

@@ -152,6 +152,9 @@ const SURFACES = {
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/StoryletEngine.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/StoryletSave.h",
       "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/StoryletBundle.h",
+      // The USTRUCTs the wrapper hands back (FStoryletDealtCard and the rest),
+      // which the returned-shape check below reads.
+      "ports/unreal/StoryletEngine/Source/StoryletEngineRuntime/Public/StoryletTypes.h",
     ],
   },
 };
@@ -234,6 +237,48 @@ const API = [
     js: { re: "world\\?: ScopeResolver" }, unity: { re: "IScopeResolver World" },
     godot: { re: '"world"' }, unreal: { re: "WorldResolver" }, bp: null,
     why: "the host's @world binding (EngineOptions) is a std::function/interface, which does not cross a BP pin; Blueprint binds @world through a UStoryletWorld instead, which the engine registers as a foreign scope" },
+  // The diagnostic hooks (2026-10-06): a JS-side warning or callback is port
+  // parity, the same as any member, and until this review no row held them,
+  // which is how the Blueprint wrapper came to have neither. Option fields, so
+  // these are field probes; the cores spell them as engine or open-flow options.
+  { on: "Engine", member: "onReplacedFlow",
+    js: { re: "onReplacedFlow\\?: \\(id: string, dealt: number\\) => void" },
+    unity: { re: "Action<string, int> OnReplacedFlow" },
+    godot: { re: '"on_replaced_flow"' },
+    unreal: { re: "std::function<void\\(const std::string&, int\\)> onReplacedFlow" },
+    bp: { re: "FStoryletReplacedFlow OnReplacedFlow" },
+    why: "a field or option in the cores; Blueprint binds it as an assignable delegate on the engine" },
+  { on: "Flow", member: "onRestoreReport",
+    js: { re: "onRestoreReport\\?: \\(report: LoadReport\\) => void" },
+    unity: { re: "Action<LoadReport> OnRestoreReport" },
+    godot: { re: '"on_restore_report"' },
+    unreal: { re: "std::function<void\\(const LoadReport&\\)> onRestoreReport" },
+    bp: { re: "OpenFlowFromJson\\(const FString& Id, const FString& Json, FString& OutReportJson\\)" },
+    why: "an open-flow option in the cores; Blueprint has no callback pin, so the restore's report comes back as JSON in OpenFlowFromJson's OutReportJson" },
+  { on: "Flow", member: "openFlowSeed",
+    js: { re: "interface OpenFlowOptions[\\s\\S]{0,1500}?seed\\?: number" },
+    unity: { re: "class OpenFlowOptions[\\s\\S]{0,400}?double\\? Seed" },
+    godot: { re: 'OPEN_FLOW_OPTION_KEYS := \\["seed"' },
+    unreal: { re: "struct OpenFlowOptions[\\s\\S]{0,1500}?seed" },
+    bp: "OpenFlowSeeded",
+    why: "seeding one flow is an open-flow option in the cores; a Blueprint pin cannot be optional, hence the OpenFlowSeeded variant (added 2026-10-06; Blueprint could not seed a flow before)" },
+  // The LoadReport is never thrown away (2026-10-06): a hot swap and a save load
+  // both say what they cost, and until this review the helpers on three
+  // runtimes dropped it on the floor.
+  { on: "LiveLink", member: "liveBundleReport",
+    js: { re: "report: LoadReport \\}" },
+    unity: { re: "public LoadReport Report" },
+    godot: { re: '"report": swapped\\["report"\\]' },
+    unreal: { re: "ApplyLiveBundle\\(UStoryletEngine\\* Engine, const FString& Data, FString& OutError, FString& OutReportJson\\)" },
+    bp: "ApplyLiveBundleWithReport",
+    why: "the swap's LoadReport in the live-bundle result; Blueprint and the C++ link hand it back as JSON" },
+  { on: "Save", member: "loadStateReport",
+    js: { re: "onReport\\?: \\(report: LoadReport\\) => void" },
+    unity: { re: "Action<LoadReport> onReport = null" },
+    godot: { re: 'LOAD_OPTION_KEYS := \\["on_report"\\]' },
+    unreal: { re: "onReport" },
+    bp: "LoadStateFromJsonWithReport",
+    why: "loading a save hands back what it cost: an optional callback in the cores (the return value stays the @world values), a WithReport variant with an out-param in Blueprint" },
   { on: "Engine", member: "registryOption",
     js: { re: "registry\\?: ScopeRegistry" }, unity: { re: "ScopeRegistry Registry" },
     godot: { re: '"registry"' }, unreal: { re: "std::shared_ptr<ScopeRegistry> registry;" }, bp: null,
@@ -472,8 +517,8 @@ const API = [
   { on: "Debug", member: "unregisterLink", js: null, unity: "UnregisterLink", godot: "unregister_link", unreal: "UnregisterLink", bp: null,
     why: "as Debug.registerLink" },
   { on: "LiveLink", member: "linkState",
-    js: { re: "state\\b" }, unity: { re: "LiveLinkState State" }, godot: "link_state", unreal: "LinkState", bp: null,
-    why: "connecting / connected / closed, the same three everywhere. JS exposes it as a `state` field on the link object rather than a method, which is the JS idiom; no BP pin, as the link has none" },
+    js: { re: "readonly state: LiveLinkState" }, unity: { re: "LiveLinkState State" }, godot: "link_state", unreal: "LinkState", bp: null,
+    why: "connecting / connected / closed, the same three everywhere. JS exposes it as a read-only `state` on the link object rather than a method, which is the JS idiom (added 2026-10-06: the row's old `state\\b` probe passed on prose while the member did not exist); no BP pin, as the link has none" },
 
   // --- the bundle asset path (design 2.2) -------------------------------------
   { on: "Bundle", member: "importer", js: null, unity: "OnImportAsset", godot: "_import", unreal: "FactoryCreateFile", bp: null,
@@ -490,7 +535,7 @@ const API = [
     why: "Blueprint: editor-side, as examiner.panel" },
   { on: "Examiner", member: "boardSection", js: { re: "board\\(\\)" }, unity: { re: "\"Board\"" }, godot: { re: "\\.board\\(\\)" }, unreal: { re: "BoardSection" }, bp: null,
     why: "Blueprint: editor-side, as examiner.panel" },
-  { on: "Examiner", member: "resetToDefault", js: { re: "Reset to default" }, unity: { re: "Reset-to-default" }, godot: { re: "Reset to default" }, unreal: { re: "Reset to default" }, bp: null,
+  { on: "Examiner", member: "resetToDefault", js: { re: "Reset to default" }, unity: { re: "\"Reset to default\"" }, godot: { re: "Reset to default" }, unreal: { re: "Reset to default" }, bp: null,
     why: "Blueprint: editor-side, as examiner.panel" },
   { on: "Examiner", member: "searchFilter", js: { re: "Filter properties" }, unity: { re: "Filter properties" }, godot: { re: "Filter properties" }, unreal: { re: "SSearchBox" }, bp: null,
     why: "Blueprint: editor-side, as examiner.panel" },
@@ -536,6 +581,185 @@ const API = [
     why: "JS has no asset pipeline: describeBundle takes an already-parsed bundle, so there is no import failure to surface (the host's JSON.parse throws at its own boundary). Blueprint: editor-side, as bundleInspector.view" },
 ];
 
+// --- the fields of what the API hands back (added 2026-10-06) ----------------
+//
+// The table above asks whether a member exists and, with `takes`, what it
+// accepts. It never asked what comes BACK, so a port could drop a field from a
+// dealt card and stay green: the 2026-10-06 review found the Blueprint log
+// entry carrying Flow / Kind / Seq / Turn / Summary and nothing structured,
+// and no row could have said so.
+//
+// SHAPES names where each surface DECLARES a returned shape: a regex for the
+// head of the interface, class or struct (or, where a surface has no type for
+// it, the function whose signature or body builds it). FIELDS then holds one
+// row per required field, in the API table's own form: each surface's
+// spelling, a { re } probe, or null with a why ("MISSING - review ..." is
+// debt). A field passes only if it is declared INSIDE that declaration, not
+// anywhere in the file, because `id` and `turn` are everywhere and a loose
+// probe would pass on any of them. A cell may name `in:` a companion
+// declaration where the field lives one step away (a log entry's kind is
+// declared on the event it carries).
+//
+// GDScript builds these as Dictionaries inline, so its "declaration" is the
+// builder function and a field is its string key there. Those anchors carry a
+// parameter where the name alone is shared (the vendored state logger has an
+// _emit and the registry a _view of its own).
+const SHAPES = {
+  DealtCard: { from: "Flow.deal / dealMany / board / peek",
+    js: "interface DealtCard\\b", unity: "class DealtCard\\b", godot: "func _view\\(entry: Dictionary\\)",
+    unreal: "struct DealtCard\\s*\\{", bp: "struct FStoryletDealtCard\\b" },
+  OutcomeView: { from: "Flow.outcomes",
+    js: "interface OutcomeView\\b", unity: "class OutcomeView\\b", godot: "func outcomes\\(",
+    unreal: "struct OutcomeView\\s*\\{", bp: "struct FStoryletOutcomeView\\b" },
+  BoxView: { from: "Flow.listBoxes",
+    js: "interface BoxView\\b", unity: "class BoxView\\b", godot: "func list_boxes\\(",
+    unreal: "struct BoxView\\s*\\{", bp: "struct FStoryletBoxView\\b" },
+  RankedList: { from: "Flow.peek",
+    js: "interface RankedList\\b", unity: "class RankedList\\b", godot: "func peek\\(",
+    unreal: "struct RankedList\\s*\\{", bp: "TArray<FStoryletDealtCard> Peek\\(",
+    why: "Blueprint's Peek returns the card array itself, so its signature stands in for the shape" },
+  LogEntry: { from: "Flow.log",
+    js: "type LogEntry =", unity: "class LogEntry\\b", godot: "func _emit\\(event: Dictionary",
+    unreal: "struct LogEntry\\s*\\{", bp: "struct FStoryletLogEntry\\b" },
+  HotSwapResult: { from: "Engine.hotSwap",
+    js: "hotSwap\\([^)]*\\):", unity: "class HotSwapResult\\b", godot: "func _swap\\(",
+    unreal: "struct HotSwapResult\\s*\\{", bp: null,
+    why: "JS declares it inline as hotSwap's return type; Godot builds it in _swap, which hot_swap and the live link share. No BP hotSwap (see Engine.hotSwap): Blueprint swaps in place through ApplyLiveBundle, so there is no replacement engine to hand back" },
+  LiveBundleResult: { from: "LiveLink.applyLiveBundle",
+    js: "type LiveBundleResult =", unity: "class StoryletLiveBundleResult\\b",
+    godot: "func apply_live_bundle\\(",
+    unreal: "static bool ApplyLiveBundle\\(", bp: "bool ApplyLiveBundleWithReport\\(",
+    why: "Unreal has no result type: the C++ link and the BP engine return ok as a bool and the rest as out-params, so the signatures (both overloads on the link) stand in for the shape" },
+};
+
+// Why the Unreal cores have no engine or bundle in a live-bundle result, said once.
+const IN_PLACE = "swapped IN PLACE: the UStoryletEngine the caller holds stays valid with the new bundle under it (GetBundle reads it), so there is nothing to hand back";
+
+const FIELDS = [
+  ...["id", "gameId", "title", "purpose", "fields"].map((f) => ({ shape: "DealtCard", field: f })),
+  ...["id", "gameId", "title", "purpose", "fields", "available"].map((f) => ({ shape: "OutcomeView", field: f })),
+  ...["id", "gameId", "title", "turn"].map((f) => ({ shape: "BoxView", field: f })),
+].map((row) => ({
+  ...row,
+  // These three follow each language's naming exactly, so the spellings are
+  // derived rather than typed out thirty times: camelCase in JS, the C++ core
+  // and Godot's keys, PascalCase in C# and Blueprint (bool gets UE's b prefix).
+  js: row.field, godot: row.field, unreal: row.field,
+  unity: row.field[0].toUpperCase() + row.field.slice(1),
+  bp: row.field === "available" ? "bAvailable" : row.field[0].toUpperCase() + row.field.slice(1),
+})).concat([
+  { shape: "RankedList", field: "box", js: "box", unity: "Box", godot: "box", unreal: "box", bp: null,
+    why: "Blueprint's Peek returns the cards alone; the box is the BoxRef the caller passed (the other surfaces echo it normalised to a gameId, which a BP caller who peeks by internal id does not get back)" },
+  { shape: "RankedList", field: "cards", js: "cards", unity: "Cards", godot: "cards", unreal: "cards",
+    bp: { re: "TArray<FStoryletDealtCard> Peek\\(" } },
+
+  { shape: "LogEntry", field: "seq", js: "seq", unity: "Seq", godot: "seq", unreal: "seq", bp: "Seq" },
+  { shape: "LogEntry", field: "turn",
+    js: { re: "turn\\?: number" }, unity: "Turn", godot: "turn", unreal: "turn", bp: "Turn",
+    why: "JS by its optional spelling, because the play and turns events carry a `turn: number` of their own" },
+  { shape: "LogEntry", field: "type",
+    js: { re: 'type: "deal"', in: "type TraceEvent =" }, unity: null,
+    godot: { re: '"type": "deal"', in: "func deal_many\\(" },
+    unreal: { re: "Kind kind", in: "struct TraceEvent\\s*\\{" }, bp: "Kind",
+    why: "the event's kind. Declared on the event, not the entry, in JS, Godot (each emitting builder sets it) and the C++ core. C# has no tagged union, so the kind IS the event's class (DealEvent, PeekEvent, ...) and a host switches on it" },
+  { shape: "LogEntry", field: "event",
+    js: { re: "TraceEvent &" }, unity: { re: "TraceEvent Event" }, godot: { re: "event\\.duplicate\\(\\)" },
+    unreal: { re: "TraceEvent event" }, bp: null,
+    why: "the structured event: the hand, box, card, outcome, path, criteria and verdicts a log line is about. JS and Godot spread it into the entry, C# and C++ hold it. MISSING - review 2026-10-06: the Blueprint entry flattens to Kind / Seq / Turn / Summary, so a Blueprint host can read that a card was dealt but not which card, to which hand, or why. Its header says no generic value crosses a BP pin, which holds for a write's value and prev but not for the string fields every other kind carries" },
+
+  { shape: "HotSwapResult", field: "engine", js: "engine", unity: "Engine", godot: "engine", unreal: "engine", bp: null,
+    why: "as the shape: no Blueprint hotSwap" },
+  { shape: "HotSwapResult", field: "report", js: "report", unity: "Report", godot: "report", unreal: "report", bp: null,
+    why: "as the shape: no Blueprint hotSwap" },
+
+  { shape: "LiveBundleResult", field: "ok", js: "ok", unity: "Ok", godot: "ok",
+    unreal: { re: "bool ApplyLiveBundle\\(" }, bp: { re: "bool ApplyLiveBundleWithReport\\(" },
+    why: "the Unreal cells are the bool return" },
+  { shape: "LiveBundleResult", field: "engine", js: "engine", unity: "Engine", godot: "engine", unreal: null, bp: null,
+    why: IN_PLACE },
+  { shape: "LiveBundleResult", field: "bundle", js: "bundle", unity: "Bundle", godot: "bundle", unreal: null, bp: null,
+    why: `${IN_PLACE}. The BP caller passed the bundle in` },
+  { shape: "LiveBundleResult", field: "report", js: "report", unity: "Report", godot: "report",
+    unreal: { re: "FString& OutReportJson\\b" }, bp: { re: "FString& OutReportJson\\b" },
+    why: "the Unreal cells are the out-param carrying the LoadReport as JSON" },
+  { shape: "LiveBundleResult", field: "error", js: "error", unity: "Error", godot: "error",
+    unreal: { re: "FString& OutError\\b" }, bp: { re: "FString& OutError\\b" },
+    why: "the Unreal cells are the out-param" },
+]);
+
+/**
+ * The source with its comments removed, so a probe can only be satisfied by
+ * CODE. Until 2026-10-06 the probes ran over the raw text, and two rows passed
+ * on a comment alone: JS `LiveLink.linkState` (its `state\b` probe met the
+ * word in prose; there was no such member) and Unity's "Reset to default"
+ * (named in a comment over a button that said only "Reset"). String literals
+ * are kept, because several probes deliberately match a UI string.
+ *
+ * C-family files (`.ts`, `.cs`, `.h`, `.cpp`) lose `//` and block comments;
+ * GDScript loses `#` comments. Quoted strings survive whole, including a
+ * GDScript triple-quoted string and a C# verbatim `@"..."` (whose quote is
+ * doubled, not escaped). Newlines are kept so a line-anchored probe still
+ * sees line starts.
+ */
+function stripComments(text, file) {
+  const gd = file.endsWith(".gd");
+  let out = "";
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const c = text[i];
+    const next = text[i + 1];
+    if (gd && c === "#") {
+      while (i < n && text[i] !== "\n") i++;
+      continue;
+    }
+    if (!gd && c === "/" && next === "/") {
+      while (i < n && text[i] !== "\n") i++;
+      continue;
+    }
+    if (!gd && c === "/" && next === "*") {
+      const end = text.indexOf("*/", i + 2);
+      const stop = end < 0 ? n : end + 2;
+      out += text.slice(i, stop).replace(/[^\n]/g, "");
+      i = stop;
+      continue;
+    }
+    if (gd && (text.startsWith('"""', i) || text.startsWith("'''", i))) {
+      const q = text.slice(i, i + 3);
+      const end = text.indexOf(q, i + 3);
+      const stop = end < 0 ? n : end + 3;
+      out += text.slice(i, stop);
+      i = stop;
+      continue;
+    }
+    if (!gd && c === "@" && next === '"') {
+      let j = i + 2;
+      while (j < n) {
+        if (text[j] === '"' && text[j + 1] === '"') { j += 2; continue; }
+        if (text[j] === '"') { j++; break; }
+        j++;
+      }
+      out += text.slice(i, j);
+      i = j;
+      continue;
+    }
+    if (c === '"' || c === "'" || (!gd && c === "`")) {
+      let j = i + 1;
+      while (j < n && text[j] !== c) {
+        if (text[j] === "\\") j++;
+        else if (text[j] === "\n" && c !== "`") break;   // an unterminated quote ends with its line
+        j++;
+      }
+      out += text.slice(i, Math.min(j + 1, n));
+      i = j + 1;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
 const sources = {};
 const missingFiles = [];
 for (const [key, s] of Object.entries(SURFACES)) {
@@ -546,7 +770,7 @@ for (const [key, s] of Object.entries(SURFACES)) {
       missingFiles.push(`  ${rel}  (surface: ${s.label})`);
       continue;
     }
-    texts.push(readFileSync(abs, "utf8"));
+    texts.push(stripComments(readFileSync(abs, "utf8"), rel));
   }
   sources[key] = texts.join("\n");
 }
@@ -585,12 +809,99 @@ for (const row of API) {
   }
 }
 
+/**
+ * The text of every declaration in `source` whose head matches `anchor`, so a
+ * field probe can be held to the shape it belongs to. All matches, joined, for
+ * the same reason paramLists takes all of them: the Unreal link declares
+ * applyLiveBundle as two overloads, and the report lives on the second.
+ *
+ * GDScript has no braces, so there it is the function from its `func` line to
+ * the next line back at column 0. Elsewhere it runs from the head to the close
+ * of the first bracket opened after it (the body of an interface, class or
+ * struct, a function's parameter list, or hotSwap's inline return type), or,
+ * for a TypeScript alias (`type X =`), to its `;`. Comments are already gone,
+ * so the only brackets left are code; none of these declarations holds a
+ * bracket inside a string.
+ */
+function declBodies(source, key, anchor) {
+  const out = [];
+  for (const m of source.matchAll(new RegExp(anchor, "g"))) {
+    const head = m.index;
+    let end = m.index + m[0].length;
+    if (key === "godot") {
+      for (;;) {
+        const nl = source.indexOf("\n", end);
+        if (nl < 0) { end = source.length; break; }
+        const next = source.indexOf("\n", nl + 1);
+        const line = source.slice(nl + 1, next < 0 ? source.length : next);
+        end = nl;
+        if (line.trim() !== "" && !/^\s/.test(line)) break;
+        end = next < 0 ? source.length : next;
+        if (next < 0) break;
+      }
+      out.push(source.slice(head, end));
+      continue;
+    }
+    const alias = /=\s*$/.test(m[0]);
+    let depth = 0;
+    let i = alias ? end : end - 1;
+    for (; i < source.length; i++) {
+      const c = source[i];
+      if (c === "(" || c === "{" || c === "[") depth++;
+      else if (c === ")" || c === "}" || c === "]") {
+        depth--;
+        if (!alias && depth === 0) break;
+      } else if (alias && depth === 0 && c === ";") break;
+    }
+    out.push(source.slice(head, i + 1));
+  }
+  return out;
+}
+
+/** How a field declaration looks inside each surface's declaration of a shape. */
+const FIELD = {
+  js: (n) => `(?<![\\w$])${n}\\??\\s*:`,
+  unity: (n) => `(?<=\\s)${n}\\s*(;|=|\\{)`,
+  godot: (n) => `"${n}"`,
+  unreal: (n) => `(?<=[\\s>*&])${n}\\s*(;|=|\\{)`,
+  bp: (n) => `(?<=[\\s>*&])${n}\\s*(;|=|\\{)`,
+};
+
+const undeclared = new Set();
+for (const row of FIELDS) {
+  const shape = SHAPES[row.shape];
+  if (!shape) {
+    console.error(`check-runtime-api-parity: field row \`${row.field}\` names shape \`${row.shape}\`, which SHAPES does not declare.`);
+    process.exit(2);
+  }
+  for (const key of Object.keys(SURFACES)) {
+    const cell = row[key];
+    if (cell == null) continue; // deliberately absent here (see `why`)
+    if (shape[key] == null) {
+      console.error(`check-runtime-api-parity: ${row.shape}.${row.field} has a ${key} spelling, but ${row.shape} has no ${key} declaration.`);
+      process.exit(2);
+    }
+    const anchor = cell.in ?? shape[key];
+    const bodies = declBodies(sources[key], key, anchor);
+    if (bodies.length === 0) {
+      const line = `  ${row.shape} (returned by ${shape.from})  ->  NO DECLARATION on ${SURFACES[key].label} (expected /${anchor}/)`;
+      if (!undeclared.has(line)) { undeclared.add(line); missing.push(line); }
+      continue;
+    }
+    const re = new RegExp(typeof cell === "string" ? FIELD[key](cell) : cell.re, cell.flags ?? "");
+    if (!bodies.some((body) => re.test(body))) {
+      const shown = typeof cell === "string" ? cell : `/${cell.re}/`;
+      missing.push(`  ${row.shape}.${row.field}  ->  MISSING FIELD on ${SURFACES[key].label} (expected \`${shown}\` inside /${anchor}/)`);
+    }
+  }
+}
+
 if (missing.length) {
   console.error("Storylet Engine runtime API parity FAILED - the runtimes must expose the same surface:\n");
   console.error(missing.join("\n"));
   console.error(`
-Fix by implementing the member on the runtime(s) above, in this commit. If it genuinely does not
-belong there, set that column to null in scripts/check-runtime-api-parity.mjs with a \`why\`.`);
+Fix by implementing the member or field on the runtime(s) above, in this commit. If it genuinely does
+not belong there, set that column to null in scripts/check-runtime-api-parity.mjs with a \`why\`.`);
   process.exit(1);
 }
 
@@ -603,11 +914,14 @@ belong there, set that column to null in scripts/check-runtime-api-parity.mjs wi
 // there is no debug registry to have). What actually wants reading is the
 // DEBT: a hole whose `why` admits the member should be there and is not.
 // Those say "MISSING" and are counted separately (2026-08-29).
-const holesFor = (pred) => API.reduce(
+const holesFor = (table, pred) => table.reduce(
   (n, row) => n + Object.keys(SURFACES).filter((k) => row[k] == null && pred(row)).length, 0);
-const debt = holesFor((row) => /MISSING/i.test(row.why ?? ""));
-const holes = holesFor(() => true);
+const isDebt = (row) => /MISSING/i.test(row.why ?? "");
+const debt = holesFor(API, isDebt) + holesFor(FIELDS, isDebt);
+const holes = holesFor(API, () => true);
+const fieldHoles = holesFor(FIELDS, () => true);
 console.log(
-  `Storylet Engine runtime API parity OK - ${API.length} members across `
-  + `${Object.keys(SURFACES).length} surfaces (${holes} recorded holes, each with a why; `
+  `Storylet Engine runtime API parity OK - ${API.length} members and ${Object.keys(SHAPES).length} `
+  + `returned shapes (${FIELDS.length} fields) across ${Object.keys(SURFACES).length} surfaces `
+  + `(${holes} member holes and ${fieldHoles} field holes, each with a why; `
   + `${debt} of them admitted DEBT).`);

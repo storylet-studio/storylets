@@ -480,7 +480,10 @@ func _external_scopes_read_written() -> void:
 	var registry := StoryletScopeRegistry.new()
 	registry.define_owned("patter", [{"name": "gold", "type": "number", "default": 3},
 		{"name": "visits", "type": "number", "default": 1}], {"owner": "Patter"})
-	var flow := StoryletEngine.create(bundle, {"registry": registry}).open_flow("main")
+	# The engine kept, not chained: a flow holds its engine weakly, so an engine
+	# nothing keeps is freed and closes its flows.
+	var engine := StoryletEngine.create(bundle, {"registry": registry})
+	var flow := engine.open_flow("main")
 	_expect("dealt", flow.deal("h1").map(func(c): return c["gameId"]), ["c1"])
 	var err := flow.play("c1", "go", "h1")
 	_check("the patron would not play: " + err, err == "")
@@ -541,7 +544,8 @@ func _external_scopes_refused() -> void:
 	card["outcomes"][0]["changes"] = {"@patter.gold": {"src": "1", "ast": ["n", 1]}}
 	var shared := StoryletScopeRegistry.new()
 	shared.define_owned("patter", [{"name": "gold", "type": "number", "default": 3}])
-	var paying := StoryletEngine.create(pays, {"registry": shared}).open_flow("main")
+	var paying_engine := StoryletEngine.create(pays, {"registry": shared})
+	var paying := paying_engine.open_flow("main")
 	_expect("dealt", paying.deal("h1").map(func(c): return c["gameId"]), ["c1"])
 	shared.remove("patter")
 	var err := paying.play("c1", "go", "h1")
@@ -557,7 +561,8 @@ func _external_scopes_unnamed_write() -> void:
 	card["outcomes"][0]["changes"] = {"@patter.gold": {"src": "1", "ast": ["n", 1]}}
 	# A scope the content does not name as another engine's is still no target.
 	bundle.erase("externalScopes")
-	var other := StoryletEngine.create(bundle).open_flow("main")
+	var engine := StoryletEngine.create(bundle)
+	var other := engine.open_flow("main")
 	other.deal("h1")
 	var err := other.play("c1", "go", "h1")
 	_check("an unnamed scope was not a bad target: " + err, err.contains('bad change target scope "@patter"'))

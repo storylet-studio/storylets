@@ -393,6 +393,97 @@ namespace storylets
             return scope == "box" || scope == "deck" || scope == "hand" || scope == "value";
         }
 
+        /** Is `key` an array index as a JS object orders its keys: the canonical
+         *  decimal of an integer from 0 to 2^32 - 2 ("7", "42"; never "07",
+         *  "-1" or "4294967295")? */
+        inline bool IsJsIndexKey(const std::string& key, uint64_t& out)
+        {
+            if (key.empty() || key.size() > 10 || (key.size() > 1 && key[0] == '0')) return false;
+            uint64_t v = 0;
+            for (char c : key)
+            {
+                if (c < '0' || c > '9') return false;
+                v = v * 10 + static_cast<uint64_t>(c - '0');
+            }
+            if (v > 4294967294ULL) return false;
+            out = v;
+            return true;
+        }
+
+        /** Keys in the order a JS object holds them (ruling E): integer-like
+         *  keys first, ascending, then the rest in insertion order. JS order is
+         *  the contract wherever the reference writes an object keyed by flow
+         *  id or hand gameId (a save's flows, the order a load reopens them,
+         *  the dealt slice and the board), because any JS reading a save sees
+         *  it that way anyway: JSON.parse reorders them. */
+        inline std::vector<std::string> JsKeyOrder(std::vector<std::string> keys)
+        {
+            std::vector<std::pair<uint64_t, std::string>> indexed;
+            std::vector<std::string> rest;
+            for (auto& key : keys)
+            {
+                uint64_t v = 0;
+                if (IsJsIndexKey(key, v)) indexed.emplace_back(v, std::move(key));
+                else rest.push_back(std::move(key));
+            }
+            if (indexed.empty()) return rest;
+            std::sort(indexed.begin(), indexed.end(),
+                [](const std::pair<uint64_t, std::string>& a, const std::pair<uint64_t, std::string>& b) { return a.first < b.first; });
+            std::vector<std::string> out;
+            out.reserve(indexed.size() + rest.size());
+            for (auto& pair : indexed) out.push_back(std::move(pair.second));
+            for (auto& key : rest) out.push_back(std::move(key));
+            return out;
+        }
+
+        /** An OrderedMap re-keyed into JS order (JsKeyOrder), values moved. */
+        template <typename V>
+        OrderedMap<std::string, V> InJsOrder(OrderedMap<std::string, V> map)
+        {
+            const std::vector<std::string> keys = map.keys();
+            std::vector<std::string> ordered = JsKeyOrder(keys);
+            if (ordered == keys) return map;
+            OrderedMap<std::string, V> out;
+            for (const auto& key : ordered) out.set(key, std::move(*map.get(key)));
+            return out;
+        }
+
+        /** The trace handlers' identities (ruling F): identity -> the id it
+         *  is registered under. See Engine::subscribeTrace. */
+        using TraceIdentities = std::vector<std::pair<const void*, uint64_t>>;
+
+        /** The id `identity` is already registered under, or 0. */
+        inline uint64_t RegisteredAs(const TraceIdentities& identities, const void* identity)
+        {
+            if (!identity) return 0;
+            for (const auto& pair : identities)
+            {
+                if (pair.first == identity) return pair.second;
+            }
+            return 0;
+        }
+
+        inline void ForgetIdentity(TraceIdentities& identities, uint64_t id)
+        {
+            identities.erase(std::remove_if(identities.begin(), identities.end(),
+                [id](const std::pair<const void*, uint64_t>& pair) { return pair.second == id; }), identities.end());
+        }
+
+        /** The one kind switch: an owned scope word to that member of anything
+         *  laid out per kind (a Partition, a PropsPartition, a FlowDecls, the
+         *  OwnerIndexes), const when the argument is. Anything that is not
+         *  box, deck or hand answers "value", as each of the nine copies this
+         *  replaced did; every caller has already checked IsOwnedScope or
+         *  walks the four kinds itself. */
+        template <typename T>
+        auto KindOf(T& perKind, const std::string& kind) -> decltype((perKind.value))
+        {
+            if (kind == "box") return perKind.box;
+            if (kind == "deck") return perKind.deck;
+            if (kind == "hand") return perKind.hand;
+            return perKind.value;
+        }
+
         /**
          * The owner segment of a property address, both ways round
          * (design/engine-server.md 4.4).
@@ -426,29 +517,13 @@ namespace storylets
         };
 
         /** One index per owned scope, reached by the scope word the address
-         *  carries. */
+         *  carries (KindOf). */
         struct OwnerIndexes
         {
             OwnerIndex box;
             OwnerIndex deck;
             OwnerIndex hand;
             OwnerIndex value;
-
-            OwnerIndex& of(const std::string& kind)
-            {
-                if (kind == "box") return box;
-                if (kind == "deck") return deck;
-                if (kind == "hand") return hand;
-                return value;
-            }
-
-            const OwnerIndex& of(const std::string& kind) const
-            {
-                if (kind == "box") return box;
-                if (kind == "deck") return deck;
-                if (kind == "hand") return hand;
-                return value;
-            }
         };
 
         /** Index one owner both ways. OrderedMap::set is LAST-write-wins, so
@@ -881,22 +956,6 @@ namespace storylets
         /** A registry section's values: registry key -> name -> value. */
         using Sections = OrderedMap<std::string, OrderedMap<std::string, StoryletValue>>;
 
-        inline OrderedMap<std::string, OrderedMap<std::string, StoryletValue>>& PartitionKind(PropsPartition& p, const std::string& kind)
-        {
-            if (kind == "box") return p.box;
-            if (kind == "deck") return p.deck;
-            if (kind == "hand") return p.hand;
-            return p.value;
-        }
-
-        inline const OrderedMap<std::string, OrderedMap<std::string, StoryletValue>>& PartitionKind(const PropsPartition& p, const std::string& kind)
-        {
-            if (kind == "box") return p.box;
-            if (kind == "deck") return p.deck;
-            if (kind == "hand") return p.hand;
-            return p.value;
-        }
-
         inline std::vector<std::string> SplitKey(const std::string& key)
         {
             std::vector<std::string> parts;
@@ -956,7 +1015,7 @@ namespace storylets
                 if (!wellFormed) continue;
                 if (parts.size() == 3 && isKind(parts[1]))
                 {
-                    PartitionKind(moved.shared, parts[1]).set(UnescapeKeyPart(parts[2]), pair.second);
+                    KindOf(moved.shared, parts[1]).set(UnescapeKeyPart(parts[2]), pair.second);
                 }
                 else if (parts.size() == 4 && parts[1] == "flow" && parts[3] == "story")
                 {
@@ -964,7 +1023,7 @@ namespace storylets
                 }
                 else if (parts.size() == 5 && parts[1] == "flow" && isKind(parts[3]))
                 {
-                    if (PropsPartition* p = flowOf(parts[2])) PartitionKind(*p, parts[3]).set(UnescapeKeyPart(parts[4]), pair.second);
+                    if (PropsPartition* p = flowOf(parts[2])) KindOf(*p, parts[3]).set(UnescapeKeyPart(parts[4]), pair.second);
                 }
                 // Anything else under `storylets/` is this engine's and no
                 // bag's any more: dropped.
@@ -982,7 +1041,7 @@ namespace storylets
             if (p.story.size() > 0) out.set(keyOf("story", std::string()), p.story);
             for (const char* kind : {"box", "deck", "hand", "value"})
             {
-                for (const auto& pair : PartitionKind(p, kind))
+                for (const auto& pair : KindOf(p, kind))
                 {
                     if (pair.second.size() > 0) out.set(keyOf(kind, pair.first), pair.second);
                 }
@@ -1091,6 +1150,12 @@ namespace storylets
          *  holds, which is the question a resume under that name has to ask. */
         std::unordered_map<std::string, int> sharedClaimsExcept(const std::string& id) const;
 
+    private:
+        /** The one walk behind both: every live flow's board, but `except`. */
+        std::unordered_map<std::string, int> claimsHeld(const std::string* except) const;
+
+    public:
+
         // --- the run's log (design/shared-scarcity.md 8.2) --------------------
 
         /** Every flow's events in one ordered stream, each tagged with its flow.
@@ -1131,13 +1196,35 @@ namespace storylets
         }
 
         /** Every flow's trace, one stream, each event tagged with its flow id
-         *  - the tools' one stream. Returns the unsubscribe. */
-        std::function<void()> subscribeTrace(std::function<void(const std::string&, const TraceEvent&)> handler)
+         *  - the tools' one stream. Returns the unsubscribe.
+         *
+         *  The unsubscribe captures this engine by raw pointer: call it while
+         *  the engine is alive, or not at all (an engine that goes away takes
+         *  its handlers with it). It is safe from inside a handler, since
+         *  delivery runs over a copy of the handler list.
+         *
+         *  The same handler subscribed twice is registered once (ruling F; JS
+         *  keeps its handlers in a Set). A std::function has no identity to
+         *  compare (and target() needs RTTI, which Unreal builds without), so
+         *  the handler's identity is the caller's to give: `identity`, any
+         *  address that stands for the handler (the object it belongs to, the
+         *  function it wraps). Subscribing an identity already registered
+         *  hands back an unsubscribe for that one registration, and either
+         *  unsubscribe removes it. Without one, every subscribe is its own
+         *  registration, as each new closure is its own handler in JS. */
+        std::function<void()> subscribeTrace(std::function<void(const std::string&, const TraceEvent&)> handler,
+            const void* identity = nullptr)
         {
-            uint64_t id = nextEngineTraceId_++;
-            engineTraceHandlers_.push_back({id, std::move(handler)});
+            uint64_t id = detail::RegisteredAs(engineTraceIdentities_, identity);
+            if (id == 0)
+            {
+                id = nextEngineTraceId_++;
+                engineTraceHandlers_.push_back({id, std::move(handler)});
+                if (identity) engineTraceIdentities_.emplace_back(identity, id);
+            }
             return [this, id]()
             {
+                detail::ForgetIdentity(engineTraceIdentities_, id);
                 engineTraceHandlers_.erase(
                     std::remove_if(engineTraceHandlers_.begin(), engineTraceHandlers_.end(),
                         [id](const EngineTraceHandler& h) { return h.first == id; }),
@@ -1315,16 +1402,11 @@ namespace storylets
             static const std::vector<PropertyDecl> empty;
             if (!hand.templateId.empty())
             {
+                // templatesById_ holds every template in every box, indexed
+                // before anything asks, so a miss is a template the bundle does
+                // not have: it declares nothing.
                 const HandTemplate* const* known = templatesById_.get(hand.templateId);
-                if (known) return (*known)->properties;
-                for (const auto& box : bundle_->boxes)
-                {
-                    for (const auto& t : box.handTemplates)
-                    {
-                        if (t.id == hand.templateId) return t.properties;
-                    }
-                }
-                return empty;
+                return known ? (*known)->properties : empty;
             }
             return hand.properties;
         }
@@ -1345,7 +1427,7 @@ namespace storylets
          */
         std::string addressOf(const std::string& kind, const std::string& id) const
         {
-            const std::string* gameId = owners_.of(kind).gameId.get(id);
+            const std::string* gameId = detail::KindOf(owners_, kind).gameId.get(id);
             return kind + "." + (gameId ? *gameId : id);
         }
 
@@ -1362,7 +1444,7 @@ namespace storylets
         bool resolveOwner(const std::string& kind, const std::string& segment,
             std::string& outId, bool& outLegacy) const
         {
-            const detail::OwnerIndex& index = owners_.of(kind);
+            const detail::OwnerIndex& index = detail::KindOf(owners_, kind);
             const std::string* byGameId = index.id.get(segment);
             if (byGameId)
             {
@@ -1403,12 +1485,12 @@ namespace storylets
         std::string ownerOrThrow(const std::string& kind, const std::string& segment,
             const std::string& name, bool& outLegacy) const
         {
-            const std::vector<std::string>* candidates = owners_.of(kind).repeated.get(segment);
+            const std::vector<std::string>* candidates = detail::KindOf(owners_, kind).repeated.get(segment);
             if (candidates) throw StoryletError(ambiguousAddressMessage(segment, name, *candidates));
             // A box-qualified form of a project-map zone: never accepted,
             // because the zone belongs to no box (design/project-map-contract.md
             // 3.4). The refusal names the address that works.
-            const std::string* zone = owners_.of(kind).zoneQualified.get(segment);
+            const std::string* zone = detail::KindOf(owners_, kind).zoneQualified.get(segment);
             if (zone)
             {
                 throw StoryletError("\"value." + segment + "." + name + "\": \"" + *zone
@@ -1540,7 +1622,7 @@ namespace storylets
                 registered.push_back("story");
                 for (const char* kind : {"box", "deck", "hand", "value"})
                 {
-                    for (const auto& pair : partitionKind(shared_, kind))
+                    for (const auto& pair : detail::KindOf(shared_, kind))
                     {
                         if (pair.second->declarations().empty()) continue;   // holds nothing: not registered
                         const std::string key = detail::SharedKey(kind, pair.first);
@@ -1594,12 +1676,8 @@ namespace storylets
             shared_.story->reseed(&story);
             for (const char* kind : {"box", "deck", "hand", "value"})
             {
-                const OrderedMap<std::string, std::vector<PropertyDecl>>& decls =
-                    std::string(kind) == "box" ? sharedDecls_.box
-                    : std::string(kind) == "deck" ? sharedDecls_.deck
-                    : std::string(kind) == "hand" ? sharedDecls_.hand
-                    : sharedDecls_.value;
-                for (const auto& pair : partitionKind(shared_, kind))
+                const OrderedMap<std::string, std::vector<PropertyDecl>>& decls = detail::KindOf(sharedDecls_, kind);
+                for (const auto& pair : detail::KindOf(shared_, kind))
                 {
                     const std::vector<PropertyDecl>* found = decls.get(pair.first);
                     const std::vector<ScopeDeclaration> plain = found ? detail::PlainDecls(*found) : std::vector<ScopeDeclaration>();
@@ -1610,15 +1688,6 @@ namespace storylets
             {
                 registry_->reseedOwned("world", detail::PlainDecls(bundle_->world.properties));
             }
-        }
-
-        /** One kind of a partition's bags (Flow::kindOf, which is not complete here). */
-        static const OrderedMap<std::string, std::shared_ptr<PropertyBag>>& partitionKind(const detail::Partition& p, const std::string& kind)
-        {
-            if (kind == "box") return p.box;
-            if (kind == "deck") return p.deck;
-            if (kind == "hand") return p.hand;
-            return p.value;
         }
 
         /** Every OTHER scope in the registry, as an eval context sees it (instance
@@ -1687,31 +1756,25 @@ namespace storylets
             // should see its own event.
             if (logCap_.has_value())
             {
+                // Clamped as the flow log is: a negative cap empties the log, as
+                // JS's slice does, where the bare cast read it as a size beyond
+                // any vector and never trimmed at all.
+                const size_t cap = static_cast<size_t>(std::max(*logCap_, 0));
                 EngineLogEntry entry;
                 entry.event = evt;
                 entry.flow = flowId;
                 entry.seq = engineSeq_++;
                 entry.turn = turn;
                 engineLog_.push_back(std::move(entry));
-                if (engineLog_.size() > static_cast<size_t>(*logCap_))
+                if (engineLog_.size() > cap)
                 {
                     engineLog_.erase(engineLog_.begin(),
-                        engineLog_.begin() + (engineLog_.size() - static_cast<size_t>(*logCap_)));
+                        engineLog_.begin() + static_cast<ptrdiff_t>(engineLog_.size() - cap));
                 }
             }
             std::vector<EngineTraceHandler> handlers = engineTraceHandlers_;
             for (const auto& handler : handlers) handler.second(flowId, evt);
         }
-
-        // --- the run's log (design/shared-scarcity.md 8.2) --------------------
-
-        /** Every flow's events in one ordered stream, each tagged with its flow.
-         *  Opt in with the same `log` option the flow logs use; capped the same.
-         *
-         *  This exists because a flow's own log cannot answer the question a run
-         *  raises: when a story action in ANOTHER flow moves shared state, your
-         *  flow's log says nothing and your value simply changes. */
-
 
         bool engineTracing() const { return !engineTraceHandlers_.empty(); }
 
@@ -1730,6 +1793,9 @@ namespace storylets
         bool selfWorld_ = false;
         /** The keys the engine itself registered (flows keep their own), in order. */
         std::vector<std::string> registered_;
+        /** The @world rows that open both listProperties, the engine's and a
+         *  flow's: read through the resolver, in declaration order. */
+        void addWorldRows(std::vector<PropertyRow>& rows) const;
         /** saveGame's `registry` section, in the order a load rebuilds it. */
         OrderedMap<std::string, OrderedMap<std::string, StoryletValue>> registrySection() const;
         mutable int viewRevision_ = -1;
@@ -1770,6 +1836,7 @@ namespace storylets
         int64_t engineSeq_ = 0;
         std::vector<std::string> spentIds() const;
         std::vector<EngineTraceHandler> engineTraceHandlers_;
+        detail::TraceIdentities engineTraceIdentities_;
         uint64_t nextEngineTraceId_ = 1;
 
         // Lookups (bundle is immutable; built once). Shared with every flow.
@@ -1891,7 +1958,7 @@ namespace storylets
                 put(detail::FlowKey(id_, "story"), stores_.story);
                 for (const char* kind : {"box", "deck", "hand", "value"})
                 {
-                    for (const auto& pair : kindOf(stores_, kind)) put(detail::FlowKey(id_, kind, pair.first), pair.second);
+                    for (const auto& pair : detail::KindOf(stores_, kind)) put(detail::FlowKey(id_, kind, pair.first), pair.second);
                 }
             }
             catch (...)
@@ -1914,13 +1981,27 @@ namespace storylets
 
         /** Subscribe to the deal/play trace (schema 5). Returns the
          *  unsubscribe. With no subscribers the flow does no trace work at
-         *  all. */
-        std::function<void()> subscribeTrace(std::function<void(const TraceEvent&)> handler)
+         *  all.
+         *
+         *  The unsubscribe captures this flow by raw pointer: call it while
+         *  the flow object is alive (a FlowPtr held keeps it so, closed or
+         *  not), or not at all. It is safe from inside a handler, since
+         *  delivery runs over a copy of the handler list. The same `identity`
+         *  subscribed twice is registered once (ruling F), as on
+         *  Engine::subscribeTrace, which says what an identity is and why. */
+        std::function<void()> subscribeTrace(std::function<void(const TraceEvent&)> handler,
+            const void* identity = nullptr)
         {
-            uint64_t id = nextTraceId_++;
-            traceHandlers_.push_back({id, std::move(handler)});
+            uint64_t id = detail::RegisteredAs(traceIdentities_, identity);
+            if (id == 0)
+            {
+                id = nextTraceId_++;
+                traceHandlers_.push_back({id, std::move(handler)});
+                if (identity) traceIdentities_.emplace_back(identity, id);
+            }
             return [this, id]()
             {
+                detail::ForgetIdentity(traceIdentities_, id);
                 traceHandlers_.erase(
                     std::remove_if(traceHandlers_.begin(), traceHandlers_.end(),
                         [id](const TraceHandler& h) { return h.first == id; }),
@@ -1941,8 +2022,10 @@ namespace storylets
         // --- host surface (schema 5) --------------------------------------------
 
         /** Look at the top of the stock through raw tag criteria (schema 3.1):
-         *  claims respected, nothing registered, nothing left behind but the
-         *  trace line. You can never play a card you only peeked. */
+         *  claims respected, nothing registered, no random draw consumed
+         *  (ruling A), nothing left behind but the trace line. You can never
+         *  play a card you only peeked. At most `n` cards, none when `n` is
+         *  below one; every card when it is absent. */
         RankedList peek(
             const std::string& boxRef,
             const OrderedMap<std::string, std::string>& criteria = {},
@@ -1963,7 +2046,21 @@ namespace storylets
             {
                 return claimVerdict(card, shared, claimCounts, worldClaims);
             };
-            RunAskResult run = runAsk(ask, claimed, trace);
+            // A peek consumes no draws (ruling A): it ranks with a throwaway
+            // copy of this flow's generator, the tie shuffle and any random()
+            // in a condition alike, and the real one is put back however the
+            // ask ends. So it still answers as a deal would now, and any
+            // number of peeks leaves the next deal unchanged.
+            RunAskResult run;
+            {
+                struct RestorePrng
+                {
+                    Mulberry32& prng;
+                    const Mulberry32 saved;
+                    ~RestorePrng() { prng = saved; }
+                } restore{prng_, prng_};
+                run = runAsk(ask, claimed, trace);
+            }
             std::vector<CardEntry> listed;
             if (!n.has_value())
             {
@@ -2001,8 +2098,8 @@ namespace storylets
             const HandInBox& found = resolveHand(handRef);
             std::string gameId = EffectiveGameId(*found.hand);
             OrderedMap<std::string, std::vector<DealtCard>> result = dealMany(std::vector<std::string>{handRef});
-            const std::vector<DealtCard>* cards = result.get(gameId);
-            return cards ? *cards : std::vector<DealtCard>{};
+            std::vector<DealtCard>* cards = result.get(gameId);
+            return cards ? std::move(*cards) : std::vector<DealtCard>{};
         }
 
         /** Re-deal several / all hands (schema 3.5): seeded hand-order shuffle
@@ -2039,10 +2136,16 @@ namespace storylets
                 HandEnv handEnv = buildHandEnv(ask);
                 EvalContext condCtx = evalCtx(box, nullptr, handEnv);
                 bool conditionOk = passes(ask.condition, condCtx);
+                // ONE context per deck, built for its gate and reused for every
+                // card condition in it: box, deck and handEnv do not vary, and a
+                // condition is a read-only gate (runAsk does the same). Keyed by
+                // deck id, so a seated card whose deck is not in this box finds
+                // no gate and is refused as before.
                 std::unordered_map<std::string, bool> gateOk;
+                std::unordered_map<std::string, EvalContext> deckCtx;
                 for (const auto& deck : box.decks)
                 {
-                    EvalContext ctx = evalCtx(box, &deck, handEnv);
+                    EvalContext& ctx = deckCtx.emplace(deck.id, evalCtx(box, &deck, handEnv)).first->second;
                     gateOk[deck.id] = passes(deck.condition, ctx);
                 }
                 double boxTurn = turnCounts_.getOr(box.id, 0);
@@ -2060,29 +2163,47 @@ namespace storylets
                     evicted.emplace_back(known ? EffectiveGameId(*known->card) : cardId, reason);
                     return false;
                 };
-                const std::vector<std::string>* contents = boardContents_.get(hand.id);
+                // A COPY: a condition can emit a diagnostic, and a trace handler
+                // re-entering the flow can replace this hand's vector, which a
+                // pointer into the board would then read freed.
+                const std::vector<std::string> contents = boardContents_.getOr(hand.id, {});
                 std::vector<std::string> survivors;
-                if (contents)
+                for (const auto& cardId : contents)
                 {
-                    for (const auto& cardId : *contents)
+                    bool keep = [&]()
                     {
-                        bool keep = [&]()
+                        if (!conditionOk) return evict(cardId, "hand-condition");
+                        const CardEntry* entry = engine_->cardsById_.get(cardId);
+                        if (!entry) return evict(cardId, "vanished");   // edited content: dropped
+                        // Its deck is in ANOTHER box now (a load, resume or hot swap
+                        // into an edited build): gone from this hand's box, as a
+                        // deleted card is (ruling D), and asked before the gate,
+                        // which has no entry for a deck of another box.
+                        if (entry->box->id != box.id) return evict(cardId, "vanished");
+                        if (!gateOk[entry->deck->id]) return evict(cardId, VerdictWire(TraceVerdict::DeckGate));
+                        // Taken out of the world by somebody's shared one-shot
+                        // (ruling C): checked where the fill checks it, after the
+                        // gate and before this flow's own clock, so a card one
+                        // playthrough holds goes once another has spent it, as a
+                        // cooldown would evict it.
+                        const bool deckShared = entry->deck->shared.has_value() && *entry->deck->shared;
+                        if (cardIsShared(*entry->card, deckShared) && engine_->isTaken(cardId))
                         {
-                            if (!conditionOk) return evict(cardId, "hand-condition");
-                            const CardEntry* entry = engine_->cardsById_.get(cardId);
-                            if (!entry) return evict(cardId, "vanished");   // edited content: dropped
-                            if (!gateOk[entry->deck->id]) return evict(cardId, VerdictWire(TraceVerdict::DeckGate));
-                            if (cooldowns_.getOr(cardId, 0) > boxTurn) return evict(cardId, VerdictWire(TraceVerdict::Cooldown));
-                            if (!tagsMatch(*entry->card, handEnv.boundTags)) return evict(cardId, VerdictWire(TraceVerdict::Tags));
-                            EvalContext ctx = evalCtx(box, entry->deck, handEnv);
-                            if (!passes(entry->card->condition, ctx, "card " + entry->card->gameId + " condition"))
-                            {
-                                return evict(cardId, VerdictWire(TraceVerdict::Condition));
-                            }
-                            return true;
-                        }();
-                        if (keep) survivors.push_back(cardId);
-                    }
+                            return evict(cardId, VerdictWire(TraceVerdict::Taken));
+                        }
+                        if (cooldowns_.getOr(cardId, 0) > boxTurn) return evict(cardId, VerdictWire(TraceVerdict::Cooldown));
+                        if (!tagsMatch(*entry->card, handEnv.boundTags)) return evict(cardId, VerdictWire(TraceVerdict::Tags));
+                        // No condition passes outright, so no context and no
+                        // label; the label is only read by a diagnostic, which
+                        // only fires when something traces.
+                        if (entry->card->condition && !passes(entry->card->condition, deckCtx.at(entry->deck->id),
+                            tracing() ? "card " + entry->card->gameId + " condition" : std::string()))
+                        {
+                            return evict(cardId, VerdictWire(TraceVerdict::Condition));
+                        }
+                        return true;
+                    }();
+                    if (keep) survivors.push_back(cardId);
                 }
                 boardContents_.set(hand.id, std::move(survivors));
                 if (tracing())
@@ -2109,9 +2230,14 @@ namespace storylets
             {
                 const Hand& hand = *handInBox.hand;
                 const Box& box = *handInBox.box;
-                std::vector<std::string> contents = boardContents_.getOr(hand.id, {});
-                double free = handCapacity(hand) - static_cast<double>(contents.size());
+                // Sized through a pointer: a full hand, the common case, copies
+                // nothing. The copy below is taken before runAsk, whose
+                // diagnostics can re-enter the flow, and is the vector the hand
+                // ends up holding.
+                const std::vector<std::string>* held = boardContents_.get(hand.id);
+                double free = handCapacity(hand) - static_cast<double>(held ? held->size() : 0);
                 if (free <= 0) continue;
+                std::vector<std::string> contents = held ? *held : std::vector<std::string>();
                 AskDescriptor ask = askForHand(hand, box);
                 std::unordered_set<std::string> own(contents.begin(), contents.end());
                 std::vector<TraceCard> traceStorage;
@@ -2131,17 +2257,16 @@ namespace storylets
                 // `added` is what the BOARD holds (internal ids); `taking` is
                 // the same cards as the trace names them (gameIds). The two must
                 // move together or every dealt card silently reads as capped.
-                std::vector<std::string> added;
                 std::unordered_set<std::string> taking;
+                const size_t kept = contents.size();
+                contents.reserve(kept + take);
                 for (size_t i = 0; i < take; ++i)
                 {
-                    added.push_back(run.ordered[i].card->id);
-                    taking.insert(EffectiveGameId(*run.ordered[i].card));
+                    contents.push_back(run.ordered[i].card->id);
+                    if (trace) taking.insert(EffectiveGameId(*run.ordered[i].card));
                 }
-                std::vector<std::string> next = contents;
-                next.insert(next.end(), added.begin(), added.end());
-                boardContents_.set(hand.id, std::move(next));
-                for (const auto& id : added) { ++claimCounts[id]; ++worldClaims[id]; }
+                for (size_t i = kept; i < contents.size(); ++i) { ++claimCounts[contents[i]]; ++worldClaims[contents[i]]; }
+                boardContents_.set(hand.id, std::move(contents));
                 // Emitted after the hand is set: a handler reading board() sees the deal.
                 if (trace)
                 {
@@ -2157,12 +2282,18 @@ namespace storylets
             OrderedMap<std::string, std::vector<DealtCard>> result;
             for (const auto& handInBox : dealt)
             {
-                std::vector<std::string> ids = boardContents_.getOr(handInBox.hand->id, {});
+                const std::vector<std::string>* ids = boardContents_.get(handInBox.hand->id);
                 std::vector<DealtCard> cards;
-                for (const auto& id : ids) cards.push_back(view(engine_->cardsById_.at(id)));
+                if (ids)
+                {
+                    cards.reserve(ids->size());
+                    for (const auto& id : *ids) cards.push_back(view(engine_->cardsById_.at(id)));
+                }
                 result.set(EffectiveGameId(*handInBox.hand), std::move(cards));
             }
-            return result;
+            // Keyed by hand gameId in JS object order (ruling E), not the
+            // shuffled order the hands were dealt in.
+            return detail::InJsOrder(std::move(result));
         }
 
         /** The board: current hand contents, in dealt order, keyed by hand
@@ -2208,7 +2339,7 @@ namespace storylets
                 for (const auto& id : pair.second) cards.push_back(view(engine_->cardsById_.at(id)));
                 result.set(EffectiveGameId(*found.hand), std::move(cards));
             }
-            return result;
+            return detail::InJsOrder(std::move(result));   // JS object order (ruling E)
         }
 
     public:
@@ -2236,8 +2367,10 @@ namespace storylets
         }
 
         /** Apply an outcome (schema 3.7): the card must sit in a hand on the
-         *  board (you never play a card from inside the deck). Throws before
-         *  any mutation on a gated-shut outcome or a bad write target.
+         *  board (you never play a card from inside the deck). All or nothing
+         *  (ruling B): a gated-shut outcome, a bad or refused write target, or
+         *  a write the landing refuses leaves every value as it was, logs no
+         *  play, advances no turn and keeps the card in its hand.
          *
          *  A card with NO outcomes is played with none, named as "" (the
          *  no-outcome-play brief, 2026-09-14): a masthead, a notice, a codex
@@ -2308,27 +2441,44 @@ namespace storylets
             double newTurn = turnCounts_.getOr(entry.box->id, 0)
                 + (opts.advanceTurns.has_value() ? *opts.advanceTurns : perPlay);
 
-            // Every right-hand side evaluates against PRE-play state, then all
-            // writes land (schema 3.7).
-            std::vector<std::pair<std::string, StoryletValue>> writes;
+            // A play is all-or-nothing (ruling B). Every target is resolved and
+            // checked first, writing nothing, so any refusal the engine can know
+            // in advance comes before a single write lands. Then every
+            // right-hand side evaluates against PRE-play state (schema 3.7),
+            // then the writes land. A refusal only the landing can meet (another
+            // engine's read-only property, a host resolver that throws) puts
+            // back, silently, what had already landed. The write events fire
+            // once every write is in.
+            std::vector<WritePlan> plans;
+            std::vector<StoryletValue> values;
             if (outcome)
             {
-                for (const auto& change : outcome->changes)
-                {
-                    writes.emplace_back(change.first, eval(change.second, ctx));
-                }
+                plans.reserve(outcome->changes.size());
+                values.reserve(outcome->changes.size());
+                for (const auto& change : outcome->changes) plans.push_back(planWrite(change.first, entry, handEnv));
+                for (const auto& change : outcome->changes) values.push_back(eval(change.second, ctx));
             }
-            for (const auto& write : writes)
+            std::vector<std::optional<StoryletValue>> prevs;
+            prevs.reserve(plans.size());
+            try
             {
-                WriteResult landed = applyWrite(write.first, write.second, entry, handEnv);
-                if (tracing())
+                for (size_t i = 0; i < plans.size(); ++i) prevs.push_back(landWrite(plans[i], values[i]));
+            }
+            catch (...)
+            {
+                for (size_t i = prevs.size(); i-- > 0;) undoWrite(plans[i], prevs[i]);
+                throw;
+            }
+            if (tracing())
+            {
+                for (size_t i = 0; i < plans.size(); ++i)
                 {
                     TraceEvent evt;
                     evt.kind = TraceEvent::Kind::Write;
-                    evt.target = write.first;
-                    evt.path = landed.path;
-                    evt.value = write.second;
-                    evt.prev = landed.prev;
+                    evt.target = plans[i].target;
+                    evt.path = plans[i].path;
+                    evt.value = values[i];
+                    evt.prev = prevs[i];
                     emit(std::move(evt), newTurn);
                 }
             }
@@ -2357,12 +2507,14 @@ namespace storylets
             }
             // The card leaves its hand, releasing its claim (schema 3.5/3.7).
             const std::string& handId = resolved.ask.hand->id;
-            std::vector<std::string> remaining;
-            for (const auto& id : boardContents_.getOr(handId, {}))
+            if (std::vector<std::string>* held = boardContents_.get(handId))
             {
-                if (id != entry.card->id) remaining.push_back(id);
+                held->erase(std::remove(held->begin(), held->end(), entry.card->id), held->end());
             }
-            boardContents_.set(handId, std::move(remaining));
+            else
+            {
+                boardContents_.set(handId, {});
+            }
             turnCounts_.set(entry.box->id, newTurn);
             // Emitted last: a handler reading the board and the clock sees the play.
             if (tracing())
@@ -2435,10 +2587,17 @@ namespace storylets
             double spec = 0;
         };
 
-        struct WriteResult
+        /** One change target, resolved and checked but not yet written: where
+         *  the value will land, named for the trace. */
+        struct WritePlan
         {
+            enum class Kind { World, Bag, Scope };
+            Kind kind = Kind::Bag;
+            std::string target;
             std::string path;
-            std::optional<StoryletValue> prev;
+            std::string scope;
+            std::string name;
+            PropertyBag* bag = nullptr;
         };
 
         struct RunAskResult
@@ -2574,17 +2733,32 @@ namespace storylets
         bool keyOf(const Box& box, const std::string& group, const std::string& tag,
             std::string& outKey) const
         {
-            const TagGroup* found = groupInBox(box, group);
-            if (!found) return false;
-            for (const auto& candidate : found->tags)
+            // Memoised: the answer is the bundle's, which never changes under a
+            // flow, and the lookup behind it (every group the box sees, then
+            // every tag in the one found) ran once per candidate card per ask.
+            // A miss is remembered as "", which no resolved key can be (it
+            // always holds two separators).
+            const std::string asked = tagKey(box.id, group, tag);
+            auto memo = tagKeyMemo_.find(asked);
+            if (memo == tagKeyMemo_.end())
             {
-                if (candidate.gameId == tag)
+                std::string resolved;
+                if (const TagGroup* found = groupInBox(box, group))
                 {
-                    outKey = tagKey(box.id, found->id, candidate.id);
-                    return true;
+                    for (const auto& candidate : found->tags)
+                    {
+                        if (candidate.gameId == tag)
+                        {
+                            resolved = tagKey(box.id, found->id, candidate.id);
+                            break;
+                        }
+                    }
                 }
+                memo = tagKeyMemo_.emplace(asked, std::move(resolved)).first;
             }
-            return false;
+            if (memo->second.empty()) return false;
+            outKey = memo->second;
+            return true;
         }
 
         /** One host per box: the play-history functions take a BARE group name
@@ -2693,22 +2867,6 @@ namespace storylets
         {
             const std::shared_ptr<PropertyBag>* bag = kind.get(id);
             return bag ? bag->get() : nullptr;
-        }
-
-        static OrderedMap<std::string, std::shared_ptr<PropertyBag>>& kindOf(detail::Partition& p, const std::string& kind)
-        {
-            if (kind == "box") return p.box;
-            if (kind == "deck") return p.deck;
-            if (kind == "hand") return p.hand;
-            return p.value;
-        }
-
-        static const OrderedMap<std::string, std::shared_ptr<PropertyBag>>& kindOf(const detail::Partition& p, const std::string& kind)
-        {
-            if (kind == "box") return p.box;
-            if (kind == "deck") return p.deck;
-            if (kind == "hand") return p.hand;
-            return p.value;
         }
 
         static std::vector<std::string> splitPath(const std::string& path)
@@ -2866,52 +3024,41 @@ namespace storylets
                 }
                 const HandTemplate& t = **found;
                 for (const auto& pair : t.bindings) ask.boundTags.set(pair.first, pair.second);
-                for (const auto& pair : hand.chosen)
-                {
-                    // A hole filled from a property rather than with a tag:
-                    // resolve it now, before tag composition (4.6).
-                    if (IsHoleRef(pair.second))
-                    {
-                        fillHoleFromProperty(hand, pair.first, pair.second, ask);
-                        continue;
-                    }
-                    ask.boundTags.set(pair.first, pair.second);
-                    const GroupInBox* group = engine_->groupsById_.get(pair.first);
-                    const Tag* tag = group ? tagById(*group->group, pair.second) : nullptr;
-                    if (group && tag)
-                    {
-                        ask.askNames.set(EffectiveGameId(*group->group), EffectiveGameId(*tag));
-                    }
-                }
+                bindNamed(hand, hand.chosen, ask);
                 ask.condition = t.condition;
             }
-            else
+            else if (hand.rule)
             {
-                if (hand.rule)
-                {
-                    for (const auto& pair : hand.rule->bindings)
-                    {
-                        if (IsHoleRef(pair.second))
-                        {
-                            fillHoleFromProperty(hand, pair.first, pair.second, ask);
-                            continue;
-                        }
-                        ask.boundTags.set(pair.first, pair.second);
-                        // ...and name it, as the template branch does: a card
-                        // reading @hand.<group> must not care HOW it was bound.
-                        const GroupInBox* group = engine_->groupsById_.get(pair.first);
-                        const Tag* tag = group ? tagById(*group->group, pair.second) : nullptr;
-                        if (group && tag)
-                        {
-                            ask.askNames.set(EffectiveGameId(*group->group), EffectiveGameId(*tag));
-                        }
-                    }
-                    ask.condition = hand.rule->condition;
-                }
+                bindNamed(hand, hand.rule->bindings, ask);
+                ask.condition = hand.rule->condition;
             }
             ask.boundTags.set(PLACE_GROUP, hand.id);
             bindStateGroups(box, ask);
             return ask;
+        }
+
+        /** A template hand's chosen tags and a rule hand's bindings, the one
+         *  loop: each binds its group and names it in @hand, so a card reading
+         *  @hand.<group> does not care HOW it was bound, and a hole filled
+         *  from a property rather than with a tag is resolved now, before tag
+         *  composition (4.6). */
+        void bindNamed(const Hand& hand, const OrderedMap<std::string, std::string>& bindings, AskDescriptor& ask) const
+        {
+            for (const auto& pair : bindings)
+            {
+                if (IsHoleRef(pair.second))
+                {
+                    fillHoleFromProperty(hand, pair.first, pair.second, ask);
+                    continue;
+                }
+                ask.boundTags.set(pair.first, pair.second);
+                const GroupInBox* group = engine_->groupsById_.get(pair.first);
+                const Tag* tag = group ? tagById(*group->group, pair.second) : nullptr;
+                if (group && tag)
+                {
+                    ask.askNames.set(EffectiveGameId(*group->group), EffectiveGameId(*tag));
+                }
+            }
         }
 
         /** A peek's ask: raw criteria ({group gameId: tag gameId}), bindings
@@ -2995,17 +3142,19 @@ namespace storylets
             }
             else
             {
+                // ANY failure reads as undeclared, as JS's bare catch does: a
+                // host @world resolver that throws is the game's error, and it
+                // must surface as this diagnostic rather than escape the deal.
                 try { value = getProperty(scope + "." + name); }
-                catch (const StoryletError&) { value.reset(); }
+                catch (...) { value.reset(); }
             }
             if (!value.has_value())
             {
                 diagnose(where, "\"" + ref + "\" names a property that is not declared");
                 return;
             }
-            const std::string wanted = value->isString() ? value->asString() : value->toJsonString();
-            const Tag* tag = nullptr;
-            for (const auto& t : found->group->tags) { if (EffectiveGameId(t) == wanted) { tag = &t; break; } }
+            std::string wanted;
+            const Tag* tag = tagForValue(*found->group, *value, wanted);
             if (!tag)
             {
                 diagnose(where, ref + " is \"" + wanted + "\", which is not one of the tags of \"" + groupName + "\"");
@@ -3057,16 +3206,17 @@ namespace storylets
                     continue;
                 }
                 StoryletValue value;
+                // ANY failure, a throwing host @world resolver included, as
+                // JS's bare catch: see fillHoleFromProperty.
                 try { value = getProperty(scope + "." + name); }
-                catch (const StoryletError&)
+                catch (...)
                 {
                     diagnose("tag group " + EffectiveGameId(group),
                         "boundBy \"" + ref + "\" names a property that is not declared");
                     continue;
                 }
-                const std::string wanted = value.isString() ? value.asString() : value.toJsonString();
-                const Tag* tag = nullptr;
-                for (const auto& t : group.tags) { if (EffectiveGameId(t) == wanted) { tag = &t; break; } }
+                std::string wanted;
+                const Tag* tag = tagForValue(group, value, wanted);
                 if (!tag)
                 {
                     diagnose("tag group " + EffectiveGameId(group),
@@ -3076,6 +3226,20 @@ namespace storylets
                 ask.boundTags.set(group.id, tag->id);
                 ask.askNames.set(EffectiveGameId(group), EffectiveGameId(*tag));
             }
+        }
+
+        /** The tag a property value names in a group, by gameId, for a filled
+         *  hole and a boundBy alike; null when it names none. `outWanted` is the
+         *  value as text, which the diagnostic for a miss quotes: JS String(),
+         *  so 2 is "2" and ["act1"] is "act1", never JSON's quoted forms. */
+        static const Tag* tagForValue(const TagGroup& group, const StoryletValue& value, std::string& outWanted)
+        {
+            outWanted = value.toDisplayString();
+            for (const auto& t : group.tags)
+            {
+                if (EffectiveGameId(t) == outWanted) return &t;
+            }
+            return nullptr;
         }
 
         /** A trace diagnostic, when anyone is listening. */
@@ -3280,27 +3444,36 @@ namespace storylets
             }
 
             // Deck gates: evaluated once per ask, in deck (id) order (schema 2.5).
-            std::unordered_map<std::string, bool> gateOk;
+            // ONE context per deck, not per card, and the gate's own context is
+            // the cards' too: box, deck and handEnv do not vary across either,
+            // and a condition is a read-only gate (schema 3.1). Reference:
+            // engine.ts runAsk, and storylets-new/design/port-review-2026-08.md.
+            const size_t deckCount = box.decks.size();
+            std::vector<EvalContext> deckCtxs;
+            std::vector<char> gateOk;
+            deckCtxs.reserve(deckCount);
+            gateOk.reserve(deckCount);
+            size_t cardCount = 0;
             for (const auto& deck : box.decks)
             {
-                EvalContext ctx = evalCtx(box, &deck, handEnv);
-                gateOk[deck.id] = passes(deck.condition, ctx, "deck " + deck.gameId + " gate");
+                deckCtxs.push_back(evalCtx(box, &deck, handEnv));
+                gateOk.push_back(passes(deck.condition, deckCtxs.back(), "deck " + deck.gameId + " gate") ? 1 : 0);
+                cardCount += deck.cards.size();
             }
 
             double boxTurn = turnCounts_.getOr(box.id, 0);
             std::vector<Scored> scored;
-            for (const auto& deck : box.decks)
+            scored.reserve(cardCount);
+            if (trace) trace->reserve(trace->size() + cardCount);
+            for (size_t d = 0; d < deckCount; ++d)
             {
-                // ONE context per deck, not per card: box, deck and handEnv do not
-                // vary inside this loop, and a condition is a read-only gate
-                // (schema 3.1). Reference: engine.ts runAsk, and
-                // storylets-new/design/port-review-2026-08.md.
-                EvalContext deckCtx = evalCtx(box, &deck, handEnv);
+                const Deck& deck = box.decks[d];
+                EvalContext& deckCtx = deckCtxs[d];
                 const bool deckShared = deck.shared.has_value() ? *deck.shared : false;
                 for (const auto& card : deck.cards)
                 {
                     const bool shared = cardIsShared(card, deckShared);
-                    if (!gateOk[deck.id])
+                    if (!gateOk[d])
                     {
                         verdict(card, TraceVerdict::DeckGate);
                         continue;
@@ -3351,7 +3524,10 @@ namespace storylets
                         try
                         {
                             StoryletValue v = eval(card.priorityExpr, ctx);
-                            if (!v.isNumber())
+                            // NaN (overflow, Inf - Inf, a host value) ranks
+                            // nowhere: refused as a non-number is (ruling G),
+                            // with no diagnostic, since nothing threw.
+                            if (!v.isNumber() || std::isnan(v.asNumber()))
                             {
                                 verdict(card, TraceVerdict::Priority);
                                 continue;
@@ -3431,6 +3607,7 @@ namespace storylets
                     trace->push_back(std::move(tc));
                 }
             }
+            result.ordered.reserve(scored.size());
             for (const auto& s : scored) result.ordered.push_back(s.entry);
             return result;
         }
@@ -3494,8 +3671,8 @@ namespace storylets
             if (!entry) entry = engine_->cardsByGameId_.get(cardId);
             if (!entry) throw StoryletError("unknown card \"" + cardId + "\"");
             const HandInBox& found = resolveHand(handRef);
-            std::vector<std::string> contents = boardContents_.getOr(found.hand->id, {});
-            if (std::find(contents.begin(), contents.end(), entry->card->id) == contents.end())
+            const std::vector<std::string>* contents = boardContents_.get(found.hand->id);
+            if (!contents || std::find(contents->begin(), contents->end(), entry->card->id) == contents->end())
             {
                 throw StoryletError("card \"" + EffectiveGameId(*entry->card)
                     + "\" is not dealt to hand \"" + EffectiveGameId(*found.hand) + "\"");
@@ -3525,36 +3702,42 @@ namespace storylets
             return id;
         }
 
-        /** Land one change in whichever partition declares the name: the
-         *  flow's bag when the property is per-flow, the shared bag when it
-         *  is shared. Returns the resolved store path (for the trace) and
-         *  the value it replaced (for the log's "0 -> 1" reading). */
-        WriteResult landIn(const std::string& kind, const std::string& ownerId,
-            const std::string& name, const StoryletValue& value, const std::string& path)
+        /** Find the bag that declares one change's name: the flow's bag when
+         *  the property is per-flow, the shared bag when it is shared. Writes
+         *  nothing; throws when no bag declares the name or its declaration is
+         *  `writable: false`, the kernel's refusal asked BEFORE any write lands
+         *  rather than met half way through a play (ruling B). */
+        WritePlan planBag(const std::string& target, const std::string& kind, const std::string& ownerId,
+            const std::string& name, const std::string& path)
         {
             PropertyBag* own = kind == "story" ? stores_.story.get()
-                : const_cast<PropertyBag*>(bagOf(kindOf(stores_, kind), ownerId));
+                : const_cast<PropertyBag*>(bagOf(detail::KindOf(stores_, kind), ownerId));
             PropertyBag* shared = kind == "story" ? engine_->shared_.story.get()
-                : const_cast<PropertyBag*>(bagOf(kindOf(engine_->shared_, kind), ownerId));
+                : const_cast<PropertyBag*>(bagOf(detail::KindOf(engine_->shared_, kind), ownerId));
             PropertyBag* bag = own && own->get(name).has_value() ? own
                 : shared && shared->get(name).has_value() ? shared
                 : nullptr;
             if (!bag) throw StoryletError("no property at \"" + path + "\"");
-            // An engine write: the bag's subscribers fire (the firing rule). A story write
-            // to a `writable: false` declaration is the kernel's RegistryError, rethrown as
-            // StoryletError.
-            BagChange change = kernelCall([&] { return bag->set(name, value); });
-            WriteResult result;
-            result.path = path;
-            result.prev = change.prev;
-            return result;
+            for (const auto& d : bag->declarations())
+            {
+                if (d.name == name && d.writable.has_value() && !*d.writable)
+                {
+                    throw StoryletError("'" + name + "' is read-only");
+                }
+            }
+            WritePlan plan;
+            plan.kind = WritePlan::Kind::Bag;
+            plan.target = target;
+            plan.path = path;
+            plan.name = name;
+            plan.bag = bag;
+            return plan;
         }
 
-        WriteResult applyWrite(
-            const std::string& target,
-            const StoryletValue& value,
-            const CardEntry& entry,
-            const HandEnv& handEnv)
+        /** Resolve and check one change target, writing nothing: every refusal
+         *  a write can meet that the engine can know in advance is met HERE, so
+         *  a play checks all its targets before any write lands (ruling B). */
+        WritePlan planWrite(const std::string& target, const CardEntry& entry, const HandEnv& handEnv)
         {
             std::string scope, name;
             if (!parseChangeTarget(target, scope, name))
@@ -3571,15 +3754,16 @@ namespace storylets
                 {
                     throw StoryletError("'@world." + name + "' is read-only (writable: false)");
                 }
-                WriteResult result;
-                result.path = "world." + name;
-                result.prev = engine_->worldGet(name);
-                engine_->worldSet(name, value);
-                return result;
+                WritePlan plan;
+                plan.kind = WritePlan::Kind::World;
+                plan.target = target;
+                plan.path = "world." + name;
+                plan.name = name;
+                return plan;
             }
-            if (scope == "story") return landIn("story", std::string(), name, value, "story." + name);
-            if (scope == "box") return landIn("box", entry.box->id, name, value, address("box", entry.box->id) + "." + name);
-            if (scope == "deck") return landIn("deck", entry.deck->id, name, value, address("deck", entry.deck->id) + "." + name);
+            if (scope == "story") return planBag(target, "story", std::string(), name, "story." + name);
+            if (scope == "box") return planBag(target, "box", entry.box->id, name, address("box", entry.box->id) + "." + name);
+            if (scope == "deck") return planBag(target, "deck", entry.deck->id, name, address("deck", entry.deck->id) + "." + name);
             if (scope == "hand")
             {
                 // Write-back routing (schema 3.6): the composed name remembers
@@ -3594,22 +3778,23 @@ namespace storylets
                     throw StoryletError("@hand." + name + " is a chosen tag / criteria name and cannot be written");
                 }
                 const char* kindName = source->second.kind == HandSource::Kind::Value ? "value" : "hand";
-                return landIn(kindName, source->second.id, name, value,
+                return planBag(target, kindName, source->second.id, name,
                     address(kindName, source->second.id) + "." + name);
             }
             // Another engine's game-wide scope (`@patter.x`): the family's shared
             // vocabulary lets a card write it, and the registry keeps that
-            // engine's rules (a read-only property is refused, as the kernel's
-            // RegistryError rethrown as StoryletError). A story write, so no host
-            // flag.
-            ScopeRegistry& reg = *engine_->registry_;
-            if (reg.has(scope))
+            // engine's rules, met as the write lands (a read-only property is
+            // refused there, the kernel's RegistryError rethrown as
+            // StoryletError, and the play puts back what had landed).
+            if (engine_->registry_->has(scope))
             {
-                WriteResult result;
-                result.path = scope + "." + name;
-                result.prev = reg.get(scope, name);
-                kernelCall([&] { reg.set(scope, name, value); });
-                return result;
+                WritePlan plan;
+                plan.kind = WritePlan::Kind::Scope;
+                plan.target = target;
+                plan.path = scope + "." + name;
+                plan.scope = scope;
+                plan.name = name;
+                return plan;
             }
             const std::vector<std::string>& external = engine_->bundle_->externalScopes;
             if (std::find(external.begin(), external.end(), scope) != external.end())
@@ -3617,6 +3802,52 @@ namespace storylets
                 throw StoryletError("@" + scope + "." + name + " cannot be written: no engine on this registry registered @" + scope);
             }
             throw StoryletError("bad change target scope \"@" + scope + "\"");
+        }
+
+        /** Land one planned write; returns the value it replaced (for the
+         *  log's "0 -> 1" reading, and for putting it back). An engine write:
+         *  the bag's subscribers fire (the firing rule), and a refusal is the
+         *  kernel's RegistryError, rethrown as StoryletError. */
+        std::optional<StoryletValue> landWrite(const WritePlan& plan, const StoryletValue& value)
+        {
+            switch (plan.kind)
+            {
+                case WritePlan::Kind::World:
+                {
+                    std::optional<StoryletValue> prev = engine_->worldGet(plan.name);
+                    engine_->worldSet(plan.name, value);
+                    return prev;
+                }
+                case WritePlan::Kind::Bag:
+                    return kernelCall([&] { return plan.bag->set(plan.name, value); }).prev;
+                default:
+                {
+                    ScopeRegistry& reg = *engine_->registry_;
+                    std::optional<StoryletValue> prev = reg.get(plan.scope, plan.name);
+                    kernelCall([&] { reg.set(plan.scope, plan.name, value); });
+                    return prev;
+                }
+            }
+        }
+
+        /** Put back one landed write after a later one was refused: as the
+         *  host, silently, so the play leaves no trace. Nothing to put back
+         *  where there was no value before. */
+        void undoWrite(const WritePlan& plan, const std::optional<StoryletValue>& prev)
+        {
+            if (!prev.has_value()) return;
+            switch (plan.kind)
+            {
+                case WritePlan::Kind::World:
+                    engine_->worldSet(plan.name, *prev, /*host=*/true);
+                    return;
+                case WritePlan::Kind::Bag:
+                    plan.bag->set(plan.name, *prev, /*silent=*/true, "play refused", /*host=*/true);
+                    return;
+                default:
+                    kernelCall([&] { engine_->registry_->set(plan.scope, plan.name, *prev, /*host=*/true); });
+                    return;
+            }
         }
 
         /** ^@([a-z]+)\.([A-Za-z_][A-Za-z0-9_-]*)$ without a regex engine. */
@@ -3698,6 +3929,9 @@ namespace storylets
         std::unordered_map<std::string, PlayRecord> lastPlayOf_;
         std::unordered_map<std::string, double> tagPlayCount_;
         std::unordered_map<std::string, PlayRecord> lastPlayInTag_;
+        /** keyOf's answers: (box id, group name, tag name) -> the index key, or
+         *  "" for a pair this box does not know. Derived from the bundle alone. */
+        mutable std::unordered_map<std::string, std::string> tagKeyMemo_;
 
         /** The per-flow property partitions (the not-shared halves), each bag
          *  that declares something registered under this flow's keys. */
@@ -3705,6 +3939,7 @@ namespace storylets
         std::vector<std::string> registered_;
 
         std::vector<TraceHandler> traceHandlers_;
+        detail::TraceIdentities traceIdentities_;
         uint64_t nextTraceId_ = 1;
         std::vector<LogEntry> logEntries_;
         int64_t logSeq_ = 0;
@@ -3759,7 +3994,7 @@ namespace storylets
         {
             assertOpen();
             std::vector<PropertyRow> rows;
-            addWorldRows(rows);
+            engine_->addWorldRows(rows);
             // No path prefix passed in: the bag composes the address from its
             // own pathPrefix, so the row arrives complete - which is also why
             // the field-by-field copy this used to do is gone, including the
@@ -3824,8 +4059,8 @@ namespace storylets
             else if (parts.size() == 3 && detail::IsOwnedScope(parts[0]))
             {
                 const std::string id = ownerId(parts[0], parts[1], parts[2]);
-                const PropertyBag* own = bagOf(kindOf(stores_, parts[0]), id);
-                const PropertyBag* shared = bagOf(kindOf(engine_->shared_, parts[0]), id);
+                const PropertyBag* own = bagOf(detail::KindOf(stores_, parts[0]), id);
+                const PropertyBag* shared = bagOf(detail::KindOf(engine_->shared_, parts[0]), id);
                 if (!own && !shared) throw StoryletError("no " + parts[0] + " store \"" + parts[1] + "\"");
                 if (own) value = own->get(parts[2]);
                 if (!value.has_value() && shared) value = shared->get(parts[2]);
@@ -3870,8 +4105,8 @@ namespace storylets
             else if (parts.size() == 3 && detail::IsOwnedScope(parts[0]))
             {
                 const std::string id = ownerId(parts[0], parts[1], parts[2]);
-                own = const_cast<PropertyBag*>(bagOf(kindOf(stores_, parts[0]), id));
-                shared = const_cast<PropertyBag*>(bagOf(kindOf(engine_->shared_, parts[0]), id));
+                own = const_cast<PropertyBag*>(bagOf(detail::KindOf(stores_, parts[0]), id));
+                shared = const_cast<PropertyBag*>(bagOf(detail::KindOf(engine_->shared_, parts[0]), id));
                 if (!own && !shared) throw StoryletError("no " + parts[0] + " store \"" + parts[1] + "\"");
                 name = parts[2];
             }
@@ -3883,34 +4118,10 @@ namespace storylets
                 : shared && shared->get(name).has_value() ? shared
                 : nullptr;
             if (!bag) throw StoryletError("no property at \"" + path + "\"");
-            // A host write: silent under the firing rule (no subscriber
-            // feedback loop), but visible to the bag's audit hook.
-            // A HOST write: silent under the firing rule, visible to the audit hook,
-            // and flagged host so a `writable: false` does not refuse the game its
-            // own value.
+            // A HOST write: silent under the firing rule (no subscriber feedback
+            // loop), visible to the audit hook, and flagged host so a
+            // `writable: false` does not refuse the game its own value.
             bag->set(name, value, /*silent=*/true, "host setProperty", /*host=*/true);
-        }
-
-        void addWorldRows(std::vector<PropertyRow>& rows) const
-        {
-            for (const auto& d : engine_->bundle_->world.properties)
-            {
-                PropertyRow r;
-                r.path = "world." + d.name;
-                r.name = d.name;
-                r.type = d.type;
-                std::optional<StoryletValue> value = engine_->worldGet(d.name);
-                r.value = value.has_value() ? *value : d.defaultOrTypeDefault();
-                r.defaultValue = d.defaultOrTypeDefault();
-                r.values = d.values;
-            r.stages = d.stages;
-                r.stages = d.stages;
-                // Whether the resolver can be written at all AND what the declaration
-                // says, which is the kernel's own rule for a foreign scope: a row is
-                // where `writable: false` is meant to SHOW.
-                r.writable = engine_->worldCanSet() && !engine_->worldReadOnly(d.name);
-                rows.push_back(std::move(r));
-            }
         }
 
         // --- persistence (schema 4) ------------------------------------------------
@@ -4012,13 +4223,15 @@ namespace storylets
             for (const auto& deck : box.decks)
             {
                 detail::IndexOwner(owners_.deck, deck);
-                if (deck.shared) hasShared_ = true;
+                // TRUE, not merely present: a deck that says `shared: false`
+                // shares nothing, and must not cost every deal the ledger walks.
+                if (deck.shared.has_value() && *deck.shared) hasShared_ = true;
                 for (const auto& card : deck.cards)
                 {
                     detail::CardEntry entry{&card, &deck, &box};
                     cardsById_.set(card.id, entry);
                     cardsByGameId_.set(EffectiveGameId(card), entry);
-                    if (card.shared && *card.shared) hasShared_ = true;
+                    if (card.shared.has_value() && *card.shared) hasShared_ = true;
                 }
             }
             for (const auto& t : box.handTemplates)
@@ -4205,21 +4418,26 @@ namespace storylets
 
     inline std::unordered_map<std::string, int> Engine::sharedClaims() const
     {
-        std::unordered_map<std::string, int> counts;
-        for (const auto& pair : flows_)
-        {
-            for (const auto& id : pair.second->heldCardIds()) ++counts[id];
-        }
-        return counts;
+        return claimsHeld(nullptr);
     }
 
     inline std::unordered_map<std::string, int> Engine::sharedClaimsExcept(const std::string& id) const
     {
+        return claimsHeld(&id);
+    }
+
+    inline std::unordered_map<std::string, int> Engine::claimsHeld(const std::string* except) const
+    {
+        // Read straight off each board rather than through heldCardIds, which
+        // copies every held id into a fresh vector per flow per deal.
         std::unordered_map<std::string, int> counts;
         for (const auto& pair : flows_)
         {
-            if (pair.first == id) continue;
-            for (const auto& cardId : pair.second->heldCardIds()) ++counts[cardId];
+            if (except && pair.first == *except) continue;
+            for (const auto& hand : pair.second->boardContents_)
+            {
+                for (const auto& cardId : hand.second) ++counts[cardId];
+            }
         }
         return counts;
     }
@@ -4268,12 +4486,8 @@ namespace storylets
         if (owned.has_value())
         {
             const std::string& kind = owned->kind;
-            const OrderedMap<std::string, std::shared_ptr<PropertyBag>>& sharedKind = Flow::kindOf(shared_, kind);
-            const OrderedMap<std::string, std::vector<PropertyDecl>>& flowKind =
-                kind == "box" ? flowDecls_.box
-                : kind == "deck" ? flowDecls_.deck
-                : kind == "hand" ? flowDecls_.hand
-                : flowDecls_.value;
+            const OrderedMap<std::string, std::shared_ptr<PropertyBag>>& sharedKind = detail::KindOf(shared_, kind);
+            const OrderedMap<std::string, std::vector<PropertyDecl>>& flowKind = detail::KindOf(flowDecls_, kind);
             const std::shared_ptr<PropertyBag>* bag = sharedKind.get(owned->id);
             if (bag)
             {
@@ -4316,7 +4530,7 @@ namespace storylets
             return;
         }
         // Resolved once, then reused for both halves (4.4). The write used to
-        // re-split the path and dereference whatever kindOf found for it, which
+        // re-split the path and dereference whatever KindOf found for it, which
         // survived only because the read below had thrown first.
         std::optional<OwnedAddress> owned;
         if (parts.size() == 3 && detail::IsOwnedScope(parts[0])) owned = resolveOwned(parts);
@@ -4326,7 +4540,7 @@ namespace storylets
         PropertyBag* bag = shared_.story.get();
         if (owned.has_value())
         {
-            const std::shared_ptr<PropertyBag>* found = Flow::kindOf(shared_, owned->kind).get(owned->id);
+            const std::shared_ptr<PropertyBag>* found = detail::KindOf(shared_, owned->kind).get(owned->id);
             if (!found) throw StoryletError("no " + owned->kind + " store \"" + owned->segment + "\"");
             bag = found->get();
         }
@@ -4336,9 +4550,8 @@ namespace storylets
         bag->set(parts.back(), value, /*silent=*/true, "host setProperty", /*host=*/true);
     }
 
-    inline std::vector<PropertyRow> Engine::listProperties() const
+    inline void Engine::addWorldRows(std::vector<PropertyRow>& rows) const
     {
-        std::vector<PropertyRow> rows;
         for (const auto& d : bundle_->world.properties)
         {
             PropertyRow r;
@@ -4350,10 +4563,18 @@ namespace storylets
             r.defaultValue = d.defaultOrTypeDefault();
             r.values = d.values;
             r.stages = d.stages;
-            // The declaration counts as well as the resolver: see the Flow's rows.
+            // Whether the resolver can be written at all AND what the declaration
+            // says, which is the kernel's own rule for a foreign scope: a row is
+            // where `writable: false` is meant to SHOW.
             r.writable = worldCanSet() && !worldReadOnly(d.name);
             rows.push_back(std::move(r));
         }
+    }
+
+    inline std::vector<PropertyRow> Engine::listProperties() const
+    {
+        std::vector<PropertyRow> rows;
+        addWorldRows(rows);
         // No path prefix passed in: the bag composes the address from its own
         // pathPrefix, so the row arrives complete.
         auto add = [&rows](const PropertyBag& bag)
@@ -4375,13 +4596,17 @@ namespace storylets
         envelope.content = bundle_->content;
         if (ownsRegistry_) envelope.registry = registrySection();
         envelope.shared.spent = spentIds();
-        for (const auto& pair : flows_) envelope.flows.set(pair.first, pair.second->snapshot(false));
+        // JS object order (ruling E): integer-like flow ids first. The
+        // reference writes `flows` as an object, so this is the order its
+        // bytes have and the order any load reopens them in.
+        for (const auto& id : detail::JsKeyOrder(flows_.keys())) envelope.flows.set(id, (*flows_.get(id))->snapshot(false));
         return envelope;
     }
 
     /** The registry's values in CANONICAL order, the order a load rebuilds
      *  them in: the engine-wide keys as the constructor registered them, then
-     *  each flow's keys in flows() order (each flow's own registration order),
+     *  each flow's keys in the order the save's `flows` lists them, JS object
+     *  order (ruling E; each flow's own registration order within it),
      *  then anything else the registry holds (values still waiting for a key),
      *  as the registry lists it. The registry itself lists keys in
      *  registration order, and a flow replaced in place (open() keeps its slot
@@ -4401,9 +4626,10 @@ namespace storylets
             if (found && !out.contains(key)) out.set(key, *found);
         };
         for (const auto& key : registered_) take(key);
-        for (const auto& pair : flows_)
+        // The flows in the order the save's `flows` lists them (ruling E).
+        for (const auto& id : detail::JsKeyOrder(flows_.keys()))
         {
-            for (const auto& key : pair.second->registered_) take(key);
+            for (const auto& key : (*flows_.get(id))->registered_) take(key);
         }
         for (const auto& pair : all) take(pair.first);
         return out;
@@ -4476,8 +4702,8 @@ namespace storylets
         // A load's project refusal, asked before anything moves.
         if (bundle->content.project != bundle_->content.project)
         {
-            throw StoryletError("save is for project \"" + bundle_->content.project
-                + "\", bundle is \"" + bundle->content.project + "\"");
+            throw StoryletError("hotSwap: the bundle is for project \"" + bundle->content.project
+                + "\", this engine runs \"" + bundle_->content.project + "\"");
         }
         // The options this engine was built with, and only what `change` edits differs.
         EngineOptions opts = creationOptions_;
@@ -4641,29 +4867,31 @@ namespace storylets
                 return kind == "story" ? std::string("story") : detail::SharedKey(kind, id);
             }, *plan.sections);
         }
-        std::vector<std::string> ids;
-        for (const auto& pair : envelope.flows)
+        // In JS object order (ruling E), whatever order the envelope holds: a
+        // JS load reads `flows` through JSON.parse, which puts integer-like ids
+        // first, so that is the order the flows reopen in everywhere.
+        std::vector<std::string> ids = detail::JsKeyOrder(envelope.flows.keys());
+        for (const auto& flowKey : ids)
         {
-            ids.push_back(pair.first);
-            FlowSave withProps = pair.second;
+            FlowSave withProps = *envelope.flows.get(flowKey);
             if (moved.has_value())
             {
-                const PropsPartition* values = moved->flows.get(pair.first);
+                const PropsPartition* values = moved->flows.get(flowKey);
                 withProps.props = values ? *values : PropsPartition();
             }
-            FlowSave clean = planFlowRestore(pair.first, withProps, nullptr, draft);
+            FlowSave clean = planFlowRestore(flowKey, withProps, nullptr, draft);
             if (plan.sections.has_value() && clean.props.has_value())
             {
                 // The flow's values go into the registry, where its bags claim
                 // them; the restored flow itself carries none.
-                const std::string flowId = pair.first;
+                const std::string flowId = flowKey;
                 detail::SectionsOf(*clean.props, [&flowId](const std::string& kind, const std::string& id)
                 {
                     return detail::FlowKey(flowId, kind, id);
                 }, *plan.sections);
                 clean.props.reset();
             }
-            plan.flows.set(pair.first, std::move(clean));
+            plan.flows.set(flowKey, std::move(clean));
         }
         plan.report = detail::FinishReport(bundle_->content, envelope.content, ids, draft);
         return plan;

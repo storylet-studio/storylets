@@ -55,30 +55,38 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Restore a SaveState file into an engine (every flow is
         /// rebuilt; re-take your Flow handles afterwards). Throws on a foreign
         /// or malformed file. Returns the file's @world values, if any - the
-        /// HOST applies them; the engine never touches them.</summary>
-        public static OrderedMap<string, ExprValue> LoadState(Engine engine, SaveFile file)
+        /// HOST applies them; the engine never touches them.
+        ///
+        /// <paramref name="onReport"/>, when given, receives the LoadReport the
+        /// load produced (what the build dropped, defaulted or evicted), which
+        /// this helper used to drop: the JS reference's `{ onReport }`. Optional,
+        /// so the return value stays the @world values and existing calls are
+        /// unchanged.</summary>
+        public static OrderedMap<string, ExprValue> LoadState(Engine engine, SaveFile file, Action<LoadReport> onReport = null)
         {
             if (file == null || file.Engine == null)
             {
                 throw new StoryletError($"not a storylets save (expected schema \"{Model.SAVEFILE_SCHEMA}\")");
             }
-            engine.LoadGame(file.Engine);
+            var report = engine.LoadGame(file.Engine);
+            onReport?.Invoke(report);
             return file.World;
         }
 
         /// <summary>Parse + restore a SerializeState string: the TEXT twin of
         /// LoadState, as Patterplay pairs them. Throws on malformed JSON, a
-        /// foreign file or a project mismatch.</summary>
-        public static OrderedMap<string, ExprValue> DeserializeState(Engine engine, string json)
+        /// foreign file or a project mismatch. <paramref name="onReport"/> as
+        /// LoadState's.</summary>
+        public static OrderedMap<string, ExprValue> DeserializeState(Engine engine, string json, Action<LoadReport> onReport = null)
         {
             JObject parsed;
             try
             {
                 parsed = JObject.Parse(json);
             }
-            catch (Exception)
+            catch (Exception e)
             {
-                throw new StoryletError("not valid JSON");
+                throw new StoryletError("not valid JSON", e);
             }
             var engineToken = parsed["engine"] as JObject;
             var engineSchema = engineToken?["schema"]?.Type == JTokenType.String ? engineToken.Value<string>("schema") : null;
@@ -103,9 +111,9 @@ namespace StoryletStudio.StoryletEngine
             }
             catch (Exception e)
             {
-                throw new StoryletError($"malformed storylets save: {e.Message}");
+                throw new StoryletError($"malformed storylets save: {e.Message}", e);
             }
-            return LoadState(engine, file);
+            return LoadState(engine, file, onReport);
         }
 
         // --- envelope <-> JObject (the TS SaveEnvelope wire shape) ---------------

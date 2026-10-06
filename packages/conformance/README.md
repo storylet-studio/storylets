@@ -8,7 +8,7 @@ behaviour lands here as a case first, then in the implementations
 
 ## The corpus
 
-[`corpus.json`](./corpus.json) (`version: 11`) is the portable artifact. It
+[`corpus.json`](./corpus.json) (`version: 12`) is the portable artifact. It
 carries **compiled** forms only (`{ src, ast }` envelopes, whole bundles),
 so a runtime-only port consumes it with no parser or compiler. Five case
 kinds - `expressions`, `specificity`, `peek`, `scripted`, `load` - specified in
@@ -32,6 +32,17 @@ runtime's own serialised save text). `parkFlow` may carry `keepOpen`, which
 takes the blob without closing the flow, so the `resumeFlow` after it
 replaces a live flow in place.
 
+Version 12 is the engine review of 2026-10-06: a peek consumes no draws, a
+play is all-or-nothing, a shared one-shot another flow has taken is evicted
+with the reason `taken`, a seated card whose deck moved to another box is
+evicted as `vanished`, and a NaN priority is not dealt, beside pins for the
+behaviour the JS reference already had (value-to-text, the `$` grammars, seeds
+past 2^63, integer-like flow ids, `peek` capped at `null`, the draw count of a
+deal). Two runner obligations are new: a peek op's `n` may be JSON `null`,
+which is a cap distinct from an absent one and must be passed through, and
+every flow a `saveLoad` rebuilds is subscribed to the trace sink as a lazily
+opened flow is, so a deal after the load can pin its evictions.
+
 ## PRNG
 
 Seeded cases pin **mulberry32** (schema doc 3.3): default seed 0,
@@ -44,7 +55,7 @@ verify first are tabled in the design notes, section 3.
   with **hand-authored** expectations - the expectations are the contract,
   never derived from an engine (PRNG-dependent ones are computed from the
   pinned algorithm and marked `PRNG-computed`). `src/cases.ts` is the live
-  contract - 185 cases (10 expressions, 8 specificity, 32 peek, 129 scripted,
+  contract - 201 cases (10 expressions, 8 specificity, 34 peek, 143 scripted,
   6 load);
   the design notes' sections 1-5 specify the shapes, and its section 6 listing
   is the round-1 draft, awaiting re-transcription.

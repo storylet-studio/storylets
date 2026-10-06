@@ -29,12 +29,18 @@
 
 class UStoryletBundle;
 class UStoryletEngine;
-namespace storylets { class Engine; class Flow; struct TraceEvent; }
+namespace storylets { class Engine; class Flow; struct TraceEvent; struct OpenFlowOptions; }
 
 /** Pimpl holders (defined in StoryletEngine.cpp). */
 class UStoryletWorld;
 struct FStoryletEngineImpl;
 struct FStoryletFlowImpl;
+
+/** OpenFlow replaced a flow that still had cards dealt: its id and how many.
+ *  The diagnostic hook every runtime has (the JS onReplacedFlow): the host
+ *  that calls OpenFlow straight after a load discards the restored hand, and
+ *  GetFlow is the call it meant. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FStoryletReplacedFlow, const FString&, FlowId, int32, DealtCards);
 
 /**
  * One playthrough over the engine's world: the play verbs, over this flow's
@@ -80,14 +86,22 @@ public:
 
 	/** Look at the top of the box's stock through raw tag criteria
 	 *  ({group gameId: tag gameId}): claims respected, nothing registered.
-	 *  You can never play a card you only peeked. MaxCards < 0 = unlimited.
-	 *  Criteria order matters (it composes into @hand in order), and a
-	 *  Blueprint Map keeps its authored order. */
+	 *  You can never play a card you only peeked. At most MaxCards come back,
+	 *  and a MaxCards of 0 or less returns nothing, as peek(n) does in every
+	 *  runtime; PeekAll is the uncapped look. Criteria order matters (it
+	 *  composes into @hand in order), and a Blueprint Map keeps its authored
+	 *  order. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
-	TArray<FStoryletDealtCard> Peek(const FString& BoxRef, const TMap<FString, FString>& Criteria, int32 MaxCards = -1);
+	TArray<FStoryletDealtCard> Peek(const FString& BoxRef, const TMap<FString, FString>& Criteria, int32 MaxCards);
+
+	/** Peek with no cap: every available card, ranked. Elsewhere this is
+	 *  peek() with the count left out; it is a separate Blueprint method
+	 *  because a BP pin has no "absent" (the same call as DealAllHands). */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
+	TArray<FStoryletDealtCard> PeekAll(const FString& BoxRef, const TMap<FString, FString>& Criteria);
 
 	/** The board: current hand contents, dealt order, keyed by hand gameId. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
 	TArray<FStoryletHandContents> Board() const;
 
 	/** The board narrowed to one box's hands (by box gameId or id), same
@@ -98,7 +112,7 @@ public:
 	 *  always-present BoxRef pin would make the whole-board read look like
 	 *  it needed one (the same call as PlayAdvancing and DealAllHands).
 	 *  Empty (and a log) on an unknown box. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
 	TArray<FStoryletHandContents> BoardForBox(const FString& BoxRef) const;
 
 	/** A dealt card's outcomes, each gate evaluated against CURRENT state. */
@@ -132,7 +146,7 @@ public:
 
 	/** Every box, bundle order: identity plus THIS flow's clock (the
 	 *  enumeration surface the examiner's turns section keys on). */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
 	TArray<FStoryletBoxView> ListBoxes() const;
 
 	// --- state, as this flow sees it ----------------------------------------
@@ -140,7 +154,7 @@ public:
 	/** Every declared property as an examiner row, in the flow's MERGED view:
 	 *  @world through the engine's resolver, then per scope the shared values
 	 *  and this flow's own copies. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Debug")
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Debug")
 	TArray<FStoryletPropertyView> ListProperties() const;
 
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
@@ -178,7 +192,7 @@ public:
 	 *  the examiner's log panel shows. Empty when the engine was created
 	 *  without the log. The durable play history in a save stays the play log
 	 *  (schema 4) - this log is a flow-lifetime utility and is NOT saved. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Debug")
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Debug")
 	TArray<FStoryletLogEntry> Log() const;
 
 	/** Empty the retained log; Seq keeps counting, so ordering across a
@@ -192,7 +206,7 @@ public:
 	 *  no delegate crosses that boundary). The subscription is held at this
 	 *  wrapper, not on the core, so it survives ApplyLiveBundle's swap. Fires
 	 *  synchronously, on the thread that drove the flow. Returns a handle for
-	 *  UnsubscribeTrace; 0 when the flow is closed. */
+	 *  UnsubscribeTrace; 0 (and a log) when the flow is closed. */
 	int32 SubscribeTrace(TFunction<void(const storylets::TraceEvent&)> Handler);
 
 	void UnsubscribeTrace(int32 Handle);
@@ -225,6 +239,15 @@ public:
 	virtual void BeginDestroy() override;
 
 private:
+	/** True, having logged "<Verb> - flow "<id>" is closed" (the core's own
+	 *  refusal), when this wrapper is closed: the header's promise that every
+	 *  verb on a closed flow refuses AND logs. Reads log at Warning and verbs
+	 *  at Error, as each one's other refusals do. */
+	bool RefuseClosed(const TCHAR* Verb, bool bRead = false) const;
+
+	/** The core's refusal, word for word, for a wrapper whose core is gone. */
+	FString ClosedMessage() const;
+
 	UPROPERTY()
 	TObjectPtr<UStoryletEngine> Owner = nullptr;
 
@@ -288,8 +311,16 @@ public:
 	std::shared_ptr<storylets::ScopeRegistry> GetRegistry() const;
 
 	/** The @world container given to Create, or null when self-backed. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
 	UStoryletWorld* GetBoundWorld() const;
+
+	/** Fired when OpenFlow (or OpenFlowFromJson) replaces a flow that still
+	 *  had cards dealt, with its id and how many, before the old flow goes
+	 *  inert. Behaviour is unchanged; this makes visible the host that opens
+	 *  a flow straight after a load and throws the restored hand away, where
+	 *  GetFlow was the call. Survives ApplyLiveBundle. */
+	UPROPERTY(BlueprintAssignable, Category = "Storylet Engine|Debug")
+	FStoryletReplacedFlow OnReplacedFlow;
 
 	// --- flows (design/flows.md) ---------------------------------------------
 
@@ -297,17 +328,23 @@ public:
 	 *  a name closes the old flow and reseeds that name's whole per-flow
 	 *  state; shared state is untouched. There is no default flow: "main" is
 	 *  a caller convention, not an engine rule. Null (and a log) when the
-	 *  engine is invalid. */
+	 *  engine is invalid. The flow's PRNG takes the engine's seed. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	UStoryletFlow* OpenFlow(const FString& Id);
 
+	/** OpenFlow with this flow's own PRNG seed in place of the engine's (the
+	 *  other runtimes' openFlow seed option; schema 3.3). A separate method
+	 *  because a BP pin has no "absent" (the same call as PlayAdvancing). */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
+	UStoryletFlow* OpenFlowSeeded(const FString& Id, int32 Seed);
+
 	/** The open flow of that name, or null. Every flow a load restored is
 	 *  open, including one this engine never opened itself. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
 	UStoryletFlow* GetFlow(const FString& Id) const;
 
 	/** Every open flow, in the order they were opened. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine")
 	TArray<UStoryletFlow*> Flows() const;
 
 	/** Close the named flow: its wrapper goes inert. A quiet no-op when no
@@ -326,21 +363,25 @@ public:
 
 	/** ONE flow's state as JSON, to park a visit that is walking away. Empty
 	 *  (and a log) when no flow of that name is open. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Save")
 	FString SaveFlowToJson(const FString& Id) const;
 
 	/** Open the named flow AS IT WAS, from a SaveFlowToJson string. Replaces
 	 *  any flow already open under that name, exactly as OpenFlow does. Drift
 	 *  is tolerated as a save load tolerates it, plus one thing: a shared card
-	 *  the other open flows now hold every copy of is not put back. Null (and a
-	 *  log) on malformed JSON. */
+	 *  the other open flows now hold every copy of is not put back.
+	 *  OutReportJson is the restore's LoadReport as JSON, the same report
+	 *  PreviewFlowRestoreJson gives for the same blob (the other runtimes'
+	 *  onRestoreReport): what the drift cost comes back with the act, whether
+	 *  or not anybody looked first. Null, an empty report and a log on
+	 *  malformed JSON. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
-	UStoryletFlow* OpenFlowFromJson(const FString& Id, const FString& Json);
+	UStoryletFlow* OpenFlowFromJson(const FString& Id, const FString& Json, FString& OutReportJson);
 
 	/** What OpenFlowFromJson would do to that name, as a LoadReport JSON
 	 *  string, without doing it (design/engine-server.md 4.9). Nothing moves.
 	 *  Empty (and a log) on malformed JSON. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Save")
 	FString PreviewFlowRestoreJson(const FString& Id, const FString& Json) const;
 
 	/** Close every flow and reseed the shared state to its defaults. Values
@@ -354,7 +395,7 @@ public:
 	/** The shared surface as examiner rows: @world (read through the world
 	 *  resolver) then the shared half of each scope. A flow's own copies are
 	 *  on UStoryletFlow::ListProperties. */
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Debug")
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Debug")
 	TArray<FStoryletPropertyView> ListProperties() const;
 
 	/** Shared and @world paths only, and another engine's game-wide scope in
@@ -406,23 +447,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Live Link")
 	bool ApplyLiveBundle(UStoryletBundle* NewBundle, FString& OutError);
 
+	/** ApplyLiveBundle, handing back the swap's LoadReport as JSON in
+	 *  OutReportJson (the play-helpers applyLiveBundle result's `report`):
+	 *  the cards the edit knocked off the board and the properties it
+	 *  dropped, defaulted or retyped. Empty when the swap is refused. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Live Link")
+	bool ApplyLiveBundleWithReport(UStoryletBundle* NewBundle, FString& OutError, FString& OutReportJson);
+
 	// --- persistence (schema 4) -------------------------------------------------
 	//
 	// The .storyletsave string boundary is UStoryletSave (StoryletSave.h), a
 	// Blueprint function library over this engine - the parity of Patterplay's
 	// UPatterSave, Unity's StoryletSave and play-helpers' save.ts.
 
-	// --- the debug registry -------------------------------------------------------
+	// --- the run's trace and log ---------------------------------------------------
 
-	/** Publish this engine to the editor's Runtime State examiner under an
-	 *  optional label; its flows appear beneath it. Unregisters itself when
-	 *  destroyed. */
-	/** The RUN's log: every flow's events in one order, each entry naming its
-	 *  flow. Opt in with the same bRetainLog the flow logs use.
-	 *
-	 *  A flow's own log cannot answer the question a run raises: when a story
-	 *  action in ANOTHER flow moves shared state, your flow's log says nothing
-	 *  and your value simply changes (design/shared-scarcity.md 8.2). */
 	/** Every flow's trace in one stream, each event tagged with its flow. C++
 	 *  only, as the flow's own is: no delegate crosses a Blueprint pin. This is
 	 *  what Live Link forwards, so the editor can follow one participant and
@@ -431,12 +470,23 @@ public:
 
 	void UnsubscribeTrace(int32 Handle);
 
-	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Debug")
+	/** The RUN's log: every flow's events in one order, each entry naming its
+	 *  flow. Opt in with the same bRetainLog the flow logs use.
+	 *
+	 *  A flow's own log cannot answer the question a run raises: when a story
+	 *  action in ANOTHER flow moves shared state, your flow's log says nothing
+	 *  and your value simply changes (design/shared-scarcity.md 8.2). */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Debug")
 	TArray<FStoryletLogEntry> GetRunLog() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Debug")
 	void ClearRunLog();
 
+	// --- the debug registry -------------------------------------------------------
+
+	/** Publish this engine to the editor's Runtime State examiner under an
+	 *  optional label; its flows appear beneath it. Unregisters itself when
+	 *  destroyed. */
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Debug")
 	void RegisterForDebug(const FString& Label);
 
@@ -471,6 +521,11 @@ private:
 	/** Create and CreateWithRegistry, on a registry or (null) the engine's own. */
 	static UStoryletEngine* CreateOn(UStoryletBundle* Bundle, std::shared_ptr<storylets::ScopeRegistry> Registry,
 		int32 Seed, bool bRetainLog, UStoryletWorld* World);
+
+	/** OpenFlow, OpenFlowSeeded and OpenFlowFromJson: the core's openFlow with
+	 *  these options, and the wrapper bookkeeping all three share. Null (and a
+	 *  log naming Verb) when the engine is invalid or the core refuses. */
+	UStoryletFlow* OpenFlowWith(const FString& Id, const storylets::OpenFlowOptions& Options, const TCHAR* Verb);
 
 	UPROPERTY()
 	TObjectPtr<UStoryletBundle> BundleRef = nullptr;

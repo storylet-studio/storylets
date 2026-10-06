@@ -38,8 +38,6 @@ namespace StoryletStudio.StoryletEngine
         public string Metadata;
     }
 
-    /// <summary>One hand: the Deal() surface. GameId is the name Deal() is
-    /// called with.</summary>
     /// <summary>One hole this hand fills from a property rather than with a
     /// tag: the hand MOVES when that property is written
     /// (design/engine-server.md 4.6). Group is the tag group's gameId, From
@@ -50,6 +48,8 @@ namespace StoryletStudio.StoryletEngine
         public string From;
     }
 
+    /// <summary>One hand: the Deal() surface. GameId is the name Deal() is
+    /// called with.</summary>
     public sealed class HandSummary
     {
         public string GameId;

@@ -57,13 +57,21 @@ export function snapshotState(engine: Engine, flow: Flow): StateSnapshot {
       if (row.value !== undefined) out[row.path] = row.value as ScalarValue;
     }
   }
-  Object.assign(out, extraState(engine.saveGame().flows[flow.id]));
+  Object.assign(out, extraState(flowBlob(engine, flow.id)));
   return out;
 }
 
+/** ONE flow's blob, or undefined for a flow that is not open (a just-closed
+ *  one: no paths). `saveFlow` clones that flow alone, where reading it out of
+ *  `saveGame()` cloned the whole engine, every flow and every property, on
+ *  each capture. */
+function flowBlob(engine: Engine, id: string): FlowSave | undefined {
+  return engine.getFlow(id) !== undefined ? engine.saveFlow(id) : undefined;
+}
+
 /** The storylets path-provider adapter for non-property state (design 3.4):
- *  one flow's turns / cooldowns / board as flattened paths, off its blob in
- *  the envelope (absent for a just-closed flow: no paths). */
+ *  one flow's turns / cooldowns / board as flattened paths, off its blob
+ *  (absent for a just-closed flow: no paths). */
 function extraState(saved: FlowSave | undefined): StateSnapshot {
   const out: StateSnapshot = {};
   if (saved === undefined) return out;
@@ -88,6 +96,6 @@ export function createStateLogger(engine: Engine, flow: Flow, opts: StateLoggerO
     // the kernel composes paths from the BAG's own pathPrefix ("story.", "deck.<id>.")
     // and needs none passed. Same strings, one owner.
     mounts: () => [...engine.listBags(), ...(live()?.listBags() ?? [])].map(({ bag }) => ({ bag })),
-    extra: () => extraState(engine.saveGame().flows[id]),
+    extra: () => extraState(flowBlob(engine, id)),
   }, opts);
 }

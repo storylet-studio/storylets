@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 12,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -4340,6 +4340,226 @@
         "c_two",
         "c_one",
         "c_zero"
+      ]
+    },
+    {
+      "name": "a seed past 2^63 reduces mod 2^32 as toUint32 does",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_a",
+                    "gameId": "a",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_b",
+                    "gameId": "b",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_c",
+                    "gameId": "c",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_d",
+                    "gameId": "d",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_e",
+                    "gameId": "e",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "seed": 10000000000000000000,
+      "box": "box",
+      "expect": [
+        "c_b",
+        "c_d",
+        "c_a",
+        "c_c",
+        "c_e"
+      ]
+    },
+    {
+      "name": "a seed past 2^63 shuffles as its 32-bit reduction does",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_a",
+                    "gameId": "a",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_b",
+                    "gameId": "b",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_c",
+                    "gameId": "c",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_d",
+                    "gameId": "d",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_e",
+                    "gameId": "e",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "seed": 2313682944,
+      "box": "box",
+      "expect": [
+        "c_b",
+        "c_d",
+        "c_a",
+        "c_c",
+        "c_e"
       ]
     }
   ],
@@ -12535,6 +12755,7 @@
                     "gameId": "alpha",
                     "priority": 0,
                     "redraw": "always",
+                    "copies": 2,
                     "outcomes": []
                   },
                   {
@@ -12542,6 +12763,7 @@
                     "gameId": "beta",
                     "priority": 0,
                     "redraw": "always",
+                    "copies": 2,
                     "outcomes": []
                   },
                   {
@@ -12549,25 +12771,39 @@
                     "gameId": "gamma",
                     "priority": 0,
                     "redraw": "always",
+                    "copies": 2,
                     "outcomes": []
                   }
                 ]
               }
             ],
             "handTemplates": [],
-            "hands": []
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
           }
         ]
       },
       "seed": 1,
       "script": [
         {
-          "op": "peek",
-          "expect": [
-            "c_gamma",
-            "c_alpha",
-            "c_beta"
-          ]
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_gamma",
+              "c_alpha",
+              "c_beta"
+            ]
+          }
         },
         {
           "op": "saveLoad"
@@ -19141,6 +19377,7 @@
                     "gameId": "alpha",
                     "priority": 0,
                     "redraw": "always",
+                    "copies": 2,
                     "outcomes": []
                   },
                   {
@@ -19148,6 +19385,7 @@
                     "gameId": "beta",
                     "priority": 0,
                     "redraw": "always",
+                    "copies": 2,
                     "outcomes": []
                   },
                   {
@@ -19155,35 +19393,54 @@
                     "gameId": "gamma",
                     "priority": 0,
                     "redraw": "always",
+                    "copies": 2,
                     "outcomes": []
                   }
                 ]
               }
             ],
             "handTemplates": [],
-            "hands": []
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
           }
         ]
       },
       "seed": 1,
       "script": [
         {
-          "op": "peek",
+          "op": "deal",
           "flow": "alice",
-          "expect": [
-            "c_gamma",
-            "c_alpha",
-            "c_beta"
-          ]
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_gamma",
+              "c_alpha",
+              "c_beta"
+            ]
+          }
         },
         {
-          "op": "peek",
+          "op": "deal",
           "flow": "bob",
-          "expect": [
-            "c_gamma",
-            "c_alpha",
-            "c_beta"
-          ]
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_gamma",
+              "c_alpha",
+              "c_beta"
+            ]
+          }
         },
         {
           "op": "parkFlow",
@@ -26864,6 +27121,2441 @@
           "expectVerdicts": {
             "xquay": "tags",
             "yquay": "tags"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a peek consumes no draws: peeking three times leaves the next deal unchanged",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_alpha",
+                    "gameId": "alpha",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_beta",
+                    "gameId": "beta",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_gamma",
+                    "gameId": "gamma",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "peek",
+          "flow": "a",
+          "expect": [
+            "c_beta",
+            "c_gamma",
+            "c_alpha"
+          ]
+        },
+        {
+          "op": "peek",
+          "flow": "a",
+          "expect": [
+            "c_beta",
+            "c_gamma",
+            "c_alpha"
+          ]
+        },
+        {
+          "op": "peek",
+          "flow": "a",
+          "expect": [
+            "c_beta",
+            "c_gamma",
+            "c_alpha"
+          ]
+        },
+        {
+          "op": "deal",
+          "flow": "a",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_beta",
+              "c_gamma",
+              "c_alpha"
+            ]
+          }
+        },
+        {
+          "op": "deal",
+          "flow": "b",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_beta",
+              "c_gamma",
+              "c_alpha"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a play is all-or-nothing: a refused write lands none of the outcome's writes",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": [
+            {
+              "name": "clock",
+              "type": "number",
+              "default": 0,
+              "writable": false
+            }
+          ]
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "gold",
+              "type": "number",
+              "default": 0
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [
+              {
+                "name": "heat",
+                "type": "number",
+                "default": 0
+              }
+            ],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_hand",
+                    "gameId": "hand",
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_go",
+                        "gameId": "go",
+                        "changes": {
+                          "@box.heat": {
+                            "src": "@box.heat + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "box",
+                                "heat"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          },
+                          "@hand.nope": {
+                            "src": "1",
+                            "ast": [
+                              "n",
+                              1
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "c_scope",
+                    "gameId": "scope",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_go",
+                        "gameId": "go",
+                        "changes": {
+                          "@story.gold": {
+                            "src": "@story.gold + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "story",
+                                "gold"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          },
+                          "@zzz.x": {
+                            "src": "1",
+                            "ast": [
+                              "n",
+                              1
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "c_world",
+                    "gameId": "world",
+                    "priority": 3,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_go",
+                        "gameId": "go",
+                        "changes": {
+                          "@story.gold": {
+                            "src": "@story.gold + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "story",
+                                "gold"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          },
+                          "@world.clock": {
+                            "src": "1",
+                            "ast": [
+                              "n",
+                              1
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_world",
+              "c_hand",
+              "c_scope"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_world",
+          "outcome": "go",
+          "from": "h_q",
+          "expectError": true
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "story.gold": 0,
+            "world.clock": 0,
+            "turn.b_x": 0
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_hand",
+          "outcome": "go",
+          "from": "h_q",
+          "expectError": true
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "box.box.heat": 0,
+            "turn.b_x": 0
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_scope",
+          "outcome": "go",
+          "from": "h_q",
+          "expectError": true
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "story.gold": 0,
+            "turn.b_x": 0
+          }
+        },
+        {
+          "op": "assertBoard",
+          "expect": {
+            "h_q": [
+              "c_world",
+              "c_hand",
+              "c_scope"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a change target with a trailing newline is refused, and nothing lands",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "coins",
+              "type": "number",
+              "default": 0
+            },
+            {
+              "name": "gold",
+              "type": "number",
+              "default": 0
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_a",
+                    "gameId": "a",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": [
+                      {
+                        "id": "o_go",
+                        "gameId": "go",
+                        "changes": {
+                          "@story.coins": {
+                            "src": "@story.coins + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "story",
+                                "coins"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          },
+                          "@story.gold\n": {
+                            "src": "@story.gold + 1",
+                            "ast": [
+                              "bin",
+                              "+",
+                              [
+                                "sv",
+                                "story",
+                                "gold"
+                              ],
+                              [
+                                "n",
+                                1
+                              ]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_a"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "card": "c_a",
+          "outcome": "go",
+          "from": "h_q",
+          "expectError": true
+        },
+        {
+          "op": "assertState",
+          "expect": {
+            "story.coins": 0,
+            "story.gold": 0,
+            "turn.b_x": 0
+          }
+        },
+        {
+          "op": "assertBoard",
+          "expect": {
+            "h_q": [
+              "c_a"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a boundBy with a trailing newline is not a reference, and binds nothing",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "act",
+              "type": "string",
+              "default": "act-1"
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_act",
+                "gameId": "act",
+                "tags": [
+                  {
+                    "id": "v_act1",
+                    "gameId": "act-1"
+                  },
+                  {
+                    "id": "v_act2",
+                    "gameId": "act-2"
+                  }
+                ],
+                "boundBy": "@story.act\n"
+              },
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_early",
+                    "gameId": "early",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_act": [
+                        "v_act1"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_late",
+                    "gameId": "late",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_act": [
+                        "v_act2"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_early",
+              "c_late"
+            ]
+          },
+          "expectDiagnostic": "is not a @world or @story property reference"
+        }
+      ]
+    },
+    {
+      "name": "a hole reference with a trailing newline is not a reference, and binds nothing",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_dockside",
+                    "gameId": "dockside",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_zone": [
+                        "v_docks"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_stall",
+                    "gameId": "stall",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_zone": [
+                        "v_market"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [
+              {
+                "id": "t_npc",
+                "gameId": "npc",
+                "chooses": [
+                  "d_zone"
+                ],
+                "slots": "unbounded",
+                "properties": [
+                  {
+                    "name": "zone",
+                    "type": "enum",
+                    "values": [
+                      "docks",
+                      "market"
+                    ],
+                    "default": "docks"
+                  }
+                ]
+              }
+            ],
+            "hands": [
+              {
+                "id": "h_elder",
+                "gameId": "elder",
+                "template": "t_npc",
+                "chosen": {
+                  "d_zone": "@hand.zone\n"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_elder"
+          ],
+          "expectBoard": {
+            "h_elder": [
+              "c_dockside",
+              "c_stall"
+            ]
+          },
+          "expectDiagnostic": "is not a @hand, @world or @story property reference"
+        }
+      ]
+    },
+    {
+      "name": "a taken card is evicted from another flow's hand at its next deal",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_rare",
+                "gameId": "rare",
+                "shared": true,
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_pixie",
+                    "gameId": "pixie",
+                    "priority": 0,
+                    "redraw": "never",
+                    "sharedCopies": 2,
+                    "outcomes": [
+                      {
+                        "id": "o_take",
+                        "gameId": "take",
+                        "changes": {}
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "flow": "alice",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_pixie"
+            ]
+          }
+        },
+        {
+          "op": "deal",
+          "flow": "bob",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_pixie"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "flow": "alice",
+          "card": "c_pixie",
+          "outcome": "take",
+          "from": "h_q"
+        },
+        {
+          "op": "deal",
+          "flow": "bob",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": []
+          },
+          "expectTrace": [
+            "evict q pixie taken"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a seated card whose deck moved to another box is evicted as vanished",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_move",
+                    "gameId": "move",
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_stay",
+                    "gameId": "stay",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_a",
+                "gameId": "a",
+                "rule": {
+                  "slots": "unbounded"
+                },
+                "slots": 1
+              }
+            ]
+          }
+        ]
+      },
+      "bundleB": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_stay",
+                    "gameId": "stay",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_a",
+                "gameId": "a",
+                "rule": {
+                  "slots": "unbounded"
+                },
+                "slots": 1
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_move",
+                    "gameId": "move",
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_a"
+          ],
+          "expectBoard": {
+            "h_a": [
+              "c_move"
+            ]
+          }
+        },
+        {
+          "op": "saveLoad",
+          "into": "B"
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_a"
+          ],
+          "expectBoard": {
+            "h_a": [
+              "c_stay"
+            ]
+          },
+          "expectTrace": [
+            "evict a move vanished"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "integer-like flow ids come first after a load, and the save is the same bytes",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "steps",
+              "type": "number",
+              "default": 0,
+              "shared": false
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_a",
+                    "gameId": "a",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "openFlow",
+          "flow": "main"
+        },
+        {
+          "op": "openFlow",
+          "flow": "7"
+        },
+        {
+          "op": "assertFlows",
+          "expect": [
+            "main",
+            "7"
+          ]
+        },
+        {
+          "op": "setState",
+          "flow": "7",
+          "story": {
+            "steps": 3
+          }
+        },
+        {
+          "op": "saveLoad",
+          "expectSameBytes": true
+        },
+        {
+          "op": "assertFlows",
+          "expect": [
+            "7",
+            "main"
+          ]
+        },
+        {
+          "op": "assertState",
+          "flow": "7",
+          "expect": {
+            "story.steps": 3
+          }
+        },
+        {
+          "op": "assertState",
+          "flow": "main",
+          "expect": {
+            "story.steps": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "a priority that evaluates to NaN is not dealt",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "big",
+              "type": "number",
+              "default": 1e+200
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_nan",
+                    "gameId": "nan",
+                    "priority": {
+                      "src": "@story.big * @story.big - @story.big * @story.big",
+                      "ast": [
+                        "bin",
+                        "-",
+                        [
+                          "bin",
+                          "*",
+                          [
+                            "sv",
+                            "story",
+                            "big"
+                          ],
+                          [
+                            "sv",
+                            "story",
+                            "big"
+                          ]
+                        ],
+                        [
+                          "bin",
+                          "*",
+                          [
+                            "sv",
+                            "story",
+                            "big"
+                          ],
+                          [
+                            "sv",
+                            "story",
+                            "big"
+                          ]
+                        ]
+                      ]
+                    },
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_ok",
+                    "gameId": "ok",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "peek",
+          "expect": [
+            "c_ok"
+          ],
+          "expectVerdicts": {
+            "nan": "priority",
+            "ok": "dealt"
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_ok"
+            ]
+          },
+          "expectVerdicts": {
+            "nan": "priority"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a number binds a group by its JS text: 2 binds the tag \"2\"",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "floor",
+              "type": "number",
+              "default": 2
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_floor",
+                "gameId": "floor",
+                "tags": [
+                  {
+                    "id": "v_f1",
+                    "gameId": "1"
+                  },
+                  {
+                    "id": "v_f2",
+                    "gameId": "2"
+                  }
+                ],
+                "boundBy": "@story.floor"
+              },
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_one",
+                    "gameId": "one",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_floor": [
+                        "v_f1"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_two",
+                    "gameId": "two",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_floor": [
+                        "v_f2"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_two"
+            ]
+          }
+        },
+        {
+          "op": "setState",
+          "story": {
+            "floor": 1
+          }
+        },
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_one"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a hole filled from a number property binds the tag of its JS text",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_floor",
+                "gameId": "floor",
+                "tags": [
+                  {
+                    "id": "v_f1",
+                    "gameId": "1"
+                  },
+                  {
+                    "id": "v_f2",
+                    "gameId": "2"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_one",
+                    "gameId": "one",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_floor": [
+                        "v_f1"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_two",
+                    "gameId": "two",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_floor": [
+                        "v_f2"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [
+              {
+                "id": "t_lift",
+                "gameId": "lift",
+                "chooses": [
+                  "d_floor"
+                ],
+                "slots": "unbounded",
+                "properties": [
+                  {
+                    "name": "floor",
+                    "type": "number",
+                    "default": 2
+                  }
+                ]
+              }
+            ],
+            "hands": [
+              {
+                "id": "h_lift",
+                "gameId": "lift",
+                "template": "t_lift",
+                "chosen": {
+                  "d_floor": "@hand.floor"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_lift"
+          ],
+          "expectBoard": {
+            "h_lift": [
+              "c_two"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a flags value binds a group by its joined text: [\"act1\"] binds \"act1\"",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "acts",
+              "type": "flags",
+              "default": [
+                "act1"
+              ]
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_act",
+                "gameId": "act",
+                "tags": [
+                  {
+                    "id": "v_act1",
+                    "gameId": "act1"
+                  },
+                  {
+                    "id": "v_act2",
+                    "gameId": "act2"
+                  }
+                ],
+                "boundBy": "@story.acts"
+              },
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_early",
+                    "gameId": "early",
+                    "priority": 2,
+                    "redraw": "always",
+                    "tags": {
+                      "d_act": [
+                        "v_act1"
+                      ]
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_late",
+                    "gameId": "late",
+                    "priority": 1,
+                    "redraw": "always",
+                    "tags": {
+                      "d_act": [
+                        "v_act2"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_early"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a peek capped at null returns nothing; an absent cap returns everything",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_a",
+                    "gameId": "a",
+                    "priority": 2,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_b",
+                    "gameId": "b",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "peek",
+          "expect": [
+            "c_a",
+            "c_b"
+          ]
+        },
+        {
+          "op": "peek",
+          "n": null,
+          "expect": []
+        }
+      ]
+    },
+    {
+      "name": "the random() draw count of a deal is pinned",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "condition": {
+                  "src": "random(1, 10) > 0",
+                  "ast": [
+                    "bin",
+                    ">",
+                    [
+                      "call",
+                      "random",
+                      [
+                        "n",
+                        1
+                      ],
+                      [
+                        "n",
+                        10
+                      ]
+                    ],
+                    [
+                      "n",
+                      0
+                    ]
+                  ]
+                },
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_a",
+                    "gameId": "a",
+                    "condition": {
+                      "src": "random(1, 6) > 2",
+                      "ast": [
+                        "bin",
+                        ">",
+                        [
+                          "call",
+                          "random",
+                          [
+                            "n",
+                            1
+                          ],
+                          [
+                            "n",
+                            6
+                          ]
+                        ],
+                        [
+                          "n",
+                          2
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_b",
+                    "gameId": "b",
+                    "condition": {
+                      "src": "random(1, 6) > 2 and random(1, 6) > 1",
+                      "ast": [
+                        "bin",
+                        "and",
+                        [
+                          "bin",
+                          ">",
+                          [
+                            "call",
+                            "random",
+                            [
+                              "n",
+                              1
+                            ],
+                            [
+                              "n",
+                              6
+                            ]
+                          ],
+                          [
+                            "n",
+                            2
+                          ]
+                        ],
+                        [
+                          "bin",
+                          ">",
+                          [
+                            "call",
+                            "random",
+                            [
+                              "n",
+                              1
+                            ],
+                            [
+                              "n",
+                              6
+                            ]
+                          ],
+                          [
+                            "n",
+                            1
+                          ]
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_c",
+                    "gameId": "c",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_d",
+                    "gameId": "d",
+                    "condition": {
+                      "src": "random(1, 6) > 3",
+                      "ast": [
+                        "bin",
+                        ">",
+                        [
+                          "call",
+                          "random",
+                          [
+                            "n",
+                            1
+                          ],
+                          [
+                            "n",
+                            6
+                          ]
+                        ],
+                        [
+                          "n",
+                          3
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              },
+              {
+                "id": "k_side",
+                "gameId": "side",
+                "condition": {
+                  "src": "random(1, 10) > 3",
+                  "ast": [
+                    "bin",
+                    ">",
+                    [
+                      "call",
+                      "random",
+                      [
+                        "n",
+                        1
+                      ],
+                      [
+                        "n",
+                        10
+                      ]
+                    ],
+                    [
+                      "n",
+                      3
+                    ]
+                  ]
+                },
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_e",
+                    "gameId": "e",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_f",
+                    "gameId": "f",
+                    "condition": {
+                      "src": "random(1, 6) > 2",
+                      "ast": [
+                        "bin",
+                        ">",
+                        [
+                          "call",
+                          "random",
+                          [
+                            "n",
+                            1
+                          ],
+                          [
+                            "n",
+                            6
+                          ]
+                        ],
+                        [
+                          "n",
+                          2
+                        ]
+                      ]
+                    },
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_a",
+                "gameId": "a",
+                "rule": {
+                  "condition": {
+                    "src": "random(1, 10) > 0",
+                    "ast": [
+                      "bin",
+                      ">",
+                      [
+                        "call",
+                        "random",
+                        [
+                          "n",
+                          1
+                        ],
+                        [
+                          "n",
+                          10
+                        ]
+                      ],
+                      [
+                        "n",
+                        0
+                      ]
+                    ]
+                  },
+                  "slots": "unbounded"
+                },
+                "slots": 2
+              },
+              {
+                "id": "h_b",
+                "gameId": "b",
+                "rule": {
+                  "condition": {
+                    "src": "random(1, 10) > 1",
+                    "ast": [
+                      "bin",
+                      ">",
+                      [
+                        "call",
+                        "random",
+                        [
+                          "n",
+                          1
+                        ],
+                        [
+                          "n",
+                          10
+                        ]
+                      ],
+                      [
+                        "n",
+                        1
+                      ]
+                    ]
+                  },
+                  "slots": "unbounded"
+                },
+                "slots": 2
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "expectBoard": {
+            "h_a": [
+              "c_d",
+              "c_a"
+            ],
+            "h_b": [
+              "c_f",
+              "c_c"
+            ]
+          }
+        },
+        {
+          "op": "deal",
+          "expectBoard": {
+            "h_a": [
+              "c_d",
+              "c_a"
+            ],
+            "h_b": [
+              "c_c",
+              "c_b"
+            ]
           }
         }
       ]

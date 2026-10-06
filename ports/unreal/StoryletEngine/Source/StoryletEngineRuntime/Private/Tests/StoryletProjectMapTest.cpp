@@ -130,7 +130,7 @@ bool FStoryletProjectMapTest::RunTest(const FString& Parameters)
 		}
 		TMap<FString, FString> Criteria;
 		Criteria.Add(TEXT("district"), TEXT("hill"));
-		TArray<FStoryletDealtCard> Peeked = Flow->Peek(TEXT("box"), Criteria);
+		TArray<FStoryletDealtCard> Peeked = Flow->PeekAll(TEXT("box"), Criteria);
 		if (TestEqual(TEXT("peek names the map's group in an opted-in box"), Peeked.Num(), 1))
 		{
 			TestEqual(TEXT("the hill card"), Peeked[0].GameId, FString(TEXT("hill_card")));

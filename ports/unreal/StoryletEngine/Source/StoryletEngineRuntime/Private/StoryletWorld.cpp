@@ -29,11 +29,8 @@ struct FStoryletWorldImpl
 	}
 };
 
-namespace
-{
-	std::string Std(const FString& S) { return std::string(TCHAR_TO_UTF8(*S)); }
-	FString Ue(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
-}
+using StoryletConvert::Std;
+using StoryletConvert::Ue;
 
 UStoryletWorld::UStoryletWorld()
 {

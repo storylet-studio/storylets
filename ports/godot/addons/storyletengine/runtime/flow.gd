@@ -14,14 +14,42 @@
 # success). Programmer errors ALSO push_error. A CLOSED flow's handle is
 # inert: every verb refuses (peek carries "error", play returns it, the
 # rest push_error and return their empty shape).
+#
+# Lifetime: a flow holds its engine WEAKLY. The engine owns its flows (it keeps
+# every one alive for get_flow and the shared ledger), so a strong reference
+# back made the pair a cycle that reference counting never frees: a dropped
+# engine stayed in memory for the life of the process, bundle, flows and all.
+# Keep the StoryletEngine for as long as you play its flows. When it is freed,
+# every flow it held closes, and a handle you kept refuses as any closed one
+# does, saying why.
 class_name StoryletFlow
 extends RefCounted
 
 const PLAY_OPTION_KEYS := ["advance_turns"]
 
-var _engine: StoryletEngine
-var id: String
+var _engine_ref: WeakRef
+var _engine: StoryletEngine:
+	get:
+		return _engine_ref.get_ref()
+## This flow's name, as open_flow was given it. Read-only: the engine files the
+## flow under this name, so a handle renamed after the fact would save, log and
+## close under one name while the engine knew it by another.
+var id: String:
+	get:
+		return _id
+	set(_value):
+		push_error('StoryletFlow: id is read-only (flow "%s")' % _id)
+var _id: String
 var _closed := false
+## Set when the engine was freed rather than the flow closed: the refusal then
+## names the cause, since nothing the host did to the flow explains it.
+var _engine_gone := false
+## Copied off the engine at construction, so the hottest reads (every condition,
+## every candidate card, every event) cost no trip through the weak reference.
+## Each is fixed for the engine's life.
+var _dialect: Dictionary
+var _required_groups: Dictionary
+var _log_cap: int
 
 var _prng: StoryletMulberry32
 # Per-box turn counters, keyed by box id (schema 3.4), PER FLOW.
@@ -70,13 +98,16 @@ var _log_seq: int = 0
 
 ## @internal - built by StoryletEngine.open_flow / load_game only.
 func _init(engine: StoryletEngine, flow_id: String, seed_value: int) -> void:
-	_engine = engine
-	id = flow_id
+	_engine_ref = weakref(engine)
+	_id = flow_id
+	_dialect = engine._dialect
+	_required_groups = engine._required_groups
+	_log_cap = engine._log_cap
 	_prng = StoryletMulberry32.new(seed_value)
 	var fd: Dictionary = engine._flow_decls
 	# Keyed by internal id and ADDRESSED by gameId (StoryletEngine.address_of).
 	var stores := {"story": StoryletEngine._bag_from_decls(fd["story"], "story."), "box": {}, "deck": {}, "hand": {}, "value": {}}
-	for kind in ["box", "deck", "hand", "value"]:
+	for kind in StoryletEngine.OWNED_KINDS:
 		for owner_id in fd[kind]:
 			stores[kind][owner_id] = StoryletEngine._bag_from_decls(fd[kind][owner_id], engine.address_of(kind, owner_id) + ".")
 	_stores = stores
@@ -128,7 +159,31 @@ func registered_keys() -> Array:
 ## @internal
 func mark_closed() -> void:
 	release_bags(false)
+	_close_down()
+
+
+## @internal - the engine is being freed: this flow closes where it stands. Its
+## bags are left registered, as they would be had the engine lived on; the
+## engine is past the point of asking anything of.
+func engine_freed() -> void:
+	_engine_gone = true
+	_close_down()
+
+
+func _close_down() -> void:
 	_closed = true
+	# The caches hold nothing that keeps an object alive (bound methods carry an
+	# object id, not a reference), but a closed flow never asks again.
+	_hosts_by_box.clear()
+	_scope_bases.clear()
+	_scope_view = null
+
+
+## What a verb refused on a closed flow says.
+func _closed_message() -> String:
+	if _engine_gone:
+		return 'flow "%s" is closed: its engine was freed (keep the StoryletEngine for as long as you play its flows)' % _id
+	return 'flow "%s" is closed' % _id
 
 
 ## @internal - take this flow's bags out of the registry; with `keep`, their
@@ -180,11 +235,9 @@ func _values_of(kind: String, owner_id: String) -> Dictionary:
 ## push_error) on an unknown box or a closed flow.
 func turn(box_ref: String) -> float:
 	if _closed:
-		push_error('StoryletFlow: flow "%s" is closed' % id)
+		push_error("StoryletFlow: " + _closed_message())
 		return NAN
-	var box = _engine._boxes_by_game_id.get(box_ref)
-	if box == null:
-		box = _engine._boxes_by_id.get(box_ref)
+	var box = _resolve_box(box_ref)
 	if box == null:
 		push_error('StoryletFlow: unknown box "%s"' % box_ref)
 		return NAN
@@ -193,36 +246,39 @@ func turn(box_ref: String) -> float:
 
 ## Subscribe to this flow's deal/play trace (schema 5). Returns the
 ## unsubscribe Callable.
+##
+## The same Callable subscribed twice is registered once (ruling F), so one
+## unsubscribe removes it.
 func subscribe_trace(handler: Callable) -> Callable:
-	_trace_handlers.append(handler)
+	if not _trace_handlers.has(handler):
+		_trace_handlers.append(handler)
 	return func() -> void: _trace_handlers.erase(handler)
 
 
 func _tracing() -> bool:
-	return not _trace_handlers.is_empty() or _engine._log_cap >= 0 or _engine.engine_tracing()
+	return not _trace_handlers.is_empty() or _log_cap >= 0 or _engine.engine_tracing()
 
 
 func _emit(event: Dictionary, turn_stamp = null) -> void:
-	if _engine._log_cap >= 0:
+	if _log_cap >= 0:
 		var entry := event.duplicate()
 		entry["seq"] = _log_seq
 		_log_seq += 1
 		if turn_stamp != null:
 			entry["turn"] = turn_stamp
-		_log_entries.append(entry)
-		if _log_entries.size() > _engine._log_cap:
-			_log_entries = _log_entries.slice(_log_entries.size() - _engine._log_cap)
+		_log_entries = StoryletEngine._append_capped(_log_entries, entry, _log_cap)
 	# Over a COPY, and skipping anything freed: see the note on
 	# StoryletEngine.emit_engine, which this mirrors.
 	for handler in _trace_handlers.duplicate():
 		if handler.is_valid():
 			handler.call(event)
-	_engine.emit_engine(id, event, turn_stamp)
+	_engine.emit_engine(_id, event, turn_stamp)
 
 
 ## The retained flow log (opt-in via the engine's log option), oldest first,
 ## capped. NOT saved; the durable play history in a save stays the play log.
 func log() -> Array:
+	_log_entries = StoryletEngine._capped(_log_entries, _log_cap)
 	return _log_entries
 
 
@@ -235,30 +291,13 @@ func clear_log() -> void:
 
 # Tag group names are box-scoped: two boxes may name a group the same way
 # (schema 1 - boxes namespace their groups), so a name is only ever resolved
-# inside the box being asked, never bundle-wide. Ids are project-unique and
-# accepted here too, still confined to the box.
-#
-# A box on the project map sees ONE namespace: its own groups, then the map's
-# group (design/project-map-contract.md 3.1). A box that has not opted in does
-# not see the map's name at all, so a peek naming it there is the ordinary
-# unknown-group refusal. Own groups first is stated for determinism only: a
-# bundle that loads never has the two share a name.
+# inside the box being asked, never bundle-wide. The lookup and its memo live
+# on the engine (StoryletEngine.group_in_box), since the answer depends on the
+# bundle alone.
 func _group_in_box(box: Dictionary, reference: String) -> Variant:
-	var groups := StoryletBundle.groups_of_box(_engine._bundle, box)
-	for group in groups:
-		if StoryletBundle.effective_game_id(group) == reference:
-			return group
-	for group in groups:
-		if group["id"] == reference:
-			return group
-	return null
+	return _engine.group_in_box(box, reference)
 
 
-# `box` is the box whose ask is being evaluated: the play-history functions
-# take a bare group name, so it resolves there, and they count only that box's
-# own plays (the box is in the index key). That was automatic while every group
-# was a box's; a project-map zone is shared, and its history is still not
-# (design/project-map-contract.md 3.7, D7).
 ## One host per box, built once. The Callables below read _play_count,
 ## _turn_counts and the rest LIVE, so a cached host answers with current state -
 ## which is what makes caching safe rather than a snapshot bug. Unreal did this
@@ -266,6 +305,11 @@ func _group_in_box(box: Dictionary, reference: String) -> Variant:
 ## _eval_ctx: once per deck per ask, and once per surviving card in the
 ## eviction pass. Copied here 2026-08-29, lazily, so unvisited boxes cost
 ## nothing.
+##
+## Bound METHODS, never lambdas: a GDScript lambda that touches a member holds
+## a strong reference to this flow, so a host cached on the flow made the flow
+## its own cycle and no flow was ever freed. A bound method carries the
+## object's id and nothing more.
 var _hosts_by_box: Dictionary = {}
 
 
@@ -278,16 +322,26 @@ func _host(box: Dictionary) -> Dictionary:
 	return made
 
 
+# `box` is the box whose ask is being evaluated: the play-history functions
+# take a bare group name, so it resolves there, and they count only that box's
+# own plays (the box is in the index key). That was automatic while every group
+# was a box's; a project-map zone is shared, and its history is still not
+# (design/project-map-contract.md 3.7, D7). bind() appends, so the box is the
+# LAST parameter of the two methods it is bound to.
 func _make_host(box: Dictionary) -> Dictionary:
 	return {
-		"next_random": func() -> float: return _prng.next(),
+		"next_random": _host_next_random,
 		"count_played": _host_count_played,
 		"turns_since_played": _host_turns_since_played,
-		"count_played_in": func(group: String, tag: String) -> float:
-			return _host_count_played_in(box, group, tag),
-		"turns_since_played_in": func(group: String, tag: String) -> float:
-			return _host_turns_since_played_in(box, group, tag),
+		"count_played_in": _host_count_played_in.bind(box),
+		"turns_since_played_in": _host_turns_since_played_in.bind(box),
 	}
+
+
+# Through the method rather than bound to the generator: a restore replaces
+# _prng, and a host cached before it must draw from the new one.
+func _host_next_random() -> float:
+	return _prng.next()
 
 
 func _host_count_played(card: String) -> float:
@@ -299,30 +353,15 @@ func _host_turns_since_played(card: String) -> float:
 	return _since(last) if last != null else StoryletDialect.NEVER_PLAYED
 
 
-func _host_count_played_in(box: Dictionary, group: String, tag: String) -> float:
-	var key = _tag_key_in(box, group, tag)
+func _host_count_played_in(group: String, tag: String, box: Dictionary) -> float:
+	var key = _engine.tag_key_in(box, group, tag)
 	return 0.0 if key == null else float(_tag_play_count.get(key, 0))
 
 
-func _host_turns_since_played_in(box: Dictionary, group: String, tag: String) -> float:
-	var key = _tag_key_in(box, group, tag)
+func _host_turns_since_played_in(group: String, tag: String, box: Dictionary) -> float:
+	var key = _engine.tag_key_in(box, group, tag)
 	var last = null if key == null else _last_play_in_tag.get(key)
 	return _since(last) if last != null else StoryletDialect.NEVER_PLAYED
-
-
-## A group NAME and tag name resolved in THIS box, as the index's key, with
-## this box in it: a zone's plays in another box are not this box's history.
-## Null when either is unknown here, which is the old per-record "false" and reads
-## as "never". Resolved once per call, where _in_tag used to resolve it again
-## for every record in the log.
-func _tag_key_in(box: Dictionary, group: String, tag: String) -> Variant:
-	var found = _group_in_box(box, group)
-	if found == null:
-		return null
-	for v in found["tags"]:
-		if v.get("gameId") == tag:
-			return _tag_key(box["id"], found["id"], v["id"])
-	return null
 
 
 ## The key for one (box, group, tag) triple.
@@ -377,15 +416,6 @@ func _since(record: Dictionary) -> float:
 	return float(_turn_counts.get(entry["box"]["id"], 0.0)) - float(record["turn"])
 
 
-# The evaluation environment (schema 3.1/6.2): @box/@deck resolve to the card
-# under evaluation; in hand-condition contexts @deck is an empty bag, so any
-# reference is an eval error (missing-policy throw). Every scope is the
-# flow's MERGED view - its own copies over the shared values, names
-# disjoint - and @world reads through the engine's resolver. Every OTHER
-# scope in the registry (another engine's `patter`, a game's own) reaches the
-# context too, under the five own tokens. Quality ladders live on the engine
-# (declaration-level, partition-blind), falling back to the registry's.
-
 # The ladder behind one composed @hand name, or null when the name is not a
 # quality (or came from criteria, which are tag names, never state).
 func _hand_ladder(hand_env: Dictionary, name: String) -> Variant:
@@ -400,45 +430,83 @@ func _hand_ladder(hand_env: Dictionary, name: String) -> Variant:
 	return null
 
 
+## Every scope an ask in one box (and deck) sees except @hand, which is the
+## ask's own: built once per registry generation and kept, keyed by box id or
+## "<box id>\u001f<deck id>". JS builds its readers once per flow; these are the
+## same readers with the registry's other scopes under them, so a registry that
+## gains or loses a scope (its view is a new Dictionary then) starts them afresh.
+var _scope_bases: Dictionary = {}
+## The registry view the bases were built over.
+var _scope_view = null
+
+
+# The evaluation environment (schema 3.1/6.2): @box/@deck resolve to the card
+# under evaluation; in hand-condition contexts @deck is an empty bag, so any
+# reference is an eval error (missing-policy throw). Every scope is the
+# flow's MERGED view - its own copies over the shared values, names
+# disjoint - and @world reads through the engine's resolver. Every OTHER
+# scope in the registry (another engine's `patter`, a game's own) reaches the
+# context too, under the five own tokens. Quality ladders live on the engine
+# (declaration-level, partition-blind), falling back to the registry's.
 func _eval_ctx(box: Dictionary, deck, hand_env: Dictionary) -> Dictionary:
 	var box_id: String = box["id"]
 	var deck_id = deck["id"] if deck != null else null
 	var others: Dictionary = _engine.registry_view()
-	# Every other engine's game-wide scope first (every engine reads every scope);
-	# this engine's own tokens are its merged views, over the top.
-	var scopes: Dictionary = (others["scopes"] as Dictionary).duplicate()
-	scopes["world"] = _engine.world_get
-	scopes["story"] = func(n: String) -> Variant: return _read_story(n)
-	scopes["box"] = func(n: String) -> Variant: return _read_pair("box", box_id, n)
-	scopes["deck"] = (func(n: String) -> Variant: return _read_pair("deck", deck_id, n)) if deck_id != null else {}
+	if not is_same(others, _scope_view):
+		_scope_bases = {}
+		_scope_view = others
+	var key: String = box_id if deck_id == null else "%s\u001f%s" % [box_id, deck_id]
+	var base = _scope_bases.get(key)
+	if base == null:
+		# Every other engine's game-wide scope first (every engine reads every
+		# scope); this engine's own tokens are its merged views, over the top.
+		base = (others["scopes"] as Dictionary).duplicate()
+		base["world"] = _engine.world_get
+		base["story"] = _read_story
+		base["box"] = _read_owned.bind("box", box_id)
+		base["deck"] = _read_owned.bind("deck", deck_id) if deck_id != null else {}
+		_scope_bases[key] = base
+	# One copy per context, because @hand is the ask's own: a context shared
+	# between asks and rewritten for each would change under an ask that a trace
+	# handler interrupts with another.
+	var scopes: Dictionary = (base as Dictionary).duplicate()
 	scopes["hand"] = hand_env["bag"]
 	var ctx := {"scopes": scopes, "host": _host(box)}
 	var other_qualities = others["qualities"]
 	if _engine._has_qualities or other_qualities != null:
 		# The quality channel, answering for THIS ask's box and deck.
-		var env := hand_env
-		ctx["qualities"] = func(scope: String, name: String) -> Variant:
-			match scope:
-				"world":
-					var ladder = _engine._world_ladders.get(name)
-					if ladder == null and other_qualities != null:
-						return (other_qualities as Callable).call(scope, name)
-					return ladder
-				"story":
-					return _engine._story_ladders.get(name)
-				"box":
-					return (_engine._box_ladders.get(box_id, {}) as Dictionary).get(name)
-				"deck":
-					# No deck in this ask (a hand condition): the registry's answer, as
-					# for any token this engine does not own.
-					if deck_id != null:
-						return (_engine._deck_ladders.get(deck_id, {}) as Dictionary).get(name)
-				"hand":
-					return _hand_ladder(env, name)
-			if other_qualities != null:
-				return (other_qualities as Callable).call(scope, name)
-			return null
+		ctx["qualities"] = _ladder_of.bind(box_id, deck_id, hand_env, other_qualities)
 	return ctx
+
+
+# One owned scope's merged read, in the argument order a bound reader is
+# called with: the name first, the owner bound after it.
+func _read_owned(name: String, kind: String, owner_id: String) -> Variant:
+	return _read_pair(kind, owner_id, name)
+
+
+# The quality channel for one ask, bound per context by _eval_ctx.
+func _ladder_of(scope: String, name: String, box_id: String, deck_id, hand_env: Dictionary, other_qualities) -> Variant:
+	match scope:
+		"world":
+			var ladder = _engine._world_ladders.get(name)
+			if ladder == null and other_qualities != null:
+				return (other_qualities as Callable).call(scope, name)
+			return ladder
+		"story":
+			return _engine._story_ladders.get(name)
+		"box":
+			return (_engine._box_ladders.get(box_id, {}) as Dictionary).get(name)
+		"deck":
+			# No deck in this ask (a hand condition): the registry's answer, as
+			# for any token this engine does not own.
+			if deck_id != null:
+				return (_engine._deck_ladders.get(deck_id, {}) as Dictionary).get(name)
+		"hand":
+			return _hand_ladder(hand_env, name)
+	if other_qualities != null:
+		return (other_qualities as Callable).call(scope, name)
+	return null
 
 
 # Evaluate an {src, ast} envelope; a scalar value or an EvalError.
@@ -448,7 +516,7 @@ func _eval(expr: Dictionary, ctx: Dictionary) -> Variant:
 	var node = expr.get("ast")
 	if not (node is Array):
 		return StoryletExpression.error("malformed expression AST")
-	return StoryletExpression.evaluate(node, ctx, _engine._dialect)
+	return StoryletExpression.evaluate(node, ctx, _dialect)
 
 
 # A condition gate: absent passes; an eval error is never a silent pass - the
@@ -473,6 +541,13 @@ static func _tag_by_game_id(group: Dictionary, game_id: String) -> Variant:
 	return null
 
 
+static func _tag_by_id(group: Dictionary, tag_id) -> Variant:
+	for t in group["tags"]:
+		if t["id"] == tag_id:
+			return t
+	return null
+
+
 # A deal's ask: the hand's template bindings + chosen tags, or its rule's
 # bindings, plus the implicit home binding (schema 2.4). Returns the ask
 # descriptor {"box", "hand", "condition"?, "bound_tags", "ask_names"} or
@@ -487,43 +562,11 @@ func _ask_for_hand(hand: Dictionary, box: Dictionary) -> Dictionary:
 			return {"error": 'hand "%s": unknown template "%s"' % [StoryletBundle.effective_game_id(hand), hand["template"]]}
 		for group_id in template.get("bindings", {}):
 			bound_tags[group_id] = template["bindings"][group_id]
-		for group_id in hand.get("chosen", {}):
-			var tag_id = hand["chosen"][group_id]
-			# A hole filled from a property rather than with a tag: resolve it
-			# now, before tag composition (design/engine-server.md 4.6).
-			if StoryletBundle.is_hole_ref(str(tag_id)):
-				_fill_hole_from_property(hand, group_id, str(tag_id), bound_tags, ask_names)
-				continue
-			bound_tags[group_id] = tag_id
-			var found = _engine._groups_by_id.get(group_id)
-			if found != null:
-				var tag = null
-				for t in found["group"]["tags"]:
-					if t["id"] == tag_id:
-						tag = t
-						break
-				if tag != null:
-					ask_names[StoryletBundle.effective_game_id(found["group"])] = StoryletBundle.effective_game_id(tag)
+		_bind_own(hand, hand.get("chosen", {}), bound_tags, ask_names)
 		condition = template.get("condition")
 	else:
 		var rule: Dictionary = hand.get("rule", {})
-		for group_id in rule.get("bindings", {}):
-			var rule_tag_id = rule["bindings"][group_id]
-			if StoryletBundle.is_hole_ref(str(rule_tag_id)):
-				_fill_hole_from_property(hand, group_id, str(rule_tag_id), bound_tags, ask_names)
-				continue
-			bound_tags[group_id] = rule_tag_id
-			# ...and name it, as the template branch does: a card reading
-			# @hand.<group> must not care HOW the group got bound.
-			var rule_found = _engine._groups_by_id.get(group_id)
-			if rule_found != null:
-				var rule_tag = null
-				for t in rule_found["group"]["tags"]:
-					if t["id"] == rule_tag_id:
-						rule_tag = t
-						break
-				if rule_tag != null:
-					ask_names[StoryletBundle.effective_game_id(rule_found["group"])] = StoryletBundle.effective_game_id(rule_tag)
+		_bind_own(hand, rule.get("bindings", {}), bound_tags, ask_names)
 		condition = rule.get("condition")
 	bound_tags[StoryletBundle.PLACE_GROUP] = hand["id"]
 	_bind_state_groups(box, bound_tags, ask_names)
@@ -531,6 +574,25 @@ func _ask_for_hand(hand: Dictionary, box: Dictionary) -> Dictionary:
 	if condition != null:
 		ask["condition"] = condition
 	return ask
+
+
+# A hand's own bindings: a template hand's chosen tags, or its rule's
+# bindings. Each binds its group and NAMES it on the ask, whichever of the two
+# it came from: a card reading @hand.<group> must not care HOW the group got
+# bound. A hole filled from a property rather than with a tag is resolved now,
+# before tag composition (design/engine-server.md 4.6).
+func _bind_own(hand: Dictionary, bindings: Dictionary, bound_tags: Dictionary, ask_names: Dictionary) -> void:
+	for group_id in bindings:
+		var tag_id = bindings[group_id]
+		if StoryletBundle.is_hole_ref(str(tag_id)):
+			_fill_hole_from_property(hand, group_id, str(tag_id), bound_tags, ask_names)
+			continue
+		bound_tags[group_id] = tag_id
+		var found = _engine._groups_by_id.get(group_id)
+		if found != null:
+			var tag = _tag_by_id(found["group"], tag_id)
+			if tag != null:
+				ask_names[StoryletBundle.effective_game_id(found["group"])] = StoryletBundle.effective_game_id(tag)
 
 
 # A peek's ask: raw criteria ({group gameId: tag gameId}), bindings only, no
@@ -554,10 +616,7 @@ func _ask_for_peek(box: Dictionary, criteria: Dictionary) -> Dictionary:
 			return {"error": 'peek: unknown tag group "%s" in box "%s"' % [group_ref, StoryletBundle.effective_game_id(box)]}
 		var tag = _tag_by_game_id(found, tag_ref)
 		if tag == null:
-			for t in found["tags"]:
-				if t["id"] == tag_ref:
-					tag = t
-					break
+			tag = _tag_by_id(found, tag_ref)
 		if tag == null:
 			return {"error": 'peek: unknown tag "%s" in group "%s"' % [tag_ref, StoryletBundle.effective_game_id(found)]}
 		bound_tags[found["id"]] = tag["id"]
@@ -605,7 +664,7 @@ func _fill_hole_from_property(hand: Dictionary, group_id: String, ref: String,
 	if value == null:
 		_emit({"type": "diagnostic", "where": where, "message": '"%s" names a property that is not declared' % ref})
 		return
-	var wanted := str(value)
+	var wanted := _js_text(value)
 	var tag = null
 	for t in found["group"].get("tags", []):
 		if StoryletBundle.effective_game_id(t) == wanted:
@@ -617,6 +676,28 @@ func _fill_hole_from_property(hand: Dictionary, group_id: String, ref: String,
 		return
 	bound_tags[group_id] = tag["id"]
 	ask_names[group_name] = StoryletBundle.effective_game_id(tag)
+
+
+# A value as the text a tag gameId is matched against, by JS String(): a number
+# in JS form ("2", where str(2.0) is "2.0") and a flags list joined with ","
+# (["act1"] is "act1"). Read by a boundBy and by a property-filled hole.
+static func _js_text(value) -> String:
+	if value is Array:
+		var parts := PackedStringArray()
+		for x in value:
+			parts.append(_js_text(x))
+		return ",".join(parts)
+	if value is float or value is int:
+		return StoryletValues.js_number(float(value))
+	if value is bool:
+		return "true" if value else "false"
+	return str(value)
+
+
+## A boundBy's property name, compiled once (as _change_target_re is) rather
+## than for every state-bound group of every ask. \z, not $: PCRE's $ matches
+## before a trailing newline too, and JS's does not.
+static var _bound_by_name_re := RegEx.create_from_string("^[a-z][a-z0-9_-]*\\z")
 
 
 # Bind every state-bound group in the box from the property it names. Runs
@@ -642,7 +723,7 @@ func _bind_state_groups(box: Dictionary, bound_tags: Dictionary, ask_names: Dict
 		# (2026-08-29). The compiler applies the same regex, so only a
 		# hand-edited or foreign-produced bundle can reach this - which is
 		# exactly when the four should still agree.
-		if (scope != "world" and scope != "story") or not RegEx.create_from_string("^[a-z][a-z0-9_-]*$").search(name):
+		if (scope != "world" and scope != "story") or not _bound_by_name_re.search(name):
 			_emit({"type": "diagnostic", "where": where, "message": 'boundBy "%s" is not a @world or @story property reference' % ref})
 			continue
 		# Resolve without get_property, which push_error()s on a missing name:
@@ -652,7 +733,7 @@ func _bind_state_groups(box: Dictionary, bound_tags: Dictionary, ask_names: Dict
 			_emit({"type": "diagnostic", "where": where, "message": 'boundBy "%s" names a property that is not declared' % ref})
 			continue
 		var value = r["value"]
-		var wanted := str(value)
+		var wanted := _js_text(value)
 		var tag = null
 		for t in group.get("tags", []):
 			if StoryletBundle.effective_game_id(t) == wanted:
@@ -769,7 +850,7 @@ func _tags_match(card: Dictionary, bound_tags: Dictionary) -> bool:
 			continue
 		if not card_tags.has(group_id):
 			# Omission is a wildcard unless the group says otherwise.
-			if _engine._required_groups.has(group_id):
+			if _required_groups.has(group_id):
 				return false
 			continue
 		if not (card_tags[group_id] as Array).has(bound_tags[group_id]):
@@ -841,7 +922,9 @@ func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
 						_emit({"type": "diagnostic", "where": "card %s priority" % str(card.get("gameId", card["id"])), "message": v.message})
 					_verdict(trace, card, "priority")
 					continue
-				if not StoryletValues.is_number(v):
+				# NaN is a number to is_number and no rank to a sort (ruling G):
+				# Inf - Inf, an overflow or a host value gets here.
+				if not StoryletValues.is_number(v) or is_nan(float(v)):
 					_verdict(trace, card, "priority")
 					continue
 				priority = float(v)
@@ -853,7 +936,7 @@ func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
 				var node = card["condition"].get("ast")
 				if node is Array:
 					var truthy := func(n: Array) -> bool:
-						var r = StoryletExpression.evaluate(n, ctx, _engine._dialect)
+						var r = StoryletExpression.evaluate(n, ctx, _dialect)
 						if StoryletExpression.is_error(r):
 							return false
 						return StoryletValues.condition_passes(r)
@@ -895,6 +978,18 @@ func _run_ask(ask: Dictionary, claimed: Callable, trace) -> Dictionary:
 	for s in scored:
 		ordered.append(s["entry"])
 	return {"ordered": ordered, "hand_env": hand_env}
+
+
+# How many of `size` ranked cards a peek capped at `n` lists, as JS's
+# `slice(0, Math.max(n, 0))` reads the cap: null and NaN are nothing, INF is
+# everything, a fraction truncates.
+static func _peek_cap(n, size: int) -> int:
+	if n == null or not StoryletValues.is_number(n) or is_nan(float(n)):
+		return 0
+	var cap := float(n)
+	if cap >= float(size):
+		return size
+	return maxi(int(cap), 0)
 
 
 # Identity on the trace is by gameId (design change 4.4), so this takes the
@@ -950,20 +1045,31 @@ func _resolve_hand(ref: String) -> Variant:
 	return found
 
 
+# A box by gameId, else by internal id; null when neither names one. Untyped:
+# board() passes its argument straight through, whatever the host gave it.
+func _resolve_box(box_ref) -> Variant:
+	var box = _engine._boxes_by_game_id.get(box_ref)
+	if box == null:
+		box = _engine._boxes_by_id.get(box_ref)
+	return box
+
+
 # --- host surface (schema 5) -----------------------------------------------------
 
 ## Look at the top of the stock through raw tag criteria (schema 3.1): claims
 ## respected, nothing registered, nothing left behind but the trace line. You
 ## can never play a card you only peeked. Returns {"box": gameId, "cards":
 ## Array of card views}; a bad reference push_errors and adds "error".
-func peek(box_ref: String, criteria: Dictionary = {}, n = null) -> Dictionary:
+##
+## `n` caps the list. Left out it is INF, no cap; a negative cap and a null
+## one return nothing, as JS's `slice(0, Math.max(n, 0))` reads them. null was
+## "no cap" here until 2026-10-06, and JS has always read it as zero.
+func peek(box_ref: String, criteria: Dictionary = {}, n = INF) -> Dictionary:
 	if _closed:
-		var closed_msg := 'flow "%s" is closed' % id
+		var closed_msg := _closed_message()
 		push_error("StoryletFlow.peek: " + closed_msg)
 		return {"box": box_ref, "cards": [], "error": closed_msg}
-	var box = _engine._boxes_by_game_id.get(box_ref)
-	if box == null:
-		box = _engine._boxes_by_id.get(box_ref)
+	var box = _resolve_box(box_ref)
 	if box == null:
 		var msg := 'unknown box "%s"' % box_ref
 		push_error("StoryletFlow.peek: " + msg)
@@ -979,9 +1085,17 @@ func peek(box_ref: String, criteria: Dictionary = {}, n = null) -> Dictionary:
 	var world_claims := _engine.shared_claims() if _engine._has_shared else {}
 	var trace = [] if _tracing() else null
 	var claimed := func(card: Dictionary, shared: bool) -> String: return _claim_verdict(card, shared, claim_counts, world_claims)
+	# A peek consumes NO draws (ruling A, 2026-10-06): its tie shuffle and any
+	# random() in a condition run on a throwaway COPY of the flow's generator,
+	# so any number of peeks leaves the next deal as it was, and a peek still
+	# answers as a deal would now. The host reads _prng live
+	# (_host_next_random), which is what the swap relies on.
+	var own := _prng
+	_prng = StoryletMulberry32.new(own.state())
 	var res := _run_ask(ask, claimed, trace)
+	_prng = own
 	var ordered: Array = res["ordered"]
-	var listed := ordered if n == null else ordered.slice(0, maxi(int(n), 0))
+	var listed := ordered.slice(0, _peek_cap(n, ordered.size()))
 	if trace != null:
 		var taken := {}
 		for e in listed:
@@ -997,7 +1111,7 @@ func peek(box_ref: String, criteria: Dictionary = {}, n = null) -> Dictionary:
 ## Refresh one hand (schema 3.5); returns its new shape (Array of card views).
 func deal(hand_ref: String) -> Array:
 	if _closed:
-		push_error('StoryletFlow.deal: flow "%s" is closed' % id)
+		push_error("StoryletFlow.deal: " + _closed_message())
 		return []
 	var found = _resolve_hand(hand_ref)
 	if found == null:
@@ -1012,7 +1126,7 @@ func deal(hand_ref: String) -> Array:
 ## keyed by hand gameId (board() stays the whole-board read).
 func deal_many(hand_refs = null) -> Dictionary:
 	if _closed:
-		push_error('StoryletFlow.deal_many: flow "%s" is closed' % id)
+		push_error("StoryletFlow.deal_many: " + _closed_message())
 		return {}
 	var refs: Array = []
 	if hand_refs == null:
@@ -1042,8 +1156,14 @@ func deal_many(hand_refs = null) -> Dictionary:
 		var hand_env := _build_hand_env(ask)
 		var condition_ok := _passes(ask.get("condition"), _eval_ctx(box, null, hand_env))
 		var gate_ok := {}
+		# ONE context per deck, kept for the card conditions below as _run_ask
+		# keeps its own: box, deck and hand_env do not vary per card, and a
+		# condition is a read-only gate (schema 3.1).
+		var deck_ctxs := {}
 		for deck in box["decks"]:
-			gate_ok[deck["id"]] = _passes(deck.get("condition"), _eval_ctx(box, deck, hand_env))
+			var deck_ctx := _eval_ctx(box, deck, hand_env)
+			deck_ctxs[deck["id"]] = deck_ctx
+			gate_ok[deck["id"]] = _passes(deck.get("condition"), deck_ctx)
 		var turn_now: float = _turn_counts.get(box["id"], 0.0)
 		var survivors: Array = []
 		# Trace events fire after the state they report has landed (a handler
@@ -1063,13 +1183,26 @@ func deal_many(hand_refs = null) -> Dictionary:
 				var entry = _engine._cards_by_id.get(card_id)
 				if entry == null:
 					reason = "vanished"   # edited content: dropped
+				elif entry["box"]["id"] != box["id"]:
+					# Its deck is in ANOTHER box now (a load, resume or hot swap into
+					# an edited build): gone from this hand's box, as a deleted card
+					# is (ruling D). The gate lookup below had no key for it and
+					# stopped the deal with a script error.
+					reason = "vanished"
 				elif not gate_ok[entry["deck"]["id"]]:
 					reason = "deck-gate"
+				elif _card_is_shared(entry["card"], bool(entry["deck"].get("shared", false))) and _engine.is_taken(card_id):
+					# Taken out of the world by somebody's shared one-shot (ruling C):
+					# checked where the fill checks it, after the gate and before this
+					# flow's own clock, so a card one playthrough holds leaves its hand
+					# once another has spent it, as a cooldown would evict it.
+					reason = "taken"
 				elif float(_cooldowns.get(card_id, 0.0)) > turn_now:
 					reason = "cooldown"
 				elif not _tags_match(entry["card"], hand_env["bound_tags"]):
 					reason = "tags"
-				elif not _passes(entry["card"].get("condition"), _eval_ctx(box, entry["deck"], hand_env), "card %s condition" % str(entry["card"].get("gameId", card_id))):
+				elif entry["card"].has("condition") and not _passes(entry["card"]["condition"], deck_ctxs[entry["deck"]["id"]],
+						("card %s condition" % str(entry["card"].get("gameId", card_id))) if _tracing() else ""):
 					reason = "condition"
 			if reason == "":
 				survivors.append(card_id)
@@ -1138,7 +1271,8 @@ func deal_many(hand_refs = null) -> Dictionary:
 		for id in ids:
 			views.append(_view(_engine._cards_by_id[id]))
 		out[StoryletBundle.effective_game_id(f["hand"])] = views
-	return out
+	# Keyed as a JS object orders it (ruling E): an integer-like hand gameId first.
+	return StoryletEngine.js_ordered(out)
 
 
 ## The board: current hand contents, in dealt order, keyed by hand gameId
@@ -1157,13 +1291,11 @@ func deal_many(hand_refs = null) -> Dictionary:
 ## overload pair for the same reason; GDScript has null, so it uses that.
 func board(box_ref = null) -> Dictionary:
 	if _closed:
-		push_error('StoryletFlow.board: flow "%s" is closed' % id)
+		push_error("StoryletFlow.board: " + _closed_message())
 		return {}
 	var keep := ""
 	if box_ref != null:
-		var box = _engine._boxes_by_game_id.get(box_ref)
-		if box == null:
-			box = _engine._boxes_by_id.get(box_ref)
+		var box = _resolve_box(box_ref)
 		if box == null:
 			push_error('StoryletFlow.board: unknown box "%s"' % box_ref)
 			return {}
@@ -1177,7 +1309,8 @@ func board(box_ref = null) -> Dictionary:
 		for id in _board_contents[hand_id]:
 			views.append(_view(_engine._cards_by_id[id]))
 		out[StoryletBundle.effective_game_id(found["hand"])] = views
-	return out
+	# Keyed as a JS object orders it (ruling E), as deal_many is.
+	return StoryletEngine.js_ordered(out)
 
 
 # Resolve a played/inspected card within a hand on the board. Returns
@@ -1206,7 +1339,7 @@ func _resolve_dealt(card_id: String, hand_ref: String) -> Dictionary:
 ## outcomeFields and handed over exactly as the bundle wrote it.
 func outcomes(card_id: String, from_hand: String) -> Array:
 	if _closed:
-		push_error('StoryletFlow.outcomes: flow "%s" is closed' % id)
+		push_error("StoryletFlow.outcomes: " + _closed_message())
 		return []
 	var rd := _resolve_dealt(card_id, from_hand)
 	if rd.has("error"):
@@ -1243,7 +1376,7 @@ func outcomes(card_id: String, from_hand: String) -> Array:
 ## with none is refused as before.
 func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dictionary = {}) -> String:
 	if _closed:
-		var closed_msg := 'flow "%s" is closed' % id
+		var closed_msg := _closed_message()
 		push_error("StoryletFlow.play: " + closed_msg)
 		return closed_msg
 	for key in opts:
@@ -1253,6 +1386,10 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 			return msg
 	var rd := _resolve_dealt(card_id, from_hand)
 	if rd.has("error"):
+		# A bad reference is a programmer error, which push_errors as well as
+		# returning (the rule at the head of this file), as outcomes() does for
+		# the same resolve. The refusals below are part of play: returned only.
+		push_error("StoryletFlow.play: " + rd["error"])
 		return rd["error"]
 	var entry: Dictionary = rd["entry"]
 	var ask: Dictionary = rd["ask"]
@@ -1290,23 +1427,40 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 	var new_turn: float = float(_turn_counts.get(entry["box"]["id"], 0.0)) \
 		+ float(opts.get("advance_turns", per_play))
 
-	# Every right-hand side evaluates against PRE-play state, then all writes
-	# land (schema 3.7).
-	var writes: Array = []
+	# A play is ALL-OR-NOTHING (ruling B, 2026-10-06). Every target is resolved
+	# and checked first, so a refusal the engine can know in advance lands
+	# nothing and emits nothing; then every right-hand side evaluates against
+	# PRE-play state (schema 3.7); then the writes land. A refusal only the
+	# landing can meet puts back what the earlier writes replaced. The write
+	# events fire once all of them have landed.
 	var changes: Dictionary = {} if outcome == null else outcome.get("changes", {})
+	var plans: Array = []
+	for target in changes:
+		var plan := _plan_write(target, entry, hand_env)
+		if plan.has("error"):
+			return plan["error"]
+		plans.append(plan)
+	var values: Array = []
 	for target in changes:
 		var v = _eval(changes[target], ctx)
 		if StoryletExpression.is_error(v):
 			return v.message
-		writes.append({"target": target, "value": v})
-	for w in writes:
-		var landed := _apply_write(w["target"], w["value"], entry, hand_env)
-		if landed.has("error"):
-			return landed["error"]
-		if _tracing():
-			var evt := {"type": "write", "target": w["target"], "path": landed["path"], "value": w["value"]}
-			if landed.has("prev"):
-				evt["prev"] = landed["prev"]
+		values.append(v)
+	var landed: Array = []
+	for i in plans.size():
+		var done := _land_write(plans[i], values[i])
+		if done.has("error"):
+			for k in range(landed.size() - 1, -1, -1):
+				_undo_write(landed[k]["plan"], landed[k].get("prev"))
+			return done["error"]
+		done["plan"] = plans[i]
+		done["value"] = values[i]
+		landed.append(done)
+	if _tracing():
+		for l in landed:
+			var evt := {"type": "write", "target": l["plan"]["target"], "path": l["plan"]["path"], "value": l["value"]}
+			if l.has("prev"):
+				evt["prev"] = l["prev"]
 			_emit(evt, new_turn)
 
 	var outcome_id: String = "" if outcome == null else StoryletBundle.effective_game_id(outcome)
@@ -1343,15 +1497,15 @@ func play(card_id: String, outcome_game_id: String, from_hand: String, opts: Dic
 	return ""
 
 
-static var _change_target_re := RegEx.create_from_string("^@([a-z]+)\\.([A-Za-z_][A-Za-z0-9_-]*)$")
+# \z, not $: PCRE's $ also matches before a trailing newline, so "@story.gold\n"
+# was a target here and is refused in JS (2026-10-06).
+static var _change_target_re := RegEx.create_from_string("^@([a-z]+)\\.([A-Za-z_][A-Za-z0-9_-]*)\\z")
 
 
-# Land one change; returns {"path", "prev"?} (the resolved store path for the
-# trace and the value it replaced for the log's "0 -> 1" reading) or
-# {"error": message}.
-# Land one change in whichever partition declares the name: the flow's bag
-# when the property is per-flow, the shared bag when it is shared.
-func _land_in(kind: String, owner_id, name: String, value, path: String) -> Dictionary:
+# Find the bag that declares one change's name: the flow's bag when the
+# property is per-flow, the shared bag when it is shared. Refused, landing
+# nothing, when no bag declares it or its declaration says `writable: false`.
+func _plan_bag(target: String, kind: String, owner_id, name: String, path: String) -> Dictionary:
 	var own = _stores["story"] if kind == "story" else _stores[kind].get(owner_id)
 	var shared = _engine._shared["story"] if kind == "story" else _engine._shared[kind].get(owner_id)
 	var bag = null
@@ -1361,10 +1515,20 @@ func _land_in(kind: String, owner_id, name: String, value, path: String) -> Dict
 		bag = shared
 	if bag == null:
 		return {"error": 'no property at "%s"' % path}
-	return _land(bag, name, value, path)
+	# The kernel would refuse this when the write lands, with this text; asked
+	# here so the refusal comes before any of the play's writes has landed.
+	for d in (bag as StoryletPropertyBag).declarations():
+		if d.get("name") == name and d.get("writable", true) == false:
+			return {"error": "'%s' is read-only" % name}
+	return {"kind": "bag", "target": target, "bag": bag, "name": name, "path": path}
 
 
-func _apply_write(target: String, value, entry: Dictionary, hand_env: Dictionary) -> Dictionary:
+# Resolve and check one change target, writing nothing: every refusal a write
+# can meet that the engine can know in advance is met HERE, so a play checks
+# all its targets before any write lands (ruling B). Returns the plan
+# {"kind": "world" | "bag" | "scope", "target", "name", "path", ...} or
+# {"error": message}.
+func _plan_write(target: String, entry: Dictionary, hand_env: Dictionary) -> Dictionary:
 	var m := _change_target_re.search(target)
 	if m == null:
 		return {"error": 'bad change target "%s"' % target}
@@ -1382,20 +1546,13 @@ func _apply_write(target: String, value, entry: Dictionary, hand_env: Dictionary
 			# the JS runtime and Patterplay.
 			if _engine.world_read_only(name):
 				return {"error": "'@world.%s' is read-only (writable: false)" % name}
-			var prev = _engine.world_get(name)
-			var refused := _engine.world_set(name, value)
-			if refused != "":
-				return {"error": refused}
-			var out := {"path": "world.%s" % name}
-			if prev != null:
-				out["prev"] = prev
-			return out
+			return {"kind": "world", "target": target, "name": name, "path": "world.%s" % name}
 		"story":
-			return _land_in("story", null, name, value, "story.%s" % name)
+			return _plan_bag(target, "story", null, name, "story.%s" % name)
 		"box":
-			return _land_in("box", entry["box"]["id"], name, value, "%s.%s" % [_address("box", entry["box"]["id"]), name])
+			return _plan_bag(target, "box", entry["box"]["id"], name, "%s.%s" % [_address("box", entry["box"]["id"]), name])
 		"deck":
-			return _land_in("deck", entry["deck"]["id"], name, value, "%s.%s" % [_address("deck", entry["deck"]["id"]), name])
+			return _plan_bag(target, "deck", entry["deck"]["id"], name, "%s.%s" % [_address("deck", entry["deck"]["id"]), name])
 		"hand":
 			# Write-back routing (schema 3.6): the composed name remembers its
 			# source store; writes to criteria/chosen-tag names are errors.
@@ -1404,23 +1561,55 @@ func _apply_write(target: String, value, entry: Dictionary, hand_env: Dictionary
 				return {"error": "@hand.%s is not composed in this ask" % name}
 			if source["kind"] == "criteria":
 				return {"error": "@hand.%s is a chosen tag / criteria name and cannot be written" % name}
-			return _land_in(source["kind"], source["id"], name, value, "%s.%s" % [_address(source["kind"], source["id"]), name])
+			return _plan_bag(target, source["kind"], source["id"], name, "%s.%s" % [_address(source["kind"], source["id"]), name])
 	# Another engine's game-wide scope (`@patter.x`): the family's shared
 	# vocabulary lets a card write it, and the registry keeps that engine's
-	# rules (a read-only property is refused). A story write, so no host flag.
-	var reg = _engine._registry
-	if reg.has(scope):
-		var prev = reg.get_value(scope, name)
-		var refused: String = reg.set_value(scope, name, value)
-		if refused != "":
-			return {"error": refused}
-		var out := {"path": "%s.%s" % [scope, name]}
-		if prev != null:
-			out["prev"] = prev
-		return out
+	# rules (a read-only property is refused when the write lands, and the play
+	# then puts back what it had written). A story write, so no host flag.
+	if _engine._registry.has(scope):
+		return {"kind": "scope", "target": target, "scope": scope, "name": name, "path": "%s.%s" % [scope, name]}
 	if _engine._external_scopes.has(scope):
 		return {"error": "@%s.%s cannot be written: no engine on this registry registered @%s" % [scope, name, scope]}
 	return {"error": 'bad change target scope "@%s"' % scope}
+
+
+# Land one planned change: {"prev"?} (the value it replaced, for the log's
+# "0 -> 1" reading) or {"error": message}. An engine write: the bag's
+# subscribers fire (the firing rule).
+func _land_write(plan: Dictionary, value) -> Dictionary:
+	var prev = null
+	var refused := ""
+	match plan["kind"]:
+		"world":
+			prev = _engine.world_get(plan["name"])
+			refused = _engine.world_set(plan["name"], value)
+		"bag":
+			var change: Dictionary = (plan["bag"] as StoryletPropertyBag).set_value(plan["name"], value)
+			if change.has("error"):
+				refused = str(change["error"])
+			prev = change.get("prev")
+		"scope":
+			prev = _engine._registry.get_value(plan["scope"], plan["name"])
+			refused = _engine._registry.set_value(plan["scope"], plan["name"], value)
+	if refused != "":
+		return {"error": refused}
+	return {} if prev == null else {"prev": prev}
+
+
+# Put back what one landed change replaced, when a LATER change in the same
+# play was refused as it landed (a refusal no plan could see coming: another
+# engine's read-only property, a host resolver that refuses). Silent and as
+# the host, since this is the engine undoing itself, not the story writing.
+func _undo_write(plan: Dictionary, prev) -> void:
+	if prev == null:
+		return
+	match plan["kind"]:
+		"world":
+			_engine.world_set(plan["name"], prev, true)
+		"bag":
+			(plan["bag"] as StoryletPropertyBag).set_value(plan["name"], prev, {"silent": true, "reason": "play refused", "host": true})
+		"scope":
+			_engine._registry.set_value(plan["scope"], plan["name"], prev, {"host": true})
 
 
 # One owned property owner's address, gameId segment and all (4.4).
@@ -1428,26 +1617,13 @@ func _address(kind: String, owner_id: String) -> String:
 	return _engine.address_of(kind, owner_id)
 
 
-static func _land(bag: StoryletPropertyBag, name: String, value, path: String) -> Dictionary:
-	# An engine write: the bag's subscribers fire (the firing rule).
-	var change := bag.set_value(name, value)
-	if change.has("error"):
-		return {"error": change["error"]}
-	var out := {"path": path}
-	if change.has("prev"):
-		out["prev"] = change["prev"]
-	return out
-
-
 ## Advance one box's clock (schema 3.4): a turn is one draw-from-stock session
 ## for that box. An unknown box push_errors and does nothing.
 func advance_turns(box_ref: String, n: float = 1.0) -> void:
 	if _closed:
-		push_error('StoryletFlow.advance_turns: flow "%s" is closed' % id)
+		push_error("StoryletFlow.advance_turns: " + _closed_message())
 		return
-	var box = _engine._boxes_by_game_id.get(box_ref)
-	if box == null:
-		box = _engine._boxes_by_id.get(box_ref)
+	var box = _resolve_box(box_ref)
 	if box == null:
 		push_error('StoryletFlow.advance_turns: unknown box "%s"' % box_ref)
 		return
@@ -1461,6 +1637,9 @@ func advance_turns(box_ref: String, n: float = 1.0) -> void:
 
 ## Every box, bundle order: identity + THIS flow's clock (parity member).
 func list_boxes() -> Array:
+	if _closed:
+		push_error("StoryletFlow.list_boxes: " + _closed_message())
+		return []
 	var out: Array = []
 	for b in _engine._bundle["boxes"]:
 		var row := {"id": b["id"], "gameId": StoryletBundle.effective_game_id(b)}
@@ -1475,8 +1654,11 @@ func list_boxes() -> Array:
 ## logger's mount surface; parity member). The shared bags are the engine's
 ## list_bags; flows are rebuilt by load_game, so consumers re-enumerate.
 func list_bags() -> Array:
+	if _closed:
+		push_error("StoryletFlow.list_bags: " + _closed_message())
+		return []
 	var mounts: Array = [{"prefix": "story", "bag": _stores["story"]}]
-	for kind in ["box", "deck", "hand", "value"]:
+	for kind in StoryletEngine.OWNED_KINDS:
 		for owner_id in _stores[kind]:
 			mounts.append({"prefix": _address(kind, owner_id), "bag": _stores[kind][owner_id]})
 	return mounts
@@ -1485,6 +1667,9 @@ func list_bags() -> Array:
 ## The flow's FULL merged view as examiner rows: @world read through the
 ## engine's resolver, then per scope the shared values and this flow's own.
 func list_properties() -> Array:
+	if _closed:
+		push_error("StoryletFlow.list_properties: " + _closed_message())
+		return []
 	var out: Array = []
 	for d in _engine._bundle["world"].get("properties", []):
 		var value = _engine.world_get(d["name"])
@@ -1500,22 +1685,21 @@ func list_properties() -> Array:
 		if d.has("stages"):
 			row["stages"] = d["stages"]
 		out.append(row)
-	StoryletEngine._add_rows(out, "story", _engine._shared["story"])
-	StoryletEngine._add_rows(out, "story", _stores["story"])
-	for kind in ["box", "deck", "hand", "value"]:
+	StoryletEngine._add_rows(out, _engine._shared["story"])
+	StoryletEngine._add_rows(out, _stores["story"])
+	for kind in StoryletEngine.OWNED_KINDS:
 		var ids := {}
 		for owner_id in _engine._shared[kind]:
 			ids[owner_id] = true
 		for owner_id in _stores[kind]:
 			ids[owner_id] = true
 		for owner_id in ids:
-			var mount := _address(kind, owner_id)
 			var shared = _engine._shared[kind].get(owner_id)
 			if shared != null:
-				StoryletEngine._add_rows(out, mount, shared)
+				StoryletEngine._add_rows(out, shared)
 			var own = _stores[kind].get(owner_id)
 			if own != null:
-				StoryletEngine._add_rows(out, mount, own)
+				StoryletEngine._add_rows(out, own)
 	return out
 
 
@@ -1530,7 +1714,7 @@ func list_properties() -> Array:
 ## refuses it.
 func get_property(path: String) -> Variant:
 	if _closed:
-		push_error('StoryletFlow.get_property: flow "%s" is closed' % id)
+		push_error("StoryletFlow.get_property: " + _closed_message())
 		return null
 	var parts := path.split(".")
 	var value = null
@@ -1541,7 +1725,7 @@ func get_property(path: String) -> Variant:
 		value = _engine._registry.get_value(parts[0], parts[1])
 	elif parts.size() == 2 and parts[0] == "story":
 		value = _read_story(parts[1])
-	elif parts.size() == 3 and ["box", "deck", "hand", "value"].has(parts[0]):
+	elif parts.size() == 3 and StoryletEngine.OWNED_KINDS.has(parts[0]):
 		var owner := _resolve_owner(parts[0], parts[1], parts[2])
 		if owner.has("error"):
 			push_error("StoryletFlow.get_property: " + str(owner["error"]))
@@ -1567,7 +1751,7 @@ func get_property(path: String) -> Variant:
 ## the bag's audit hook. Returns "" or the error message (with push_error).
 func set_property(path: String, value) -> String:
 	if _closed:
-		var closed_msg := 'flow "%s" is closed' % id
+		var closed_msg := _closed_message()
 		push_error("StoryletFlow.set_property: " + closed_msg)
 		return closed_msg
 	var parts := path.split(".")
@@ -1585,7 +1769,7 @@ func set_property(path: String, value) -> String:
 	if parts.size() == 2 and parts[0] == "story":
 		kind = "story"
 		name = parts[1]
-	elif parts.size() == 3 and ["box", "deck", "hand", "value"].has(parts[0]):
+	elif parts.size() == 3 and StoryletEngine.OWNED_KINDS.has(parts[0]):
 		kind = parts[0]
 		name = parts[2]
 		var owner := _resolve_owner(kind, parts[1], name)
@@ -1648,8 +1832,8 @@ func _resolve_owner(kind: String, segment: String, name: String) -> Dictionary:
 	return owner
 
 
-# _bind_state_groups reads world/story through this (a diagnostic path, so
-# it must not push_error on a missing name).
+# _bind_state_groups and _fill_hole_from_property read world/story through
+# this (a diagnostic path, so it must not push_error on a missing name).
 func _resolve_path(path: String) -> Dictionary:
 	var parts := path.split(".")
 	if parts.size() == 2 and parts[0] == "world":
@@ -1692,7 +1876,7 @@ func restore(saved: Dictionary) -> void:
 	if saved.has("props"):
 		var props: Dictionary = saved["props"]
 		(_stores["story"] as StoryletPropertyBag).load(props.get("story", {}))
-		for kind in ["box", "deck", "hand", "value"]:
+		for kind in StoryletEngine.OWNED_KINDS:
 			var kept: Dictionary = props.get(kind, {})
 			for owner_id in kept:
 				var bag = _stores[kind].get(owner_id)

@@ -19,6 +19,165 @@ func _check(name: String, ok: bool, detail: String = "") -> void:
 		printerr("FAIL %s%s" % [name, (": " + detail) if detail != "" else ""])
 
 
+## Lifetimes (2026-10-06). An engine owned its flows and every flow held its
+## engine, and each flow cached host functions whose lambdas held the flow: two
+## reference cycles, so no engine or flow was ever freed. Every live-bundle swap
+## kept the old engine, bundle and all, for the life of the game. Each case
+## builds in a function of its own and hands back only WeakRefs, so nothing on
+## this stack can be what keeps an object alive.
+func _lifetime(bundle: Dictionary) -> void:
+	var played := _played_engine(bundle)
+	_check("a dropped engine with an open, dealt and played flow is freed",
+		played["engine"].get_ref() == null)
+	_check("and so is its flow", played["flow"].get_ref() == null)
+	_check("and the registry it made", played["registry"].get_ref() == null)
+
+	var kept: StoryletFlow = _flow_outliving_its_engine(bundle)
+	_check("a flow kept past its engine is closed", kept.is_closed())
+	print("(an expected refusal error follows)")
+	var refused := kept.play("any", "any", "any")
+	_check("and refuses, naming the cause", refused.contains("its engine was freed"), refused)
+
+	var closed := _closed_flow(bundle)
+	_check("a closed flow the host dropped is freed while its engine lives", closed.get_ref() == null)
+
+	var swapped := _swapped_engine(bundle)
+	_check("an engine a hot_swap replaced is freed once dropped", swapped["old"].get_ref() == null)
+	_check("and its replacement lives while held", swapped["held"])
+
+
+func _played_engine(bundle: Dictionary) -> Dictionary:
+	var engine := StoryletEngine.create(bundle, {"seed": 7, "log": true})
+	var flow := engine.open_flow("main")
+	var events: Array = []
+	flow.subscribe_trace(func(e: Dictionary) -> void: events.append(e["type"]))
+	engine.subscribe_trace(func(_id: String, e: Dictionary) -> void: events.append(e["type"]))
+	var dealt := flow.deal_many()
+	for hand in dealt:
+		for card in dealt[hand]:
+			for outcome in flow.outcomes(card["id"], hand):
+				if outcome["available"]:
+					flow.play(card["id"], outcome["gameId"], hand)
+					break
+			break
+	flow.peek(str(bundle["boxes"][0]["id"]))
+	flow.list_properties()
+	_check("the lifetime case dealt and traced", not events.is_empty())
+	return {"engine": weakref(engine), "flow": weakref(flow), "registry": weakref(engine._registry)}
+
+
+func _flow_outliving_its_engine(bundle: Dictionary) -> StoryletFlow:
+	var engine := StoryletEngine.create(bundle, {"seed": 7})
+	var flow := engine.open_flow("main")
+	flow.deal_many()
+	return flow
+
+
+func _closed_flow(bundle: Dictionary) -> WeakRef:
+	var engine := StoryletEngine.create(bundle, {"seed": 7})
+	var flow := engine.open_flow("main")
+	flow.deal_many()
+	flow.close()
+	var ref: WeakRef = weakref(flow)
+	flow = null
+	# Still holding the engine: the flow must go on its own.
+	_check("the engine outlives the flow it closed", engine.flows().is_empty())
+	return ref
+
+
+func _swapped_engine(bundle: Dictionary) -> Dictionary:
+	var engine := StoryletEngine.create(bundle, {"seed": 7})
+	engine.open_flow("main").deal_many()
+	var old: WeakRef = weakref(engine)
+	var replacement = engine.hot_swap(bundle).get("engine")
+	engine = null
+	var carried = replacement.get_flow("main") if replacement != null else null
+	return {"old": old, "held": carried != null and not (carried as StoryletFlow).is_closed()}
+
+
+## The messages push_error'd while a Logger like this one is added: the
+## refusal channel of a verb with no exceptions to throw.
+class _Caught extends Logger:
+	var errors: Array = []
+	func _log_error(_function: String, _file: String, _line: int, code: String, _rationale: String,
+			_editor_notify: bool, _error_type: int, _script_backtrace: Array[ScriptBacktrace]) -> void:
+		errors.append(code)
+
+
+## Refusals the corpus cannot see, because it reads only what a verb returns.
+## A closed flow's list verbs refused nothing and answered from its stale
+## bags, where every other verb push_errors and returns its empty shape; and
+## play() returned a bad reference without pushing it, where outcomes() pushes
+## the same resolve (2026-10-06).
+func _refusals(bundle: Dictionary) -> void:
+	var engine := StoryletEngine.create(bundle, {"seed": 7})
+	var flow := engine.open_flow("main")
+	var caught := _Caught.new()
+	print("(expected refusal errors follow)")
+	OS.add_logger(caught)
+	var played := flow.play("no-such-card", "go", "no-such-hand")
+	flow.close()
+	var boxes := flow.list_boxes()
+	var bags := flow.list_bags()
+	var rows := flow.list_properties()
+	OS.remove_logger(caught)
+	_check("play pushes a bad reference as well as returning it",
+		played != "" and caught.errors.has("StoryletFlow.play: " + played), str(caught.errors))
+	_check("a closed flow's list verbs return nothing", boxes.is_empty() and bags.is_empty() and rows.is_empty())
+	var closed := 'flow "main" is closed'
+	_check("and each push_errors the refusal",
+		caught.errors.has("StoryletFlow.list_boxes: " + closed)
+		and caught.errors.has("StoryletFlow.list_bags: " + closed)
+		and caught.errors.has("StoryletFlow.list_properties: " + closed), str(caught.errors))
+	print("(an expected refusal error follows)")
+	flow.id = "renamed"
+	_check("a flow's id is read-only", flow.id == "main", flow.id)
+
+
+## Ruling F (2026-10-06), a host API, so checked per runtime rather than in the
+## corpus: the same handler subscribed twice is registered once, and delivery is
+## from a copy, so a subscribe during an event is heard from the next one.
+func _handlers(bundle: Dictionary) -> void:
+	var engine := StoryletEngine.create(bundle, {"seed": 7})
+	var flow := engine.open_flow("main")
+	var heard := {"flow": 0, "engine": 0, "late": 0}
+	var on_flow := func(_e: Dictionary) -> void: heard["flow"] += 1
+	var on_engine := func(_id: String, _e: Dictionary) -> void: heard["engine"] += 1
+	flow.subscribe_trace(on_flow)
+	var unsubscribe := flow.subscribe_trace(on_flow)
+	engine.subscribe_trace(on_engine)
+	engine.subscribe_trace(on_engine)
+	var late := func(_e: Dictionary) -> void: heard["late"] += 1
+	var adds_late := func(_e: Dictionary) -> void: flow.subscribe_trace(late)
+	flow.subscribe_trace(adds_late)
+	flow.advance_turns(str(bundle["boxes"][0]["id"]))
+	_check("a flow handler subscribed twice hears an event once", heard["flow"] == 1, str(heard))
+	_check("an engine handler subscribed twice hears an event once", heard["engine"] == 1, str(heard))
+	_check("a handler subscribed during an event does not hear that event", heard["late"] == 0, str(heard))
+	flow.advance_turns(str(bundle["boxes"][0]["id"]))
+	_check("and hears the next", heard["late"] == 1, str(heard))
+	unsubscribe.call()
+	flow.advance_turns(str(bundle["boxes"][0]["id"]))
+	_check("one unsubscribe removes a handler subscribed twice", heard["flow"] == 2, str(heard))
+
+
+## The LoadReport reaches the host from both helpers that used to drop it, and
+## a save writes whole numbers as JS does (2026-10-06).
+func _reports_and_bytes(bundle: Dictionary, saved: String) -> void:
+	var whole := RegEx.create_from_string("[0-9]\\.0[,\\n\\]}]")
+	_check("a save writes whole numbers as JS does (3, not 3.0)", whole.search(saved) == null,
+		whole.search(saved).get_string() if whole.search(saved) != null else "")
+	var reports: Array = []
+	var into := StoryletEngine.create(bundle, {"seed": 7})
+	var world = StoryletSave.deserialize_state(into, saved, {"on_report": func(r: Dictionary) -> void: reports.append(r)})
+	_check("deserialize_state hands the load's report to on_report", world != null and reports.size() == 1
+		and (reports[0] as Dictionary).has("exact"), str(reports))
+	_check("and the reloaded engine saves the same bytes", StoryletSave.serialize_state(into) == saved)
+	var live := StoryletLiveLink.apply_live_bundle(into, JSON.stringify(bundle))
+	_check("apply_live_bundle returns the hot swap's report", live.get("ok", false) and live.get("report") is Dictionary
+		and (live["report"] as Dictionary).has("exact"), str(live.keys()))
+
+
 func _initialize() -> void:
 	var text := FileAccess.get_file_as_string(BUNDLE_PATH)
 	_check("bundle readable", text != "", BUNDLE_PATH)
@@ -155,7 +314,8 @@ func _initialize() -> void:
 	var reason: String = StoryletEngine.new(no_map)._init_error
 	_check("the refusal names the box", reason.begins_with("bundle refused: ") and reason.contains('box "village"'), reason)
 
-	var probe := StoryletEngine.create(bundle, {"seed": 7}).open_flow("main")
+	var probe_engine := StoryletEngine.create(bundle, {"seed": 7})
+	var probe := probe_engine.open_flow("main")
 	var criteria_ok := true
 	var checked := 0
 	for box in described["boxes"]:
@@ -214,6 +374,11 @@ func _initialize() -> void:
 	_check("foreign file refused", StoryletSave.deserialize_state(fresh, '{"schema":"patter/save@0"}') == null)
 	_check("malformed JSON refused", StoryletSave.deserialize_state(fresh, "not json") == null)
 	_check("refusal left the engine intact", StoryletSave.serialize_state(fresh) == saved)
+
+	_lifetime(bundle)
+	_refusals(bundle)
+	_handlers(bundle)
+	_reports_and_bytes(bundle, saved)
 
 	print("SMOKE %s" % ("ALL PASS" if _fails == 0 else "%d FAILED" % _fails))
 	quit(0 if _fails == 0 else 1)

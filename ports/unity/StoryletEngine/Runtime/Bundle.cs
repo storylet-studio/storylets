@@ -59,7 +59,10 @@ namespace StoryletStudio.StoryletEngine
         /// binds it to its own name; a homed card is available only to its hand.</summary>
         public const string PLACE_GROUP = "place";
 
-        private static readonly Regex HoleRef = new Regex(@"^@(hand|world|story)\.([a-z][a-z0-9_-]*)$");
+        // \z, not $: a .NET `$` also matches before a final newline, so
+        // "@hand.zone\n" would parse as a reference here and not in JS, whose
+        // `$` is the very end. The same holds for every grammar regex below.
+        private static readonly Regex HoleRef = new Regex(@"^@(hand|world|story)\.([a-z][a-z0-9_-]*)\z");
 
         /// <summary>Is this `chosen` / binding value MEANT as a property
         /// reference rather than a tag id (design/engine-server.md 4.6)? The
@@ -92,7 +95,7 @@ namespace StoryletStudio.StoryletEngine
         private static readonly Regex NonSlug = new Regex("[^a-z0-9-]+");
         private static readonly Regex DashRuns = new Regex("-+");
         private static readonly Regex EdgeDashes = new Regex("^-+|-+$");
-        private static readonly Regex ValidGameId = new Regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$");
+        private static readonly Regex ValidGameId = new Regex(@"^[a-z0-9]([a-z0-9-]*[a-z0-9])?\z");
 
         /// <summary>Slugify a human label into a filename- / address-safe gameId.</summary>
         public static string GameIdify(string text)
@@ -103,6 +106,50 @@ namespace StoryletStudio.StoryletEngine
             s = DashRuns.Replace(s, "-");
             s = EdgeDashes.Replace(s, "");
             return s;
+        }
+
+        /// <summary>Is this key an array index to a JS object: the canonical
+        /// text of an integer from 0 to 2^32 - 2 ("7", "42"; not "07", "-1" or
+        /// "4294967295")? Such keys come first, ascending, in any JS
+        /// object.</summary>
+        internal static bool IsJsArrayIndex(string key)
+        {
+            if (string.IsNullOrEmpty(key) || key.Length > 10) return false;
+            if (key.Length > 1 && key[0] == '0') return false;
+            foreach (var ch in key) if (ch < '0' || ch > '9') return false;
+            return ulong.Parse(key, System.Globalization.CultureInfo.InvariantCulture) <= 4294967294UL;
+        }
+
+        /// <summary>Keys in the order a JS object holds them (ruling E,
+        /// 2026-10-06): array-index keys first, ascending, then the rest in
+        /// insertion order. The contract wherever the reference writes an
+        /// object a host or a save reads in order: a save's flows, the
+        /// registry section built from them, the order flows reopen after a
+        /// load, and the DealMany and Board results. Any JS reading a save
+        /// sees it this way anyway, because JSON.parse reorders.</summary>
+        internal static List<string> JsKeyOrder(IEnumerable<string> keys)
+        {
+            var indices = new List<string>();
+            var rest = new List<string>();
+            foreach (var key in keys) (IsJsArrayIndex(key) ? indices : rest).Add(key);
+            indices.Sort((a, b) => ulong.Parse(a, System.Globalization.CultureInfo.InvariantCulture)
+                .CompareTo(ulong.Parse(b, System.Globalization.CultureInfo.InvariantCulture)));
+            indices.AddRange(rest);
+            return indices;
+        }
+
+        /// <summary>The same map in JS object order (see JsKeyOrder): a new
+        /// map, or this one when it is already in that order.</summary>
+        internal static OrderedMap<string, T> InJsKeyOrder<T>(OrderedMap<string, T> map)
+        {
+            var keys = new List<string>(map.Keys);
+            var ordered = JsKeyOrder(keys);
+            bool same = true;
+            for (int i = 0; i < keys.Count && same; i++) same = keys[i] == ordered[i];
+            if (same) return map;
+            var output = new OrderedMap<string, T>();
+            foreach (var key in ordered) output.Set(key, map.GetOrDefault(key));
+            return output;
         }
 
         public static bool IsValidGameId(string gameId)

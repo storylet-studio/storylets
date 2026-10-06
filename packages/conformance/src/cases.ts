@@ -404,6 +404,22 @@ export const fixtures: Fixtures = {
       ],
       criteria: { zone: "market", district: "quay" },
       expect: ["c_three", "c_two", "c_one", "c_zero"] },
+
+    // --- seeds beyond 2^32 (engine review 2026-10) ---------------------------
+    // A seed reduces to 32 bits as JS `toUint32` does: truncate, then modulo
+    // 2^32, with no clamp to a 64-bit integer on the way. 1e19 is past 2^63, so
+    // a runtime that converts to a signed 64-bit integer first (Godot's
+    // `int()`) clamps it and reduces a different number. 1e19 mod 2^32 is
+    // 2313682944, and the pair below says the two seeds are one seed.
+    { name: "a seed past 2^63 reduces mod 2^32 as toUint32 does",   // PRNG-computed
+      seed: 1e19,
+      cards: [{ id: "c_a" }, { id: "c_b" }, { id: "c_c" }, { id: "c_d" }, { id: "c_e" }],
+      expect: ["c_b", "c_d", "c_a", "c_c", "c_e"] },
+
+    { name: "a seed past 2^63 shuffles as its 32-bit reduction does",   // PRNG-computed
+      seed: 2313682944,
+      cards: [{ id: "c_a" }, { id: "c_b" }, { id: "c_c" }, { id: "c_d" }, { id: "c_e" }],
+      expect: ["c_b", "c_d", "c_a", "c_c", "c_e"] },
   ],
 
   // --- Family SC - scripted ------------------------------------------------------
@@ -1386,12 +1402,16 @@ export const fixtures: Fixtures = {
       ] },
 
     // --- persistence (schema 4; SandboxStories S9) -------------------------------
+    // The stream is advanced by a DEAL: a peek consumes no draws (ruling A,
+    // corpus version 12), so two peeks would now agree whatever the load did.
+    // Two copies of each card leave the dealt ones free for the peek after.
     { name: "save/load carries the PRNG state, not a reset",  // PRNG-computed
       seed: 1,
-      cards: [{ id: "c_alpha" }, { id: "c_beta" }, { id: "c_gamma" }],
+      cards: [{ id: "c_alpha", copies: 2 }, { id: "c_beta", copies: 2 }, { id: "c_gamma", copies: 2 }],
+      hands: [{ id: "h_q", rule: {} }],
       script: [
         // seed-1 shuffle of the full tie -> [c_gamma, c_alpha, c_beta]
-        { op: "peek", expect: ["c_gamma", "c_alpha", "c_beta"] },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_gamma", "c_alpha", "c_beta"] } },
         { op: "saveLoad" },
         // the CONTINUED stream gives a different permutation; an engine that
         // reseeded on load would repeat the first list and fail here
@@ -2093,14 +2113,18 @@ export const fixtures: Fixtures = {
     // above pins; design change 4.4 moves addresses and trace events to gameIds
     // together, in all four runtimes, and these cases move with it.
 
+    // Each flow's stream is advanced by a DEAL, since a peek consumes no draws
+    // (ruling A, corpus version 12); two copies of each card leave the dealt
+    // ones free for the peeks after.
     { name: "a parked flow resumes on the same stream, as though it never left",  // PRNG-computed
       seed: 1,
-      cards: [{ id: "c_alpha" }, { id: "c_beta" }, { id: "c_gamma" }],
+      cards: [{ id: "c_alpha", copies: 2 }, { id: "c_beta", copies: 2 }, { id: "c_gamma", copies: 2 }],
+      hands: [{ id: "h_q", rule: {} }],
       script: [
         // The seed-1 shuffle of the full tie, and the same one for both flows:
         // a flow's PRNG starts at the engine's seed.
-        { op: "peek", flow: "alice", expect: ["c_gamma", "c_alpha", "c_beta"] },
-        { op: "peek", flow: "bob", expect: ["c_gamma", "c_alpha", "c_beta"] },
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_gamma", "c_alpha", "c_beta"] } },
+        { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: ["c_gamma", "c_alpha", "c_beta"] } },
         { op: "parkFlow", flow: "alice" },
         // Parking is closing: alice is gone from the engine while she is away.
         { op: "assertFlows", expect: ["bob"] },
@@ -2995,6 +3019,278 @@ export const fixtures: Fixtures = {
         { op: "deal", hands: ["h_x", "h_y"],
           expectBoard: { h_x: ["c_xhill"], h_y: ["c_yhill"] },
           expectVerdicts: { xquay: "tags", yquay: "tags" } },
+      ] },
+
+    // --- the engine review (2026-10-06): rulings A to G ----------------------
+    //
+    // design/engine-review-2026-10.md in the workshop. Each case below pins one
+    // ruling, or one behaviour the review found the JS reference already had
+    // on purpose and a port did not.
+
+    // Ruling A. A peek shuffles its ties with a THROWAWAY copy of the flow's
+    // generator, so looking at the stock never changes what the next deal
+    // gives. The essential assertion is the pair: flow "a" peeks three times
+    // and then deals, flow "b" only deals, and both are dealt the same hand
+    // from the same seed. Each peek also answers exactly as that deal does,
+    // since a peek is a deal that registers nothing. (The order itself is the
+    // seed-0 shuffle of the full-tie peek case above.)
+    { name: "a peek consumes no draws: peeking three times leaves the next deal unchanged",   // PRNG-computed
+      cards: [{ id: "c_alpha" }, { id: "c_beta" }, { id: "c_gamma" }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "peek", flow: "a", expect: ["c_beta", "c_gamma", "c_alpha"] },
+        { op: "peek", flow: "a", expect: ["c_beta", "c_gamma", "c_alpha"] },
+        { op: "peek", flow: "a", expect: ["c_beta", "c_gamma", "c_alpha"] },
+        { op: "deal", flow: "a", hands: ["h_q"], expectBoard: { h_q: ["c_beta", "c_gamma", "c_alpha"] } },
+        { op: "deal", flow: "b", hands: ["h_q"], expectBoard: { h_q: ["c_beta", "c_gamma", "c_alpha"] } },
+      ] },
+
+    // Ruling B. Every write target is resolved and checked before any write
+    // lands, so a refusal anywhere in the outcome changes nothing: the earlier
+    // write is absent, no turn passes, and the card is still in its hand. The
+    // refused change sorts AFTER a good one in each outcome (a bundle carries
+    // changes in key order), which is what made the partial write visible:
+    // a read-only @world, an @hand name this ask does not compose, and a scope
+    // nobody registered.
+    { name: "a play is all-or-nothing: a refused write lands none of the outcome's writes",
+      world: [{ name: "clock", type: "number", default: 0, writable: false }],
+      story: [{ name: "gold", type: "number", default: 0 }],
+      boxProperties: [{ name: "heat", type: "number", default: 0 }],
+      cards: [
+        { id: "c_world", priority: 3, outcomes: [{ id: "o_go", changes: {
+          "@story.gold": "@story.gold + 1", "@world.clock": "1" } }] },
+        { id: "c_hand", priority: 2, outcomes: [{ id: "o_go", changes: {
+          "@box.heat": "@box.heat + 1", "@hand.nope": "1" } }] },
+        { id: "c_scope", priority: 1, outcomes: [{ id: "o_go", changes: {
+          "@story.gold": "@story.gold + 1", "@zzz.x": "1" } }] },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_world", "c_hand", "c_scope"] } },
+        { op: "play", card: "c_world", outcome: "go", from: "h_q", expectError: true },
+        { op: "assertState", expect: { "story.gold": 0, "world.clock": 0, "turn.b_x": 0 } },
+        { op: "play", card: "c_hand", outcome: "go", from: "h_q", expectError: true },
+        { op: "assertState", expect: { "box.box.heat": 0, "turn.b_x": 0 } },
+        { op: "play", card: "c_scope", outcome: "go", from: "h_q", expectError: true },
+        { op: "assertState", expect: { "story.gold": 0, "turn.b_x": 0 } },
+        { op: "assertBoard", expect: { h_q: ["c_world", "c_hand", "c_scope"] } },
+      ] },
+
+    // `$` in the change-target grammar matches only at the very end (JS). A
+    // .NET or PCRE `$` also matches before a final newline, so "@story.gold\n"
+    // would pass as a target there. Refused here, and, the play being
+    // all-or-nothing, the good change beside it does not land either.
+    { name: "a change target with a trailing newline is refused, and nothing lands",
+      story: [
+        { name: "coins", type: "number", default: 0 },
+        { name: "gold", type: "number", default: 0 },
+      ],
+      cards: [{ id: "c_a", outcomes: [{ id: "o_go", changes: {
+        "@story.coins": "@story.coins + 1", "@story.gold\n": "@story.gold + 1" } }] }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_a"] } },
+        { op: "play", card: "c_a", outcome: "go", from: "h_q", expectError: true },
+        { op: "assertState", expect: { "story.coins": 0, "story.gold": 0, "turn.b_x": 0 } },
+        { op: "assertBoard", expect: { h_q: ["c_a"] } },
+      ] },
+
+    // The same `$` rule in the boundBy grammar: "@story.act\n" is not a
+    // reference, so the group binds nothing (a wildcard) and the deal says so.
+    { name: "a boundBy with a trailing newline is not a reference, and binds nothing",
+      story: [{ name: "act", type: "string", default: "act-1" }],
+      groups: [{ id: "d_act", tags: [{ id: "v_act1", gameId: "act-1" }, { id: "v_act2", gameId: "act-2" }],
+        boundBy: "@story.act\n" }],
+      cards: [
+        { id: "c_early", priority: 2, tags: { act: ["act-1"] } },
+        { id: "c_late", priority: 1, tags: { act: ["act-2"] } },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_early", "c_late"] },
+          expectDiagnostic: "is not a @world or @story property reference" },
+      ] },
+
+    // And in the hole-reference grammar: "@hand.zone\n" is not a reference, so
+    // the hole stays unbound and the deal says so.
+    { name: "a hole reference with a trailing newline is not a reference, and binds nothing",
+      templates: [{ id: "t_npc", chooses: ["zone"], properties: [
+        { name: "zone", type: "enum", values: ["docks", "market"], default: "docks" },
+      ] }],
+      hands: [{ id: "h_elder", template: "t_npc", chosen: { zone: "@hand.zone\n" } }],
+      cards: [
+        { id: "c_dockside", priority: 2, tags: { zone: ["docks"] } },
+        { id: "c_stall", priority: 1, tags: { zone: ["market"] } },
+      ],
+      script: [
+        { op: "deal", hands: ["h_elder"], expectBoard: { h_elder: ["c_dockside", "c_stall"] },
+          expectDiagnostic: "is not a @hand, @world or @story property reference" },
+      ] },
+
+    // Ruling C. A shared `redraw: never` card, once taken by one playthrough,
+    // is evicted from every other playthrough's hand at that hand's next deal,
+    // as a cooldown evicts a held card. Two copies in the world let both flows
+    // hold it; alice plays hers and it is spent for everyone, so bob's copy
+    // goes with the new evict reason `taken`, checked where the fill checks it
+    // (after the deck gate, before the cooldown).
+    { name: "a taken card is evicted from another flow's hand at its next deal",
+      decks: [{ id: "k_rare", shared: true,
+        cards: [{ id: "c_pixie", redraw: "never", sharedCopies: 2, outcomes: [{ id: "o_take" }] }] }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_pixie"] } },
+        { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: ["c_pixie"] } },
+        { op: "play", flow: "alice", card: "c_pixie", outcome: "take", from: "h_q" },
+        { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: [] },
+          expectTrace: ["evict q pixie taken"] },
+      ] },
+
+    // Ruling D. After a load into an edited build, a seated card can belong
+    // to a deck that is now in ANOTHER box. To the hand it has gone from its
+    // box, so the next deal evicts it as `vanished`, the reason a card the
+    // build no longer has already gets. The card still exists, so it is named
+    // by its gameId. (The JS reference evicted it as `deck-gate` by accident,
+    // through a missing map key; two ports crashed on the same lookup.)
+    { name: "a seated card whose deck moved to another box is evicted as vanished",
+      cards: [
+        { id: "c_move", priority: 2 },
+        { id: "c_stay", priority: 1 },
+      ],
+      hands: [{ id: "h_a", rule: {}, slots: 1 }],
+      bundleB: {
+        cards: [{ id: "c_stay", priority: 1 }],
+        hands: [{ id: "h_a", rule: {}, slots: 1 }],
+        otherBox: { cards: [{ id: "c_move", priority: 2 }] },
+      },
+      script: [
+        { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_move"] } },
+        { op: "saveLoad", into: "B" },
+        { op: "deal", hands: ["h_a"], expectBoard: { h_a: ["c_stay"] },
+          expectTrace: ["evict a move vanished"] },
+      ] },
+
+    // Ruling E. JS object order is the contract for keyed results: a key that
+    // looks like an integer ("7") comes first, ascending, in any JS object,
+    // whatever order it was inserted in. A save's `flows` is one, and the
+    // flows reopen after a load in that order. `flows()` before any load stays
+    // insertion order. The save must also be the same bytes after the load,
+    // including the per-flow property section: `steps` gives each flow one.
+    { name: "integer-like flow ids come first after a load, and the save is the same bytes",
+      story: [{ name: "steps", type: "number", default: 0, shared: false }],
+      cards: [{ id: "c_a" }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "openFlow", flow: "main" },
+        { op: "openFlow", flow: "7" },
+        { op: "assertFlows", expect: ["main", "7"] },
+        { op: "setState", flow: "7", story: { steps: 3 } },
+        { op: "saveLoad", expectSameBytes: true },
+        { op: "assertFlows", expect: ["7", "main"] },
+        { op: "assertState", flow: "7", expect: { "story.steps": 3 } },
+        { op: "assertState", flow: "main", expect: { "story.steps": 0 } },
+      ] },
+
+    // Ruling G. A priority that evaluates to NaN (here Inf - Inf, from an
+    // overflow) is not dealt: it gets the verdict `priority`, as a priority
+    // that is not a number already does.
+    { name: "a priority that evaluates to NaN is not dealt",
+      story: [{ name: "big", type: "number", default: 1e200 }],
+      cards: [
+        { id: "c_nan", priority: "@story.big * @story.big - @story.big * @story.big" },
+        { id: "c_ok", priority: 1 },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "peek", expect: ["c_ok"], expectVerdicts: { nan: "priority", ok: "dealt" } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_ok"] }, expectVerdicts: { nan: "priority" } },
+      ] },
+
+    // A value used to bind a tag group becomes text as JS `String()` makes it:
+    // a whole number has no decimal point ("2", never "2.0"), and a flags
+    // list is joined with "," (["act1"] is "act1"). Through `boundBy` and
+    // through a hole filled from a property alike.
+    { name: "a number binds a group by its JS text: 2 binds the tag \"2\"",
+      story: [{ name: "floor", type: "number", default: 2 }],
+      groups: [{ id: "d_floor", tags: [{ id: "v_f1", gameId: "1" }, { id: "v_f2", gameId: "2" }],
+        boundBy: "@story.floor" }],
+      cards: [
+        { id: "c_one", priority: 2, tags: { floor: ["1"] } },
+        { id: "c_two", priority: 1, tags: { floor: ["2"] } },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_two"] } },
+        { op: "setState", story: { floor: 1 } },
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_one"] } },
+      ] },
+
+    { name: "a hole filled from a number property binds the tag of its JS text",
+      groups: [{ id: "d_floor", tags: [{ id: "v_f1", gameId: "1" }, { id: "v_f2", gameId: "2" }] }],
+      templates: [{ id: "t_lift", chooses: ["floor"], properties: [
+        { name: "floor", type: "number", default: 2 },
+      ] }],
+      hands: [{ id: "h_lift", template: "t_lift", chosen: { floor: "@hand.floor" } }],
+      cards: [
+        { id: "c_one", priority: 2, tags: { floor: ["1"] } },
+        { id: "c_two", priority: 1, tags: { floor: ["2"] } },
+      ],
+      script: [
+        { op: "deal", hands: ["h_lift"], expectBoard: { h_lift: ["c_two"] } },
+      ] },
+
+    { name: "a flags value binds a group by its joined text: [\"act1\"] binds \"act1\"",
+      story: [{ name: "acts", type: "flags", default: ["act1"] }],
+      groups: [{ id: "d_act", tags: [{ id: "v_act1", gameId: "act1" }, { id: "v_act2", gameId: "act2" }],
+        boundBy: "@story.acts" }],
+      cards: [
+        { id: "c_early", priority: 2, tags: { act: ["act1"] } },
+        { id: "c_late", priority: 1, tags: { act: ["act2"] } },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_early"] } },
+      ] },
+
+    // `peek(n = null)` returns nothing: JS reads `Math.max(null, 0)` as 0. An
+    // absent `n` is no cap at all. A corpus runner must tell a JSON `null`
+    // from an absent key here, and pass the null through to its peek.
+    { name: "a peek capped at null returns nothing; an absent cap returns everything",
+      cards: [{ id: "c_a", priority: 2 }, { id: "c_b", priority: 1 }],
+      script: [
+        { op: "peek", expect: ["c_a", "c_b"] },
+        { op: "peek", n: null, expect: [] },
+      ] },
+
+    // Section 4 of the review: the deal's draw count is a contract, so this
+    // case PINS it. `random()` sits in a hand condition, two deck gates and
+    // the card conditions, with specificity on (which evaluates a condition's
+    // parts again), across two hands in one dealMany and then a second deal
+    // (whose eviction pass evaluates them all again). The boards are the JS
+    // reference's own answer and the contract: merging the eviction pass's
+    // evaluations into the fill, or asking for a hand once instead of twice,
+    // changes them.
+    { name: "the random() draw count of a deal is pinned",   // PRNG-computed (the reference's answer)
+      decks: [
+        { id: "k_main", condition: "random(1, 10) > 0", cards: [
+          { id: "c_a", condition: "random(1, 6) > 2" },
+          { id: "c_b", condition: "random(1, 6) > 2 and random(1, 6) > 1" },
+          { id: "c_c" },
+          { id: "c_d", condition: "random(1, 6) > 3" },
+        ] },
+        { id: "k_side", condition: "random(1, 10) > 3", cards: [
+          { id: "c_e" },
+          { id: "c_f", condition: "random(1, 6) > 2" },
+        ] },
+      ],
+      hands: [
+        { id: "h_a", rule: { condition: "random(1, 10) > 0" }, slots: 2 },
+        { id: "h_b", rule: { condition: "random(1, 10) > 1" }, slots: 2 },
+      ],
+      script: [
+        { op: "deal", expectBoard: { h_a: ["c_d", "c_a"], h_b: ["c_f", "c_c"] } },
+        // h_b's c_f fails its condition on the second draw and goes; c_c keeps
+        // its seat and c_b fills the space.
+        { op: "deal", expectBoard: { h_a: ["c_d", "c_a"], h_b: ["c_c", "c_b"] } },
       ] },
   ],
 

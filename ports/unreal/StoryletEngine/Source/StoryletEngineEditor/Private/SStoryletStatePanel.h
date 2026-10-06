@@ -66,4 +66,19 @@ private:
 	// Enum option lists must outlive their SComboBox; rebuilt whenever the
 	// panel is (the old port's EnumSources lesson).
 	TArray<TSharedRef<TArray<TSharedPtr<FString>>>> EnumSources;
+
+	// Each open flow's board as the hand rows show it (hand gameId -> the
+	// card list's text), read ONCE per poll by RefreshBoards and shared with
+	// the rows by reference. The rows used to convert the whole board on
+	// every paint, once per hand, and Signature() converted it again per
+	// poll for its hand names alone.
+	using FBoardText = TMap<FString, FText>;
+	TMap<TWeakObjectPtr<UStoryletFlow>, TSharedRef<FBoardText>> BoardTexts;
+
+	// One Board() per open flow into BoardTexts, in place (the rows hold the
+	// maps), and flows gone or closed dropped.
+	void RefreshBoards();
+
+	// The map the rows of this flow read, made on first ask.
+	TSharedRef<FBoardText> BoardTextFor(UStoryletFlow* Flow);
 };

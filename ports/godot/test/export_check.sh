@@ -81,7 +81,8 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	# Far enough to prove the bundle is real, not just present: a session over it.
-	var session := StoryletEngine.create(loaded["bundle"], {"seed": 1}).open_flow("main")
+	var engine := StoryletEngine.create(loaded["bundle"], {"seed": 1})
+	var session := engine.open_flow("main")
 	var board: Dictionary = session.board()
 	print("EXPORT CHECK: PLAYED a session with ", board.size(), " board entries")
 	get_tree().quit(0)

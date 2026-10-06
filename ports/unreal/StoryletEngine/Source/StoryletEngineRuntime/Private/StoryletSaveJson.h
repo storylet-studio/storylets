@@ -27,6 +27,8 @@ bool StoryletLoadStateFromJson(storylets::Engine& Engine, const FString& Json, F
 /** The same load, but the file's @world values are RETURNED for the caller to
  *  apply rather than written through the engine: a bound container is restored
  *  directly (the host restoring, which its read-only policy does not bind),
- *  a self-backed engine through setProperty. */
+ *  a self-backed engine through setProperty. OutReportJson, when given, takes
+ *  the load's LoadReport as JSON (empty on a refusal). */
 bool StoryletLoadStateWorld(storylets::Engine& Engine, const FString& Json,
-	storylets::OrderedMap<std::string, storylets::StoryletValue>& OutWorld, FString& OutError);
+	storylets::OrderedMap<std::string, storylets::StoryletValue>& OutWorld, FString& OutError,
+	FString* OutReportJson = nullptr);

@@ -6,6 +6,33 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Added
+
+- **The load report is never thrown away**: `apply_live_bundle`'s result carries `"report"`, and `StoryletSave.load_state` and `deserialize_state` take `{"on_report": Callable}`.
+
+### Changed
+
+- **A peek consumes no random draws.** It ranks on a copy of the flow's generator, so looking at the stock, any number of times, no longer changes what the next deal gives.
+- **A play is all-or-nothing.** Every change target is checked before any write lands, and a refusal only the landing can meet puts back what had already landed; a refused play changes nothing. Write events now fire after every write has landed. A bag property declared `writable: false` is refused as `'<name>' is read-only`.
+- **A taken card is evicted.** A shared, never-redraw card that another playthrough has taken is evicted from this one's hand at its next deal, with the new evict reason `taken`.
+- **A card whose deck now sits in another box is evicted as `vanished`** at the next deal, after a load, resume or hot swap that moved it.
+- **Flow ids and hand ids that look like integers come first**, ascending, in a save's flows and registry section, in the order flows reopen after a load, and in `dealMany` and `board()` results: the order a JS object gives, so every runtime writes the same save bytes.
+- **A priority that evaluates to NaN is not dealt**: it gets the verdict `priority`, as a priority that is not a number does.
+- **A trace handler fires once each, from a snapshot.** Subscribing the same handler twice registers it once, and a handler added or removed during an event takes effect from the next one.
+- A hot swap's wrong-project refusal reads `hotSwap: the bundle is for project "<new>", this engine runs "<old>"`.
+- **A flow holds its engine weakly**, so an engine and its flows are freed once the game lets go of the engine. Keep the engine for as long as you play: a flow whose engine has been freed is closed, and says so.
+- A flow's `id` is read-only.
+
+### Fixed
+
+- **Engines and flows were never freed**: cached host functions held their flow, and a flow and its engine held each other. A test now proves a dropped engine, a closed flow and a hot-swapped engine are all freed.
+- **A deal no longer stops with a script error** when a card on the board belongs to a deck in another box: it is evicted as `vanished`.
+- **Saves write whole numbers as JS does** (`3`, not `3.0`), so a save is byte-for-byte the same on every runtime.
+- A number that binds a tag group or fills a hole becomes text as JS's `String()` makes it (`2`, not `2.0`), so it binds its tag; the grammars no longer accept a trailing newline; seeds of 2^63 and more reduce as JS's do; `peek` with a `null` count returns nothing.
+- `list_boxes`, `list_bags` and `list_properties` refuse on a closed flow, and `play()` reports a bad reference with `push_error` as well as returning it.
+- The Runtime State panel refreshes quality dropdowns.
+- The `boundBy` pattern is compiled once, a deal reuses its scope readers, and a full log is trimmed once per cap's worth of events rather than on every one.
+
 ## [0.9.1] - 2026-10-02
 
 ### Changed

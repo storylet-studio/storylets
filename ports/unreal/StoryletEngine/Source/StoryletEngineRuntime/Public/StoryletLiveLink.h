@@ -1,6 +1,6 @@
 // FStoryletLiveLink - the game-side client for Storyletter's Live Link
 // (design/live-link.md). Joins a running game to the editor over a loopback
-// WebSocket: the attached session's trace stream and board snapshots go UP,
+// WebSocket: the attached engine's trace stream and board snapshots go UP,
 // so the editor's Board shows the game's run instead of its own (OBSERVE-ONLY:
 // the game stays in control, the editor is a passive mirror); freshly compiled
 // bundles come DOWN after a save, so the run picks up the edit without
@@ -19,12 +19,21 @@
 //   Link->Attach(Engine);               // forward every flow's trace; a board each goes first
 //   // ...play as normal; every deal, play and turn reaches the editor as it happens.
 //
-//   // Live refresh: the editor saved and pushed a new bundle.
-//   Link->OnBundle = [Link, Flow](const FString& Build, const FString& Data)
+//   // Live refresh: the editor saved and pushed a new bundle. The link is held
+//   // weakly: a handler the link owns that held it strongly would keep it open
+//   // for ever. Engine is the UStoryletEngine you attached (keep it in a UPROPERTY).
+//   Link->OnBundle = [WeakLink = Link.ToWeakPtr(), Engine](const FString& Build, const FString& Data)
 //   {
 //       FString Error;
-//       if (!FStoryletLiveLink::ApplyLiveBundle(Flow, Data, Error)) { UE_LOG(...); return; }
-//       Link->SetBuild(Build);             // the editor's icon goes back to in sync
+//       if (!FStoryletLiveLink::ApplyLiveBundle(Engine, Data, Error))
+//       {
+//           UE_LOG(LogTemp, Error, TEXT("Live Link: %s"), *Error);
+//           return;
+//       }
+//       if (const TSharedPtr<FStoryletLiveLink> Pinned = WeakLink.Pin())
+//       {
+//           Pinned->SetBuild(Build);       // the editor's icon goes back to in sync
+//       }
 //   };
 #pragma once
 
@@ -34,7 +43,6 @@
 #include "UObject/WeakObjectPtr.h"
 
 class IWebSocket;
-class UStoryletEngine;
 class UStoryletEngine;
 namespace storylets { class LiveLinkClient; }
 
@@ -83,19 +91,24 @@ public:
 	const FString& GetBuild() const { return BuildId; }
 
 	/** Live refresh: the editor pushed a freshly compiled bundle. `Data` is
-	 *  the full .storyletsc JSON: hand it, with your session, to
+	 *  the full .storyletsc JSON: hand it, with your engine, to
 	 *  ApplyLiveBundle, then call SetBuild(Build). Fires on the game thread.
 	 *  Never fires with a malformed frame. No-op in Shipping (the whole link
 	 *  compiles out). */
 	TFunction<void(const FString& Build, const FString& Data)> OnBundle;
 
-	/** Apply a pushed bundle to a session: compile `Data`
+	/** Apply a pushed bundle to an engine: compile `Data`
 	 *  (UStoryletBundle::LoadFromJsonString), then
 	 *  UStoryletEngine::ApplyLiveBundle, which swaps the new bundle in under
-	 *  the run IN PLACE (the session object and every handle to it stay
-	 *  valid). False (with OutError, and the session untouched) when the JSON
-	 *  does not compile or the bundle refuses the run (another project). */
+	 *  the run IN PLACE (the engine object and every flow handed out from it
+	 *  stay valid). False (with OutError, and the engine untouched) when the
+	 *  JSON does not compile or the bundle refuses the run (another project). */
 	static bool ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError);
+
+	/** The same, handing back the swap's LoadReport as JSON in OutReportJson
+	 *  (play-helpers' applyLiveBundle result `report`): what the edit cost the
+	 *  run. Empty when the bundle is refused. */
+	static bool ApplyLiveBundle(UStoryletEngine* Engine, const FString& Data, FString& OutError, FString& OutReportJson);
 
 private:
 	FStoryletLiveLink(const FString& InBuild, const FString& InProject, const FString& InUrl);

@@ -116,6 +116,9 @@ namespace StoryletStudio.StoryletEngine.Editor
                     "No engines registered. Call " +
                     "StoryletDebug.Register(engine, \"label\") to watch and edit its state here.",
                     MessageType.Info);
+                // Nothing was drawn, so this prunes everything: the last engine
+                // to go must not stay alive in here until another one arrives.
+                PruneLogState();
                 return;
             }
 
@@ -240,7 +243,7 @@ namespace StoryletStudio.StoryletEngine.Editor
                     // Reset-to-default, disabled while already at default.
                     using (new EditorGUI.DisabledScope(row.Value != null && row.Value.ValueEquals(row.Default)))
                     {
-                        if (GUILayout.Button("Reset", GUILayout.Width(48)))
+                        if (GUILayout.Button(new GUIContent("Reset", "Reset to default"), GUILayout.Width(48)))
                         {
                             session.SetProperty(row.Path, row.Default);
                             GUI.FocusControl(null);
@@ -297,6 +300,10 @@ namespace StoryletStudio.StoryletEngine.Editor
                         ? Mathf.Max(0, opts.IndexOf(row.Value.AsString))
                         : 0;
                     int next = EditorGUILayout.Popup(cur, opts.ToArray());
+                    // A value only when the user PICKED something. Returning the
+                    // shown option every frame wrote opts[0] over any value the
+                    // list does not hold, just by drawing the row, at ~4 Hz.
+                    if (next == cur) return null;
                     return ExprValue.Str(opts[Mathf.Clamp(next, 0, opts.Count - 1)]);
                 }
                 case PropertyTypes.Flags:
@@ -337,9 +344,6 @@ namespace StoryletStudio.StoryletEngine.Editor
             return dealt.Count > 0 ? string.Join(", ", dealt) : "(none)";
         }
 
-        /// <summary>One line per entry, [turn]-stamped where the event has a
-        /// box context (write lines share the state logger's
-        /// "path: from -> to" reading).</summary>
         /// <summary>One line of either log: a flow's own, or the engine's run
         /// log, which is the same events plus the flow that caused each. Named
         /// rather than generic so both call sites read the same.</summary>
@@ -359,6 +363,9 @@ namespace StoryletStudio.StoryletEngine.Editor
             return FormatLogEntry(new LogEntry { Event = line.Event, Seq = line.Seq, Turn = line.Turn }, prefix);
         }
 
+        /// <summary>One line per entry, [turn]-stamped where the event has a
+        /// box context (write lines share the state logger's
+        /// "path: from -> to" reading).</summary>
         internal static string FormatLogEntry(LogEntry entry, string flowPrefix = "")
         {
             var stamp = (entry.Turn != null ? $"[{ExprValue.JsNumber(entry.Turn.Value)}] " : "[-] ") + flowPrefix;

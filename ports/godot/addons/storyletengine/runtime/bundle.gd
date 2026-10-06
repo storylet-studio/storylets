@@ -60,8 +60,11 @@ static func _compile_res() -> void:
 	_re_non_slug = RegEx.create_from_string("[^a-z0-9-]+")
 	_re_dash_runs = RegEx.create_from_string("-+")
 	_re_edge_dashes = RegEx.create_from_string("^-+|-+$")
-	_re_valid_game_id = RegEx.create_from_string("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
-	_re_hole_ref = RegEx.create_from_string("^@(hand|world|story)\\.([a-z][a-z0-9_-]*)$")
+	# \z, not $, in the two grammars: PCRE's $ also matches before a trailing
+	# newline, so "@story.act\n" parsed as a reference here and was refused in JS,
+	# whose $ ends the string (2026-10-06). The same holds in flow.gd.
+	_re_valid_game_id = RegEx.create_from_string("^[a-z0-9]([a-z0-9-]*[a-z0-9])?\\z")
+	_re_hole_ref = RegEx.create_from_string("^@(hand|world|story)\\.([a-z][a-z0-9_-]*)\\z")
 
 
 ## Slugify a human label into a filename- / address-safe gameId.

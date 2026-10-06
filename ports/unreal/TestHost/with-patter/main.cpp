@@ -303,8 +303,10 @@ namespace
     {
         P::Beat beat;
         beat.id = b.at("id").str; beat.kind = b.at("kind").str;
-        if (const auto* c = b.find("character")) beat.character = c->str;
-        if (const auto* dr = b.find("direction")) beat.direction = dr->str;
+        // Present, even as "", is set: Patter's beats carry the flag beside the
+        // value (absent is unset), and a line with no flag shows no speaker.
+        if (const auto* c = b.find("character")) { beat.hasCharacter = true; beat.character = c->str; }
+        if (const auto* dr = b.find("direction")) { beat.hasDirection = true; beat.direction = dr->str; }
         if (const auto* tg = b.find("tags")) beat.tags = StrList(*tg);
         return beat;
     }

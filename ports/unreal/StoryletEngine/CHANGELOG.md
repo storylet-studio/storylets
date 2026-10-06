@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`UStoryletEngine::OnReplacedFlow`**, a BlueprintAssignable delegate fired (flow id, dealt cards) when an open replaces a flow that still held cards, the core's `onReplacedFlow`. **`OpenFlowSeeded(Id, Seed)`** opens a flow on its own PRNG seed. **`OpenFlowFromJson`** gains an `OutReportJson` out-param, the restore's LoadReport. **`ApplyLiveBundleWithReport`**, **`UStoryletSave::LoadStateFromJsonWithReport`** and a four-argument **`FStoryletLiveLink::ApplyLiveBundle`** hand back the load's report as JSON, and the core's `loadState` / `deserializeState` take an optional `onReport`. **`PeekAll`** is the uncapped peek.
+- `subscribeTrace` on the core engine and flow takes an optional `identity`: the same identity subscribed twice is registered once (ruling F).
+
+### Changed
+
+- **A peek consumes no random draws** (ruling A). **A play is all-or-nothing** (ruling B): every target is checked before any write lands, a refusal the landing meets puts back what had landed, and a `writable: false` bag property is refused as `'<name>' is read-only` before anything moves. **A taken shared card is evicted** from another flow's hand as `taken` (ruling C), and **a seated card whose deck is now in another box as `vanished`** (ruling D). **Integer-like flow ids and hand gameIds come first**, ascending, in a save's flows, the order a load reopens them, the registry section, the dealt slice and the board (ruling E). **A NaN priority is not dealt** (ruling G). A value binding a tag group becomes text as JS `String()` makes it. `hotSwap`'s wrong-project refusal reads `hotSwap: the bundle is for project "<new>", this engine runs "<old>"`.
+- `Peek` with a `MaxCards` below one returns nothing, as everywhere else; `PeekAll` replaces the old `-1` default. Const reads (`Board`, `BoardForBox`, `ListBoxes`, `ListProperties`, `Log`, `GetRunLog`, `GetFlow`, `Flows`, `GetBoundWorld`, `SaveFlowToJson`, `PreviewFlowRestoreJson`) are BlueprintPure.
+- Every verb on a closed flow logs `flow "<id>" is closed`, the core's refusal, and no engine error escapes a Blueprint call.
+
+### Fixed
+
+- A negative log cap empties the engine's run log, as it does a flow's. A deck that says `shared: false` no longer costs every deal the shared-claim walks. A saved PRNG state is read through `ToUint32`. A host @world resolver that throws while binding a `boundBy` group or filling a hole is the "not declared" diagnostic rather than an escaping exception. The eviction pass no longer reads a board vector a re-entrant trace handler can replace.
+- The editor's Runtime State panel reads each flow's board once per poll instead of once per hand per paint.
+
 ## [0.9.1] - 2026-10-02
 
 ### Changed

@@ -1018,16 +1018,16 @@ namespace StoryletStudio.StoryletEngine
             InitShared();
         }
 
+        /// <summary>A hand's declared @hand state: a template instance inherits
+        /// its template's declarations, a standalone hand declares its own
+        /// (schema 2.6). The constructor indexes every box's templates before
+        /// it asks, so an unknown template here is one no box declares, and
+        /// declares nothing.</summary>
         internal List<PropertyDecl> HandDecls(Hand hand)
         {
             if (hand.Template != null)
             {
-                var known = _templatesById.GetOrDefault(hand.Template);
-                if (known != null) return known.Properties ?? new List<PropertyDecl>();
-                foreach (var box in _bundle.Boxes)
-                    foreach (var t in box.HandTemplates)
-                        if (t.Id == hand.Template) return t.Properties ?? new List<PropertyDecl>();
-                return new List<PropertyDecl>();
+                return _templatesById.GetOrDefault(hand.Template)?.Properties ?? new List<PropertyDecl>();
             }
             return hand.Properties ?? new List<PropertyDecl>();
         }
@@ -1226,7 +1226,7 @@ namespace StoryletStudio.StoryletEngine
             // The world's claims as they stand WITHOUT this name, taken before
             // the replace: a resume competes with the other flows, never with
             // the flow it is replacing (which is about to release everything).
-            var otherClaims = opts.Restore != null ? SharedClaimsExcept(id) : null;
+            var otherClaims = opts.Restore != null ? SharedClaims(except: id) : null;
             var existing = _flows.GetOrDefault(id);
             // A replace keeps the flow's slot in _flows, but the registry cannot
             // keep its keys' places (the old flow's are removed and the new
@@ -1352,31 +1352,17 @@ namespace StoryletStudio.StoryletEngine
 
         /// <summary>Shared claims across every LIVE flow, card id -> holders.
         /// Derived, which is what makes CloseFlow and the OpenFlow replace
-        /// release what a flow was holding: its board leaves the map with
-        /// it.</summary>
-        internal Dictionary<string, int> SharedClaims()
+        /// release what a flow was holding: its board leaves the map with it.
+        ///
+        /// With <paramref name="except"/>, that flow is left out: what the REST
+        /// of the world holds, which is the question a resume under that name
+        /// has to ask.</summary>
+        internal Dictionary<string, int> SharedClaims(string except = null)
         {
             var counts = new Dictionary<string, int>();
             foreach (var pair in _flows)
             {
-                foreach (var id in pair.Value.HeldCardIds())
-                {
-                    counts.TryGetValue(id, out var n);
-                    counts[id] = n + 1;
-                }
-            }
-            return counts;
-        }
-
-        /// <summary>The same ledger with one name left out: what the REST of the
-        /// world holds, which is the question a resume under that name has to
-        /// ask.</summary>
-        private Dictionary<string, int> SharedClaimsExcept(string id)
-        {
-            var counts = new Dictionary<string, int>();
-            foreach (var pair in _flows)
-            {
-                if (pair.Key == id) continue;
+                if (except != null && pair.Key == except) continue;
                 foreach (var cardId in pair.Value.HeldCardIds())
                 {
                     counts.TryGetValue(cardId, out var n);
@@ -1419,7 +1405,7 @@ namespace StoryletStudio.StoryletEngine
                 }
                 throw new StoryletError($"no property at \"{path}\"");
             }
-            if (parts.Length == 3 && (parts[0] == "box" || parts[0] == "deck" || parts[0] == "hand" || parts[0] == "value"))
+            if (parts.Length == 3 && IsOwnedKind(parts[0]))
             {
                 var kind = parts[0];
                 var segment = parts[1];
@@ -1606,7 +1592,8 @@ namespace StoryletStudio.StoryletEngine
         /// flow id - the tools' one stream. Returns the unsubscribe.</summary>
         public Action SubscribeTrace(Action<string, TraceEvent> handler)
         {
-            _engineTraceHandlers.Add(handler);
+            // Once per handler, delivered from a copy (ruling F), as Flow's.
+            if (!_engineTraceHandlers.Contains(handler)) _engineTraceHandlers.Add(handler);
             return () => _engineTraceHandlers.Remove(handler);
         }
 
@@ -1659,8 +1646,9 @@ namespace StoryletStudio.StoryletEngine
         {
             if (bundle.Content.Project != _bundle.Content.Project)
             {
+                // Names the BUNDLE: there is no save in a hot swap.
                 throw new StoryletError(
-                    $"save is for project \"{_bundle.Content.Project}\", bundle is \"{bundle.Content.Project}\"");
+                    $"hotSwap: the bundle is for project \"{bundle.Content.Project}\", this engine runs \"{_bundle.Content.Project}\"");
             }
             var options = _creationOptions.Copy();
             change?.Invoke(options);
@@ -1760,7 +1748,9 @@ namespace StoryletStudio.StoryletEngine
             };
             if (_ownsRegistry) envelope.Registry = RegistrySection();
             envelope.Shared.Spent = SpentIds();
-            foreach (var pair in _flows) envelope.Flows.Set(pair.Key, pair.Value.Snapshot(false));
+            // In JS object order (ruling E): an integer-like flow id comes first,
+            // as it does in the reference's save, so the bytes match.
+            foreach (var id in Model.JsKeyOrder(_flows.Keys)) envelope.Flows.Set(id, _flows.GetOrDefault(id).Snapshot(false));
             return envelope;
         }
 
@@ -1786,7 +1776,11 @@ namespace StoryletStudio.StoryletEngine
                 if (all.TryGetValue(key, out var bag) && !output.ContainsKey(key)) output.Set(key, bag);
             }
             foreach (var m in _sharedMounts) Take(m.Key);
-            foreach (var pair in _flows) foreach (var key in pair.Value.RegisteredKeys()) Take(key);
+            // Flows in the order the save's `flows` lists them, which is JS
+            // object order (ruling E), not Flows() order: OpenFlow("main");
+            // OpenFlow("7") saved main's keys first and the loaded engine, which
+            // reopens 7 first, saved 7's.
+            foreach (var id in Model.JsKeyOrder(_flows.Keys)) foreach (var key in _flows.GetOrDefault(id).RegisteredKeys()) Take(key);
             foreach (var pair in all) Take(pair.Key);
             return output;
         }
@@ -1825,7 +1819,7 @@ namespace StoryletStudio.StoryletEngine
         public LoadReport PreviewFlowRestore(string id, FlowSave saved)
         {
             var draft = new ReportDraft();
-            PlanFlowRestore(id, saved, SharedClaimsExcept(id), draft);
+            PlanFlowRestore(id, saved, SharedClaims(except: id), draft);
             return FinishReport(_bundle.Content, _bundle.Content, new List<string> { id }, draft);
         }
 
@@ -1925,9 +1919,11 @@ namespace StoryletStudio.StoryletEngine
                 new OrderedMap<string, OrderedMap<string, ExprValue>>();
         }
 
-        private static bool IsOwnedKind(string kind)
+        /// <summary>Is this one of OwnedScopes, the scopes whose properties
+        /// belong to an owner (box, deck, hand, tag value)?</summary>
+        internal static bool IsOwnedKind(string kind)
         {
-            return kind == "box" || kind == "deck" || kind == "hand" || kind == "value";
+            return Array.IndexOf(OwnedScopes, kind) >= 0;
         }
 
         private static MovedValues PartitionsFromSections(
@@ -2130,7 +2126,10 @@ namespace StoryletStudio.StoryletEngine
             }
             var draft = new ReportDraft();
             var plan = new LoadPlan();
-            var envelopeFlows = envelope.Flows ?? new OrderedMap<string, FlowSave>();
+            // Walked, and so reopened, in JS object order (ruling E): the order
+            // the reference's loadGame takes them in, whatever order a host
+            // built this envelope in.
+            var envelopeFlows = Model.InJsKeyOrder(envelope.Flows ?? new OrderedMap<string, FlowSave>());
             // Where the property values are, if this envelope has them: a
             // version 1 envelope's partitions, or a standalone engine's registry
             // sections.

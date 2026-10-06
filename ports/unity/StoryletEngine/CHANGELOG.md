@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The load report is never thrown away**: `StoryletSave.LoadState` and `DeserializeState` take an optional `Action<LoadReport> onReport`.
+
+### Changed
+
+- **A peek consumes no random draws.** It ranks on a copy of the flow's generator, so looking at the stock, any number of times, no longer changes what the next deal gives.
+- **A play is all-or-nothing.** Every change target is checked before any write lands, and a refusal only the landing can meet puts back what had already landed; a refused play changes nothing. Write events now fire after every write has landed. A bag property declared `writable: false` is refused as `'<name>' is read-only`.
+- **A taken card is evicted.** A shared, never-redraw card that another playthrough has taken is evicted from this one's hand at its next deal, with the new evict reason `taken`.
+- **A card whose deck now sits in another box is evicted as `vanished`** at the next deal, after a load, resume or hot swap that moved it.
+- **Flow ids and hand ids that look like integers come first**, ascending, in a save's flows and registry section, in the order flows reopen after a load, and in `dealMany` and `board()` results: the order a JS object gives, so every runtime writes the same save bytes.
+- **A priority that evaluates to NaN is not dealt**: it gets the verdict `priority`, as a priority that is not a number does.
+- **A trace handler fires once each, from a snapshot.** Subscribing the same handler twice registers it once, and a handler added or removed during an event takes effect from the next one.
+- A hot swap's wrong-project refusal reads `hotSwap: the bundle is for project "<new>", this engine runs "<old>"`.
+- `StoryletBundleAsset.CreateEngine(double? seed = null, opts)` no longer overwrites a seed already set in `opts`.
+
+### Fixed
+
+- **A deal no longer throws** when a card on the board belongs to a deck in another box: it is evicted as `vanished`.
+- A value that binds a tag group or fills a hole becomes text as JS's `String()` makes it, so a list of flags binds its tag; the change-target, hole, boundBy and gameId grammars no longer accept a trailing newline.
+- The Runtime State window no longer rewrites an enum or quality value merely by drawing it, no longer keeps engines alive once none is registered, and names its reset button "Reset to default".
+- The Live Link's socket is disposed when it closes, and sending waits on a signal rather than polling every 15 ms.
+- A deal caches its scope views per flow instead of rebuilding them per deck and per card.
+
 ## [0.9.1] - 2026-10-02
 
 ### Changed

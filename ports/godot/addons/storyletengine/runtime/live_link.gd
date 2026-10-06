@@ -222,7 +222,7 @@ func close() -> void:
 ## hot_swap. A new ENGINE over the parsed bundle carrying the old one's run
 ## (every flow of it: turns, properties, cooldowns, the hands on the table; a
 ## deleted card leaves the table, a new property takes its default).
-## Returns {"ok": true, "engine", "bundle"} or {"ok": false, "error"} with
+## Returns {"ok": true, "engine", "bundle", "report"} or {"ok": false, "error"} with
 ## the old engine left as it was: malformed JSON, a bundle the runtime
 ## rejects, another project. hot_swap rebuilt every flow, so re-take your
 ## handles from the returned engine.
@@ -240,7 +240,9 @@ static func apply_live_bundle(engine: StoryletEngine, data: String, opts: Dictio
 	var swapped := engine._swap(loaded["bundle"], opts)
 	if not swapped["ok"]:
 		return {"ok": false, "error": swapped["error"]}
-	return {"ok": true, "engine": swapped["engine"], "bundle": loaded["bundle"]}
+	# "report" is the LoadReport the replacement's load produced: what the edit
+	# dropped, defaulted, retyped or evicted, which a refresh must not swallow.
+	return {"ok": true, "engine": swapped["engine"], "bundle": loaded["bundle"], "report": swapped["report"]}
 
 
 ## The cheap snapshot: hands by gameId holding card gameIds in dealt order,
@@ -364,54 +366,7 @@ func _drain_incoming() -> void:
 ## (an integer-valued float is "1", never "1.0"; a fraction is its shortest
 ## round-trip form). JSON numbers parse to floats in Godot, so every count and
 ## turn in a trace event is one, and Godot's own JSON.stringify would put them
-## on the wire as 1.0 where the reference writes 1.
+## on the wire as 1.0 where the reference writes 1. The writer is StoryletSave's,
+## shared with the save files.
 static func to_json(value) -> String:
-	match typeof(value):
-		TYPE_NIL:
-			return "null"
-		TYPE_BOOL:
-			return "true" if value else "false"
-		TYPE_INT:
-			return str(value)
-		TYPE_FLOAT:
-			return _js_number(value)
-		TYPE_STRING, TYPE_STRING_NAME:
-			return JSON.stringify(str(value))
-		TYPE_ARRAY, TYPE_PACKED_STRING_ARRAY, TYPE_PACKED_FLOAT64_ARRAY, TYPE_PACKED_INT64_ARRAY:
-			var items: Array = []
-			for x in value:
-				items.append(to_json(x))
-			return "[" + ",".join(items) + "]"
-		TYPE_DICTIONARY:
-			var pairs: Array = []
-			for k in value:
-				pairs.append(JSON.stringify(str(k)) + ":" + to_json(value[k]))
-			return "{" + ",".join(pairs) + "}"
-	return JSON.stringify(value)
-
-
-# JavaScript's Number-to-string: integers plain, fractions at the shortest
-# precision that round-trips, exponent form outside [1e-6, 1e21), and NaN /
-# Infinity as null (what JSON.stringify does with them).
-static func _js_number(n: float) -> String:
-	if is_nan(n) or is_inf(n):
-		return "null"
-	if n == 0.0:
-		return "0"
-	var mag := absf(n)
-	if mag >= 1e21 or mag < 1e-6:
-		var e := int(floor(log(mag) / log(10.0)))
-		var m := n / pow(10.0, e)
-		if absf(m) >= 10.0:   # rounding pushed the mantissa over
-			m /= 10.0
-			e += 1
-		return "%se%s%d" % [_js_number(m), "+" if e > 0 else "", e]
-	if n == floor(n) and mag < 9.2e18:
-		return str(int(n))
-	if n == floor(n):
-		return String.num(n, 0)
-	for decimals in range(1, 18):
-		var s := String.num(n, decimals)
-		if s.to_float() == n:
-			return s
-	return String.num(n, 17)
+	return StoryletSave.to_json(value)

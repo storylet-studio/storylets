@@ -46,8 +46,9 @@
 // Key dealing contracts, unchanged from round 2 (all per flow now):
 //   - two verbs: deal(hand) claims, peek(box, criteria) just looks; you can
 //     never play a card you only peeked (3.1, look/use rule)
-//   - availability order: deck gate -> cooldown -> tags -> hand condition ->
-//     card condition -> claims (3.1)
+//   - availability order: hand condition -> deck gate -> taken -> cooldown ->
+//     tags -> card condition -> claims -> priority (3.1), the order an ask
+//     reaches the verdicts below in
 //   - claims are physical WITHIN a flow: a card sits in at most `copies`
 //     hands of that flow's board at once, at most once in any one hand; the
 //     ledger is derived from the board contents (3.5)
@@ -114,6 +115,21 @@ import { PropertyBag as StateBag, ScopeRegistry } from "@wildwinter/scoperegistr
 import type { PropertyRow, ScopeDeclaration } from "@wildwinter/scoperegistry";
 import { makePrng, shuffleInPlace } from "./prng.js";
 import type { Prng } from "./prng.js";
+
+/**
+ * The error the engine throws when it refuses something itself: an unknown
+ * box, hand, card or flow, a closed flow, a gated-shut outcome, a write it will
+ * not make, a bundle or save it cannot read. A host can tell these apart from a
+ * fault in its own code with `instanceof StoryletError`; the message is the
+ * same text it always was. Errors the shared property kernel raises reach the
+ * host as they are.
+ */
+export class StoryletError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StoryletError";
+  }
+}
 
 export interface EngineOptions {
   /** Default seed for each flow's PRNG; override per flow in openFlow
@@ -317,6 +333,13 @@ const sharedCap = (card: Card<Expression>): number => card.sharedCopies ?? card.
 
 type HandSource = { kind: "value"; id: string } | { kind: "hand"; id: string } | { kind: "criteria" };
 
+/** One outcome change, resolved and checked but not yet landed. `path` is
+ *  the store location the trace reports, in the address grammar. */
+type WritePlan =
+  | { kind: "world"; name: string; path: string }
+  | { kind: "bag"; bag: StateBag; name: string; path: string }
+  | { kind: "scope"; scope: string; name: string; path: string };
+
 /** The composed @hand for one ask: the read bag, plus where each name
  *  routes on write (schema 3.6). */
 interface HandEnv {
@@ -396,7 +419,7 @@ function partitionsFromSections(sections: Sections, flowIds: Set<string>): {
  *  bag that never registers would wait in the registry for ever. */
 function sectionsOf(p: PropsPartition, keyOf: (kind: FlaggedScope, id?: string) => string, out: Sections): void {
   if (Object.keys(p.story).length > 0) out[keyOf("story")] = p.story;
-  for (const kind of ["box", "deck", "hand", "value"] as const) {
+  for (const kind of OWNED_SCOPES) {
     for (const [id, values] of Object.entries(p[kind])) if (Object.keys(values).length > 0) out[keyOf(kind, id)] = values;
   }
 }
@@ -407,7 +430,20 @@ function sectionsOf(p: PropsPartition, keyOf: (kind: FlaggedScope, id?: string) 
 // `pathPrefix` carries its own separator, so a bag composes its rows' addresses itself
 // (`story.gold`, `deck.tavern.drawn`) instead of every caller pasting a prefix onto a row.
 const bagFromDecls = (decls: PropertyDecl[], pathPrefix: string): StateBag =>
-  new StateBag(decls, { normalise: (n) => n, pathPrefix });
+  new StateBag(decls, { normalise: identity, pathPrefix });
+
+/** One name read from a bag as an OWN value. The bag's `values` is an ordinary
+ *  object, so a plain index would answer `constructor`, `toString` and the rest
+ *  of Object.prototype with a function: an expression reading `@deck.constructor`
+ *  must find nothing there, as it would in every other runtime. Identity
+ *  normalisation (above) means the authored name IS the key. */
+const ownValue = (bag: StateBag | undefined, name: string): ScalarValue | undefined =>
+  bag !== undefined && Object.prototype.hasOwnProperty.call(bag.values, name) ? bag.values[name] : undefined;
+
+/** The scope an expression sees where there is nothing to read (@deck in a
+ *  hand condition, a box or deck with no reader): empty, and with no prototype,
+ *  so no built-in property answers either. */
+const EMPTY_SCOPE: PropertyBag = Object.freeze(Object.create(null) as PropertyBag);
 
 // Truthiness for a bare condition. Booleans and numbers as you would expect;
 // a string passes when non-empty and a flag list when non-empty, matching
@@ -427,18 +463,13 @@ function conditionPasses(v: ScalarValue): boolean {
   return v.length > 0; // string[] (flags)
 }
 
-// PropertyView is gone. It was the shared PropertyRow plus a `path`, and `path` moved onto
-// that row on 2026-09-02 - so the name was a synonym, and a synonym for a shared type is how
-// the two families drifted in the first place: the same row called PropertyView here,
-// ScopePropertyRow next to it, PropertyRow in the kernel. listProperties() returns PropertyRow.
-
 /** One kernel bag with its store path prefix (story / box.<gameId> / deck.<gameId>
  *  / hand.<gameId> / value.<gameId>): the state logger's mount surface
  *  (design/engine-runtimes.md 3.4 - the logger builds on the PropertyBag
  *  audit hook, so it needs the bags themselves, not just their rows).
  *  The Engine lists the shared bags, a Flow its own; the @world container
- *  is the host's bag and the host mounts it itself. loadGame() replaces
- *  every bag, so re-enumerate after a load. */
+ *  is the host's bag and the host mounts it itself. loadGame() rebuilds
+ *  every flow, and so every flow's bags, so re-enumerate after a load. */
 export interface BagMount {
   prefix: string;
   bag: StateBag;
@@ -481,6 +512,8 @@ interface DeclSet {
  *  segment. `story` has no owner and `world` is the host's. */
 type OwnedScope = "box" | "deck" | "hand" | "value";
 const OWNED_SCOPES = ["box", "deck", "hand", "value"] as const;
+const isOwnedScope = (kind: string | undefined): kind is OwnedScope =>
+  (OWNED_SCOPES as readonly string[]).includes(kind ?? "");
 
 /** The owner segment of a property address, both ways round
  *  (design/engine-server.md 4.4).
@@ -553,7 +586,7 @@ interface Partition {
 type PartitionKind = keyof Partition;
 
 /** Everything a Flow shares with its Engine: the bundle-derived lookups
- *  (immutable), the shared stores (replaced wholesale by loadGame/reset),
+ *  (immutable), the shared stores (reseeded in place by loadGame/reset),
  *  and the seams. One object, held by both classes - the two are one
  *  machine in two lifetimes. */
 interface Internals {
@@ -634,14 +667,13 @@ interface Internals {
   engineTracing: () => boolean;
 }
 
-const handDeclsOf = (internals: Internals, hand: Hand<Expression>): PropertyDecl[] => {
-  if (hand.template !== undefined) {
-    return internals.templatesById.get(hand.template)?.properties
-      ?? internals.bundle.boxes.flatMap((b) => b.handTemplates).find((t) => t.id === hand.template)?.properties
-      ?? [];
-  }
-  return hand.properties ?? [];
-};
+/** A template instance inherits the template's property declarations; a
+ *  standalone hand declares its own (schema 2.6). `templatesById` is complete
+ *  before anything asks: the constructor indexes every box first. */
+const handDeclsOf = (internals: Internals, hand: Hand<Expression>): PropertyDecl[] =>
+  hand.template !== undefined
+    ? internals.templatesById.get(hand.template)?.properties ?? []
+    : hand.properties ?? [];
 
 /**
  * One owned property's ADDRESS, owner segment and all: `box.village.mood`.
@@ -690,9 +722,9 @@ const resolveOwner = (internals: Internals, kind: OwnedScope, segment: string): 
  *  place, so the engine's surface and a flow's answer alike. */
 const ownerOrThrow = (internals: Internals, kind: OwnedScope, segment: string, name: string): { id: string; legacy: boolean } => {
   const owner = resolveOwner(internals, kind, segment);
-  if (owner === undefined) throw new Error(`no ${kind} store "${segment}"`);
-  if ("ambiguous" in owner) throw new Error(ambiguousValueAddressMessage(segment, name, owner.ambiguous));
-  if ("zone" in owner) throw new Error(zoneQualifiedValueAddressMessage(segment, owner.zone, name));
+  if (owner === undefined) throw new StoryletError(`no ${kind} store "${segment}"`);
+  if ("ambiguous" in owner) throw new StoryletError(ambiguousValueAddressMessage(segment, name, owner.ambiguous));
+  if ("zone" in owner) throw new StoryletError(zoneQualifiedValueAddressMessage(segment, owner.zone, name));
   return owner;
 };
 
@@ -703,25 +735,15 @@ const legacyAddressMessage = (internals: Internals, kind: OwnedScope, segment: s
   `"${kind}.${segment}.${name}" names the ${kind} by its internal id; write "${addressOf(internals, kind, segment)}.${name}". `
   + `The internal-id form is refused after the next release.`;
 
-/** Build one side of the partition from the bundle. The bags are KEYED by
- *  internal id and ADDRESSED by gameId; see addressOf. */
-const buildPartition = (internals: Internals, half: (scope: FlaggedScope, decls: PropertyDecl[]) => PropertyDecl[]): Partition => {
-  const b = internals.bundle;
-  const at = (kind: OwnedScope, id: string): string => `${addressOf(internals, kind, id)}.`;
+/** Build one side of the partition from that side's declarations (the
+ *  engine precomputes both halves once, in bundle order, as a DeclSet). The
+ *  bags are KEYED by internal id and ADDRESSED by gameId; see addressOf. */
+const buildPartition = (internals: Internals, decls: DeclSet): Partition => {
+  const bags = (kind: OwnedScope): Map<string, StateBag> => new Map([...decls[kind]].map(
+    ([id, list]): [string, StateBag] => [id, bagFromDecls(list, `${addressOf(internals, kind, id)}.`)]));
   return {
-    story: bagFromDecls(half("story", b.story.properties), "story."),
-    box: new Map(b.boxes.map((box) => [box.id, bagFromDecls(half("box", box.properties), at("box", box.id))])),
-    deck: new Map(b.boxes.flatMap((box) => box.decks.map(
-      (deck): [string, StateBag] => [deck.id, bagFromDecls(half("deck", deck.properties), at("deck", deck.id))]))),
-    // A template instance inherits the template's property declarations;
-    // a standalone hand declares its own (schema 2.6).
-    hand: new Map(b.boxes.flatMap((box) => box.hands.map(
-      (hand): [string, StateBag] => [hand.id, bagFromDecls(half("hand", handDeclsOf(internals, hand)), at("hand", hand.id))]))),
-    // Every box's tags, then the project map's zones ONCE (design/project-
-    // map-contract.md 3.3): a zone is one bag per partition, whichever boxes'
-    // hands are dealt to it.
-    value: new Map(allTagGroups(b).flatMap((group) => group.tags.map(
-      (tag): [string, StateBag] => [tag.id, bagFromDecls(half("value", tag.properties ?? []), at("value", tag.id))]))),
+    story: bagFromDecls(decls.story, "story."),
+    box: bags("box"), deck: bags("deck"), hand: bags("hand"), value: bags("value"),
   };
 };
 
@@ -738,7 +760,7 @@ const loadPartition = (p: Partition, values: PropsPartition | undefined): void =
   // them: orphaned keys (deleted entities, re-flagged properties) drop;
   // newly declared properties keep defaults.
   p.story.load(values?.story ?? {});
-  for (const kind of ["box", "deck", "hand", "value"] as const) {
+  for (const kind of OWNED_SCOPES) {
     for (const [id, bag] of Object.entries(values?.[kind] ?? {})) {
       p[kind].get(id)?.load(bag);
     }
@@ -845,7 +867,7 @@ function walkPartition(
     story: walkScope(decls.story, values?.story, (n) => `story.${n}`, flow, draft),
     box: {}, deck: {}, hand: {}, value: {},
   };
-  for (const kind of ["box", "deck", "hand", "value"] as const) {
+  for (const kind of OWNED_SCOPES) {
     const savedKind = values?.[kind] ?? {};
     const ids = [...new Set([...decls[kind].keys(), ...Object.keys(savedKind)])].sort();
     for (const id of ids) {
@@ -905,7 +927,7 @@ const refuseUnreadableBundle = (bundle: Bundle): void => {
   // runtime does not know may not have any of the shape the rest reads.
   const schema = (bundle as { schema?: unknown }).schema;
   if (typeof schema !== "string" || !BUNDLE_SCHEMAS.includes(schema)) {
-    throw new Error(`unsupported bundle schema: ${String(schema)} (this runtime reads ${BUNDLE_SCHEMAS.join(" and ")})`);
+    throw new StoryletError(`unsupported bundle schema: ${String(schema)} (this runtime reads ${BUNDLE_SCHEMAS.join(" and ")})`);
   }
   const problems: string[] = [];
   const map = bundle.map?.group;
@@ -971,7 +993,7 @@ const refuseUnreadableBundle = (bundle: Bundle): void => {
       }
     }
   }
-  if (problems.length > 0) throw new Error(`bundle refused: ${problems.join("; ")}`);
+  if (problems.length > 0) throw new StoryletError(`bundle refused: ${problems.join("; ")}`);
 };
 
 export class Engine {
@@ -1029,7 +1051,9 @@ export class Engine {
             this.engineLog.splice(0, this.engineLog.length - this.internals.logCap);
           }
         }
-        for (const h of this.engineTraceHandlers) h(flow, event);
+        // From a copy (ruling F): a handler that subscribes or unsubscribes
+        // during an event changes who hears the NEXT one, never this one.
+        for (const h of [...this.engineTraceHandlers]) h(flow, event);
       },
       engineTracing: () => this.engineTraceHandlers.size > 0,
     };
@@ -1117,7 +1141,7 @@ export class Engine {
     const internals = this.internals;
     const reg = internals.registry;
     const worldDecls = internals.bundle.world.properties as unknown as ScopeDeclaration[];
-    internals.shared = buildPartition(internals, sharedHalf);
+    internals.shared = buildPartition(internals, internals.sharedDecls);
     internals.worldReadOnly = new Set(internals.bundle.world.properties.filter((d) => d.writable === false).map((d) => d.name));
     const registered: string[] = [];
     // Register now, and remember how, so a failed hotSwap can register again.
@@ -1233,7 +1257,7 @@ export class Engine {
     // The world's claims as they stand WITHOUT this name, taken before the
     // replace: a resume competes with the other flows, never with the flow it
     // is replacing (which is about to release everything it holds).
-    const otherClaims = opts.restore !== undefined ? this.sharedClaimsExcept(id) : undefined;
+    const otherClaims = opts.restore !== undefined ? this.sharedClaims(id) : undefined;
     // Replacing an existing id KEEPS its place in the order. `close()` would
     // drop the key, and a JS Map re-inserts a deleted key at the END, so
     // openFlow("a"); openFlow("b"); openFlow("a") listed [b, a] here and
@@ -1333,7 +1357,10 @@ export class Engine {
     return this.spent.has(cardId);
   }
 
-  /** @internal */
+  /** Take a shared one-shot out of the world, as its play would. Kept in the
+   *  published types (no internal tag, which the type build strips):
+   *  Storyletter's Board and the Storylet Server both call it to carry a run's
+   *  spent cards into a new run, and nothing else offers that. */
   markTaken(cardId: string): void {
     this.spent.add(cardId);
   }
@@ -1361,21 +1388,13 @@ export class Engine {
 
   /** @internal - shared claims across every LIVE flow, card id -> holders.
    *  Derived, which is what makes closeFlow and the openFlow replace release
-   *  what a flow was holding: its board leaves the map with it. */
-  sharedClaims(): Map<string, number> {
-    const counts = new Map<string, number>();
-    for (const flow of this.flowsById.values()) {
-      for (const id of flow.heldCardIds()) counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-    return counts;
-  }
-
-  /** The same ledger with one name left out: what the REST of the world
-   *  holds, which is the question a resume under that name has to ask. */
-  private sharedClaimsExcept(id: string): Map<string, number> {
+   *  what a flow was holding: its board leaves the map with it. `except`
+   *  leaves one flow out: what the REST of the world holds, which is the
+   *  question a resume under that name has to ask. */
+  sharedClaims(except?: string): Map<string, number> {
     const counts = new Map<string, number>();
     for (const [flowId, flow] of this.flowsById) {
-      if (flowId === id) continue;
+      if (flowId === except) continue;
       for (const cardId of flow.heldCardIds()) counts.set(cardId, (counts.get(cardId) ?? 0) + 1);
     }
     return counts;
@@ -1395,7 +1414,7 @@ export class Engine {
     const value = found.kind === "world" ? this.internals.worldResolver.get(found.name)
       : found.kind === "scope" ? this.internals.registry.get(found.token, found.name)
       : found.bag.get(found.name);
-    if (value === undefined) throw new Error(`no property at "${path}"`);
+    if (value === undefined) throw new StoryletError(`no property at "${path}"`);
     return value;
   }
 
@@ -1403,7 +1422,7 @@ export class Engine {
     const found = this.resolveShared(path);
     if (found.kind === "world") {
       if (!this.internals.worldSet) {
-        throw new Error(`@world is read-only here: the host bound no write`);
+        throw new StoryletError(`@world is read-only here: the host bound no write`);
       }
       this.internals.worldSet(found.name, value, true);
       return;
@@ -1425,7 +1444,7 @@ export class Engine {
     | { kind: "bag"; bag: StateBag; name: string } {
     const parts = path.split(".");
     const perFlow = (): never => {
-      throw new Error(`"${path}" is per-flow state - read it on a Flow, not the Engine`);
+      throw new StoryletError(`"${path}" is per-flow state - read it on a Flow, not the Engine`);
     };
     if (parts.length === 2 && parts[0] === "world") return { kind: "world", name: parts[1]! };
     // Another engine's game-wide scope (`patter.gold`): every engine reads every scope.
@@ -1434,23 +1453,23 @@ export class Engine {
     }
     if (parts.length === 2 && parts[0] === "story") {
       const name = parts[1]!;
-      if (this.internals.shared.story.get(name) !== undefined) return { kind: "bag", bag: this.internals.shared.story, name };
+      if (ownValue(this.internals.shared.story, name) !== undefined) return { kind: "bag", bag: this.internals.shared.story, name };
       if (this.internals.flowDecls.story.some((d) => d.name === name)) perFlow();
-      throw new Error(`no property at "${path}"`);
+      throw new StoryletError(`no property at "${path}"`);
     }
-    if (parts.length === 3 && (parts[0] === "box" || parts[0] === "deck" || parts[0] === "hand" || parts[0] === "value")) {
-      const kind = parts[0] as OwnedScope;
+    if (parts.length === 3 && isOwnedScope(parts[0])) {
+      const kind = parts[0];
       const [, segment, name] = parts as unknown as [string, string, string];
       const owner = ownerOrThrow(this.internals, kind, segment, name);
       if (owner.legacy) this.diagnose(legacyAddressMessage(this.internals, kind, segment, name));
       const id = owner.id;
       const bag = this.internals.shared[kind].get(id);
-      if (bag !== undefined && bag.get(name) !== undefined) return { kind: "bag", bag, name };
+      if (bag !== undefined && ownValue(bag, name) !== undefined) return { kind: "bag", bag, name };
       if (this.internals.flowDecls[kind].get(id)?.some((d) => d.name === name)) perFlow();
-      if (bag === undefined && !this.internals.flowDecls[kind].has(id)) throw new Error(`no ${kind} store "${segment}"`);
-      throw new Error(`no property at "${path}"`);
+      if (bag === undefined && !this.internals.flowDecls[kind].has(id)) throw new StoryletError(`no ${kind} store "${segment}"`);
+      throw new StoryletError(`no property at "${path}"`);
     }
-    throw new Error(`bad property path "${path}"`);
+    throw new StoryletError(`bad property path "${path}"`);
   }
 
   /** The engine's own surface has no flow, so an engine-level diagnostic
@@ -1469,7 +1488,7 @@ export class Engine {
   private assertExternalScopes(): void {
     for (const token of this.internals.bundle.externalScopes ?? []) {
       if (!this.internals.registry.has(token)) {
-        throw new Error(`this content names @${token}, which no engine on this registry registered: `
+        throw new StoryletError(`this content names @${token}, which no engine on this registry registered: `
           + `give every engine the game's one registry`);
       }
     }
@@ -1488,9 +1507,7 @@ export class Engine {
         ...(d.stages !== undefined ? { stages: d.stages } : {}),
         // @world is FOREIGN - a host resolver backs it - so writability is whether that
         // resolver can be written at all AND what the declaration says, which is the
-        // shared registry's own rule for a foreign scope (its foreignWritable). The
-        // `as PropertyView` cast this replaced was hiding the field's absence: the row
-        // type has always required it, and these rows shipped without one.
+        // shared registry's own rule for a foreign scope (its foreignWritable).
         //
         // A row is where `writable: false` is meant to SHOW (Reboot.md 10): it tells a
         // state panel this is the game's value, not the story's. It does not stop the
@@ -1515,7 +1532,7 @@ export class Engine {
    *  the host mounts it itself. */
   listBags(): BagMount[] {
     const mounts: BagMount[] = [{ prefix: "story", bag: this.internals.shared.story }];
-    for (const kind of ["box", "deck", "hand", "value"] as const) {
+    for (const kind of OWNED_SCOPES) {
       for (const [id, bag] of this.internals.shared[kind]) mounts.push({ prefix: addressOf(this.internals, kind, id), bag });
     }
     return mounts;
@@ -1523,8 +1540,9 @@ export class Engine {
 
   /** Every flow's trace, one stream, each event tagged with its flow id. */
   subscribeTrace(handler: EngineTraceHandler): () => void {
+    // A Set: the same handler subscribed twice is registered once (ruling F).
     this.engineTraceHandlers.add(handler);
-    return () => this.engineTraceHandlers.delete(handler);
+    return () => { this.engineTraceHandlers.delete(handler); };
   }
 
   // --- persistence (schema 4) -------------------------------------------------
@@ -1548,7 +1566,9 @@ export class Engine {
    */
   hotSwap(bundle: Bundle, opts: EngineOptions = {}): { engine: Engine; report: LoadReport } {
     if (bundle.content.project !== this.internals.bundle.content.project) {
-      throw new Error(`save is for project "${this.internals.bundle.content.project}", bundle is "${bundle.content.project}"`);
+      // Names the BUNDLE: there is no save in a hot swap, so the load's own
+      // "save is for project" wording pointed the reader at the wrong thing.
+      throw new StoryletError(`hotSwap: the bundle is for project "${bundle.content.project}", this engine runs "${this.internals.bundle.content.project}"`);
     }
     const options: EngineOptions = { ...this.creationOptions, ...opts };
     const snapshot = this.saveGame();
@@ -1617,7 +1637,8 @@ export class Engine {
 
   /** The registry's values in CANONICAL order, the order a load rebuilds them
    *  in: the engine-wide keys as the constructor registered them, then each
-   *  flow's keys in `flows()` order (each flow's own registration order), then
+   *  flow's keys in the order the save's `flows` lists the flows (each flow's
+   *  own registration order), then
    *  anything else the registry holds (values still waiting for a key), as the
    *  registry lists it. The registry itself lists keys in registration order,
    *  and a flow replaced in place (`open()` above keeps its slot in
@@ -1627,7 +1648,14 @@ export class Engine {
    *  save loaded and saved again no longer equal to itself. It is the
    *  2026-08-29 rule carried into the section save@2 moved the per-flow values
    *  to (2026-10-01). Order does not matter on READ (`partitionsFromSections`
-   *  sorts by key shape), so a save written in the old order loads as before. */
+   *  sorts by key shape), so a save written in the old order loads as before.
+   *
+   *  "The order the save lists them" is JS OBJECT order (ruling E,
+   *  2026-10-06), which is not always `flows()` order: a flow id that looks like
+   *  an integer ("7") comes first, ascending, in any JS object, and a load
+   *  reopens the flows in the order the parsed save hands them over. Without
+   *  this, `openFlow("main"); openFlow("7")` saved main's keys first and the
+   *  loaded engine saved 7's first. */
   private registrySection(): Sections {
     const all = this.internals.registry.save() as Sections;
     const out: Sections = {};
@@ -1635,7 +1663,7 @@ export class Engine {
       if (Object.prototype.hasOwnProperty.call(all, key) && !Object.prototype.hasOwnProperty.call(out, key)) out[key] = all[key]!;
     };
     for (const { key } of this.sharedMounts) take(key);
-    for (const flow of this.flowsById.values()) for (const key of flow.registeredKeys()) take(key);
+    for (const flow of Object.values(Object.fromEntries(this.flowsById))) for (const key of flow.registeredKeys()) take(key);
     for (const key of Object.keys(all)) take(key);
     return out;
   }
@@ -1648,7 +1676,7 @@ export class Engine {
    *  left to save. */
   saveFlow(id: string): FlowSave {
     const flow = this.flowsById.get(id);
-    if (!flow) throw new Error(`unknown flow "${id}"`);
+    if (!flow) throw new StoryletError(`unknown flow "${id}"`);
     // Parked whole, properties included: a parked flow's bags leave the
     // registry when it closes, so its values have to travel with it.
     return structuredClone(flow.snapshot(true));
@@ -1668,7 +1696,7 @@ export class Engine {
    *  build and resumed under the next raises the same questions. Pure. */
   previewFlowRestore(id: string, saved: FlowSave): LoadReport {
     const draft = emptyDraft();
-    this.planFlowRestore(id, saved, this.sharedClaimsExcept(id), draft);
+    this.planFlowRestore(id, saved, this.sharedClaims(id), draft);
     const content = this.internals.bundle.content;
     return finishReport(content, content, [id], draft);
   }
@@ -1712,7 +1740,7 @@ export class Engine {
 
   private assertSameProject(envelope: SaveEnvelope | SaveEnvelopeV1): void {
     if (envelope.content.project !== this.internals.bundle.content.project) {
-      throw new Error(`save is for project "${envelope.content.project}", bundle is "${this.internals.bundle.content.project}"`);
+      throw new StoryletError(`save is for project "${envelope.content.project}", bundle is "${this.internals.bundle.content.project}"`);
     }
   }
 
@@ -1728,7 +1756,7 @@ export class Engine {
     flows: [string, FlowSave][];
   } {
     const schema = (envelope as { schema?: unknown }).schema;
-    if (schema !== SAVE_SCHEMA && schema !== SAVE_SCHEMA_V1) throw new Error(`unsupported save schema: ${String(schema)}`);
+    if (schema !== SAVE_SCHEMA && schema !== SAVE_SCHEMA_V1) throw new StoryletError(`unsupported save schema: ${String(schema)}`);
     const draft = emptyDraft();
     // Where the property values are, if this envelope has them: a version 1
     // envelope's partitions, or a standalone engine's registry sections.
@@ -1907,7 +1935,7 @@ export class Flow {
     this.internals = internals;
     this.id = id;
     this.prng = makePrng(seed);
-    this.stores = buildPartition(internals, flowHalf);
+    this.stores = buildPartition(internals, internals.flowDecls);
     // Register the bags: each claims whatever the registry holds for its key (a
     // load); openFlow discarded that first for a fresh flow.
     const put = (key: string, bag: StateBag): void => {
@@ -1921,12 +1949,13 @@ export class Flow {
       this.turnCounts.set(box.id, 0);
       for (const hand of box.hands) this.boardContents.set(hand.id, []);
     }
+    // Own values only (`ownValue`): a name Object.prototype carries is not a
+    // property of any scope here.
     const pair = (own: StateBag | undefined, shared: StateBag | undefined): ScopeResolver => ({
-      get: (n) => own?.get(n) ?? shared?.get(n),
+      get: (n) => ownValue(own, n) ?? ownValue(shared, n),
     });
-    // `internals.shared` is reassigned wholesale by loadGame/reset, but a
-    // load rebuilds every Flow too, so a live flow's readers and the
-    // shared partition are always the same generation.
+    // The shared bags are built once for the engine's life and reseeded in
+    // place by loadGame/reset, so these readers never go stale.
     this.storyReader = pair(this.stores.story, internals.shared.story);
     for (const box of internals.bundle.boxes) {
       this.boxReaders.set(box.id, pair(this.stores.box.get(box.id), internals.shared.box.get(box.id)));
@@ -1978,22 +2007,28 @@ export class Flow {
   }
 
   private assertOpen(): void {
-    if (this.closed) throw new Error(`flow "${this.id}" is closed`);
+    if (this.closed) throw new StoryletError(`flow "${this.id}" is closed`);
+  }
+
+  /** A box by gameId or id, or the refusal every verb that takes one gives. */
+  private resolveBox(boxRef: string): Box<Expression> {
+    const box = this.internals.boxesByGameId.get(boxRef) ?? this.internals.boxesById.get(boxRef);
+    if (!box) throw new StoryletError(`unknown box "${boxRef}"`);
+    return box;
   }
 
   /** A box's current turn (schema 3.4), on THIS flow's clock. */
   turn(boxRef: string): number {
     this.assertOpen();
-    const box = this.internals.boxesByGameId.get(boxRef) ?? this.internals.boxesById.get(boxRef);
-    if (!box) throw new Error(`unknown box "${boxRef}"`);
-    return this.turnCounts.get(box.id) ?? 0;
+    return this.turnCounts.get(this.resolveBox(boxRef).id) ?? 0;
   }
 
   /** Subscribe to this flow's deal/play trace (schema 5). Returns the
    *  unsubscribe. With no subscribers anywhere the flow does no trace work. */
   subscribeTrace(handler: TraceHandler): () => void {
+    // A Set: the same handler subscribed twice is registered once (ruling F).
     this.traceHandlers.add(handler);
-    return () => this.traceHandlers.delete(handler);
+    return () => { this.traceHandlers.delete(handler); };
   }
 
   private get tracing(): boolean {
@@ -2005,7 +2040,10 @@ export class Flow {
       this.logEntries.push({ ...event, seq: this.logSeq++, ...(turn !== undefined ? { turn } : {}) });
       if (this.logEntries.length > this.internals.logCap) this.logEntries.splice(0, this.logEntries.length - this.internals.logCap);
     }
-    for (const handler of this.traceHandlers) handler(event);
+    // From a copy (ruling F): a handler that subscribes or unsubscribes during
+    // an event changes who hears the NEXT one, never this one. A live Set
+    // would call a handler added mid-delivery straight away.
+    for (const handler of [...this.traceHandlers]) handler(event);
     this.internals.emitEngine(this.id, event, turn);
   }
 
@@ -2076,12 +2114,6 @@ export class Flow {
     for (const record of this.playLog) this.indexPlay(record);
   }
 
-  /** `box` is the box whose ask is being evaluated: the play-history
-   *  functions take a bare group name, so it resolves there, and they count
-   *  only that box's own plays (the box is in the index key). That was
-   *  automatic while every group was a box's; a project-map zone is shared,
-   *  and its history is still not (design/project-map-contract.md 3.7, D7).
-   *  History is THIS flow's: countPlayed answers "have I done this". */
   /** One host per box, built once.
    *
    *  The closures below read `this.playCount`, `this.turnCounts` and the rest
@@ -2103,16 +2135,31 @@ export class Flow {
     return made;
   }
 
+  /** `box` is the box whose ask is being evaluated: the play-history
+   *  functions take a bare group name, so it resolves there, and they count
+   *  only that box's own plays (the box is in the index key). That was
+   *  automatic while every group was a box's; a project-map zone is shared,
+   *  and its history is still not (design/project-map-contract.md 3.7, D7).
+   *  History is THIS flow's: countPlayed answers "have I done this". */
   private makeHost(box: Box<Expression>): StoryletsHost {
     /** A group NAME and tag name resolved in THIS box, as the index's key,
      *  with this box in it: a zone's plays in another box are not this box's
-     *  history. Resolved once per call now, where `inTag` used to resolve it
-     *  again for every record in the log. Undefined when either name is
-     *  unknown here, which is the old per-record `false` and answers "never". */
+     *  history. Undefined when either name is unknown here, which answers
+     *  "never".
+     *
+     *  MEMOISED per (group, tag): the answer depends only on the bundle, which
+     *  never changes under a flow, and a history condition asks it once per
+     *  candidate card per ask, each time a walk of the box's groups and then
+     *  the group's tags. */
+    const keys = new Map<string, string | undefined>();
     const keyOf = (group: string, tag: string): string | undefined => {
+      const memo = `${group}\u001f${tag}`;
+      if (keys.has(memo)) return keys.get(memo);
       const found = this.groupInBox(box, group);
       const t = found?.tags.find((v) => v.gameId === tag);
-      return found && t ? tagKey(box.id, found.id, t.id) : undefined;
+      const key = found && t ? tagKey(box.id, found.id, t.id) : undefined;
+      keys.set(memo, key);
+      return key;
     };
     /** Turns-since is measured on the played card's box's clock (3.4). */
     const since = (record: PlayRecord): number => {
@@ -2153,8 +2200,8 @@ export class Flow {
         ...others.scopes,
         world: this.internals.worldResolver,
         story: this.storyReader,
-        box: this.boxReaders.get(box.id) ?? {},
-        deck: deck ? this.deckReaders.get(deck.id) ?? {} : {},
+        box: this.boxReaders.get(box.id) ?? EMPTY_SCOPE,
+        deck: deck ? this.deckReaders.get(deck.id) ?? EMPTY_SCOPE : EMPTY_SCOPE,
         hand: handEnv.bag,
       },
       host: this.host(box) as unknown as Record<string, unknown>,
@@ -2215,14 +2262,12 @@ export class Flow {
   private askForHand(hand: Hand<Expression>, box: Box<Expression>): AskDescriptor {
     const boundTags = new Map<string, string>();
     const askNames: Record<string, string> = {};
-    let condition: Expression | undefined;
-    if (hand.template !== undefined) {
-      const template = this.internals.templatesById.get(hand.template);
-      if (!template) throw new Error(`hand "${effectiveGameId(hand)}": unknown template "${hand.template}"`);
-      for (const [groupId, tagId] of Object.entries(template.bindings ?? {})) {
-        boundTags.set(groupId, tagId);
-      }
-      for (const [groupId, tagId] of Object.entries(hand.chosen ?? {})) {
+    /** A template instance's `chosen` and a standalone hand's rule
+     *  `bindings` bind the same way, so one loop serves both: a card reading
+     *  @hand.<group> must not care HOW the group got bound
+     *  (design/hand-typing.md, the residues). */
+    const bindAll = (bindings: Record<string, string> | undefined): void => {
+      for (const [groupId, tagId] of Object.entries(bindings ?? {})) {
         // A hole filled from a property rather than with a tag: resolve it
         // now, before tag composition (4.6, the hand that moves).
         if (isHoleRef(tagId)) {
@@ -2234,21 +2279,19 @@ export class Flow {
         const tag = found?.group.tags.find((t) => t.id === tagId);
         if (found && tag) askNames[effectiveGameId(found.group)] = effectiveGameId(tag);
       }
+    };
+    let condition: Expression | undefined;
+    if (hand.template !== undefined) {
+      const template = this.internals.templatesById.get(hand.template);
+      if (!template) throw new StoryletError(`hand "${effectiveGameId(hand)}": unknown template "${hand.template}"`);
+      // A template's FIXED bindings bind and are not named in @hand.
+      for (const [groupId, tagId] of Object.entries(template.bindings ?? {})) {
+        boundTags.set(groupId, tagId);
+      }
+      bindAll(hand.chosen);
       condition = template.condition;
     } else {
-      for (const [groupId, tagId] of Object.entries(hand.rule?.bindings ?? {})) {
-        if (isHoleRef(tagId)) {
-          this.fillHoleFromProperty(hand, groupId, tagId, boundTags, askNames);
-          continue;
-        }
-        boundTags.set(groupId, tagId);
-        // ...and name it, exactly as the template branch above does: a card
-        // reading @hand.<group> must not care HOW the group got bound
-        // (design/hand-typing.md, the residues).
-        const found = this.internals.groupsById.get(groupId);
-        const tag = found?.group.tags.find((t) => t.id === tagId);
-        if (found && tag) askNames[effectiveGameId(found.group)] = effectiveGameId(tag);
-      }
+      bindAll(hand.rule?.bindings);
       condition = hand.rule?.condition;
     }
     boundTags.set(PLACE_GROUP, hand.id);
@@ -2264,16 +2307,16 @@ export class Flow {
     for (const [groupRef, tagRef] of Object.entries(criteria)) {
       if (groupRef === PLACE_GROUP) {
         const hand = this.internals.handsByGameId.get(tagRef) ?? this.internals.handsById.get(tagRef);
-        if (!hand) throw new Error(`peek: unknown hand "${tagRef}" in home criteria`);
+        if (!hand) throw new StoryletError(`peek: unknown hand "${tagRef}" in home criteria`);
         boundTags.set(PLACE_GROUP, hand.hand.id);
         continue;
       }
       const found = this.groupInBox(box, groupRef);
       if (!found) {
-        throw new Error(`peek: unknown tag group "${groupRef}" in box "${effectiveGameId(box)}"`);
+        throw new StoryletError(`peek: unknown tag group "${groupRef}" in box "${effectiveGameId(box)}"`);
       }
       const tag = this.tagByGameId(found, tagRef) ?? found.tags.find((t) => t.id === tagRef);
-      if (!tag) throw new Error(`peek: unknown tag "${tagRef}" in group "${effectiveGameId(found)}"`);
+      if (!tag) throw new StoryletError(`peek: unknown tag "${tagRef}" in group "${effectiveGameId(found)}"`);
       boundTags.set(found.id, tag.id);
       askNames[effectiveGameId(found)] = effectiveGameId(tag);
     }
@@ -2384,14 +2427,16 @@ export class Flow {
    *  flow's half. Names are disjoint, so the spread is routing, not
    *  shadowing. */
   private valuesOf(kind: Exclude<PartitionKind, "story">, id: string): PropertyBag {
-    return {
-      ...(this.internals.shared[kind].get(id)?.values ?? {}),
-      ...(this.stores[kind].get(id)?.values ?? {}),
-    };
+    // No prototype: `@hand.constructor` must find nothing, not Object's.
+    return Object.assign(Object.create(null) as PropertyBag,
+      this.internals.shared[kind].get(id)?.values ?? {},
+      this.stores[kind].get(id)?.values ?? {});
   }
 
   private buildHandEnv(ask: AskDescriptor): HandEnv {
-    const bag: PropertyBag = {};
+    // No prototype, as above: the composed @hand is read by plain index, so an
+    // ordinary object would answer `@hand.constructor` with a function.
+    const bag: PropertyBag = Object.create(null) as PropertyBag;
     const sources = new Map<string, HandSource>();
 
     // 1. Tag properties of every bound tag (home binds a hand, not a tag).
@@ -2564,7 +2609,9 @@ export class Flow {
         } else {
           try {
             const v = this.eval(card.priority, deckCtx);
-            if (typeof v !== "number") {
+            // NaN is a number to `typeof` and no rank to a sort (ruling G):
+            // Inf - Inf, an overflow or a host value gets here.
+            if (typeof v !== "number" || Number.isNaN(v)) {
               verdict(card, "priority");
               continue;
             }
@@ -2653,7 +2700,7 @@ export class Flow {
 
   private resolveHand(ref: string): { hand: Hand<Expression>; box: Box<Expression> } {
     const found = this.internals.handsByGameId.get(ref) ?? this.internals.handsById.get(ref);
-    if (!found) throw new Error(`unknown hand "${ref}"`);
+    if (!found) throw new StoryletError(`unknown hand "${ref}"`);
     return found;
   }
 
@@ -2664,8 +2711,7 @@ export class Flow {
    *  trace line. You can never play a card you only peeked. */
   peek(boxRef: string, criteria: Record<string, string> = {}, n?: number): RankedList {
     this.assertOpen();
-    const box = this.internals.boxesByGameId.get(boxRef) ?? this.internals.boxesById.get(boxRef);
-    if (!box) throw new Error(`unknown box "${boxRef}"`);
+    const box = this.resolveBox(boxRef);
     const ask = this.askForPeek(box, criteria);
     const claimCounts = this.claims();
     // Skipped outright when the bundle shares nothing, which is most bundles:
@@ -2673,7 +2719,19 @@ export class Flow {
     // every question the same way a computed one would.
     const worldClaims = this.internals.hasShared ? this.engine.sharedClaims() : new Map<string, number>();
     const trace = this.tracing ? [] : undefined;
-    const { ordered } = this.runAsk(ask, (card, shared) => this.claimVerdict(card, shared, claimCounts, worldClaims), trace);
+    // A peek consumes NO draws (ruling A, 2026-10-06): its tie shuffle and any
+    // random() in a condition run on a throwaway COPY of the flow's generator,
+    // so looking at the stock any number of times leaves the next deal exactly
+    // as it was, and the peek still answers as a deal would now. The host's
+    // closures read `this.prng` live, which is what the swap relies on.
+    const own = this.prng;
+    this.prng = makePrng(own.state());
+    let ordered: CardEntry[];
+    try {
+      ({ ordered } = this.runAsk(ask, (card, shared) => this.claimVerdict(card, shared, claimCounts, worldClaims), trace));
+    } finally {
+      this.prng = own;
+    }
     // CLAMPED. `slice(0, -1)` drops the last card and returns the rest, so a
     // negative n answered with almost the whole list here while every port
     // returned nothing (2026-08-29).
@@ -2695,7 +2753,13 @@ export class Flow {
   /** Re-deal several / all hands (schema 3.5): seeded hand-order shuffle
    *  (fairness), evict, seed the ledger from survivors, fill in order.
    *  Returns the dealt slice - the new contents of exactly the hands this
-   *  call dealt, keyed by hand gameId (board() stays the whole-board read). */
+   *  call dealt, keyed by hand gameId (board() stays the whole-board read).
+   *
+   *  The eviction pass evaluates each hand's condition and deck gates, and the
+   *  fill evaluates them again, asking for the hand twice. That is the draw
+   *  count of a deal and the corpus pins it: merging the two would move every
+   *  random() in a gate and the count of diagnostics (engine review 2026-10,
+   *  section 4). */
   dealMany(handRefs?: string[]): Record<string, DealtCard[]> {
     this.assertOpen();
     const dealt = (handRefs ?? [...this.internals.handsById.keys()].sort())
@@ -2708,10 +2772,16 @@ export class Flow {
       const ask = this.askForHand(hand, box);
       const handEnv = this.buildHandEnv(ask);
       const conditionOk = this.passes(ask.condition, this.evalCtx(box, undefined, handEnv));
+      // ONE context per deck, as the fill builds them (see runAsk): the gate
+      // and every surviving card of that deck are evaluated against it.
       const gateOk = new Map<string, boolean>();
+      const deckCtx = new Map<string, EvalContext>();
       for (const deck of box.decks) {
-        gateOk.set(deck.id, this.passes(deck.condition, this.evalCtx(box, deck, handEnv)));
+        const ctx = this.evalCtx(box, deck, handEnv);
+        deckCtx.set(deck.id, ctx);
+        gateOk.set(deck.id, this.passes(deck.condition, ctx));
       }
+      const tracing = this.tracing;
       const turn = this.turnCounts.get(box.id) ?? 0;
       // Trace events fire after the state they report has landed (a handler
       // reading the board sees the eviction), so they are collected here and
@@ -2730,16 +2800,29 @@ export class Flow {
         if (!conditionOk) return evict(cardId, "hand-condition");
         const entry = this.internals.cardsById.get(cardId);
         if (!entry) return evict(cardId, "vanished");   // edited content: dropped
+        // Its deck is in ANOTHER box now (a load, resume or hot swap into an
+        // edited build): gone from this hand's box, as a deleted card is
+        // (ruling D). It was evicted as "deck-gate" before, by a missing map key.
+        if (entry.box.id !== box.id) return evict(cardId, "vanished");
         if (!gateOk.get(entry.deck.id)) return evict(cardId, "deck-gate");
+        // Taken out of the world by somebody's shared one-shot (ruling C):
+        // checked where the fill checks it, after the gate and before the
+        // flow's own clock, so a card held by one playthrough goes from its
+        // hand once another has spent it, as a cooldown would evict it.
+        if (cardIsShared(entry.card, entry.deck.shared ?? false) && this.engine.isTaken(cardId)) {
+          return evict(cardId, "taken");
+        }
         if ((this.cooldowns[cardId] ?? 0) > turn) return evict(cardId, "cooldown");
         if (!this.tagsMatch(entry.card, handEnv.boundTags)) return evict(cardId, "tags");
-        if (!this.passes(entry.card.condition, this.evalCtx(box, entry.deck, handEnv), `card ${entry.card.gameId} condition`)) {
+        // The label is read only when an eval throws AND tracing is on.
+        if (!this.passes(entry.card.condition, deckCtx.get(entry.deck.id)!,
+          tracing ? `card ${entry.card.gameId} condition` : undefined)) {
           return evict(cardId, "condition");
         }
         return true;
       });
       this.boardContents.set(hand.id, survivors);
-      if (this.tracing) {
+      if (tracing) {
         for (const e of evicted) this.emit({ type: "evict", hand: effectiveGameId(hand), card: e.card, reason: e.reason }, turn);
       }
     }
@@ -2792,12 +2875,7 @@ export class Flow {
    *  unknown box throws, as it does on turn() and peek(). */
   board(boxRef?: string): Record<string, DealtCard[]> {
     this.assertOpen();
-    let keep: string | undefined;
-    if (boxRef !== undefined) {
-      const box = this.internals.boxesByGameId.get(boxRef) ?? this.internals.boxesById.get(boxRef);
-      if (!box) throw new Error(`unknown box "${boxRef}"`);
-      keep = box.id;
-    }
+    const keep = boxRef !== undefined ? this.resolveBox(boxRef).id : undefined;
     return Object.fromEntries([...this.boardContents.entries()]
       .filter(([handId]) => keep === undefined || this.internals.handsById.get(handId)!.box.id === keep)
       .map(([handId, ids]) => [
@@ -2809,10 +2887,10 @@ export class Flow {
   /** Resolve a played/inspected card within a hand on the board. */
   private resolveDealt(cardId: string, handRef: string): { entry: CardEntry; ask: AskDescriptor } {
     const entry = this.internals.cardsById.get(cardId) ?? this.internals.cardsByGameId.get(cardId);
-    if (!entry) throw new Error(`unknown card "${cardId}"`);
+    if (!entry) throw new StoryletError(`unknown card "${cardId}"`);
     const { hand, box } = this.resolveHand(handRef);
     if (!(this.boardContents.get(hand.id) ?? []).includes(entry.card.id)) {
-      throw new Error(`card "${effectiveGameId(entry.card)}" is not dealt to hand "${effectiveGameId(hand)}"`);
+      throw new StoryletError(`card "${effectiveGameId(entry.card)}" is not dealt to hand "${effectiveGameId(hand)}"`);
     }
     return { entry, ask: this.askForHand(hand, box) };
   }
@@ -2834,8 +2912,9 @@ export class Flow {
   }
 
   /** Apply an outcome (schema 3.7): the card must sit in a hand on the
-   *  board (you never play a card from inside the deck). Throws before any
-   *  mutation on a gated-shut outcome or a bad write target.
+   *  board (you never play a card from inside the deck). All-or-nothing:
+   *  throws before any mutation on a gated-shut outcome or a refused write
+   *  target, and a refusal changes nothing at all.
    *
    *  A card with NO outcomes is played with none, named as "" (the
    *  no-outcome-play brief, 2026-09-14): a masthead, a notice, a codex entry,
@@ -2850,15 +2929,15 @@ export class Flow {
     const { entry, ask } = this.resolveDealt(cardId, from);
     const bare = outcomeGameId === "";
     if (bare && entry.card.outcomes.length > 0) {
-      throw new Error(`card "${effectiveGameId(entry.card)}" has outcomes (${entry.card.outcomes.map((o) => effectiveGameId(o)).join(", ")}); name the one played`);
+      throw new StoryletError(`card "${effectiveGameId(entry.card)}" has outcomes (${entry.card.outcomes.map((o) => effectiveGameId(o)).join(", ")}); name the one played`);
     }
     const outcome = bare ? undefined : entry.card.outcomes.find((o) => effectiveGameId(o) === outcomeGameId);
-    if (!bare && !outcome) throw new Error(`card "${effectiveGameId(entry.card)}" has no outcome "${outcomeGameId}"`);
+    if (!bare && !outcome) throw new StoryletError(`card "${effectiveGameId(entry.card)}" has no outcome "${outcomeGameId}"`);
 
     const handEnv = this.buildHandEnv(ask);
     const ctx = this.evalCtx(entry.box, entry.deck, handEnv);
     if (outcome && !this.passes(outcome.condition, ctx)) {
-      throw new Error(`outcome "${outcomeGameId}" on "${effectiveGameId(entry.card)}" is gated shut`);
+      throw new StoryletError(`outcome "${outcomeGameId}" on "${effectiveGameId(entry.card)}" is gated shut`);
     }
 
     // The played card's box's clock advances (schema 3.4); computed up
@@ -2872,15 +2951,26 @@ export class Flow {
     const perPlay = entry.box.turn !== undefined ? 0 : this.internals.bundle.settings.playAdvancesTurns;
     const newTurn = (this.turnCounts.get(entry.box.id) ?? 0) + (opts.advanceTurns ?? perPlay);
 
-    // Every right-hand side evaluates against PRE-play state, then all
-    // writes land (schema 3.7).
-    const writes: { target: string; value: ScalarValue }[] = [];
-    for (const [target, expr] of Object.entries(outcome?.changes ?? {})) {
-      writes.push({ target, value: this.eval(expr, ctx) });
+    // A play is ALL-OR-NOTHING (ruling B, 2026-10-06). Every target is
+    // resolved and checked first, so a refusal the engine can know in advance
+    // lands nothing and emits nothing; then every right-hand side evaluates
+    // against PRE-play state (schema 3.7); then the writes land. A refusal
+    // only the landing can meet puts back what the earlier writes replaced.
+    // The write events fire once all of them have landed.
+    const changes = Object.entries(outcome?.changes ?? {})
+      .map(([target, expr]) => ({ target, expr, plan: this.planWrite(target, entry, handEnv) }));
+    const writes = changes.map((c) => ({ ...c, value: this.eval(c.expr, ctx) }));
+    const landed: { target: string; plan: WritePlan; value: ScalarValue; prev: ScalarValue | undefined }[] = [];
+    try {
+      for (const w of writes) landed.push({ target: w.target, plan: w.plan, value: w.value, prev: this.landWrite(w.plan, w.value) });
+    } catch (e) {
+      for (const l of [...landed].reverse()) this.undoWrite(l.plan, l.prev);
+      throw e;
     }
-    for (const { target, value } of writes) {
-      const { path, prev } = this.applyWrite(target, value, entry, handEnv);
-      if (this.tracing) this.emit({ type: "write", target, path, value, ...(prev !== undefined ? { prev } : {}) }, newTurn);
+    if (this.tracing) {
+      for (const { target, plan, value, prev } of landed) {
+        this.emit({ type: "write", target, path: plan.path, value, ...(prev !== undefined ? { prev } : {}) }, newTurn);
+      }
     }
 
     const outcomeId = outcome ? effectiveGameId(outcome) : "";
@@ -2912,67 +3002,99 @@ export class Flow {
     return addressOf(this.internals, kind, id);
   }
 
-  /** Land one change in whichever partition declares the name: the flow's
-   *  bag when the property is per-flow, the shared bag when it is shared -
-   *  the union/partition invariant made executable. */
-  private landIn(kind: Exclude<PartitionKind, "story"> | "story", id: string | undefined, name: string, value: ScalarValue, path: string): { path: string; prev?: ScalarValue } {
+  /** Find the bag that declares one change's name: the flow's bag when the
+   *  property is per-flow, the shared bag when it is shared - the
+   *  union/partition invariant made executable. Read by OWN value, so a name
+   *  Object.prototype carries is no property. Throws, landing nothing, when
+   *  no bag declares it or the declaration is `writable: false`. */
+  private planBag(kind: Exclude<PartitionKind, "story"> | "story", id: string | undefined, name: string, path: string): WritePlan {
     const own = kind === "story" ? this.stores.story : id !== undefined ? this.stores[kind].get(id) : undefined;
     const shared = kind === "story" ? this.internals.shared.story : id !== undefined ? this.internals.shared[kind].get(id) : undefined;
-    const bag = own !== undefined && own.get(name) !== undefined ? own
-      : shared !== undefined && shared.get(name) !== undefined ? shared
+    const bag = ownValue(own, name) !== undefined ? own
+      : ownValue(shared, name) !== undefined ? shared
       : undefined;
-    if (bag === undefined) throw new Error(`no property at "${path}"`);
-    // An engine write: the bag's subscribers fire (the firing rule).
-    const change = bag.set(name, value);
-    return { path, ...(change.prev !== undefined ? { prev: change.prev } : {}) };
+    if (bag === undefined) throw new StoryletError(`no property at "${path}"`);
+    // The kernel would refuse this at `set`, with this text; asked here so the
+    // refusal comes before any of the play's writes has landed.
+    if (bag.declarations().some((d) => d.name === name && d.writable === false)) {
+      throw new StoryletError(`'${name}' is read-only`);
+    }
+    return { kind: "bag", bag, name, path };
   }
 
-  /** Land one change; returns the resolved store path (for the trace) and
-   *  the value it replaced (for the log's "0 -> 1" reading). */
-  private applyWrite(target: string, value: ScalarValue, entry: CardEntry, handEnv: HandEnv): { path: string; prev?: ScalarValue } {
+  /** Resolve and check one change target, writing nothing: every refusal a
+   *  write can meet that the engine can know in advance is met HERE, so a
+   *  play checks all its targets before any write lands (ruling B). */
+  private planWrite(target: string, entry: CardEntry, handEnv: HandEnv): WritePlan {
     const match = /^@([a-z]+)\.([A-Za-z_][A-Za-z0-9_-]*)$/.exec(target);
-    if (!match) throw new Error(`bad change target "${target}"`);
+    if (!match) throw new StoryletError(`bad change target "${target}"`);
     const [, scope, name] = match as unknown as [string, string, string];
     switch (scope) {
       case "world": {
-        const worldSet = this.internals.worldSet;
-        if (!worldSet) throw new Error(`@world.${name} cannot be written: the host bound @world read-only`);
+        if (!this.internals.worldSet) throw new StoryletError(`@world.${name} cannot be written: the host bound @world read-only`);
         // The story's own promise, kept HERE and only here, because here is where
         // the story does the writing: the table is consulted before the seam, so
         // an outcome never reaches the bag (which would let a host write past it)
         // nor a bound resolver (which cannot tell the two apart). The host's
         // setProperty is its own path and never asks. Patter's runtime refuses the
         // same write through the shared kernel, so both read one way.
-        if (this.internals.worldReadOnly.has(name)) throw new Error(`'@world.${name}' is read-only (writable: false)`);
-        const prev = this.internals.worldResolver.get(name);
-        worldSet(name, value);
-        return { path: `world.${name}`, ...(prev !== undefined ? { prev } : {}) };
+        if (this.internals.worldReadOnly.has(name)) throw new StoryletError(`'@world.${name}' is read-only (writable: false)`);
+        return { kind: "world", name, path: `world.${name}` };
       }
-      case "story": return this.landIn("story", undefined, name, value, `story.${name}`);
-      case "box": return this.landIn("box", entry.box.id, name, value, `${this.address("box", entry.box.id)}.${name}`);
-      case "deck": return this.landIn("deck", entry.deck.id, name, value, `${this.address("deck", entry.deck.id)}.${name}`);
+      case "story": return this.planBag("story", undefined, name, `story.${name}`);
+      case "box": return this.planBag("box", entry.box.id, name, `${this.address("box", entry.box.id)}.${name}`);
+      case "deck": return this.planBag("deck", entry.deck.id, name, `${this.address("deck", entry.deck.id)}.${name}`);
       case "hand": {
         // Write-back routing (schema 3.6): the composed name remembers its
         // source store; writes to criteria/chosen-tag names are errors.
         const source = handEnv.sources.get(name);
-        if (!source) throw new Error(`@hand.${name} is not composed in this ask`);
-        if (source.kind === "criteria") throw new Error(`@hand.${name} is a chosen tag / criteria name and cannot be written`);
-        return this.landIn(source.kind, source.id, name, value, `${this.address(source.kind, source.id)}.${name}`);
+        if (!source) throw new StoryletError(`@hand.${name} is not composed in this ask`);
+        if (source.kind === "criteria") throw new StoryletError(`@hand.${name} is a chosen tag / criteria name and cannot be written`);
+        return this.planBag(source.kind, source.id, name, `${this.address(source.kind, source.id)}.${name}`);
       }
       default: {
         // Another engine's game-wide scope (`@patter.x`): the family's shared
         // vocabulary lets a card write it, and the registry keeps that engine's
-        // rules (a read-only property is refused). A story write, so no host flag.
-        if (this.internals.registry.has(scope)) {
-          const prev = this.internals.registry.get(scope, name);
-          this.internals.registry.set(scope, name, value);
-          return { path: `${scope}.${name}`, ...(prev !== undefined ? { prev } : {}) };
-        }
+        // rules (a read-only property is refused when the write lands, and the
+        // play then puts back what it had written). A story write, so no host flag.
+        if (this.internals.registry.has(scope)) return { kind: "scope", scope, name, path: `${scope}.${name}` };
         if (this.internals.bundle.externalScopes?.includes(scope)) {
-          throw new Error(`@${scope}.${name} cannot be written: no engine on this registry registered @${scope}`);
+          throw new StoryletError(`@${scope}.${name} cannot be written: no engine on this registry registered @${scope}`);
         }
-        throw new Error(`bad change target scope "@${scope}"`);
+        throw new StoryletError(`bad change target scope "@${scope}"`);
       }
+    }
+  }
+
+  /** Land one planned change; returns the value it replaced (for the log's
+   *  "0 -> 1" reading). An engine write: the bag's subscribers fire (the
+   *  firing rule). */
+  private landWrite(plan: WritePlan, value: ScalarValue): ScalarValue | undefined {
+    switch (plan.kind) {
+      case "world": {
+        const prev = this.internals.worldResolver.get(plan.name);
+        this.internals.worldSet!(plan.name, value);
+        return prev;
+      }
+      case "bag": return plan.bag.set(plan.name, value).prev;
+      case "scope": {
+        const prev = this.internals.registry.get(plan.scope, plan.name);
+        this.internals.registry.set(plan.scope, plan.name, value);
+        return prev;
+      }
+    }
+  }
+
+  /** Put back what one landed change replaced, when a LATER change in the same
+   *  play was refused as it landed (a refusal no plan could see coming: another
+   *  engine's read-only property, a host resolver that throws). Silent and as
+   *  the host, since this is the engine undoing itself, not the story writing. */
+  private undoWrite(plan: WritePlan, prev: ScalarValue | undefined): void {
+    if (prev === undefined) return;
+    switch (plan.kind) {
+      case "world": this.internals.worldSet!(plan.name, prev, true); return;
+      case "bag": plan.bag.set(plan.name, prev, { silent: true, reason: "play refused", host: true }); return;
+      case "scope": this.internals.registry.set(plan.scope, plan.name, prev, { host: true }); return;
     }
   }
 
@@ -2980,8 +3102,7 @@ export class Flow {
    *  session for that box, on THIS flow's clock. */
   advanceTurns(boxRef: string, n = 1): void {
     this.assertOpen();
-    const box = this.internals.boxesByGameId.get(boxRef) ?? this.internals.boxesById.get(boxRef);
-    if (!box) throw new Error(`unknown box "${boxRef}"`);
+    const box = this.resolveBox(boxRef);
     const next = (this.turnCounts.get(box.id) ?? 0) + n;
     this.turnCounts.set(box.id, next);
     if (this.tracing) this.emit({ type: "turns", box: effectiveGameId(box), turn: next }, next);
@@ -3008,7 +3129,7 @@ export class Flow {
   listBags(): BagMount[] {
     this.assertOpen();
     const mounts: BagMount[] = [{ prefix: "story", bag: this.stores.story }];
-    for (const kind of ["box", "deck", "hand", "value"] as const) {
+    for (const kind of OWNED_SCOPES) {
       for (const [id, bag] of this.stores[kind]) mounts.push({ prefix: addressOf(this.internals, kind, id), bag });
     }
     return mounts;
@@ -3031,9 +3152,7 @@ export class Flow {
         ...(d.stages !== undefined ? { stages: d.stages } : {}),
         // @world is FOREIGN - a host resolver backs it - so writability is whether that
         // resolver can be written at all AND what the declaration says, which is the
-        // shared registry's own rule for a foreign scope (its foreignWritable). The
-        // `as PropertyView` cast this replaced was hiding the field's absence: the row
-        // type has always required it, and these rows shipped without one.
+        // shared registry's own rule for a foreign scope (its foreignWritable).
         //
         // A row is where `writable: false` is meant to SHOW (Reboot.md 10): it tells a
         // state panel this is the game's value, not the story's. It does not stop the
@@ -3070,8 +3189,8 @@ export class Flow {
     const found = this.resolvePath(path);
     const value = found.kind === "world" ? this.internals.worldResolver.get(found.name)
       : found.kind === "scope" ? this.internals.registry.get(found.token, found.name)
-      : found.own?.get(found.name) ?? found.shared?.get(found.name);
-    if (value === undefined) throw new Error(`no property at "${path}"`);
+      : ownValue(found.own, found.name) ?? ownValue(found.shared, found.name);
+    if (value === undefined) throw new StoryletError(`no property at "${path}"`);
     return value;
   }
 
@@ -3079,7 +3198,7 @@ export class Flow {
     this.assertOpen();
     const found = this.resolvePath(path);
     if (found.kind === "world") {
-      if (!this.internals.worldSet) throw new Error(`@world is read-only here: the host bound no write`);
+      if (!this.internals.worldSet) throw new StoryletError(`@world is read-only here: the host bound no write`);
       this.internals.worldSet(found.name, value, true);
       return;
     }
@@ -3087,10 +3206,10 @@ export class Flow {
       this.internals.registry.set(found.token, found.name, value, { host: true });
       return;
     }
-    const bag = found.own !== undefined && found.own.get(found.name) !== undefined ? found.own
-      : found.shared !== undefined && found.shared.get(found.name) !== undefined ? found.shared
+    const bag = ownValue(found.own, found.name) !== undefined ? found.own
+      : ownValue(found.shared, found.name) !== undefined ? found.shared
       : undefined;
-    if (bag === undefined) throw new Error(`no property at "${path}"`);
+    if (bag === undefined) throw new StoryletError(`no property at "${path}"`);
     // A host write: silent under the firing rule (no subscriber feedback
     // loop), visible to the bag's audit hook, and flagged HOST so a
     // `writable: false` does not refuse the game its own value.
@@ -3109,8 +3228,8 @@ export class Flow {
     if (parts.length === 2 && parts[0] === "story") {
       return { kind: "bag", own: this.stores.story, shared: this.internals.shared.story, name: parts[1]! };
     }
-    if (parts.length === 3 && (parts[0] === "box" || parts[0] === "deck" || parts[0] === "hand" || parts[0] === "value")) {
-      const kind = parts[0] as OwnedScope;
+    if (parts.length === 3 && isOwnedScope(parts[0])) {
+      const kind = parts[0];
       const [, segment, name] = parts as unknown as [string, string, string];
       const owner = ownerOrThrow(this.internals, kind, segment, name);
       if (owner.legacy && this.tracing) {
@@ -3118,16 +3237,20 @@ export class Flow {
       }
       const own = this.stores[kind].get(owner.id);
       const shared = this.internals.shared[kind].get(owner.id);
-      if (own === undefined && shared === undefined) throw new Error(`no ${kind} store "${segment}"`);
+      if (own === undefined && shared === undefined) throw new StoryletError(`no ${kind} store "${segment}"`);
       return { kind: "bag", ...(own !== undefined ? { own } : {}), ...(shared !== undefined ? { shared } : {}), name };
     }
-    throw new Error(`bad property path "${path}"`);
+    throw new StoryletError(`bad property path "${path}"`);
   }
 
   // --- persistence (schema 4) -------------------------------------------------
 
-  /** @internal - this flow's blob: inside the engine's envelope without its
-   *  properties (the registry has them), or parked whole by saveFlow. */
+  /** This flow's blob: inside the engine's envelope without its properties
+   *  (the registry has them), or parked whole by saveFlow. Engine-side
+   *  plumbing; a host parks a flow with `engine.saveFlow`. It carries no
+   *  internal tag (which the type build strips) only because a Storylet Server
+   *  test calls it with `restore` below; once that test moves to `saveFlow`
+   *  and `openFlow({ restore })`, both should be tagged. */
   snapshot(withProps: boolean): FlowSave {
     return {
       ...(withProps ? { props: partitionValues(this.stores) } : {}),
@@ -3139,8 +3262,11 @@ export class Flow {
     };
   }
 
-  /** @internal - restore a freshly opened flow from its blob (loadGame).
-   *  Orphaned keys (deleted entities) drop; new declarations keep defaults. */
+  /** Restore a freshly opened flow from its blob (loadGame, and openFlow's
+   *  `restore`, both of which clean the blob first). Orphaned keys (deleted
+   *  entities) drop; new declarations keep defaults. Engine-side plumbing that
+   *  skips the checks a restore through `openFlow` makes; see `snapshot` for
+   *  why it is not yet tagged internal. */
   restore(saved: FlowSave): void {
     if (saved.props !== undefined) loadPartition(this.stores, saved.props);
     this.turnCounts = new Map(this.internals.bundle.boxes.map((b) => [b.id, 0]));

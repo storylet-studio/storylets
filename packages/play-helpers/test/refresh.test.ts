@@ -55,6 +55,11 @@ describe("applyLiveBundle", () => {
     if (!r.ok) return;
     expect(r.engine).not.toBe(oldEngine);
     expect(r.bundle.content.hash).toBe("edited1");
+    // The load's report comes back with the engine: what the edit cost the run.
+    expect(r.report.exact).toBe(false);
+    expect(r.report.hash).toEqual({ saved: oldEngine.saveGame().content.hash, bundle: "edited1" });
+    expect(r.report.evicted.map((e) => [e.hand, e.reason])).toEqual([["the-inn", "vanished"]]);
+    expect(r.report.defaultedProperties.map((p) => p.path)).toContain("story.mood");
 
     // loadGame rebuilt every flow: re-take the handle by name.
     const flow = r.engine.getFlow("main")!;

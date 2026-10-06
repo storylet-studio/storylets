@@ -16,11 +16,18 @@ import { defineConfig } from "tsup";
 //
 // Until 2026-09-27 there was one library build, inlined for the zip and published
 // to npm as well, so npm users ran a private registry fixed at build time.
+//
+// Both libraries publish their types with `@internal` members STRIPPED: the
+// engine's own plumbing (`Flow.markClosed`, `Engine.sharedClaims` and the rest)
+// is reachable from JS, but a host typing against the package does not see it,
+// so it cannot be called by accident around the checks the public verbs make.
+const dts = { compilerOptions: { stripInternal: true } };
+
 export default defineConfig([
   {
     entry: ["src/index.ts"],
     format: ["esm", "cjs"],
-    dts: true,
+    dts,
     clean: true,
     sourcemap: true,
   },
@@ -28,7 +35,7 @@ export default defineConfig([
     entry: ["src/index.ts"],
     outDir: "dist-zip",
     format: ["esm", "cjs"],
-    dts: true,
+    dts,
     clean: true,
     sourcemap: true,
     noExternal: [/^@storylet-studio\//, /^@wildwinter\//],

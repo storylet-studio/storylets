@@ -132,15 +132,18 @@ game says it is.
 
 A card's `redraw` policy is its cooldown, measured in its own box's turns: `always` (no
 cooldown), `never` (a one-shot), or a number N (unavailable for N of that box's turns after
-it's played). Cooldowns start when a card is played, not when it's dealt, and a peek never
-touches any clock.
+it's played). Cooldowns start when a card is played, not when it's dealt. A peek never
+touches any clock, and it draws no random numbers either, so however often you look, the next
+deal comes out the same.
 
 Clocks and cooldowns are per flow as well, so advancing a box in one flow moves nothing in
 another, and a one-shot spent by one participant is still there for the next.
 
 On a **shared** card, `redraw: never` is the exception. The first participant to play it takes
 it out of the world for everyone, permanently, and the others are told `taken` rather than
-`cooldown` (they have no cooldown, because it isn't there any more). A *finite* `redraw` stays
+`cooldown` (they have no cooldown, because it isn't there any more). A copy already sitting in
+someone else's hand, which a card with `sharedCopies` above one allows, leaves that hand at its
+next deal, evicted as `taken`. A *finite* `redraw` stays
 personal even on a shared card. The goblin goes straight back in the pool for whoever is
 next, while the participant who just fought it waits their own three turns. For a world-wide
 timer, use `@world`, where your game already keeps the time
