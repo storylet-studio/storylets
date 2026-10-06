@@ -10,6 +10,12 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.18.3] - 2026-10-06
+
+### Changed
+
+- **The Board runs the Storylet Engine 0.10.0**, the October engine review: a play is all-or-nothing, so a refused write leaves nothing half-done; a shared one-shot taken in one playthrough leaves the others' hands at their next deal; a card whose deck moved to another box leaves its hand as vanished; and a priority that comes out as NaN is not dealt. The playable page you publish carries the same engine.
+
 ## [0.18.2] - 2026-10-02
 
 ### Added
