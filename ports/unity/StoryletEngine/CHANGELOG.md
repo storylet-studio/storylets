@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-06
+
 ### Fixed
 
 - **A closed flow lets go of its trace handlers**, as on the other three runtimes. It never emits again, so nothing changes in C#; in Godot and C++ a handler holding its own flow kept that flow alive for good.
