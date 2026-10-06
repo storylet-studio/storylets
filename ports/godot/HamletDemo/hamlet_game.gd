@@ -33,13 +33,19 @@ var at: String = ""              # the hand the player stands at, "" = nowhere
 var playing = null               # {card, flow, shown, choices, outcome, labelled, done}
 var log: Array = []
 
+## The lambdas hold the world Dictionary and the read-only list, never this game: the
+## engines keep the resolver, so a lambda reading a member would hold the game, and the
+## game holds the engines, a loop Godot never frees. So `world` is one Dictionary for
+## the game's life, and a load refills it rather than replacing it.
 func _resolver() -> Dictionary:
+	var w := world
+	var ro := read_only
 	return {
-		"get": func(n: String): return world.get(n),
+		"get": func(n: String): return w.get(n),
 		"set": func(n: String, v) -> void:
-			if read_only.has(n):
+			if ro.has(n):
 				push_error("@world.%s is the game's alone: a story tried to set it" % n); return
-			world[n] = v,
+			w[n] = v,
 	}
 
 func setup(storylet_bundle: Dictionary, patter_bundle: Dictionary) -> void:
@@ -110,7 +116,8 @@ func _choices_from(options: Array) -> Array:
 		var outcome := str(opt.get("gameData", {}).get("outcome", ""))
 		var shut := outcome != "" and not open.has(outcome)
 		var eligible: bool = opt.get("eligible", true)
-		out.append({"id": opt["id"], "text": str(opt.get("text", opt["id"])), "outcome": outcome,
+		var prompt: Dictionary = opt.get("prompt", {})
+		out.append({"id": opt["id"], "text": str(prompt.get("text", opt["id"])), "outcome": outcome,
 			"enabled": eligible and not shut,
 			"why": ("not available here" if not eligible else ("requirements not met" if shut else ""))})
 	return out
@@ -197,7 +204,8 @@ func save() -> Dictionary:
 	return env
 
 func load(env: Dictionary) -> bool:
-	world = env.get("world", world).duplicate()
+	var loaded: Dictionary = env.get("world", world).duplicate()
+	world.clear(); world.merge(loaded)
 	if StoryletSave.deserialize_state(story_engine, str(env["storylets"])) == null and not env.has("storylets"): return false
 	var pt = env["patter"]
 	var patter_ok := PatterSave.deserialize_state(patter, pt) if pt is String else true
