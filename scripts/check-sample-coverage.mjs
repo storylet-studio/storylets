@@ -88,9 +88,6 @@ const OMITTED = [
   { member: "setProperty", why: "DELIBERATE TEACHING: a game changes state by PLAYING an outcome, never by writing @story behind the engine's back. The door exists for hosts driving @world, and the Village has no @world" },
   { member: "peek", why: "asks what WOULD be dealt without dealing it, which is an editor and tooling question (Storyletter's Board uses it). A game deals" },
   { member: "listBags", why: "the mounted property bags: an integrator's introspection, not a player's" },
-  { member: "markTaken", why: "a shared one-shot's spend, restored by a server reloading a run it parked: the engine marks it itself when the card is played, so a game never calls it. Public because the Storylet Server restores spends through it" },
-  { member: "snapshot", why: "a flow's raw state, the seam the Storylet Server parks a participant through. A game saves with saveFlow / saveGame, which the client does" },
-  { member: "restore", why: "snapshot's other half, same seam: a game resumes through openFlow's restore option, which checks the shared claims this skips" },
   { member: "reset", why: "the client restarts by building a fresh Engine, which is what a game does when you start again. `reset` is for a host that must keep the same object" },
 
   // --- the same thing, one layer down ---------------------------------------
@@ -110,9 +107,19 @@ const OMITTED = [
   { member: "previewLoad", why: "what a load would drop, before it drops it. A client loads its OWN save, written by the build it is running, so the answer is always nothing; the caller who needs it is a hot swap" },
   { member: "previewFlowRestore", why: "the same question for one parked flow, and the client parks none" },
 
+  // --- durable state (ruling H, 2026-10-06) ----------------------------------
+  // What outlives a RUN: a venue's run ends at closing time and the next one
+  // starts in the morning, with the players' pockets and the installation's
+  // memory carried across. The Village has no runs: it is one story, saved and
+  // loaded whole, and nothing in it is declared durable.
+  { member: "saveDurable", why: "a pocket or an installation's memory, lifted at the end of a run. The Village has one run that lasts as long as the save does, so its whole save is the thing to keep, and the client keeps it" },
+  { member: "loadDurable", why: "the memory written into the next run's fresh engine, the other half of saveDurable, and the client starts no next run" },
+  { member: "DURABLE_SCHEMA", why: "the schema tag a durable half carries, exported for a host that builds or checks one by hand. A host that only passes saveDurable's result back never needs it" },
+
   // --- engine internals exposed for ports and tests --------------------------
   { member: "makePrng", why: "the seeded PRNG is the engine's own; a game passes a seed and lets it get on with it" },
   { member: "shuffleInPlace", why: "an internal of the deal, exported for the ports and the corpus" },
+  { member: "registry", why: "the engine's scope registry, read back by a game that runs several engines on one registry or saves it itself. The Village runs one engine on the registry the engine made, and saves through serializeState, which needs nothing from it" },
   { member: "createWorldContainer", why: "@world is the HOST game's state and the Village has none - every property it moves is @story, @deck or @hand. A client with world state is the Port Meridian demo's job" },
 ];
 

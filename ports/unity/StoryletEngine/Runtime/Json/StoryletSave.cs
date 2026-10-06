@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Wildwinter.Expr;
@@ -132,6 +133,9 @@ namespace StoryletStudio.StoryletEngine
 
         private static JToken ValueToken(ExprValue v)
         {
+            // A durable half read from a hand-edited file keeps what it could
+            // not read as a null entry, and goes back out as null.
+            if (v == null) return JValue.CreateNull();
             if (v.IsBool) return new JValue(v.AsBool);
             if (v.IsNumber) return NumToken(v.AsNumber);
             if (v.IsString) return new JValue(v.AsString);
@@ -222,10 +226,7 @@ namespace StoryletStudio.StoryletEngine
 
         public static JObject ToJson(SaveEnvelope env)
         {
-            var content = new JObject();
-            if (env.Content.Project != null) content["project"] = env.Content.Project;
-            if (env.Content.Version != null) content["version"] = env.Content.Version;
-            if (env.Content.Hash != null) content["hash"] = env.Content.Hash;
+            var content = ContentToken(env.Content);
             var flows = new JObject();
             foreach (var pair in env.Flows) flows[pair.Key] = FlowToken(pair.Value);
             var o = new JObject
@@ -239,6 +240,116 @@ namespace StoryletStudio.StoryletEngine
             o["shared"] = SharedToken(env.Shared);
             o["flows"] = flows;
             return o;
+        }
+
+        private static JObject ContentToken(BundleContent c)
+        {
+            var content = new JObject();
+            if (c == null) return content;
+            if (c.Project != null) content["project"] = c.Project;
+            if (c.Version != null) content["version"] = c.Version;
+            if (c.Hash != null) content["hash"] = c.Hash;
+            return content;
+        }
+
+        private static BundleContent ParseContent(JToken token)
+        {
+            var c = new BundleContent();
+            if (!(token is JObject content)) return c;
+            c.Project = content.Value<string>("project");
+            c.Version = content.Value<string>("version");
+            c.Hash = content.Value<string>("hash");
+            return c;
+        }
+
+        // --- durable halves <-> JObject (the TS DurableSave wire shape) ----------
+
+        /// <summary>A durable half (Engine.SaveDurable or Flow.SaveDurable) as
+        /// JSON, in the reference's key order: schema, content, values, spent.
+        /// <c>ToJson(half).ToString(Formatting.None)</c> is the text the JS
+        /// reference's JSON.stringify writes for the same half, byte for byte,
+        /// which is how a game keeps one between runs.</summary>
+        public static JObject ToJson(DurableSave half)
+        {
+            var spent = new JArray();
+            foreach (var id in half.Spent ?? new List<string>()) spent.Add(id);
+            return new JObject
+            {
+                ["schema"] = half.Schema,
+                ["content"] = ContentToken(half.Content),
+                ["values"] = BagToken(half.Values ?? new OrderedMap<string, ExprValue>()),
+                ["spent"] = spent,
+            };
+        }
+
+        /// <summary>A durable half back from its JSON, for Engine.LoadDurable or
+        /// OpenFlowOptions.Durable. Parsed as it stands, so the load, not this
+        /// parse, refuses a shape or a project it does not know: a schema or
+        /// project that is not a string is kept as JS's String() prints it, and
+        /// one that is absent as null, which the refusal quotes as
+        /// "undefined".</summary>
+        public static DurableSave DurableFromJson(JObject o)
+        {
+            var content = ParseContent(o["content"]);
+            // The project as JS's String() prints it, null when absent, which
+            // the refusal quotes as "undefined": the same words in every runtime.
+            content.Project = o["content"] is JObject c ? JsText(c["project"]) : null;
+            var half = new DurableSave
+            {
+                // Only a string is the tag: an array whose text happens to spell
+                // it (["storylets/durable@1"]) is refused, as JS refuses it.
+                Schema = o["schema"] != null && o["schema"].Type != JTokenType.String && JsText(o["schema"]) == Model.DURABLE_SCHEMA
+                    ? Model.DURABLE_SCHEMA + " " : JsText(o["schema"]),
+                Content = content,
+                Values = DurableValues(o["values"]),
+            };
+            if (o["spent"] is JArray spent)
+            {
+                foreach (var id in spent) half.Spent.Add(id.Value<string>());
+            }
+            return half;
+        }
+
+        /// <summary>A JSON token as JavaScript's String() prints it, null when
+        /// absent (the refusal then says "undefined"): the text the reference's
+        /// durable refusals quote for a schema or project that is not a
+        /// string.</summary>
+        private static string JsText(JToken token)
+        {
+            if (token == null) return null;
+            switch (token.Type)
+            {
+                case JTokenType.Null: return "null";
+                case JTokenType.Boolean: return token.Value<bool>() ? "true" : "false";
+                case JTokenType.Integer:
+                case JTokenType.Float: return ExprValue.JsNumber(token.Value<double>());
+                case JTokenType.String: return token.Value<string>();
+                // Array.prototype.join: a null item is empty.
+                case JTokenType.Array:
+                    return string.Join(",", ((JArray)token).Select(t => t.Type == JTokenType.Null ? "" : JsText(t)));
+                case JTokenType.Object: return "[object Object]";
+                default: return null;
+            }
+        }
+
+        /// <summary>A durable half's values. A value no property can hold (a
+        /// null, an object, an array of anything but strings) is kept as a
+        /// null entry, never as a value: the load then reports it as JS does,
+        /// retyped where the address is durable on that side and dropped where
+        /// it is not, and writes nothing for it.</summary>
+        private static OrderedMap<string, ExprValue> DurableValues(JToken token)
+        {
+            var bag = new OrderedMap<string, ExprValue>();
+            if (!(token is JObject o)) return bag;
+            foreach (var pair in o)
+            {
+                var v = pair.Value;
+                bool readable = v.Type == JTokenType.Boolean || v.Type == JTokenType.Integer
+                    || v.Type == JTokenType.Float || v.Type == JTokenType.String
+                    || (v is JArray items && items.All(t => t.Type == JTokenType.String));
+                bag.Set(pair.Key, readable ? StoryletJson.ToValue(v) : null);
+            }
+            return bag;
         }
 
         private static OrderedMap<string, ExprValue> ParseBag(JToken token)
@@ -341,13 +452,7 @@ namespace StoryletStudio.StoryletEngine
             {
                 Schema = o["schema"]?.Type == JTokenType.String ? o.Value<string>("schema") : null,
             };
-            var content = o["content"] as JObject;
-            if (content != null)
-            {
-                env.Content.Project = content.Value<string>("project");
-                env.Content.Version = content.Value<string>("version");
-                env.Content.Hash = content.Value<string>("hash");
-            }
+            if (o["content"] is JObject) env.Content = ParseContent(o["content"]);
             if (o["registry"] is JObject registry) env.Registry = ParseKind(registry);
             env.Shared = ParseShared(o["shared"]);
             if (o["flows"] is JObject flows)

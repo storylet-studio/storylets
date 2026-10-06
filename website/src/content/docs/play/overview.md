@@ -71,18 +71,20 @@ On the **engine** (the world):
 | Call | Does |
 |---|---|
 | `new Engine(bundle, { seed, log, world, registry })` | Build the engine. `world` binds your game's `@world` resolver, and `registry` hands it your game's registry. A bundle it can't read is refused here |
-| `openFlow(id, { seed, restore })` | Open (or replace) a named flow. All play happens on the flow it returns, and `restore` opens it as it was |
+| `openFlow(id, { seed, restore, durable })` | Open (or replace) a named flow. All play happens on the flow it returns; `restore` opens it as it was, and `durable` opens it fresh with its [pocket](/play/world-state/#durable-state-that-outlives-a-run) in |
 | `getFlow(id)` / `flows()` / `closeFlow(id)` | Find, list, and close flows; a closed flow's handle refuses every call |
 | `reset()` | Close every flow and reseed shared state |
 | `hotSwap(bundle, options)` | A new engine over an edited bundle, carrying the run; returns it with the load report ([Live Link](/play/live-link/#live-refresh)) |
 | `saveGame()` / `loadGame(envelope)` | The whole run (shared state plus every flow) in and out. The load returns a report |
 | `saveFlow(id)` | One flow's state on its own, to park a playthrough that is stepping away |
+| `saveDurable()` / `loadDurable(memory)` | The shared [durable](/play/world-state/#durable-state-that-outlives-a-run) state, to carry into a new run. The load returns a report |
 | `previewLoad(envelope)` / `previewFlowRestore(id, save)` | What that load would change, without changing it |
 | `getProperty(path)` / `setProperty(path, value)` | Shared state and `@world` only; a per-flow path is refused |
 | `subscribeTrace(handler)` | Every flow's events, one stream, tagged with the flow id |
 | `log()` / `clearLog()` | The run's retained log, if you asked for one: every flow's entries in one order, each naming its flow |
 | `listProperties()` / `listBags()` | Every shared property, and the shared bags behind them |
 | `sharedClaims()` | How many copies of each card the world's flows are holding (shared scarcity) |
+| `registry` | The scope registry the engine reads, whether you handed it in or the engine made its own |
 
 On a **flow** (one playthrough):
 
@@ -101,6 +103,7 @@ On a **flow** (one playthrough):
 | `getProperty(path)` / `setProperty(path, value)` | Read and write state by path (the flow's merged view) |
 | `subscribeTrace(handler)` | Stream every deal, peek, evict, play, write, turn, and diagnostic |
 | `log()` / `clearLog()` | The retained flow log, if you asked for one |
+| `saveDurable()` | This flow's durable state, its pocket, for `openFlow`'s `durable` in a new run |
 
 And beside both, a free function rather than a method on either. `describeBundle(bundle)`
 tells you what a bundle offers (its boxes, hands, decks, and declared properties) without

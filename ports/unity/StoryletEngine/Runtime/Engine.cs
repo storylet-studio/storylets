@@ -226,11 +226,72 @@ namespace StoryletStudio.StoryletEngine
         /// back, and is reported as claimed-elsewhere. Ask PreviewFlowRestore
         /// first to see that coming.</summary>
         public FlowSave Restore = null;
-        /// <summary>Handed the Restore's LoadReport as it happens - the same
-        /// report PreviewFlowRestore returns for the same blob. Ignored without
-        /// Restore; the report has nowhere else to go, since OpenFlow returns
-        /// the handle.</summary>
+        /// <summary>Open this flow with its POCKET in: a durable half from
+        /// Flow.SaveDurable, written into the fresh flow before the handle comes
+        /// back (ruling H). The flow starts as any new flow does, on its own
+        /// seed and clocks, with the pocket's values laid over its defaults and
+        /// its durable spends spent. What no longer fits this build is reported
+        /// through OnRestoreReport, as LoadDurable reports the engine's half.
+        ///
+        /// Refused together with Restore: a restore already carries the flow's
+        /// durable values, so a pocket beside it would be a second answer for
+        /// the same property, and which one won would be a rule nobody could
+        /// see.</summary>
+        public DurableSave Durable = null;
+        /// <summary>Handed the report of a Restore or a Durable as it happens.
+        /// For a restore it is the same report PreviewFlowRestore returns for the
+        /// same blob. Ignored without either; the report has nowhere else to go,
+        /// since OpenFlow returns the handle.</summary>
         public Action<LoadReport> OnRestoreReport = null;
+    }
+
+    /// <summary>One DURABLE HALF (ruling H, 2026-10-06): what outlives a run.
+    /// The engine's half (Engine.SaveDurable) is the installation's memory, a
+    /// flow's half (Flow.SaveDurable) is the player's pocket, and the two have
+    /// one shape.
+    ///
+    /// Keyed the way everything host-facing is, because a half is meant to
+    /// cross builds: a value by its property ADDRESS, exactly as
+    /// ListProperties() prints it and SetProperty takes it ("story.souls",
+    /// "hand.the-elder.met", "value.harbour/docks.lamps"), and a spend by the
+    /// card's GAMEID. A save keys by internal id so it survives a rename; a
+    /// durable half keys by name so a person can read it, and a rename shows
+    /// up in the report instead. StoryletSave.SerializeDurable writes it as the
+    /// JS reference's JSON.</summary>
+    public sealed class DurableSave
+    {
+        /// <summary>Model.DURABLE_SCHEMA.</summary>
+        public string Schema = Model.DURABLE_SCHEMA;
+        /// <summary>The build it was taken from: a load reports drift against
+        /// it, and refuses another project's.</summary>
+        public BundleContent Content = new BundleContent();
+        /// <summary>Every durable property on this half, by address, keys
+        /// sorted.</summary>
+        public OrderedMap<string, ExprValue> Values = new OrderedMap<string, ExprValue>();
+        /// <summary>The durable redraw:never spends on this half, by card
+        /// gameId, sorted.</summary>
+        public List<string> Spent = new List<string>();
+    }
+
+    /// <summary>One durable declaration on one side of the sharing flag, with
+    /// the address a durable half keys it by and where its bag is.</summary>
+    internal sealed class DurableProp
+    {
+        public string Address;
+        /// <summary>"story", or one of Engine.OwnedScopes.</summary>
+        public string Kind;
+        /// <summary>The owner's internal id; null for "story".</summary>
+        public string Owner;
+        public PropertyDecl Decl;
+    }
+
+    /// <summary>What a durable half will write, decided before anything is
+    /// written.</summary>
+    internal sealed class DurablePlan
+    {
+        public readonly OrderedMap<DurableProp, ExprValue> Values = new OrderedMap<DurableProp, ExprValue>();
+        /// <summary>Internal card ids to spend.</summary>
+        public readonly List<string> Cards = new List<string>();
     }
 
     /// <summary>A card view in a dealt hand or a peeked list. Carries NO outcome
@@ -675,6 +736,13 @@ namespace StoryletStudio.StoryletEngine
         /// has to say what the shared side WOULD hold without building a bag,
         /// which is what makes PreviewLoad pure.</summary>
         private readonly DeclSet _sharedDecls = new DeclSet();
+        /// <summary>The durable declarations and durable cards on each side
+        /// (ruling H), precomputed once from the two DeclSets and the
+        /// decks.</summary>
+        internal List<DurableProp> _durableShared = new List<DurableProp>();
+        internal List<DurableProp> _durableFlow = new List<DurableProp>();
+        internal readonly List<CardEntry> _durableSharedCards = new List<CardEntry>();
+        internal readonly List<CardEntry> _durableFlowCards = new List<CardEntry>();
 
         /// <summary>The shared stores, registered in the registry for the
         /// engine's life. Reseeded in place by Reset and by a load that carries
@@ -704,6 +772,13 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>True when the engine made the registry: SaveGame() then
         /// carries its values.</summary>
         private readonly bool _ownsRegistry;
+
+        /// <summary>The registry this engine's bags live in: the game's, the very
+        /// object EngineOptions.Registry passed in, or the one the engine made
+        /// because it was given none. The same object for the engine's life. A
+        /// HotSwap replacement built on the game's registry answers that same
+        /// registry; a standalone engine's replacement makes its own.</summary>
+        public ScopeRegistry Registry => _registry;
 
         // --- registry keys ------------------------------------------------------
         //
@@ -961,6 +1036,10 @@ namespace StoryletStudio.StoryletEngine
                         _cardsById.Set(card.Id, entry);
                         _cardsByGameId.Set(Model.EffectiveGameId(card), entry);
                         if (card.Shared == true) _hasShared = true;
+                        if (CardIsDurable(card, deck))
+                        {
+                            (Flow.CardIsShared(card, deck.Shared ?? false) ? _durableSharedCards : _durableFlowCards).Add(entry);
+                        }
                     }
                 }
                 foreach (var template in box.HandTemplates) _templatesById.Set(template.Id, template);
@@ -1014,6 +1093,8 @@ namespace StoryletStudio.StoryletEngine
                     _sharedDecls.Value.Set(tag.Id, Half("value", tag.Properties ?? new List<PropertyDecl>(), true));
                 }
             }
+            _durableShared = DurableProps(_sharedDecls);
+            _durableFlow = DurableProps(_flowDecls);
             WorldScope = new WorldSource { Owner = this };
             InitShared();
         }
@@ -1222,6 +1303,22 @@ namespace StoryletStudio.StoryletEngine
         /// first.</summary>
         private Flow Open(string id, OpenFlowOptions opts, bool claim)
         {
+            if (opts.Durable != null && opts.Restore != null)
+            {
+                throw new StoryletError($"openFlow \"{id}\": restore and durable cannot be given together; "
+                    + "a restore already carries the flow's durable state");
+            }
+            // A pocket is checked and planned before the name is touched: a
+            // refusal, and anything the plan finds, must leave the flow already
+            // open as it was.
+            DurablePlan durablePlan = null;
+            ReportDraft durableDraft = null;
+            if (opts.Durable != null)
+            {
+                AssertDurable(opts.Durable);
+                durableDraft = new ReportDraft();
+                durablePlan = PlanDurable(_durableFlow, _durableFlowCards, opts.Durable, id, durableDraft);
+            }
             AssertExternalScopes();
             // The world's claims as they stand WITHOUT this name, taken before
             // the replace: a resume competes with the other flows, never with
@@ -1252,6 +1349,11 @@ namespace StoryletStudio.StoryletEngine
                 {
                     opts.OnRestoreReport(FinishReport(_bundle.Content, _bundle.Content, new List<string> { id }, draft));
                 }
+            }
+            if (durablePlan != null)
+            {
+                flow.WriteDurable(durablePlan);
+                opts.OnRestoreReport?.Invoke(FinishReport(_bundle.Content, opts.Durable.Content, new List<string> { id }, durableDraft));
             }
             return flow;
         }
@@ -1341,6 +1443,10 @@ namespace StoryletStudio.StoryletEngine
 
         internal bool IsTaken(string cardId) { return _spent.Contains(cardId); }
 
+        /// <summary>Take a shared one-shot out of the world, as its play does.
+        /// Keyed by internal id. A host carries spends across a run with
+        /// SaveDurable and LoadDurable, which speak gameIds and check that the
+        /// card is still one that may be carried (ruling H).</summary>
         internal void MarkTaken(string cardId) { _spent.Add(cardId); }
 
         private List<string> SpentIds()
@@ -1799,6 +1905,210 @@ namespace StoryletStudio.StoryletEngine
             var flow = _flows.GetOrDefault(id);
             if (flow == null) throw new StoryletError($"unknown flow \"{id}\"");
             return flow.Snapshot(true);
+        }
+
+        // --- durable state (ruling H, 2026-10-06) ---------------------------------
+
+        /// <summary>The engine's DURABLE HALF, the installation's memory: every
+        /// shared Durable property's value by its address, and every shared
+        /// durable one-shot that has been spent, by card gameId. What a new run
+        /// starts from, through LoadDurable; a flow's own half is
+        /// Flow.SaveDurable.</summary>
+        public DurableSave SaveDurable()
+        {
+            var spent = new List<string>();
+            foreach (var entry in _durableSharedCards)
+            {
+                if (_spent.Contains(entry.Card.Id)) spent.Add(Model.EffectiveGameId(entry.Card));
+            }
+            spent.Sort(StringComparer.Ordinal);
+            return new DurableSave
+            {
+                Schema = Model.DURABLE_SCHEMA,
+                Content = ContentCopy(),
+                Values = DurableValues(_shared, _durableShared),
+                Spent = spent,
+            };
+        }
+
+        /// <summary>Write the engine's durable half into this engine, a fresh
+        /// one at the top of a new run. Every shared durable property takes the
+        /// memory's value, or its default where the memory carries none that
+        /// fits, and every spend the memory lists is taken out of the world.
+        /// Nothing else is touched: not a run-scoped value, not a flow, not a
+        /// spend the memory does not name.
+        ///
+        /// Returns the report LoadGame would give, for this half: an address
+        /// this build does not declare durable and shared is dropped, a value
+        /// its declaration no longer takes is retyped, a durable declaration the
+        /// memory lacks is defaulted, and a spend for a card that is no longer a
+        /// shared durable one-shot is a dropped spent card. Another project's
+        /// memory, or an unknown schema, is refused before anything
+        /// moves.</summary>
+        public LoadReport LoadDurable(DurableSave memory)
+        {
+            AssertDurable(memory);
+            var draft = new ReportDraft();
+            var plan = PlanDurable(_durableShared, _durableSharedCards, memory, null, draft);
+            foreach (var prop in _durableShared)
+            {
+                var value = plan.Values.TryGetValue(prop, out var carried) ? carried : prop.Decl.DefaultOrTypeDefault();
+                PutDurable(DurableBag(_shared, prop), prop.Decl.Name, value);
+            }
+            foreach (var cardId in plan.Cards) _spent.Add(cardId);
+            return FinishReport(_bundle.Content, memory.Content, new List<string>(), draft);
+        }
+
+        /// <summary>The bundle's content block, copied, for a half to
+        /// carry.</summary>
+        internal BundleContent ContentCopy()
+        {
+            return new BundleContent
+            {
+                Project = _bundle.Content.Project,
+                Version = _bundle.Content.Version,
+                Hash = _bundle.Content.Hash,
+            };
+        }
+
+        /// <summary>A card whose spend outlives the run: redraw:never, with
+        /// Durable on the card or, failing that, its deck, the same fall-through
+        /// Shared has. Only never can cross a run boundary: a finite cooldown is
+        /// an absolute turn of a clock that restarts with the run.</summary>
+        private static bool CardIsDurable(Card card, Deck deck)
+        {
+            return card.Redraw != null && card.Redraw.IsNever && (card.Durable ?? deck.Durable ?? false);
+        }
+
+        /// <summary>Every durable declaration in one side's DeclSet, in bundle
+        /// order. Where two owners print the same address (two groups in one box
+        /// naming a tag alike, the residual the compiler is closing) the first
+        /// answers, which is the rule owner resolution keeps for the same
+        /// address.</summary>
+        private List<DurableProp> DurableProps(DeclSet decls)
+        {
+            var outList = new List<DurableProp>();
+            var seen = new HashSet<string>();
+            void Push(DurableProp p)
+            {
+                if (seen.Add(p.Address)) outList.Add(p);
+            }
+            foreach (var decl in decls.Story)
+            {
+                if (decl.Durable == true) Push(new DurableProp { Address = "story." + decl.Name, Kind = "story", Decl = decl });
+            }
+            foreach (var kind in OwnedScopes)
+            {
+                foreach (var pair in decls.Kind(kind))
+                {
+                    foreach (var decl in pair.Value)
+                    {
+                        if (decl.Durable != true) continue;
+                        Push(new DurableProp { Address = AddressOf(kind, pair.Key) + "." + decl.Name, Kind = kind, Owner = pair.Key, Decl = decl });
+                    }
+                }
+            }
+            return outList;
+        }
+
+        internal static PropertyBag DurableBag(Partition p, DurableProp prop)
+        {
+            return prop.Kind == "story" ? p.Story : KindOf(p, prop.Kind).GetOrDefault(prop.Owner);
+        }
+
+        /// <summary>One half's values, keys in ordinal order so the same state
+        /// writes the same text (an address always has a dot in it, so a JS
+        /// object keeps that order too: ruling E).</summary>
+        internal static OrderedMap<string, ExprValue> DurableValues(Partition p, List<DurableProp> props)
+        {
+            var entries = new List<KeyValuePair<string, ExprValue>>();
+            foreach (var prop in props)
+            {
+                var bag = DurableBag(p, prop);
+                if (bag != null && bag.Values.TryGetValue(prop.Decl.Name, out var value) && value != null)
+                {
+                    entries.Add(new KeyValuePair<string, ExprValue>(prop.Address, value));
+                }
+            }
+            // Stable, as the reference's byKey is; addresses are unique anyway.
+            var sorted = entries.OrderBy(e => e.Key, StringComparer.Ordinal);
+            var values = new OrderedMap<string, ExprValue>();
+            foreach (var e in sorted) values.Set(e.Key, e.Value);
+            return values;
+        }
+
+        /// <summary>Walk one durable half against this build's durable
+        /// declarations and durable cards on one side (`flow` names the flow for
+        /// a pocket; null, it is the engine's memory), filing what does not fit
+        /// in the load report's own fields. Pure: the caller writes the plan.
+        ///
+        /// A value lands only at an address this build declares DURABLE ON THIS
+        /// SIDE: a renamed property, one no longer durable, and one that moved
+        /// to the other side of Shared are all dropped, since this half would
+        /// never have carried them. A value its declaration no longer takes is
+        /// retyped and takes the default; a durable declaration the half does
+        /// not carry is defaulted. A spend lands only on a card that is still a
+        /// durable one-shot on this side, and is otherwise a dropped cooldown (a
+        /// pocket's spends are cooldowns) or a dropped spent card (a memory's
+        /// are the engine's spent set), named by the gameId the half
+        /// carried.</summary>
+        private DurablePlan PlanDurable(List<DurableProp> props, List<CardEntry> cards,
+                                        DurableSave save, string flow, ReportDraft draft)
+        {
+            var plan = new DurablePlan();
+            var byAddress = new Dictionary<string, DurableProp>();
+            foreach (var p in props) byAddress[p.Address] = p;
+            var carried = save.Values ?? new OrderedMap<string, ExprValue>();
+            foreach (var pair in carried)
+            {
+                if (!byAddress.TryGetValue(pair.Key, out var prop))
+                {
+                    draft.DroppedProperties.Add(new LoadProperty { Flow = flow, Path = pair.Key });
+                    continue;
+                }
+                if (!ValueFits(prop.Decl, pair.Value))
+                {
+                    draft.RetypedProperties.Add(new LoadProperty { Flow = flow, Path = pair.Key });
+                    continue;
+                }
+                plan.Values.Set(prop, pair.Value);
+            }
+            foreach (var prop in props)
+            {
+                if (!carried.ContainsKey(prop.Address)) draft.DefaultedProperties.Add(new LoadProperty { Flow = flow, Path = prop.Address });
+            }
+            var eligible = new HashSet<string>();
+            foreach (var entry in cards) eligible.Add(entry.Card.Id);
+            foreach (var gameId in save.Spent ?? new List<string>())
+            {
+                var entry = _cardsByGameId.GetOrDefault(gameId);
+                if (entry != null && eligible.Contains(entry.Card.Id)) plan.Cards.Add(entry.Card.Id);
+                else if (flow != null) draft.DroppedCooldowns.Add(new LoadCooldown { Flow = flow, Card = gameId });
+                else draft.DroppedSpent.Add(gameId);
+            }
+            return plan;
+        }
+
+        /// <summary>The two refusals every durable load shares, made before
+        /// anything moves: a shape this runtime does not know, and another
+        /// project's state.</summary>
+        private void AssertDurable(DurableSave save)
+        {
+            var schema = save?.Schema;
+            if (schema != Model.DURABLE_SCHEMA) throw new StoryletError($"unsupported durable schema: {schema ?? "undefined"}");
+            var project = _bundle.Content.Project;
+            if (save.Content?.Project != project)
+            {
+                throw new StoryletError($"durable state is for project \"{save.Content?.Project ?? "undefined"}\", bundle is \"{project}\"");
+            }
+        }
+
+        /// <summary>A host write of one durable value: silent, as every host
+        /// write is, and past a Writable == false, which is the story's promise
+        /// and not the game's.</summary>
+        internal static void PutDurable(PropertyBag bag, string name, ExprValue value)
+        {
+            bag?.Set(name, value, silent: true, reason: "host durable", host: true);
         }
 
         /// <summary>What LoadGame(envelope) would do that is not a plain

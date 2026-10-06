@@ -8,7 +8,7 @@ behaviour lands here as a case first, then in the implementations
 
 ## The corpus
 
-[`corpus.json`](./corpus.json) (`version: 12`) is the portable artifact. It
+[`corpus.json`](./corpus.json) (`version: 13`) is the portable artifact. It
 carries **compiled** forms only (`{ src, ast }` envelopes, whole bundles),
 so a runtime-only port consumes it with no parser or compiler. Five case
 kinds - `expressions`, `specificity`, `peek`, `scripted`, `load` - specified in
@@ -43,6 +43,22 @@ which is a cap distinct from an absent one and must be passed through, and
 every flow a `saveLoad` rebuilds is subscribed to the trace sink as a lazily
 opened flow is, so a deal after the load can pin its evictions.
 
+Version 13 is durable state as a feature (ruling H, 2026-10-06), with four new
+scripted ops a runner must implement. `keepPocket` takes `flow.saveDurable()`
+on the op's flow and keeps it under the flow's name; `keepMemory` takes
+`engine.saveDurable()` and keeps it once. Both are held outside the engine, and
+the runner checks every half it keeps carries `schema: "storylets/durable@1"`
+and the running bundle's `content`, then the op's `expect`: `values` compared
+whole and in any key order, `spent` exactly. `newRun` replaces the engine with a
+fresh one (from `bundleB` with `into: "B"`), drops every handle, and, if a memory
+was kept, calls `loadDurable(memory)` and checks `expectReport` as `saveLoad`
+does. `openFlowDurable` opens the named flow with `{ durable: <its pocket> }`,
+re-takes and watches the handle, and checks the report `onRestoreReport` was
+handed (one must arrive); with `withRestore` it passes the blob parked under that
+name as `restore` too, and `expectError` requires the open to be refused with the
+flow already open under that name left live. The card and deck fixtures gained
+`durable`.
+
 ## PRNG
 
 Seeded cases pin **mulberry32** (schema doc 3.3): default seed 0,
@@ -55,7 +71,7 @@ verify first are tabled in the design notes, section 3.
   with **hand-authored** expectations - the expectations are the contract,
   never derived from an engine (PRNG-dependent ones are computed from the
   pinned algorithm and marked `PRNG-computed`). `src/cases.ts` is the live
-  contract - 201 cases (10 expressions, 8 specificity, 34 peek, 143 scripted,
+  contract - 205 cases (10 expressions, 8 specificity, 34 peek, 147 scripted,
   6 load);
   the design notes' sections 1-5 specify the shapes, and its section 6 listing
   is the round-1 draft, awaiting re-transcription.

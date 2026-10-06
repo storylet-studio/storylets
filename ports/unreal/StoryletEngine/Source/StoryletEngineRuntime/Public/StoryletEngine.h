@@ -185,6 +185,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Storylet Engine")
 	void SetPropertyFlags(const FString& Path, const TArray<FString>& Values);
 
+	// --- durable state (ruling H) --------------------------------------------
+
+	/** This flow's DURABLE HALF as JSON, the player's pocket: every per-flow
+	 *  `durable` property's value by its address, and every per-flow durable
+	 *  one-shot this flow has spent, by card gameId. Keep it between runs and
+	 *  open the player's flow with it in the next one, through
+	 *  UStoryletEngine::OpenFlowWithDurableJson; the shared half is the
+	 *  engine's SaveDurableToJson. Empty (and a log) on a closed flow. */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Save")
+	FString SaveDurableToJson() const;
+
 	// --- the retained flow log (schema 5) ------------------------------------
 
 	/** The retained log (opt-in via the engine's bRetainLog), oldest first,
@@ -384,6 +395,55 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Save")
 	FString PreviewFlowRestoreJson(const FString& Id, const FString& Json) const;
 
+	// --- durable state (ruling H) ------------------------------------------------
+	//
+	// What outlives a run: a `durable` property's value and a `durable` card's
+	// `redraw: never` spend. Two halves of one shape, each a JSON string as a
+	// parked flow is: the installation's memory here, a player's pocket on
+	// UStoryletFlow::SaveDurableToJson. A new run starts from a fresh engine:
+	// LoadDurableFromJson puts the memory in, and OpenFlowWithDurableJson opens
+	// each returning player's flow with their pocket. Values are keyed by
+	// property address and spends by card gameId, so a half crosses builds, and
+	// whatever no longer fits comes back in the report.
+
+	/** The engine's DURABLE HALF as JSON, the installation's memory: every
+	 *  shared `durable` property's value by its address, and every shared
+	 *  durable one-shot that has been spent, by card gameId. Empty (and a log)
+	 *  on an invalid engine. */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Save")
+	FString SaveDurableToJson() const;
+
+	/** Write a SaveDurableToJson string into this engine, a fresh one at the
+	 *  top of a new run. Every shared durable property takes the memory's
+	 *  value, or its default where the memory carries none that fits, and
+	 *  every spend it lists is taken out of the world; nothing else is
+	 *  touched. OutReportJson is the LoadReport as JSON: what no longer fits
+	 *  this build (an address no longer declared durable and shared, a value
+	 *  its declaration no longer takes, a card that is gone). False, an empty
+	 *  report and a log, with the engine untouched, on malformed JSON, an
+	 *  unknown schema or another project's memory. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
+	bool LoadDurableFromJson(const FString& Json, FString& OutReportJson);
+
+	/** OpenFlow with the player's POCKET written in, from a flow's
+	 *  SaveDurableToJson string: the flow starts as any new flow does, on the
+	 *  engine's seed and fresh clocks, with the pocket's values laid over its
+	 *  defaults and its durable spends spent. Replaces any flow already open
+	 *  under that name, exactly as OpenFlow does. OutReportJson is the
+	 *  LoadReport as JSON (the other runtimes' onRestoreReport), naming what
+	 *  no longer fits this build. Null, an empty report and a log on malformed
+	 *  JSON, an unknown schema or another project's pocket, and the flow
+	 *  already open under that name is left as it was. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
+	UStoryletFlow* OpenFlowWithDurableJson(const FString& Id, const FString& Json, FString& OutReportJson);
+
+	/** OpenFlowWithDurableJson with this flow's own PRNG seed in place of the
+	 *  engine's (the other runtimes' openFlow seed option beside `durable`). A
+	 *  separate method because a BP pin has no "absent", as OpenFlowSeeded is
+	 *  to OpenFlow. */
+	UFUNCTION(BlueprintCallable, Category = "Storylet Engine|Save")
+	UStoryletFlow* OpenFlowWithDurableJsonSeeded(const FString& Id, const FString& Json, int32 Seed, FString& OutReportJson);
+
 	/** Close every flow and reseed the shared state to its defaults. Values
 	 *  loaded into the registry for this engine and not yet claimed are
 	 *  dropped; another engine's are not. */
@@ -522,10 +582,16 @@ private:
 	static UStoryletEngine* CreateOn(UStoryletBundle* Bundle, std::shared_ptr<storylets::ScopeRegistry> Registry,
 		int32 Seed, bool bRetainLog, UStoryletWorld* World);
 
-	/** OpenFlow, OpenFlowSeeded and OpenFlowFromJson: the core's openFlow with
-	 *  these options, and the wrapper bookkeeping all three share. Null (and a
-	 *  log naming Verb) when the engine is invalid or the core refuses. */
+	/** OpenFlow, OpenFlowSeeded, OpenFlowFromJson and the two durable opens:
+	 *  the core's openFlow with these options, and the wrapper bookkeeping they
+	 *  share. Null (and a log naming Verb) when the engine is invalid or the
+	 *  core refuses. */
 	UStoryletFlow* OpenFlowWith(const FString& Id, const storylets::OpenFlowOptions& Options, const TCHAR* Verb);
+
+	/** The two durable opens: the pocket parsed from Json, the seed when given,
+	 *  and the report into OutReportJson. */
+	UStoryletFlow* OpenFlowWithDurable(const FString& Id, const FString& Json, TOptional<int32> Seed,
+		FString& OutReportJson, const TCHAR* Verb);
 
 	UPROPERTY()
 	TObjectPtr<UStoryletBundle> BundleRef = nullptr;

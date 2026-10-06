@@ -246,6 +246,18 @@ that flow's state, its property values included, and `OpenFlowFromJson(Id, Json)
 back. `CloseFlow` in between is what releases the cards it was holding and takes its values out
 of the registry, and `PreviewFlowRestoreJson(Id, Json)` says what coming back would cost.
 
+What outlives a run has a pair of its own. `SaveDurableToJson()` on the engine takes the
+installation's memory (the shared `durable` values and the durable one-shots that have been
+spent), and on a flow it takes that player's pocket. In the next run's fresh engine,
+`LoadDurableFromJson(Json, Report)` puts the memory back and
+`OpenFlowWithDurableJson(Id, Json, Report)` opens the player's flow with their pocket in
+(`OpenFlowWithDurableJsonSeeded` takes the flow's own seed as well). Both
+hand back the report as JSON, naming whatever no longer fits the build
+([what carries and what the report lists](/play/world-state/#carrying-it-to-the-next-run)).
+From C++, `Engine::saveDurable()`, `Flow::saveDurable()`, `Engine::loadDurable()` and the
+`durable` open option take a `storylets::DurableSave`, and `storylets::serializeDurable` /
+`deserializeDurable` in `Storylets/Save.h` turn one into text and back.
+
 ## The Runtime State panel
 
 **Tools ▸ Storylet Engine Runtime State** opens the examiner. Register an engine with

@@ -212,6 +212,27 @@ the flow in between is what releases the cards it was holding, and takes its val
 registry. On the way back, a shared card another flow
 now holds is dropped and reported (`PreviewFlowRestore(id, saved)` asks in advance).
 
+What outlives a run, a [`durable`](/play/world-state/#durable-state-that-outlives-a-run)
+value or a durable card's spend, has a call of its own on each half. Take both as the run ends,
+and put them into the next run's fresh engine:
+
+```csharp
+DurableSave memory = _engine.SaveDurable();   // the installation's memory: the shared half
+DurableSave pocket = _flow.SaveDurable();     // one player's pocket: their flow's half
+
+var next = new Engine(Bundle.Bundle);
+LoadReport memoryReport = next.LoadDurable(memory);
+Flow alice = next.OpenFlow("alice", new OpenFlowOptions
+{
+    Durable = pocket,
+    OnRestoreReport = r => Debug.Log(r.Exact ? "pocket in" : "the build moved on"),
+});
+```
+
+Both reports say what no longer fits the build, as a load's does. `Durable` can't be given with
+`Restore`. `StoryletSave.ToJson(pocket)` and `StoryletSave.DurableFromJson(json)` carry a half as
+JSON, the same text every runtime writes.
+
 For files, `StoryletSave` is the string boundary. `SerializeState(engine, worldValues)` gives
 you the `.storyletsave` text, and `DeserializeState(engine, text)` reads one back, either
 envelope version, and hands you the file's values for a `@world` you bind to apply

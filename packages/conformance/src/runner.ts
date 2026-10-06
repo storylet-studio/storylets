@@ -12,9 +12,12 @@ import type { EvalContext, ScalarValue } from "@wildwinter/expr";
 import { matchedSpecificity } from "@wildwinter/expr-specificity";
 import { storyletsDialect } from "@storylet-studio/dialect";
 import { Engine, Flow, makePrng } from "@storylet-studio/runtime";
+import type { DurableSave } from "@storylet-studio/runtime";
 import { effectiveGameId } from "@storylet-studio/model";
 import type { Bundle, FlowSave, LoadProperty, LoadReport } from "@storylet-studio/model";
-import type { ExpressionCase, LoadCase, PeekCase, ScriptedCase, SpecificityCase, StateSelector } from "./types.js";
+import type {
+  DurableExpect, ExpressionCase, LoadCase, PeekCase, ScriptedCase, SpecificityCase, StateSelector,
+} from "./types.js";
 
 /** Truthiness for a bare condition; mirrors the runtime's `conditionPasses`,
  *  and Patterplay's `truthy`, which it was aligned with on 2026-09-01. */
@@ -120,6 +123,35 @@ const cooldownKeys = (list: LoadReport["droppedCooldowns"]): string[] =>
 const propertyKeys = (list: LoadProperty[]): string[] =>
   list.map((p) => [p.flow ?? "", p.path].join(FIELD_SEP)).sort();
 
+/** A map compared as a whole and regardless of key order: its entries,
+ *  sorted by key, as one canonical string. */
+const entriesOf = (record: Record<string, unknown>): string =>
+  show(Object.entries(record).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+
+/** Check a durable half the runner has just kept (corpus version 13): the
+ *  schema tag and content block every half carries, then what `expect` names.
+ *  `values` whole and in any order, `spent` exactly. */
+const checkDurable = (
+  at: string,
+  expected: DurableExpect | undefined,
+  actual: DurableSave,
+  bundle: Bundle,
+  failures: string[],
+): void => {
+  if (actual.schema !== "storylets/durable@1") {
+    failures.push(`${at}: schema expected "storylets/durable@1", got ${show(actual.schema)}`);
+  }
+  if (!same(actual.content, bundle.content)) {
+    failures.push(`${at}: content expected ${show(bundle.content)}, got ${show(actual.content)}`);
+  }
+  if (expected?.values !== undefined && entriesOf(expected.values) !== entriesOf(actual.values)) {
+    failures.push(`${at}: values expected ${entriesOf(expected.values)}, got ${entriesOf(actual.values)}`);
+  }
+  if (expected?.spent !== undefined && !same(expected.spent, actual.spent)) {
+    failures.push(`${at}: spent expected ${show(expected.spent)}, got ${show(actual.spent)}`);
+  }
+};
+
 /** Check the fields `expectReport` names, and only those. */
 const checkReport = (
   at: string,
@@ -168,11 +200,17 @@ export function runScriptedCase(c: ScriptedCase): string[] {
   const failures: string[] = [];
   const seed = c.seed ?? 0;
   let engine = new Engine(c.bundle, { seed });
+  // The bundle the engine runs now: a kept durable half must carry its content.
+  let running = c.bundle;
   let handles = new Map<string, Flow>();
   // Parked flow blobs, by the name they were parked under. Held OUTSIDE the
   // engine on purpose: a park survives a content swap, which is the case that
   // makes a resume interesting.
   const parked = new Map<string, FlowSave>();
+  // Durable halves (corpus version 13), held outside the engine for the reason
+  // a parked blob is: a pocket and an installation's memory outlive the run.
+  const pockets = new Map<string, DurableSave>();
+  let memory: DurableSave | undefined;
   // Verdicts from the deal or peek an op just ran, card id -> verdict, taken
   // from the trace because that is the only place the REASON lives: a board
   // read says a card is absent, never why, and "claimed" against
@@ -481,6 +519,7 @@ export function runScriptedCase(c: ScriptedCase): string[] {
           break;
         }
         engine = target;
+        running = op.into === "B" ? c.bundleB! : c.bundle;
         checkReport(at, op.expectReport, engine.loadGame(envelope), failures);
         // Re-taken AND watched, as a lazily opened flow is (corpus version 12):
         // a deal straight after a load into an edited build is where an
@@ -528,8 +567,90 @@ export function runScriptedCase(c: ScriptedCase): string[] {
         checkReport(at, op.expectReport, applied ?? preview, failures);
         break;
       }
+      case "keepPocket": {
+        const name = op.flow ?? "main";
+        let kept: DurableSave | undefined;
+        try {
+          kept = flowOf(name).saveDurable();
+        } catch (e) {
+          failures.push(`${at}: unexpected error: ${String(e)}`);
+          break;
+        }
+        pockets.set(name, kept);
+        checkDurable(at, op.expect, kept, running, failures);
+        break;
+      }
+      case "keepMemory": {
+        let kept: DurableSave | undefined;
+        try {
+          kept = engine.saveDurable();
+        } catch (e) {
+          failures.push(`${at}: unexpected error: ${String(e)}`);
+          break;
+        }
+        memory = kept;
+        checkDurable(at, op.expect, kept, running, failures);
+        break;
+      }
+      case "newRun": {
+        // The world restarts: a fresh engine, no flow, no handle. What crosses
+        // is what the script kept, and only through the durable verbs.
+        running = op.into === "B" ? c.bundleB! : c.bundle;
+        engine = new Engine(running, { seed });
+        handles = new Map();
+        if (memory === undefined) break;
+        let report: LoadReport | undefined;
+        try {
+          report = engine.loadDurable(memory);
+        } catch (e) {
+          failures.push(`${at}: unexpected error: ${String(e)}`);
+          break;
+        }
+        checkReport(at, op.expectReport, report, failures);
+        break;
+      }
+      case "openFlowDurable": {
+        const pocket = pockets.get(op.flow);
+        if (pocket === undefined) {
+          failures.push(`${at}: no pocket is kept under "${op.flow}"`);
+          break;
+        }
+        const restore = op.withRestore ? parked.get(op.flow) : undefined;
+        if (op.withRestore && restore === undefined) {
+          failures.push(`${at}: nothing is parked under "${op.flow}"`);
+          break;
+        }
+        let applied: LoadReport | undefined;
+        let opened: Flow | undefined;
+        let error: string | undefined;
+        try {
+          opened = engine.openFlow(op.flow, {
+            ...(op.seed !== undefined ? { seed: op.seed } : {}),
+            durable: pocket,
+            ...(restore !== undefined ? { restore } : {}),
+            onRestoreReport: (r) => { applied = r; },
+          });
+        } catch (e) {
+          error = String(e);
+        }
+        if (op.expectError) {
+          // Refused before anything changed: the handle the script holds under
+          // that name (if any) is left exactly as it was.
+          if (error === undefined) failures.push(`${at}: expected an error, the flow opened`);
+          break;
+        }
+        if (error !== undefined) {
+          failures.push(`${at}: unexpected error: ${error}`);
+          break;
+        }
+        handles.set(op.flow, watch(opened!));
+        if (applied === undefined) failures.push(`${at}: the durable open produced no report`);
+        else checkReport(at, op.expectReport, applied, failures);
+        break;
+      }
       case "reset":
         engine = new Engine(c.bundle, { seed });
+        running = c.bundle;
         handles = new Map();
         break;
     }

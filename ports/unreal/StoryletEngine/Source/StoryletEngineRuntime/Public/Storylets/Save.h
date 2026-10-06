@@ -454,6 +454,161 @@ namespace storylets
         }
     }
 
+    /** A DURABLE HALF as JSON (ruling H): the installation's memory from
+     *  Engine::saveDurable or a player's pocket from Flow::saveDurable, in the
+     *  reference's key names and order (schema, content, values, spent). The
+     *  string boundary for a host that keeps a half between runs: Blueprint has
+     *  no DurableSave struct, and a half is stored as text anyway. */
+    inline std::string serializeDurable(const DurableSave& half)
+    {
+        std::string out = "{\n";
+        savedetail::Indent(out, 1);
+        out += "\"schema\": " + StoryletValue::JsonQuote(half.schema) + ",\n";
+        savedetail::Indent(out, 1);
+        out += "\"content\": {\n";
+        savedetail::Indent(out, 2);
+        out += "\"project\": " + StoryletValue::JsonQuote(half.content.project) + ",\n";
+        savedetail::Indent(out, 2);
+        out += "\"version\": " + StoryletValue::JsonQuote(half.content.version) + ",\n";
+        savedetail::Indent(out, 2);
+        out += "\"hash\": " + StoryletValue::JsonQuote(half.content.hash) + "\n";
+        savedetail::Indent(out, 1);
+        out += "},\n";
+        savedetail::Indent(out, 1);
+        out += "\"values\": ";
+        if (half.unreadable.empty())
+        {
+            savedetail::WriteBag(out, half.values, 1);
+        }
+        else
+        {
+            // A half read from a hand-edited file goes back out with what it
+            // could not read as null, so it still carries those addresses and
+            // a load still reports them.
+            out += "{\n";
+            bool first = true;
+            const auto entry = [&out, &first](const std::string& address, const std::string& token)
+            {
+                if (!first) out += ",\n";
+                first = false;
+                savedetail::Indent(out, 2);
+                out += StoryletValue::JsonQuote(address) + ": " + token;
+            };
+            for (const auto& pair : half.values) entry(pair.first, savedetail::ValueToken(pair.second));
+            for (const std::string& address : half.unreadable) entry(address, "null");
+            out += "\n";
+            savedetail::Indent(out, 1);
+            out += "}";
+        }
+        out += ",\n";
+        savedetail::Indent(out, 1);
+        out += "\"spent\": [";
+        for (size_t i = 0; i < half.spent.size(); ++i)
+        {
+            if (i) out += ", ";
+            out += StoryletValue::JsonQuote(half.spent[i]);
+        }
+        out += "]\n}";
+        return out;
+    }
+
+    namespace savedetail
+    {
+        /** A JSON token as JavaScript's String() prints it, absent as
+         *  "undefined": the text the reference's durable refusals quote, so a
+         *  half with no schema, or a non-string one, is refused in the same
+         *  words everywhere. */
+        inline std::string JsText(const JsonValue* token)
+        {
+            if (!token) return "undefined";
+            switch (token->type)
+            {
+                case JsonValue::Null: return "null";
+                case JsonValue::Bool: return token->b ? "true" : "false";
+                case JsonValue::Number: return NumToken(token->num);
+                case JsonValue::String: return token->str;
+                case JsonValue::Array:
+                {
+                    // Array.prototype.join: a null item is empty.
+                    std::string out;
+                    for (size_t i = 0; i < token->arr.size(); ++i)
+                    {
+                        if (i) out += ",";
+                        if (!token->arr[i].isNull()) out += JsText(&token->arr[i]);
+                    }
+                    return out;
+                }
+                default: return "[object Object]";
+            }
+        }
+
+        /** A value a property can hold: a boolean, a number, a string, or an
+         *  array of strings (flags). */
+        inline bool IsReadableValue(const JsonValue& token)
+        {
+            if (token.isBool() || token.isNumber() || token.isString()) return true;
+            if (!token.isArray()) return false;
+            for (const auto& item : token.arr) if (!item.isString()) return false;
+            return true;
+        }
+    }
+
+    /** The twin of serializeDurable: a parsed tree back to a half. Takes what
+     *  it is given and leaves the judging to the load: Engine::loadDurable and
+     *  openFlow's `durable` refuse an unknown schema or another project's half
+     *  before anything moves, quoting a missing or non-string schema or project
+     *  as JS prints it ("undefined" when absent). A value no property can hold
+     *  goes to `unreadable`, to be reported by the load, never into a bag. */
+    inline DurableSave durableFromTree(const JsonValue& tree)
+    {
+        DurableSave half;
+        const JsonValue* schema = tree.find("schema");
+        half.schema = savedetail::JsText(schema);
+        // Only a string is the tag: an array whose text happens to spell it
+        // (["storylets/durable@1"]) is refused, as JS refuses it, with that text.
+        if (schema && !schema->isString() && half.schema == DURABLE_SCHEMA) half.schema += " ";
+        const JsonValue* content = tree.find("content");
+        half.content.project = savedetail::JsText(content && content->isObject() ? content->find("project") : nullptr);
+        if (content && content->isObject())
+        {
+            half.content.version = content->strOr("version");
+            half.content.hash = content->strOr("hash");
+        }
+        const JsonValue* values = tree.find("values");
+        if (values && values->isObject())
+        {
+            for (const auto& pair : values->obj)
+            {
+                if (savedetail::IsReadableValue(pair.second)) half.values.set(pair.first, bundleloader::ToValue(pair.second));
+                else half.unreadable.push_back(pair.first);
+            }
+        }
+        const JsonValue* spent = tree.find("spent");
+        if (spent && spent->isArray())
+        {
+            for (const auto& id : spent->arr) half.spent.push_back(id.str);
+        }
+        return half;
+    }
+
+    /** Parse a serializeDurable string. Throws StoryletError on malformed
+     *  text, as deserializeFlow does. */
+    inline DurableSave deserializeDurable(const std::string& json)
+    {
+        try
+        {
+            return durableFromTree(JsonParser(json).parse());
+        }
+        catch (const StoryletError&)
+        {
+            throw;
+        }
+        catch (const std::exception&)
+        {
+            throw StoryletError("not valid JSON");
+        }
+    }
+
     /** A registry's values (ScopeRegistry::save()) as pretty-printed JSON,
      *  keyed by registry key, the shape a standalone envelope carries under
      *  `registry`. The game's half of a combined save: a game that passes its

@@ -58,11 +58,10 @@ export interface PropertyDecl {
    * opened"); a durable per-flow one is the player's pocket (visits,
    * allegiance, what they earned).
    *
-   * INERT TO THE RUNTIME. The engine partitions by `shared` alone and never
-   * reads this. Durability is what the SERVER does at a run boundary: it reads
-   * the declarations, lifts the durable values out of the partitions before the
-   * world restarts, and writes them back into the fresh engine afterwards,
-   * entirely through `getProperty` / `setProperty`.
+   * The engine partitions by `shared` alone; this flag only decides what the
+   * durable halves carry across a run boundary: `engine.saveDurable()` and
+   * `loadDurable` for a shared one, `flow.saveDurable()` and `openFlow`'s
+   * `durable` for a per-flow one.
    *
    * On a `@world` declaration the flag is a validation error, for the reason
    * `shared` is: @world is the game's own state, and how long the game keeps it
@@ -420,10 +419,9 @@ export interface Card<E> {
    *  an absolute turn of a box clock, and the clock resets with the run. On
    *  any other redraw the flag is a compile warning.
    *
-   *  INERT TO THE RUNTIME, like the declaration flag: the server lifts the
-   *  durable spends at run end (per-flow ones from the flow's `never`
-   *  cooldowns, shared ones from the engine's spent set) and puts them back
-   *  through `openFlow(id, { restore })` and `markTaken`. */
+   *  Like the declaration flag, it only decides what the durable halves carry:
+   *  a per-flow spend rides the flow's half (its `never` cooldown), a shared
+   *  one the engine's half (its spent set), each by card gameId. */
   durable?: boolean;
   /** Card-template data: field name -> value, validated at publish. */
   fields?: Record<string, ScalarValue>;

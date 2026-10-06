@@ -2443,6 +2443,210 @@ export const fixtures: Fixtures = {
         { op: "assertState", expect: { "story.weather": "fair" } },
       ] },
 
+    // --- durable state, as a feature (ruling H, 2026-10-06; corpus version 13) ---
+    //
+    // `durable` on a declaration says a value outlives the run; on a deck or a
+    // card it says a `redraw: never` spend does. Until this ruling a game had
+    // to carry both across by hand, through getProperty, setProperty, a restore
+    // carrying only cooldowns and the internal `markTaken`. Now each half has a
+    // verb: `flow.saveDurable()` is one flow's pocket, `engine.saveDurable()`
+    // the installation's memory, `engine.loadDurable(memory)` puts the memory
+    // into a fresh engine and `openFlow(id, { durable })` opens a flow with its
+    // pocket in.
+    //
+    // A half is keyed the way everything host-facing is: a value by the address
+    // `listProperties()` prints (a tag gameId two boxes share is box-qualified),
+    // a spend by the card's gameId. What it carries is decided by both flags at
+    // once: `durable` says whether, `shared` says which half. A per-flow durable
+    // spend is a `never` cooldown on the flow, a shared one is the engine's
+    // spent set; a finite cooldown never crosses, since the clock it counts on
+    // restarts with the run.
+    //
+    // What no longer fits is reported, not written, in the load report's own
+    // fields: an address the build no longer declares as durable on that side
+    // is dropped, a value its declaration no longer takes is retyped (and takes
+    // the default), a durable declaration the half does not carry is
+    // defaulted, and a spend for a card that is gone, or no longer a durable
+    // one-shot on that side, is a dropped cooldown (a pocket's) or a dropped
+    // spent card (a memory's), named by the gameId the half carried.
+
+    { name: "a pocket and the installation's memory carry across a new run, and nothing else does",
+      story: [
+        { name: "souls", type: "number", default: 0, durable: true },                   // memory
+        { name: "visits", type: "number", default: 0, shared: false, durable: true },   // pocket
+        { name: "gold", type: "number", default: 0 },                                   // this run, shared
+        { name: "steps", type: "number", default: 0, shared: false },                   // this run, per flow
+      ],
+      boxProperties: [{ name: "mood", type: "string", default: "calm", durable: true }],
+      // `rain` is also a tag of the other box's weather group, so this one's
+      // address is box-qualified, and the pocket is keyed by exactly that.
+      groups: [{ id: "d_sky", tags: [{ id: "v_rain", properties: [
+        { name: "lamps", type: "number", default: 0, durable: true },
+      ] }] }],
+      otherBox: {},
+      decks: [
+        { id: "k_main", cards: [
+          { id: "c_once", priority: 4, redraw: "never", durable: true },     // a pocket spend
+          { id: "c_plain", priority: 1, redraw: "never" },                   // spent for this run only
+        ] },
+        { id: "k_relics", shared: true, durable: true, cards: [
+          { id: "c_relic", priority: 3, redraw: "never" },                   // a memory spend
+          { id: "c_fleeting", priority: 2, redraw: "never", durable: false }, // the card overrides the deck
+        ] },
+      ],
+      hands: [{ id: "h_q", rule: {}, properties: [{ name: "met", type: "boolean", default: false, durable: true }] }],
+      script: [
+        { op: "setState", flow: "alice", story: { souls: 3, visits: 2, gold: 5, steps: 4 },
+          box: { box: { mood: "wary" } }, hand: { q: { met: true } }, value: { "box/rain": { lamps: 2 } } },
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_once", "c_relic", "c_fleeting", "c_plain"] } },
+        { op: "play", flow: "alice", card: "c_once", from: "h_q" },
+        { op: "play", flow: "alice", card: "c_relic", from: "h_q" },
+        { op: "play", flow: "alice", card: "c_fleeting", from: "h_q" },
+        { op: "play", flow: "alice", card: "c_plain", from: "h_q" },
+        // The pocket: alice's durable per-flow values, every one of them, and
+        // her one durable per-flow spend. Not `steps` (run-scoped), not
+        // `souls` (the other half), not c_plain (spent for this run only).
+        { op: "keepPocket", flow: "alice", expect: {
+          values: { "story.visits": 2, "box.box.mood": "wary", "hand.q.met": true, "value.box/rain.lamps": 2 },
+          spent: ["once"],
+        } },
+        // The memory: the shared durable value and the shared durable spend.
+        // c_fleeting is shared and spent, and its own `durable: false` keeps it
+        // out.
+        { op: "keepMemory", expect: { values: { "story.souls": 3 }, spent: ["relic"] } },
+        { op: "newRun", expectReport: {
+          exact: true, project: "conf", flows: [],
+          version: { saved: "0.0.0", bundle: "0.0.0" }, hash: { saved: "", bundle: "" },
+          evicted: [], droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        // A new run starts with no flows; the memory is already in.
+        { op: "assertFlows", expect: [] },
+        { op: "assertEngineRead", path: "story.souls", expect: 3 },
+        { op: "assertEngineRead", path: "story.gold", expect: 0 },
+        { op: "openFlowDurable", flow: "alice", expectReport: {
+          exact: true, project: "conf", flows: ["alice"],
+          version: { saved: "0.0.0", bundle: "0.0.0" }, hash: { saved: "", bundle: "" },
+          evicted: [], droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+        } },
+        { op: "assertState", flow: "alice", expect: {
+          "story.visits": 2, "story.steps": 0, "story.souls": 3, "story.gold": 0,
+          "box.box.mood": "wary", "hand.q.met": true, "value.box/rain.lamps": 2, "turn.b_x": 0,
+        } },
+        // Her own spend is still spent for her, and the relic for everyone;
+        // the two this-run spends are back.
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_fleeting", "c_plain"] },
+          expectVerdicts: { once: "cooldown", relic: "taken" } },
+        // A newcomer brings no pocket: c_once is theirs to find, the relic is
+        // still gone, and alice holds the world's one c_fleeting.
+        { op: "deal", flow: "bob", hands: ["h_q"], expectBoard: { h_q: ["c_once", "c_plain"] },
+          expectVerdicts: { relic: "taken", fleeting: "claimed-elsewhere" } },
+        { op: "assertState", flow: "bob", expect: { "story.visits": 0, "hand.q.met": false, "story.souls": 3 } },
+      ] },
+
+    { name: "a durable half kept under one build loads into the next, and says what no longer fits",
+      story: [
+        { name: "souls", type: "number", default: 0, durable: true },
+        { name: "oath", type: "enum", default: "iron", values: ["iron", "oak"], shared: false, durable: true },
+        { name: "title", type: "string", default: "", shared: false, durable: true },
+      ],
+      decks: [
+        { id: "k_main", cards: [{ id: "c_once", priority: 3, redraw: "never", durable: true }] },
+        { id: "k_relics", shared: true, durable: true, cards: [
+          { id: "c_relic", priority: 2, redraw: "never" },
+          { id: "c_gone", priority: 1, redraw: "never" },
+        ] },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      // The next build: `souls` renamed `spirits`, "iron" struck from the
+      // oath, `title` no longer durable, `rank` new, c_once and c_gone cut,
+      // and a new version, which the report names as drift.
+      bundleB: {
+        content: { version: "0.2.0" },
+        story: [
+          { name: "spirits", type: "number", default: 0, durable: true },
+          { name: "oath", type: "enum", default: "oak", values: ["oak", "ash"], shared: false, durable: true },
+          { name: "title", type: "string", default: "", shared: false },
+          { name: "rank", type: "number", default: 0, shared: false, durable: true },
+        ],
+        decks: [
+          { id: "k_main", cards: [] },
+          { id: "k_relics", shared: true, durable: true, cards: [{ id: "c_relic", priority: 2, redraw: "never" }] },
+        ],
+        hands: [{ id: "h_q", rule: {} }],
+      },
+      script: [
+        { op: "setState", flow: "alice", story: { souls: 7, oath: "iron", title: "the smith" } },
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_once", "c_relic", "c_gone"] } },
+        { op: "play", flow: "alice", card: "c_once", from: "h_q" },
+        { op: "play", flow: "alice", card: "c_relic", from: "h_q" },
+        { op: "play", flow: "alice", card: "c_gone", from: "h_q" },
+        { op: "keepPocket", flow: "alice", expect: {
+          values: { "story.oath": "iron", "story.title": "the smith" }, spent: ["once"],
+        } },
+        { op: "keepMemory", expect: { values: { "story.souls": 7 }, spent: ["gone", "relic"] } },
+        { op: "newRun", into: "B", expectReport: {
+          exact: false, project: "conf", flows: [],
+          version: { saved: "0.0.0", bundle: "0.2.0" }, hash: { saved: "", bundle: "" },
+          evicted: [], droppedCooldowns: [],
+          droppedSpent: ["gone"],
+          droppedProperties: [{ path: "story.souls" }],
+          defaultedProperties: [{ path: "story.spirits" }],
+          retypedProperties: [],
+        } },
+        { op: "assertEngineRead", path: "story.spirits", expect: 0 },
+        // `title` is still declared, and still per flow, but no longer
+        // durable: a pocket does not carry it, so it is dropped rather than
+        // written, exactly as a renamed one would be.
+        { op: "openFlowDurable", flow: "alice", expectReport: {
+          exact: false, project: "conf", flows: ["alice"],
+          version: { saved: "0.0.0", bundle: "0.2.0" }, hash: { saved: "", bundle: "" },
+          evicted: [], droppedSpent: [],
+          droppedCooldowns: [{ flow: "alice", card: "once" }],
+          droppedProperties: [{ flow: "alice", path: "story.title" }],
+          defaultedProperties: [{ flow: "alice", path: "story.rank" }],
+          retypedProperties: [{ flow: "alice", path: "story.oath" }],
+        } },
+        { op: "assertState", flow: "alice", expect: { "story.oath": "oak", "story.title": "", "story.rank": 0 } },
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: [] }, expectVerdicts: { relic: "taken" } },
+      ] },
+
+    // A pocket opens on the flow's own seed, as a fresh flow does: carrying a
+    // spend must not carry, or reset, a random stream. The first deal is the
+    // seed-1 shuffle "a parked flow resumes on the same stream" pins.
+    { name: "a flow opened with its pocket deals on its own seed, as a fresh flow does",  // PRNG-computed
+      seed: 1,
+      story: [{ name: "visits", type: "number", default: 0, shared: false, durable: true }],
+      cards: [{ id: "c_alpha", copies: 2 }, { id: "c_beta", copies: 2 }, { id: "c_gamma", copies: 2 }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "setState", flow: "alice", story: { visits: 1 } },
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_gamma", "c_alpha", "c_beta"] } },
+        { op: "keepPocket", flow: "alice", expect: { values: { "story.visits": 1 }, spent: [] } },
+        { op: "newRun" },
+        { op: "openFlowDurable", flow: "alice", expectReport: { exact: true } },
+        { op: "deal", flow: "alice", hands: ["h_q"], expectBoard: { h_q: ["c_gamma", "c_alpha", "c_beta"] } },
+        { op: "assertState", flow: "alice", expect: { "story.visits": 1 } },
+      ] },
+
+    // `restore` lays a whole flow back, its durable values among them, so a
+    // pocket beside it would be a second answer for the same property. The
+    // pair is refused, and refused before the flow under that name is touched.
+    { name: "a pocket cannot come with a restore, and the refusal changes nothing",
+      story: [{ name: "visits", type: "number", default: 0, shared: false, durable: true }],
+      cards: [{ id: "c_plain" }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "setState", flow: "alice", story: { visits: 2 } },
+        { op: "keepPocket", flow: "alice" },
+        { op: "parkFlow", flow: "alice", keepOpen: true },
+        { op: "openFlowDurable", flow: "alice", withRestore: true, expectError: true },
+        // Still the flow it was, through the handle taken before the refusal.
+        { op: "assertFlows", expect: ["alice"] },
+        { op: "assertState", flow: "alice", expect: { "story.visits": 2 } },
+      ] },
+
     // --- identity by gameId: trace events and property addresses (4.4) --------
     //
     // One grammar, one vocabulary. A trace event names entities by gameId -

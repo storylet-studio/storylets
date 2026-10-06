@@ -6,6 +6,16 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Added
+
+- **`engine.registry()`**: the scope registry the engine's bags live in, the very object create's `"registry"` option passed in, or the one the engine made because it was given none. The same object for the engine's life; a `hot_swap` replacement on the game's registry answers that same registry. Parity with Unreal's `registry()`.
+- **Durable state is a feature**: each half of what outlives a run has one call to take it and one to put it back. `engine.save_durable()` is the installation's memory (every shared `durable` value by its property address, every spent shared durable one-shot by card gameId), `flow.save_durable()` one player's pocket (the per-flow half, the same shape), `engine.load_durable(memory)` writes the memory into the next run's fresh engine, and `open_flow(id, {"durable": pocket})` opens a flow with its pocket in. Each half is plain data, `{"schema": "storylets/durable@1", "content", "values", "spent"}`, made to cross builds: `load_durable` returns the load report, and `open_flow` hands it to `"on_restore_report"`, naming a value at an address no longer durable on that side (`droppedProperties`), one its declaration no longer takes (`retypedProperties`), a durable declaration the half lacks (`defaultedProperties`), and a spend for a card that is gone (`droppedSpent` for the memory, `droppedCooldowns` for a pocket). Another project's half, an unknown schema, and `"durable"` given with `"restore"` are refused before anything changes, with `push_error`, a missing or non-string schema or project quoted as JS prints it (`unsupported durable schema: undefined`, not `<null>`). A null, an object, or an array of anything but strings in a half's values is retyped or dropped, never written.
+
+### Changed
+
+- **`mark_taken`, and the flow's `snapshot` and `restore`, are internal.** A game carries durable spends with `save_durable` and `load_durable`, parks a flow with `save_flow`, and resumes it with `open_flow`'s `"restore"`.
+- **Kernel `k492cf234`**: a listener's error is no longer reported as a read-only refusal, every listener registered when a write starts hears it once (a listener whose object has been freed is dropped), and fewer allocations on the hot path. An evaluation no longer keeps its context alive after it returns.
+
 ## [0.10.0] - 2026-10-06
 
 ### Added

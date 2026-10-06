@@ -134,6 +134,47 @@ namespace storylets
         std::function<void(const std::string&, int)> onReplacedFlow;
     };
 
+    /** The schema tag every durable half carries, so the shape can change later
+     *  and a runtime can tell which one it was given. */
+    inline const char* const DURABLE_SCHEMA = "storylets/durable@1";
+
+    /**
+     * One DURABLE HALF (ruling H, 2026-10-06): what outlives a run. The
+     * engine's half (Engine::saveDurable) is the installation's memory, a
+     * flow's half (Flow::saveDurable) is the player's pocket, and the two have
+     * one shape.
+     *
+     * Keyed the way everything host-facing is, because a half is meant to
+     * cross builds: a value by its property ADDRESS, exactly as
+     * listProperties() prints it and setProperty takes it (`story.souls`,
+     * `hand.the-elder.met`, `value.harbour/docks.lamps`), and a spend by the
+     * card's GAMEID. A save keys by internal id so it survives a rename; a
+     * durable half keys by name so a person can read it, and a rename shows up
+     * in the report instead. serializeDurable / deserializeDurable
+     * (Storylets/Save.h) are its string boundary.
+     */
+    struct DurableSave
+    {
+        /** DURABLE_SCHEMA when written; anything else is refused on load. */
+        std::string schema = DURABLE_SCHEMA;
+        /** The build it was taken from: a load reports drift against it, and
+         *  refuses another project's. */
+        BundleContent content;
+        /** Every durable property on this half, by address, keys sorted. */
+        OrderedMap<std::string, StoryletValue> values;
+        /** The durable `redraw: never` spends on this half, by card gameId,
+         *  sorted. */
+        std::vector<std::string> spent;
+        /** Addresses this half carries with a value no property can hold: a
+         *  JSON null, an object, or an array of anything but strings. Only
+         *  deserializeDurable fills it (saveDurable never writes one), so that
+         *  a hand-edited or foreign half is reported rather than refused: a
+         *  load files each one as JS files a value its declaration does not
+         *  take, retyped where the address is durable on that side and dropped
+         *  where it is not, and writes nothing for it. */
+        std::vector<std::string> unreadable;
+    };
+
     struct OpenFlowOptions
     {
         /** Seed for this flow's PRNG (absent = the engine's seed). */
@@ -153,10 +194,25 @@ namespace storylets
          * that coming.
          */
         std::optional<FlowSave> restore;
-        /** Handed the restore's LoadReport as it happens - the same report
-         *  previewFlowRestore returns for the same blob. Ignored without
-         *  `restore`; the report has nowhere else to go, since openFlow returns
-         *  the handle. */
+        /**
+         * Open this flow with its POCKET in: a durable half from
+         * Flow::saveDurable, written into the fresh flow before the handle
+         * comes back (ruling H). The flow starts as any new flow does, on its
+         * own seed and clocks, with the pocket's values laid over its defaults
+         * and its durable spends spent. What no longer fits this build is
+         * reported through onRestoreReport, as loadDurable reports the
+         * engine's half.
+         *
+         * Refused together with `restore`: a restore already carries the
+         * flow's durable values, so a pocket beside it would be a second answer
+         * for the same property, and which one won would be a rule nobody could
+         * see.
+         */
+        std::optional<DurableSave> durable;
+        /** Handed the report of a `restore` or a `durable` as it happens. For a
+         *  restore it is the same report previewFlowRestore returns for the
+         *  same blob. Ignored without either; the report has nowhere else to
+         *  go, since openFlow returns the handle. */
         std::function<void(const LoadReport&)> onRestoreReport;
     };
 
@@ -1069,6 +1125,88 @@ namespace storylets
         {
             return std::vector<ScopeDeclaration>(decls.begin(), decls.end());
         }
+
+        // --- durable state (ruling H, 2026-10-06) ------------------------------
+
+        /** A card whose spend outlives the run: `redraw: never`, with `durable`
+         *  on the card or, failing that, its deck, the same fall-through
+         *  `shared` has. Only `never` can cross a run boundary: a finite
+         *  cooldown is an absolute turn of a clock that restarts with the run. */
+        inline bool CardIsDurable(const Card& card, const Deck& deck)
+        {
+            return card.redraw.kind == RedrawPolicy::Kind::Never
+                && card.durable.value_or(deck.durable.value_or(false));
+        }
+
+        /** One durable declaration on one side of the sharing flag, with the
+         *  address a durable half keys it by and where its bag is. */
+        struct DurableProp
+        {
+            std::string address;
+            /** "story", or the owned scope word. */
+            std::string kind;
+            /** The owner's internal id; empty for `story`. */
+            std::string owner;
+            PropertyDecl decl;
+        };
+
+        /** The durable declarations and durable cards on each side, precomputed
+         *  once from the two declaration halves and the decks. */
+        struct DurableIndex
+        {
+            std::vector<DurableProp> shared;
+            std::vector<DurableProp> flow;
+            std::vector<CardEntry> sharedCards;
+            std::vector<CardEntry> flowCards;
+        };
+
+        /** What a durable half will write, decided before anything is written. */
+        struct DurablePlan
+        {
+            /** Index into the side's DurableProp list, and the value it takes,
+             *  in the order the half carried them. */
+            std::vector<std::pair<size_t, StoryletValue>> values;
+            /** Internal card ids to spend. */
+            std::vector<std::string> cards;
+        };
+
+        /** The bag a durable declaration lives in on one side; null for an
+         *  owner that side has no bag for. */
+        inline PropertyBag* DurableBag(const Partition& p, const DurableProp& prop)
+        {
+            if (prop.kind == "story") return p.story.get();
+            const std::shared_ptr<PropertyBag>* bag = KindOf(p, prop.kind).get(prop.owner);
+            return bag ? bag->get() : nullptr;
+        }
+
+        /** One half's values, keys in byte order so the same state writes the
+         *  same text. */
+        inline OrderedMap<std::string, StoryletValue> DurableValues(const Partition& p, const std::vector<DurableProp>& props)
+        {
+            std::vector<std::pair<std::string, StoryletValue>> entries;
+            for (const DurableProp& prop : props)
+            {
+                const PropertyBag* bag = DurableBag(p, prop);
+                std::optional<StoryletValue> value = bag ? bag->get(prop.decl.name) : std::nullopt;
+                if (value.has_value()) entries.emplace_back(prop.address, std::move(*value));
+            }
+            std::sort(entries.begin(), entries.end(),
+                [](const std::pair<std::string, StoryletValue>& a, const std::pair<std::string, StoryletValue>& b)
+                {
+                    return a.first < b.first;
+                });
+            OrderedMap<std::string, StoryletValue> out;
+            for (auto& entry : entries) out.set(entry.first, std::move(entry.second));
+            return out;
+        }
+
+        /** A host write of one durable value: silent, as every host write is,
+         *  and past a `writable: false`, which is the story's promise and not
+         *  the game's. */
+        inline void PutDurable(PropertyBag* bag, const std::string& name, const StoryletValue& value)
+        {
+            if (bag) bag->set(name, value, /*silent=*/true, "host durable", /*host=*/true);
+        }
     }
 
     class Flow;
@@ -1139,7 +1277,6 @@ namespace storylets
          *  id. The claim ledger is DERIVED from live boards and needs no
          *  storage; this one is durable, so it rides the save. */
         bool isTaken(const std::string& cardId) const { return spent_.count(cardId) > 0; }
-        void markTaken(const std::string& cardId) { spent_.insert(cardId); }
 
         /** Shared claims across every LIVE flow, card id -> holders. Derived,
          *  which is what makes closeFlow and the openFlow replace release what
@@ -1153,6 +1290,13 @@ namespace storylets
     private:
         /** The one walk behind both: every live flow's board, but `except`. */
         std::unordered_map<std::string, int> claimsHeld(const std::string* except) const;
+
+        /** Internal: take a shared one-shot out of the world, as its play does
+         *  (a Flow, which is a friend, calls it). Keyed by internal id. A host
+         *  carries spends across a run with saveDurable and loadDurable, which
+         *  speak gameIds and check that the card is still one that may be
+         *  carried (ruling H). */
+        void markTaken(const std::string& cardId) { spent_.insert(cardId); }
 
     public:
 
@@ -1282,6 +1426,32 @@ namespace storylets
          *  cost, so the cost comes back with the load whether or not anybody
          *  looked first. */
         LoadReport loadGame(const SaveEnvelope& envelope);
+
+        // --- durable state (ruling H, 2026-10-06) ----------------------------
+
+        /** The engine's DURABLE HALF, the installation's memory: every shared
+         *  `durable` property's value by its address, and every shared durable
+         *  one-shot that has been spent, by card gameId. What a new run starts
+         *  from, through loadDurable; a flow's own half is
+         *  Flow::saveDurable. */
+        DurableSave saveDurable() const;
+
+        /**
+         * Write the engine's durable half into this engine, a fresh one at the
+         * top of a new run. Every shared durable property takes the memory's
+         * value, or its default where the memory carries none that fits, and
+         * every spend the memory lists is taken out of the world. Nothing else
+         * is touched: not a run-scoped value, not a flow, not a spend the
+         * memory does not name.
+         *
+         * Returns the report loadGame would give, for this half: an address
+         * this build does not declare durable and shared is dropped, a value
+         * its declaration no longer takes is retyped, a durable declaration the
+         * memory lacks is defaulted, and a spend for a card that is no longer a
+         * shared durable one-shot is a dropped spent card. Another project's
+         * memory, or an unknown schema, is refused before anything moves.
+         */
+        LoadReport loadDurable(const DurableSave& memory);
 
         // --- the @world seam (used by flows and hosts alike) -----------------
 
@@ -1821,6 +1991,41 @@ namespace storylets
         /** The scope walk over all five scopes of one partition. */
         PropsPartition walkPartition(const detail::FlowDecls& decls, const PropsPartition* values,
             const std::string& flow, detail::ReportDraft& draft) const;
+
+        /** Every durable declaration in one side's halves, in bundle order.
+         *  Where two owners print the same address (two groups in one box
+         *  naming a tag alike, the residual the compiler is closing) the first
+         *  answers, which is the rule resolveOwner keeps for the same address. */
+        std::vector<detail::DurableProp> durableProps(const detail::FlowDecls& decls) const;
+
+        /** The two refusals every durable load shares, made before anything
+         *  moves: a shape this runtime does not know, and another project's
+         *  state. */
+        void assertDurable(const DurableSave& save) const;
+
+        /**
+         * Walk one durable half against this build's durable declarations and
+         * durable cards on one side (`flow` names the flow for a pocket;
+         * absent, it is the engine's memory), filing what does not fit in the
+         * load report's own fields. Pure: the caller writes the plan.
+         *
+         * A value lands only at an address this build declares DURABLE ON THIS
+         * SIDE: a renamed property, one no longer durable, and one that moved
+         * to the other side of `shared` are all dropped, since this half would
+         * never have carried them. A value its declaration no longer takes is
+         * retyped and takes the default; a durable declaration the half does
+         * not carry is defaulted. A spend lands only on a card that is still a
+         * durable one-shot on this side, and is otherwise a dropped cooldown (a
+         * pocket's spends are cooldowns) or a dropped spent card (a memory's
+         * are the engine's spent set), named by the gameId the half carried.
+         */
+        detail::DurablePlan planDurable(const std::vector<detail::DurableProp>& props,
+            const std::vector<detail::CardEntry>& cards, const DurableSave& save,
+            const std::optional<std::string>& flow, detail::ReportDraft& draft) const;
+
+        /** The durable declarations and durable cards on each side, built once
+         *  at construction (a bundle never changes). */
+        detail::DurableIndex durable_;
 
         detail::Partition shared_;
         detail::FlowDecls flowDecls_;
@@ -4126,10 +4331,47 @@ namespace storylets
 
         // --- persistence (schema 4) ------------------------------------------------
 
-        /** This flow's blob: inside the engine's envelope without its
+        /** This flow's DURABLE HALF, the player's pocket (ruling H): every
+         *  per-flow `durable` property's value by its address, and every
+         *  per-flow durable one-shot this flow has spent, by card gameId. A
+         *  later run opens the player's flow with it, through openFlow's
+         *  `durable`; the shared half is Engine::saveDurable. A copy:
+         *  StoryletValue is a value type. */
+        DurableSave saveDurable() const
+        {
+            assertOpen();
+            DurableSave pocket;
+            pocket.content = engine_->bundle_->content;
+            pocket.values = detail::DurableValues(stores_, engine_->durable_.flow);
+            for (const CardEntry& entry : engine_->durable_.flowCards)
+            {
+                const double* cooldown = cooldowns_.get(entry.card->id);
+                if (cooldown && *cooldown == MAX_SAFE_INTEGER) pocket.spent.push_back(EffectiveGameId(*entry.card));
+            }
+            std::sort(pocket.spent.begin(), pocket.spent.end());
+            return pocket;
+        }
+
+    private:
+        /** Internal: write a planned pocket into this freshly opened flow
+         *  (openFlow's `durable`, which has already checked and planned it). Its
+         *  bags hold their defaults, so only what the plan carries is written. */
+        void writeDurable(const detail::DurablePlan& plan)
+        {
+            const std::vector<detail::DurableProp>& props = engine_->durable_.flow;
+            for (const auto& pair : plan.values)
+            {
+                const detail::DurableProp& prop = props[pair.first];
+                detail::PutDurable(detail::DurableBag(stores_, prop), prop.decl.name, pair.second);
+            }
+            for (const std::string& cardId : plan.cards) cooldowns_.set(cardId, MAX_SAFE_INTEGER);
+        }
+
+        /** Internal: this flow's blob, inside the engine's envelope without its
          *  properties (the registry has them), or parked whole by saveFlow
          *  (StoryletValue is a value type, so a container-deep copy is the TS
-         *  structuredClone). */
+         *  structuredClone). Engine-side plumbing; a host parks a flow with
+         *  Engine::saveFlow. */
         FlowSave snapshot(bool withProps) const
         {
             FlowSave save;
@@ -4151,8 +4393,12 @@ namespace storylets
             return save;
         }
 
-        /** Restore a freshly opened flow from its blob (loadGame). Orphaned
-         *  keys (deleted entities) drop; new declarations keep defaults. */
+        /** Internal: restore a freshly opened flow from its blob (loadGame, and
+         *  openFlow's `restore`, both of which clean the blob first). Orphaned
+         *  keys (deleted entities) drop; new declarations keep defaults.
+         *  Engine-side plumbing that skips the checks a restore through openFlow
+         *  makes, which is why a host resumes a flow through openFlow and never
+         *  through this. */
         void restore(const FlowSave& saved)
         {
             if (saved.props.has_value())
@@ -4232,6 +4478,11 @@ namespace storylets
                     cardsById_.set(card.id, entry);
                     cardsByGameId_.set(EffectiveGameId(card), entry);
                     if (card.shared.has_value() && *card.shared) hasShared_ = true;
+                    if (detail::CardIsDurable(card, deck))
+                    {
+                        const bool shared = Flow::cardIsShared(card, deck.shared.has_value() && *deck.shared);
+                        (shared ? durable_.sharedCards : durable_.flowCards).push_back(entry);
+                    }
                 }
             }
             for (const auto& t : box.handTemplates)
@@ -4294,6 +4545,8 @@ namespace storylets
                 sharedDecls_.value.set(tag.id, half("value", tag.properties, true));
             }
         }
+        durable_.shared = durableProps(sharedDecls_);
+        durable_.flow = durableProps(flowDecls_);
         initShared();
     }
 
@@ -4346,6 +4599,21 @@ namespace storylets
 
     inline FlowPtr Engine::open(const std::string& id, const OpenFlowOptions& opts, bool claim)
     {
+        if (opts.durable.has_value() && opts.restore.has_value())
+        {
+            throw StoryletError("openFlow \"" + id
+                + "\": restore and durable cannot be given together; a restore already carries the flow's durable state");
+        }
+        // A pocket is checked and planned before the name is touched: a
+        // refusal, and anything the plan finds, must leave the flow already
+        // open as it was.
+        std::optional<detail::DurablePlan> pocket;
+        detail::ReportDraft pocketDraft;
+        if (opts.durable.has_value())
+        {
+            assertDurable(*opts.durable);
+            pocket = planDurable(durable_.flow, durable_.flowCards, *opts.durable, id, pocketDraft);
+        }
         assertExternalScopes();
         // The world's claims as they stand WITHOUT this name, taken before the
         // replace: a resume competes with the other flows, never with the flow
@@ -4373,6 +4641,14 @@ namespace storylets
             if (opts.onRestoreReport)
             {
                 opts.onRestoreReport(detail::FinishReport(bundle_->content, bundle_->content, {id}, draft));
+            }
+        }
+        if (pocket.has_value())
+        {
+            flow->writeDurable(*pocket);
+            if (opts.onRestoreReport)
+            {
+                opts.onRestoreReport(detail::FinishReport(bundle_->content, opts.durable->content, {id}, pocketDraft));
             }
         }
         return flow;
@@ -4694,6 +4970,127 @@ namespace storylets
             open(pair.first, OpenFlowOptions(), /*claim=*/true)->restore(pair.second);
         }
         return plan.report;
+    }
+
+    inline std::vector<detail::DurableProp> Engine::durableProps(const detail::FlowDecls& decls) const
+    {
+        std::vector<detail::DurableProp> out;
+        std::unordered_set<std::string> seen;
+        auto push = [&out, &seen](detail::DurableProp prop)
+        {
+            if (!seen.insert(prop.address).second) return;
+            out.push_back(std::move(prop));
+        };
+        for (const PropertyDecl& decl : decls.story)
+        {
+            if (decl.durable.value_or(false)) push(detail::DurableProp{"story." + decl.name, "story", std::string(), decl});
+        }
+        for (const char* kind : {"box", "deck", "hand", "value"})
+        {
+            for (const auto& pair : detail::KindOf(decls, kind))
+            {
+                for (const PropertyDecl& decl : pair.second)
+                {
+                    if (!decl.durable.value_or(false)) continue;
+                    push(detail::DurableProp{addressOf(kind, pair.first) + "." + decl.name, kind, pair.first, decl});
+                }
+            }
+        }
+        return out;
+    }
+
+    inline void Engine::assertDurable(const DurableSave& save) const
+    {
+        if (save.schema != DURABLE_SCHEMA) throw StoryletError("unsupported durable schema: " + save.schema);
+        if (save.content.project != bundle_->content.project)
+        {
+            throw StoryletError("durable state is for project \"" + save.content.project
+                + "\", bundle is \"" + bundle_->content.project + "\"");
+        }
+    }
+
+    inline detail::DurablePlan Engine::planDurable(const std::vector<detail::DurableProp>& props,
+        const std::vector<detail::CardEntry>& cards, const DurableSave& save,
+        const std::optional<std::string>& flow, detail::ReportDraft& draft) const
+    {
+        const std::string at = flow.has_value() ? *flow : std::string();
+        std::unordered_map<std::string, size_t> byAddress;
+        for (size_t i = 0; i < props.size(); ++i) byAddress.emplace(props[i].address, i);
+        detail::DurablePlan plan;
+        for (const auto& pair : save.values)
+        {
+            const auto found = byAddress.find(pair.first);
+            if (found == byAddress.end())
+            {
+                draft.droppedProperties.push_back(LoadProperty{at, pair.first});
+                continue;
+            }
+            if (!detail::ValueFits(props[found->second].decl, pair.second))
+            {
+                draft.retypedProperties.push_back(LoadProperty{at, pair.first});
+                continue;
+            }
+            plan.values.emplace_back(found->second, pair.second);
+        }
+        // A value no property can hold fits no declaration: dropped where the
+        // address is not durable on this side, retyped where it is, exactly as
+        // JS's valueFits answers for a null or an object.
+        std::unordered_set<std::string> carried(save.unreadable.begin(), save.unreadable.end());
+        for (const std::string& address : save.unreadable)
+        {
+            if (byAddress.count(address) == 0) draft.droppedProperties.push_back(LoadProperty{at, address});
+            else draft.retypedProperties.push_back(LoadProperty{at, address});
+        }
+        for (const detail::DurableProp& prop : props)
+        {
+            if (!save.values.contains(prop.address) && carried.count(prop.address) == 0)
+            {
+                draft.defaultedProperties.push_back(LoadProperty{at, prop.address});
+            }
+        }
+        std::unordered_set<std::string> eligible;
+        for (const detail::CardEntry& entry : cards) eligible.insert(entry.card->id);
+        for (const std::string& gameId : save.spent)
+        {
+            const detail::CardEntry* entry = cardsByGameId_.get(gameId);
+            if (entry && eligible.count(entry->card->id) > 0) plan.cards.push_back(entry->card->id);
+            else if (flow.has_value()) draft.droppedCooldowns.push_back(LoadCooldown{*flow, gameId});
+            else draft.droppedSpent.push_back(gameId);
+        }
+        return plan;
+    }
+
+    inline DurableSave Engine::saveDurable() const
+    {
+        DurableSave memory;
+        memory.content = bundle_->content;
+        memory.values = detail::DurableValues(shared_, durable_.shared);
+        for (const detail::CardEntry& entry : durable_.sharedCards)
+        {
+            if (spent_.count(entry.card->id) > 0) memory.spent.push_back(EffectiveGameId(*entry.card));
+        }
+        std::sort(memory.spent.begin(), memory.spent.end());
+        return memory;
+    }
+
+    inline LoadReport Engine::loadDurable(const DurableSave& memory)
+    {
+        assertDurable(memory);
+        detail::ReportDraft draft;
+        const detail::DurablePlan plan = planDurable(durable_.shared, durable_.sharedCards, memory, std::nullopt, draft);
+        // Every shared durable property takes the memory's value or, where the
+        // memory has none that fits, its default: the memory is the whole of
+        // this half, so a value it lacks is not left as this run found it.
+        std::vector<const StoryletValue*> planned(durable_.shared.size(), nullptr);
+        for (const auto& pair : plan.values) planned[pair.first] = &pair.second;
+        for (size_t i = 0; i < durable_.shared.size(); ++i)
+        {
+            const detail::DurableProp& prop = durable_.shared[i];
+            detail::PutDurable(detail::DurableBag(shared_, prop), prop.decl.name,
+                planned[i] ? *planned[i] : prop.decl.defaultOrTypeDefault());
+        }
+        for (const std::string& cardId : plan.cards) spent_.insert(cardId);
+        return detail::FinishReport(bundle_->content, memory.content, {}, draft);
     }
 
     inline Engine::HotSwapResult Engine::hotSwap(BundlePtr bundle, const std::function<void(EngineOptions&)>& change)

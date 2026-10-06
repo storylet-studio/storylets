@@ -111,7 +111,7 @@ import type {
   SaveEnvelope, SaveEnvelopeV1, Tag, TagGroup,
 } from "@storylet-studio/model";
 import { SAVE_SCHEMA, SAVE_SCHEMA_V1 } from "@storylet-studio/model";
-import { PropertyBag as StateBag, ScopeRegistry } from "@wildwinter/scoperegistry";
+import { PropertyBag as StateBag, ScopeRegistry, defaultFor } from "@wildwinter/scoperegistry";
 import type { PropertyRow, ScopeDeclaration } from "@wildwinter/scoperegistry";
 import { makePrng, shuffleInPlace } from "./prng.js";
 import type { Prng } from "./prng.js";
@@ -191,11 +191,52 @@ export interface OpenFlowOptions {
    * `claimed-elsewhere`. Ask `previewFlowRestore` first to see that coming.
    */
   restore?: FlowSave;
-  /** Handed the `restore`'s LoadReport as it happens - the same report
-   *  `previewFlowRestore` returns for the same blob. Ignored without
-   *  `restore`; the report has nowhere else to go, since `openFlow` returns
-   *  the handle. */
+  /**
+   * Open this flow with its POCKET in: a durable half from `flow.saveDurable()`,
+   * written into the fresh flow before the handle comes back (ruling H). The
+   * flow starts as any new flow does, on its own seed and clocks, with the
+   * pocket's values laid over its defaults and its durable spends spent.
+   * What no longer fits this build is reported through `onRestoreReport`, as
+   * `loadDurable` reports the engine's half.
+   *
+   * Refused together with `restore`: a restore already carries the flow's
+   * durable values, so a pocket beside it would be a second answer for the
+   * same property, and which one won would be a rule nobody could see.
+   */
+  durable?: DurableSave;
+  /** Handed the report of a `restore` or a `durable` as it happens. For a
+   *  restore it is the same report `previewFlowRestore` returns for the same
+   *  blob. Ignored without either; the report has nowhere else to go, since
+   *  `openFlow` returns the handle. */
   onRestoreReport?: (report: LoadReport) => void;
+}
+
+/** The schema tag every durable half carries, so the shape can change later
+ *  and a runtime can tell which one it was given. */
+export const DURABLE_SCHEMA = "storylets/durable@1";
+
+/**
+ * One DURABLE HALF (ruling H, 2026-10-06): what outlives a run. The engine's
+ * half (`engine.saveDurable()`) is the installation's memory, a flow's half
+ * (`flow.saveDurable()`) is the player's pocket, and the two have one shape.
+ *
+ * Keyed the way everything host-facing is, because a half is meant to cross
+ * builds: a value by its property ADDRESS, exactly as `listProperties()`
+ * prints it and `setProperty` takes it (`story.souls`, `hand.the-elder.met`,
+ * `value.harbour/docks.lamps`), and a spend by the card's GAMEID. A save keys
+ * by internal id so it survives a rename; a durable half keys by name so a
+ * person can read it, and a rename shows up in the report instead.
+ */
+export interface DurableSave {
+  schema: typeof DURABLE_SCHEMA;
+  /** The build it was taken from: a load reports drift against it, and
+   *  refuses another project's. */
+  content: BundleContent;
+  /** Every durable property on this half, by address, keys sorted. */
+  values: Record<string, ScalarValue>;
+  /** The durable `redraw: "never"` spends on this half, by card gameId,
+   *  sorted. */
+  spent: string[];
 }
 
 /** A card view in a dealt hand or a peeked list. Carries NO outcome
@@ -324,6 +365,13 @@ interface CardEntry {
  *  loop and pass the answer down: the ask runs this per card per deal. */
 const cardIsShared = (card: Card<Expression>, deckShared: boolean): boolean =>
   card.shared ?? deckShared;
+
+/** A card whose spend outlives the run: `redraw: "never"`, with `durable` on
+ *  the card or, failing that, its deck, the same fall-through `shared` has.
+ *  Only `never` can cross a run boundary: a finite cooldown is an absolute turn
+ *  of a clock that restarts with the run. */
+const cardIsDurable = (card: Card<Expression>, deck: Deck<Expression>): boolean =>
+  card.redraw === "never" && (card.durable ?? deck.durable ?? false) === true;
 
 /** How many hands ACROSS EVERY FLOW may hold this at once. Defaults to
  *  `copies`, so the common case writes one number and only "five in the world,
@@ -585,6 +633,122 @@ interface Partition {
 
 type PartitionKind = keyof Partition;
 
+/** One durable declaration on one side of the sharing flag, with the address a
+ *  durable half keys it by and where its bag is. */
+interface DurableProp {
+  address: string;
+  kind: FlaggedScope;
+  /** The owner's internal id; absent for `story`. */
+  owner?: string;
+  decl: PropertyDecl;
+}
+
+/** Every durable declaration in one side's DeclSet, in bundle order. Where two
+ *  owners print the same address (two groups in one box naming a tag alike,
+ *  the residual the compiler is closing) the first answers, which is the rule
+ *  `resolveOwner` keeps for the same address. */
+const durableProps = (internals: Internals, decls: DeclSet): DurableProp[] => {
+  const out: DurableProp[] = [];
+  const seen = new Set<string>();
+  const push = (p: DurableProp): void => {
+    if (seen.has(p.address)) return;
+    seen.add(p.address);
+    out.push(p);
+  };
+  for (const decl of decls.story) if (decl.durable === true) push({ address: `story.${decl.name}`, kind: "story", decl });
+  for (const kind of OWNED_SCOPES) {
+    for (const [owner, list] of decls[kind]) {
+      for (const decl of list) {
+        if (decl.durable === true) push({ address: `${addressOf(internals, kind, owner)}.${decl.name}`, kind, owner, decl });
+      }
+    }
+  }
+  return out;
+};
+
+const durableBag = (p: Partition, prop: DurableProp): StateBag | undefined =>
+  prop.kind === "story" ? p.story : p[prop.kind].get(prop.owner!);
+
+/** One half's values, keys in byte order so the same state writes the same
+ *  text. An address never looks like an integer (it has a dot in it), so the
+ *  object keeps that order (ruling E). */
+const durableValues = (p: Partition, props: DurableProp[]): Record<string, ScalarValue> => {
+  const entries: [string, ScalarValue][] = [];
+  for (const prop of props) {
+    const value = ownValue(durableBag(p, prop), prop.decl.name);
+    if (value !== undefined) entries.push([prop.address, value]);
+  }
+  return Object.fromEntries(byKey(entries, ([address]) => address));
+};
+
+/** What a durable half will write, decided before anything is written. */
+interface DurablePlan {
+  values: Map<DurableProp, ScalarValue>;
+  /** Internal card ids to spend. */
+  cards: string[];
+}
+
+/**
+ * Walk one durable half against this build's durable declarations and
+ * durable cards on one side (`flow` names the flow for a pocket; absent, it is
+ * the engine's memory), filing what does not fit in the load report's own
+ * fields. Pure: the caller writes the plan.
+ *
+ * A value lands only at an address this build declares DURABLE ON THIS SIDE:
+ * a renamed property, one no longer durable, and one that moved to the other
+ * side of `shared` are all dropped, since this half would never have carried
+ * them. A value its declaration no longer takes is retyped and takes the
+ * default; a durable declaration the half does not carry is defaulted. A spend
+ * lands only on a card that is still a durable one-shot on this side, and is
+ * otherwise a dropped cooldown (a pocket's spends are cooldowns) or a dropped
+ * spent card (a memory's are the engine's spent set), named by the gameId the
+ * half carried.
+ */
+function planDurable(
+  internals: Internals, props: DurableProp[], cards: CardEntry[],
+  save: DurableSave, flow: string | undefined, draft: ReportDraft,
+): DurablePlan {
+  const at = (path: string): LoadProperty => ({ ...(flow !== undefined ? { flow } : {}), path });
+  const byAddress = new Map(props.map((p) => [p.address, p]));
+  const values = new Map<DurableProp, ScalarValue>();
+  const carried = save.values ?? {};
+  for (const [address, value] of Object.entries(carried)) {
+    const prop = byAddress.get(address);
+    if (prop === undefined) { draft.droppedProperties.push(at(address)); continue; }
+    if (!valueFits(prop.decl, value)) { draft.retypedProperties.push(at(address)); continue; }
+    values.set(prop, value);
+  }
+  for (const prop of props) {
+    if (!Object.prototype.hasOwnProperty.call(carried, prop.address)) draft.defaultedProperties.push(at(prop.address));
+  }
+  const eligible = new Set(cards.map((e) => e.card.id));
+  const spend: string[] = [];
+  for (const gameId of save.spent ?? []) {
+    const entry = internals.cardsByGameId.get(gameId);
+    if (entry !== undefined && eligible.has(entry.card.id)) spend.push(entry.card.id);
+    else if (flow !== undefined) draft.droppedCooldowns.push({ flow, card: gameId });
+    else draft.droppedSpent.push(gameId);
+  }
+  return { values, cards: spend };
+}
+
+/** The two refusals every durable load shares, made before anything moves: a
+ *  shape this runtime does not know, and another project's state. */
+const assertDurable = (internals: Internals, save: DurableSave): void => {
+  const schema = (save as { schema?: unknown } | null | undefined)?.schema;
+  if (schema !== DURABLE_SCHEMA) throw new StoryletError(`unsupported durable schema: ${String(schema)}`);
+  const project = internals.bundle.content.project;
+  if (save.content?.project !== project) {
+    throw new StoryletError(`durable state is for project "${String(save.content?.project)}", bundle is "${project}"`);
+  }
+};
+
+/** A host write of one durable value: silent, as every host write is, and
+ *  past a `writable: false`, which is the story's promise and not the game's. */
+const putDurable = (bag: StateBag | undefined, name: string, value: ScalarValue): void => {
+  bag?.set(name, structuredClone(value), { silent: true, reason: "host durable", host: true });
+};
+
 /** Everything a Flow shares with its Engine: the bundle-derived lookups
  *  (immutable), the shared stores (reseeded in place by loadGame/reset),
  *  and the seams. One object, held by both classes - the two are one
@@ -629,6 +793,9 @@ interface Internals {
    *  what the shared side WOULD hold without building a bag, which is what
    *  makes previewLoad pure. */
   sharedDecls: DeclSet;
+  /** The durable declarations and durable cards on each side (ruling H),
+   *  precomputed once from the two DeclSets and the decks. */
+  durable: { shared: DurableProp[]; flow: DurableProp[]; sharedCards: CardEntry[]; flowCards: CardEntry[] };
   /** The shared stores, registered in the registry for the engine's life.
    *  Reseeded in place by reset and by a load that carries values. */
   shared: Partition;
@@ -820,7 +987,7 @@ function valueFits(decl: PropertyDecl, value: ScalarValue): boolean {
     case "quality":
       return typeof value === "string" && (decl.stages === undefined || decl.stages.includes(value));
     case "flags":
-      return Array.isArray(value) && (decl.values === undefined || value.every((f) => decl.values!.includes(f)));
+      return Array.isArray(value) && value.every((f) => typeof f === "string" && (decl.values === undefined || decl.values.includes(f)));
     default: return true;
   }
 }
@@ -1037,6 +1204,7 @@ export class Engine {
       hasShared: false,
       flowDecls: { story: [], box: new Map(), deck: new Map(), hand: new Map(), value: new Map() },
       sharedDecls: { story: [], box: new Map(), deck: new Map(), hand: new Map(), value: new Map() },
+      durable: { shared: [], flow: [], sharedCards: [], flowCards: [] },
       shared: undefined as unknown as Partition,
       registry: opts.registry ?? new ScopeRegistry(),
       ownsRegistry: opts.registry === undefined,
@@ -1094,6 +1262,9 @@ export class Engine {
           internals.cardsById.set(card.id, entry);
           internals.cardsByGameId.set(effectiveGameId(card), entry);
           if (card.shared === true) internals.hasShared = true;
+          if (cardIsDurable(card, deck)) {
+            (cardIsShared(card, deck.shared ?? false) ? internals.durable.sharedCards : internals.durable.flowCards).push(entry);
+          }
         }
       }
       for (const template of box.handTemplates) {
@@ -1130,6 +1301,8 @@ export class Engine {
     });
     internals.flowDecls = declSet(flowHalf);
     internals.sharedDecls = declSet(sharedHalf);
+    internals.durable.shared = durableProps(internals, internals.sharedDecls);
+    internals.durable.flow = durableProps(internals, internals.flowDecls);
 
     this.initShared(this.hostWorld);
   }
@@ -1239,6 +1412,14 @@ export class Engine {
       || any(internals.ladders.value) || any(internals.ladders.hand);
   }
 
+  /** The registry this engine's bags live in: the game's, the very object the
+   *  `registry` option passed in, or the one the engine made because it was
+   *  given none. The same object for the engine's life. Read-only: a game
+   *  hands an engine its registry at construction and never swaps it. */
+  get registry(): ScopeRegistry {
+    return this.internals.registry;
+  }
+
   // --- flow management (Patter's surface, name for name) ----------------------
 
   /** Open (or REPLACE) the named flow. An existing id's flow is closed
@@ -1253,6 +1434,18 @@ export class Engine {
    *  the values the registry holds for them (a load); a fresh open is a reset
    *  of that name, so anything waiting for it is discarded first. */
   private open(id: string, opts: OpenFlowOptions, claim: boolean): Flow {
+    if (opts.durable !== undefined && opts.restore !== undefined) {
+      throw new StoryletError(`openFlow "${id}": restore and durable cannot be given together; a restore already carries the flow's durable state`);
+    }
+    // A pocket is checked and planned before the name is touched: a refusal,
+    // and anything the plan finds, must leave the flow already open as it was.
+    let durable: { plan: DurablePlan; draft: ReportDraft; content: BundleContent } | undefined;
+    if (opts.durable !== undefined) {
+      assertDurable(this.internals, opts.durable);
+      const draft = emptyDraft();
+      const { flow: props, flowCards } = this.internals.durable;
+      durable = { plan: planDurable(this.internals, props, flowCards, opts.durable, id, draft), draft, content: opts.durable.content };
+    }
     this.assertExternalScopes();
     // The world's claims as they stand WITHOUT this name, taken before the
     // replace: a resume competes with the other flows, never with the flow it
@@ -1286,6 +1479,10 @@ export class Engine {
       flow.restore(clean);
       const content = this.internals.bundle.content;
       opts.onRestoreReport?.(finishReport(content, content, [id], draft));
+    }
+    if (durable !== undefined) {
+      flow.writeDurable(durable.plan);
+      opts.onRestoreReport?.(finishReport(this.internals.bundle.content, durable.content, [id], durable.draft));
     }
     return flow;
   }
@@ -1357,10 +1554,10 @@ export class Engine {
     return this.spent.has(cardId);
   }
 
-  /** Take a shared one-shot out of the world, as its play would. Kept in the
-   *  published types (no internal tag, which the type build strips):
-   *  Storyletter's Board and the Storylet Server both call it to carry a run's
-   *  spent cards into a new run, and nothing else offers that. */
+  /** @internal - take a shared one-shot out of the world, as its play does.
+   *  Keyed by internal id. A host carries spends across a run with
+   *  `saveDurable` and `loadDurable`, which speak gameIds and check that the
+   *  card is still one that may be carried (ruling H). */
   markTaken(cardId: string): void {
     this.spent.add(cardId);
   }
@@ -1680,6 +1877,52 @@ export class Engine {
     // Parked whole, properties included: a parked flow's bags leave the
     // registry when it closes, so its values have to travel with it.
     return structuredClone(flow.snapshot(true));
+  }
+
+  /**
+   * The engine's DURABLE HALF, the installation's memory (ruling H): every
+   * shared `durable` property's value by its address, and every shared
+   * durable one-shot that has been spent, by card gameId. What a new run
+   * starts from, through `loadDurable`; a flow's own half is
+   * `flow.saveDurable()`.
+   */
+  saveDurable(): DurableSave {
+    const { bundle, shared, durable } = this.internals;
+    return structuredClone({
+      schema: DURABLE_SCHEMA,
+      content: bundle.content,
+      values: durableValues(shared, durable.shared),
+      spent: durable.sharedCards.filter((e) => this.spent.has(e.card.id)).map((e) => effectiveGameId(e.card)).sort(),
+    });
+  }
+
+  /**
+   * Write the engine's durable half into this engine, a fresh one at the top
+   * of a new run (ruling H). Every shared durable property takes the memory's
+   * value, or its default where the memory carries none that fits, and every
+   * spend the memory lists is taken out of the world. Nothing else is touched:
+   * not a run-scoped value, not a flow, not a spend the memory does not name.
+   *
+   * Returns the report `loadGame` would give, for this half: an address this
+   * build does not declare durable and shared is dropped, a value its
+   * declaration no longer takes is retyped, a durable declaration the memory
+   * lacks is defaulted, and a spend for a card that is no longer a shared
+   * durable one-shot is a dropped spent card. Another project's memory, or an
+   * unknown schema, is refused before anything moves.
+   */
+  loadDurable(memory: DurableSave): LoadReport {
+    const internals = this.internals;
+    assertDurable(internals, memory);
+    const draft = emptyDraft();
+    const plan = planDurable(internals, internals.durable.shared, internals.durable.sharedCards, memory, undefined, draft);
+    for (const prop of internals.durable.shared) {
+      const value = plan.values.has(prop)
+        ? plan.values.get(prop)!
+        : defaultFor(prop.decl as unknown as ScopeDeclaration);
+      putDurable(durableBag(internals.shared, prop), prop.decl.name, value);
+    }
+    for (const cardId of plan.cards) this.spent.add(cardId);
+    return finishReport(internals.bundle.content, memory.content, [], draft);
   }
 
   /** What `loadGame(envelope)` would do that is not a plain restore, without
@@ -3245,12 +3488,37 @@ export class Flow {
 
   // --- persistence (schema 4) -------------------------------------------------
 
-  /** This flow's blob: inside the engine's envelope without its properties
-   *  (the registry has them), or parked whole by saveFlow. Engine-side
-   *  plumbing; a host parks a flow with `engine.saveFlow`. It carries no
-   *  internal tag (which the type build strips) only because a Storylet Server
-   *  test calls it with `restore` below; once that test moves to `saveFlow`
-   *  and `openFlow({ restore })`, both should be tagged. */
+  /**
+   * This flow's DURABLE HALF, the player's pocket (ruling H): every per-flow
+   * `durable` property's value by its address, and every per-flow durable
+   * one-shot this flow has spent, by card gameId. A later run opens the
+   * player's flow with it, `openFlow(id, { durable })`; the shared half is
+   * `engine.saveDurable()`.
+   */
+  saveDurable(): DurableSave {
+    this.assertOpen();
+    const { bundle, durable } = this.internals;
+    return structuredClone({
+      schema: DURABLE_SCHEMA,
+      content: bundle.content,
+      values: durableValues(this.stores, durable.flow),
+      spent: durable.flowCards
+        .filter((e) => this.cooldowns[e.card.id] === Number.MAX_SAFE_INTEGER)
+        .map((e) => effectiveGameId(e.card)).sort(),
+    });
+  }
+
+  /** @internal - write a planned pocket into this freshly opened flow
+   *  (openFlow's `durable`, which has already checked and planned it). Its
+   *  bags hold their defaults, so only what the plan carries is written. */
+  writeDurable(plan: DurablePlan): void {
+    for (const [prop, value] of plan.values) putDurable(durableBag(this.stores, prop), prop.decl.name, value);
+    for (const cardId of plan.cards) this.cooldowns[cardId] = Number.MAX_SAFE_INTEGER;
+  }
+
+  /** @internal - this flow's blob: inside the engine's envelope without its
+   *  properties (the registry has them), or parked whole by saveFlow.
+   *  Engine-side plumbing; a host parks a flow with `engine.saveFlow`. */
   snapshot(withProps: boolean): FlowSave {
     return {
       ...(withProps ? { props: partitionValues(this.stores) } : {}),
@@ -3262,11 +3530,11 @@ export class Flow {
     };
   }
 
-  /** Restore a freshly opened flow from its blob (loadGame, and openFlow's
-   *  `restore`, both of which clean the blob first). Orphaned keys (deleted
-   *  entities) drop; new declarations keep defaults. Engine-side plumbing that
-   *  skips the checks a restore through `openFlow` makes; see `snapshot` for
-   *  why it is not yet tagged internal. */
+  /** @internal - restore a freshly opened flow from its blob (loadGame, and
+   *  openFlow's `restore`, both of which clean the blob first). Orphaned keys
+   *  (deleted entities) drop; new declarations keep defaults. Engine-side
+   *  plumbing that skips the checks a restore through `openFlow` makes, which
+   *  is why a host resumes a flow through `openFlow` and never through this. */
   restore(saved: FlowSave): void {
     if (saved.props !== undefined) loadPartition(this.stores, saved.props);
     this.turnCounts = new Map(this.internals.bundle.boxes.map((b) => [b.id, 0]));

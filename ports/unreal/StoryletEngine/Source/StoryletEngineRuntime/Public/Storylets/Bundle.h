@@ -201,10 +201,11 @@ namespace storylets
         /** The durability axis (design/engine-server.md 4.2), valid wherever
          *  `shared` is and orthogonal to it: `shared` says whose value this is
          *  WITHIN a run, `durable` says whether it survives the run at all.
-         *  INERT here - the engine partitions by `shared` alone and never reads
-         *  this; a server lifts and restores durable values across a run
-         *  boundary through GetProperty / SetProperty. Never valid on a @world
-         *  declaration (the compiler refuses it). */
+         *  The engine partitions by `shared` alone; `durable` decides only
+         *  what a durable half carries (ruling H): Engine::saveDurable /
+         *  loadDurable for a shared one, Flow::saveDurable and openFlow's
+         *  `durable` for a per-flow one. Never valid on a @world declaration
+         *  (the compiler refuses it). */
         std::optional<bool> durable;
         // `writable` (false is the story's promise not to write it, Reboot.md 10;
         // absent = writable) is the KERNEL's field, declared once, on
@@ -290,9 +291,9 @@ namespace storylets
          *  when shared; defaults to copies. */
         std::optional<double> sharedCopies;
         /** Does this card's `redraw: never` spend survive the run (4.2)? Absent
-         *  takes the deck's flag. INERT here: the server lifts the durable
-         *  spends at a run boundary and puts them back through
-         *  OpenFlow(id, restore) and MarkTaken. */
+         *  takes the deck's flag. Read only by the durable halves (ruling H):
+         *  a shared card's spend rides Engine::saveDurable, a per-flow card's
+         *  Flow::saveDurable. */
         std::optional<bool> durable;
         /** Card-template data: field name -> value. */
         OrderedMap<std::string, StoryletValue> fields;
@@ -311,7 +312,7 @@ namespace storylets
          *  the card says otherwise (design/shared-scarcity.md). */
         std::optional<bool> shared;
         /** Every `redraw: never` card in this pile is spent past the end of the
-         *  run unless the card says otherwise (4.2). Inert here. */
+         *  run unless the card says otherwise (4.2), read by the durable halves. */
         std::optional<bool> durable;
         std::vector<PropertyDecl> properties;
         std::vector<Card> cards;

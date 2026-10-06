@@ -8,7 +8,7 @@
 import { Engine } from "@storylet-studio/runtime";
 import type { Flow, LogEntry, TraceVerdict } from "@storylet-studio/runtime";
 import { SAVEFILE_SCHEMA, effectiveGameId, groupsOfBox, valueAddresses } from "@storylet-studio/model";
-import type { Bundle, PropertyBag, PropertyDecl, SaveFile, ScalarValue, TagGroup } from "@storylet-studio/model";
+import type { Bundle, PropertyBag, SaveFile, ScalarValue, TagGroup } from "@storylet-studio/model";
 import { ENGINE_SCOPES } from "@storylet-studio/dialect";
 import { GAME_SCOPES_DIR, GAME_SCOPES_FILE, standInRegistry } from "@wildwinter/scoperegistry/scopes";
 import { ScopeRegistry } from "@wildwinter/scoperegistry";
@@ -146,65 +146,6 @@ export interface StateRow {
    *  (design/quality.md section 4) instead of a free-text input, which would
    *  invite the exact stage typos the compiler exists to refuse. */
   stages?: string[];
-}
-
-/**
- * Every declared property that outlives a run, as the path `getProperty` takes
- * (design/engine-server.md 4.2). `@world` is never here: it carries no flag,
- * and it is the host's anyway.
- *
- * The path shapes are the engine's own: "story.x", "box.<gameId>.x",
- * "deck.<gameId>.x", "hand.<gameId>.x", "value.<tagGameId>.x" - the owner
- * segment is a gameId (design/engine-server.md 4.4), box-qualified for a tag
- * gameId two boxes share ("value.harbour/docks.x"), which is the one owner a
- * gameId does not name uniquely. `valueAddresses` is that rule, shared with the
- * engine so the address this shows is one the engine will take. Hands take
- * their template's declarations where they have one, exactly as the engine's
- * bags do.
- */
-export function durablePropertyPaths(bundle: Bundle): string[] {
-  const out: string[] = [];
-  const push = (prefix: string, decls: readonly PropertyDecl[] | undefined): void => {
-    for (const d of decls ?? []) if (d.durable === true) out.push(`${prefix}${d.name}`);
-  };
-  push("story.", bundle.story.properties);
-  const values = valueAddresses(bundle);
-  for (const box of bundle.boxes) {
-    push(`box.${effectiveGameId(box)}.`, box.properties);
-    for (const deck of box.decks) push(`deck.${effectiveGameId(deck)}.`, deck.properties);
-    for (const hand of box.hands) {
-      const decls = hand.template !== undefined
-        ? box.handTemplates.find((t) => t.id === hand.template)?.properties
-        : hand.properties;
-      push(`hand.${effectiveGameId(hand)}.`, decls);
-    }
-    for (const group of box.tagGroups) {
-      for (const tag of group.tags) {
-        push(`value.${values.print.get(tag.id) ?? effectiveGameId(tag)}.`, tag.properties);
-      }
-    }
-  }
-  // The project map's zones, once: they belong to no box.
-  for (const tag of bundle.map?.group.tags ?? []) {
-    push(`value.${values.print.get(tag.id) ?? effectiveGameId(tag)}.`, tag.properties);
-  }
-  return out;
-}
-
-/** Every card whose spend outlives a run, by id, with whether that spend is
- *  one person's or the whole world's. The card's flags, else its deck's, which
- *  is the inheritance both axes have (4.2). */
-export function durableCardIds(bundle: Bundle): Map<string, { shared: boolean }> {
-  const out = new Map<string, { shared: boolean }>();
-  for (const box of bundle.boxes) {
-    for (const deck of box.decks) {
-      for (const card of deck.cards) {
-        if ((card.durable ?? deck.durable) !== true) continue;
-        out.set(card.id, { shared: (card.shared ?? deck.shared) === true });
-      }
-    }
-  }
-  return out;
 }
 
 /** The file in a game's scopes folder that would declare a token, and who writes it. */
@@ -409,48 +350,25 @@ export class Table {
    *
    * What a designer is testing here is a returning player, which is the
    * ordinary daily event in a venue and not a recovery path: at run end the
-   * server lifts the durable values and spends out of the engine, and at run
-   * start it writes them back into a fresh one. This does exactly that, on the
-   * public surface and nothing else, because the RUNTIME IS INERT about
-   * durability and must stay so: saveGame to read what is there, reset,
-   * openFlow with a restore for the durable cooldowns, setProperty for the
-   * values and markTaken for the shared spends.
+   * server keeps the player's pocket and the installation's memory, and at run
+   * start it writes them into a fresh world. This does exactly that, through
+   * the verbs a game would call: `saveDurable` on the flow and the engine,
+   * reset, `loadDurable`, and `openFlow` with the pocket.
    *
    * @world is untouched. It is the host's container, not the engine's, and
    * neither this nor Forget everyone is the game's business (4.2).
    */
   newRun(): void {
-    // Read everything durable BEFORE the reset, while it still exists.
-    const kept: [string, ScalarValue][] = [];
-    for (const path of durablePropertyPaths(this.bundle)) {
-      try { kept.push([path, this.session.getProperty(path)]); } catch { /* not readable: dropped */ }
-    }
-    const durableCards = durableCardIds(this.bundle);
-    const before = this.engine.saveGame();
-    const cooldowns: Record<string, number> = {};
-    for (const [cardId, until] of Object.entries(before.flows["main"]?.cooldowns ?? {})) {
-      // Only a `never` spend crosses the run boundary, and only a per-flow one
-      // is the flow's to carry: a shared spend lives in the engine's set below.
-      const card = durableCards.get(cardId);
-      if (card !== undefined && !card.shared && until === Number.MAX_SAFE_INTEGER) cooldowns[cardId] = until;
-    }
-    const spent = before.shared.spent.filter((id) => durableCards.get(id)?.shared === true);
+    // Keep everything durable BEFORE the reset, while it still exists.
+    const pocket = this.session.saveDurable();
+    const memory = this.engine.saveDurable();
     const world = this.worldValues();
 
     this.engine.reset();
-    // A fresh flow first, to take its blob: the run's seed, its zeroed clocks
-    // and its default state, which is what a new run starts from. The durable
-    // cooldowns go back on top of that, and openFlow REPLACES the name, which
-    // is the one door that restores into a flow (4.1).
-    this.engine.openFlow("main");
-    const blank = this.engine.saveFlow("main");
-    this.session = this.engine.openFlow("main", { restore: { ...blank, cooldowns } });
-    for (const id of spent) this.engine.markTaken(id);
-    // setProperty routes to whichever half the declaration put the value in,
-    // so the pocket and the installation's memory are written the same way.
-    for (const [path, value] of kept) {
-      try { this.session.setProperty(path, value); } catch { /* the declaration moved: dropped */ }
-    }
+    this.engine.loadDurable(memory);
+    // openFlow REPLACES the name, on the run's seed with its clocks at zero,
+    // and the pocket goes in on top of the defaults.
+    this.session = this.engine.openFlow("main", { durable: pocket });
     for (const [name, value] of Object.entries(world)) {
       try { this.engine.setProperty(`world.${name}`, value); } catch { /* an orphaned key: dropped */ }
     }

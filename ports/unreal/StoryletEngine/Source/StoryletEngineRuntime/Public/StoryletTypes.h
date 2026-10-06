@@ -177,13 +177,51 @@ enum class EStoryletLogKind : uint8
 	Diagnostic
 };
 
+/** One card's verdict in a deal or a peek: why it did or did not make the
+ *  ask, in availability order (schema 3.1). The trace's per-card row. */
+USTRUCT(BlueprintType)
+struct FStoryletTraceCard
+{
+	GENERATED_BODY()
+
+	/** The card's GAMEID (design/engine-server.md 4.4); the other runtimes
+	 *  call it `id`, but on a Blueprint pin Id is the internal id. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString GameId;
+
+	/** The verdict's wire name: "dealt", "capped", "cooldown", "deck-gate",
+	 *  "tags", "condition", "priority", "claimed", "claimed-elsewhere" or
+	 *  "taken", as every other runtime's log and the Live Link spell it. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Verdict;
+
+	/** The card's evaluated priority, where the ask got that far. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	bool bHasPriority = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	double Priority = 0;
+
+	/** The card's specificity, where the ask got that far. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	bool bHasSpecificity = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	double Specificity = 0;
+};
+
 /** One retained-log entry, flattened for Blueprint: the kind, its place in
  *  the flow's time (Seq orders the whole flow, or the whole run on the
  *  engine's log; Turn is the clock of the box the event happened in,
- *  bHasTurn false for diagnostics), and the one-line Summary the
- *  examiner's log panel shows (write lines share the state
- *  logger's "path: from -> to" reading). The typed per-kind payloads stay on
- *  the core's TraceEvent; no generic value crosses a BP pin. */
+ *  bHasTurn false for diagnostics), the event itself, and the one-line
+ *  Summary the examiner's log panel shows (write lines share the state
+ *  logger's "path: from -> to" reading).
+ *
+ *  The event is the other runtimes' trace event as flat fields: only the
+ *  fields the Kind names are filled, the rest stay empty. Identity is by
+ *  gameId throughout (design/engine-server.md 4.4). A write's value and the
+ *  value it replaced cross as JSON text, not as a value struct, for the
+ *  reason the property surface is typed only (StoryletEngine.h). */
 USTRUCT(BlueprintType)
 struct FStoryletLogEntry
 {
@@ -201,6 +239,8 @@ struct FStoryletLogEntry
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	int64 Seq = 0;
 
+	/** Play and Turns: also the box's (new) turn, which the other runtimes
+	 *  carry on the event as well. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	bool bHasTurn = false;
 
@@ -209,6 +249,64 @@ struct FStoryletLogEntry
 
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FString Summary;
+
+	/** Deal and Evict: the hand's gameId. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Hand;
+
+	/** Peek and Turns: the box's gameId. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Box;
+
+	/** Evict and Play: the card's gameId. A card the build no longer has
+	 *  (Reason "vanished") has no gameId left, so it is named by the id the
+	 *  board carried. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Card;
+
+	/** Play: the outcome's gameId; empty for a card with no outcomes, played
+	 *  with none. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Outcome;
+
+	/** Evict: a verdict's wire name (see FStoryletTraceCard::Verdict), or
+	 *  "hand-condition" or "vanished". */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Reason;
+
+	/** Write: the authored target. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Target;
+
+	/** Write: the resolved store location, in the address grammar
+	 *  GetProperty* takes, the owner segment its gameId (a routed @hand write
+	 *  shows where it actually went, schema 3.6). */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Path;
+
+	/** Write: the landed value as JSON text (true, 3, "north", ["a","b"]). */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString ValueJson;
+
+	/** Write: the value it replaced as JSON text; empty when there was none. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString PrevJson;
+
+	/** Diagnostic: where the expression failed, and why. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Where;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Message;
+
+	/** Peek: the ask's criteria, tag group to tag. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TMap<FString, FString> Criteria;
+
+	/** Deal and Peek: every card the ask considered, with its verdict, in
+	 *  the order the engine reports them. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FStoryletTraceCard> Cards;
 };
 
 /** One property-examiner row: path-addressed (GetProperty* / SetProperty*

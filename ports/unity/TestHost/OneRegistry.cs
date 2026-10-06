@@ -621,6 +621,29 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 Num(engine.GetProperty("story.gold"), 2, "and plays on, on its own registry");
                 Num(swapped.Engine.GetProperty("story.gold"), 1, "which is not the replacement's");
             }),
+
+            // The registry accessor (engine review, October 2026, ruling J).
+            ("Registry: the game's registry as passed in, and still that one after a hotSwap", () =>
+            {
+                var g = Playing();
+                Check(ReferenceEquals(g.Engine.Registry, g.Registry), "Registry is not the object the game passed in");
+                var next = g.Engine.HotSwap(Edited()).Engine;
+                Check(ReferenceEquals(next.Registry, g.Registry), "the replacement's Registry is not the game's");
+            }),
+
+            ("Registry: a standalone engine's is its own and stable; its hotSwap replacement makes another", () =>
+            {
+                var engine = new Engine(NewBundle(), new EngineOptions { Seed = 1 });
+                var own = engine.Registry;
+                Check(own != null, "a standalone engine has no Registry");
+                Check(ReferenceEquals(engine.Registry, own), "Registry is not the same object every read");
+                Heist(engine.OpenFlow("f"));
+                Num(own.Get("story", "gold"), 1, "its registry holds its values");
+                var next = engine.HotSwap(Edited()).Engine;
+                Check(!ReferenceEquals(next.Registry, own), "the replacement shares the standalone engine's registry");
+                Check(ReferenceEquals(engine.Registry, own), "the old engine's Registry moved");
+                Num(next.Registry.Get("story", "gold"), 1, "the replacement's registry holds the carried run");
+            }),
         };
 
         // --- other engines' scopes -------------------------------------------------------

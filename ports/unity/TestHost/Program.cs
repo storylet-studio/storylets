@@ -14,6 +14,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using StoryletStudio.StoryletEngine;
 using Wildwinter.Expr;
@@ -113,6 +114,13 @@ namespace StoryletStudio.StoryletEngine.TestHost
             var oneRegistry = OneRegistry.Run();
             foreach (var f in oneRegistry.Failures) { _fails++; Console.Error.WriteLine($"  FAIL [one registry] {f}"); }
             Console.WriteLine($"one registry: {oneRegistry.Passed}/{oneRegistry.Total}");
+
+            // Durable state from the game's side (ruling H): the port of the JS
+            // runtime's durable.test.ts (the wire text of a half, the refusals,
+            // a memory loaded into an engine that is not fresh).
+            var durable = Durable.Run();
+            foreach (var f in durable.Failures) { _fails++; Console.Error.WriteLine($"  FAIL [durable] {f}"); }
+            Console.WriteLine($"durable: {durable.Passed}/{durable.Total}");
 
             Console.WriteLine(_fails == 0 ? "ALL PASS" : $"{_fails} FAILED");
             return _fails == 0 ? 0 : 1;
@@ -556,6 +564,37 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 if (want[name] == null) continue;
                 Cmp(name, Show(WantKeys(want[name], "flow", "path")),
                     Show(SortedKeys(got.Select(p => string.Join(FieldSep, p.Flow ?? "", p.Path)))));
+            }
+        }
+
+        /// <summary>Check a durable half the runner has just kept (corpus version
+        /// 13): the schema tag and content block every half carries, then what
+        /// `expect` names. Values WHOLE and in any key order (four languages
+        /// hold a map four ways), spent exactly, order included.</summary>
+        private static void CheckDurable(string at, JToken expected, DurableSave actual, Bundle bundle, List<string> failures)
+        {
+            if (actual.Schema != "storylets/durable@1")
+            {
+                failures.Add($"{at}: schema expected \"storylets/durable@1\", got {(actual.Schema == null ? "null" : "\"" + actual.Schema + "\"")}");
+            }
+            var c = actual.Content;
+            if (c == null || c.Project != bundle.Content.Project || c.Version != bundle.Content.Version || c.Hash != bundle.Content.Hash)
+            {
+                string Shown(BundleContent b) => b == null ? "null" : $"{{project:{b.Project},version:{b.Version},hash:{b.Hash}}}";
+                failures.Add($"{at}: content expected {Shown(bundle.Content)}, got {Shown(c)}");
+            }
+            if (!(expected is JObject want)) return;
+            if (want["values"] is JObject values)
+            {
+                var wantShown = ShowJsonFields(values);
+                var gotShown = ShowFields(actual.Values);
+                if (wantShown != gotShown) failures.Add($"{at}: values expected {wantShown}, got {gotShown}");
+            }
+            if (want["spent"] is JArray spent)
+            {
+                var wantSpent = Show(spent.Select(x => x.Value<string>()));
+                var gotSpent = Show(actual.Spent);
+                if (wantSpent != gotSpent) failures.Add($"{at}: spent expected {wantSpent}, got {gotSpent}");
             }
         }
 
@@ -1087,6 +1126,9 @@ namespace StoryletStudio.StoryletEngine.TestHost
             var bundleB = c["bundleB"] is JObject bb ? BundleLoader.Parse(bb) : null;
             var seed = SeedOf(c["seed"]);
             var engine = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = seed });
+            // The bundle the engine runs now: a kept durable half must carry its
+            // content.
+            var running = bundle;
             // Flow handles as the SCRIPT knows them: kept across closeFlow so a
             // later op on a closed name exercises the inert handle, never a
             // quiet re-open.
@@ -1111,6 +1153,22 @@ namespace StoryletStudio.StoryletEngine.TestHost
             // the engine on purpose: a park survives a content swap, which is the
             // case that makes a resume interesting.
             var parked = new Dictionary<string, FlowSave>();
+            // Durable halves (corpus version 13), held outside the engine for the
+            // reason a parked blob is: a pocket and an installation's memory
+            // outlive the run. Each is kept as the JSON layer gives it back, as a
+            // game keeps one between runs, so every kept half also holds the wire
+            // shape to the engine's own.
+            var pockets = new Dictionary<string, DurableSave>();
+            DurableSave memory = null;
+            DurableSave Keep(string at, JToken expected, DurableSave actual)
+            {
+                CheckDurable(at, expected, actual, running, failures);
+                var text = StoryletSave.ToJson(actual).ToString(Formatting.None);
+                var kept = StoryletSave.DurableFromJson(JObject.Parse(text));
+                var again = StoryletSave.ToJson(kept).ToString(Formatting.None);
+                if (again != text) failures.Add($"{at}: the durable half does not survive JSON: {text} came back as {again}");
+                return kept;
+            }
             Flow Watch(Flow f)
             {
                 f.SubscribeTrace(e =>
@@ -1503,6 +1561,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                             break;
                         }
                         engine = target;
+                        running = into;
                         CheckReport(at, op["expectReport"], engine.LoadGame(envelope), failures);
                         // Re-taken AND watched, as a lazily opened flow is
                         // (corpus version 12): a deal straight after a load into
@@ -1622,8 +1681,102 @@ namespace StoryletStudio.StoryletEngine.TestHost
                         break;
                     }
 
+                    case "keepPocket":
+                    {
+                        var name = op.Value<string>("flow") ?? "main";
+                        if (!handles.TryGetValue(name, out var f))
+                        {
+                            f = Watch(engine.OpenFlow(name));
+                            handles[name] = f;
+                        }
+                        DurableSave half;
+                        try { half = f.SaveDurable(); }
+                        catch (Exception e)
+                        {
+                            failures.Add($"{at}: unexpected error: {e.Message}");
+                            break;
+                        }
+                        pockets[name] = Keep(at, op["expect"], half);
+                        break;
+                    }
+
+                    case "keepMemory":
+                    {
+                        DurableSave half;
+                        try { half = engine.SaveDurable(); }
+                        catch (Exception e)
+                        {
+                            failures.Add($"{at}: unexpected error: {e.Message}");
+                            break;
+                        }
+                        memory = Keep(at, op["expect"], half);
+                        break;
+                    }
+
+                    case "newRun":
+                    {
+                        // The world restarts: a fresh engine, no flow, no handle.
+                        // What crosses is what the script kept, and only through
+                        // the durable verbs.
+                        running = op.Value<string>("into") == "B" ? bundleB : bundle;
+                        engine = new StoryletStudio.StoryletEngine.Engine(running, new EngineOptions { Seed = seed });
+                        handles = new Dictionary<string, Flow>();
+                        if (memory == null) break;
+                        LoadReport report;
+                        try { report = engine.LoadDurable(memory); }
+                        catch (Exception e)
+                        {
+                            failures.Add($"{at}: unexpected error: {e.Message}");
+                            break;
+                        }
+                        CheckReport(at, op["expectReport"], report, failures);
+                        break;
+                    }
+
+                    case "openFlowDurable":
+                    {
+                        var name = op.Value<string>("flow");
+                        if (!pockets.TryGetValue(name, out var pocket))
+                        {
+                            failures.Add($"{at}: no pocket is kept under \"{name}\"");
+                            break;
+                        }
+                        var withRestore = op.Value<bool?>("withRestore") == true;
+                        FlowSave restore = null;
+                        if (withRestore && !parked.TryGetValue(name, out restore))
+                        {
+                            failures.Add($"{at}: nothing is parked under \"{name}\"");
+                            break;
+                        }
+                        LoadReport applied = null;
+                        var opts = new OpenFlowOptions { Durable = pocket, Restore = restore, OnRestoreReport = r => applied = r };
+                        if (op["seed"] != null) opts.Seed = SeedOf(op["seed"]);
+                        Flow opened = null;
+                        string error = null;
+                        try { opened = engine.OpenFlow(name, opts); }
+                        catch (Exception e) { error = e.Message; }
+                        if (op.Value<bool?>("expectError") == true)
+                        {
+                            // Refused before anything changed: the handle the
+                            // script holds under that name (if any) is left
+                            // exactly as it was.
+                            if (error == null) failures.Add($"{at}: expected an error, the flow opened");
+                            break;
+                        }
+                        if (error != null)
+                        {
+                            failures.Add($"{at}: unexpected error: {error}");
+                            break;
+                        }
+                        handles[name] = Watch(opened);
+                        if (applied == null) failures.Add($"{at}: the durable open produced no report");
+                        else CheckReport(at, op["expectReport"], applied, failures);
+                        break;
+                    }
+
                     case "reset":
                         engine = new StoryletStudio.StoryletEngine.Engine(bundle, new EngineOptions { Seed = seed });
+                        running = bundle;
                         handles = new Dictionary<string, Flow>();
                         break;
 

@@ -176,20 +176,65 @@ on the same declarations, and the two are independent:
 | **shared** | world truth for this run: the act, the well opened | the installation's memory: trolls defeated since it opened |
 | **per flow** | this visit: my danger in the docks | the player's pocket: visits, allegiance, what they earned |
 
-The engine never reads the flag. It partitions by `shared` alone, and durability is what
-whoever runs the engine does at a run boundary: read the declarations, lift the durable values
-out with `getProperty` before the world restarts, and write them back with `setProperty` into
-the fresh one. Everything that needs is already public.
-
 `durable` is a compile error on `@world`, for the reason `shared` is. `@world` is the game's
 own state, and how long the game keeps it is the game's business.
 
 **A card can be durable too**, on the deck or on the card, and it means one thing. Its
 `redraw: never` spend survives the run. Only `never` can (a finite cooldown is an absolute
 turn of a box's clock, and the clock resets with the run), so `durable` on any other redraw is
-a compile warning. A durable per-flow spend rides in that flow's cooldowns. A durable shared
-one rides the engine's spent set, and both go back with `openFlow(id, { restore })` and
-`markTaken`.
+a compile warning.
+
+### Carrying it to the next run
+
+Each half has one call to take it and one to put it back. Take both before the run ends, and
+put them back into the next run's fresh engine:
+
+```js
+// At the end of a run.
+const memory = engine.saveDurable();   // the installation's memory: the shared half
+const pocket = flow.saveDurable();     // one player's pocket: their flow's half
+
+// At the start of the next one.
+const next = new Engine(bundle);
+next.loadDurable(memory);
+const alice = next.openFlow("alice", { durable: pocket });
+```
+
+The two halves have the same shape, and it's plain JSON, so keep them however your game keeps
+things: the memory beside the installation, a pocket beside its player.
+
+```json
+{
+  "schema": "storylets/durable@1",
+  "content": { "project": "the-village", "version": "1.4.0", "hash": "3f9c2a1b" },
+  "values": { "hand.the-elder.met": true, "story.visits": 3 },
+  "spent": ["the-lost-ring"]
+}
+```
+
+`values` is keyed by the same paths `getProperty` takes, and `spent` lists the durable
+one-shots that have been played, by the card's name. A pocket carries only the per-flow half
+and a memory only the shared half. Nothing run-scoped goes in either.
+
+A flow opened with its pocket starts as any new flow does, on its own seed with its clocks at
+zero, with the pocket's values in and its spent cards spent. `durable` can't be given with
+`restore`, because a restore already carries the flow's durable values. A half from another
+project is refused.
+
+**A durable half is meant to cross builds**, so putting one back says what didn't make it.
+`loadDurable` returns the same report `loadGame` does, and `openFlow` hands it to
+`onRestoreReport`:
+
+| The half holds | The report lists it in | What happens |
+|---|---|---|
+| a value at a path this build doesn't declare durable on that side | `droppedProperties` | not written |
+| a value its declaration no longer takes | `retypedProperties` | the property takes its default |
+| no value for a durable declaration | `defaultedProperties` | the property takes its default |
+| a spend for a card that's gone, or no longer a durable one-shot | `droppedSpent` (the memory), `droppedCooldowns` (a pocket) | not spent |
+
+A renamed property is a new property with its default and an old value with nowhere to go.
+The report names the old path, and the value is still in the half you kept, so whether to
+carry it over by hand is your call.
 
 ## Saving it
 

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`FStoryletLogEntry` carries the event**, as every other runtime's log entry does (ruling I): `Hand`, `Box`, `Card`, `Outcome`, `Reason`, `Target`, `Path`, `Where` and `Message` as gameId strings, a peek's `Criteria` as a map, a write's value and the value it replaced as `ValueJson` / `PrevJson` (JSON text; `PrevJson` empty when there was none), and a deal's or peek's per-card verdicts as `Cards`, an array of the new **`FStoryletTraceCard`** (`GameId`, `Verdict` by its wire name, and `Priority` / `Specificity` behind `bHasPriority` / `bHasSpecificity`). Only the fields the `Kind` names are filled. Both `Log` and `GetRunLog` fill them; `Summary` is unchanged.
+- **Durable state is a feature** (ruling H). The core's `Engine::saveDurable()` returns the installation's memory (every shared `durable` property's value, and every shared durable one-shot that has been spent) and `Flow::saveDurable()` one player's pocket (the same for the per-flow half), in one shape: `DurableSave` (`schema` = `DURABLE_SCHEMA`, `"storylets/durable@1"`, `content`, `values`, `spent`), values keyed by property address and spends by card gameId. `Engine::loadDurable(memory)` writes a memory into the next run's engine and returns its `LoadReport`; `OpenFlowOptions::durable` opens a flow with its pocket in, the report through `onRestoreReport`. What no longer fits the build is reported (an address no longer declared durable on that side, a value its declaration no longer takes, a card that is gone), and `durable` with `restore`, another project's state and an unknown schema are refused before anything changes. `serializeDurable` / `deserializeDurable` in `Storylets/Save.h` are the string pair; a value the half carries that no property can hold (a null, an object, an array of anything but strings) is kept in `DurableSave::unreadable` and reported, retyped or dropped, never written, and a missing or non-string schema or project is quoted as JS prints it (`unsupported durable schema: undefined`). Blueprint carries a half as JSON text: **`SaveDurableToJson`** on `UStoryletEngine` and on `UStoryletFlow`, **`LoadDurableFromJson(Json, OutReportJson)`** and **`OpenFlowWithDurableJson(Id, Json, OutReportJson)`** and its seeded twin **`OpenFlowWithDurableJsonSeeded(Id, Json, Seed, OutReportJson)`** on `UStoryletEngine`; a refusal logs and returns false or null.
+
+### Changed
+
+- **`Engine::markTaken`, `Flow::snapshot` and `Flow::restore` are internal** (private, reached by the engine and its flows as friends). Carry spends across a run with `saveDurable` and `loadDurable`, and resume a flow with `openFlow`'s `restore`.
+- **Kernel `k492cf234`**: a listener's error is no longer reported as a read-only refusal (a game's own hook that throws now reaches you as its own exception), every listener registered when a write starts hears it once, and fewer allocations on the hot path. A game module that includes Patterplay too needs it on `k492cf234` as well, or the kernel check stops the build.
+
 ## [0.10.0] - 2026-10-06
 
 ### Added

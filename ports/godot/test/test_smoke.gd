@@ -178,6 +178,176 @@ func _reports_and_bytes(bundle: Dictionary, saved: String) -> void:
 		and (live["report"] as Dictionary).has("exact"), str(live.keys()))
 
 
+## Durable state as a feature (ruling H, 2026-10-06): the host API's edges the
+## corpus cannot reach, as the JS runtime's durable.test.ts has them. The shape of
+## a half as a game stores it, the refusals made before anything moves, a memory
+## loaded into an engine that is not fresh. The bundle is the corpus's own
+## ("a durable half kept under one build..."), with a `writable: false` durable
+## value and a run-scoped shared one added.
+func _durable_halves() -> void:
+	var corpus = JSON.parse_string(FileAccess.get_file_as_string(
+		ProjectSettings.globalize_path("res://").path_join("../../packages/conformance/corpus.json")))
+	var bundle = null
+	for c in (corpus["scripted"] if corpus is Dictionary else []):
+		if str(c["name"]).begins_with("a durable half kept under one build"):
+			bundle = (c["bundle"] as Dictionary).duplicate(true)
+	_check("the durable bundle is in the corpus", bundle != null)
+	if bundle == null:
+		return
+	(bundle["story"]["properties"] as Array).append_array([
+		{"name": "seal", "type": "number", "default": 0, "shared": false, "durable": true, "writable": false},
+		{"name": "gold", "type": "number", "default": 0},
+	])
+	var engine := _durable_played(bundle)
+	var alice: StoryletFlow = engine.get_flow("alice")
+	var memory := engine.save_durable()
+	var pocket := alice.save_durable()
+	_check("the memory is the shared half, by address and gameId", StoryletSave.to_json(memory) == StoryletSave.to_json({
+		"schema": "storylets/durable@1", "content": bundle["content"],
+		"values": {"story.souls": 4}, "spent": ["gone", "relic"]}), StoryletSave.to_json(memory))
+	_check("the pocket is the flow's half, keys in byte order", StoryletSave.to_json(pocket) == StoryletSave.to_json({
+		"schema": "storylets/durable@1", "content": bundle["content"],
+		"values": {"story.oath": "oak", "story.seal": 9, "story.title": ""}, "spent": ["once"]}), StoryletSave.to_json(pocket))
+	(pocket["values"] as Dictionary)["story.oath"] = "iron"
+	_check("a half is a copy", alice.get_property("story.oath") == "oak")
+
+	# Through JSON, which is how a game keeps them.
+	var kept_memory = JSON.parse_string(StoryletSave.to_json(engine.save_durable()))
+	var kept_pocket = JSON.parse_string(StoryletSave.to_json(alice.save_durable()))
+	_check("a half writes whole numbers as JS does", StoryletSave.to_json(kept_memory).contains('"story.souls":4}'),
+		StoryletSave.to_json(kept_memory))
+	var next := StoryletEngine.create(bundle, {"seed": 7})
+	_check("the memory loads exactly", next.load_durable(kept_memory).get("exact", false))
+	var reports: Array = []
+	var flow := next.open_flow("alice", {"durable": kept_pocket,
+		"on_restore_report": func(r: Dictionary) -> void: reports.append(r)})
+	_check("the pocket opens exactly", reports.size() == 1 and (reports[0] as Dictionary).get("exact", false), str(reports))
+	_check("a writable: false value goes back", flow.get_property("story.seal") == 9.0)
+	_check("the memory saves back as it was kept", StoryletSave.to_json(next.save_durable()) == StoryletSave.to_json(kept_memory))
+	_check("the pocket saves back as it was kept", StoryletSave.to_json(flow.save_durable()) == StoryletSave.to_json(kept_pocket))
+
+	# Refused before anything moves.
+	var fresh := StoryletEngine.create(bundle, {"seed": 7})
+	var before := StoryletSave.to_json(fresh.save_game())
+	var wrong_schema := memory.duplicate(true)
+	wrong_schema["schema"] = "storylets/durable@9"
+	var wrong_project := memory.duplicate(true)
+	wrong_project["content"]["project"] = "other"
+	var caught := _Caught.new()
+	print("(expected refusal errors follow)")
+	OS.add_logger(caught)
+	var schema_refused := fresh.load_durable(wrong_schema)
+	var project_refused := fresh.load_durable(wrong_project)
+	var null_refused := fresh.load_durable(null)
+	OS.remove_logger(caught)
+	_check("an unknown schema is refused", schema_refused.is_empty()
+		and caught.errors.has("StoryletEngine.load_durable: unsupported durable schema: storylets/durable@9"), str(caught.errors))
+	_check("another project's memory is refused", project_refused.is_empty()
+		and caught.errors.has('StoryletEngine.load_durable: durable state is for project "other", bundle is "conf"'), str(caught.errors))
+	_check("a memory that is not one is refused", null_refused.is_empty())
+	_check("and the refusals changed nothing", StoryletSave.to_json(fresh.save_game()) == before)
+
+	var foreign := alice.save_durable()
+	foreign["content"]["project"] = "other"
+	caught = _Caught.new()
+	OS.add_logger(caught)
+	var opened_foreign = engine.open_flow("alice", {"durable": foreign})
+	var opened_both = engine.open_flow("alice", {"durable": alice.save_durable(), "restore": engine.save_flow("alice")})
+	OS.remove_logger(caught)
+	_check("a pocket for another project is refused as the flow opens", opened_foreign == null
+		and caught.errors.has('StoryletEngine.open_flow: durable state is for project "other", bundle is "conf"'), str(caught.errors))
+	_check("a pocket with a restore is refused", opened_both == null
+		and caught.errors.has('StoryletEngine.open_flow: openFlow "alice": restore and durable cannot be given together; a restore already carries the flow\'s durable state'),
+		str(caught.errors))
+	_check("and the flow already open is as it was", not alice.is_closed() and alice.get_property("story.oath") == "oak")
+
+	# A memory makes the engine's durable half exactly that, and touches nothing else.
+	var busy := StoryletEngine.create(bundle, {"seed": 7})
+	busy.open_flow("bob").set_property("story.gold", 3)
+	busy.set_property("story.souls", 8)
+	var emptied := memory.duplicate(true)
+	emptied["values"] = {}
+	var report := busy.load_durable(emptied)
+	_check("a memory with no value defaults it, and says so",
+		StoryletSave.to_json(report.get("defaultedProperties")) == '[{"path":"story.souls"}]', str(report.get("defaultedProperties")))
+	_check("and the value is its default", busy.get_property("story.souls") == 0.0)
+	_check("a run-scoped value is untouched", busy.get_property("story.gold") == 3.0)
+	_check("and so is the open flow", not (busy.get_flow("bob") as StoryletFlow).is_closed())
+
+	# Spends by gameId: an internal id is a card this build does not have.
+	var by_id := StoryletEngine.create(bundle, {"seed": 7})
+	var internal := {"schema": "storylets/durable@1", "content": bundle["content"], "values": {"story.souls": 1}, "spent": ["c_relic"]}
+	_check("a spend named by internal id is dropped", by_id.load_durable(internal).get("droppedSpent") == ["c_relic"])
+	internal["spent"] = ["once"]
+	_check("a pocket's spend in a memory is dropped", by_id.load_durable(internal).get("droppedSpent") == ["once"])
+
+	# A missing or non-string schema or project is quoted as JS's String() prints it.
+	var quoting := StoryletEngine.create(bundle, {"seed": 7})
+	var quoted := {
+		'{}': "unsupported durable schema: undefined",
+		'{"schema":null}': "unsupported durable schema: null",
+		'{"schema":42}': "unsupported durable schema: 42",
+		'{"schema":"storylets/durable@1"}': 'durable state is for project "undefined", bundle is "conf"',
+		'{"schema":"storylets/durable@1","content":{}}': 'durable state is for project "undefined", bundle is "conf"',
+		'{"schema":"storylets/durable@1","content":{"project":5}}': 'durable state is for project "5", bundle is "conf"',
+	}
+	caught = _Caught.new()
+	OS.add_logger(caught)
+	for text in quoted:
+		quoting.load_durable(JSON.parse_string(text))
+	OS.remove_logger(caught)
+	for text in quoted:
+		_check("%s is refused in JS's words" % text, caught.errors.has("StoryletEngine.load_durable: " + str(quoted[text])), str(caught.errors))
+
+	# A value no property can hold is reported as JS reports it (a null or an
+	# object fits no declaration: retyped where the address is durable on that
+	# side, dropped where it is not), [1] for a number too, and nothing is written.
+	var paths := func(list) -> String:
+		var out: Array = []
+		for entry in list:
+			out.append("%s:%s" % [entry.get("flow", ""), entry["path"]])
+		return ",".join(PackedStringArray(out))
+	var odd := StoryletEngine.create(bundle, {"seed": 7})
+	odd.set_property("story.souls", 8)
+	var odd_report := odd.load_durable(JSON.parse_string('{"schema":"storylets/durable@1","content":{"project":"conf","version":"0.0.0","hash":""},"values":{"story.souls":null,"story.gone":{},"story.oath":"oak"},"spent":[]}'))
+	_check("an unreadable memory value is dropped or retyped, as JS reports it",
+		paths.call(odd_report.get("droppedProperties", [])) == ":story.gone,:story.oath"
+		and paths.call(odd_report.get("retypedProperties", [])) == ":story.souls"
+		and (odd_report.get("defaultedProperties", []) as Array).is_empty(), str(odd_report))
+	_check("and the value keeps its default", odd.get_property("story.souls") == 0.0)
+	var odd_reports: Array = []
+	var odd_flow := odd.open_flow("alice", {"durable": JSON.parse_string('{"schema":"storylets/durable@1","content":{"project":"conf","version":"0.0.0","hash":""},"values":{"story.oath":null,"story.seal":[1],"story.souls":[],"story.title":""},"spent":[]}'),
+		"on_restore_report": func(r: Dictionary) -> void: odd_reports.append(r)})
+	var odd_pocket: Dictionary = odd_reports[0] if odd_reports.size() == 1 else {}
+	_check("an unreadable pocket value is dropped or retyped, as JS reports it",
+		paths.call(odd_pocket.get("droppedProperties", [])) == "alice:story.souls"
+		and paths.call(odd_pocket.get("retypedProperties", [])) == "alice:story.oath,alice:story.seal"
+		and (odd_pocket.get("defaultedProperties", []) as Array).is_empty(), str(odd_pocket))
+	_check("and nothing unreadable reaches a bag", odd_flow != null and odd_flow.get_property("story.oath") == "iron"
+		and odd_flow.get_property("story.seal") == 0.0)
+
+	engine.close_flow("alice")
+	caught = _Caught.new()
+	OS.add_logger(caught)
+	var closed_half := alice.save_durable()
+	OS.remove_logger(caught)
+	_check("a closed flow's save_durable is refused", closed_half.is_empty()
+		and caught.errors.has('StoryletFlow.save_durable: flow "alice" is closed'), str(caught.errors))
+
+
+## A run that has spent every one-shot and moved every durable value.
+func _durable_played(bundle: Dictionary) -> StoryletEngine:
+	var engine := StoryletEngine.create(bundle, {"seed": 7})
+	var flow := engine.open_flow("alice")
+	flow.set_property("story.souls", 4)
+	flow.set_property("story.oath", "oak")
+	flow.set_property("story.seal", 9)
+	var dealt := flow.deal("q")
+	for card in dealt:
+		flow.play(card["gameId"], "", "q")
+	return engine
+
+
 func _initialize() -> void:
 	var text := FileAccess.get_file_as_string(BUNDLE_PATH)
 	_check("bundle readable", text != "", BUNDLE_PATH)
@@ -379,6 +549,7 @@ func _initialize() -> void:
 	_refusals(bundle)
 	_handlers(bundle)
 	_reports_and_bytes(bundle, saved)
+	_durable_halves()
 
 	print("SMOKE %s" % ("ALL PASS" if _fails == 0 else "%d FAILED" % _fails))
 	quit(0 if _fails == 0 else 1)

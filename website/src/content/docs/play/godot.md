@@ -143,6 +143,25 @@ the cards it was holding. On the way back, a shared card another flow now holds 
 reported (`preview_flow_restore(id, saved)` asks in advance, and
 `{"on_restore_report": Callable}` hands you what the restore actually did).
 
+What outlives a run, a [`durable`](/play/world-state/#durable-state-that-outlives-a-run)
+value or a durable card's spend, has a call of its own on each half. Take both as the run ends,
+and put them into the next run's fresh engine:
+
+```gdscript
+var memory := engine.save_durable()   # the installation's memory: the shared half
+var pocket := flow.save_durable()     # one player's pocket: their flow's half
+
+var next := StoryletEngine.create(bundle)
+var memory_report := next.load_durable(memory)
+var alice := next.open_flow("alice", {"durable": pocket,
+	"on_restore_report": func(r: Dictionary) -> void: print("pocket in" if r["exact"] else "the build moved on")})
+```
+
+Both reports say what no longer fits the build, as a load's does. `"durable"` can't be given
+with `"restore"`, and a half from another project is refused with a `push_error`. Each half is a
+plain Dictionary: `StoryletSave.to_json(pocket)` writes it as the same text every runtime
+writes, and `JSON.parse_string` reads it back.
+
 `StoryletSave.serialize_state(engine, world_values)` and
 `StoryletSave.deserialize_state(engine, text)` are the `.storyletsave` string boundary. The
 second hands back the file's `@world` values for your game to apply, which matters when your

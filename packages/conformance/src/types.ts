@@ -265,7 +265,44 @@ export type ScriptOp =
    *  The runner asks `previewFlowRestore` first and requires it to equal the
    *  report the restore itself produces, then checks `expectReport`. */
   | { op: "resumeFlow"; flow: string; seed?: number; expectReport?: Partial<LoadReport> }
+  /** Keep one flow's DURABLE half, the player's pocket (ruling H, corpus
+   *  version 13): `flow.saveDurable()` on the op's flow, kept in the runner
+   *  under that flow's name. Held OUTSIDE the engine, as a parked blob is,
+   *  because the point of a pocket is that it outlives the run (`newRun`).
+   *  The runner checks every half it keeps carries the schema tag
+   *  `"storylets/durable@1"` and the content block of the bundle the engine
+   *  runs, then `expect` (see DurableExpect). */
+  | { op: "keepPocket"; flow?: string; expect?: DurableExpect }
+  /** The same for the engine's durable half, the installation's memory:
+   *  `engine.saveDurable()`, kept once (a second keep replaces the first). */
+  | { op: "keepMemory"; expect?: DurableExpect }
+  /** A NEW RUN: the engine discarded and a fresh one built, from `bundleB` when
+   *  `into: "B"`, every handle dropped; then, if a memory was kept,
+   *  `loadDurable(memory)` on the fresh engine, and `expectReport` checked
+   *  against the report it returns, as `saveLoad` checks a load's. Kept
+   *  pockets and parked blobs survive it. */
+  | { op: "newRun"; into?: "B"; expectReport?: Partial<LoadReport> }
+  /** Open a flow with its pocket written in:
+   *  `openFlow(flow, { durable: <the pocket kept under that name> })`, the
+   *  handle re-taken and watched, and `expectReport` checked against the report
+   *  handed to `onRestoreReport` (a report must arrive). `seed` as `openFlow`.
+   *
+   *  `withRestore` ALSO passes the blob parked under the same name as
+   *  `restore`, which every runtime must REFUSE, with `expectError`, before
+   *  anything changes: the flow already open under that name stays open and
+   *  its handle stays live, which the ops after it can read. */
+  | { op: "openFlowDurable"; flow: string; seed?: number; withRestore?: true; expectReport?: Partial<LoadReport>; expectError?: true }
   | { op: "reset" };
+
+/** What `keepPocket` and `keepMemory` check of the half they kept. `values`
+ *  is compared WHOLE: its key set must match, keys are property addresses
+ *  exactly as `listProperties()` prints them, and key ORDER is not compared
+ *  (four languages hold a map four ways). `spent` is compared exactly, order
+ *  included: it is card gameIds, and a durable half sorts them. */
+export interface DurableExpect {
+  values?: Record<string, ScalarValue>;
+  spent?: string[];
+}
 
 export interface ScriptedCase {
   name: string;
@@ -364,6 +401,8 @@ export interface CardFixture {
   shared?: boolean;
   /** The world cap when shared; defaults to `copies`. */
   sharedCopies?: number;
+  /** Its `redraw: "never"` spend outlives the run; absent takes the deck's. */
+  durable?: boolean;
   fields?: Record<string, ScalarValue>;
   outcomes?: OutcomeFixture[];
 }
@@ -373,6 +412,9 @@ export interface DeckFixture {
   condition?: string;
   /** Every card in this pile is shared unless the card overrides it. */
   shared?: boolean;
+  /** Every `redraw: "never"` spend in this pile outlives the run unless the
+   *  card overrides it. */
+  durable?: boolean;
   /** The @deck scope's declarations. */
   properties?: PropertyDecl[];
   cards: CardFixture[];

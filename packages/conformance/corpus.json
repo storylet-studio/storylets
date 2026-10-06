@@ -1,5 +1,5 @@
 {
-  "version": 12,
+  "version": 13,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -22089,6 +22089,1160 @@
           "op": "assertState",
           "expect": {
             "story.weather": "fair"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a pocket and the installation's memory carry across a new run, and nothing else does",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "souls",
+              "type": "number",
+              "default": 0,
+              "durable": true
+            },
+            {
+              "name": "visits",
+              "type": "number",
+              "default": 0,
+              "shared": false,
+              "durable": true
+            },
+            {
+              "name": "gold",
+              "type": "number",
+              "default": 0
+            },
+            {
+              "name": "steps",
+              "type": "number",
+              "default": 0,
+              "shared": false
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [
+              {
+                "name": "mood",
+                "type": "string",
+                "default": "calm",
+                "durable": true
+              }
+            ],
+            "tagGroups": [
+              {
+                "id": "d_sky",
+                "gameId": "sky",
+                "tags": [
+                  {
+                    "id": "v_rain",
+                    "gameId": "rain",
+                    "properties": [
+                      {
+                        "name": "lamps",
+                        "type": "number",
+                        "default": 0,
+                        "durable": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_once",
+                    "gameId": "once",
+                    "priority": 4,
+                    "redraw": "never",
+                    "durable": true,
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_plain",
+                    "gameId": "plain",
+                    "priority": 1,
+                    "redraw": "never",
+                    "outcomes": []
+                  }
+                ]
+              },
+              {
+                "id": "k_relics",
+                "gameId": "relics",
+                "shared": true,
+                "durable": true,
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_fleeting",
+                    "gameId": "fleeting",
+                    "priority": 2,
+                    "redraw": "never",
+                    "durable": false,
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_relic",
+                    "gameId": "relic",
+                    "priority": 3,
+                    "redraw": "never",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                },
+                "properties": [
+                  {
+                    "name": "met",
+                    "type": "boolean",
+                    "default": false,
+                    "durable": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "b_y",
+            "gameId": "other",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_weather_y",
+                "gameId": "weather",
+                "tags": [
+                  {
+                    "id": "v_rain_y",
+                    "gameId": "rain"
+                  },
+                  {
+                    "id": "v_sun_y",
+                    "gameId": "sun"
+                  }
+                ]
+              },
+              {
+                "id": "d_zone_y",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks_y",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market_y",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_ymain",
+                "gameId": "ymain",
+                "properties": [],
+                "cards": []
+              }
+            ],
+            "handTemplates": [],
+            "hands": []
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "setState",
+          "flow": "alice",
+          "story": {
+            "souls": 3,
+            "visits": 2,
+            "gold": 5,
+            "steps": 4
+          },
+          "box": {
+            "box": {
+              "mood": "wary"
+            }
+          },
+          "hand": {
+            "q": {
+              "met": true
+            }
+          },
+          "value": {
+            "box/rain": {
+              "lamps": 2
+            }
+          }
+        },
+        {
+          "op": "deal",
+          "flow": "alice",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_once",
+              "c_relic",
+              "c_fleeting",
+              "c_plain"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "flow": "alice",
+          "card": "c_once",
+          "from": "h_q"
+        },
+        {
+          "op": "play",
+          "flow": "alice",
+          "card": "c_relic",
+          "from": "h_q"
+        },
+        {
+          "op": "play",
+          "flow": "alice",
+          "card": "c_fleeting",
+          "from": "h_q"
+        },
+        {
+          "op": "play",
+          "flow": "alice",
+          "card": "c_plain",
+          "from": "h_q"
+        },
+        {
+          "op": "keepPocket",
+          "flow": "alice",
+          "expect": {
+            "values": {
+              "story.visits": 2,
+              "box.box.mood": "wary",
+              "hand.q.met": true,
+              "value.box/rain.lamps": 2
+            },
+            "spent": [
+              "once"
+            ]
+          }
+        },
+        {
+          "op": "keepMemory",
+          "expect": {
+            "values": {
+              "story.souls": 3
+            },
+            "spent": [
+              "relic"
+            ]
+          }
+        },
+        {
+          "op": "newRun",
+          "expectReport": {
+            "exact": true,
+            "project": "conf",
+            "flows": [],
+            "version": {
+              "saved": "0.0.0",
+              "bundle": "0.0.0"
+            },
+            "hash": {
+              "saved": "",
+              "bundle": ""
+            },
+            "evicted": [],
+            "droppedCooldowns": [],
+            "droppedSpent": [],
+            "droppedProperties": [],
+            "defaultedProperties": [],
+            "retypedProperties": []
+          }
+        },
+        {
+          "op": "assertFlows",
+          "expect": []
+        },
+        {
+          "op": "assertEngineRead",
+          "path": "story.souls",
+          "expect": 3
+        },
+        {
+          "op": "assertEngineRead",
+          "path": "story.gold",
+          "expect": 0
+        },
+        {
+          "op": "openFlowDurable",
+          "flow": "alice",
+          "expectReport": {
+            "exact": true,
+            "project": "conf",
+            "flows": [
+              "alice"
+            ],
+            "version": {
+              "saved": "0.0.0",
+              "bundle": "0.0.0"
+            },
+            "hash": {
+              "saved": "",
+              "bundle": ""
+            },
+            "evicted": [],
+            "droppedCooldowns": [],
+            "droppedSpent": [],
+            "droppedProperties": [],
+            "defaultedProperties": [],
+            "retypedProperties": []
+          }
+        },
+        {
+          "op": "assertState",
+          "flow": "alice",
+          "expect": {
+            "story.visits": 2,
+            "story.steps": 0,
+            "story.souls": 3,
+            "story.gold": 0,
+            "box.box.mood": "wary",
+            "hand.q.met": true,
+            "value.box/rain.lamps": 2,
+            "turn.b_x": 0
+          }
+        },
+        {
+          "op": "deal",
+          "flow": "alice",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_fleeting",
+              "c_plain"
+            ]
+          },
+          "expectVerdicts": {
+            "once": "cooldown",
+            "relic": "taken"
+          }
+        },
+        {
+          "op": "deal",
+          "flow": "bob",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_once",
+              "c_plain"
+            ]
+          },
+          "expectVerdicts": {
+            "relic": "taken",
+            "fleeting": "claimed-elsewhere"
+          }
+        },
+        {
+          "op": "assertState",
+          "flow": "bob",
+          "expect": {
+            "story.visits": 0,
+            "hand.q.met": false,
+            "story.souls": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "a durable half kept under one build loads into the next, and says what no longer fits",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "souls",
+              "type": "number",
+              "default": 0,
+              "durable": true
+            },
+            {
+              "name": "oath",
+              "type": "enum",
+              "default": "iron",
+              "values": [
+                "iron",
+                "oak"
+              ],
+              "shared": false,
+              "durable": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "default": "",
+              "shared": false,
+              "durable": true
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_once",
+                    "gameId": "once",
+                    "priority": 3,
+                    "redraw": "never",
+                    "durable": true,
+                    "outcomes": []
+                  }
+                ]
+              },
+              {
+                "id": "k_relics",
+                "gameId": "relics",
+                "shared": true,
+                "durable": true,
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_gone",
+                    "gameId": "gone",
+                    "priority": 1,
+                    "redraw": "never",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_relic",
+                    "gameId": "relic",
+                    "priority": 2,
+                    "redraw": "never",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "bundleB": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.2.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "spirits",
+              "type": "number",
+              "default": 0,
+              "durable": true
+            },
+            {
+              "name": "oath",
+              "type": "enum",
+              "default": "oak",
+              "values": [
+                "oak",
+                "ash"
+              ],
+              "shared": false,
+              "durable": true
+            },
+            {
+              "name": "title",
+              "type": "string",
+              "default": "",
+              "shared": false
+            },
+            {
+              "name": "rank",
+              "type": "number",
+              "default": 0,
+              "shared": false,
+              "durable": true
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": []
+              },
+              {
+                "id": "k_relics",
+                "gameId": "relics",
+                "shared": true,
+                "durable": true,
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_relic",
+                    "gameId": "relic",
+                    "priority": 2,
+                    "redraw": "never",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "setState",
+          "flow": "alice",
+          "story": {
+            "souls": 7,
+            "oath": "iron",
+            "title": "the smith"
+          }
+        },
+        {
+          "op": "deal",
+          "flow": "alice",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_once",
+              "c_relic",
+              "c_gone"
+            ]
+          }
+        },
+        {
+          "op": "play",
+          "flow": "alice",
+          "card": "c_once",
+          "from": "h_q"
+        },
+        {
+          "op": "play",
+          "flow": "alice",
+          "card": "c_relic",
+          "from": "h_q"
+        },
+        {
+          "op": "play",
+          "flow": "alice",
+          "card": "c_gone",
+          "from": "h_q"
+        },
+        {
+          "op": "keepPocket",
+          "flow": "alice",
+          "expect": {
+            "values": {
+              "story.oath": "iron",
+              "story.title": "the smith"
+            },
+            "spent": [
+              "once"
+            ]
+          }
+        },
+        {
+          "op": "keepMemory",
+          "expect": {
+            "values": {
+              "story.souls": 7
+            },
+            "spent": [
+              "gone",
+              "relic"
+            ]
+          }
+        },
+        {
+          "op": "newRun",
+          "into": "B",
+          "expectReport": {
+            "exact": false,
+            "project": "conf",
+            "flows": [],
+            "version": {
+              "saved": "0.0.0",
+              "bundle": "0.2.0"
+            },
+            "hash": {
+              "saved": "",
+              "bundle": ""
+            },
+            "evicted": [],
+            "droppedCooldowns": [],
+            "droppedSpent": [
+              "gone"
+            ],
+            "droppedProperties": [
+              {
+                "path": "story.souls"
+              }
+            ],
+            "defaultedProperties": [
+              {
+                "path": "story.spirits"
+              }
+            ],
+            "retypedProperties": []
+          }
+        },
+        {
+          "op": "assertEngineRead",
+          "path": "story.spirits",
+          "expect": 0
+        },
+        {
+          "op": "openFlowDurable",
+          "flow": "alice",
+          "expectReport": {
+            "exact": false,
+            "project": "conf",
+            "flows": [
+              "alice"
+            ],
+            "version": {
+              "saved": "0.0.0",
+              "bundle": "0.2.0"
+            },
+            "hash": {
+              "saved": "",
+              "bundle": ""
+            },
+            "evicted": [],
+            "droppedSpent": [],
+            "droppedCooldowns": [
+              {
+                "flow": "alice",
+                "card": "once"
+              }
+            ],
+            "droppedProperties": [
+              {
+                "flow": "alice",
+                "path": "story.title"
+              }
+            ],
+            "defaultedProperties": [
+              {
+                "flow": "alice",
+                "path": "story.rank"
+              }
+            ],
+            "retypedProperties": [
+              {
+                "flow": "alice",
+                "path": "story.oath"
+              }
+            ]
+          }
+        },
+        {
+          "op": "assertState",
+          "flow": "alice",
+          "expect": {
+            "story.oath": "oak",
+            "story.title": "",
+            "story.rank": 0
+          }
+        },
+        {
+          "op": "deal",
+          "flow": "alice",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": []
+          },
+          "expectVerdicts": {
+            "relic": "taken"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a flow opened with its pocket deals on its own seed, as a fresh flow does",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "visits",
+              "type": "number",
+              "default": 0,
+              "shared": false,
+              "durable": true
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_alpha",
+                    "gameId": "alpha",
+                    "priority": 0,
+                    "redraw": "always",
+                    "copies": 2,
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_beta",
+                    "gameId": "beta",
+                    "priority": 0,
+                    "redraw": "always",
+                    "copies": 2,
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_gamma",
+                    "gameId": "gamma",
+                    "priority": 0,
+                    "redraw": "always",
+                    "copies": 2,
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "seed": 1,
+      "script": [
+        {
+          "op": "setState",
+          "flow": "alice",
+          "story": {
+            "visits": 1
+          }
+        },
+        {
+          "op": "deal",
+          "flow": "alice",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_gamma",
+              "c_alpha",
+              "c_beta"
+            ]
+          }
+        },
+        {
+          "op": "keepPocket",
+          "flow": "alice",
+          "expect": {
+            "values": {
+              "story.visits": 1
+            },
+            "spent": []
+          }
+        },
+        {
+          "op": "newRun"
+        },
+        {
+          "op": "openFlowDurable",
+          "flow": "alice",
+          "expectReport": {
+            "exact": true
+          }
+        },
+        {
+          "op": "deal",
+          "flow": "alice",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_gamma",
+              "c_alpha",
+              "c_beta"
+            ]
+          }
+        },
+        {
+          "op": "assertState",
+          "flow": "alice",
+          "expect": {
+            "story.visits": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "a pocket cannot come with a restore, and the refusal changes nothing",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": [
+            {
+              "name": "visits",
+              "type": "number",
+              "default": 0,
+              "shared": false,
+              "durable": true
+            }
+          ]
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_plain",
+                    "gameId": "plain",
+                    "priority": 0,
+                    "redraw": "always",
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "setState",
+          "flow": "alice",
+          "story": {
+            "visits": 2
+          }
+        },
+        {
+          "op": "keepPocket",
+          "flow": "alice"
+        },
+        {
+          "op": "parkFlow",
+          "flow": "alice",
+          "keepOpen": true
+        },
+        {
+          "op": "openFlowDurable",
+          "flow": "alice",
+          "withRestore": true,
+          "expectError": true
+        },
+        {
+          "op": "assertFlows",
+          "expect": [
+            "alice"
+          ]
+        },
+        {
+          "op": "assertState",
+          "flow": "alice",
+          "expect": {
+            "story.visits": 2
           }
         }
       ]

@@ -21,6 +21,8 @@
     <Compile Include="LiveLinkFixture.cs" />
     <!-- One registry per game: packages/runtime/test/one-registry.test.ts, ported. -->
     <Compile Include="OneRegistry.cs" />
+    <!-- Durable state from the game's side: packages/runtime/test/durable.test.ts, ported. -->
+    <Compile Include="Durable.cs" />
     <!-- The registry corpus runner, vendored from expr/ports/unity/testing. -->
     <Compile Include="RegistryCorpus.cs" />
     <Compile Include="../StoryletEngine/Runtime/**/*.cs" />

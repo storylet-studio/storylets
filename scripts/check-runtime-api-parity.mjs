@@ -343,6 +343,29 @@ const API = [
     unreal: "previewFlowRestore", bp: "PreviewFlowRestoreJson",
     why: "as previewLoad, the report crosses a BP pin as JSON; the method itself is on the engine wrapper because the flow it asks about may not be open" },
 
+  // --- durable state (ruling H, 2026-10-06) ----------------------------------
+  // What outlives a run, as a feature rather than a recipe: one shape for both
+  // halves (the installation's memory on the engine, the player's pocket on a
+  // flow), a load that reports what no longer fits, and an open-flow option
+  // that writes a pocket in. With these public, markTaken and the flow's
+  // snapshot / restore are internal on every runtime.
+  { on: "Engine/Flow", member: "saveDurable",
+    js: "saveDurable", unity: "SaveDurable", godot: "save_durable", unreal: "saveDurable", bp: "SaveDurableToJson",
+    why: "one name on both objects, the engine's half and a flow's, so a name probe holds both; Blueprint takes the half through the string boundary (no DurableSave struct crosses a pin), as SaveFlowToJson" },
+  { on: "Engine", member: "loadDurable",
+    js: "loadDurable", unity: "LoadDurable", godot: "load_durable", unreal: "loadDurable", bp: "LoadDurableFromJson",
+    why: "Blueprint passes the half as JSON and takes the LoadReport back as JSON in an out-param, as OpenFlowFromJson" },
+  { on: "Engine", member: "openFlowDurable",
+    js: { re: "durable\\?: DurableSave" }, unity: { re: "DurableSave Durable" },
+    godot: { re: 'OPEN_FLOW_OPTION_KEYS := \\[[^\\]]*"durable"' },
+    unreal: { re: "std::optional<DurableSave> durable" }, bp: "OpenFlowWithDurableJson",
+    why: "an open-flow option in the cores, beside restore, with onRestoreReport carrying its report; a separate BP method because Blueprint has no optional struct args, taking the pocket as JSON and handing the report back as JSON (as OpenFlowFromJson)" },
+
+  // --- the registry accessor (ruling J, 2026-10-06) ---------------------------
+  { on: "Engine", member: "registry",
+    js: "registry", unity: { re: "ScopeRegistry Registry =>" }, godot: "registry", unreal: "registry", bp: "GetRegistry",
+    why: "the engine's scope registry, the game's or its own, read-only: a getter in JS, a property in C# (probed by its expression body, because the EngineOptions.Registry field has the same name), a method elsewhere. The C++ core's ownsRegistry() is test plumbing and has no row" },
+
   // --- the retained session log + trace (schema 5) --------------------------
   { on: "Flow", member: "log", js: "log", unity: "Log", godot: "log", unreal: "log", bp: "Log" },
   { on: "Engine", member: "log",
@@ -400,7 +423,7 @@ const API = [
     why: "as sharedClaims: the `taken` verdict is how Blueprint learns this" },
   { on: "Engine", member: "markTaken", js: "markTaken", unity: "MarkTaken",
     godot: "mark_taken", unreal: "markTaken", bp: null,
-    why: "as sharedClaims; the engine marks a shared one-shot spent as part of play, never the host" },
+    why: "as sharedClaims; the engine marks a shared one-shot spent as part of play, never the host. Internal on every runtime since ruling H: a host carries spends across a run with saveDurable and loadDurable" },
   { on: "Flow", member: "subscribeTrace", js: "subscribeTrace", unity: "SubscribeTrace", godot: "subscribe_trace", unreal: "subscribeTrace", bp: null,
     why: "deliberate: no delegate crosses a BP pin; Blueprint reads the retained log by polling Log() (the log option lands on Create as bRetainLog) - closes the 2026-07-31 audit hole" },
 
@@ -630,6 +653,10 @@ const SHAPES = {
     godot: "func apply_live_bundle\\(",
     unreal: "static bool ApplyLiveBundle\\(", bp: "bool ApplyLiveBundleWithReport\\(",
     why: "Unreal has no result type: the C++ link and the BP engine return ok as a bool and the rest as out-params, so the signatures (both overloads on the link) stand in for the shape" },
+  DurableSave: { from: "Engine/Flow.saveDurable",
+    js: "interface DurableSave\\b", unity: "class DurableSave\\b", godot: "func save_durable\\(",
+    unreal: "struct DurableSave\\s*\\{", bp: null,
+    why: "Godot builds the half in save_durable. Blueprint carries a durable half as JSON text, so it has no struct of its own" },
 };
 
 // Why the Unreal cores have no engine or bundle in a live-bundle result, said once.
@@ -664,13 +691,18 @@ const FIELDS = [
     why: "the event's kind. Declared on the event, not the entry, in JS, Godot (each emitting builder sets it) and the C++ core. C# has no tagged union, so the kind IS the event's class (DealEvent, PeekEvent, ...) and a host switches on it" },
   { shape: "LogEntry", field: "event",
     js: { re: "TraceEvent &" }, unity: { re: "TraceEvent Event" }, godot: { re: "event\\.duplicate\\(\\)" },
-    unreal: { re: "TraceEvent event" }, bp: null,
-    why: "the structured event: the hand, box, card, outcome, path, criteria and verdicts a log line is about. JS and Godot spread it into the entry, C# and C++ hold it. MISSING - review 2026-10-06: the Blueprint entry flattens to Kind / Seq / Turn / Summary, so a Blueprint host can read that a card was dealt but not which card, to which hand, or why. Its header says no generic value crosses a BP pin, which holds for a write's value and prev but not for the string fields every other kind carries" },
+    unreal: { re: "TraceEvent event" }, bp: { re: "TArray<FStoryletTraceCard>\\s+Cards\\s*;" },
+    why: "the structured event: the hand, box, card, outcome, path, criteria and verdicts a log line is about. JS and Godot spread it into the entry, C# and C++ hold it. Blueprint flattens the event onto the entry: string fields per kind, a write's values as JSON text, and the verdicts as Cards" },
 
   { shape: "HotSwapResult", field: "engine", js: "engine", unity: "Engine", godot: "engine", unreal: "engine", bp: null,
     why: "as the shape: no Blueprint hotSwap" },
   { shape: "HotSwapResult", field: "report", js: "report", unity: "Report", godot: "report", unreal: "report", bp: null,
     why: "as the shape: no Blueprint hotSwap" },
+
+  ...["schema", "content", "values", "spent"].map((f) => ({
+    shape: "DurableSave", field: f, js: f, godot: f, unreal: f, unity: f[0].toUpperCase() + f.slice(1), bp: null,
+    why: "as the shape: Blueprint holds a durable half as JSON text",
+  })),
 
   { shape: "LiveBundleResult", field: "ok", js: "ok", unity: "Ok", godot: "ok",
     unreal: { re: "bool ApplyLiveBundle\\(" }, bp: { re: "bool ApplyLiveBundleWithReport\\(" },

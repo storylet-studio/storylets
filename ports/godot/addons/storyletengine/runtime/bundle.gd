@@ -34,6 +34,10 @@ const SAVE_SCHEMA := "storylets/save@2"
 ## The version 1 envelope's schema tag, still read.
 const SAVE_SCHEMA_V1 := "storylets/save@1"
 const SAVEFILE_SCHEMA := "storylets/savefile@1"
+## The schema tag every DURABLE HALF carries (ruling H, 2026-10-06): what
+## save_durable writes and load_durable and open_flow's "durable" read, so the
+## shape can change later and a runtime can tell which one it was given.
+const DURABLE_SCHEMA := "storylets/durable@1"
 
 ## The reserved tag group (schema 2.4): present in every box without
 ## declaration, its tags the box's hand ids. Every hand implicitly binds it to

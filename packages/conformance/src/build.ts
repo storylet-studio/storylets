@@ -44,8 +44,11 @@ import type {
  *  distinct from absent, and the flows a `saveLoad` rebuilds are watched. Two
  *  earlier cases advanced the PRNG with a peek and now advance it with a deal
  *  ("save/load carries the PRNG state", "a parked flow resumes on the same
- *  stream"); their expectations are unchanged. */
-export const CORPUS_VERSION = 12;
+ *  stream"); their expectations are unchanged.
+ *  13: durable state as a feature (ruling H, 2026-10-06): the four ops
+ *  `keepPocket`, `keepMemory`, `newRun` and `openFlowDurable`, and `durable`
+ *  on the card and deck fixtures. No earlier expectation changed. */
+export const CORPUS_VERSION = 13;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>
@@ -209,6 +212,7 @@ const expandCard = (f: CardFixture, strip: boolean, s: Scaffold): Card<Expressio
   ...(f.copies !== undefined ? { copies: f.copies } : {}),
   ...(f.shared !== undefined ? { shared: f.shared } : {}),
   ...(f.sharedCopies !== undefined ? { sharedCopies: f.sharedCopies } : {}),
+  ...(f.durable !== undefined ? { durable: f.durable } : {}),
   fields: f.fields,
   outcomes: byDisplayOrder(f.outcomes ?? []).map(expandOutcome),
 });
@@ -218,6 +222,7 @@ const expandDeck = (f: DeckFixture, strip: boolean, s: Scaffold): Deck<Expressio
   gameId: gameId(f.id),
   condition: maybe(f.condition),
   ...(f.shared !== undefined ? { shared: f.shared } : {}),
+  ...(f.durable !== undefined ? { durable: f.durable } : {}),
   properties: f.properties ?? [],
   cards: byId(f.cards.map((c) => expandCard(c, strip, s))),
 });

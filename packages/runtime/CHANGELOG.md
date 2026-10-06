@@ -8,6 +8,16 @@ section for it.
 
 ## [Unreleased]
 
+### Added
+
+- **Durable state is a feature.** `engine.saveDurable()` returns the installation's memory (every shared `durable` property's value, and every shared durable one-shot that has been spent) and `flow.saveDurable()` one player's pocket (the same for the per-flow half), in one shape: `{ schema: "storylets/durable@1", content, values, spent }`, values keyed by property address and spends by card gameId. `engine.loadDurable(memory)` writes a memory into the next run's engine and `openFlow(id, { durable: pocket })` opens a flow with its pocket in. Both report what no longer fits the build (an address no longer declared durable on that side, a value its declaration no longer takes, a card that is gone) as a `LoadReport`, returned by `loadDurable` and handed to `onRestoreReport` by `openFlow`. `durable` and `restore` together are refused, as are another project's state and an unknown schema. `DURABLE_SCHEMA` and the `DurableSave` type are exported.
+- **`engine.registry`**: the engine's scope registry, read-only, whether the game passed it in or the engine made its own.
+
+### Changed
+
+- **`markTaken`, `Flow.snapshot` and `Flow.restore` are internal** and no longer in the published types. Carry spends across a run with `saveDurable` and `loadDurable`, and resume a flow with `openFlow(id, { restore })`.
+- **A flags value must hold strings.** A save or durable half whose flags value holds anything else (`[1]`, say) is reported as retyped and the property keeps its default, as on the other three runtimes, instead of landing in the bag.
+
 ## [0.10.0] - 2026-10-06
 
 ### Added

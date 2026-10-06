@@ -1897,6 +1897,42 @@ namespace StoryletStudio.StoryletEngine
 
         // --- persistence (schema 4) ----------------------------------------------------
 
+        /// <summary>This flow's DURABLE HALF, the player's pocket (ruling H): every
+        /// per-flow Durable property's value by its address, and every per-flow
+        /// durable one-shot this flow has spent, by card gameId. A later run opens
+        /// the player's flow with it, OpenFlow(id, new OpenFlowOptions { Durable =
+        /// pocket }); the shared half is Engine.SaveDurable.</summary>
+        public DurableSave SaveDurable()
+        {
+            AssertOpen();
+            var spent = new List<string>();
+            foreach (var entry in _engine._durableFlowCards)
+            {
+                if (_cooldowns.TryGetValue(entry.Card.Id, out var until) && until == Model.MAX_SAFE_INTEGER)
+                {
+                    spent.Add(Model.EffectiveGameId(entry.Card));
+                }
+            }
+            spent.Sort(StringComparer.Ordinal);
+            return new DurableSave
+            {
+                Schema = Model.DURABLE_SCHEMA,
+                Content = _engine.ContentCopy(),
+                Values = Engine.DurableValues(_stores, _engine._durableFlow),
+                Spent = spent,
+            };
+        }
+
+        /// <summary>Write a planned pocket into this freshly opened flow
+        /// (OpenFlow's Durable, which has already checked and planned it). Its
+        /// bags hold their defaults, so only what the plan carries is
+        /// written.</summary>
+        internal void WriteDurable(DurablePlan plan)
+        {
+            foreach (var pair in plan.Values) Engine.PutDurable(Engine.DurableBag(_stores, pair.Key), pair.Key.Decl.Name, pair.Value);
+            foreach (var cardId in plan.Cards) _cooldowns.Set(cardId, Model.MAX_SAFE_INTEGER);
+        }
+
         /// <summary>This flow's blob: inside the engine's envelope without its
         /// properties (the registry has them), or parked whole by SaveFlow.
         /// ExprValue is immutable, so a container-deep copy is the TS

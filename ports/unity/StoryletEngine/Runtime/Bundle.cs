@@ -53,6 +53,10 @@ namespace StoryletStudio.StoryletEngine
         /// container - design/flows.md). The engine never reads or writes the
         /// world half.</summary>
         public const string SAVEFILE_SCHEMA = "storylets/savefile@1";
+        /// <summary>The schema tag every durable half carries (ruling H,
+        /// 2026-10-06), so the shape can change later and a runtime can tell
+        /// which one it was given. See DurableSave.</summary>
+        public const string DURABLE_SCHEMA = "storylets/durable@1";
 
         /// <summary>The reserved tag group (schema 2.4): present in every box
         /// without declaration, its tags the box's hand ids. Every hand implicitly
@@ -230,11 +234,13 @@ namespace StoryletStudio.StoryletEngine
         public bool? Shared;
         /// <summary>The durability axis (design/engine-server.md 4.2), valid
         /// wherever Shared is and orthogonal to it: Shared says whose value this
-        /// is WITHIN a run, Durable says whether it survives the run at all.
-        /// INERT here - the engine partitions by Shared alone and never reads
-        /// this; a server lifts and restores durable values across a run
-        /// boundary through GetProperty / SetProperty. Never valid on a @world
-        /// declaration (the compiler refuses it).</summary>
+        /// is WITHIN a run, Durable says whether it survives the run at all. A
+        /// durable shared property is the installation's memory, a durable
+        /// per-flow one the player's pocket. The engine partitions by Shared
+        /// alone; this flag only decides what the durable halves carry across a
+        /// run boundary: Engine.SaveDurable and LoadDurable for a shared one,
+        /// Flow.SaveDurable and OpenFlowOptions.Durable for a per-flow one.
+        /// Never valid on a @world declaration (the compiler refuses it).</summary>
         public bool? Durable;
         // Writable (@world only: false is the story's promise not to write it,
         // Reboot.md 10; absent = writable) is the KERNEL's field and is declared
@@ -309,9 +315,13 @@ namespace StoryletStudio.StoryletEngine
         /// Read only when shared; defaults to Copies.</summary>
         public double? SharedCopies;
         /// <summary>Does this card's redraw:never spend survive the run
-        /// (design/engine-server.md 4.2)? Absent takes the deck's flag. INERT
-        /// here: the server lifts the durable spends at a run boundary and puts
-        /// them back through OpenFlow(id, restore) and MarkTaken.</summary>
+        /// (design/engine-server.md 4.2)? Absent takes the deck's flag, set here
+        /// it overrides the deck, as Shared does. Only "never" crosses the run
+        /// boundary: a finite cooldown is an absolute turn of a box clock, and
+        /// the clock restarts with the run. It only decides what the durable
+        /// halves carry: a per-flow spend rides the flow's half (its never
+        /// cooldown), a shared one the engine's half (its spent set), each by
+        /// card gameId.</summary>
         public bool? Durable;
         /// <summary>Card-template data: field name -> value.</summary>
         public OrderedMap<string, ExprValue> Fields;
@@ -330,7 +340,7 @@ namespace StoryletStudio.StoryletEngine
         /// shared unless the card says otherwise (design/shared-scarcity.md).</summary>
         public bool? Shared;
         /// <summary>Every redraw:never card in this pile is spent past the end
-        /// of the run unless the card says otherwise (4.2). Inert here.</summary>
+        /// of the run unless the card says otherwise (4.2): see Card.Durable.</summary>
         public bool? Durable;
         public List<PropertyDecl> Properties = new List<PropertyDecl>();
         public List<Card> Cards = new List<Card>();

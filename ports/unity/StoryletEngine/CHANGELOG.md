@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Durable state is a feature.** `Engine.SaveDurable()` returns the installation's memory (every shared `durable` property's value, and every shared durable one-shot that has been spent) and `Flow.SaveDurable()` one player's pocket (the same for the per-flow half), in one shape, `DurableSave`: `Schema` (`Model.DURABLE_SCHEMA`, `"storylets/durable@1"`), `Content`, `Values` keyed by property address and `Spent` by card gameId. `Engine.LoadDurable(memory)` writes a memory into the next run's engine and `OpenFlow(id, new OpenFlowOptions { Durable = pocket })` opens a flow with its pocket in. Both report what no longer fits the build (an address no longer declared durable on that side, a value its declaration no longer takes, a card that is gone) as a `LoadReport`, returned by `LoadDurable` and handed to `OnRestoreReport` by `OpenFlow`. `Durable` and `Restore` together are refused, as are another project's state and an unknown schema, before anything changes. `StoryletSave.ToJson(DurableSave)` and `StoryletSave.DurableFromJson` carry a half as JSON, the same text the JS reference writes. A value in a half that no property can hold (a null, an object, an array of anything but strings) is reported, not refused: retyped where the address is durable on that side, dropped where it is not, and never written; and a missing or non-string schema or project is quoted as JS prints it (`unsupported durable schema: undefined`, `durable state is for project "undefined"`). `MarkTaken`, `Flow.Snapshot` and `Flow.Restore` stay internal, as they have always been in this runtime: the durable verbs are the public way to carry state across a run.
+- **`Engine.Registry`**, read-only: the `ScopeRegistry` the engine's bags live in, the very object `EngineOptions.Registry` passed in, or the one the engine made because it was given none. The same object for the engine's life; a `HotSwap` replacement on the game's registry answers that same registry. Parity with Unreal's `registry()`.
+
+### Changed
+
+- **Kernel `k492cf234`**: a listener's error is no longer reported as a read-only refusal (a game's own hook that throws now reaches you as its own exception), every listener registered when a write starts hears it once, and fewer allocations on the hot path. Keep Patterplay on the same kernel.
+
 ## [0.10.0] - 2026-10-06
 
 ### Added

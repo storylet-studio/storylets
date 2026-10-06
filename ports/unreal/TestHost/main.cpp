@@ -533,6 +533,39 @@ static void checkReport(const std::string& at, const JsonValue* expected, const 
     }
 }
 
+/** Check a durable half the runner has just kept (corpus version 13): the
+ *  schema tag and content block every half carries, then what `expect` names.
+ *  `values` whole and in any order, `spent` exactly. */
+static void checkDurable(const std::string& at, const JsonValue* expected, const DurableSave& actual,
+    const Bundle& bundle, std::vector<std::string>& failures)
+{
+    if (actual.schema != "storylets/durable@1")
+    {
+        failures.push_back(at + ": schema expected \"storylets/durable@1\", got \"" + actual.schema + "\"");
+    }
+    const auto content = [](const BundleContent& c)
+    {
+        return "{\"project\":\"" + c.project + "\",\"version\":\"" + c.version + "\",\"hash\":\"" + c.hash + "\"}";
+    };
+    if (content(actual.content) != content(bundle.content))
+    {
+        failures.push_back(at + ": content expected " + content(bundle.content) + ", got " + content(actual.content));
+    }
+    if (!expected || !expected->isObject()) return;
+    if (const JsonValue* values = expected->find("values"))
+    {
+        const std::string want = showFields(savedetail::ParseBag(values));
+        const std::string got = showFields(actual.values);
+        if (want != got) failures.push_back(at + ": values expected " + want + ", got " + got);
+    }
+    if (const JsonValue* spent = expected->find("spent"))
+    {
+        const std::string want = show(stringList(*spent));
+        const std::string got = show(actual.spent);
+        if (want != got) failures.push_back(at + ": spent expected " + want + ", got " + got);
+    }
+}
+
 /** Ops that run ON a flow, and so open one lazily. The rest - engine reads, flow
  *  management, save/load - must NOT, or a harness quietly opens "main" where the
  *  JS reference does not and assertFlows answers differently for no engine
@@ -556,6 +589,8 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
     EngineOptions opts;
     opts.seed = seed;
     auto engine = std::make_unique<Engine>(bundle, opts);
+    // The bundle the engine runs now: a kept durable half must carry its content.
+    BundlePtr running = bundle;
     // Flow handles as the SCRIPT knows them: kept across closeFlow so a
     // later op on a closed name exercises the inert handle, never a quiet
     // re-open.
@@ -580,7 +615,12 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
     // engine on purpose: a park survives a content swap, which is the case that
     // makes a resume interesting.
     std::unordered_map<std::string, FlowSave> parked;
-    auto watch = [&verdicts, &diagnostics, &traces](const FlowPtr& f) -> FlowPtr
+    // Durable halves (corpus version 13), held outside the engine for the
+    // reason a parked blob is: a pocket and an installation's memory outlive
+    // the run.
+    std::unordered_map<std::string, DurableSave> pockets;
+    std::optional<DurableSave> memory;
+    auto watch =[&verdicts, &diagnostics, &traces](const FlowPtr& f) -> FlowPtr
     {
         f->subscribeTrace([&verdicts, &diagnostics, &traces](const TraceEvent& e)
         {
@@ -1065,6 +1105,7 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
             else
             {
                 engine = std::move(target);
+                running = into;
                 checkReport(at, op.find("expectReport"), engine->loadGame(envelope), failures);
                 // Re-taken AND watched, as a lazily opened flow is (corpus
                 // version 12): a deal straight after a load into an edited
@@ -1144,9 +1185,116 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
                 }
             }
         }
+        else if (kind == "keepPocket" || kind == "keepMemory")
+        {
+            // Through the STRING boundary, as parkFlow keeps its blob: it is
+            // the only door Blueprint has (SaveDurableToJson /
+            // LoadDurableFromJson / OpenFlowWithDurableJson), and the half that
+            // lands here is the one that survived the round trip.
+            std::optional<DurableSave> kept;
+            try
+            {
+                const DurableSave half = kind == "keepPocket" ? flowOf(op).saveDurable() : engine->saveDurable();
+                kept = deserializeDurable(serializeDurable(half));
+            }
+            catch (const std::exception& ex)
+            {
+                failures.push_back(at + ": unexpected error: " + std::string(ex.what()));
+            }
+            if (kept.has_value())
+            {
+                checkDurable(at, op.find("expect"), *kept, *running, failures);
+                if (kind == "keepMemory")
+                {
+                    memory = std::move(*kept);
+                }
+                else
+                {
+                    std::string name = op.strOr("flow");
+                    if (name.empty()) name = "main";
+                    pockets[name] = std::move(*kept);
+                }
+            }
+        }
+        else if (kind == "newRun")
+        {
+            // The world restarts: a fresh engine, no flow, no handle. What
+            // crosses is what the script kept, and only through the durable
+            // verbs.
+            running = op.strOr("into") == "B" ? bundleB : bundle;
+            engine = std::make_unique<Engine>(running, opts);
+            handles.clear();
+            if (memory.has_value())
+            {
+                try
+                {
+                    checkReport(at, op.find("expectReport"), engine->loadDurable(*memory), failures);
+                }
+                catch (const std::exception& ex)
+                {
+                    failures.push_back(at + ": unexpected error: " + std::string(ex.what()));
+                }
+            }
+        }
+        else if (kind == "openFlowDurable")
+        {
+            const std::string name = op.strOr("flow");
+            auto pocket = pockets.find(name);
+            auto blob = parked.find(name);
+            const bool withRestore = op.boolOr("withRestore");
+            if (pocket == pockets.end())
+            {
+                failures.push_back(at + ": no pocket is kept under \"" + name + "\"");
+            }
+            else if (withRestore && blob == parked.end())
+            {
+                failures.push_back(at + ": nothing is parked under \"" + name + "\"");
+            }
+            else
+            {
+                bool reported = false;
+                LoadReport applied;
+                OpenFlowOptions durableOpts;
+                durableOpts.durable = pocket->second;
+                if (withRestore) durableOpts.restore = blob->second;
+                durableOpts.onRestoreReport = [&applied, &reported](const LoadReport& r)
+                {
+                    applied = r;
+                    reported = true;
+                };
+                if (const JsonValue* seedJson = op.find("seed")) durableOpts.seed = seedJson->num;
+                FlowPtr opened;
+                std::optional<std::string> error;
+                try
+                {
+                    opened = engine->openFlow(name, durableOpts);
+                }
+                catch (const std::exception& ex)
+                {
+                    error = std::string(ex.what());
+                }
+                if (op.boolOr("expectError"))
+                {
+                    // Refused before anything changed: the handle the script
+                    // holds under that name (if any) is left exactly as it was.
+                    if (!error.has_value()) failures.push_back(at + ": expected an error, the flow opened");
+                }
+                else if (error.has_value())
+                {
+                    failures.push_back(at + ": unexpected error: " + *error);
+                }
+                else
+                {
+                    handles[name] = watch(opened);
+                    if (!reported) failures.push_back(at + ": the durable open produced no report");
+                    else checkReport(at, op.find("expectReport"), applied, failures);
+                }
+            }
+        }
         else if (kind == "reset")
         {
             engine = std::make_unique<Engine>(bundle, opts);
+            running = bundle;
             handles.clear();
         }
         else
@@ -1825,20 +1973,272 @@ static std::vector<std::pair<std::string, std::function<std::vector<std::string>
     return checks;
 }
 
-static int runPortFixes(size_t& total)
+/** Durable halves (ruling H, 2026-10-06): the JS durable.test.ts, ported. The
+ *  corpus pins what the durable verbs carry and what a load reports; these are
+ *  the host API's edges a script cannot reach: the shape of a half as a game
+ *  stores it, the refusals made before anything moves, a memory loaded into an
+ *  engine that is not fresh, and a closed flow. */
+static std::vector<std::pair<std::string, std::function<std::vector<std::string>()>>> durableChecks()
+{
+    using oneregistry::Show;
+    std::vector<std::pair<std::string, std::function<std::vector<std::string>()>>> checks;
+
+    // The JS test's bundle: a shared durable `souls`, a per-flow durable enum
+    // `oath` and a per-flow durable `seal` the story may not write, a shared
+    // run-scoped `gold`; a per-flow durable one-shot c_once and, in a shared
+    // durable deck, the one-shot c_relic.
+    static const char* const json = R"JSON({"schema":"storylets/bundle@0","content":{"project":"conf","version":"0.0.0","hash":""},"metadata":"full","settings":{"playAdvancesTurns":1},"world":{"properties":[]},"story":{"properties":[{"name":"souls","type":"number","default":0,"durable":true},{"name":"oath","type":"enum","default":"iron","values":["iron","oak"],"shared":false,"durable":true},{"name":"seal","type":"number","default":0,"shared":false,"durable":true,"writable":false},{"name":"gold","type":"number","default":0}]},"boxes":[{"id":"b_x","gameId":"box","ranking":{"specificity":true},"fields":[],"properties":[],"tagGroups":[],"decks":[{"id":"k_main","gameId":"main","properties":[],"cards":[{"id":"c_once","gameId":"once","priority":2,"redraw":"never","durable":true,"outcomes":[]}]},{"id":"k_relics","gameId":"relics","shared":true,"durable":true,"properties":[],"cards":[{"id":"c_relic","gameId":"relic","priority":1,"redraw":"never","outcomes":[]}]}],"handTemplates":[],"hands":[{"id":"h_q","gameId":"q","rule":{"slots":"unbounded"}}]}]})JSON";
+    static const BundlePtr bundle = ParseBundle(JsonParser(json).parse());
+
+    // A run that has spent both one-shots and moved every durable value.
+    auto played = []
+    {
+        auto engine = std::make_unique<Engine>(bundle);
+        FlowPtr flow = engine->openFlow("alice");
+        flow->setProperty("story.souls", StoryletValue::Num(4));
+        flow->setProperty("story.oath", StoryletValue::Str("oak"));
+        flow->setProperty("story.seal", StoryletValue::Num(9));
+        for (const DealtCard& card : flow->deal("q")) flow->play(card.gameId, "", "q");
+        return engine;
+    };
+    // What a call threw, or "" when it did not.
+    auto thrown = [](const std::function<void()>& body) -> std::string
+    {
+        try { body(); }
+        catch (const StoryletError& e) { return e.what(); }
+        catch (const std::exception& e) { return std::string("not a StoryletError: ") + e.what(); }
+        return std::string();
+    };
+
+    checks.emplace_back("are plain data: the schema tag, the build, values by address and spends by gameId", [=]
+    {
+        std::vector<std::string> out;
+        auto engine = played();
+        const DurableSave memory = engine->saveDurable();
+        if (memory.schema != DURABLE_SCHEMA) out.push_back("the memory's schema is " + memory.schema);
+        if (memory.content.project != "conf" || memory.content.version != "0.0.0") out.push_back("the memory carries another build");
+        if (showFields(memory.values) != R"({"story.souls":4})") out.push_back("the memory's values are " + showFields(memory.values));
+        if (memory.spent != std::vector<std::string>{"relic"}) out.push_back("the memory spent " + show(memory.spent));
+        DurableSave pocket = engine->getFlow("alice")->saveDurable();
+        if (showFields(pocket.values) != R"({"story.oath":"oak","story.seal":9})") out.push_back("the pocket's values are " + showFields(pocket.values));
+        if (pocket.spent != std::vector<std::string>{"once"}) out.push_back("the pocket spent " + show(pocket.spent));
+        // Keys in byte order, so the same state writes the same text.
+        if (pocket.values.keys() != std::vector<std::string>{"story.oath", "story.seal"}) out.push_back("the pocket's keys are " + show(pocket.values.keys()));
+        // A copy: changing it changes nothing in the engine.
+        pocket.values.set("story.oath", StoryletValue::Str("iron"));
+        if (Show(engine->getFlow("alice")->getProperty("story.oath")) != "\"oak\"") out.push_back("the pocket was not a copy");
+        return out;
+    });
+    checks.emplace_back("survive JSON, which is how a game keeps them", [=]
+    {
+        std::vector<std::string> out;
+        auto engine = played();
+        const std::string memory = serializeDurable(engine->saveDurable());
+        const std::string pocket = serializeDurable(engine->getFlow("alice")->saveDurable());
+        Engine next(bundle);
+        if (!next.loadDurable(deserializeDurable(memory)).exact) out.push_back("the memory's load was not exact");
+        std::optional<bool> exact;
+        OpenFlowOptions opts;
+        opts.durable = deserializeDurable(pocket);
+        opts.onRestoreReport = [&exact](const LoadReport& r) { exact = r.exact; };
+        FlowPtr flow = next.openFlow("alice", opts);
+        if (exact != std::optional<bool>(true)) out.push_back("the pocket's open was not reported exact");
+        // A `writable: false` value goes back: that flag is the story's
+        // promise, and putting a player's own state back is the game speaking.
+        if (Show(flow->getProperty("story.seal")) != "9") out.push_back("story.seal is " + Show(flow->getProperty("story.seal")));
+        if (serializeDurable(next.saveDurable()) != memory) out.push_back("the memory did not come back as it went");
+        if (serializeDurable(flow->saveDurable()) != pocket) out.push_back("the pocket did not come back as it went");
+        return out;
+    });
+    checks.emplace_back("refuse an unknown schema and another project's state before anything moves", [=]
+    {
+        std::vector<std::string> out;
+        auto engine = played();
+        const DurableSave memory = engine->saveDurable();
+        Engine next(bundle);
+        const std::string before = serializeState(next);
+        DurableSave schema = memory;
+        schema.schema = "storylets/durable@9";
+        const std::string a = thrown([&] { next.loadDurable(schema); });
+        if (a != "unsupported durable schema: storylets/durable@9") out.push_back("an unknown schema said \"" + a + "\"");
+        DurableSave other = memory;
+        other.content.project = "other";
+        const std::string b = thrown([&] { next.loadDurable(other); });
+        if (b != "durable state is for project \"other\", bundle is \"conf\"") out.push_back("another project's said \"" + b + "\"");
+        const std::string c = thrown([&] { next.loadDurable(deserializeDurable("[]")); });
+        if (c.empty() || c.rfind("not a StoryletError", 0) == 0) out.push_back("a half that is no object said \"" + c + "\"");
+        const std::string d = thrown([&] { deserializeDurable("{ not json"); });
+        if (d.empty() || d.rfind("not a StoryletError", 0) == 0) out.push_back("malformed text said \"" + d + "\"");
+        if (serializeState(next) != before) out.push_back("a refused load changed the engine");
+        return out;
+    });
+    checks.emplace_back("refuse a pocket for another project as the flow opens, leaving the open flow as it was", [=]
+    {
+        std::vector<std::string> out;
+        auto engine = played();
+        const DurableSave pocket = engine->getFlow("alice")->saveDurable();
+        FlowPtr held = engine->getFlow("alice");
+        OpenFlowOptions foreign;
+        foreign.durable = pocket;
+        foreign.durable->content.project = "other";
+        if (thrown([&] { engine->openFlow("alice", foreign); }).empty()) out.push_back("another project's pocket opened");
+        if (held->isClosed()) out.push_back("the refusal closed the flow");
+        OpenFlowOptions both;
+        both.durable = pocket;
+        both.restore = engine->saveFlow("alice");
+        const std::string said = thrown([&] { engine->openFlow("alice", both); });
+        if (said.rfind("openFlow \"alice\": restore and durable cannot be given together", 0) != 0)
+        {
+            out.push_back("restore with durable said \"" + said + "\"");
+        }
+        if (held->isClosed()) out.push_back("the second refusal closed the flow");
+        if (Show(held->getProperty("story.oath")) != "\"oak\"") out.push_back("story.oath is " + Show(held->getProperty("story.oath")));
+        return out;
+    });
+    checks.emplace_back("make the memory exactly the engine's durable half, and touch nothing else", [=]
+    {
+        std::vector<std::string> out;
+        auto engine = played();
+        DurableSave memory = engine->saveDurable();
+        // An engine that is NOT fresh: a durable value moved, a run-scoped one too.
+        Engine next(bundle);
+        FlowPtr bob = next.openFlow("bob");
+        bob->setProperty("story.gold", StoryletValue::Num(3));
+        next.setProperty("story.souls", StoryletValue::Num(8));
+        memory.values = OrderedMap<std::string, StoryletValue>();
+        const LoadReport report = next.loadDurable(memory);
+        // The memory carries no `souls`, so it takes its default, as the report says.
+        if (report.defaultedProperties.size() != 1 || report.defaultedProperties[0].path != "story.souls"
+            || !report.defaultedProperties[0].flow.empty())
+        {
+            out.push_back("defaulted " + propertyKeys(report.defaultedProperties));
+        }
+        if (Show(next.getProperty("story.souls")) != "0") out.push_back("story.souls is " + Show(next.getProperty("story.souls")));
+        if (Show(next.getProperty("story.gold")) != "3") out.push_back("story.gold is " + Show(next.getProperty("story.gold")));
+        if (bob->isClosed()) out.push_back("the load closed a flow");
+        return out;
+    });
+    checks.emplace_back("name spends by gameId: an internal id is a card this build does not have", [=]
+    {
+        std::vector<std::string> out;
+        Engine next(bundle);
+        DurableSave memory;
+        memory.content = bundle->content;
+        memory.values.set("story.souls", StoryletValue::Num(1));
+        memory.spent = {"c_relic"};
+        const std::vector<std::string> byId = next.loadDurable(memory).droppedSpent;
+        if (byId != std::vector<std::string>{"c_relic"}) out.push_back("an internal id dropped " + show(byId));
+        // And a pocket's spend on the memory's side is not the memory's to carry.
+        memory.spent = {"once"};
+        const std::vector<std::string> pocketSide = next.loadDurable(memory).droppedSpent;
+        if (pocketSide != std::vector<std::string>{"once"}) out.push_back("a pocket's spend dropped " + show(pocketSide));
+        return out;
+    });
+    checks.emplace_back("quote a missing or non-string schema and project as JS prints them", [=]
+    {
+        std::vector<std::string> out;
+        Engine next(bundle);
+        const std::pair<const char*, const char*> cases[] = {
+            {R"({})", "unsupported durable schema: undefined"},
+            {R"({"schema":null})", "unsupported durable schema: null"},
+            {R"({"schema":42})", "unsupported durable schema: 42"},
+            {R"({"schema":"storylets/durable@1"})", "durable state is for project \"undefined\", bundle is \"conf\""},
+            {R"({"schema":"storylets/durable@1","content":{}})", "durable state is for project \"undefined\", bundle is \"conf\""},
+            {R"({"schema":"storylets/durable@1","content":{"project":5}})", "durable state is for project \"5\", bundle is \"conf\""},
+        };
+        for (const auto& c : cases)
+        {
+            const std::string said = thrown([&] { next.loadDurable(deserializeDurable(c.first)); });
+            if (said != c.second) out.push_back(std::string(c.first) + " said \"" + said + "\"");
+        }
+        return out;
+    });
+    checks.emplace_back("report a value no property can hold, as JS does, and write nothing for it", [=]
+    {
+        // The same input the JS reference reports as below: a null or an
+        // object fits no declaration (retyped where the address is durable on
+        // that side, dropped where it is not), and so does [1] for a number.
+        std::vector<std::string> out;
+        Engine next(bundle);
+        next.setProperty("story.souls", StoryletValue::Num(8));
+        const std::string memoryText = R"({"schema":"storylets/durable@1","content":{"project":"conf","version":"0.0.0","hash":""},)"
+            R"("values":{"story.souls":null,"story.gone":{},"story.oath":"oak"},"spent":[]})";
+        const DurableSave memory = deserializeDurable(memoryText);
+        const LoadReport report = next.loadDurable(memory);
+        if (propertyKeys(report.droppedProperties) != propertyKeys({{"", "story.gone"}, {"", "story.oath"}}))
+        {
+            out.push_back("the memory dropped " + propertyKeys(report.droppedProperties));
+        }
+        if (propertyKeys(report.retypedProperties) != propertyKeys({{"", "story.souls"}}))
+        {
+            out.push_back("the memory retyped " + propertyKeys(report.retypedProperties));
+        }
+        if (!report.defaultedProperties.empty()) out.push_back("the memory defaulted " + propertyKeys(report.defaultedProperties));
+        if (Show(next.getProperty("story.souls")) != "0") out.push_back("story.souls is " + Show(next.getProperty("story.souls")));
+        // Written back out, it still carries the address, so it reports the same.
+        if (propertyKeys(Engine(bundle).loadDurable(deserializeDurable(serializeDurable(memory))).retypedProperties)
+            != propertyKeys({{"", "story.souls"}}))
+        {
+            out.push_back("a re-written half lost what it could not read");
+        }
+        std::optional<LoadReport> opened;
+        OpenFlowOptions opts;
+        opts.durable = deserializeDurable(R"({"schema":"storylets/durable@1","content":{"project":"conf","version":"0.0.0","hash":""},)"
+            R"("values":{"story.oath":null,"story.seal":[1],"story.souls":[]},"spent":[]})");
+        opts.onRestoreReport = [&opened](const LoadReport& r) { opened = r; };
+        FlowPtr flow = next.openFlow("alice", opts);
+        if (!opened.has_value())
+        {
+            out.push_back("the pocket produced no report");
+            return out;
+        }
+        if (propertyKeys(opened->droppedProperties) != propertyKeys({{"alice", "story.souls"}}))
+        {
+            out.push_back("the pocket dropped " + propertyKeys(opened->droppedProperties));
+        }
+        if (propertyKeys(opened->retypedProperties) != propertyKeys({{"alice", "story.oath"}, {"alice", "story.seal"}}))
+        {
+            out.push_back("the pocket retyped " + propertyKeys(opened->retypedProperties));
+        }
+        if (!opened->defaultedProperties.empty()) out.push_back("the pocket defaulted " + propertyKeys(opened->defaultedProperties));
+        if (Show(flow->getProperty("story.oath")) != "\"iron\"") out.push_back("story.oath is " + Show(flow->getProperty("story.oath")));
+        if (Show(flow->getProperty("story.seal")) != "0") out.push_back("story.seal is " + Show(flow->getProperty("story.seal")));
+        return out;
+    });
+    checks.emplace_back("are refused on a closed flow, as every verb is", [=]
+    {
+        std::vector<std::string> out;
+        auto engine = played();
+        FlowPtr flow = engine->getFlow("alice");
+        engine->closeFlow("alice");
+        const std::string said = thrown([&] { flow->saveDurable(); });
+        if (said != "flow \"alice\" is closed") out.push_back("a closed flow said \"" + said + "\"");
+        return out;
+    });
+    return checks;
+}
+
+/** One list of named checks: each returns its failures, empty is a pass. */
+static int runChecks(const char* group,
+    const std::vector<std::pair<std::string, std::function<std::vector<std::string>()>>>& checks)
 {
     int passed = 0;
-    const auto checks = portFixChecks();
-    total = checks.size();
     for (const auto& check : checks)
     {
         std::vector<std::string> failures;
         try { failures = check.second(); }
         catch (const std::exception& e) { failures.push_back(std::string("threw: ") + e.what()); }
         if (failures.empty()) ++passed;
-        for (const auto& f : failures) fail("port-fixes", check.first, f);
+        for (const auto& f : failures) fail(group, check.first, f);
     }
     return passed;
+}
+
+static int runPortFixes(size_t& total)
+{
+    const auto checks = portFixChecks();
+    total = checks.size();
+    return runChecks("port-fixes", checks);
 }
 
 int main(int argc, char** argv)
@@ -1885,6 +2285,8 @@ int main(int argc, char** argv)
         for (const std::string& f : kernelErrors.failures) fail("kernel-errors", "engine", f);
         size_t portFixTotal = 0;
         const int portFixes = runPortFixes(portFixTotal);
+        const auto durable = durableChecks();
+        const int durablePassed = runChecks("durable", durable);
 
         std::cout << "corpus version " << version << "\n";
         std::cout << "describeBundle checks: " << d << "/1  project map: " << m << "/1  save round trip: " << sv << "/1\n";
@@ -1897,6 +2299,7 @@ int main(int argc, char** argv)
         std::cout << "one registry per game: " << oneRegistry.passed << "/" << oneRegistry.total << "\n";
         std::cout << "kernel errors reach the game as the engine's own: " << kernelErrors.passed << "/" << kernelErrors.total << "\n";
         std::cout << "port fixes (engine review 2026-10): " << portFixes << "/" << portFixTotal << "\n";
+        std::cout << "durable halves (ruling H): " << durablePassed << "/" << durable.size() << "\n";
 
         // The expr parity corpus sits beside ours, vendored from ../expr.
         // Absent is a FAILURE, not a skip: a parity gate that quietly does

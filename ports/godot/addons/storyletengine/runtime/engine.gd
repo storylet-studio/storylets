@@ -50,11 +50,12 @@ const OWNER := "Storylet Engine"
 ## The four instance kinds, in the order their bags register.
 const OWNED_KINDS := ["box", "deck", "hand", "value"]
 ## open_flow's options. "restore" takes a save_flow blob and opens the flow AS
-## IT WAS (design/engine-server.md 4.1); "on_restore_report" is a
-## Callable(report: Dictionary) handed what that restore did - the same report
-## preview_flow_restore returns, and the only way out for it, since open_flow
-## returns the handle.
-const OPEN_FLOW_OPTION_KEYS := ["seed", "restore", "on_restore_report"]
+## IT WAS (design/engine-server.md 4.1); "durable" takes a flow's durable half
+## (its POCKET, from flow.save_durable()) and opens a fresh flow with it written
+## in (ruling H); "on_restore_report" is a Callable(report: Dictionary) handed
+## what either did - for a restore, the same report preview_flow_restore
+## returns - and the only way out for it, since open_flow returns the handle.
+const OPEN_FLOW_OPTION_KEYS := ["seed", "restore", "durable", "on_restore_report"]
 ## The load report's sort-key separator: a UNIT SEPARATOR, because it cannot
 ## occur in an id, a gameId or a property name.
 const REPORT_SEP := "\u001f"
@@ -126,6 +127,11 @@ var _flow_decls: Dictionary = {}
 # shared side WOULD hold without building a bag, which is what makes
 # preview_load pure.
 var _shared_decls: Dictionary = {}
+## The durable declarations and durable cards on each side (ruling H), built
+## once at construction: what save_durable carries and a durable load may
+## write. "shared" / "flow" hold durable props ({"address", "kind", "owner"
+## (absent for story), "decl"}), "shared_cards" / "flow_cards" card entries.
+var _durable: Dictionary = {"shared": [], "flow": [], "shared_cards": [], "flow_cards": []}
 # The shared stores: {"story": bag, "box"/"deck"/"hand"/"value": {id: bag}},
 # registered in the registry for the engine's life. Reseeded in place by reset
 # and by a load that carries values, so the registry never sees them come and go.
@@ -556,6 +562,9 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 				_cards_by_game_id[StoryletBundle.effective_game_id(card)] = entry
 				if card.get("shared", false) == true:
 					_has_shared = true
+				if _card_is_durable(card, deck):
+					var side := "shared_cards" if StoryletFlow._card_is_shared(card, bool(deck.get("shared", false))) else "flow_cards"
+					(_durable[side] as Array).append(entry)
 		for template in box["handTemplates"]:
 			_templates_by_id[template["id"]] = template
 		for hand in box["hands"]:
@@ -600,6 +609,8 @@ func _init(bundle: Dictionary, opts: Dictionary = {}) -> void:
 			sd["value"][tag["id"]] = _half("value", tag.get("properties", []), true)
 	_flow_decls = fd
 	_shared_decls = sd
+	_durable["shared"] = _durable_props(_shared_decls)
+	_durable["flow"] = _durable_props(_flow_decls)
 
 	_init_shared()
 
@@ -744,6 +755,16 @@ static func flow_key(flow_id: String, kind: String, id: String = "") -> String:
 	if kind == "story":
 		return flow_prefix(flow_id) + "story"
 	return "%s%s/%s" % [flow_prefix(flow_id), kind, _esc(id)]
+
+
+## The registry this engine's bags live in: the game's, the very object create's
+## "registry" option passed in, or the one the engine made because it was given
+## none. The same object for the engine's life. Untyped, as the option is: a
+## combined game's registry may be another addon's shim. A hot_swap replacement
+## built on the game's registry answers that same registry; a standalone
+## engine's replacement makes its own.
+func registry():
+	return _registry
 
 
 ## @internal - every OTHER scope in the registry, as an eval context sees it:
@@ -909,6 +930,15 @@ func world_read_only(name: String) -> bool:
 ## engine's default for this flow's PRNG. Content that names another engine's
 ## scope nothing on this registry registered is refused: null with push_error,
 ## and nothing is touched.
+##
+## {"durable": pocket} opens the flow with its POCKET in, a durable half from
+## flow.save_durable() (ruling H): the flow starts as any new flow does, on its
+## own seed and clocks, with the pocket's values laid over its defaults and its
+## durable spends spent. What no longer fits this build is reported through
+## "on_restore_report", as load_durable reports the engine's half. Refused,
+## before anything changes, with "restore" beside it (a restore already carries
+## the flow's durable values, so a pocket would be a second answer for the same
+## property), and for another project's pocket or an unknown schema.
 func open_flow(id: String, opts: Dictionary = {}) -> StoryletFlow:
 	for key in opts:
 		if not OPEN_FLOW_OPTION_KEYS.has(key):
@@ -921,6 +951,23 @@ func open_flow(id: String, opts: Dictionary = {}) -> StoryletFlow:
 ## values the registry holds for them (a load); a fresh open is a reset of that
 ## name, so anything waiting for it is discarded first.
 func _open(id: String, opts: Dictionary, claim: bool) -> StoryletFlow:
+	if opts.has("durable") and opts.has("restore"):
+		push_error('StoryletEngine.open_flow: openFlow "%s": restore and durable cannot be given together; a restore already carries the flow\'s durable state' % id)
+		return null
+	# A pocket is checked and planned before the name is touched: a refusal, and
+	# anything the plan finds, must leave the flow already open as it was.
+	var durable = null
+	if opts.has("durable"):
+		var refused := _durable_refusal(opts["durable"])
+		if refused != "":
+			push_error("StoryletEngine.open_flow: " + refused)
+			return null
+		var durable_draft := _empty_draft()
+		durable = {
+			"plan": _plan_durable(_durable["flow"], _durable["flow_cards"], opts["durable"], id, durable_draft),
+			"draft": durable_draft,
+			"content": opts["durable"]["content"],
+		}
 	var unregistered := _external_scope_refusal()
 	if unregistered != "":
 		push_error("StoryletEngine.open_flow: " + unregistered)
@@ -947,6 +994,11 @@ func _open(id: String, opts: Dictionary, claim: bool) -> StoryletFlow:
 		var on_report = opts.get("on_restore_report")
 		if on_report is Callable and (on_report as Callable).is_valid():
 			(on_report as Callable).call(_finish_report(_bundle["content"], _bundle["content"], [id], draft))
+	if durable != null:
+		flow.write_durable(durable["plan"])
+		var on_durable_report = opts.get("on_restore_report")
+		if on_durable_report is Callable and (on_durable_report as Callable).is_valid():
+			(on_durable_report as Callable).call(_finish_report(_bundle["content"], durable["content"], [id], durable["draft"]))
 	return flow
 
 
@@ -1052,10 +1104,16 @@ func clear_log() -> void:
 	_engine_log = []
 
 
+## @internal - has a shared one-shot left the world? Keyed by internal id; the
+## `taken` verdict on a deal's trace is how a host learns it.
 func is_taken(card_id: String) -> bool:
 	return _spent.has(card_id)
 
 
+## @internal - take a shared one-shot out of the world, as its play does. Keyed
+## by internal id. A host carries spends across a run with save_durable and
+## load_durable, which speak gameIds and check that the card is still one that
+## may be carried (ruling H).
 func mark_taken(card_id: String) -> void:
 	_spent[card_id] = true
 
@@ -1539,6 +1597,62 @@ func save_flow(id: String) -> Dictionary:
 	return (flow as StoryletFlow).snapshot(true)
 
 
+## The engine's DURABLE HALF, the installation's memory (ruling H): every shared
+## `durable` property's value by its address, and every shared durable one-shot
+## that has been spent, by card gameId. What a new run starts from, through
+## load_durable; a flow's own half is flow.save_durable().
+##
+## {"schema": "storylets/durable@1", "content": the bundle's content block,
+## "values": {address: value}, keys sorted, "spent": [gameId], sorted}: plain
+## data, keyed as everything host-facing is (an address exactly as
+## list_properties() prints it, a card by its gameId), so it crosses builds and
+## a person can read it. A copy: changing it changes nothing here. Write it with
+## StoryletSave.to_json, which writes a whole number as JS does (3, not 3.0).
+func save_durable() -> Dictionary:
+	var spent: Array = []
+	for entry in _durable["shared_cards"]:
+		if _spent.has(entry["card"]["id"]):
+			spent.append(StoryletBundle.effective_game_id(entry["card"]))
+	spent.sort()
+	return {
+		"schema": StoryletBundle.DURABLE_SCHEMA,
+		"content": (_bundle["content"] as Dictionary).duplicate(true),
+		"values": _durable_values(_shared, _durable["shared"]),
+		"spent": spent,
+	}
+
+
+## Write the engine's durable half into this engine, a fresh one at the top of a
+## new run (ruling H). Every shared durable property takes the memory's value,
+## or its default where the memory carries none that fits, and every spend the
+## memory lists is taken out of the world. Nothing else is touched: not a
+## run-scoped value, not a flow, not a spend the memory does not name. The writes
+## are the host's: silent, and past a `writable: false`, which is the story's
+## promise and not the game's.
+##
+## Returns the report load_game would give, for this half: an address this build
+## does not declare durable and shared is dropped, a value its declaration no
+## longer takes is retyped, a durable declaration the memory lacks is defaulted,
+## and a spend for a card that is no longer a shared durable one-shot is a
+## dropped spent card. Another project's memory, or an unknown schema, is
+## refused before anything moves: {} with push_error.
+func load_durable(memory) -> Dictionary:
+	var refused := _durable_refusal(memory)
+	if refused != "":
+		push_error("StoryletEngine.load_durable: " + refused)
+		return {}
+	var draft := _empty_draft()
+	var plan := _plan_durable(_durable["shared"], _durable["shared_cards"], memory, null, draft)
+	var planned: Dictionary = plan["values"]
+	for prop in _durable["shared"]:
+		var value = planned[prop["address"]]["value"] if planned.has(prop["address"]) \
+			else StoryletPropertyBag.default_for(prop["decl"])
+		_put_durable(_durable_bag(_shared, prop), str(prop["decl"]["name"]), value)
+	for card_id in plan["cards"]:
+		_spent[card_id] = true
+	return _finish_report(_bundle["content"], memory["content"], [], draft)
+
+
 ## What load_game(envelope) would do that is not a plain restore, without doing
 ## any of it (design/engine-server.md 4.9). Pure: nothing on this engine moves.
 ## A project mismatch is refused here exactly as load_game refuses it - it is
@@ -1975,3 +2089,203 @@ static func _finish_report(bundle_content: Dictionary, saved_content: Dictionary
 		"defaultedProperties": defaulted_props,
 		"retypedProperties": retyped_props,
 	}
+
+
+# --- durable halves (ruling H, 2026-10-06) -----------------------------------------
+#
+# A durable half is what outlives a run: the engine's (the installation's memory)
+# and a flow's (the player's pocket), one shape. Which declarations and cards
+# belong to which half is decided by both flags at once: `durable` says whether,
+# `shared` says which half. A save keys by internal id so it survives a rename;
+# a durable half keys by name (the property address, the card's gameId) so a
+# person can read it, and a rename shows up in the report instead.
+
+## A card whose spend outlives the run: `redraw: "never"`, with `durable` on the
+## card or, failing that, its deck, the same fall-through `shared` has. Only
+## `never` can cross a run boundary: a finite cooldown is an absolute turn of a
+## clock that restarts with the run.
+static func _card_is_durable(card: Dictionary, deck: Dictionary) -> bool:
+	var redraw = card.get("redraw", "always")
+	if not (redraw is String and redraw == "never"):
+		return false
+	var durable = card.get("durable")
+	if durable == null:
+		durable = deck.get("durable")
+	return durable is bool and durable
+
+
+## A boolean flag that is present and true, as JS's `=== true` asks.
+static func _flag_set(d: Dictionary, key: String) -> bool:
+	var v = d.get(key)
+	return v is bool and v
+
+
+## Every durable declaration in one side's declaration set, in bundle order,
+## with the address a durable half keys it by. Where two owners print the same
+## address (two groups in one box naming a tag alike, the residual the compiler
+## is closing) the first answers, which is the rule resolve_owner keeps for the
+## same address.
+func _durable_props(decls: Dictionary) -> Array:
+	var out: Array = []
+	var seen := {}
+	for decl in decls["story"]:
+		if _flag_set(decl, "durable"):
+			var address := "story." + str(decl["name"])
+			if not seen.has(address):
+				seen[address] = true
+				out.append({"address": address, "kind": "story", "decl": decl})
+	for kind in OWNED_KINDS:
+		for owner_id in decls[kind]:
+			for decl in decls[kind][owner_id]:
+				if not _flag_set(decl, "durable"):
+					continue
+				var address := "%s.%s" % [address_of(kind, owner_id), str(decl["name"])]
+				if seen.has(address):
+					continue
+				seen[address] = true
+				out.append({"address": address, "kind": kind, "owner": owner_id, "decl": decl})
+	return out
+
+
+## Where one durable prop's bag is in a partition (the engine's _shared, or a
+## flow's stores); null when that owner has no bag there.
+static func _durable_bag(p: Dictionary, prop: Dictionary) -> StoryletPropertyBag:
+	if prop["kind"] == "story":
+		return p["story"]
+	return (p[prop["kind"]] as Dictionary).get(prop["owner"])
+
+
+## One half's values, keys in byte order so the same state writes the same text.
+## An address never looks like an integer (it has a dot in it), so the
+## Dictionary keeps that order in JS too (ruling E). Deep-copied.
+static func _durable_values(p: Dictionary, props: Array) -> Dictionary:
+	var found := {}
+	for prop in props:
+		var bag := _durable_bag(p, prop)
+		if bag == null:
+			continue
+		var name := str(prop["decl"]["name"])
+		if bag.values.has(name):
+			var value = bag.values[name]
+			found[prop["address"]] = (value as Array).duplicate() if value is Array else value
+	var keys: Array = found.keys()
+	keys.sort()
+	var out := {}
+	for address in keys:
+		out[address] = found[address]
+	return out
+
+
+## "" when a durable half may be loaded here, else the refusal: a shape this
+## runtime does not know, or another project's state. The two refusals every
+## durable load shares, made before anything moves.
+func _durable_refusal(save) -> String:
+	var schema = save.get("schema") if save is Dictionary else null
+	if not (schema is String and schema == StoryletBundle.DURABLE_SCHEMA):
+		var said: String = _js_text(schema) if save is Dictionary and (save as Dictionary).has("schema") else "undefined"
+		return "unsupported durable schema: %s" % said
+	var content = save.get("content")
+	var saved_project = content.get("project") if content is Dictionary else null
+	var project := str(_bundle["content"]["project"])
+	if not (saved_project is String and saved_project == project):
+		var said: String = _js_text(saved_project) if content is Dictionary and (content as Dictionary).has("project") else "undefined"
+		return 'durable state is for project "%s", bundle is "%s"' % [said, project]
+	return ""
+
+
+## A value as JavaScript's String() prints it: the text the reference's durable
+## refusals quote for a schema or project that is not a string (an absent one is
+## "undefined", which the caller says, since a Dictionary cannot tell absent from
+## null by value). str() would print null as "<null>" and 42.0 as "42.0".
+static func _js_text(value) -> String:
+	if value == null:
+		return "null"
+	if value is bool:
+		return "true" if value else "false"
+	if value is int or value is float:
+		return StoryletValues.js_number(float(value))
+	if value is String:
+		return value
+	if value is Array:
+		# Array.prototype.join: a null item is empty.
+		var parts: Array = []
+		for item in (value as Array):
+			parts.append("" if item == null else _js_text(item))
+		return ",".join(PackedStringArray(parts))
+	return "[object Object]"
+
+
+## A value a property can hold, as a durable half carries it: anything but an
+## array of something other than strings. A null and a Dictionary fit no
+## declaration anyway; an array of numbers would fit an unconstrained flags
+## declaration and put numbers in a flags bag, so it is held to fit nothing,
+## as the Unreal and Unity ports hold it.
+static func _durable_readable(value) -> bool:
+	if not (value is Array):
+		return true
+	for item in (value as Array):
+		if not (item is String):
+			return false
+	return true
+
+
+## Walk one durable half against this build's durable declarations and durable
+## cards on one side (`flow` names the flow for a pocket; null, it is the
+## engine's memory), filing what does not fit in the load report's own fields.
+## Pure: the caller writes the plan, {"values": {address: {"prop", "value"}},
+## "cards": [internal card id]}.
+##
+## A value lands only at an address this build declares DURABLE ON THIS SIDE: a
+## renamed property, one no longer durable, and one that moved to the other side
+## of `shared` are all dropped, since this half would never have carried them. A
+## value its declaration no longer takes is retyped and takes the default; a
+## durable declaration the half does not carry is defaulted. A spend lands only
+## on a card that is still a durable one-shot on this side, and is otherwise a
+## dropped cooldown (a pocket's spends are cooldowns) or a dropped spent card (a
+## memory's are the engine's spent set), named by the gameId the half carried.
+func _plan_durable(props: Array, cards: Array, save: Dictionary, flow, draft: Dictionary) -> Dictionary:
+	var at := func(path: String) -> Dictionary:
+		var entry := {"path": path}
+		if flow != null:
+			entry["flow"] = flow
+		return entry
+	var by_address := {}
+	for prop in props:
+		by_address[prop["address"]] = prop
+	var carried = save.get("values")
+	if not (carried is Dictionary):
+		carried = {}
+	var values := {}
+	for address in carried:
+		var prop = by_address.get(str(address))
+		if prop == null:
+			(draft["droppedProperties"] as Array).append(at.call(str(address)))
+			continue
+		if not (_durable_readable(carried[address]) and _value_fits(prop["decl"], carried[address])):
+			(draft["retypedProperties"] as Array).append(at.call(str(address)))
+			continue
+		values[str(address)] = {"prop": prop, "value": carried[address]}
+	for prop in props:
+		if not (carried as Dictionary).has(prop["address"]):
+			(draft["defaultedProperties"] as Array).append(at.call(str(prop["address"])))
+	var eligible := {}
+	for entry in cards:
+		eligible[entry["card"]["id"]] = true
+	var spend: Array = []
+	var spent = save.get("spent")
+	for game_id in (spent if spent is Array else []):
+		var entry = _cards_by_game_id.get(str(game_id))
+		if entry != null and eligible.has(entry["card"]["id"]):
+			spend.append(str(entry["card"]["id"]))
+		elif flow != null:
+			(draft["droppedCooldowns"] as Array).append({"flow": flow, "card": str(game_id)})
+		else:
+			(draft["droppedSpent"] as Array).append(str(game_id))
+	return {"values": values, "cards": spend}
+
+
+## A host write of one durable value: silent, as every host write is, and past a
+## `writable: false`, which is the story's promise and not the game's.
+static func _put_durable(bag: StoryletPropertyBag, name: String, value) -> void:
+	if bag != null:
+		bag.set_value(name, StoryletValues.to_value(value), {"silent": true, "reason": "host durable", "host": true})

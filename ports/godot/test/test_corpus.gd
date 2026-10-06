@@ -554,7 +554,12 @@ func _run_scripted_case(c: Dictionary) -> Array:
 	# parked = flow blobs a parkFlow op took, by the name they were parked under.
 	# Held OUTSIDE the engine on purpose: a park survives a content swap, which
 	# is the case that makes a resume interesting.
-	var rc := {"engine": first_engine, "handles": {}, "parked": {}}
+	# running = the bundle the engine runs now: a kept durable half must carry
+	# its content. pockets / memory = durable halves (corpus version 13), held
+	# outside the engine for the reason a parked blob is: a pocket and an
+	# installation's memory outlive the run.
+	var rc := {"engine": first_engine, "handles": {}, "parked": {},
+		"running": bundle, "pockets": {}, "memory": null}
 	var names := _hand_game_ids(bundle)
 
 	# Verdicts from the deal or peek an op just ran, card id -> verdict, taken
@@ -870,6 +875,7 @@ func _run_scripted_case(c: Dictionary) -> Array:
 				else:
 					_check_report(at, op.get("expectReport"), next_engine.load_game(envelope), failures)
 					rc["engine"] = next_engine
+					rc["running"] = into
 					var next_handles := {}
 					# Re-taken AND watched, as a lazily opened flow is (corpus version
 					# 12): a deal straight after a load into an edited build is where
@@ -922,8 +928,71 @@ func _run_scripted_case(c: Dictionary) -> Array:
 							% [at, _report_shape(preview), _report_shape(applied)])
 					_check_report(at, op.get("expectReport"), applied if not applied.is_empty() else preview, failures)
 
+			"keepPocket":
+				var pocket_name := str(op.get("flow", "main"))
+				var pocket := flow_of.call(op).save_durable() as Dictionary
+				if pocket.is_empty():
+					failures.append("%s: unexpected error: save_durable refused (see the push_error above)" % at)
+				else:
+					(rc["pockets"] as Dictionary)[pocket_name] = pocket
+					_check_durable(at, op.get("expect"), pocket, rc["running"], failures)
+
+			"keepMemory":
+				var memory := (rc["engine"] as StoryletEngine).save_durable()
+				if memory.is_empty():
+					failures.append("%s: unexpected error: save_durable refused (see the push_error above)" % at)
+				else:
+					rc["memory"] = memory
+					_check_durable(at, op.get("expect"), memory, rc["running"], failures)
+
+			"newRun":
+				# The world restarts: a fresh engine, no flow, no handle. What
+				# crosses is what the script kept, and only through the durable
+				# verbs.
+				rc["running"] = c["bundleB"] if op.get("into") == "B" else bundle
+				rc["engine"] = StoryletEngine.create(rc["running"], {"seed": seed})
+				rc["handles"] = {}
+				if rc["memory"] != null:
+					var loaded := (rc["engine"] as StoryletEngine).load_durable(rc["memory"])
+					if loaded.is_empty():
+						failures.append("%s: unexpected error: load_durable refused (see the push_error above)" % at)
+					else:
+						_check_report(at, op.get("expectReport"), loaded, failures)
+
+			"openFlowDurable":
+				var durable_name := str(op["flow"])
+				var pockets: Dictionary = rc["pockets"]
+				var with_restore: bool = op.get("withRestore", false)
+				if not pockets.has(durable_name):
+					failures.append('%s: no pocket is kept under "%s"' % [at, durable_name])
+				elif with_restore and not (rc["parked"] as Dictionary).has(durable_name):
+					failures.append('%s: nothing is parked under "%s"' % [at, durable_name])
+				else:
+					var reported := {}
+					var durable_opts := {"durable": pockets[durable_name],
+						"on_restore_report": func(r: Dictionary) -> void: reported.merge(r, true)}
+					if with_restore:
+						durable_opts["restore"] = (rc["parked"] as Dictionary)[durable_name]
+					if op.has("seed"):
+						durable_opts["seed"] = op["seed"]
+					var opened = (rc["engine"] as StoryletEngine).open_flow(durable_name, durable_opts)
+					if op.get("expectError", false):
+						# Refused before anything changed: the handle the script
+						# holds under that name (if any) is left exactly as it was.
+						if opened != null:
+							failures.append("%s: expected an error, the flow opened" % at)
+					elif opened == null:
+						failures.append("%s: unexpected error: open_flow refused (see the push_error above)" % at)
+					else:
+						(rc["handles"] as Dictionary)[durable_name] = watch.call(opened)
+						if reported.is_empty():
+							failures.append("%s: the durable open produced no report" % at)
+						else:
+							_check_report(at, op.get("expectReport"), reported, failures)
+
 			"reset":
 				rc["engine"] = StoryletEngine.create(bundle, {"seed": seed})
+				rc["running"] = bundle
 				rc["handles"] = {}
 
 			_:
@@ -1012,6 +1081,44 @@ func _check_report(at: String, expected, actual: Dictionary, out: Array) -> void
 			continue
 		cmp.call(field, _show_list(_report_keys(want[field], ["flow", "path"])),
 			_show_list(_report_keys(actual.get(field, []), ["flow", "path"])))
+
+
+# --- durable halves (ruling H; corpus version 13) ---------------------------------
+
+## A map compared as a whole and regardless of key order: its entries, sorted by
+## key, as one canonical string.
+static func _entries_of(record: Dictionary) -> String:
+	var keys := record.keys()
+	keys.sort()
+	var parts: Array = []
+	for k in keys:
+		parts.append("%s: %s" % [str(k), StoryletValues.show(StoryletValues.to_value(record[k]))])
+	return "{" + ", ".join(parts) + "}"
+
+
+## Check a durable half the runner has just kept: the schema tag and content
+## block every half carries, then what `expect` names. `values` whole and in any
+## order, `spent` exactly.
+func _check_durable(at: String, expected, actual: Dictionary, running: Dictionary, out: Array) -> void:
+	if actual.get("schema") != "storylets/durable@1":
+		out.append('%s: schema expected "storylets/durable@1", got %s' % [at, str(actual.get("schema"))])
+	var want_content := JSON.stringify(running["content"], "", true, true)
+	var got_content := JSON.stringify(actual.get("content"), "", true, true)
+	if want_content != got_content:
+		out.append("%s: content expected %s, got %s" % [at, want_content, got_content])
+	if not (expected is Dictionary):
+		return
+	var want: Dictionary = expected
+	if want.has("values"):
+		var got_values = actual.get("values")
+		var got_shown := _entries_of(got_values) if got_values is Dictionary else str(got_values)
+		if _entries_of(want["values"]) != got_shown:
+			out.append("%s: values expected %s, got %s" % [at, _entries_of(want["values"]), got_shown])
+	if want.has("spent"):
+		var got_spent = actual.get("spent")
+		if not (got_spent is Array) or not _same_list(want["spent"], got_spent):
+			out.append("%s: spent expected %s, got %s" % [at, _show_list(want["spent"]),
+				_show_list(got_spent) if got_spent is Array else str(got_spent)])
 
 
 # Read-only @world with a HOST resolver bound (Reboot.md 10). The corpus case

@@ -96,6 +96,9 @@ func run() -> Dictionary:
 		["hot_swap refuses another project before anything moves", _hot_swap_refuses_project],
 		["a hot_swap rebuild that fails part way leaves this engine and the registry exactly as they were", _hot_swap_rolls_back],
 		["the Live Link's apply_live_bundle now works on the game's registry", _hot_swap_live_link],
+		# The registry accessor (engine review, October 2026, ruling J).
+		["registry() is the game's registry as passed in, and still that one after a hot_swap", _registry_accessor_game],
+		["a standalone engine's registry() is its own and stable; its hot_swap replacement makes another", _registry_accessor_standalone],
 	]
 	var passed := 0
 	var all: Array = []
@@ -658,4 +661,33 @@ func _hot_swap_live_link() -> void:
 	_check("apply_live_bundle refused: " + str(r.get("error", "")), r.get("ok", false))
 	if r.get("ok", false):
 		_expect("story.gold", (r["engine"] as StoryletEngine).get_property("story.gold"), 1)
+	_finished = true
+
+
+func _registry_accessor_game() -> void:
+	var g := _playing()
+	var engine: StoryletEngine = g["engine"]
+	_check("registry() is not the object the game passed in", is_same(engine.registry(), g["registry"]))
+	var r: Dictionary = engine.hot_swap(_edited())
+	_check("the swap was refused: " + str(r.get("error", "")), r.get("ok", false))
+	if r.get("ok", false):
+		_check("the replacement's registry() is not the game's",
+			is_same((r["engine"] as StoryletEngine).registry(), g["registry"]))
+	_finished = true
+
+
+func _registry_accessor_standalone() -> void:
+	var engine: StoryletEngine = StoryletEngine.create(_bundle, {"seed": 1})
+	var own = engine.registry()
+	_check("a standalone engine has no registry", own != null)
+	_check("registry() is not the same object every call", is_same(engine.registry(), own))
+	_heist(engine.open_flow("f"))
+	_expect("its registry holds its values", own.get_value("story", "gold"), 1)
+	var r: Dictionary = engine.hot_swap(_edited())
+	_check("the swap was refused: " + str(r.get("error", "")), r.get("ok", false))
+	if r.get("ok", false):
+		var next: StoryletEngine = r["engine"]
+		_check("the replacement shares the standalone engine's registry", not is_same(next.registry(), own))
+		_check("the old engine's registry() moved", is_same(engine.registry(), own))
+		_expect("the replacement's registry holds the carried run", next.registry().get_value("story", "gold"), 1)
 	_finished = true

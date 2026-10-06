@@ -428,6 +428,77 @@ FString UStoryletEngine::PreviewFlowRestoreJson(const FString& FlowId, const FSt
 	});
 }
 
+// --- UStoryletEngine: durable state (ruling H) ------------------------------------
+
+FString UStoryletEngine::SaveDurableToJson() const
+{
+	if (!IsValidEngine())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: SaveDurableToJson on an invalid engine"));
+		return FString();
+	}
+	return Guard(TEXT("SaveDurableToJson"), false, FString(), [&]
+	{
+		return Ue(storylets::serializeDurable(Impl->Engine->saveDurable()));
+	});
+}
+
+bool UStoryletEngine::LoadDurableFromJson(const FString& Json, FString& OutReportJson)
+{
+	OutReportJson.Reset();
+	if (!IsValidEngine())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: LoadDurableFromJson on an invalid engine"));
+		return false;
+	}
+	// The core refuses a malformed, foreign or unknown half before anything
+	// moves, so a false here leaves the engine as it was.
+	return Guard(TEXT("LoadDurableFromJson"), false, false, [&]
+	{
+		const storylets::DurableSave Memory = storylets::deserializeDurable(Std(Json));
+		OutReportJson = Ue(storylets::reportToJson(Impl->Engine->loadDurable(Memory)));
+		return true;
+	});
+}
+
+UStoryletFlow* UStoryletEngine::OpenFlowWithDurableJson(const FString& FlowId, const FString& Json, FString& OutReportJson)
+{
+	return OpenFlowWithDurable(FlowId, Json, TOptional<int32>(), OutReportJson, TEXT("OpenFlowWithDurableJson"));
+}
+
+UStoryletFlow* UStoryletEngine::OpenFlowWithDurableJsonSeeded(const FString& FlowId, const FString& Json, int32 Seed,
+	FString& OutReportJson)
+{
+	return OpenFlowWithDurable(FlowId, Json, Seed, OutReportJson, TEXT("OpenFlowWithDurableJsonSeeded"));
+}
+
+UStoryletFlow* UStoryletEngine::OpenFlowWithDurable(const FString& FlowId, const FString& Json, TOptional<int32> Seed,
+	FString& OutReportJson, const TCHAR* Verb)
+{
+	OutReportJson.Reset();
+	if (!IsValidEngine())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Storylet Engine: %s on an invalid engine"), Verb);
+		return nullptr;
+	}
+	storylets::OpenFlowOptions Options;
+	if (Seed.IsSet()) Options.seed = static_cast<double>(Seed.GetValue());
+	const bool bParsed = Guard(Verb, false, false, [&]
+	{
+		Options.durable = storylets::deserializeDurable(Std(Json));
+		return true;
+	});
+	if (!bParsed) return nullptr;
+	// The pocket's report, handed over as it lands, as OpenFlowFromJson's is.
+	// A refusal (an unknown schema, another project's pocket) comes before the
+	// name is touched, so the flow open under it stays as it was.
+	Options.onRestoreReport = [&OutReportJson](const storylets::LoadReport& Report)
+	{
+		OutReportJson = Ue(storylets::reportToJson(Report));
+	};
+	return OpenFlowWith(FlowId, Options, Verb);
+}
+
 UStoryletFlow* UStoryletEngine::GetFlow(const FString& FlowId) const
 {
 	if (!IsValidEngine()) return nullptr;
@@ -576,6 +647,34 @@ namespace
 		E.bHasTurn = Turn.has_value();
 		E.Turn = Turn.value_or(0);
 		E.Summary = FormatLogEntry(Event, Turn, FlowName);
+		// The event itself, every field copied: the core leaves the ones its
+		// kind does not name empty, so the entry does too.
+		E.Hand = Ue(Event.hand);
+		E.Box = Ue(Event.box);
+		E.Card = Ue(Event.card);
+		E.Outcome = Ue(Event.outcome);
+		E.Reason = Ue(Event.reason);
+		E.Target = Ue(Event.target);
+		E.Path = Ue(Event.path);
+		if (Event.value.has_value()) E.ValueJson = Ue(Event.value->toJsonString());
+		if (Event.prev.has_value()) E.PrevJson = Ue(Event.prev->toJsonString());
+		E.Where = Ue(Event.where);
+		E.Message = Ue(Event.message);
+		for (const auto& Pair : Event.criteria)
+		{
+			E.Criteria.Add(Ue(Pair.first), Ue(Pair.second));
+		}
+		E.Cards.Reserve(static_cast<int32>(Event.cards.size()));
+		for (const storylets::TraceCard& C : Event.cards)
+		{
+			FStoryletTraceCard& Out = E.Cards.AddDefaulted_GetRef();
+			Out.GameId = Ue(C.id);
+			Out.Verdict = Ue(storylets::VerdictWire(C.verdict));
+			Out.bHasPriority = C.priority.has_value();
+			Out.Priority = C.priority.value_or(0);
+			Out.bHasSpecificity = C.specificity.has_value();
+			Out.Specificity = C.specificity.value_or(0);
+		}
 		return E;
 	}
 }
@@ -761,6 +860,17 @@ TArray<FStoryletBoxView> UStoryletFlow::ListBoxes() const
 			Out.Add(MoveTemp(V));
 		}
 		return Out;
+	});
+}
+
+// --- UStoryletFlow: durable state (ruling H) --------------------------------------
+
+FString UStoryletFlow::SaveDurableToJson() const
+{
+	if (RefuseClosed(TEXT("SaveDurableToJson"))) return FString();
+	return Guard(TEXT("SaveDurableToJson"), false, FString(), [&]
+	{
+		return Ue(storylets::serializeDurable(GetCoreFlow()->saveDurable()));
 	});
 }
 

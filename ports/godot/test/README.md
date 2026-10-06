@@ -46,7 +46,10 @@ godot --headless --path ports/godot --import
   `N FAILED` (exit 1).
 
 - `test_smoke.gd` - loads the bundled Hamlet demo, deals, plays one outcome
-  and round-trips the run through the `.storyletsave` string boundary:
+  and round-trips the run through the `.storyletsave` string boundary. It also
+  holds the host API's edges the corpus cannot reach (lifetimes, refusal
+  texts, trace handlers, and the durable halves' shape and refusals, as the JS
+  runtime's `durable.test.ts` has them, on the corpus's own durable bundle):
 
   ```sh
   godot --headless --path ports/godot --script res://test/test_smoke.gd

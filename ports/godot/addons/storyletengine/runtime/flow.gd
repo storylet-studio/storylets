@@ -1851,9 +1851,47 @@ func _resolve_path(path: String) -> Dictionary:
 
 # --- persistence (schema 4) ---------------------------------------------------------
 
+## This flow's DURABLE HALF, the player's pocket (ruling H): every per-flow
+## `durable` property's value by its address, and every per-flow durable
+## one-shot this flow has spent, by card gameId. A later run opens the player's
+## flow with it, open_flow(id, {"durable": pocket}); the shared half is
+## engine.save_durable(), and the shape is the same. A copy. Refused on a closed
+## flow, as every verb is: {} with push_error.
+func save_durable() -> Dictionary:
+	if _closed:
+		push_error("StoryletFlow.save_durable: " + _closed_message())
+		return {}
+	var never := float(StoryletBundle.MAX_SAFE_INTEGER)
+	var spent: Array = []
+	for entry in _engine._durable["flow_cards"]:
+		var card_id: String = entry["card"]["id"]
+		if _cooldowns.has(card_id) and float(_cooldowns[card_id]) == never:
+			spent.append(StoryletBundle.effective_game_id(entry["card"]))
+	spent.sort()
+	return {
+		"schema": StoryletBundle.DURABLE_SCHEMA,
+		"content": (_engine._bundle["content"] as Dictionary).duplicate(true),
+		"values": StoryletEngine._durable_values(_stores, _engine._durable["flow"]),
+		"spent": spent,
+	}
+
+
+## @internal - write a planned pocket into this freshly opened flow (open_flow's
+## "durable", which has already checked and planned it). Its bags hold their
+## defaults, so only what the plan carries is written.
+func write_durable(plan: Dictionary) -> void:
+	for address in plan["values"]:
+		var planned: Dictionary = plan["values"][address]
+		var prop: Dictionary = planned["prop"]
+		StoryletEngine._put_durable(StoryletEngine._durable_bag(_stores, prop), str(prop["decl"]["name"]), planned["value"])
+	for card_id in plan["cards"]:
+		_cooldowns[card_id] = float(StoryletBundle.MAX_SAFE_INTEGER)
+
+
 ## @internal - this flow's blob, deep-copied: inside the engine's envelope
 ## without its properties (the registry has them), or parked whole by
-## save_flow, properties included.
+## save_flow, properties included. Engine-side plumbing; a host parks a flow
+## with engine.save_flow.
 func snapshot(with_props: bool) -> Dictionary:
 	var out := {}
 	if with_props:
@@ -1868,10 +1906,13 @@ func snapshot(with_props: bool) -> Dictionary:
 	return out
 
 
-## @internal - restore a freshly opened flow from its blob (load_game).
-## Orphaned keys (deleted entities) drop; new declarations keep defaults. A
-## blob without "props" (a version 2 envelope's) leaves the values the bags
-## claimed from the registry alone.
+## @internal - restore a freshly opened flow from its blob (load_game, and
+## open_flow's "restore", both of which clean the blob first). Orphaned keys
+## (deleted entities) drop; new declarations keep defaults. A blob without
+## "props" (a version 2 envelope's) leaves the values the bags claimed from the
+## registry alone. Engine-side plumbing that skips the checks a restore through
+## open_flow makes, which is why a host resumes a flow through open_flow and
+## never through this.
 func restore(saved: Dictionary) -> void:
 	if saved.has("props"):
 		var props: Dictionary = saved["props"]
