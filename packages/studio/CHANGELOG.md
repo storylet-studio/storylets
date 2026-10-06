@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.18.6] - 2026-10-06
+
 ### Changed
 
 - **Publish Bundle refuses a project with a load error**, naming the file that would not load. A file that did not parse used to be left out and the rest published, so the bundle shipped without that deck's cards. Publish Playable HTML refuses it too.

@@ -20,6 +20,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-06
+
 ### Added
 
 - **`<command> --help`** prints that command's usage and exits 0, as does `help <command>`.

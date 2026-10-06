@@ -9,6 +9,13 @@ the release notes, and refuses a tag with no dated section for it.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-06
+
+### Changed
+
+- **The project in the zip is in the current format**: one project map above the boxes, which the Village's boxes opt into, as Storyletter 0.17.0 and later write it. Storyletter no longer offers to upgrade it when you open it.
+- **The page runs the Storylet Engine 0.11.1**, the October engine review: a peek draws no random numbers, a play is all-or-nothing, and a NaN priority is not dealt.
+
 ## [0.3.1] - 2026-09-30
 
 ### Added
