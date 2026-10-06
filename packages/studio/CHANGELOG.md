@@ -10,8 +10,11 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.18.4] - 2026-10-06
+
 ### Changed
 
+- **The Board runs the Storylet Engine 0.11.0**, with the shared expression kernel's fixes: a listener's error is no longer reported as a read-only refusal, and every listener hears each write once. The playable page you publish carries the same engine.
 - **The Board's New run carries durable state through the engine's own verbs**, the ones a game calls: the player's pocket and the installation's memory are saved, the world restarts, and both go back in. A durable value whose property is no longer durable, or has moved between shared and per-player, now starts the new run at its default, as it would in a game.
 
 ## [0.18.3] - 2026-10-06
