@@ -63,6 +63,13 @@ the engine kept nowhere, gives a flow that is already closed, and every call on 
 `push_error`, saying its engine was freed. You need the engine anyway, to save the game and to
 open other flows.
 
+The same reference counting applies to the callables you hand the engine. A trace handler on
+a flow can read that flow freely, since a closed flow lets go of its handlers. But a `@world`
+resolver or an engine-level handler that reads a member of the object holding the engine
+captures that object, and the two then keep each other alive. Have the callable capture the
+values it needs instead, as the Hamlet demo's resolver captures its `world` Dictionary rather
+than the game.
+
 The engine is the world. Every play call lives on a **flow** (one playthrough) opened by
 name. A single-player game opens `"main"` and never thinks about it again. Several flows run
 parallel playthroughs over the same shared state ([the sharing rules](/play/world-state/)).

@@ -2221,9 +2221,13 @@ export class Flow {
     this.markClosed();
   }
 
-  /** @internal */
+  /** @internal - the handle goes inert, its bags leave the registry, and it
+   *  lets go of its trace handlers: a closed flow never emits again, and a
+   *  handler that holds the flow would otherwise hold it for good on a runtime
+   *  that counts references (Godot, C++). */
   markClosed(): void {
     this.releaseBags(false);
+    this.traceHandlers.clear();
     this.closed = true;
   }
 

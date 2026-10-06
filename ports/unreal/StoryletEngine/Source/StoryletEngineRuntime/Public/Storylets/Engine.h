@@ -2125,11 +2125,17 @@ namespace storylets
         }
 
         /** @internal - the handle goes inert and the flow's bags leave the
-         *  registry, their values with them. */
+         *  registry, their values with them. It also lets go of its trace
+         *  handlers: a closed flow never emits again, and a handler holding the
+         *  flow's shared_ptr would otherwise keep it alive for good. */
         void markClosed()
         {
             releaseBags(false);
             closed_ = true;
+            // Last, through a local: dropping a handler can drop the last
+            // reference to this flow, so nothing touches it afterwards.
+            std::vector<TraceHandler> handlers;
+            handlers.swap(traceHandlers_);
         }
 
         /** @internal - take this flow's bags out of the registry; with `keep`,

@@ -8,6 +8,10 @@ section for it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A closed flow lets go of its trace handlers**, as on the other three runtimes. It never emits again, so nothing changes here; in Godot and C++ a handler holding its own flow kept that flow alive for good.
+
 ## [0.11.0] - 2026-10-06
 
 ### Added

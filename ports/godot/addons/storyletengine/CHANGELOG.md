@@ -6,6 +6,10 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A flow whose own trace handler holds it is freed.** A handler reading its flow (the board, say) captured it, and reference counting kept that flow and its bags alive for good, even after `close()` or the engine being freed. A closed flow now lets go of its handlers, so the loop breaks either way. The docs say what the engine cannot break for you: a `@world` resolver or engine handler that captures the object holding the engine.
+
 ## [0.11.0] - 2026-10-06
 
 ### Added

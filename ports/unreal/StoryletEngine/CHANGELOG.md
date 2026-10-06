@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A flow whose own trace handler holds it is freed.** A handler capturing its flow's `FlowPtr` (one that reads the board, say) kept that flow, and its bags, alive for good, even after `closeFlow` or the engine going. A closed flow now lets go of its handlers, so the loop breaks either way.
+
 ## [0.11.0] - 2026-10-06
 
 ### Added

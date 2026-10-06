@@ -132,6 +132,9 @@ func _process(_delta: float) -> bool:
 					"selected=%d, expected 2 (dusk)" % ob.selected)
 				_panel._value_widgets = rows
 				reset.free()
+			# Asked for directly, so never in the tree: freed here, or it and its
+			# popup outlive the test (97 objects at exit until 2026-10-06).
+			w.free()
 			StoryletDebug.unregister(_engine)
 		_:
 			_check("unregistering empties the panel", body.contains("No engines registered"), body)

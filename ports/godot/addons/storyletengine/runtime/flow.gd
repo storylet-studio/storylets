@@ -177,6 +177,9 @@ func _close_down() -> void:
 	_hosts_by_box.clear()
 	_scope_bases.clear()
 	_scope_view = null
+	# A closed flow never emits again, so its handlers go: one that holds this flow
+	# (a game's handler reading the board) would otherwise keep it alive for good.
+	_trace_handlers.clear()
 
 
 ## What a verb refused on a closed flow says.

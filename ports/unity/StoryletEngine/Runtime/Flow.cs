@@ -220,6 +220,10 @@ namespace StoryletStudio.StoryletEngine
         internal void MarkClosed()
         {
             ReleaseBags(false);
+            // A closed flow never emits again, so it lets go of its handlers, as
+            // every runtime does (in C++ and GDScript a handler holding the flow
+            // would otherwise keep it alive).
+            _traceHandlers.Clear();
             _closed = true;
         }
 

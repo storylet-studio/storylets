@@ -45,6 +45,13 @@ func _lifetime(bundle: Dictionary) -> void:
 	_check("an engine a hot_swap replaced is freed once dropped", swapped["old"].get_ref() == null)
 	_check("and its replacement lives while held", swapped["held"])
 
+	# A game's handler that reads its own flow holds that flow. A closed flow lets
+	# go of its handlers, so the loop breaks whether the game closes the flow or
+	# drops the engine (2026-10-06; until then the flow and its bags never went).
+	_check("a flow whose own handler holds it is freed once closed and dropped",
+		_self_held_flow(bundle, true).get_ref() == null)
+	_check("and once its engine is dropped", _self_held_flow(bundle, false).get_ref() == null)
+
 
 func _played_engine(bundle: Dictionary) -> Dictionary:
 	var engine := StoryletEngine.create(bundle, {"seed": 7, "log": true})
@@ -83,6 +90,16 @@ func _closed_flow(bundle: Dictionary) -> WeakRef:
 	# Still holding the engine: the flow must go on its own.
 	_check("the engine outlives the flow it closed", engine.flows().is_empty())
 	return ref
+
+
+func _self_held_flow(bundle: Dictionary, close: bool) -> WeakRef:
+	var engine := StoryletEngine.create(bundle, {"seed": 7})
+	var flow := engine.open_flow("main")
+	flow.subscribe_trace(func(_e: Dictionary) -> void: flow.board())
+	flow.deal_many()
+	if close:
+		flow.close()
+	return weakref(flow)
 
 
 func _swapped_engine(bundle: Dictionary) -> Dictionary:

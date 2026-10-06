@@ -1848,6 +1848,28 @@ static std::vector<std::pair<std::string, std::function<std::vector<std::string>
         return out;
     });
 
+    // A game's handler that reads its own flow holds that flow's shared_ptr. A
+    // closed flow lets go of its handlers, so the loop breaks whether the game
+    // closes the flow or the engine goes (2026-10-06; until then it never did).
+    auto selfHeld = [](bool close)
+    {
+        std::weak_ptr<Flow> weak;
+        {
+            Engine engine(MakeBundle(), EngineOptions{});
+            FlowPtr flow = engine.openFlow("f");
+            flow->subscribeTrace([flow](const TraceEvent&) { (void)flow->isClosed(); });
+            Heist(*flow);
+            weak = flow;
+            if (close) engine.closeFlow("f");
+            flow.reset();
+            if (close && !weak.expired()) return std::vector<std::string>{"the closed flow outlived its last handle"};
+        }
+        if (!weak.expired()) return std::vector<std::string>{"the flow outlived its engine"};
+        return std::vector<std::string>{};
+    };
+    checks.emplace_back("a flow whose own handler holds it is freed once closed and dropped", [=] { return selfHeld(true); });
+    checks.emplace_back("and once its engine goes", [=] { return selfHeld(false); });
+
     // A host resolver that throws is the game's error. JS swallows it into the
     // "not declared" diagnostic and deals on; it must not escape the deal.
     auto throwingWorld = []
