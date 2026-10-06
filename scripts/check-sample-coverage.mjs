@@ -62,6 +62,7 @@ const OMITTED = [
   { member: "closeFlow", why: "flows: nothing here closes a flow, because nothing here opens a second one. Same ruling" },
   { member: "flows", why: "flows: a list of one is not a demonstration. Same ruling" },
   { member: "Flow", why: "a game never CONSTRUCTS a flow: `openFlow` hands you one, and `getFlow` hands it back after a load. The class is exported for its type and for the ports" },
+  { member: "StoryletError", why: "the error class every engine refusal throws, exported so a host can tell the engine's errors from its own with instanceof. The client never meets one: it plays only the outcomes outcomes() offers, from the hands the board holds, so it has no refusal to catch" },
   { member: "close", why: "flows: the flow lives as long as the tab does" },
   { member: "isClosed", why: "flows: a handle that is never closed is never inert" },
   { member: "id", why: "flows: the client has one flow and a name for it already" },
@@ -87,6 +88,9 @@ const OMITTED = [
   { member: "setProperty", why: "DELIBERATE TEACHING: a game changes state by PLAYING an outcome, never by writing @story behind the engine's back. The door exists for hosts driving @world, and the Village has no @world" },
   { member: "peek", why: "asks what WOULD be dealt without dealing it, which is an editor and tooling question (Storyletter's Board uses it). A game deals" },
   { member: "listBags", why: "the mounted property bags: an integrator's introspection, not a player's" },
+  { member: "markTaken", why: "a shared one-shot's spend, restored by a server reloading a run it parked: the engine marks it itself when the card is played, so a game never calls it. Public because the Storylet Server restores spends through it" },
+  { member: "snapshot", why: "a flow's raw state, the seam the Storylet Server parks a participant through. A game saves with saveFlow / saveGame, which the client does" },
+  { member: "restore", why: "snapshot's other half, same seam: a game resumes through openFlow's restore option, which checks the shared claims this skips" },
   { member: "reset", why: "the client restarts by building a fresh Engine, which is what a game does when you start again. `reset` is for a host that must keep the same object" },
 
   // --- the same thing, one layer down ---------------------------------------
