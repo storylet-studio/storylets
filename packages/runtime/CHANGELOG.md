@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-06
+
 ### Added
 
 - **`StoryletError`** is exported, and every refusal the engine makes throws it, so a host can tell the engine's errors apart with `instanceof`. The messages are unchanged.

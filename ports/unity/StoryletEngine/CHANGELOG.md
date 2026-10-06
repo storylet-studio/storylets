@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-06
+
 ### Added
 
 - **The load report is never thrown away**: `StoryletSave.LoadState` and `DeserializeState` take an optional `Action<LoadReport> onReport`.

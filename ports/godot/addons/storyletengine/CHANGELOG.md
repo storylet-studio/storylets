@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-06
+
 ### Added
 
 - **The load report is never thrown away**: `apply_live_bundle`'s result carries `"report"`, and `StoryletSave.load_state` and `deserialize_state` take `{"on_report": Callable}`.

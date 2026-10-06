@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-06
+
 ### Added
 
 - **`UStoryletEngine::OnReplacedFlow`**, a BlueprintAssignable delegate fired (flow id, dealt cards) when an open replaces a flow that still held cards, the core's `onReplacedFlow`. **`OpenFlowSeeded(Id, Seed)`** opens a flow on its own PRNG seed. **`OpenFlowFromJson`** gains an `OutReportJson` out-param, the restore's LoadReport. **`ApplyLiveBundleWithReport`**, **`UStoryletSave::LoadStateFromJsonWithReport`** and a four-argument **`FStoryletLiveLink::ApplyLiveBundle`** hand back the load's report as JSON, and the core's `loadState` / `deserializeState` take an optional `onReport`. **`PeekAll`** is the uncapped peek.
