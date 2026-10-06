@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-06
+
 ### Added
 
 - **Durable state is a feature.** `engine.saveDurable()` returns the installation's memory (every shared `durable` property's value, and every shared durable one-shot that has been spent) and `flow.saveDurable()` one player's pocket (the same for the per-flow half), in one shape: `{ schema: "storylets/durable@1", content, values, spent }`, values keyed by property address and spends by card gameId. `engine.loadDurable(memory)` writes a memory into the next run's engine and `openFlow(id, { durable: pocket })` opens a flow with its pocket in. Both report what no longer fits the build (an address no longer declared durable on that side, a value its declaration no longer takes, a card that is gone) as a `LoadReport`, returned by `loadDurable` and handed to `onRestoreReport` by `openFlow`. `durable` and `restore` together are refused, as are another project's state and an unknown schema. `DURABLE_SCHEMA` and the `DurableSave` type are exported.

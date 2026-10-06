@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-06
+
 ### Added
 
 - **`FStoryletLogEntry` carries the event**, as every other runtime's log entry does (ruling I): `Hand`, `Box`, `Card`, `Outcome`, `Reason`, `Target`, `Path`, `Where` and `Message` as gameId strings, a peek's `Criteria` as a map, a write's value and the value it replaced as `ValueJson` / `PrevJson` (JSON text; `PrevJson` empty when there was none), and a deal's or peek's per-card verdicts as `Cards`, an array of the new **`FStoryletTraceCard`** (`GameId`, `Verdict` by its wire name, and `Priority` / `Specificity` behind `bHasPriority` / `bHasSpecificity`). Only the fields the `Kind` names are filled. Both `Log` and `GetRunLog` fill them; `Summary` is unchanged.

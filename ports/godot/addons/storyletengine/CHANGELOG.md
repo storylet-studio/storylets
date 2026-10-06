@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-06
+
 ### Added
 
 - **`engine.registry()`**: the scope registry the engine's bags live in, the very object create's `"registry"` option passed in, or the one the engine made because it was given none. The same object for the engine's life; a `hot_swap` replacement on the game's registry answers that same registry. Parity with Unreal's `registry()`.
