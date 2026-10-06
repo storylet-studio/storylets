@@ -139,6 +139,12 @@ function allCardGameIds(session: ProjectSession): Set<string> {
   return taken;
 }
 
+/** Deck gameIds are project-wide too: a deck's address (`deck.<gameId>.x`)
+ *  names no box, so the compiler refuses two decks sharing one. */
+function allDeckGameIds(session: ProjectSession): Set<string> {
+  return new Set(session.loaded.source!.boxes.flatMap((b) => b.decks.map((d) => effectiveGameId(d.shard.deck))));
+}
+
 const blank = (src: string | undefined): boolean => src === undefined || src.trim() === "";
 
 /** A number literal stays a number; anything else is a priority expression. */
@@ -718,8 +724,7 @@ const deckPath = (session: ProjectSession, box: SourceBox, gameId: string): stri
 export function createDeck(session: ProjectSession, boxId: string): { result: OpenResult; deckId: string } | { error: string } {
   const box = locateBox(session, boxId);
   if (!box) return { error: `unknown box (id ${boxId})` };
-  const taken = new Set(box.decks.map((d) => effectiveGameId(d.shard.deck)));
-  const title = freeTitle("New deck", taken);
+  const title = freeTitle("New deck", allDeckGameIds(session));
   const shard: DeckShard = {
     schema: DECK_SCHEMA,
     deck: { id: newId("k"), title, properties: [] },
@@ -824,6 +829,12 @@ export function duplicateBox(session: ProjectSession, boxId: string): { result: 
     if (hand.rule?.bindings !== undefined) hand.rule.bindings = remapRecord(hand.rule.bindings)!;
     hand.gameId = dedupedGameId(effectiveGameId(hand), handNames);
     handNames.add(hand.gameId);
+  }
+  // Deck gameIds likewise (their addresses name no box).
+  const deckNames = allDeckGameIds(session);
+  for (const deck of src.decks) {
+    deck.deck.gameId = dedupedGameId(effectiveGameId(deck.deck), deckNames);
+    deckNames.add(deck.deck.gameId);
   }
   // Card gameIds are project-wide too (the play log speaks them): dedupe.
   const cardNames = new Set(session.loaded.source!.boxes.flatMap((b) =>
@@ -1299,8 +1310,7 @@ export function duplicateDeck(session: ProjectSession, deckId: string): { result
   shard.deck.id = newId("k");
   stampOrder(shard.cards);
   for (const c of shard.cards) { c.id = newId("c"); stampOrder(c.outcomes); for (const o of c.outcomes) o.id = newId("o"); }
-  const taken = new Set(found.box.decks.map((d) => effectiveGameId(d.shard.deck)));
-  shard.deck.gameId = dedupedGameId(effectiveGameId(found.deck.shard.deck), taken);
+  shard.deck.gameId = dedupedGameId(effectiveGameId(found.deck.shard.deck), allDeckGameIds(session));
   if (shard.deck.title !== undefined) shard.deck.title = `${shard.deck.title} (copy)`;
   const content = canonicalStringify(shard satisfies DeckShard);
   const result = commit(session, "Duplicate deck", `struct:${structCounter++}`,

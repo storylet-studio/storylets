@@ -20,7 +20,9 @@ import { fileURLToPath } from "node:url";
 import { canonicalStringify, parseSource, serialiseBundle } from "@storylet-studio/compiler";
 import type { Bundle } from "@storylet-studio/model";
 import { runExport } from "../src/export.js";
+import type { ExportResult } from "../src/export.js";
 import { loadProject } from "../src/load.js";
+import { isBinaryWrite } from "../src/write.js";
 
 const exampleDir = fileURLToPath(new URL("../../../examples/saltmarsh.storylets", import.meta.url));
 
@@ -100,6 +102,8 @@ function withPicture(dir: string, name = "site-plan.png"): void {
 
 /** What the flag adds: the map's geometry, or undefined when none shipped. */
 const geometryOf = (bundle: Bundle | undefined) => bundle?.map?.geometry;
+/** The pictures an export plans: its binary writes. */
+const assetsOf = (result: ExportResult) => result.writes.filter(isBinaryWrite);
 
 describe("a bundle that was not asked for a map", () => {
   it("carries none, and is unchanged by geometry existing", () => {
@@ -135,7 +139,7 @@ describe("a bundle that was not asked for a map", () => {
     const dir = scratch();
     drawMap(dir);
     withPicture(dir);
-    expect(runExport(loadProject(dir)).assets).toEqual([]);
+    expect(assetsOf(runExport(loadProject(dir)))).toEqual([]);
   });
 });
 
@@ -168,10 +172,10 @@ describe("a bundle that was", () => {
     expect(background.file).toBe("assets/site-plan.png");
     expect(background).toMatchObject({ x: 10, y: 20, width: 300, height: 200, opacity: 0.6 });
 
-    expect(result.assets).toHaveLength(1);
+    expect(assetsOf(result)).toHaveLength(1);
     // Beside the bundle, at exactly the path the bundle names.
-    expect(result.assets[0]!.path).toBe(join(dir, "..", "storylet-dist", "assets", "site-plan.png"));   // beside the bundle, beside the project
-    expect(Buffer.from(result.assets[0]!.bytes)).toEqual(PNG);
+    expect(assetsOf(result)[0]!.path).toBe(join(dir, "..", "storylet-dist", "assets", "site-plan.png"));   // beside the bundle, beside the project
+    expect(Buffer.from(assetsOf(result)[0]!.bytes)).toEqual(PNG);
   });
 
   it("leaves authoring state at home", () => {
@@ -184,7 +188,7 @@ describe("a bundle that was", () => {
     const result = runExport(loadProject(dir));
     // A hidden picture is one the author put away: not shipped, not copied.
     expect(geometryOf(result.bundle)!.backgrounds).toHaveLength(1);
-    expect(result.assets).toHaveLength(1);
+    expect(assetsOf(result)).toHaveLength(1);
     // And no lock/hide/stacking survives into the bundle.
     const text = JSON.stringify(geometryOf(result.bundle));
     for (const key of ["locked", "hidden", "\"z\"", "\"id\""]) expect(text).not.toContain(key);
@@ -196,7 +200,7 @@ describe("a bundle that was", () => {
     askForMaps(dir);         // ...which was never put on disk
     const result = runExport(loadProject(dir));
     expect(geometryOf(result.bundle)!.backgrounds).toHaveLength(1);
-    expect(result.assets).toEqual([]);
+    expect(assetsOf(result)).toEqual([]);
   });
 
   it("carries where the hands stand, by gameId (design/engine-server.md 4.3)", () => {
@@ -244,7 +248,7 @@ describe("the per-export override", () => {
     askForMaps(dir);
     const result = runExport(loadProject(dir), undefined, { map: false });
     expect(geometryOf(result.bundle)).toBeUndefined();
-    expect(result.assets).toEqual([]);
+    expect(assetsOf(result)).toEqual([]);
   });
 });
 
@@ -255,8 +259,59 @@ describe("stdout", () => {
     withPicture(dir);
     askForMaps(dir);
     const result = runExport(loadProject(dir), "-");
-    expect(result.assets).toEqual([]);
-    expect(result.write).toBeUndefined();
+    expect(assetsOf(result)).toEqual([]);
+    expect(result.writes).toEqual([]);
     expect(existsSync(join(dir, "..", "storylet-dist"))).toBe(false);   // stdout: nothing lands beside the project either
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The CLI review, October 2026 (storylet-studio design/cli-review-2026-10.md):
+// ruling M, and one plan for the CLI and Storyletter to commit (item 14).
+// ---------------------------------------------------------------------------
+
+describe("a project with a load error (ruling M)", () => {
+  it("is refused: one unparseable deck no longer ships a bundle without it", () => {
+    const dir = scratch();
+    writeFileSync(join(dir, "encounters", "decks", "market.storyletdeck"), "{ not json");
+    const loaded = loadProject(dir);
+    expect(loaded.source).toBeDefined();   // it still loads, the deck dropped: the gutted case
+    for (const out of [undefined, "-"]) {
+      const result = runExport(loaded, out);
+      expect(result.bundle).toBeUndefined();
+      expect(result.text).toBeUndefined();
+      expect(result.writes).toEqual([]);
+      expect(result.issues).toContainEqual(expect.objectContaining({
+        severity: "error", path: "encounters/decks/market.storyletdeck", message: expect.stringMatching(/^unparseable JSON5/),
+      }));
+    }
+  });
+
+  it("is not refused over a load warning", () => {
+    const dir = scratch();
+    writeFileSync(join(dir, "encounters", "stray.storyletdeck"), "{}\n");
+    const result = runExport(loadProject(dir));
+    expect(result.issues.some((i) => i.severity === "warning")).toBe(true);
+    expect(result.bundle).toBeDefined();
+  });
+});
+
+describe("the plan", () => {
+  it("is one ordered list: the map pictures, then the bundle, then the game's scopes file", () => {
+    const dir = scratch();
+    // A repository holding a game scopes folder, so the export brings our file up to date.
+    mkdirSync(join(dir, "..", ".git"));
+    mkdirSync(join(dir, "..", "game-scopes"));
+    drawMap(dir);
+    withPicture(dir);
+    askForMaps(dir);
+    const result = runExport(loadProject(dir));
+    const dist = join(dir, "..", "storylet-dist");
+    expect(result.path).toBe(join(dist, "saltmarsh.storyletsc"));   // the example declares its own
+    expect(result.writes.map((w) => [w.path, isBinaryWrite(w)])).toEqual([
+      [join(dist, "assets", "site-plan.png"), true],
+      [join(dist, "saltmarsh.storyletsc"), false],
+      [join(dir, "..", "game-scopes", "storylets.scopes.json"), false],
+    ]);
   });
 });

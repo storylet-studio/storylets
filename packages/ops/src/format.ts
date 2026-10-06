@@ -47,6 +47,13 @@ export interface FormatResult {
 }
 
 export function runFormat(loaded: LoadedProject): FormatResult {
+  // No project here at all: the loader's error, not "all shards canonical"
+  // over a folder that has none (ruling M, 2026-10-06). A project whose files
+  // fail to load in other ways is still formatted, file by file: the caller
+  // prints its load issues.
+  if (loaded.source === undefined && loaded.files.length === 0) {
+    return { changed: [], removed: [], moved: [], migrated: [], issues: loaded.issues.filter((i) => i.severity === "error") };
+  }
   const changed: PlannedWrite[] = [];
   const removed: string[] = [];
   const issues: Issue[] = [];

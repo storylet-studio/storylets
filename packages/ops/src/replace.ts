@@ -5,6 +5,10 @@
 // outcomes. Patter's replace.ts, ported to shards (its scope there is the
 // source-language prose).
 //
+// The project map's zone group is covered as a box's groups are, by its
+// purpose, and written through the map's own planner (`planProjectMapGroup`),
+// so its frames and everything else in that shard stay as they are.
+//
 // It NEVER touches ids, gameIds (addresses, edited elsewhere), conditions,
 // changes or property declarations: a replace is a writing tool, not a
 // refactoring one, and a word that happens to appear in an address should not
@@ -20,6 +24,7 @@ import type { SourceDeck } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS, effectiveGameId } from "@storylet-studio/model";
 import type { Card, DeckShard, Outcome } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
+import { planProjectMapGroup } from "./map.js";
 import type { ResolveKind } from "./resolve.js";
 import type { PlannedWrite } from "./write.js";
 import { findMatcher } from "@wildwinter/toolkit";   // the escaped, global find regex
@@ -62,8 +67,6 @@ export interface ReplacePlan {
   /** Distinct items touched. */
   items: number;
 }
-
-
 
 // The canonical serialiser id-sorts the cards (source rule 6), so a replace
 // leaves a shard byte-identical to what a save would have produced.
@@ -139,6 +142,15 @@ export function runReplace(loaded: LoadedProject, opts: ReplaceOptions): Replace
     if (tagsChanged) {
       plan.writes.push({ path: join(loaded.dir, box.path, `tags${SHARD_EXTENSIONS.tags}`), content: canonicalStringify({ ...box.tags, groups }) });
     }
+  }
+
+  // The project map's group, once: it belongs to no box, so its trail is the
+  // first box on the map, where Find opens it (resolve.ts says the same).
+  const mapGroup = source.map?.group;
+  if (mapGroup !== undefined) {
+    const first = source.boxes.find((box) => box.box.box.usesMap === true);
+    const purpose = sub(mapGroup.id, "tagGroup", "purpose", first !== undefined ? [label(first.box.box)] : [], mapGroup.purpose);
+    if (purpose !== undefined) plan.writes.push(planProjectMapGroup(loaded.dir, source, { ...mapGroup, purpose }));
   }
 
   plan.items = touched.size;

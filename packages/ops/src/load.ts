@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { SHARD_EXTENSIONS } from "@storylet-studio/model";
 import { loadProjectFiles, parseProjectFiles, walkProjectFiles } from "@storylet-studio/compiler";
 import type { Issue, SourceFile, SourceProject } from "@storylet-studio/compiler";
@@ -45,7 +45,7 @@ export interface LoadedProject {
 }
 
 /** Find unresolved merge sidecars under a project folder (project-relative paths). */
-export function findConflictSidecars(dir: string): string[] {
+function findConflictSidecars(dir: string): string[] {
   return walkProjectFiles(dir, [CONFLICT_SIDECAR_EXTENSION])
     .map((full) => relative(dir, full).split("\\").join("/"))
     .sort();

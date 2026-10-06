@@ -263,10 +263,13 @@ export function compileProject(source: SourceProject): CompileResult {
   };
   // Hands and cards are addressed project-wide (deal(hand) is API; the
   // play-history functions key on card gameIds), so their gameIds are
-  // project-wide unique. Boxes likewise.
+  // project-wide unique. Boxes likewise, and decks: a deck's address
+  // (`deck.<gameId>.<name>`) names no box, and the engine resolves it
+  // bundle-wide (ruling M, the CLI review of 2026-10-06).
   const handGameIds = new Map<string, string>();
   const cardGameIds = new Map<string, string>();
   const boxGameIds = new Map<string, string>();
+  const deckGameIds = new Map<string, string>();
 
   // --- the game's shared scopes (patterkit design/shared-scopes.md) ------------------
   // The folder's @world, when it declares one, is this project's @world
@@ -816,6 +819,7 @@ export function compileProject(source: SourceProject): CompileResult {
       claimId(deckDecl.id, path, effectiveGameId(deckDecl));
       // A deck's gameId names its FILE, so this one is not merely an address.
       checkGameId("deck", deckDecl, path);
+      uniqueGameIds("deck", deckGameIds, effectiveGameId(deckDecl), path);
       legalPropertyName("deck", deckDecl.properties, path);
       const deckSchema = schemaFor(sourceBox, deckDecl.properties ?? []);
       const cards: Card<Expression>[] = [];

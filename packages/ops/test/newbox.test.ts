@@ -15,16 +15,16 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { runInit } from "../src/init.js";
 import { runNewBox } from "../src/newbox.js";
 import type { BoxKit } from "../src/newbox.js";
 import { runValidate } from "../src/validate.js";
 import { isSpatial, polygonOf } from "@storylet-studio/model";
 import { loadProject } from "../src/load.js";
-import { compileProject } from "@storylet-studio/compiler";
+import { canonicalStringify, compileProject, parseSource } from "@storylet-studio/compiler";
 import { Engine } from "@storylet-studio/runtime";
 import type { PlannedWrite } from "../src/write.js";
 
@@ -270,5 +270,58 @@ describe("the Story acts kit, played", () => {
     expect(now()).toEqual(["a-strangers-warning", "the-road-north"]);
     play(hand, "a-strangers-warning", "heed-it");
     expect(now()).toEqual(["the-reckoning", "the-road-north"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A retitled box keeps its folder (CLI review 2026-10, item 4)
+// ---------------------------------------------------------------------------
+
+describe("a new box never lands on a box that is already there", () => {
+  /** A project whose second box was made as "New box" and retitled since: its
+   *  folder is still `new-box`, and its title no longer says so. */
+  function retitled(): string {
+    const dir = fresh("retitled");
+    commit(runNewBox({ loaded: loadProject(dir) }).writes);
+    const boxFile = join(dir, "new-box", "box.storyletbox");
+    const box = parseSource(readFileSync(boxFile, "utf8")) as { box: { title: string } };
+    box.box.title = "Market";
+    writeFileSync(boxFile, canonicalStringify(box));
+    return dir;
+  }
+
+  it("takes every existing box's FOLDER as taken, not just its address", () => {
+    const dir = retitled();
+    const before = readFileSync(join(dir, "new-box", "box.storyletbox"), "utf8");
+    const result = runNewBox({ loaded: loadProject(dir) });
+    expect(result.folder).toBe("new-box-2");
+    expect(result.writes.every((w) => !w.path.startsWith(join(dir, "new-box") + sep))).toBe(true);
+    commit(result.writes);
+    expect(readFileSync(join(dir, "new-box", "box.storyletbox"), "utf8")).toBe(before);
+    expect(loadProject(dir).source!.boxes.map((b) => b.path).sort()).toEqual(["main", "new-box", "new-box-2"]);
+  });
+
+  it("takes a folder no box loads from (a box's leftovers, say) as taken too", () => {
+    const dir = fresh("leftover");
+    mkdirSync(join(dir, "new-box"), { recursive: true });
+    writeFileSync(join(dir, "new-box", "hands.storylethands"), "{ precious: true }\n");
+    expect(runNewBox({ loaded: loadProject(dir) }).folder).toBe("new-box-2");
+  });
+
+  it("reuses the folder a deleted box left empty", () => {
+    const dir = fresh("emptied");
+    mkdirSync(join(dir, "new-box", "decks"), { recursive: true });
+    rmSync(join(dir, "new-box", "decks"), { recursive: true });
+    expect(runNewBox({ loaded: loadProject(dir) }).folder).toBe("new-box");
+  });
+
+  it("refuses rather than overwrite a file that is already there", () => {
+    // The project as it was loaded, with a map written since: the kit would
+    // make one, and the file it would make is there.
+    const dir = fresh("stale");
+    const loaded = loadProject(dir);
+    writeFileSync(join(dir, "map.storyletmap"), "{ precious: true }\n");
+    expect(() => runNewBox({ loaded, kit: "rpg" })).toThrow(/refusing to overwrite/);
+    expect(readFileSync(join(dir, "map.storyletmap"), "utf8")).toBe("{ precious: true }\n");
   });
 });

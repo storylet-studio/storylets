@@ -41,11 +41,6 @@ export function projectMapPath(dir: string): string {
   return join(dir, `map${SHARD_EXTENSIONS.map}`);
 }
 
-/** The project map's zone group, or undefined when the project has no map. */
-export function projectMapGroup(source: SourceProject): TagGroup | undefined {
-  return source.map?.group;
-}
-
 /** The boxes on the project map, in project order. */
 export function boxesOnMap(source: SourceProject): SourceBox[] {
   return source.boxes.filter((box) => box.box.box.usesMap === true);

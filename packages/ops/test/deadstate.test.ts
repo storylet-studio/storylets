@@ -13,7 +13,9 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
+import { compileProject } from "@storylet-studio/compiler";
 import { runValidate } from "../src/validate.js";
+import { deadStateIssues } from "../src/deadstate.js";
 import type { LoadedProject } from "../src/load.js";
 import type { SourceProject } from "@storylet-studio/compiler";
 
@@ -294,5 +296,44 @@ describe("same property name in two decks", () => {
       },
     }));
     expect(issues).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The CLI review of 2026-10-06. @deck is keyed by the deck's INTERNAL id
+// (item 12): the compiler now refuses two decks sharing a gameId (ruling M),
+// but the stores are keyed by id, and so is this. And a `set_flags` write is
+// credited to the property it writes (item 23's one reading of a write).
+// ---------------------------------------------------------------------------
+
+describe("what dead state keys and credits", () => {
+  it("keeps two decks apart by id even where they share a gameId, and names the deck by gameId", () => {
+    const source = project({
+      deckProps: [{ name: "helped", type: "boolean", default: false }],
+      cards: [card("c_1", { condition: "@deck.helped" })],
+      deck2: {
+        props: [{ name: "helped", type: "boolean", default: false }],
+        cards: [card("c_2", { outcomes: [{ id: "o_2", changes: { "@deck.helped": "true" } }] })],
+      },
+    });
+    const { bundle } = compileProject(source);
+    // A bundle the compiler refuses now, built by hand: both decks "main".
+    bundle!.boxes[0]!.decks[1]!.gameId = "main";
+    const msgs = deadStateIssues(source, bundle).map((i) => i.message);
+    expect(msgs.some((m) => m.startsWith("@deck.helped in main is read") && m.includes("nothing writes it"))).toBe(true);
+  });
+
+  it("credits a set_flags write to its target, not to the property it copies from", () => {
+    const issues = check(project({
+      story: [
+        { name: "x", type: "flags", values: ["a"], default: [] },
+        { name: "y", type: "flags", values: ["a"], default: [] },
+      ],
+      cards: [
+        card("c_1", { outcomes: [{ id: "o_1", changes: { "@story.y": "set_flags(@story.x, +a)" } }] }),
+        card("c_2", { condition: "check_flags(@story.y, +a)" }),
+      ],
+    }));
+    expect(issues.filter((i) => i.message.startsWith("@story.y"))).toEqual([]);
   });
 });

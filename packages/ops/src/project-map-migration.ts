@@ -51,7 +51,10 @@ import {
 import type {
   Comment, ContractProperty, Frame, MapShard, NotesShard, ProjectMapShard, PropertyDecl, TagGroup, ViewShard,
 } from "@storylet-studio/model";
-import { ASSETS_DIR } from "./assets.js";
+import { ASSETS_DIR, assetPath, isSafeAssetName } from "./assets.js";
+import { notesPath } from "./comments.js";
+import { mapPath, projectMapPath } from "./map.js";
+import { viewPath } from "./view.js";
 
 /** A file the migration moves rather than rewrites: a picture, which no
  *  `PlannedWrite` can carry (its content is text). Absolute paths. */
@@ -388,7 +391,7 @@ export function planProjectMapMigration(dir: string, original: SourceProject): P
     frames.push(...boxFrames);
     if (map !== undefined && (boxFrames.length > 0 || box.view?.map !== undefined)) {
       const sites = map.sites;
-      const mapShardPath = shardPath(box, `map${SHARD_EXTENSIONS.map}`);
+      const mapShardPath = mapPath(dir, box);
       if (sites !== undefined && Object.keys(sites).length > 0) {
         const shard: MapShard = { schema: MAP_SCHEMA, map: { sites } };
         write(mapShardPath, shard);
@@ -398,8 +401,8 @@ export function planProjectMapMigration(dir: string, original: SourceProject): P
       if (box.view?.map !== undefined) {
         const view: ViewShard = { ...box.view, schema: VIEW_SCHEMA };
         delete view.map;
-        const viewPath = shardPath(box, `view${SHARD_EXTENSIONS.view}`);
-        if (Object.keys(view).length === 1) result.removed.push(viewPath); else write(viewPath, view);
+        const path = viewPath(dir, box);
+        if (Object.keys(view).length === 1) result.removed.push(path); else write(path, view);
       }
     }
 
@@ -425,7 +428,7 @@ export function planProjectMapMigration(dir: string, original: SourceProject): P
       if (changed) {
         const shard: NotesShard = { ...box.notes, schema: NOTES_SCHEMA };
         if (kept.length > 0) shard.comments = kept; else delete shard.comments;
-        write(shardPath(box, `notes${SHARD_EXTENSIONS.notes}`), shard);
+        write(notesPath(dir, box), shard);
       }
     }
   }
@@ -435,18 +438,26 @@ export function planProjectMapMigration(dir: string, original: SourceProject): P
   const union = frames.filter((f) => (seenFrames.has(f.id) ? false : (seenFrames.add(f.id), true)));
   if (union.length > 0) projectMap.frames = union; else delete projectMap.frames;
   const movedFrames = union.length - framesIn(original.map).length;
-  write(join(dir, `map${SHARD_EXTENSIONS.map}`), projectMap);
+  write(projectMapPath(dir), projectMap);
   if (rootCommentsMoved > 0) {
-    write(join(dir, `notes${SHARD_EXTENSIONS.notes}`), { ...(original.notes ?? {}), schema: NOTES_SCHEMA, comments: rootComments });
+    write(notesPath(dir, { path: "" }), { ...(original.notes ?? {}), schema: NOTES_SCHEMA, comments: rootComments });
   }
 
   // Step 8: the survivor's pictures to the project's one folder. A picture the
   // map names and the folder does not hold is said, not moved; one already at
   // the root is left where it is, since the root is where it belongs.
+  // A NAME, never a path: a shard field is untrusted input (a pack, a merge or a
+  // hand edit can put "../" in it), so a name `isSafeAssetName` refuses is
+  // said and left where it is, and every path is made by `assetPath`.
   if (!fromRoot) {
     for (const file of new Set(backgroundsOf(survivor.group).map((b) => b.file))) {
-      const from = join(dir, survivor.box.path, ASSETS_DIR, file);
-      const to = join(dir, ASSETS_DIR, file);
+      if (!isSafeAssetName(file)) {
+        result.issues.push({ severity: "warning", path: `${survivor.box.path}/${ASSETS_DIR}`, where: file,
+          message: `the map puts "${file}" behind it, which is not a plain file name in ${survivor.box.path}/${ASSETS_DIR}/, so it is not moved` });
+        continue;
+      }
+      const from = assetPath(join(dir, survivor.box.path), file)!;
+      const to = assetPath(dir, file)!;
       if (existsSync(to)) continue;
       if (!existsSync(from)) {
         result.issues.push({ severity: "warning", path: `${survivor.box.path}/${ASSETS_DIR}`, where: file,

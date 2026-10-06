@@ -3,13 +3,13 @@
 // merges back by id, and a hostile pack cannot write outside its target.
 // ---------------------------------------------------------------------------
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
-import { PACK_MANIFEST, readPackManifest, runPack } from "../src/pack.js";
+import { NotAPackError, PACK_MANIFEST, readPackManifest, runPack } from "../src/pack.js";
 import { UnsafeEntryError, isUnsafeEntry, runUnpack, runUnpackMerge } from "../src/unpack.js";
 import { CONFLICT_SIDECAR_EXTENSION, MergeInputError } from "../src/merge.js";
 import { loadProject } from "../src/load.js";
@@ -295,6 +295,14 @@ describe("pack", () => {
     expect(fromInside.equals(await runPack(dir))).toBe(true);
   });
 
+  it("takes the project already loaded, and packs the same bytes", async () => {
+    // A caller that loaded the project to report its problems passes it on,
+    // rather than the op reading it all again.
+    const dir = withAsset(scratch(), { packAssets: true });
+    const loaded = loadProject(dir);
+    expect(await runPack(loaded)).toEqual(await runPack(dir));
+  });
+
   it("refuses a directory that is not a project", async () => {
     await expect(runPack(tempDir())).rejects.toThrow(/not a storylets project/);
   });
@@ -380,6 +388,71 @@ describe("unpack", () => {
     expect(isUnsafeEntry("a/../../b")).toBe(true);
     expect(isUnsafeEntry("encounters/decks/docks.storyletdeck")).toBe(false);
     expect(isUnsafeEntry("deep/a/../b.storyletdeck")).toBe(false);   // stays inside
+  });
+});
+
+/** A pack built entry by entry, for what `pack` would never write. */
+async function packOf(entries: Record<string, string | Buffer>): Promise<Buffer> {
+  const zip = new JSZip();
+  for (const [name, content] of Object.entries(entries)) zip.file(name, content);
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+describe("unpack writes only what a pack is for (CLI review 2026-10, item 1)", () => {
+  const deck = '{ schema: "storylets/deck@0", deck: { id: "k_1", properties: [] }, cards: [] }\n';
+
+  it("refuses a pack carrying .git/config, which git would run", async () => {
+    const bytes = await packOf({ "main/decks/a.storyletdeck": deck, ".git/config": "[core]\n\tfsmonitor = touch pwned\n" });
+    await expect(runUnpack(bytes, tempDir())).rejects.toThrow(UnsafeEntryError);
+    const ours = scratch();
+    await expect(runUnpackMerge(bytes, await runPack(ours), ours)).rejects.toThrow(UnsafeEntryError);
+  });
+
+  it("refuses a dot segment anywhere in an entry's path", async () => {
+    for (const name of ["main/.hidden/a.storyletdeck", "assets/.DS_Store", ".storylets.server.json"]) {
+      await expect(runUnpack(await packOf({ [name]: deck }), tempDir()), name).rejects.toThrow(UnsafeEntryError);
+    }
+  });
+
+  it("returns every other entry unwritten, the server's record among them", async () => {
+    const target = tempDir();
+    const result = await runUnpack(await packOf({
+      "main/decks/a.storyletdeck": deck,
+      "storylets.server.json": '{ "schema": "storylets/server-provenance@0" }',
+      "README.md": "hello",
+      "main/run.sh": "rm -rf ~",
+      "assets/plans/site.png": "x",          // not directly in assets/
+      "assets/con.png": "x",                 // a name isSafeAssetName refuses
+      "game-scopes/deep/x.scopes.json": "{}",// not directly in game-scopes/
+      "main/assets/old.png": "x",            // only the ROOT assets/ holds pictures
+    }), target);
+    const written = [...result.shards, ...result.scopes, ...result.assets].map((w) => w.path.slice(target.length + 1));
+    expect(written).toEqual(["main/decks/a.storyletdeck"]);
+    expect([...result.other.keys()].sort()).toEqual([
+      "README.md", "assets/con.png", "assets/plans/site.png", "game-scopes/deep/x.scopes.json",
+      "main/assets/old.png", "main/run.sh", "storylets.server.json",
+    ]);
+    expect(result.other.get("storylets.server.json")).toContain("server-provenance");
+  });
+
+  it("reads a box folder called assets as shards, not pictures (item 20)", async () => {
+    const target = tempDir();
+    const box = '{ schema: "storylets/box@0", box: { id: "b_1", title: "Assets", ranking: {}, fields: [], properties: [] } }\n';
+    const result = await runUnpack(await packOf({
+      "assets/box.storyletbox": box, "assets/decks/a.storyletdeck": deck, "assets/plan.png": PNG,
+    }), target);
+    expect(result.shards.map((w) => w.path.slice(target.length + 1))).toEqual(["assets/box.storyletbox", "assets/decks/a.storyletdeck"]);
+    expect(result.assets.map((w) => w.path.slice(target.length + 1))).toEqual(["assets/plan.png"]);
+  });
+
+  it("names bytes that are not a pack, rather than throwing the zip reader's error", async () => {
+    const notZip = Buffer.from("this is not a zip at all");
+    await expect(runUnpack(notZip, tempDir())).rejects.toThrow(NotAPackError);
+    await expect(runUnpack(notZip, tempDir())).rejects.toThrow("not a .storyletpack");
+    const ours = scratch();
+    const sent = await runPack(ours);
+    await expect(runUnpackMerge(notZip, sent, ours)).rejects.toMatchObject({ which: "pack" });
+    await expect(runUnpackMerge(sent, notZip, ours)).rejects.toMatchObject({ which: "base" });
   });
 });
 
@@ -509,7 +582,7 @@ describe("unpack --merge: the return leg", () => {
     expect(write.content).toContain("A rumour");   // agreed on both sides, so clean
     expect(result.conflicts).toBe(0);
     // And the rest of the leg still ran: one shard must not take down the pack.
-    expect(result.writes.some((w) => w.path.endsWith("docks.storyletdeck"))).toBe(true);
+    expect(result.shards.some((s) => s.path.endsWith("docks.storyletdeck"))).toBe(true);
   });
 
   it("conflicts, with a sidecar, when the two sides added the same card differently", async () => {
@@ -525,9 +598,57 @@ describe("unpack --merge: the return leg", () => {
     const [conflict] = JSON.parse(sidecar!.content).conflicts as { kind: string; base: unknown }[];
     expect(conflict!.kind).toBe("added-both");    // no base: an add, not a both-changed
     expect(conflict!.base).toBeUndefined();
-    // Provisional OURS stands in the file, as it does for any other conflict.
-    expect(result.writes.find((w) => w.path.endsWith("rumours.storyletdeck"))!.content)
-      .toContain("Our rumour");
+    // Provisional OURS stands in the file, as it does for any other conflict:
+    // here the merge resolves wholly to ours, so the file already says it and
+    // only the sidecar is written.
+    expect(result.writes.some((w) => w.path.endsWith("rumours.storyletdeck"))).toBe(false);
+    expect(readFileSync(join(ours, rumoursPath), "utf8")).toContain("Our rumour");
+  });
+
+  // --- one read, and only the writes that change something (item 15) ---------
+
+  it("reads each pack once", async () => {
+    const { ours, sent, returned } = await roundTrip(() => {});
+    const load = vi.spyOn(JSZip, "loadAsync");
+    try {
+      await runUnpackMerge(returned, sent, ours);
+      expect(load).toHaveBeenCalledTimes(2);
+    } finally { load.mockRestore(); }
+  });
+
+  it("writes only the shards the merge changed", async () => {
+    // Every shard came back, and only one says anything new: rewriting the rest
+    // would be a diff nobody made, which is what Storyletter's pull refuses too.
+    const { ours, sent, returned } = await roundTrip((dir) => {
+      const p = join(dir, deckPath);
+      writeFileSync(p, readFileSync(p, "utf8").replace('gameId: "rat-job"', 'gameId: "dock-work"'));
+    });
+    const result = await runUnpackMerge(returned, sent, ours);
+    expect(result.writes.map((w) => w.path)).toEqual([join(ours, deckPath)]);
+    expect(result.shards.length).toBeGreaterThan(1);
+    expect(result.shards.filter((s) => s.changed).map((s) => s.path)).toEqual([deckPath.split(sep).join("/")]);
+  });
+
+  it("writes nothing for a shard stored in another order but otherwise the same", async () => {
+    // The merge emits its own normal form, sorted by id. A local deck with its
+    // cards out of order merges to the sorted text, which is no change at all.
+    const { ours, sent, returned } = await roundTrip(() => {});
+    const p = join(ours, deckPath);
+    const shard = parseSource(readFileSync(p, "utf8")) as { cards: unknown[] };
+    shard.cards.reverse();
+    writeFileSync(p, JSON.stringify(shard, null, 2));
+    expect((parseSource(readFileSync(p, "utf8")) as { cards: unknown[] }).cards.length).toBeGreaterThan(1);
+    const result = await runUnpackMerge(returned, sent, ours);
+    expect(result.writes).toEqual([]);
+  });
+
+  it("returns the returned pack's stray entries in other, unwritten", async () => {
+    const { ours, sent, returned } = await roundTrip(() => {});
+    const zip = await JSZip.loadAsync(returned);
+    zip.file("storylets.server.json", "{}");
+    const result = await runUnpackMerge(await zip.generateAsync({ type: "nodebuffer" }), sent, ours);
+    expect([...result.other.keys()]).toEqual(["storylets.server.json"]);
+    expect(result.writes.some((w) => w.path.endsWith("storylets.server.json"))).toBe(false);
   });
 
   // --- the cheap provenance check (pack-merge-back section 7, cheap variant) --

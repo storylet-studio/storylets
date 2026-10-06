@@ -223,4 +223,24 @@ describe("sheet naming", () => {
     expect(headers(wb.getWorksheet("Arrival (Other)")!)[0]).toBe("Box");
     expect(rowWhere(wb.getWorksheet("Arrival (Other)")!, 3, "settle-at-the-inn")[1]).toBe("Other");
   });
+
+  it("gives two long titles sharing their first 31 characters distinct names, and ends (CLI review 2026-10, item 5)", { timeout: 5000 }, async () => {
+    // The numbered suffix used to be added and then truncated away, so every
+    // candidate was the same name and the loop never ended: Storyletter runs
+    // this in its main process, and the app froze.
+    const one = loadProject(exampleDir).source!;
+    const box = one.boxes[0]!;
+    const deck = box.decks[0]!;
+    const title = (end: string): string => `The Long Night at the Calling T${end}`;   // 34 characters
+    expect(title("one")).toHaveLength(34);
+    const long = (id: string, end: string) =>
+      ({ path: `main/decks/${id}.storyletdeck`, shard: { ...deck.shard, deck: { ...deck.shard.deck, id, gameId: id, title: title(end) }, cards: [] } });
+    const project: SourceProject = { ...one, boxes: [{ ...box, decks: [long("k_one", "one"), long("k_two", "two"), long("k_three", "six")] }] };
+    const { wb } = await exported(project);
+    const names = wb.worksheets.map((ws) => ws.name).filter((n) => n.startsWith("The Long"));
+    expect(names).toHaveLength(3);
+    expect(new Set(names.map((n) => n.toLowerCase())).size).toBe(3);
+    for (const name of names) expect(name.length).toBeLessThanOrEqual(31);
+    expect(names).toEqual(["The Long Night at the Calling T", "The Long Night at the Calli (2)", "The Long Night at the Calli (3)"]);
+  });
 });

@@ -17,8 +17,9 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { backgroundsOf, isSpatial } from "@storylet-studio/model";
+import { SHARD_EXTENSIONS, backgroundsOf, isSpatial } from "@storylet-studio/model";
 import type { SourceProject } from "@storylet-studio/compiler";
+import { CONFLICT_SIDECAR_EXTENSION } from "./merge.js";
 
 /** The folder a project keeps its assets in, relative to the project root. */
 export const ASSETS_DIR = "assets";
@@ -112,6 +113,23 @@ export function imageSize(bytes: Uint8Array): { width: number; height: number } 
   return undefined;
 }
 
+/** Not a picture, wherever it is: a shard or a merge's sidecar. A box titled
+ *  "Assets" has its folder at `assets/`, beside the pictures, and its shards
+ *  must never read as orphans, since orphans are swept. */
+const NOT_PICTURES = [...Object.values(SHARD_EXTENSIONS), CONFLICT_SIDECAR_EXTENSION];
+
+/** The pictures in one folder: its plain files, dotfiles and shards aside. None
+ *  when there is no folder. The one directory read both asset questions use. */
+function filesIn(folder: string): string[] {
+  try {
+    return readdirSync(folder, { withFileTypes: true })
+      .filter((e) => e.isFile() && !e.name.startsWith(".") && !NOT_PICTURES.some((ext) => e.name.endsWith(ext)))
+      .map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Which of the project's asset files are REFERENCED by the project map, and which
  * are orphans.
@@ -133,15 +151,8 @@ export function assetUse(dir: string, source: SourceProject): { used: string[]; 
   if (source.map !== undefined) {
     for (const background of backgroundsOf(source.map.group)) referenced.add(background.file);
   }
-  const folder = join(dir, ASSETS_DIR);
-  let onDisk: string[] = [];
-  try {
-    onDisk = readdirSync(folder, { withFileTypes: true })
-      .filter((e) => e.isFile() && !e.name.startsWith("."))
-      .map((e) => e.name);
-  } catch {
-    return { used: [], orphans: [] };   // no assets folder is the normal state
-  }
+  // No assets folder is the normal state, and reads as no files.
+  const onDisk = filesIn(join(dir, ASSETS_DIR));
   return {
     used: onDisk.filter((name) => referenced.has(name)).sort(),
     orphans: onDisk.filter((name) => !referenced.has(name)).sort(),
@@ -163,16 +174,6 @@ export function orphanAssetPaths(dir: string, source: SourceProject): string[] {
   ].sort();
 }
 
-/** The plain files in one folder, dotfiles aside; none when there is no folder. */
-const filesIn = (folder: string): string[] => {
-  try {
-    return readdirSync(folder, { withFileTypes: true })
-      .filter((e) => e.isFile() && !e.name.startsWith("."))
-      .map((e) => e.name);
-  } catch {
-    return [];
-  }
-};
 
 const sameBytes = (a: string, b: string): boolean => {
   try { return readFileSync(a).equals(readFileSync(b)); } catch { return false; }

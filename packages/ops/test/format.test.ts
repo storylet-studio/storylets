@@ -113,3 +113,12 @@ describe("format moves a map out of a view shard", () => {
     expect(readFileSync(mapFile(dir), "utf8")).toBe(before);
   });
 });
+
+describe("format on a path with no project (CLI review, October 2026: ruling M)", () => {
+  it("fails with the load error rather than calling nothing canonical", () => {
+    const result = runFormat(loadProject(mkdtempSync(join(tmpdir(), "format-none-"))));
+    expect(result.changed).toEqual([]);
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]).toMatchObject({ severity: "error", message: expect.stringContaining("no .storylets project") });
+  });
+});

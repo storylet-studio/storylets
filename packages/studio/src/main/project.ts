@@ -6,20 +6,19 @@
 // ---------------------------------------------------------------------------
 
 import { basename, dirname, join } from "node:path";
-import { boxColourOf, contractNotes, defaultGameScopesParent, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate } from "@storylet-studio/ops";
+import { boxColourOf, contractNotes, defaultGameScopesParent, handDeclarations, isBinaryWrite, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate, undoInit } from "@storylet-studio/ops";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { planProject } from "@patterkit/core";
 import { planCardScene } from "./patter-scene.js";
-import type { HoleDecls, LoadedProject, PatterReport, PatterScenes, PlaceAxisBox, PlaceAxisMap } from "@storylet-studio/ops";
-import { writeBinaryFile, writeTextFiles as vcWrite } from "@wildwinter/simple-vc-lib";
+import type { HoleDecls, Issue, LoadedProject, PatterReport, PatterScenes, PlaceAxisBox, PlaceAxisMap, PlannedFileWrite } from "@storylet-studio/ops";
+import { writeBinaryFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, worldDeclarations } from "@storylet-studio/compiler";
-import { writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { SHARD_EXTENSIONS, effectiveGameId, isSpatial, openThreadCounts, PLACE_GROUP } from "@storylet-studio/model";
 import type { Bundle, Card, CoverageDriver, Hand, HandTemplate, PlayRung, PropertyDecl } from "@storylet-studio/model";
 import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
 import { boardScopes, gameScopesDto, worldFileLabel } from "./game-scopes.js";
 import type {
-  BoardPatterDto, BoardScopesDto, BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectSettingsDto,
+  BoardPatterDto, BoardScopesDto, BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectKit, ProjectSettingsDto,
   PropertyDeclDto, RemoteDto, ShardVcDto, VcStatusDto,
 } from "../shared/api.js";
 import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
@@ -71,8 +70,7 @@ export function axisMap(source: SourceProject): PlaceAxisMap {
 /** What a moving hand's hole may be filled from, as the compiler reads it: its
  *  template's (or its own) properties as @hand, the story's, the world's. */
 export function holeDecls(source: SourceProject, box: SourceBox, hand: Hand<string>): HoleDecls {
-  const template = hand.template !== undefined ? box.hands.templates.find((t) => t.id === hand.template) : undefined;
-  return { hand: template?.properties ?? hand.properties ?? [], story: source.project.story?.properties ?? [], world: worldDeclarations(source) };
+  return { hand: handDeclarations(box.hands.templates, hand), story: source.project.story?.properties ?? [], world: worldDeclarations(source) };
 }
 
 const chipValues = (
@@ -333,12 +331,20 @@ export function toDto(loaded: LoadedProject): ProjectDto {
   };
 }
 
+/**
+ * What a refused open, publish or Live Link refresh tells the author: the errors, each with the
+ * shard it is in, else every issue when none is an error, else `fallback`. One wording for every
+ * refusal, where the fallback used to be written out at each (the CLI review, October 2026).
+ */
+export function refusal(issues: readonly Issue[], fallback: string): string {
+  const errors = issues.filter((i) => i.severity === "error");
+  return (errors.length > 0 ? errors : issues)
+    .map((i) => `${i.path}${i.where ? ` [${i.where}]` : ""}: ${i.message}`).join("; ") || fallback;
+}
+
 export function openProject(path: string): { session: ProjectSession; problems: Problem[] } | { error: string } {
   const loaded = loadProject(path);
-  if (!loaded.source) {
-    const message = loaded.issues.map((i) => i.message).join("; ") || "not a storylets project";
-    return { error: message };
-  }
+  if (!loaded.source) return { error: refusal(loaded.issues, "not a storylets project") };
   resetShardStatus();   // a new project never inherits the last one's VC answers
   return {
     session: { loaded, dto: toDto(loaded), history: new History() },
@@ -410,19 +416,22 @@ export function validate(session: ProjectSession): Problem[] {
   return runValidate(loaded, { checkBundle: false }).issues;
 }
 
-/** The kits New Project offers: the starter, and the starter with a Patter project beside it. */
-export type ProjectKit = "blank" | "with-patter" | "map-story" | "action-game";
+/** The kits New Project offers: ops' game kits, and the starter with a Patter project beside
+ *  it. Declared in the shared API from `GAME_KITS`, so a kit added in ops is one Storyletter
+ *  offers, and the gallery's own list is held to it by box-kits.test.ts. */
+export type { ProjectKit };
 
 /** The Patter project folder the with-Patter kit creates beside `storyletsDir`. */
 export const patterFolderFor = (storyletsDir: string): string => storyletsDir.replace(/\.storylets$/, "") + ".patter";
 
-export function createProject(parentDir: string, name: string, kit: ProjectKit = "blank"): { path: string } | { error: string } {
+export function createProject(parentDir: string, name: string, kit: ProjectKit = "starter"): { path: string } | { error: string } {
   try {
-    const result = runInit({ dir: `${parentDir}/${name}`, name, ...(kit === "map-story" || kit === "action-game" ? { kit } : {}) });
+    const result = runInit({ dir: `${parentDir}/${name}`, name, kit: kit === "with-patter" ? "starter" : kit });
     const patterDir = patterFolderFor(result.dir);
     if (kit === "with-patter" && existsSync(patterDir)) return { error: `${basename(patterDir)} is already there` };
     const batch = writeTextFiles(result.writes.map((w) => ({ filePath: w.path, content: w.content })));
-    if (!batch.success) return { error: "could not write the project files" };
+    // A half-written project would refuse every retry, so take back what landed.
+    if (!batch.success) { undoInit(result); return { error: "could not write the project files" }; }
     if (kit === "with-patter") {
       const paired = addPatterProject(result.dir, name, patterDir);
       if ("error" in paired) return paired;
@@ -548,9 +557,7 @@ export function patterStamp(loaded: LoadedProject): string {
 
 export function compileBundle(session: ProjectSession): { bundle: Bundle; name: string; play: PlayRung; stamp: string; scopes?: BoardScopesDto; patter?: BoardPatterDto } | { error: string } {
   const loaded = loadProject(session.loaded.dir);
-  if (!loaded.source) {
-    return { error: loaded.issues.map((i) => i.message).join("; ") || "not a storylets project" };
-  }
+  if (!loaded.source) return { error: refusal(loaded.issues, "not a storylets project") };
   const { bundle, issues } = compileProject(loaded.source);
   if (!bundle) {
     const errors = issues.filter((i) => i.severity === "error").map((i) => `${i.where ? `${i.where}: ` : ""}${i.message}`);
@@ -584,39 +591,42 @@ export function currentProjectHash(session: ProjectSession): string | null {
 const boardStamp = (hash: string, patter: string): string => (patter ? `${hash}|${patter}` : hash);
 
 /** Compile and write the .storyletsc bundle to its declared path (through the
- *  VC layer; the bundle is committed with merge=ours). */
+ *  VC layer; the bundle is committed with merge=ours). A project with a load
+ *  error is refused, naming the shard (ruling M): the export would otherwise
+ *  ship the bundle without whatever failed to load. */
 export function exportBundle(session: ProjectSession): { path: string } | { error: string } {
-  const loaded = loadProject(session.loaded.dir);
-  const result = runExport(loaded);
-  if (!result.write) {
-    const errors = result.issues.filter((i) => i.severity === "error").map((i) => i.message);
-    return { error: errors.join("; ") || "the project does not compile" };
+  const result = runExport(loadProject(session.loaded.dir));
+  if (result.path === undefined) return { error: refusal(result.issues, "the project does not compile") };
+  // The plan as ops orders it: the map pictures (only when the project asked
+  // for maps), the bundle that names them, then the Storylet Engine's file in
+  // the game's shared scopes folder when it changed. A picture that fails is a
+  // failure of the export, and stops it before the bundle lands naming it.
+  const failed = commitPlanned(result.writes);
+  return failed !== undefined ? { error: failed } : { path: result.path };
+}
+
+/** Commit an ordered plan of text and binary writes through the VC layer, in
+ *  its order, stopping at the first failure; what failed, or undefined. Binary
+ *  writes get their folder made first, as the text batch makes its own. */
+function commitPlanned(writes: readonly PlannedFileWrite[]): string | undefined {
+  for (const w of writes) {
+    if (isBinaryWrite(w)) {
+      try { mkdirSync(dirname(w.path), { recursive: true }); } catch { /* the write says so */ }
+      if (!writeBinaryFile(w.path, w.bytes).success) return `could not write ${basename(w.path)}`;
+    } else if (!writeTextFiles([{ filePath: w.path, content: w.content }]).success) {
+      return `could not write ${basename(w.path)}`;
+    }
   }
-  const batch = vcWrite([{ filePath: result.write.path, content: result.write.content }]);
-  if (!batch.success) return { error: "could not write the bundle" };
-  // The Storylet Engine's file in the game's shared scopes folder, when it changed: what the
-  // other tools read of this project, brought up to date on publish as on every save.
-  if (result.scopesWrite !== undefined) {
-    const scopes = vcWrite([{ filePath: result.scopesWrite.path, content: result.scopesWrite.content }]);
-    if (!scopes.success) return { error: `could not write ${basename(result.scopesWrite.path)}` };
-  }
-  // The pictures a shipped map needs, beside it. Only ever non-empty when the
-  // project asked for maps, and a failure here is a failure of the export: a
-  // bundle naming pictures that are not there would be worse than no bundle.
-  for (const asset of result.assets) {
-    mkdirSync(dirname(asset.path), { recursive: true });
-    const one = writeBinaryFile(asset.path, Buffer.from(asset.bytes));
-    if (!one.success) return { error: `could not write ${basename(asset.path)}` };
-  }
-  return { path: result.write.path };
+  return undefined;
 }
 
 /** Live Link's refresh: the same compile Publish Bundle makes, handed back as
- *  the bundle's text and hash rather than written anywhere. Null when the
- *  project does not compile (a broken save is not pushed into a running game). */
-export function compileForLivePush(session: ProjectSession): { hash: string; json: string } | null {
+ *  the bundle's text and hash rather than written anywhere. Refused, with the
+ *  reason, when the project does not compile or did not wholly load: a broken
+ *  save, or a gutted one, is not pushed into a running game. */
+export function compileForLivePush(session: ProjectSession): { hash: string; json: string } | { error: string } {
   const result = runExport(loadProject(session.loaded.dir), "-");
-  if (!result.bundle || result.text === undefined) return null;
+  if (!result.bundle || result.text === undefined) return { error: refusal(result.issues, "the project does not compile") };
   return { hash: result.bundle.content.hash, json: result.text };
 }
 
@@ -632,16 +642,10 @@ export const shareScopesDefault = (session: ProjectSession): string => defaultGa
  * folder, and removing one is the author's call.
  */
 export function shareScopes(session: ProjectSession, parent: string): { error: string } | undefined {
+  // The plan whole, project shard included when it has to name the folder, in
+  // one batch: the same writes the CLI commits.
   const plan = planShareScopes(session.loaded, parent);
   if ("error" in plan) return plan;
-  mkdirSync(plan.dir, { recursive: true });
-  const batch = vcWrite(plan.writes.map((w) => ({ filePath: w.path, content: w.content })));
-  if (!batch.success) return { error: "could not write the scopes files" };
-  if (plan.override !== undefined) {
-    const source = session.loaded.source!;
-    const shard = { ...source.project, gameScopes: plan.override };
-    const one = vcWrite([{ filePath: join(session.loaded.dir, source.path), content: canonicalStringify(shard) }]);
-    if (!one.success) return { error: "the folder was made, but the project file could not be written to name it" };
-  }
-  return undefined;
+  const batch = writeTextFiles(plan.writes.map((w) => ({ filePath: w.path, content: w.content })));
+  return batch.success ? undefined : { error: "could not write the scopes files" };
 }

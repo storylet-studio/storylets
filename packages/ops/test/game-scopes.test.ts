@@ -19,6 +19,8 @@ import { Engine } from "@storylet-studio/runtime";
 import type { ScopesFile } from "@wildwinter/scoperegistry/scopes";
 import { loadProject } from "../src/load.js";
 import { runExport } from "../src/export.js";
+import type { ExportResult } from "../src/export.js";
+import type { PlannedWrite } from "../src/write.js";
 import { runValidate } from "../src/validate.js";
 import { runAsk } from "../src/draw.js";
 import { runCoverage } from "../src/coverage.js";
@@ -42,6 +44,10 @@ const GAME: ScopesFile = {
     { token: "player", declarations: [{ name: "hp", type: "number", default: 10 }] },
   ],
 };
+
+/** The export's write of the Storylet Engine's file, if it plans one. */
+const scopesWriteOf = (result: ExportResult): PlannedWrite | undefined =>
+  result.writes.find((w): w is PlannedWrite => "content" in w && w.path.endsWith("storylets.scopes.json"));
 
 const json = (file: ScopesFile): string => `${JSON.stringify(file, null, 2)}\n`;
 
@@ -86,7 +92,7 @@ describe("discovery and reading", () => {
     expect(loaded.source!.gameScopes).toBeUndefined();
     expect(loaded.issues).toEqual([]);
     const result = runExport(loaded);
-    expect(result.scopesWrite).toBeUndefined();
+    expect(scopesWriteOf(result)).toBeUndefined();
     expect(existsSync(join(root, "game-scopes"))).toBe(false);
     expect(runValidate(loaded, { checkBundle: false }).issues).toEqual([]);
   });
@@ -147,19 +153,19 @@ describe("discovery and reading", () => {
 describe("the Storylet Engine's file", () => {
   it("export writes it when the folder exists, and a second export leaves it byte-identical", () => {
     const { root, project } = game({ "patter.scopes.json": json(PATTER) });
-    const first = runExport(loadProject(project));
-    expect(first.scopesWrite!.path).toBe(join(root, "game-scopes", "storylets.scopes.json"));
-    expect(JSON.parse(first.scopesWrite!.content)).toEqual({
+    const first = scopesWriteOf(runExport(loadProject(project)))!;
+    expect(first.path).toBe(join(root, "game-scopes", "storylets.scopes.json"));
+    expect(JSON.parse(first.content)).toEqual({
       version: 1, owner: "Storylet Engine",
       scopes: [{ token: "story", declarations: [
         { name: "reputation", type: "number", default: 0 },
         { name: "visited", type: "flags", values: ["docks", "market"], default: [] },
       ] }],
     });
-    writeFileSync(first.scopesWrite!.path, first.scopesWrite!.content);
-    expect(runExport(loadProject(project)).scopesWrite).toBeUndefined();
+    writeFileSync(first.path, first.content);
+    expect(scopesWriteOf(runExport(loadProject(project)))).toBeUndefined();
     // ...and stdout never writes it.
-    expect(runExport(loadProject(project), "-").scopesWrite).toBeUndefined();
+    expect(scopesWriteOf(runExport(loadProject(project), "-"))).toBeUndefined();
   });
 
   it("validate warns while the file on disk isn't what the project would write", () => {
@@ -289,7 +295,10 @@ describe("sharing a project's scopes for the first time", () => {
     if ("error" in plan) throw new Error(plan.error);
     expect(plan.override).toMatch(/game-scopes$/);
     expect(resolve(project, plan.override!)).toBe(join(elsewhere, "game-scopes"));
-    expect(plan.writes.map((w) => w.path)).toEqual([join(elsewhere, "game-scopes", "storylets.scopes.json")]);
+    // The project naming the folder is part of the plan (CLI review, item 14), so
+    // the CLI and Storyletter commit the same writes in one batch.
+    expect(plan.writes.map((w) => w.path)).toEqual([join(elsewhere, "game-scopes", "storylets.scopes.json"), projectFile(project)]);
+    expect((parseSource(plan.writes[1]!.content) as { gameScopes?: string }).gameScopes).toBe(plan.override);
     expect(readdirSync(root)).not.toContain("game-scopes");
   });
 

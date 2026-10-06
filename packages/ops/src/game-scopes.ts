@@ -20,7 +20,7 @@ import {
 } from "@wildwinter/scoperegistry/scopes";
 import type { MergedScopes, NamedScopesFile, ScopesFile, ScopesFs, ScopesIssue } from "@wildwinter/scoperegistry/scopes";
 import type { ScopeDeclaration, ScopeRegistry } from "@wildwinter/scoperegistry";
-import { STORYLETS_SCOPES_FILE, STORYLETS_TOKEN, storyletsScopesFile, toScopeDeclaration } from "@storylet-studio/compiler";
+import { STORYLETS_SCOPES_FILE, STORYLETS_TOKEN, canonicalStringify, storyletsScopesFile, toScopeDeclaration } from "@storylet-studio/compiler";
 import type { GameScopes, Issue, SourceProject } from "@storylet-studio/compiler";
 import type { Bundle, PropertyDecl } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
@@ -204,7 +204,8 @@ export function defaultGameScopesParent(projectDir: string): string {
  * declares `@world` keeps it: the shared file is the source, so this never overwrites the
  * game's own declarations with one project's. `override` is set when discovery from the
  * project would not find the folder (outside the repository, or beside a project that is its
- * own repository), for the caller to write into the project as `gameScopes`.
+ * own repository), and the plan's last write then names it in the project as `gameScopes`.
+ * The caller commits `writes` as one batch, and that is all it does.
  */
 export function planShareScopes(loaded: LoadedProject, parent: string): { dir: string; writes: PlannedWrite[]; override?: string } | { error: string } {
   if (!loaded.source) return { error: "no project open" };
@@ -223,5 +224,12 @@ export function planShareScopes(loaded: LoadedProject, parent: string): { dir: s
   // Would discovery find it? Asked of the real walk, with the folder counted as there.
   const found = findGameScopes(loaded.dir, { ...nodeScopesFs, exists: (p) => resolve(p) === dir || existsSync(p) });
   const override = found.dir !== undefined && resolve(found.dir) === dir ? undefined : posix(relative(loaded.dir, dir));
+  // ...and when it would not, the project names the folder: a write of the plan
+  // like the others, so the CLI and Storyletter commit one batch and cannot
+  // disagree about it (they used to make this write themselves, one in the
+  // batch and one after it).
+  if (override !== undefined) {
+    writes.push({ path: join(loaded.dir, loaded.source.path), content: canonicalStringify({ ...loaded.source.project, gameScopes: override }) });
+  }
   return { dir, writes, ...(override !== undefined ? { override } : {}) };
 }

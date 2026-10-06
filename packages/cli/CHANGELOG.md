@@ -20,6 +20,77 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Added
+
+- **`<command> --help`** prints that command's usage and exits 0, as does `help <command>`.
+- **A flag that takes a value takes it inline**: `--runs=50`, `--where=area=docks`, as
+  Storyletter's own `--at=` does.
+
+### Changed
+
+- **`export` and `export-html` refuse a project with a load error.** A shard that does not parse
+  used to be dropped and the rest exported, exit 0, so a bundle shipped without that deck's cards.
+  Now nothing is written, the error says which shard, and the exit is 1. A load warning still
+  exports.
+- **`links`, `coverage` and `share-scopes` exit 1 on a load error**, and print the project's
+  load issues whatever happens, as `format` now does too.
+- **`format` on a folder with no project fails** with the loader's error, where it used to say
+  "all shards canonical".
+- **Usage errors all start `usage: `** and end on the command's whole usage line, every flag
+  included.
+- **A flag and its opposite together are refused** (`--map --no-map`, `--assets --no-assets`),
+  as are a `--runs` or `--max-turns` that is not a positive whole number.
+- **`coverage --propose` warns about the flags it ignores** (`--runs`, `--json` and the rest)
+  instead of dropping them in silence.
+- **`coverage`'s `unprovided:` and `warning (...)` lines go to standard error**, where every
+  other command's warnings go, so `--fail-on-gap`'s reasons do not mix into the report.
+- **The playable page says Storyletter**, not the retired name, under the project's title.
+- **`play`, `peek`, `deal` and `coverage` run the Storylet Engine 0.11.1**, the October engine
+  review: a peek draws no random numbers, a play is all-or-nothing, a taken shared one-shot leaves
+  other hands, and a NaN priority is not dealt. Patter-paired projects run Patter 0.19.0.
+- **`coverage` plays a dealt card that has no outcomes** with `""`, as a game does, so it no longer
+  holds its hand's slot for the whole run; it is still never counted as dealt and never played.
+- **`coverage`'s "gated on" hint reads a card's condition, its deck's gate and a computed
+  priority**, and no longer an outcome's gate, which never stops a deal.
+- **`coverage` names a hand whose own condition uses an @hand name it never has**, and an outcome
+  that writes one (`unprovided: ... uses ...`).
+- **`links` draws a write of exactly the threshold as enabling** a `>=` or `<=` condition, and
+  says each warning once per card, naming the card.
+- **`validate` refuses two decks sharing a gameId** anywhere in the project, as it does for every
+  other gameId: a deck's address names no box. It no longer says a card can never be dealt
+  because of @hand state, and counts `@y = set_flags(@x, +a)` as setting y's flag.
+- **`unpack` writes only a project's own files**: shards, pictures directly in `assets/` and
+  `game-scopes/*.scopes.json`. A pack with a dot-file or dot-folder entry (a `.git/config`, say)
+  is refused whole, and anything else is left out, including a server's `storylets.server.json`,
+  which `unpack` used to write into the project.
+- **`unpack --merge` writes only the shards the merge changed**, reads each pack once, and writes
+  conflict sidecars before their shards.
+- **`init` writes the project file last** and takes back what it wrote if a write fails; its editor
+  and git files say Storyletter and cover every shard type.
+
+### Fixed
+
+- **Piped output is no longer cut short.** On macOS, `export -o -`, `--json` and the merge
+  driver's output stopped at 64 KB when stdout was a pipe, because the process exited before the
+  pipe drained.
+- **`-o -` writes the file exactly**, with no newline added after it.
+- **`--where` takes its value as written.** `--where area=1.0` asked for the tag `1`.
+- **`coverage` no longer stops when the engine refuses a play** (an outcome writing an @hand
+  name the hand does not have); the refusal is listed as a warning and the run carries on.
+- **`unpack` of a file that is not a pack says so**, rather than printing a stack trace.
+- **`merge`: two people moving different zones of the project map merge cleanly.** The map was
+  merged as if it were the project file, and conflicted.
+- **`new box` never writes over a box that was renamed and kept its folder**, and refuses any file
+  that already exists; a kit added twice names its second copy's decks apart.
+- **`format` never moves a map background whose name points outside the project**, and warns.
+- **`export-xlsx` no longer hangs** when two deck titles share their first 31 characters.
+- **`pack`, `export-xlsx` and `export --map` create the `-o` folder** when it is not there yet,
+  as the text writes always did.
+- **`format` says when it cannot delete** a file it moved or emptied, and exits 1, instead of
+  carrying on as though it had.
+- **`export` writes in one order**, the same as Storyletter's Publish Bundle: the map pictures,
+  then the bundle that names them, then the game's scopes file.
+
 ## [0.12.0] - 2026-10-02
 
 ### Added

@@ -5,11 +5,11 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
-import { cpSync, mkdirSync, mkdtempSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { canonicalStringify, parseSource } from "@storylet-studio/ops";
+import { canonicalStringify, loadProject, parseSource, runExport } from "@storylet-studio/ops";
 import { run } from "../src/main.js";
 
 const exampleDir = fileURLToPath(new URL("../../../examples/saltmarsh.storylets", import.meta.url));
@@ -378,11 +378,14 @@ describe("coverage against the saltmarsh example", () => {
     expect(lines).toContain("‼ never dealt   ? never dealt, gated on state nothing sets   ~ rarely dealt (under 5% of runs)   ! dealt, never played");
     const heading = lines.indexOf("    runs dealt   dealt  played  card");
     expect(lines[heading - 1]).toBe("least reached first");
-    // Both never dealt first, in deck order between them; the ambush's gate
-    // lines follow it, since it waits on cards that never came up either.
+    // Both never dealt first, in deck order between them, each with its gate
+    // line under it, since each waits on cards that never came up either.
+    // (The pickpocket's is its deck's gate; the ambush's outcome gates no
+    // longer count against it: the CLI review, October 2026, item 11.)
     expect(lines[heading + 1]).toMatch(/^ {2}\? +0% .*ambush-at-the-ford$/);
     expect(lines[heading + 2]).toMatch(/^ {8}gated on @hand\.danger, written only by ambush-at-the-ford, which never came up either$/);
-    expect(lines[heading + 4]).toMatch(/^ {2}‼ +0% .*\[Market\] pickpocket$/);
+    expect(lines[heading + 3]).toMatch(/^ {2}\? +0% .*\[Market\] pickpocket$/);
+    expect(lines[heading + 4]).toMatch(/^ {8}gated on @story\.reputation, written only by ambush-at-the-ford, pickpocket, which never came up either$/);
     expect(lines[heading + 5]).toMatch(/^ {4} +100% .*mysterious-stranger$/);
     expect(lines[heading + 6]).toMatch(/^ {4} +100% .*rat-job$/);
   });
@@ -396,8 +399,9 @@ describe("coverage against the saltmarsh example", () => {
     expect(market).toBeGreaterThan(docks);
     expect(lines[docks + 1]).toBe("    runs dealt   dealt  played  card");
     expect(lines[docks + 2]).toMatch(/ambush-at-the-ford$/);
-    expect(lines[market + 2]).toMatch(/^ {2}‼ .* pickpocket$/);
-    expect(lines[market + 3]).toMatch(/100% .* mysterious-stranger$/);
+    expect(lines[market + 2]).toMatch(/^ {2}\? .* pickpocket$/);
+    expect(lines[market + 3]).toMatch(/^ {8}gated on @story\.reputation/);
+    expect(lines[market + 4]).toMatch(/100% .* mysterious-stranger$/);
   });
 
   it("--order takes least or deck, and nothing else", async () => {
@@ -434,7 +438,7 @@ describe("pack / unpack: the send envelope", () => {
   it("needs -o, and says so rather than guessing a filename", async () => {
     const r = (await call("pack", exampleDir));
     expect(r.code).toBe(2);
-    expect(r.err.join("\n")).toContain("usage: pack");
+    expect(r.err.join("\n")).toContain("usage: storyletengine pack [path] -o FILE");
   });
 
   // The handler read these from the day they were designed and the flag spec
@@ -713,7 +717,7 @@ describe("export-xlsx: the readable workbook", () => {
   it("-o is required", async () => {
     const r = await call("export-xlsx", villageDir);
     expect(r.code).toBe(2);
-    expect(r.err[0]).toContain("-o <file.xlsx>");
+    expect(r.err[0]).toBe("usage: storyletengine export-xlsx [path] -o FILE");
   });
 
   it("a folder with no project is exit 1 with the load issue", async () => {
@@ -793,10 +797,17 @@ describe("every loading command reports the project's issues", () => {
     expect(r.err.join("\n")).toMatch(/unrecognised file/i);
   });
 
+  // links, coverage, share-scopes and format joined 2026-10-06 (CLI review,
+  // item 13): each printed the load issues only when the project failed to
+  // load at all, or never.
   for (const [name, argv] of [
     ["new box", (d: string) => ["new", "box", d]],
     ["resolve", (d: string) => ["resolve", "docks", d]],
     ["pack", (d: string) => ["pack", d, "-o", join(d, "out.storyletpack")]],
+    ["links", (d: string) => ["links", d]],
+    ["coverage", (d: string) => ["coverage", d, "--runs", "5"]],
+    ["share-scopes", (d: string) => ["share-scopes", d]],
+    ["format", (d: string) => ["format", d, "--check"]],
   ] as [string, (d: string) => string[]][]) {
     it(`${name} reports it too`, async () => {
       const dir = withWarning();
@@ -1015,5 +1026,206 @@ describe("share-scopes", () => {
     expect(existsSync(join(shared, "game-scopes", "storylets.scopes.json"))).toBe(true);
     const project = parseSource(readFileSync(join(dir, "saltmarsh.storyletproj"), "utf8")) as { gameScopes?: string };
     expect(project.gameScopes).toBeDefined();
+  });
+});
+
+// --- the CLI review, October 2026 ---------------------------------------------
+// The command layer's findings (storylet-studio design/cli-review-2026-10.md),
+// each test named for what triggers it.
+
+/** A copy of the example with one deck that does not parse: the loader drops
+ *  it with an error and the project still loads, which is exactly the case
+ *  that used to export a gutted bundle with exit 0 (ruling M). */
+const withLoadError = (): string => {
+  const dir = join(mkdtempSync(join(tmpdir(), "storyletengine-loaderr-")), "copy.storylets");
+  cpSync(exampleDir, dir, { recursive: true });
+  writeFileSync(join(dir, "encounters", "decks", "market.storyletdeck"), "{ not json");
+  return dir;
+};
+
+describe("a project with a load error (ruling M)", () => {
+  it("export refuses, writes nothing, and says why", async () => {
+    const dir = withLoadError();
+    const out = join(dir, "..", "out.storyletsc");
+    const r = await call("export", dir, "-o", out);
+    expect(r.code).toBe(1);
+    expect(r.err.join("\n")).toMatch(/error: encounters\/decks\/market\.storyletdeck: unparseable JSON5/);
+    expect(existsSync(out)).toBe(false);
+    expect((await call("export", dir, "-o", "-")).out).toEqual([]);
+  });
+
+  it("export-html refuses too", async () => {
+    const dir = withLoadError();
+    const out = join(dir, "..", "out.html");
+    const r = await call("export-html", dir, "-o", out);
+    expect(r.code).toBe(1);
+    expect(r.err.join("\n")).toContain("unparseable JSON5");
+    expect(existsSync(out)).toBe(false);
+  });
+
+  for (const argv of [["links"], ["coverage", "--runs", "5"], ["coverage", "--propose"], ["share-scopes"]]) {
+    it(`${argv.join(" ")} prints it and exits 1`, async () => {
+      const dir = withLoadError();
+      const r = await call(argv[0]!, dir, ...argv.slice(1));
+      expect(r.code).toBe(1);
+      expect(r.err.join("\n")).toContain("unparseable JSON5");
+      expect(existsSync(join(dir, "..", "game-scopes"))).toBe(false);
+    });
+  }
+
+  it("format prints it once, not twice", async () => {
+    const r = await call("format", withLoadError(), "--check");
+    expect(r.code).toBe(1);
+    expect(r.err.filter((l) => l.includes("unparseable JSON5"))).toHaveLength(1);
+  });
+});
+
+describe("format on a path with no project", () => {
+  for (const argv of [["format"], ["fmt", "--check"]]) {
+    it(`${argv.join(" ")} fails rather than calling it canonical`, async () => {
+      const r = await call(argv[0]!, mkdtempSync(join(tmpdir(), "noproj-")), ...argv.slice(1));
+      expect(r.code).toBe(1);
+      expect(r.err.join("\n")).toContain("no .storylets project");
+      expect(r.out.join("\n")).not.toContain("all shards canonical");
+    });
+  }
+});
+
+describe("usage errors and help", () => {
+  it("every usage error line has one prefix, and ends on the command's whole short form", async () => {
+    for (const [argv, short] of [
+      [["peek"], "storyletengine peek <box> [path] [--where group=tag ...] [--n N] [--set path=value ...] [--seed N] [--deal-all]"],
+      [["deal"], "storyletengine deal <hand> [path] [--set path=value ...] [--seed N] [--deal-all]"],
+      [["merge", "a"], "storyletengine merge BASE OURS THEIRS [-o out] [--json] [--path realfile]"],
+      [["export-xlsx"], "storyletengine export-xlsx [path] -o FILE"],
+      [["pack"], "storyletengine pack [path] -o FILE [--assets|--no-assets]"],
+      [["unpack", "x.storyletpack"], "storyletengine unpack FILE -o DIR [--merge --base SENT.storyletpack]"],
+      [["resolve"], "storyletengine resolve <query> [path]"],
+      [["contract"], "storyletengine contract show [installation] [path]"],
+      [["new", "deck"], "storyletengine new box [path] [--kit "],
+      [["coverage", "--order", "random"], "storyletengine coverage [path] [--runs N]"],
+      [["validate", "--frob"], "storyletengine validate [path]"],
+    ] as [string[], string][]) {
+      const r = await call(...argv);
+      expect(r.code, argv.join(" ")).toBe(2);
+      expect(r.err.length, argv.join(" ")).toBeGreaterThan(0);
+      for (const line of r.err) expect(line, argv.join(" ")).toMatch(/^usage: /);
+      expect(r.err.at(-1), argv.join(" ")).toContain(`usage: ${short}`);
+    }
+  });
+
+  it("--help after a command prints that command's usage and exits 0", async () => {
+    const r = await call("export", "--help");
+    expect(r.code).toBe(0);
+    const said = r.out.join("\n");
+    expect(said).toContain("storyletengine export [path]");
+    expect(said).toContain("[--map|--no-map]");
+    expect(said).not.toContain("storyletengine init");
+    expect((await call("new", "box", "-h")).out.join("\n")).toContain("storyletengine new box [path]");
+    expect((await call("help", "coverage")).out.join("\n")).toContain("[--propose]");
+    expect((await call("fmt", "--help")).out.join("\n")).toContain("storyletengine format [path]");
+  });
+
+  it("takes --flag=value wherever a flag takes a value", async () => {
+    const spaced = await call("coverage", exampleDir, "--runs", "5", "--seed", "3", "--order", "deck");
+    const joined = await call("coverage", exampleDir, "--runs=5", "--seed=3", "--order=deck");
+    expect(joined.code).toBe(0);
+    expect(joined.out).toEqual(spaced.out);
+    const peeked = await call("peek", "encounters", exampleDir, "--where=area=docks", "--set=story.reputation=2");
+    expect(peeked.code).toBe(0);
+    expect(peeked.out).toEqual((await call("peek", "encounters", exampleDir, "--where", "area=docks", "--set", "story.reputation=2")).out);
+    const boolean = await call("format", exampleDir, "--check=yes");
+    expect(boolean.code).toBe(2);
+    expect(boolean.err[0]).toBe("usage: --check takes no value");
+  });
+
+  it("refuses a flag and its opposite together", async () => {
+    for (const argv of [["export", exampleDir, "-o", "-", "--map", "--no-map"], ["pack", exampleDir, "-o", "x.storyletpack", "--assets", "--no-assets"]]) {
+      const r = await call(...argv);
+      expect(r.code, argv.join(" ")).toBe(2);
+      expect(r.err[0]).toMatch(/^usage: --(map|assets) and --no-(map|assets) contradict each other$/);
+    }
+  });
+
+  it("refuses --runs and --max-turns that are not positive", async () => {
+    for (const argv of [["--runs", "0"], ["--max-turns", "-3"], ["--runs=0"]]) {
+      const r = await call("coverage", exampleDir, ...argv);
+      expect(r.code, argv.join(" ")).toBe(2);
+      expect(r.err[0]).toMatch(/^usage: --(runs|max-turns) must be a positive integer$/);
+    }
+  });
+
+  it("coverage --propose warns about the flags it ignores, and still proposes", async () => {
+    const r = await call("coverage", exampleDir, "--propose", "--runs", "9", "--json");
+    expect(r.code).toBe(0);
+    expect(r.err).toEqual(["warning: --runs and --json do nothing with --propose"]);
+    expect(r.out.join("\n")).toContain("coverage:");
+  });
+
+  it("--where takes its value as written: 1.0 is the tag 1.0, not the number 1", async () => {
+    const r = await call("peek", "encounters", exampleDir, "--where", "area=1.0");
+    expect(r.code).toBe(1);
+    expect(r.err.join("\n")).toContain('unknown tag "1.0"');
+  });
+});
+
+describe("writes", () => {
+  it("export -o - writes the bundle raw, with no newline added", async () => {
+    const chunks: string[] = [];
+    const code = await run(["export", exampleDir, "-o", "-"], { log: () => { throw new Error("logged"); }, error: () => {}, write: (t) => chunks.push(t) });
+    expect(code).toBe(0);
+    expect(chunks).toEqual([runExport(loadProject(exampleDir), "-").text]);
+  });
+
+  it("export-xlsx and pack create the -o folder, as the text writes do", async () => {
+    const base = join(mkdtempSync(join(tmpdir(), "storyletengine-outdir-")), "not", "yet");
+    const hamlet = fileURLToPath(new URL("../../ops/test/fixtures/the-hamlet.storylets", import.meta.url));
+    const xlsx = await call("export-xlsx", hamlet, "-o", join(base, "book.xlsx"));
+    expect(xlsx.err).toEqual([]);
+    expect(xlsx.code).toBe(0);
+    expect(existsSync(join(base, "book.xlsx"))).toBe(true);
+    const pack = await call("pack", exampleDir, "-o", join(base, "deeper", "p.storyletpack"));
+    expect(pack.code).toBe(0);
+    expect(existsSync(join(base, "deeper", "p.storyletpack"))).toBe(true);
+  });
+
+  it("unpack of a file that is not a pack says so, naming it, with no stack trace", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "storyletengine-notapack-"));
+    const bogus = join(tmp, "notes.storyletpack");
+    writeFileSync(bogus, "these are not the shards you are looking for");
+    const r = await call("unpack", bogus, "-o", join(tmp, "out"));
+    expect(r.code).toBe(1);
+    expect(r.err).toEqual([`unpack refused: ${bogus} is not a .storyletpack`]);
+    const sent = join(tmp, "sent.storyletpack");
+    expect((await call("pack", exampleDir, "-o", sent)).code).toBe(0);
+    const merged = await call("unpack", sent, "-o", join(tmp, "out"), "--merge", "--base", bogus);
+    expect(merged.code).toBe(1);
+    expect(merged.err.at(-1)).toBe(`unpack refused: ${bogus} is not a .storyletpack`);
+  });
+
+  it("format says so, and exits 1, when it cannot delete what it moved", async () => {
+    // A project from before the project map, whose old picture folder will not
+    // let go of the picture once it has been copied to the root.
+    const dir = join(mkdtempSync(join(tmpdir(), "storyletengine-nodelete-")), "old.storylets");
+    expect((await call("init", dir)).code).toBe(0);
+    writeFileSync(join(dir, "main", "tags.storylettags"), canonicalStringify({
+      schema: "storylets/tags@0",
+      groups: [{
+        id: "d_zone", gameId: "zone",
+        tags: [{ id: "v_yard", gameId: "yard", templates: { spatial: { polygon: [{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 4 }] } } }],
+        templates: { spatial: { map: true, backgrounds: [{ id: "g_1", file: "plan.png", x: 0, y: 0, width: 8, height: 8 }] } },
+      }],
+    }));
+    const old = join(dir, "main", "assets");
+    mkdirSync(old, { recursive: true });
+    writeFileSync(join(old, "plan.png"), Buffer.from("89504e470d0a1a0a", "hex"));
+    chmodSync(old, 0o555);
+    try {
+      const r = await call("format", dir);
+      expect(r.code).toBe(1);
+      expect(r.err.join("\n")).toMatch(/delete failed .*plan\.png/);
+    } finally {
+      chmodSync(old, 0o755);
+    }
   });
 });

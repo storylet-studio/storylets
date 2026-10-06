@@ -7,14 +7,14 @@
 // zone group is the root map shard's, and a box joins it with `usesMap`.
 
 import { describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { compileProject } from "@storylet-studio/compiler";
 import { Engine } from "@storylet-studio/runtime";
-import { isSpatial } from "@storylet-studio/model";
+import { SHARD_EXTENSIONS, isSpatial } from "@storylet-studio/model";
 import { boxMap } from "../src/map.js";
-import { GAME_KITS, runInit } from "../src/init.js";
+import { GAME_KITS, runInit, undoInit } from "../src/init.js";
 import type { GameKit } from "../src/init.js";
 import { loadProject } from "../src/load.js";
 import { runValidate } from "../src/validate.js";
@@ -45,10 +45,9 @@ describe("the editor and git files init writes", () => {
     const result = runInit({ dir: mkdtempSync(join(tmpdir(), "init-files-")), name: "Kit" });
     return new Map(result.writes.map((w) => [w.path.slice(result.dir.length + 1).replaceAll("\\", "/"), w.content]));
   };
-  const EXTENSIONS = [
-    "storyletproj", "storyletbox", "storylettags", "storylethands", "storyletdeck",
-    "storyletview", "storyletmap", "storyletnotes", "storyletcontract",
-  ];
+  /** Every shard extension, from the ONE list: a new one is covered here
+   *  without anybody remembering this file. */
+  const EXTENSIONS = Object.values(SHARD_EXTENSIONS).map((ext) => ext.slice(1));
 
   it("pin every shard extension to LF, the merge driver and JSON5", () => {
     const f = files();
@@ -61,6 +60,35 @@ describe("the editor and git files init writes", () => {
       expect(editor, ext).toMatch(new RegExp(`[{,]${ext}[,}]`));
       expect(vscode, ext).toContain(`"*.${ext}": "json5"`);
     }
+  });
+});
+
+describe("what init writes, and in what order (CLI review 2026-10, items 17 and 22)", () => {
+  it("writes the project shard LAST, so a half-finished init is not a project", () => {
+    for (const kit of GAME_KITS) {
+      const result = runInit({ dir: mkdtempSync(join(tmpdir(), "init-order-")), name: "Kit", kit });
+      expect(result.writes.at(-1)!.path, kit).toBe(result.projectFile);
+      expect(result.writes.filter((w) => w.path.endsWith(SHARD_EXTENSIONS.project)), kit).toHaveLength(1);
+    }
+  });
+
+  it("names the editor Storyletter, never the retired Storylet Studio", () => {
+    for (const kit of GAME_KITS) {
+      const result = runInit({ dir: mkdtempSync(join(tmpdir(), "init-name-")), name: "Kit", kit });
+      for (const w of result.writes) expect(w.content, w.path).not.toContain("Storylet Studio");
+      expect(result.writes.find((w) => w.path.endsWith(".gitattributes"))!.content).toContain("Storyletter");
+    }
+  });
+
+  it("takes back what it wrote when the write fails part way, so it can be run again", () => {
+    const parent = mkdtempSync(join(tmpdir(), "init-undo-"));
+    const result = runInit({ dir: join(parent, "Kit"), name: "Kit" });
+    // Half the files landed before the failure.
+    for (const w of result.writes.slice(0, 3)) { mkdirSync(dirname(w.path), { recursive: true }); writeFileSync(w.path, w.content); }
+    expect(() => runInit({ dir: join(parent, "Kit"), name: "Kit" })).toThrow(/refusing to overwrite/);
+    undoInit(result);
+    expect(result.writes.some((w) => existsSync(w.path))).toBe(false);
+    expect(() => runInit({ dir: join(parent, "Kit"), name: "Kit" })).not.toThrow();
   });
 });
 

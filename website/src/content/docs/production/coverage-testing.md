@@ -226,8 +226,8 @@ least reached first
     runs dealt   dealt  played  card
   ?         0%       0       0  [Docks] ambush-at-the-ford
         gated on @hand.danger, written only by ambush-at-the-ford, which never came up either
+  ?         0%       0       0  [Market] pickpocket
         gated on @story.reputation, written only by ambush-at-the-ford, pickpocket, which never came up either
-  ‼         0%       0       0  [Market] pickpocket
           100%      51      20  [Market] mysterious-stranger
           100%    2000    1980  [Docks] rat-job
 ```

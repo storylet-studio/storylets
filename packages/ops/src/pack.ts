@@ -25,13 +25,18 @@ import { SHARD_EXTENSIONS } from "@storylet-studio/model";
 import type { ProjectShard } from "@storylet-studio/model";
 import { ASSETS_DIR, assetUse } from "./assets.js";
 import { findProjectDir, loadProject } from "./load.js";
+import type { LoadedProject } from "./load.js";
 import { ARCHIVE_ENTRY_OPTS } from "@wildwinter/toolkit/archive";
 import { GAME_SCOPES_DIR } from "@wildwinter/scoperegistry/scopes";
 import { readGameScopes } from "./game-scopes.js";
 
+export const PACK_MANIFEST = "storylets.manifest.json";
+export const PACK_EXTENSION = ".storyletpack";
+export const PACK_SCHEMA = "storylets/pack@0";
+
 /** The manifest at the pack root: what this envelope is, and what is in it. */
 export interface PackManifest {
-  schema: "storylets/pack@0";
+  schema: typeof PACK_SCHEMA;
   project: { id: string; name: string };
   /** Shard paths (relative, forward-slashed), sorted: the pack's contents. */
   files: string[];
@@ -62,10 +67,6 @@ export interface PackOptions {
   assets?: boolean;
 }
 
-export const PACK_MANIFEST = "storylets.manifest.json";
-export const PACK_EXTENSION = ".storyletpack";
-export const PACK_SCHEMA = "storylets/pack@0";
-
 /** Every shard extension a pack carries. */
 const SHARD_EXTS = Object.values(SHARD_EXTENSIONS);
 
@@ -78,61 +79,77 @@ const SHARD_EXTS = Object.values(SHARD_EXTENSIONS);
 // and no folder entries, so an unchanged project packs to the same bytes.
 const ENTRY_OPTS = ARCHIVE_ENTRY_OPTS;
 
-/** Every file under `dir` (recursively) whose name ends in one of `exts`. */
-
-
 export class PackError extends Error {}
 
-/** Pack a project's source shards into `.storyletpack` bytes. */
-export async function runPack(startPath: string, opts: PackOptions = {}): Promise<Buffer> {
-  const root = findProjectDir(startPath);
-  if (root === undefined) throw new PackError(`not a storylets project: ${startPath}`);
+/** Bytes that are not a pack at all: not a zip. `which` says which of the two
+ *  packs a merge was given, since the message has to name the file. */
+export class NotAPackError extends PackError {
+  constructor(readonly which: "pack" | "base" = "pack") {
+    super("not a .storyletpack");
+  }
+}
 
-  const projectFileName = readdirSync(root).find((f) => f.endsWith(SHARD_EXTENSIONS.project));
+/**
+ * Pack a project's source shards into `.storyletpack` bytes.
+ *
+ * `project` is a path at or inside the project, or the project already loaded:
+ * a caller that has loaded it to report its problems (the CLI) or has it open
+ * (the editor) passes it, and the project is not read a second time. The tree is
+ * walked ONCE, for the shards and the conflict sidecars together.
+ */
+export async function runPack(project: string | LoadedProject, opts: PackOptions = {}): Promise<Buffer> {
+  const root = typeof project === "string" ? findProjectDir(project) : project.dir;
+  if (root === undefined) throw new PackError(`not a storylets project: ${String(project)}`);
+
+  // The project shard as the loader read it, or straight off the disk when the
+  // project would not load: a project somebody needs to FIX is still a delivery.
+  const loaded = typeof project === "string" ? loadProject(root) : project;
+  const projectFileName = loaded.source?.path ?? readdirSync(root).find((f) => f.endsWith(SHARD_EXTENSIONS.project));
   if (projectFileName === undefined) throw new PackError(`no project shard in ${root}`);
-  const project = parseSource(readFileSync(join(root, projectFileName), "utf8")) as ProjectShard;
+  const shard = loaded.source?.project
+    ?? parseSource(readFileSync(join(root, projectFileName), "utf8")) as ProjectShard;
+
+  // Layout-independent: whatever the folder shape, every shard under the root
+  // travels. The compiled bundle deliberately does NOT - a pack is source.
+  const walked = walkProjectFiles(root, [...SHARD_EXTS, CONFLICT_SIDECAR_EXTENSION])
+    .map((abs) => ({ abs, rel: relative(root, abs).split(sep).join("/") }));
 
   // An unresolved merge must not travel. A pack is what somebody else opens and
   // works from, and the merged model resolves conflicted values PROVISIONALLY
   // to ours - so packing one hands over a discarded edit as though it were
   // agreed, with nothing on the receiving side to say so. merge.ts has stated
   // the rule since it was written ("an unresolved merge cannot reach CI or
-  // export"); only validate enforced it until 2026-08-29, and pack does not
-  // even parse the project, so nothing here was looking.
-  const sidecars = walkProjectFiles(root, [CONFLICT_SIDECAR_EXTENSION])
-    .map((abs) => relative(root, abs).split(sep).join("/"));
+  // export"); only validate enforced it until 2026-08-29.
+  const sidecars = walked.filter((f) => f.rel.endsWith(CONFLICT_SIDECAR_EXTENSION)).map((f) => f.rel);
   if (sidecars.length > 0) {
     throw new PackError(
       `unresolved merge in this project, so it cannot be packed:\n  ${sidecars.join("\n  ")}\n`
       + "Resolve the conflicts and delete the .storyletconflict sidecars first.");
   }
-
-  // Layout-independent: whatever the folder shape, every shard under the root
-  // travels. The compiled bundle deliberately does NOT - a pack is source.
-  const files = walkProjectFiles(root, SHARD_EXTS)
-    .map((abs) => ({ abs, rel: relative(root, abs).split(sep).join("/") }))
-    .sort((a, b) => a.rel.localeCompare(b.rel));
+  const files = walked.sort((a, b) => a.rel.localeCompare(b.rel));
 
   // Assets travel only when asked, and the ask has two levels: the project's own
   // default, overridden per pack. Some projects would benefit from sending their
   // pictures and others never would, so neither "always" nor "never" is right.
-  const wanted = opts.assets ?? project.export?.packAssets ?? false;
+  const wanted = opts.assets ?? shard.export?.packAssets ?? false;
   // REFERENCED assets only. An orphan is a file no map uses - ordinary work makes
   // them, since undoing an import keeps its bytes on purpose - and a delivery
   // should carry the project's content rather than everything that has ever been
   // in the folder. Nothing is lost: the sender still has the file.
-  const assets = wanted ? referencedAssets(root) : [];
+  const assets = wanted && loaded.source !== undefined
+    ? assetUse(root, loaded.source).used.map((name) => ({ abs: join(root, ASSETS_DIR, name), rel: `${ASSETS_DIR}/${name}` }))
+    : [];
 
   // The game's shared scopes, when the project has a folder: found exactly as
   // the loader finds it (the `gameScopes` override included), and carried as
   // the text on disk. The folder sits above the project, so without this the
   // recipient's tool would work alone. No folder carries nothing, and the pack
   // is byte for byte what it was before packs carried scopes.
-  const scopes = gameScopesFiles(root, projectFileName, project.gameScopes);
+  const scopes = gameScopesFiles(root, projectFileName, shard.gameScopes);
 
   const manifest: PackManifest = {
     schema: PACK_SCHEMA,
-    project: { id: project.project.id, name: project.project.name },
+    project: { id: shard.project.id, name: shard.project.name },
     files: files.map((f) => f.rel),
     ...(assets.length > 0 ? { assets: assets.map((a) => a.rel) } : {}),
     ...(scopes.length > 0 ? { gameScopes: scopes.map((f) => f.name) } : {}),
@@ -147,19 +164,6 @@ export async function runPack(startPath: string, opts: PackOptions = {}): Promis
   for (const f of scopes) zip.file(`${GAME_SCOPES_DIR}/${f.name}`, f.text, ENTRY_OPTS);
 
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", streamFiles: false });
-}
-
-/** Every asset a map in this project actually uses, project-relative and sorted.
- *  Orphans are left behind (see the note at the call). */
-function referencedAssets(root: string): { abs: string; rel: string }[] {
-  const loaded = loadProject(root);
-  if (!loaded.source) return [];
-  const out: { abs: string; rel: string }[] = [];
-  for (const name of assetUse(root, loaded.source).used) {
-    const abs = join(root, ASSETS_DIR, name);
-    out.push({ abs, rel: relative(root, abs).split(sep).join("/") });
-  }
-  return out.sort((a, b) => a.rel.localeCompare(b.rel));
 }
 
 /** Every `*.scopes.json` in the project's game scopes folder, sorted, with its
@@ -177,9 +181,11 @@ function gameScopesFiles(root: string, projectFileName: string, override: unknow
   return out;
 }
 
-/** Read a pack's manifest without exploding it (the editor's "what is this?"). */
+/** Read a pack's manifest without exploding it (the editor's "what is this?").
+ *  Undefined for a zip with no manifest, and for bytes that are not a zip. */
 export async function readPackManifest(bytes: Buffer | Uint8Array): Promise<PackManifest | undefined> {
-  const zip = await JSZip.loadAsync(bytes);
+  let zip: JSZip;
+  try { zip = await JSZip.loadAsync(bytes); } catch { return undefined; }
   const entry = zip.file(PACK_MANIFEST);
   if (!entry) return undefined;
   try {

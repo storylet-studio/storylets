@@ -17,8 +17,13 @@
 // Pure - data in, data out, no I/O, no VCS.
 // ---------------------------------------------------------------------------
 
-import { canonicalStringify } from "@storylet-studio/compiler";
+import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
 import type { Issue } from "@storylet-studio/compiler";
+import {
+  BOX_SCHEMA, CONTRACT_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, MAP_SCHEMA, NOTES_SCHEMA, PROJECTMAP_SCHEMA,
+  PROJECT_SCHEMA, TAGS_SCHEMA, VIEW_SCHEMA,
+} from "@storylet-studio/model";
+import type { PlannedWrite } from "./write.js";
 
 export type MergeFileType = "project" | "box" | "tags" | "hands" | "deck" | "view" | "map" | "projectmap" | "notes" | "contract";
 
@@ -79,20 +84,29 @@ const eq = (a: unknown, b: unknown): boolean => canonicalStringify(a) === canoni
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 const asArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
-/** Detect the merge type from a shard's `schema` tag. */
+/** A schema tag without its version: `storylets/deck@0` is `storylets/deck`. */
+const schemaName = (schema: string): string => schema.split("@")[0]!;
+
+/**
+ * Every shard schema, by name, to its merge type: an EXACT table, built from
+ * the model's own constants. Until 2026-10-06 this was a chain of prefix
+ * tests, and `storylets/projectmap` matched `storylets/project` first, so two
+ * designers moving different zones of the project map merged it with the
+ * project shard's strategy (its group atomic) and conflicted.
+ */
+const MERGE_TYPES: ReadonlyMap<string, MergeFileType> = new Map(([
+  [PROJECT_SCHEMA, "project"], [BOX_SCHEMA, "box"], [TAGS_SCHEMA, "tags"], [HANDS_SCHEMA, "hands"],
+  [DECK_SCHEMA, "deck"], [VIEW_SCHEMA, "view"], [MAP_SCHEMA, "map"], [PROJECTMAP_SCHEMA, "projectmap"],
+  [NOTES_SCHEMA, "notes"], [CONTRACT_SCHEMA, "contract"],
+] as const).map(([schema, type]): [string, MergeFileType] => [schemaName(schema), type]));
+
+/** Detect the merge type from a shard's `schema` tag. The version is not part
+ *  of the type: a skew between the three sides is `runMerge`'s to refuse. */
 export function detectMergeType(file: { schema?: unknown }): MergeFileType {
   const s = typeof file.schema === "string" ? file.schema : "";
-  if (s.startsWith("storylets/project")) return "project";
-  if (s.startsWith("storylets/box")) return "box";
-  if (s.startsWith("storylets/tags")) return "tags";
-  if (s.startsWith("storylets/hands")) return "hands";
-  if (s.startsWith("storylets/deck")) return "deck";
-  if (s.startsWith("storylets/view")) return "view";
-  if (s.startsWith("storylets/map")) return "map";
-  if (s.startsWith("storylets/projectmap")) return "projectmap";
-  if (s.startsWith("storylets/notes")) return "notes";
-  if (s.startsWith("storylets/contract")) return "contract";
-  throw new MergeInputError(`cannot detect a storylets merge type from schema '${s}'`);
+  const type = MERGE_TYPES.get(schemaName(s));
+  if (type === undefined) throw new MergeInputError(`cannot detect a storylets merge type from schema '${s}'`);
+  return type;
 }
 
 // --- the strategy schema -------------------------------------------------------
@@ -405,4 +419,114 @@ export const CONFLICT_SIDECAR_EXTENSION = ".storyletconflict";
 /** The sidecar body: everything a UI needs to render both sides. */
 export function conflictSidecar(result: MergeResult): string {
   return JSON.stringify({ type: result.type, conflicts: result.conflicts, warnings: result.warnings }, null, 2) + "\n";
+}
+
+/**
+ * A shard in the MERGE's own normal form: `runMerge(x, x, x)`.
+ *
+ * The order of an id-keyed array is never a change (the ruling of 2026-09-07,
+ * which the server compares by too). The merge sorts every keyed array and
+ * every open map as it folds, so a merged shard comes back ordered whether or
+ * not the copy on disk was, and a comparison of canonical TEXT then reads a
+ * sort as edits nobody made. Asking the merge itself is what keeps every caller
+ * agreeing about what a change is: there is one normal form and it is the one
+ * the merge already defines.
+ *
+ * A shard the merge cannot type, anything that is not one of ours, is its own
+ * normal form, because there is no strategy to normalise it with.
+ */
+export function normalForm(shard: Record<string, unknown>): Record<string, unknown> {
+  try {
+    return runMerge(shard, shard, shard).merged;
+  } catch {
+    return shard;
+  }
+}
+
+/** Do two shard texts say the same thing? Compared in the normal form above, and
+ *  byte for byte when either will not parse: a shard somebody has broken by hand
+ *  is still a difference. */
+function sameShard(a: string, b: string): boolean {
+  try {
+    const normal = (text: string): string => canonicalStringify(normalForm(parseSource(text) as Obj));
+    return normal(a) === normal(b);
+  } catch {
+    return a === b;
+  }
+}
+
+/** One shard to fold in: theirs, against ours and the common ancestor. */
+export interface ShardMergeInput {
+  /** Project-relative path, which is what a parse failure names. */
+  rel: string;
+  /** Where the shard is written. */
+  path: string;
+  /** The shard as it stands here, or undefined when we do not have it. */
+  ours: string | undefined;
+  theirs: string;
+  /** The ancestor, or undefined when the shard did not exist then. */
+  base: string | undefined;
+  /** Take theirs whole rather than merging it (a pull's contract shard). */
+  replace?: boolean;
+  /** What a parse failure calls the other two sides ("returned" and "sent"). */
+  sides?: { theirs: string; base: string };
+}
+
+/** What happened to one shard, and what to write for it. */
+export interface ShardMergeStep {
+  outcome: "added" | "merged" | "replaced";
+  /** The shard's new content, or absent when it already says it. */
+  write?: PlannedWrite;
+  /** A `.storyletconflict` sidecar, when the merge did not resolve cleanly. */
+  sidecar?: PlannedWrite;
+  /** The merge itself, for a shard that was merged. */
+  result?: MergeResult;
+}
+
+/**
+ * Plan one shard of a returned or pulled pack: the disposition `unpack --merge`
+ * and Storyletter's pull share (pack-merge-back.md section 3), in one place so
+ * the two cannot drift again.
+ *
+ *   - present only theirs: written verbatim, as an add;
+ *   - `replace`: theirs taken whole, written only when it says something else;
+ *   - otherwise a 3-way whose conflicts resolve to OURS with a sidecar.
+ *
+ * A shard present only on our side never reaches here: a whole-file delete is
+ * never propagated. A merge whose result is what the file already says WRITES
+ * NOTHING: the merge emits its own normal form, so a shard stored in another
+ * order comes back reordered and otherwise identical, and rewriting it would
+ * be a diff, and an unpushed edit, that nobody made.
+ *
+ * Pure: the caller reads the texts and commits the writes.
+ */
+export function planShardMerge(input: ShardMergeInput): ShardMergeStep {
+  const { rel, path, ours, theirs } = input;
+  if (ours === undefined) return { outcome: "added", write: { path, content: theirs } };
+  if (input.replace === true) {
+    return { outcome: "replaced", ...(sameShard(ours, theirs) ? {} : { write: { path, content: theirs } }) };
+  }
+  const sides = input.sides ?? { theirs: "theirs", base: "base" };
+  // Named parses. A shard that will not parse stops the merge, since you cannot
+  // three-way what you cannot read, but it says which shard and which side.
+  const read = (text: string, side: string): Obj => {
+    try { return parseSource(text) as Obj; }
+    catch (e) {
+      throw new MergeInputError(`${rel}: the ${side} copy will not parse (${e instanceof Error ? e.message : String(e)})`);
+    }
+  };
+  const oursObj = read(ours, "local");
+  const theirsObj = read(theirs, sides.theirs);
+  // No ancestor means the shard did not exist when the base was taken, so every
+  // field of theirs reads as an add. `{}` is how `runMerge` is told that, and it
+  // is exempt from the schema-skew check for exactly this reason.
+  const baseObj = input.base !== undefined ? read(input.base, sides.base) : {};
+  const result = runMerge(baseObj, oursObj, theirsObj);
+  const content = canonicalStringify(result.merged);
+  return {
+    outcome: "merged", result,
+    ...(content !== canonicalStringify(normalForm(oursObj)) ? { write: { path, content } } : {}),
+    ...(result.conflicts.length > 0
+      ? { sidecar: { path: `${path}${CONFLICT_SIDECAR_EXTENSION}`, content: conflictSidecar(result) } } : {}),
+  };
 }

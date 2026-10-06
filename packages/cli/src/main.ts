@@ -5,20 +5,22 @@
 // CI consume too.
 //
 // Flags are declared per command: a VALUED flag always consumes the next
-// token, a BOOLEAN flag never does, a REPEATED flag collects every use, and
-// an unknown flag is an error rather than a silent no-op. Exit codes:
+// token (or takes its value inline, `--flag=value`), a BOOLEAN flag never
+// does, a REPEATED flag collects every use, and an unknown flag is an error
+// rather than a silent no-op. `<command> --help` prints that command's usage.
+// Every usage error prints under one prefix, `usage: `. Exit codes:
 // 0 ok, 1 the operation found problems / failed, 2 usage. (Patter's CLI
 // conventions, carried whole.)
 // ---------------------------------------------------------------------------
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { deleteFile, writeBinaryFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
 import {
   canonicalStringify, conflictSidecar, loadProject, parseFlagValue, parseSource,
-  proposeCoverage, runAsk, runCoverage, runExport, runFormat, runInit, runMerge,
+  proposeCoverage, runAsk, runCoverage, runExport, runFormat, runInit, undoInit, runMerge,
   runNewBox, runPack, runUnpack, runUnpackMerge, runValidate, analyseInfluence, describeContribution,
-  CONFLICT_SIDECAR_EXTENSION, MergeInputError, PackError, UnsafeEntryError,
+  CONFLICT_SIDECAR_EXTENSION, MergeInputError, NotAPackError, PackError, UnsafeEntryError, isBinaryWrite,
   runResolve, // resolve: the --at lookup from the terminal
   runExportXlsx, // export-xlsx: the readable workbook
   runExportHtml, bundleOutputPath, // export-html: the playable page
@@ -27,7 +29,7 @@ import {
   planShareScopes, defaultGameScopesParent, // share-scopes: Storyletter's Share Scopes, from the terminal
   leastReachedFirst, sharePct, // coverage: the order and the Runs dealt column, as the window has them
 } from "@storylet-studio/ops";
-import type { BoxKit, CardCoverage, GameKit, Issue, PlannedWrite } from "@storylet-studio/ops";
+import type { BoxKit, CardCoverage, GameKit, Issue, PlannedFileWrite, PlannedWrite } from "@storylet-studio/ops";
 import { contractPropertyPath, contractPropertyType, turnSpan } from "@storylet-studio/model";
 import pkg from "../package.json" with { type: "json" };
 
@@ -49,14 +51,14 @@ Usage:
                                       map that disagree (alias: fmt)
                  [--check]            Report what would change; write nothing (for CI)
   storyletengine export [path]        Compile to the .storyletsc bundle (the project's
-                 [-o file]            declared path, or -o; -o - for stdout), and bring
+                 [-o FILE]            declared path, or -o; -o - for stdout), and bring
                                       game-scopes/storylets.scopes.json up to date
                                       when the game shares its scopes
                  [--map|--no-map]     Carry the project map's geometry (zone shapes,
                                       pictures and sites), overriding the project
                                       setting
   storyletengine export-html [path]   One self-contained, playable .html (runtime,
-                 [-o file]            board and bundle inlined; send it to anyone,
+                 [-o FILE]            board and bundle inlined; send it to anyone,
                                       opens in any browser; default: the bundle's
                                       path with .html; -o - for stdout)
   storyletengine export-xlsx [path]   The whole project as a readable .xlsx workbook
@@ -112,6 +114,7 @@ Usage:
                  [--propose]          Print an auto-proposed coverage block
                                       (drivers + arg domains) instead of running
   storyletengine --version            Print the version and exit (also -v, version)
+  storyletengine <command> --help     Print one command's usage (also help <command>)
 
 Exit codes: 0 ok, 1 the operation found problems, 2 usage. "merge" alone also
 maps a malformed INPUT to 2, so a version-control driver can tell "these three
@@ -122,9 +125,14 @@ to its own behaviour rather than trusting a guess.
 interface Io {
   log: (line: string) => void;
   error: (line: string) => void;
+  /** Raw output, written as it stands with no newline added: `-o -`, so what
+   *  arrives on stdout is the file's bytes exactly. Falls back to `log`. */
+  write?: (text: string) => void;
 }
 
-const FLAGS: Record<string, { boolean: string[]; valued: string[]; repeated: string[] }> = {
+interface FlagSpec { boolean: readonly string[]; valued: readonly string[]; repeated: readonly string[] }
+
+const FLAGS = {
   init: { boolean: [], valued: ["name", "kit"], repeated: [] },
   new: { boolean: [], valued: ["kit"], repeated: [] },
   validate: { boolean: [], valued: [], repeated: [] },
@@ -135,17 +143,68 @@ const FLAGS: Record<string, { boolean: string[]; valued: string[]; repeated: str
   peek: { boolean: ["deal-all"], valued: ["seed", "n"], repeated: ["where", "set"] },
   deal: { boolean: ["deal-all"], valued: ["seed"], repeated: ["set"] },
   resolve: { boolean: [], valued: [], repeated: [] },
+  "share-scopes": { boolean: [], valued: ["at"], repeated: [] },
   // --assets/--no-assets were read by the handler from the day they were
   // designed and never declared here, so every use of them was an "unknown
   // flag" and the override was unreachable. Declared now, with a test.
-  "share-scopes": { boolean: [], valued: ["at"], repeated: [] },
   pack: { boolean: ["assets", "no-assets"], valued: ["o"], repeated: [] },
   unpack: { boolean: ["merge"], valued: ["o", "base"], repeated: [] },
   merge: { boolean: ["json"], valued: ["o", "path"], repeated: [] },
   links: { boolean: ["json", "refs"], valued: ["deck", "box", "card"], repeated: [] },
   coverage: { boolean: ["json", "fail-on-gap", "propose"], valued: ["runs", "max-turns", "seed", "order"], repeated: [] },
   contract: { boolean: [], valued: [], repeated: [] },
+} satisfies Record<string, FlagSpec>;
+
+/** The commands, from the one table: the switch in `run` is exhaustive over
+ *  this, so a command declared and not handled is a compile error. */
+type Command = keyof typeof FLAGS;
+/** `in` would answer for `toString` too; only the table's own keys are commands. */
+const isCommand = (name: string): name is Command => Object.hasOwn(FLAGS, name);
+
+/** Each command's whole short form, printed after every usage error so the
+ *  fix is on screen: every flag, which the old one-off lines each left some
+ *  of out. The website's "Every command" block says the same. */
+const SHORT: Record<Command, string> = {
+  init: `init [dir] [--name X] [--kit ${GAME_KITS.join("|")}]`,
+  new: `new box [path] [--kit ${BOX_KITS.join("|")}]`,
+  validate: "validate [path]",
+  format: "format [path] [--check]",
+  export: "export [path] [-o FILE] [--map|--no-map]",
+  "export-html": "export-html [path] [-o FILE]",
+  "export-xlsx": "export-xlsx [path] -o FILE",
+  peek: "peek <box> [path] [--where group=tag ...] [--n N] [--set path=value ...] [--seed N] [--deal-all]",
+  deal: "deal <hand> [path] [--set path=value ...] [--seed N] [--deal-all]",
+  resolve: "resolve <query> [path]",
+  "share-scopes": "share-scopes [path] [--at DIR]",
+  pack: "pack [path] -o FILE [--assets|--no-assets]",
+  unpack: "unpack FILE -o DIR [--merge --base SENT.storyletpack]",
+  merge: "merge BASE OURS THEIRS [-o out] [--json] [--path realfile]",
+  links: "links [path] [--deck X | --box X | --card X] [--refs] [--json]",
+  coverage: "coverage [path] [--runs N] [--max-turns M] [--seed S] [--order least|deck] [--json] [--fail-on-gap] [--propose]",
+  contract: "contract show [installation] [path]",
 };
+
+/** Flags that say opposite things: both at once is a usage error, not a
+ *  silent win for whichever the handler happened to read first. */
+const OPPOSITES: [string, string][] = [["map", "no-map"], ["assets", "no-assets"]];
+
+/** One command's block of the usage text, for `<command> --help` and
+ *  `help <command>`: read out of USAGE, so there is one text to keep right. */
+export function commandUsage(command: Command): string {
+  const lines = USAGE.split("\n");
+  const start = lines.findIndex((l) => l.startsWith(`  storyletengine ${command} `));
+  let end = start + 1;
+  while (end < lines.length && /^ {3,}\S/.test(lines[end]!)) end++;
+  return ["Usage:", ...lines.slice(start, end)].join("\n");
+}
+
+/** A usage error, exit 2: each problem on a line, then the command's whole
+ *  short form, all of it under the one prefix. */
+function usage(io: Io, command: Command, ...problems: string[]): 2 {
+  for (const problem of problems) io.error(`usage: ${problem}`);
+  io.error(`usage: storyletengine ${SHORT[command]}`);
+  return 2;
+}
 
 export interface ParsedArgs {
   positionals: string[];
@@ -156,7 +215,7 @@ export interface ParsedArgs {
 }
 
 export function parseArgs(command: string, args: string[]): ParsedArgs {
-  const spec = FLAGS[command] ?? { boolean: [], valued: [], repeated: [] };
+  const spec: FlagSpec = isCommand(command) ? FLAGS[command] : { boolean: [], valued: [], repeated: [] };
   const positionals: string[] = [];
   const flags: Record<string, string | boolean> = {};
   const repeats: Record<string, string[]> = {};
@@ -167,11 +226,16 @@ export function parseArgs(command: string, args: string[]): ParsedArgs {
       positionals.push(token);
       continue;
     }
-    const name = token.replace(/^--?/, "");
+    // `--flag=value`, as Storyletter's own `--at=` reads: split at the first
+    // `=`, so a value may hold more of them (`--where=area=docks`).
+    const eq = token.startsWith("--") ? token.indexOf("=") : -1;
+    const name = (eq > 0 ? token.slice(0, eq) : token).replace(/^--?/, "");
+    const inline = eq > 0 ? token.slice(eq + 1) : undefined;
     if (spec.boolean.includes(name)) {
-      flags[name] = true;
+      if (inline !== undefined) errors.push(`--${name} takes no value`);
+      else flags[name] = true;
     } else if (spec.valued.includes(name) || spec.repeated.includes(name)) {
-      const value = args[++i];
+      const value = inline ?? args[++i];
       if (value === undefined) {
         errors.push(`flag --${name} needs a value`);
       } else if (spec.repeated.includes(name)) {
@@ -180,8 +244,11 @@ export function parseArgs(command: string, args: string[]): ParsedArgs {
         flags[name] = value;
       }
     } else {
-      errors.push(`unknown flag ${token}`);
+      errors.push(`unknown flag ${eq > 0 ? token.slice(0, eq) : token}`);
     }
+  }
+  for (const [on, off] of OPPOSITES) {
+    if (flags[on] === true && flags[off] === true) errors.push(`--${on} and --${off} contradict each other`);
   }
   return { positionals, flags, repeats, errors };
 }
@@ -199,6 +266,18 @@ function printIssues(issues: Issue[], io: Io): void {
   }
 }
 
+/** The same issue said once: `format` prints the load's issues and its own,
+ *  and an unparseable shard is in both. */
+function uniqueIssues(issues: Issue[]): Issue[] {
+  const seen = new Set<string>();
+  return issues.filter((i) => {
+    const key = JSON.stringify([i.severity, i.path, i.where ?? "", i.message]);
+    return seen.has(key) ? false : (seen.add(key), true);
+  });
+}
+
+const hasError = (issues: readonly Issue[]): boolean => issues.some((i) => i.severity === "error");
+
 function commitWrites(writes: PlannedWrite[], io: Io): boolean {
   const batch = writeTextFiles(writes.map((w) => ({ filePath: w.path, content: w.content })));
   const failures = batch.results.filter((r) => !r.success);
@@ -206,32 +285,73 @@ function commitWrites(writes: PlannedWrite[], io: Io): boolean {
   return batch.success;
 }
 
-/** Write one binary artefact (a pack) through the VC layer, so a target that
- *  is under version control and read-only is checked out rather than refused. */
-function commitBinary(path: string, bytes: Buffer, io: Io): boolean {
+/** Write one binary artefact (a pack, a workbook, a picture) through the VC
+ *  layer, so a target that is under version control and read-only is checked
+ *  out rather than refused. The folder first: the VC layer's text batch makes
+ *  it and its binary write does not, so `-o` into a folder not there yet
+ *  failed for a pack and worked for a bundle. */
+function commitBinary(path: string, bytes: Uint8Array, io: Io): boolean {
+  try {
+    mkdirSync(dirname(resolve(path)), { recursive: true });
+  } catch (e) {
+    io.error(`write failed: ${path}: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
   const result = writeBinaryFile(path, bytes);
   if (!result.success) io.error(`write failed [${result.status}]: ${result.message}`);
   return result.success;
 }
 
-/** Parse repeated `k=v` flag values into a record. */
-function pairs(values: string[], flag: string, errors: string[]): Record<string, ReturnType<typeof parseFlagValue>> {
-  const out: Record<string, ReturnType<typeof parseFlagValue>> = {};
+/** Commit a plan of text and binary writes in the order it gives, stopping at
+ *  the first that fails: the order is the plan's (export's pictures before
+ *  the bundle that names them), never the front end's. */
+function commitPlan(writes: PlannedFileWrite[], io: Io): boolean {
+  for (const w of writes) {
+    if (!(isBinaryWrite(w) ? commitBinary(w.path, w.bytes, io) : commitWrites([w], io))) return false;
+  }
+  return true;
+}
+
+/** Delete one file through the VC layer, saying so when it cannot. */
+function commitDelete(path: string, io: Io): boolean {
+  const result = deleteFile(path);
+  if (!result.success) io.error(`delete failed [${result.status}]: ${result.message}`);
+  return result.success;
+}
+
+/** Split repeated `k=v` flag values into a record, the values as written. */
+function pairs(values: string[], flag: string, errors: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
   for (const raw of values) {
     const eq = raw.indexOf("=");
     if (eq <= 0) {
       errors.push(`--${flag} expects k=v, got "${raw}"`);
       continue;
     }
-    out[raw.slice(0, eq)] = parseFlagValue(raw.slice(eq + 1));
+    out[raw.slice(0, eq)] = raw.slice(eq + 1);
   }
   return out;
 }
 
+/** `a`, `a and b`, `a, b and c`. */
+const listed = (items: string[]): string =>
+  items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+
 /** Run one CLI invocation. Returns the process exit code. */
-export async function run(argv: string[], io: Io = { log: console.log, error: console.error }): Promise<number> {
+export async function run(
+  argv: string[],
+  io: Io = { log: console.log, error: console.error, write: (text) => { process.stdout.write(text); } },
+): Promise<number> {
   const [rawCommand, ...rest] = argv;
-  const command = rawCommand === "fmt" ? "format" : rawCommand;
+  const alias = (name: string | undefined): string | undefined => (name === "fmt" ? "format" : name);
+  const command = alias(rawCommand);
+  // `help <command>`: that command's usage, as `<command> --help` gives it.
+  if (command === "help" && rest[0] !== undefined) {
+    const asked = alias(rest[0])!;
+    if (!isCommand(asked)) { io.error(`usage: unknown command "${asked}" (storyletengine --help lists them)`); return 2; }
+    io.log(commandUsage(asked));
+    return 0;
+  }
   if (command === undefined || command === "help" || command === "--help" || command === "-h") {
     io.log(USAGE);
     return command === undefined ? 2 : 0;
@@ -246,31 +366,36 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
     io.log(pkg.version);
     return 0;
   }
-  if (!(command in FLAGS)) {
-    io.error(`unknown command "${command}"\n\n${USAGE}`);
+  if (!isCommand(command)) {
+    io.error(`usage: unknown command "${command}" (storyletengine --help lists them)`);
     return 2;
+  }
+  // Asking for help is not a usage error: the command's own block, exit 0.
+  if (rest.includes("--help") || rest.includes("-h")) {
+    io.log(commandUsage(command));
+    return 0;
   }
   const parsed = parseArgs(command, rest);
-  if (parsed.errors.length > 0) {
-    for (const e of parsed.errors) io.error(`usage: ${e}`);
-    return 2;
-  }
+  if (parsed.errors.length > 0) return usage(io, command, ...parsed.errors);
   const { positionals, flags, repeats } = parsed;
+  // `-o -`: the file's own bytes on stdout, with nothing added after them.
+  const raw = (text: string): void => (io.write ?? io.log)(text);
 
   switch (command) {
     case "init": {
       try {
         const kit = flags["kit"];
         if (kit !== undefined && (typeof kit !== "string" || !isGameKit(kit))) {
-          io.error(`usage: --kit is one of ${GAME_KITS.map((k) => `"${k}"`).join(", ")}, got "${String(kit)}"`);
-          return 2;
+          return usage(io, "init", `--kit is one of ${GAME_KITS.map((k) => `"${k}"`).join(", ")}, got "${String(kit)}"`);
         }
         const result = runInit({
           dir: positionals[0] ?? ".",
           ...(typeof flags["name"] === "string" ? { name: flags["name"] } : {}),
           ...(kit !== undefined ? { kit } : {}),
         });
-        if (!commitWrites(result.writes, io)) return 1;
+        // A half-written project would refuse every rerun ("a project already
+        // exists here"), so a failed write takes back the files just made.
+        if (!commitWrites(result.writes, io)) { undoInit(result); return 1; }
         io.log(`initialised "${result.name}" in ${result.dir}`);
         io.log(`next: storyletengine export ${result.dir}`);
         return 0;
@@ -280,18 +405,12 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
       }
     }
     case "new": {
-      if (positionals[0] !== "box") {
-        io.error(`usage: storyletengine new box [path] [--kit ${BOX_KITS.join("|")}]`);
-        return 2;
-      }
+      if (positionals[0] !== "box") return usage(io, "new");
       const kit = typeof flags["kit"] === "string" ? flags["kit"] : "blank";
       // Validated against the ONE list, so a kit added or withdrawn in ops
       // needs no edit here. The literal that used to be on this line is why
       // the usage line above still offered two kits after `dialogue` landed.
-      if (!isBoxKit(kit)) {
-        io.error(`usage: --kit is one of ${BOX_KITS.map((k) => `"${k}"`).join(", ")}, got "${kit}"`);
-        return 2;
-      }
+      if (!isBoxKit(kit)) return usage(io, "new", `--kit is one of ${BOX_KITS.map((k) => `"${k}"`).join(", ")}, got "${kit}"`);
       const loaded = loadProject(positionals[1] ?? ".");
       // Unconditionally, as every other loading command does. This was inside
       // the catch, so scaffolding into a project with warnings printed nothing
@@ -318,8 +437,10 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
     case "format": {
       const loaded = loadProject(positionals[0] ?? ".");
       const result = runFormat(loaded);
-      printIssues(result.issues, io);
-      if (result.issues.some((i) => i.severity === "error")) return 1;
+      // The load's issues always (they were never printed here), then the
+      // format's own; an unparseable shard is in both and is said once.
+      printIssues(uniqueIssues([...loaded.issues, ...result.issues]), io);
+      if (hasError(result.issues)) return 1;
       if (result.changed.length === 0 && result.removed.length === 0 && result.moved.length === 0) {
         io.log("all shards canonical");
         return 0;
@@ -335,22 +456,24 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
       // it at its new address. The old copies are deleted only once the shards
       // that pointed at them have been rewritten.
       for (const move of result.moved) {
-        mkdirSync(dirname(move.to), { recursive: true });
         if (!commitBinary(move.to, readFileSync(move.from), io)) return 1;
       }
       if (!commitWrites(result.changed, io)) return 1;
       // A shard the migration emptied. Deleted through the VC layer, like
-      // every other write, so a checked-in read-only file is checked out first.
-      for (const path of result.removed) deleteFile(path);
+      // every other write, so a checked-in read-only file is checked out
+      // first. Every delete is tried and every failure said: the new copies
+      // are written by now, so what is left is a tidy-up the author can finish.
+      let deleted = true;
+      for (const path of result.removed) deleted = commitDelete(path, io) && deleted;
       for (const move of result.moved) {
-        deleteFile(move.from);
+        deleted = commitDelete(move.from, io) && deleted;
         const folder = dirname(move.from);
         try { if (readdirSync(folder).length === 0) rmdirSync(folder); } catch { /* not ours to insist on */ }
       }
       for (const line of result.migrated) io.log(line);
       const touched = result.changed.length + result.removed.length;
       io.log(`formatted ${touched} shard(s)${result.moved.length > 0 ? `, moved ${result.moved.length} picture(s)` : ""}`);
-      return 0;
+      return deleted ? 0 : 1;
     }
     case "export": {
       const loaded = loadProject(positionals[0] ?? ".");
@@ -363,22 +486,16 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
       printIssues(result.issues, io);
       if (!result.bundle) return 1;
       if (out === "-") {
-        io.log(result.text!);
+        raw(result.text!);
         return 0;
       }
-      if (!commitWrites([result.write!], io)) return 1;
-      for (const asset of result.assets) {
-        mkdirSync(dirname(asset.path), { recursive: true });
-        if (!commitBinary(asset.path, Buffer.from(asset.bytes), io)) return 1;
-      }
-      io.log(`exported ${result.write!.path}`);
-      if (result.assets.length > 0) io.log(`  with ${result.assets.length} map picture(s)`);
-      // The game's shared scopes folder, when the project has one: what the other tools read
-      // of this project, written only when it changed.
-      if (result.scopesWrite !== undefined) {
-        if (!commitWrites([result.scopesWrite], io)) return 1;
-        io.log(`wrote ${result.scopesWrite.path}`);
-      }
+      // The plan's own order: the map pictures, the bundle that names them,
+      // then the game's shared scopes file, written only when it changed.
+      if (!commitPlan(result.writes, io)) return 1;
+      io.log(`exported ${result.path!}`);
+      const pictures = result.writes.filter(isBinaryWrite).length;
+      if (pictures > 0) io.log(`  with ${pictures} map picture(s)`);
+      for (const w of result.writes) if (!isBinaryWrite(w) && w.path !== result.path) io.log(`wrote ${w.path}`);
       return 0;
     }
     // export-html: the playable page (parity audit 9.3). Patter's export-html:
@@ -389,7 +506,7 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
       printIssues(result.issues, io);
       if (result.html === undefined) return 1;
       if (flags["o"] === "-") {
-        io.log(result.html);
+        raw(result.html);
         return 0;
       }
       const target = typeof flags["o"] === "string" ? flags["o"] : bundleOutputPath(loaded).replace(/\.[^./\\]+$/, ".html");
@@ -401,10 +518,7 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
     // loaded source, so it needs no compile and no bundle; -o is required, as
     // for pack, because a spreadsheet has no declared home in the project.
     case "export-xlsx": {
-      if (typeof flags["o"] !== "string") {
-        io.error("usage: export-xlsx [path] -o <file.xlsx>");
-        return 2;
-      }
+      if (typeof flags["o"] !== "string") return usage(io, "export-xlsx");
       const loaded = loadProject(positionals[0] ?? ".");
       printIssues(loaded.issues, io);
       if (!loaded.source) return 1;
@@ -417,24 +531,18 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
     case "peek":
     case "deal": {
       const target = positionals[0];
-      if (target === undefined) {
-        io.error(command === "peek"
-          ? "usage: peek <box> [path] [--where group=tag ...] [--n N]"
-          : "usage: deal <hand> [path]");
-        return 2;
-      }
+      if (target === undefined) return usage(io, command);
       const errors: string[] = [];
-      const criteria = Object.fromEntries(
-        Object.entries(pairs(repeats["where"] ?? [], "where", errors)).map(([k, v]) => [k, String(v)]));
-      const sets = pairs(repeats["set"] ?? [], "set", errors);
+      // --where names a tag, so its value is taken as written ("1.0" is the
+      // tag 1.0); only --set's are typed, since they are property values.
+      const criteria = pairs(repeats["where"] ?? [], "where", errors);
+      const sets = Object.fromEntries(
+        Object.entries(pairs(repeats["set"] ?? [], "set", errors)).map(([k, v]) => [k, parseFlagValue(v)]));
       const seed = typeof flags["seed"] === "string" ? Number(flags["seed"]) : undefined;
       if (seed !== undefined && !Number.isInteger(seed)) errors.push("--seed must be an integer");
       const n = typeof flags["n"] === "string" ? Number(flags["n"]) : undefined;
       if (n !== undefined && !Number.isInteger(n)) errors.push("--n must be an integer");
-      if (errors.length > 0) {
-        for (const e of errors) io.error(`usage: ${e}`);
-        return 2;
-      }
+      if (errors.length > 0) return usage(io, command, ...errors);
       const loaded = loadProject(positionals[1] ?? ".");
       const result = runAsk(loaded, {
         ...(command === "peek"
@@ -460,10 +568,7 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
     // build step, and the errors this material raises need no verb of their own
     // because `validate` already raises them.
     case "contract": {
-      if (positionals[0] !== "show") {
-        io.error("usage: storyletengine contract show [installation] [path]");
-        return 2;
-      }
+      if (positionals[0] !== "show") return usage(io, "contract");
       // `contract show <path>` with no installation has to be told apart from
       // `contract show <installation>`: a path is a thing on disk, a name is not.
       const asked = positionals[1];
@@ -501,10 +606,7 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
     }
     case "resolve": {
       const query = positionals[0];
-      if (query === undefined) {
-        io.error("usage: resolve <query> [path]");
-        return 2;
-      }
+      if (query === undefined) return usage(io, "resolve");
       const loaded = loadProject(positionals[1] ?? ".");
       printIssues(loaded.issues, io);
       if (!loaded.source) return 1;
@@ -521,21 +623,16 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
     }
     case "share-scopes": {
       // The terminal's twin of Storyletter's File > Share Scopes with Other Tools
-      // (patterkit design/shared-scopes.md): the same plan, so the two can't
-      // disagree about what the folder holds.
+      // (patterkit design/shared-scopes.md): the same plan, committed as it
+      // stands in one batch, so the two can't disagree about what is written.
       const loaded = loadProject(positionals[0] ?? ".");
-      if (!loaded.source) { printIssues(loaded.issues, io); return 1; }
+      printIssues(loaded.issues, io);
+      if (!loaded.source || hasError(loaded.issues)) return 1;
       const parent = typeof flags["at"] === "string" ? resolve(flags["at"]) : defaultGameScopesParent(loaded.dir);
       const plan = planShareScopes(loaded, parent);
       if ("error" in plan) { io.error(`share-scopes: ${plan.error}`); return 1; }
-      const writes: PlannedWrite[] = [...plan.writes];
-      if (plan.override !== undefined) {
-        const shard = { ...loaded.source.project, gameScopes: plan.override };
-        writes.push({ path: join(loaded.dir, loaded.source.path), content: canonicalStringify(shard) });
-      }
-      mkdirSync(plan.dir, { recursive: true });
-      if (!commitWrites(writes, io)) return 1;
-      for (const w of writes) io.log(`wrote ${w.path}`);
+      if (!commitWrites(plan.writes, io)) return 1;
+      for (const w of plan.writes) io.log(`wrote ${w.path}`);
       if (plan.override !== undefined) {
         io.log(`the project names the folder (gameScopes: ${plan.override}), since looking up from the project wouldn't find it`);
       }
@@ -543,32 +640,24 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
     }
 
     case "pack": {
-      if (typeof flags["o"] !== "string") {
-        io.error("usage: pack [path] -o <file.storyletpack>");
-        return 2;
-      }
+      if (typeof flags["o"] !== "string") return usage(io, "pack");
       // A pack is a HANDOVER, so what is wrong with it is worth saying before
-      // it goes. runPack deliberately does not parse the project - it walks
-      // shards by extension, layout-independent - so nothing was looking, and
-      // you could pack a project whose deck does not compile and be told
-      // "packed <file>", exit 0 (2026-08-29). Reported, not refused: sending
-      // somebody a broken project to FIX is a real errand, and an unresolved
-      // MERGE is the case that is refused (in runPack itself).
-      printIssues(loadProject(positionals[0] ?? ".").issues, io);
+      // it goes: you could once pack a project with a deck that does not even
+      // load and be told "packed <file>", exit 0 (2026-08-29). These are the
+      // LOAD's issues, not a compile's: a condition that does not compile is
+      // validate's to find. Reported, not refused: sending somebody a broken
+      // project to FIX is a real errand, and an unresolved MERGE is the case
+      // that is refused (in runPack itself). The one load serves both.
+      const loaded = loadProject(positionals[0] ?? ".");
+      printIssues(loaded.issues, io);
       let bytes: Buffer;
       try {
         // --assets / --no-assets override the project's own default for this
         // one delivery: a pack is a handover, and who it is for changes the
-        // answer (a designer wants the site plan, a writer does not).
-        //
-        // `assets` is BOOLEAN in FLAGS, so flags["assets"] is true or absent:
-        // the old `!== "false"` compared a boolean against a string and was
-        // always true, reading as though `--assets false` were supported. It
-        // is not; --no-assets is the off switch.
-        const assets = flags["assets"] !== undefined
-          ? true
-          : (flags["no-assets"] !== undefined ? false : undefined);
-        bytes = await runPack(positionals[0] ?? ".", ...(assets === undefined ? [] : [{ assets }]));
+        // answer (a designer wants the site plan, a writer does not). Both at
+        // once is a usage error, caught with the flags.
+        const assets = flags["assets"] === true ? true : (flags["no-assets"] === true ? false : undefined);
+        bytes = await runPack(loaded.source !== undefined ? loaded : (positionals[0] ?? "."), ...(assets === undefined ? [] : [{ assets }]));
       } catch (e) {
         if (e instanceof PackError) { io.error(e.message); return 1; }
         throw e;
@@ -579,24 +668,14 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
     }
     case "unpack": {
       const file = positionals[0];
-      if (file === undefined) {
-        io.error("usage: unpack <file.storyletpack> -o <dir> [--merge --base <sent.storyletpack>]");
-        return 2;
-      }
-      if (typeof flags["o"] !== "string") {
-        io.error("usage: unpack <file.storyletpack> -o <dir> [--merge --base <sent.storyletpack>]");
-        return 2;
-      }
+      if (file === undefined || typeof flags["o"] !== "string") return usage(io, "unpack");
       const target = flags["o"];
 
       try {
         if (flags["merge"] === true) {
           // The return leg: fold a RETURNED pack into the project at -o, using
           // the pack we sent as the common ancestor.
-          if (typeof flags["base"] !== "string") {
-            io.error("usage: unpack --merge needs --base <sent.storyletpack> (the pack you sent)");
-            return 2;
-          }
+          if (typeof flags["base"] !== "string") return usage(io, "unpack", "--merge needs --base SENT.storyletpack (the pack you sent)");
           const result = await runUnpackMerge(readFileSync(file), readFileSync(flags["base"]), target);
           // BEFORE the writes and before the per-shard list, so it is the first
           // thing on screen rather than scrollback. The person most likely to
@@ -604,7 +683,9 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
           // picker to remind them what they just chose, and they were the only
           // one getting no help at all (the Patter side's point).
           if (result.provenance.message !== undefined) io.error(`warning: ${result.provenance.message}`);
-          if (!commitWrites([...result.writes, ...result.sidecars], io)) return 1;
+          // Sidecars first: if one fails, the shard it flags must not be left
+          // holding provisional content with nothing saying so.
+          if (!commitWrites([...result.sidecars, ...result.writes], io)) return 1;
           for (const shard of result.shards) {
             const n = shard.result ? shard.result.conflicts.length : 0;
             io.log(`${shard.added ? "added" : "merged"}: ${shard.path}${n > 0 ? ` (${n} conflict(s))` : ""}`);
@@ -652,6 +733,11 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
         // A pack from outside the team that tries to write outside the target
         // is a refusal, not a crash.
         if (e instanceof UnsafeEntryError) { io.error(`unpack refused: ${e.message}`); return 1; }
+        // A file that is not a zip at all: said, naming it, not a stack trace.
+        if (e instanceof NotAPackError) {
+          io.error(`unpack refused: ${e.which === "base" ? String(flags["base"]) : file} is ${e.message}`);
+          return 1;
+        }
         // Schema skew still refuses: two shards of different schema versions
         // cannot be three-wayed at all. A different PROJECT no longer refuses -
         // it warns above, before the writes.
@@ -662,10 +748,7 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
     }
     case "merge": {
       const [basePath, oursPath, theirsPath] = positionals;
-      if (!basePath || !oursPath || !theirsPath) {
-        io.error("usage: merge BASE OURS THEIRS [-o out] [--json]");
-        return 2;
-      }
+      if (!basePath || !oursPath || !theirsPath) return usage(io, "merge");
       const sides: Record<string, unknown>[] = [];
       for (const path of [basePath, oursPath, theirsPath]) {
         try {
@@ -725,8 +808,11 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
       return 0;
     }
     case "links": {
+      // An analysis of a project that did not wholly load answers about the
+      // part that did, as though it were the whole: refused (ruling M).
       const loaded = loadProject(positionals[0] ?? ".");
-      if (!loaded.source) { printIssues(loaded.issues, io); return 1; }
+      printIssues(loaded.issues, io);
+      if (!loaded.source || hasError(loaded.issues)) return 1;
       const scope = typeof flags["deck"] === "string" ? { kind: "deck" as const, deck: flags["deck"] }
         : typeof flags["box"] === "string" ? { kind: "box" as const, box: flags["box"] }
         : typeof flags["card"] === "string" ? { kind: "card" as const, card: flags["card"] }
@@ -747,37 +833,42 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
         const why = e.via.map(describeContribution).join("; ");
         io.log(`  ${name.get(e.from) ?? e.from} ${e.cls} ${name.get(e.to) ?? e.to}  [${why}]`);
       }
-      for (const w of graph.warnings) io.error(`warning: ${w.message}`);
+      for (const w of graph.warnings) io.error(w.cardGameId !== undefined ? `warning: card ${w.cardGameId}: ${w.message}` : `warning: ${w.message}`);
       return 0;
     }
     case "coverage": {
-      const loaded = loadProject(positionals[0] ?? ".");
-      if (!loaded.source) {
-        printIssues(loaded.issues, io);
-        return 1;
+      // The flags first: a usage error is exit 2 whatever the project holds.
+      const num = (name: string): number | undefined => {
+        const value = flags[name];
+        return typeof value === "string" ? Number(value) : undefined;
+      };
+      for (const name of ["runs", "max-turns"]) {
+        const v = num(name);
+        // Zero runs reported an empty sweep as a clean one.
+        if (v !== undefined && !(Number.isInteger(v) && v > 0)) return usage(io, "coverage", `--${name} must be a positive integer`);
       }
+      const seedValue = num("seed");
+      if (seedValue !== undefined && !Number.isInteger(seedValue)) return usage(io, "coverage", "--seed must be an integer");
+      const order = flags["order"] ?? "least";
+      if (order !== "least" && order !== "deck") return usage(io, "coverage", "--order must be least or deck");
+      // --propose prints a block and runs nothing, so the run's flags are said
+      // to do nothing rather than silently dropped.
+      const ignored = flags["propose"] === true
+        ? ["runs", "max-turns", "seed", "order", "json", "fail-on-gap"].filter((f) => flags[f] !== undefined).map((f) => `--${f}`)
+        : [];
+      if (ignored.length > 0) io.error(`warning: ${listed(ignored)} ${ignored.length === 1 ? "does" : "do"} nothing with --propose`);
+
+      // An analysis of a project that did not wholly load answers about the
+      // part that did, as though it were the whole: refused (ruling M).
+      const loaded = loadProject(positionals[0] ?? ".");
+      printIssues(loaded.issues, io);
+      if (!loaded.source || hasError(loaded.issues)) return 1;
       if (flags["propose"] === true) {
         const proposed = proposeCoverage(loaded.source);
         printIssues(proposed.issues, io);
         if (proposed.issues.some((i) => i.severity === "error")) return 1;
         io.log(canonicalStringify({ coverage: proposed.coverage }).trimEnd());
         return 0;
-      }
-      const num = (name: string): number | undefined => {
-        const raw = flags[name];
-        return typeof raw === "string" ? Number(raw) : undefined;
-      };
-      for (const name of ["runs", "max-turns", "seed"]) {
-        const v = num(name);
-        if (v !== undefined && !Number.isInteger(v)) {
-          io.error(`usage: --${name} must be an integer`);
-          return 2;
-        }
-      }
-      const order = flags["order"] ?? "least";
-      if (order !== "least" && order !== "deck") {
-        io.error(`usage: --order must be least or deck`);
-        return 2;
       }
       const runsFlag = num("runs");
       const maxTurnsFlag = num("max-turns");
@@ -832,6 +923,7 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
         // coverage's shape after 72c625f): headed columns, and a mark that
         // says which of the three faults a row is.
         const boxes = new Set(report.cards.map((c) => c.box));
+        const cardById = new Map(report.cards.map((c) => [c.id, c]));
         const deckLabel = (c: CardCoverage): string => (boxes.size > 1 ? `${c.boxName}/${c.deckName}` : c.deckName);
         const heading = "    runs dealt   dealt  played  card";
         const cardRow = (c: CardCoverage, withDeck: boolean): void => {
@@ -853,7 +945,7 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
           // never happened. Says where to look next rather than leaving two
           // never-dealt cards looking like two separate problems.
           for (const d of c.refsWrittenOnlyByNeverDealtCards ?? []) {
-            const names = d.by.map((id) => report.cards.find((x) => x.id === id)?.gameId ?? id);
+            const names = d.by.map((id) => cardById.get(id)?.gameId ?? id);
             io.log(`        gated on ${d.ref}, written only by ${names.join(", ")}, which never came up either`);
           }
         };
@@ -887,23 +979,21 @@ export async function run(argv: string[], io: Io = { log: console.log, error: co
           io.log("");
         }
         for (const o of report.outcomes.filter((x) => x.played === 0)) {
-          io.log(`never played: ${report.cards.find((c) => c.id === o.card)?.gameId}/${o.gameId}`);
+          io.log(`never played: ${cardById.get(o.card)?.gameId}/${o.gameId}`);
         }
         // The composed-name net: evaluation faults there, so the content
-        // silently never deals from those hands - worth a line each.
+        // silently never deals from those hands - worth a line each. On
+        // stderr, where every other command's warnings go.
         for (const u of report.unprovidedHandRefs) {
-          io.log(`unprovided: ${u.where} reads ${u.ref}, which ${u.hands.join(", ")} never composes`);
+          io.error(`unprovided: ${u.where} uses ${u.ref}, which ${u.hands.join(", ")} never composes`);
         }
         for (const d of report.diagnostics) {
-          io.log(`warning (${d.runs}/${report.runs} runs): ${d.where}: ${d.message}`);
+          io.error(`warning (${d.runs}/${report.runs} runs): ${d.where}: ${d.message}`);
         }
       }
       const gap = report.cards.some((c) => c.dealt === 0)
         || report.unprovidedHandRefs.length > 0 || report.diagnostics.length > 0;
       return flags["fail-on-gap"] === true && gap ? 1 : 0;
     }
-    default:
-      io.error(USAGE);
-      return 2;
   }
 }

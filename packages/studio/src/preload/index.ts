@@ -8,7 +8,7 @@ import { JOB_PROGRESS_CHANNEL, PROJECT_CHANGED } from "../shared/api.js";
 import type { JobProgress } from "../shared/api.js";
 import type {
   BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, LeavePromptDto, MapLayerPrefs, LeaveSettledDto, LiveLinkFrame, LiveLinkStatus, MenuCommand, OpenResult, PackOffer, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
-  UpdaterPromptOptions,
+  ProjectKit, UpdaterPromptOptions,
   UpdaterDownloadProgress,
 } from "../shared/api.js";
 import type { SaveFile } from "@storylet-studio/model";
@@ -18,7 +18,7 @@ const api: StudioApi = {
   openProjectDialog: () => ipcRenderer.invoke("project:openDialog"),
   openProjectPath: (path: string) => ipcRenderer.invoke("project:openPath", path),
   revealProject: () => { void ipcRenderer.invoke("project:reveal"); },
-  createProject: (name: string, kit?: "blank" | "with-patter" | "map-story" | "action-game") => ipcRenderer.invoke("project:create", name, kit),
+  createProject: (name: string, kit?: ProjectKit) => ipcRenderer.invoke("project:create", name, kit),
   openExample: (name: string) => ipcRenderer.invoke("example:open", name),
   closeProject: () => ipcRenderer.invoke("project:close"),
   clearRecents: () => ipcRenderer.invoke("state:clearRecents"),

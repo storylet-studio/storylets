@@ -9,6 +9,9 @@
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
+import { cpSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import { loadProject } from "../src/load.js";
@@ -98,6 +101,20 @@ describe("runExportHtml on the example project", () => {
     expect(maps[0].boxes).toEqual(["contracts", "encounters", "items", "news"]);
     const siteBoxes = new Set(maps[0].sites.map((s: { box: string }) => s.box));
     expect([...siteBoxes].sort()).toEqual(["contracts", "encounters", "items", "news"]);
+  });
+
+  it("refuses a project with a load error, rather than a page missing what failed to load (ruling M)", () => {
+    const dir = join(mkdtempSync(join(tmpdir(), "html-loaderr-")), "copy.storylets");
+    cpSync(exampleDir, dir, { recursive: true });
+    const deck = readdirSync(join(dir, "village", "decks"))[0]!;
+    writeFileSync(join(dir, "village", "decks", deck), "{ not json");
+    const refused = runExportHtml(loadProject(dir));
+    expect(refused.html).toBeUndefined();
+    expect(refused.issues.some((i) => i.severity === "error" && i.message.startsWith("unparseable JSON5"))).toBe(true);
+  });
+
+  it("says Storyletter, never the retired name", () => {
+    expect(html).not.toContain("Storylet Studio");
   });
 
   it("reports the load issues, and no page, for a folder with no project", () => {

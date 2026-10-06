@@ -33,6 +33,16 @@ usage error. `fmt` is an alias for `format`.
 Most commands take a project path as their last positional argument, defaulting to the
 current directory. You can point at the `.storylets` folder or anywhere inside it.
 
+A flag that takes a value takes it inline as well: `--runs=50`, `--where=area=docks`.
+`storyletengine <command> --help` prints one command's usage, and `--version` prints the
+version. A usage error says what is wrong and then the command's whole usage, every line
+starting `usage:`.
+
+Every command that loads the project prints the problems the load found. A load error
+(a shard that doesn't parse, say) stops `export`, `export-html`, `links`, `coverage` and
+`share-scopes` with exit 1, because what they would build or report would be missing
+whatever failed to load.
+
 ## Every command
 
 ```
@@ -53,6 +63,8 @@ storyletengine coverage [path] [--runs N] [--max-turns M] [--seed S] [--order le
 storyletengine share-scopes [path] [--at DIR]
 storyletengine pack [path] -o FILE [--assets|--no-assets]
 storyletengine unpack FILE -o DIR [--merge --base SENT.storyletpack]
+storyletengine --version
+storyletengine <command> --help
 ```
 
 ## init
@@ -129,7 +141,8 @@ formatted 1 shard(s)
 ```
 
 `--check` reports what would change and writes nothing, exiting 1 if anything isn't
-canonical. That's the CI form. `fmt` is an alias.
+canonical. That's the CI form. `fmt` is an alias. Pointed at a folder with no project in
+it, either form fails rather than reporting nothing to change.
 
 `format` is also how a project from before the [project map](/storyletter/maps/) moves onto
 it, the same upgrade Storyletter offers when it opens one. The map kept in a box becomes the
@@ -156,8 +169,9 @@ $ storyletengine export tavern.storylets
 exported .../storylet-dist/the-tavern.storyletsc
 ```
 
-It writes to the path the project shard declares. `-o file` overrides it; `-o -` writes to
-standard output. Export validates first and refuses to write anything on an error.
+It writes to the path the project shard declares. `-o file` overrides it; `-o -` writes the
+bundle to standard output exactly as it would be on disk. Export compiles first and refuses
+to write anything on an error, including a shard that won't load.
 
 `--map` carries the project map's drawing, meaning the zone shapes, the background pictures,
 and where each box's hands stand, with the pictures written to `assets/` beside the bundle.
@@ -316,7 +330,7 @@ contract says so and exits 1.
 
 ## merge
 
-The structured merge driver, an id-keyed three-way merge of Storylet Studio source files.
+The structured merge driver, an id-keyed three-way merge of storylets source files.
 
 ```
 storyletengine merge BASE OURS THEIRS -o OUT --path REALFILE
@@ -508,8 +522,8 @@ least reached first
     runs dealt   dealt  played  card
   ?         0%       0       0  [Docks] ambush-at-the-ford
         gated on @hand.danger, written only by ambush-at-the-ford, which never came up either
+  ?         0%       0       0  [Market] pickpocket
         gated on @story.reputation, written only by ambush-at-the-ford, pickpocket, which never came up either
-  ‼         0%       0       0  [Market] pickpocket
           100%      51      20  [Market] mysterious-stranger
           100%    2000    1980  [Docks] rat-job
 
@@ -539,7 +553,7 @@ for how to read them.
 | `--order least\|deck` | Least reached first (the default), or deck by deck as authored. |
 | `--json` | The full report as JSON. |
 | `--fail-on-gap` | Exit 1 on any never-dealt card, unprovided `@hand` read, or runtime warning. The CI form. |
-| `--propose` | Print a proposed coverage block instead of running. |
+| `--propose` | Print a proposed coverage block instead of running. The run's own flags do nothing with it, and it says so. |
 
 `--propose` derives drivers from your conditions (the literals they compare against, plus
 declared boolean and enum domains, skipping anything an outcome writes) and prints a block to

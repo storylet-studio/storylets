@@ -16,8 +16,9 @@
 //   - `@hand` is composed per deal from tags, hand properties and the ask's
 //     criteria, so two cards reading `@hand.danger` may or may not be talking
 //     about the same hand. Statically we cannot say, so hand-scope reads and
-//     writes raise a warning and produce NO edge. Conservative, and the same
-//     stance coverage.ts already takes for its honesty net.
+//     writes raise a warning and produce NO edge. Conservative: a coverage run
+//     with the observed-edge overlay (coverage.ts `observeEdges`) is where a
+//     link through @hand shows up, as evidence from real deals.
 //   - Cross-scope analysis stays inside the requested scope: a deck-scoped
 //     analysis draws edges among that deck's cards only. Whole-project
 //     influence is what `{ kind: "all" }` and the card pivot are for.
@@ -27,6 +28,7 @@ import { compileProject } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import { effectiveGameId } from "@storylet-studio/model";
 import type { AstNode, Box, Bundle, Card, Deck, Expression } from "@storylet-studio/model";
+import { writesOf } from "./analysis-common.js";
 
 /** The scopes an influence edge can travel through. `hand` is recognised so it
  *  can be reported as unanalysed rather than silently dropped. */
@@ -82,6 +84,9 @@ export interface AnalysisWarning {
   message: string;
   /** The card the warning was raised against, when it belongs to one. */
   card?: string;
+  /** That card's gameId, so a reader can be told which card without a lookup.
+   *  Warnings are said once per card and message. */
+  cardGameId?: string;
 }
 
 /** What to analyse. `card` pivots: it analyses everything and marks the focus,
@@ -116,10 +121,17 @@ type ReadWant =
   | { kind: "wants-bool"; value: boolean }
   | { kind: "wants-eq"; value: string | number | boolean }
   | { kind: "wants-neq"; value: string | number | boolean }
-  | { kind: "wants-gt"; threshold: number }
-  | { kind: "wants-lt"; threshold: number }
+  /** Above the threshold, or AT it when `inclusive` (`>=`). */
+  | { kind: "wants-gt"; threshold: number; inclusive: boolean }
+  /** Below the threshold, or AT it when `inclusive` (`<=`). */
+  | { kind: "wants-lt"; threshold: number; inclusive: boolean }
   | { kind: "wants-flag"; flag: string; sign: "+" | "-" }
   | { kind: "computed" };
+
+/** One property a condition reads, and what it wants of it. */
+interface ReadHit { scope: InfluenceScopeName; name: string; want: ReadWant }
+/** Where `readsOf` and `computedReads` put what they find. */
+interface ReadSink { push: (hit: ReadHit) => void }
 
 type WriteDoes =
   | { kind: "set-bool"; value: boolean }
@@ -158,7 +170,7 @@ const isSv = (n: AstNode): boolean => Array.isArray(n) && n[0] === "sv";
 /** Walk a condition for the properties it reads and what it wants of them.
  *  `polarity` tracks whether we are under a `not`: the whole point is that
  *  `not (@story.done)` wants done FALSE, so a write of true DISABLES. */
-function readsOf(ast: AstNode, polarity: boolean, out: ReadWant extends never ? never : { push: (w: { name: string; scope: InfluenceScopeName; want: ReadWant }) => void }, warn: (kind: AnalysisWarningKind, message: string) => void): void {
+function readsOf(ast: AstNode, polarity: boolean, out: ReadSink, warn: (kind: AnalysisWarningKind, message: string) => void): void {
   if (!Array.isArray(ast)) return;
   const tag = ast[0];
 
@@ -249,27 +261,22 @@ function readsOf(ast: AstNode, polarity: boolean, out: ReadWant extends never ? 
 
     if (op === ">" || op === ">=" || op === "<" || op === "<=") {
       const gt = op === ">" || op === ">=";
+      // Whether the threshold itself satisfies the comparison. A `not` turns
+      // `> 10` into `<= 10` and `>= 10` into `< 10`, so it flips this as well
+      // as the direction; swapping the operands (`10 <= @x`) flips only the
+      // direction.
+      const inclusive = (op === ">=" || op === "<=") === polarity;
+      const want = (wantsHigh: boolean, threshold: number): ReadWant =>
+        wantsHigh ? { kind: "wants-gt", threshold, inclusive } : { kind: "wants-lt", threshold, inclusive };
       // `@x > 5` wants x high; `5 > @x` wants x LOW, so the side matters.
       if (isSv(lhs) && typeof lit(rhs) === "number") {
         const scope = String(lhs[1]);
-        if (isScope(scope)) {
-          const wantsHigh = gt === polarity;
-          out.push({
-            scope, name: String(lhs[2]).toLowerCase(),
-            want: wantsHigh ? { kind: "wants-gt", threshold: lit(rhs) as number } : { kind: "wants-lt", threshold: lit(rhs) as number },
-          });
-        }
+        if (isScope(scope)) out.push({ scope, name: String(lhs[2]).toLowerCase(), want: want(gt === polarity, lit(rhs) as number) });
         return;
       }
       if (isSv(rhs) && typeof lit(lhs) === "number") {
         const scope = String(rhs[1]);
-        if (isScope(scope)) {
-          const wantsHigh = gt !== polarity;
-          out.push({
-            scope, name: String(rhs[2]).toLowerCase(),
-            want: wantsHigh ? { kind: "wants-gt", threshold: lit(lhs) as number } : { kind: "wants-lt", threshold: lit(lhs) as number },
-          });
-        }
+        if (isScope(scope)) out.push({ scope, name: String(rhs[2]).toLowerCase(), want: want(gt !== polarity, lit(lhs) as number) });
         return;
       }
       computedReads(lhs, out);
@@ -301,7 +308,7 @@ export function propertyRefs(ast: AstNode): { scope: InfluenceScopeName; name: s
 }
 
 /** Every ref inside a value position, as undecidable reads. */
-function computedReads(ast: AstNode, out: { push: (w: { name: string; scope: InfluenceScopeName; want: ReadWant }) => void }): void {
+function computedReads(ast: AstNode, out: ReadSink): void {
   if (!Array.isArray(ast)) return;
   if (ast[0] === "sv") {
     const scope = String(ast[1]);
@@ -313,14 +320,9 @@ function computedReads(ast: AstNode, out: { push: (w: { name: string; scope: Inf
 
 // --- reading a write ----------------------------------------------------------
 
-/** What one outcome change does to its target. */
-function writeOf(target: string, expr: Expression, warn: (kind: AnalysisWarningKind, message: string) => void): { scope: InfluenceScopeName; name: string; does: WriteDoes } | undefined {
-  const bare = target.startsWith("@") ? target.slice(1) : target;
-  const dot = bare.indexOf(".");
-  if (dot < 0) return undefined;
-  const scope = bare.slice(0, dot);
-  if (!isScope(scope)) return undefined;
-  const name = bare.slice(dot + 1).toLowerCase();
+/** What one outcome change does to its target, the target already split
+ *  (`writesOf`) and its scope one this analysis knows. */
+function writeOf(scope: InfluenceScopeName, name: string, expr: Expression, warn: (kind: AnalysisWarningKind, message: string) => void): { scope: InfluenceScopeName; name: string; does: WriteDoes } {
   const ast = expr.ast;
 
   // set_flags never arrives here: writesOfCard intercepts it, because one call
@@ -352,29 +354,23 @@ function writeOf(target: string, expr: Expression, warn: (kind: AnalysisWarningK
 }
 
 /** Every write a card's outcomes make, each tagged with the outcome that makes
- *  it. set_flags fans out to one write per delta. Exported for the usage scan
- *  (usage.ts), which must agree with the influence graph about what a write is. */
-export function writesOfCard(card: Card<Expression>, warn: (kind: AnalysisWarningKind, message: string) => void): { scope: InfluenceScopeName; name: string; does: WriteDoes; outcome: string }[] {
+ *  it. set_flags fans out to one write per delta. What a change target IS comes
+ *  from `writesOf` (analysis-common.ts), which the usage scan and the other
+ *  analyses read too, so none of them disagree about it. */
+function writesOfCard(card: Card<Expression>, warn: (kind: AnalysisWarningKind, message: string) => void): { scope: InfluenceScopeName; name: string; does: WriteDoes; outcome: string }[] {
   const out: { scope: InfluenceScopeName; name: string; does: WriteDoes; outcome: string }[] = [];
   for (const outcome of card.outcomes) {
     const from = effectiveGameId(outcome);
-    for (const [target, expr] of Object.entries(outcome.changes)) {
-      const bare = target.startsWith("@") ? target.slice(1) : target;
-      const dot = bare.indexOf(".");
-      const scope = dot < 0 ? "" : bare.slice(0, dot);
-      const ast = expr.ast;
-      if (isScope(scope) && Array.isArray(ast) && ast[0] === "call" && ast[1] === "set_flags") {
-        const name = bare.slice(dot + 1).toLowerCase();
-        for (let i = 3; i < ast.length; i++) {
-          const fd = ast[i] as AstNode;
-          if (Array.isArray(fd) && fd[0] === "fd") {
-            out.push({ scope, name, outcome: from, does: { kind: "set-flag", flag: String(fd[2]).toLowerCase(), sign: fd[1] === "+" ? "+" : "-" } });
-          }
+    for (const w of writesOf(outcome)) {
+      if (!isScope(w.scope)) continue;
+      const name = w.name.toLowerCase();
+      if (w.flags !== undefined) {
+        for (const d of w.flags.deltas) {
+          out.push({ scope: w.scope, name, outcome: from, does: { kind: "set-flag", flag: d.flag.toLowerCase(), sign: d.sign } });
         }
         continue;
       }
-      const w = writeOf(target, expr, warn);
-      if (w) out.push({ ...w, outcome: from });
+      out.push({ ...writeOf(w.scope, name, w.expr, warn), outcome: from });
     }
   }
   return out;
@@ -417,8 +413,12 @@ function classify(does: WriteDoes, want: ReadWant): EdgeClass | null {
     const matches = does.value === want.value;
     return want.kind === "wants-eq" ? (matches ? "enable" : "disable") : (matches ? "disable" : "enable");
   }
-  if (does.kind === "set-number" && want.kind === "wants-gt") return does.value > want.threshold ? "enable" : "disable";
-  if (does.kind === "set-number" && want.kind === "wants-lt") return does.value < want.threshold ? "enable" : "disable";
+  if (does.kind === "set-number" && want.kind === "wants-gt") {
+    return (want.inclusive ? does.value >= want.threshold : does.value > want.threshold) ? "enable" : "disable";
+  }
+  if (does.kind === "set-number" && want.kind === "wants-lt") {
+    return (want.inclusive ? does.value <= want.threshold : does.value < want.threshold) ? "enable" : "disable";
+  }
 
   if (does.kind === "delta-up" && want.kind === "wants-gt") return "enable";
   if (does.kind === "delta-up" && want.kind === "wants-lt") return "disable";
@@ -474,15 +474,23 @@ export function analyseInfluence(source: SourceProject, opts: InfluenceOptions =
   const reads: ReadRecord[] = [];
   const writes: WriteRecord[] = [];
   let handScopeSeen = false;
+  // Said once per card and message: one computed write in four outcomes, or an
+  // unmodelled call read twice, is one thing to tell the reader, not four.
+  const warned = new Set<string>();
 
   for (const { card, deck, box } of located) {
-    const warn = (kind: AnalysisWarningKind, message: string): void => { warnings.push({ kind, message, card: card.id }); };
+    const warn = (kind: AnalysisWarningKind, message: string): void => {
+      const key = `${card.id}\u0000${kind}\u0000${message}`;
+      if (warned.has(key)) return;
+      warned.add(key);
+      warnings.push({ kind, message, card: card.id, cardGameId: effectiveGameId(card) });
+    };
     const container = (s: InfluenceScopeName): string | undefined =>
       s === "box" ? box.id : s === "deck" ? deck.id : undefined;
 
     const collect = (expr: Expression | undefined, note?: string): void => {
       if (!expr) return;
-      const found: { scope: InfluenceScopeName; name: string; want: ReadWant }[] = [];
+      const found: ReadHit[] = [];
       readsOf(expr.ast, true, { push: (w) => found.push(w) }, warn);
       for (const f of found) {
         if (f.scope === "hand") { handScopeSeen = true; continue; }

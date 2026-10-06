@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import {
   SHARD_EXTENSIONS, PROJECT_SCHEMA, BOX_SCHEMA, MAP_SCHEMA, TAGS_SCHEMA, HANDS_SCHEMA,
-  DECK_SCHEMA, VIEW_SCHEMA, NOTES_SCHEMA, CONTRACT_SCHEMA,
+  DECK_SCHEMA, VIEW_SCHEMA, NOTES_SCHEMA, CONTRACT_SCHEMA, PROJECTMAP_SCHEMA,
 } from "@storylet-studio/model";
 import type { ConflictKind } from "../src/merge.js";
 
@@ -578,6 +578,21 @@ describe("the merge specs cannot drift from the model", () => {
     }
   });
 
+  it("detects the TYPE each schema names, the project map's included", () => {
+    // Not just "does not throw": until 2026-10-06 `storylets/projectmap` matched
+    // the `storylets/project` prefix first and merged with the project shard's
+    // strategy, which no test could see while they only asked for no throw.
+    const expected: [string, string][] = [
+      [PROJECT_SCHEMA, "project"], [BOX_SCHEMA, "box"], [TAGS_SCHEMA, "tags"], [HANDS_SCHEMA, "hands"],
+      [DECK_SCHEMA, "deck"], [VIEW_SCHEMA, "view"], [MAP_SCHEMA, "map"], [PROJECTMAP_SCHEMA, "projectmap"],
+      [NOTES_SCHEMA, "notes"], [CONTRACT_SCHEMA, "contract"],
+    ];
+    for (const [schema, type] of expected) expect(detectMergeType({ schema }), schema).toBe(type);
+    // The version is not part of the type; a name that merely starts like one is not one.
+    expect(detectMergeType({ schema: "storylets/projectmap@1" })).toBe("projectmap");
+    expect(() => detectMergeType({ schema: "storylets/projects@0" })).toThrow(MergeInputError);
+  });
+
   it("every key a merge spec names is a field the model actually has", () => {
     // Their guard 2, in the stronger form they said our declarative specs
     // allow: read the model's own interfaces rather than a copy of the field
@@ -614,5 +629,29 @@ describe("the merge specs cannot drift from the model", () => {
 
     const orphans = [...keys].filter((k) => !declared.has(k)).sort();
     expect(orphans, "merge spec names fields the model does not have").toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The project map: two designers, two zones (CLI review 2026-10, item 7)
+// ---------------------------------------------------------------------------
+
+describe("the project map shard", () => {
+  const zone = (id: string, gameId: string, x: number): Obj => ({
+    id, gameId, templates: { spatial: { polygon: [{ x, y: 0 }, { x: x + 10, y: 0 }, { x: x + 10, y: 10 }, { x, y: 10 }] } },
+  });
+  const projectMap = (tags: Obj[]): Obj => ({
+    schema: PROJECTMAP_SCHEMA,
+    group: { id: "d_1", gameId: "district", tags, templates: { spatial: { map: true } } },
+  });
+
+  it("merges two designers moving DIFFERENT zones cleanly", () => {
+    const base = projectMap([zone("v_1", "docks", 0), zone("v_2", "old-town", 20)]);
+    const ours = projectMap([zone("v_1", "docks", 100), zone("v_2", "old-town", 20)]);
+    const theirs = projectMap([zone("v_1", "docks", 0), zone("v_2", "old-town", 200)]);
+    const result = runMerge(base, ours, theirs);
+    expect(result.type).toBe("projectmap");
+    expect(result.conflicts).toEqual([]);
+    eq(result.merged, projectMap([zone("v_1", "docks", 100), zone("v_2", "old-town", 200)]));
   });
 });

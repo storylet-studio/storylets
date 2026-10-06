@@ -25,24 +25,34 @@
 //      JSZip's behaviour rather than our guarantee, and another reader might
 //      not do it. This check does not care who built the zip or which library
 //      read it: the path either lands inside the target or it does not.
+//
+// Containment is not enough on its own, though: `.git/config` is inside the
+// target, and git runs what it names (CLI review 2026-10, item 1). So an entry
+// is also refused outright when any segment of it starts with a dot, which no
+// pack of ours carries (`pack` walks as the loader does, dot entries skipped),
+// and only three kinds are ever written: a shard (by its extension), a picture
+// directly in the root `assets/` under a name `isSafeAssetName` accepts, and a
+// scopes file directly in `game-scopes/`. Anything else comes back in `other`,
+// unwritten: that is where a server's `storylets.server.json` arrives.
 // ---------------------------------------------------------------------------
 
 import JSZip from "jszip";
 import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
+import { join } from "node:path";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS } from "@storylet-studio/model";
-import { CONFLICT_SIDECAR_EXTENSION, conflictSidecar, runMerge, MergeInputError } from "./merge.js";
+import { planShardMerge } from "./merge.js";
 import type { MergeResult } from "./merge.js";
-import { ASSETS_DIR } from "./assets.js";
-import { PACK_MANIFEST } from "./pack.js";
+import { ASSETS_DIR, isSafeAssetName } from "./assets.js";
+import { NotAPackError, PACK_MANIFEST } from "./pack.js";
 import type { PlannedBinaryWrite, PlannedWrite } from "./write.js";
 import { escapesTarget, isUnsafeEntry } from "@wildwinter/toolkit/archive";
 import { GAME_SCOPES_DIR, GAME_SCOPES_FILE, SCOPES_FILE_SUFFIX } from "@wildwinter/scoperegistry/scopes";
 import type { ProjectShard, PropertyDecl } from "@storylet-studio/model";
 import { planGameWorld, readGameScopes } from "./game-scopes.js";
 
-/** A pack entry whose path escapes the target directory (always rejected). */
+/** A pack entry whose path escapes the target directory, or that names a
+ *  dot-file or dot-folder (always rejected). */
 export class UnsafeEntryError extends Error {}
 
 // The entry guards are @wildwinter/toolkit's. Both families had a correct copy,
@@ -50,62 +60,64 @@ export class UnsafeEntryError extends Error {}
 // subtle weakening of one is a vulnerability nobody reads a diff for.
 // Re-exported so nothing that imports it has to move.
 export { isUnsafeEntry } from "@wildwinter/toolkit/archive";
-/** Is this entry one of a box's binary assets rather than a shard? By WHERE it
- *  is, matching how a pack collects them: a format nobody thought of still
- *  travels, and still must not be read as text. */
-const isAssetEntry = (name: string): boolean => name.split("/").includes(ASSETS_DIR);
 
-/** Is this entry one of the game's shared scopes files a pack carries as a
- *  snapshot (`game-scopes/<name>.scopes.json`)? Neither a shard nor an asset.
- *  Only a scopes file directly in the folder, as a pack writes them, so a box
- *  folder that happened to share the name would still be read as shards. */
-const isScopesEntry = (name: string): boolean => {
+/** Every shard extension, which is what makes an entry a shard wherever it is. */
+const SHARD_EXTS: readonly string[] = Object.values(SHARD_EXTENSIONS);
+
+/** What an entry is, by its name. A shard by its extension, wherever it sits, so
+ *  a box folder called `assets` still holds shards; a picture only directly in
+ *  the ROOT `assets/`, which is the one folder a project keeps them in; a scopes
+ *  file only directly in `game-scopes/`, as a pack writes them; and anything
+ *  else is `other`, never written. */
+function entryKind(name: string): "shard" | "asset" | "scopes" | "other" {
+  if (SHARD_EXTS.some((ext) => name.endsWith(ext))) return "shard";
   const parts = name.split("/");
-  return parts.length === 2 && parts[0] === GAME_SCOPES_DIR && parts[1]!.endsWith(SCOPES_FILE_SUFFIX);
-};
+  if (parts.length === 2 && parts[0] === ASSETS_DIR && isSafeAssetName(parts[1]!)) return "asset";
+  if (parts.length === 2 && parts[0] === GAME_SCOPES_DIR && parts[1]!.endsWith(SCOPES_FILE_SUFFIX)) return "scopes";
+  return "other";
+}
 
-/** Check an entry is bound for somewhere inside the target. Both checks, for the
- *  reasons in the header: neither is enough alone. */
-function refuseEscape(targetDir: string, name: string): void {
+/** Check an entry is bound for somewhere inside the target and names no
+ *  dot-file: both checks of the header, then the third. */
+function refuseUnsafe(targetDir: string, name: string): void {
   if (isUnsafeEntry(name) || escapesTarget(targetDir, name)) {
     throw new UnsafeEntryError(`pack entry escapes the target directory: ${name}`);
   }
+  if (name.split("/").some((segment) => segment.startsWith("."))) {
+    throw new UnsafeEntryError(`pack entry names a dot-file or dot-folder: ${name}`);
+  }
 }
 
-/** A pack's shards as relative path -> text. The manifest is not a shard, and
- *  neither is an asset: reading a PNG with `async("string")` corrupts it, and
- *  handing one to a JSON5 parser is how a merge would throw on somebody's site
- *  plan. `targetDir` is where the shards are bound for, so containment is checked
+/** A pack, read once: its shards, pictures and scopes snapshot, and the entries
+ *  that are none of those (`other`, by entry name, never written). */
+interface ReadPack {
+  shards: Map<string, string>;
+  assets: Map<string, Uint8Array>;
+  scopes: Map<string, string>;
+  other: Map<string, string>;
+}
+
+/** Read a pack, ONE inflation of the zip, every entry checked by one set of
+ *  rules. A PNG read with `async("string")` is corrupted and a JSON5 parser
+ *  handed one throws, so what an entry IS is decided before it is read.
+ *  `targetDir` is where the entries are bound for, so containment is checked
  *  here rather than left to each caller to remember. */
-async function readPackShards(bytes: Buffer | Uint8Array, targetDir: string): Promise<Map<string, string>> {
-  return (await readPack(bytes, targetDir)).shards;
-}
-
-/** A pack's shards, assets AND game scopes snapshot, from ONE read of the zip.
- *
- *  `runUnpack` used to call two readers that each did their own
- *  `JSZip.loadAsync`, so every unpack inflated the archive twice - and the
- *  containment check `refuseEscape` was applied by two separate passes that
- *  had to stay in step. One pass, one set of rules. */
-async function readPack(
-  bytes: Buffer | Uint8Array,
-  targetDir: string,
-): Promise<{ shards: Map<string, string>; assets: Map<string, Uint8Array>; scopes: Map<string, string> }> {
-  const zip = await JSZip.loadAsync(bytes);
-  const shards = new Map<string, string>();
-  const assets = new Map<string, Uint8Array>();
-  const scopes = new Map<string, string>();
+async function readPack(bytes: Buffer | Uint8Array, targetDir: string, which: "pack" | "base" = "pack"): Promise<ReadPack> {
+  let zip: JSZip;
+  try { zip = await JSZip.loadAsync(bytes); } catch { throw new NotAPackError(which); }
+  const out: ReadPack = { shards: new Map(), assets: new Map(), scopes: new Map(), other: new Map() };
   for (const [name, entry] of Object.entries(zip.files)) {
     if (entry.dir || name === PACK_MANIFEST) continue;
-    // Every entry that is not the manifest is going somewhere on disk, so it
-    // is checked once, here, whichever part it belongs to.
-    refuseEscape(targetDir, name);
-    if (isScopesEntry(name)) scopes.set(name, await entry.async("string"));
-    else if (isAssetEntry(name)) assets.set(name, await entry.async("uint8array"));
-    else shards.set(name, await entry.async("string"));
+    refuseUnsafe(targetDir, name);
+    const kind = entryKind(name);
+    if (kind === "asset") out.assets.set(name, await entry.async("uint8array"));
+    else (kind === "shard" ? out.shards : kind === "scopes" ? out.scopes : out.other).set(name, await entry.async("string"));
   }
-  return { shards, assets, scopes };
+  return out;
 }
+
+/** Sorted by path, which is the order every caller lists and commits them in. */
+const byPath = <T extends { path: string }>(writes: T[]): T[] => writes.sort((a, b) => a.path.localeCompare(b.path));
 
 /** What a pack explodes into: text to write, and bytes to write. */
 export interface UnpackResult {
@@ -117,22 +129,23 @@ export interface UnpackResult {
    *  a pack from a project with no folder, and for any pack from before packs
    *  carried scopes. */
   scopes: PlannedWrite[];
+  /** Every other entry, by its name in the pack, as text: NEVER to be written.
+   *  A server's `storylets.server.json` arrives here, for the caller that wants
+   *  it; anything else is a file no pack of ours carries. */
+  other: Map<string, string>;
 }
 
 /** Explode a pack into planned writes under `targetDir`. Pure: the caller
- *  commits, so the same op serves the CLI and the editor. */
+ *  commits, so the same op serves the CLI and the editor. Throws
+ *  `NotAPackError` for bytes that are not a zip, and `UnsafeEntryError` for an
+ *  entry that would land outside the target or names a dot-file. */
 export async function runUnpack(bytes: Buffer | Uint8Array, targetDir: string): Promise<UnpackResult> {
-  const { shards, assets, scopes } = await readPack(bytes, targetDir);
+  const { shards, assets, scopes, other } = await readPack(bytes, targetDir);
   return {
-    shards: [...shards.entries()]
-      .map(([name, content]) => ({ path: join(targetDir, name), content }))
-      .sort((a, b) => a.path.localeCompare(b.path)),
-    assets: [...assets.entries()]
-      .map(([name, data]) => ({ path: join(targetDir, name), bytes: data }))
-      .sort((a, b) => a.path.localeCompare(b.path)),
-    scopes: [...scopes.entries()]
-      .map(([name, content]) => ({ path: join(targetDir, name), content }))
-      .sort((a, b) => a.path.localeCompare(b.path)),
+    shards: byPath([...shards].map(([name, content]) => ({ path: join(targetDir, name), content }))),
+    assets: byPath([...assets].map(([name, data]) => ({ path: join(targetDir, name), bytes: data }))),
+    scopes: byPath([...scopes].map(([name, content]) => ({ path: join(targetDir, name), content }))),
+    other,
   };
 }
 
@@ -143,14 +156,22 @@ export interface MergedShard {
   /** The merge result; absent when the shard was ADDED by the other author. */
   result?: MergeResult;
   added: boolean;
+  /** Whether there is a write for it: false when the merge left the shard
+   *  saying exactly what it already says. */
+  changed: boolean;
 }
 
 export interface UnpackMergeResult {
   shards: MergedShard[];
-  /** Merged (and added) shard contents to write into the project. */
+  /** Merged (and added) shard contents to write into the project: only the
+   *  shards the merge changed. Commit `sidecars` FIRST: a merged shard whose
+   *  sidecar never landed is a conflict resolved to ours without a word. */
   writes: PlannedWrite[];
   /** Conflict sidecars for shards that did not merge cleanly. */
   sidecars: PlannedWrite[];
+  /** The returned pack's entries that are none of a shard, an asset or a
+   *  scopes file, by name: never written. */
+  other: Map<string, string>;
   /** Assets the returned pack brought that we do not have. One we DO have is
    *  never overwritten (see the note at the merge). */
   assets: PlannedBinaryWrite[];
@@ -283,18 +304,22 @@ function localProjectId(projectDir: string, theirs: Map<string, string>): string
  * Merge a RETURNED pack (`theirs`) into the project at `projectDir` (`ours`),
  * using the pack originally sent (`base`) as the common ancestor.
  *
- * Per shard: a 3-way merge, or a verbatim write when the shard is new to us.
- * A shard the other author DELETED is left alone rather than removed: a
- * whole-file delete is not propagated, which loses nothing and cannot destroy
- * work that was never theirs to remove.
+ * Per shard, `planShardMerge`: a 3-way merge, or a verbatim write when the
+ * shard is new to us, and no write at all when the merge leaves a shard saying
+ * what it already says. A shard the other author DELETED is left alone rather
+ * than removed: a whole-file delete is not propagated, which loses nothing and
+ * cannot destroy work that was never theirs to remove.
  */
 export async function runUnpackMerge(
   returnedBytes: Buffer | Uint8Array,
   baseBytes: Buffer | Uint8Array,
   projectDir: string,
 ): Promise<UnpackMergeResult> {
-  const theirs = await readPackShards(returnedBytes, projectDir);
-  const base = await readPackShards(baseBytes, projectDir);
+  // Each pack read ONCE: until 2026-10-06 the returned one was inflated twice,
+  // once for its shards and again for its pictures.
+  const returned = await readPack(returnedBytes, projectDir, "pack");
+  const theirs = returned.shards;
+  const base = (await readPack(baseBytes, projectDir, "base")).shards;
 
   // The provenance check: three ids, and a WARNING rather than a refusal. The
   // reasoning is on `ProvenanceCheck`, and the shape is the Patter side's, which
@@ -311,57 +336,35 @@ export async function runUnpackMerge(
 
   for (const [rel, theirText] of [...theirs.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     const outPath = join(projectDir, rel);
-    if (!existsSync(outPath)) {
-      // A shard we do not have: take it as it stands. There is nothing to
-      // merge against, and refusing it would silently drop new content.
-      writes.push({ path: outPath, content: theirText });
-      shards.push({ path: rel, added: true });
-      if (rel.endsWith(SHARD_EXTENSIONS.project)) {
-        try { mergedProject = { rel, shard: parseSource(theirText) }; } catch { /* cannot say */ }
-      }
-      continue;
-    }
-    const baseText = base.get(rel);
-    // Named parses. A shard that will not parse still stops the merge - you
-    // cannot three-way what you cannot read, and half-merging a return leg is
-    // worse than refusing it - but it used to stop it with a raw JSON5 error
-    // naming no file, out of a call the author made on a whole project. Now it
-    // says which shard and which side. Found by the pre-release audit.
-    const read = (text: string, side: string): Record<string, unknown> => {
-      try { return parseSource(text) as Record<string, unknown>; }
-      catch (e) {
-        throw new MergeInputError(
-          `${rel}: the ${side} copy will not parse (${e instanceof Error ? e.message : String(e)})`);
-      }
-    };
-    const ours = read(readFileSync(outPath, "utf8"), "local");
-    const theirsObj = read(theirText, "returned");
-    // No base entry means the shard did not exist when we sent the pack, so
-    // there is no ancestor: an empty base makes every field of theirs an add.
-    // `runMerge` exempts an empty base from its schema-skew check for exactly
-    // this case - until 2026-09-06 it did not, and a file two people had each
-    // created independently took the whole return leg down with it.
-    const baseObj = baseText !== undefined ? read(baseText, "sent") : {};
-
-    const result = runMerge(baseObj, ours, theirsObj);
-    if (rel.endsWith(SHARD_EXTENSIONS.project)) mergedProject = { rel, shard: result.merged };
-    writes.push({ path: outPath, content: canonicalStringify(result.merged) });
-    if (result.conflicts.length > 0) {
-      sidecars.push({ path: `${outPath}${CONFLICT_SIDECAR_EXTENSION}`, content: conflictSidecar(result) });
+    // The disposition is the one Storyletter's pull uses, from the one planner:
+    // a shard we do not have is taken as it stands (refusing it would silently
+    // drop new content), and one we do is three-wayed against the pack we sent.
+    const step = planShardMerge({
+      rel, path: outPath, theirs: theirText, base: base.get(rel),
+      ours: existsSync(outPath) ? readFileSync(outPath, "utf8") : undefined,
+      sides: { theirs: "returned", base: "sent" },
+    });
+    if (step.write !== undefined) writes.push(step.write);
+    if (step.sidecar !== undefined) sidecars.push(step.sidecar);
+    const result = step.result;
+    if (result !== undefined) {
       conflicts += result.conflicts.length;
+      warnings += result.warnings.length;
     }
-    warnings += result.warnings.length;
-    shards.push({ path: rel, result, added: false });
+    shards.push({ path: rel, ...(result !== undefined ? { result } : {}), added: step.outcome === "added", changed: step.write !== undefined });
+    if (rel.endsWith(SHARD_EXTENSIONS.project)) {
+      if (result !== undefined) mergedProject = { rel, shard: result.merged };
+      else try { mergedProject = { rel, shard: parseSource(theirText) }; } catch { /* cannot say */ }
+    }
   }
 
   // Assets are not merged, they are ADDED. There is no id-keyed structure inside
   // a PNG to three-way anything, so the only choices are take theirs, keep ours,
   // or refuse. Keep ours: an author's original must never be silently replaced by
   // a collaborator's re-saved copy, and a picture nobody has is worth having.
-  const theirAssets = (await readPack(returnedBytes, projectDir)).assets;
   const assets: PlannedBinaryWrite[] = [];
   const keptAssets: string[] = [];
-  for (const [rel, data] of [...theirAssets.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+  for (const [rel, data] of [...returned.assets.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     const outPath = join(projectDir, rel);
     if (existsSync(outPath)) keptAssets.push(rel);
     else assets.push({ path: outPath, bytes: data });
@@ -381,7 +384,7 @@ export async function runUnpackMerge(
     : undefined;
 
   return {
-    shards, writes, sidecars, assets, keptAssets, conflicts, warnings, provenance,
+    shards, writes, sidecars, other: returned.other, assets, keptAssets, conflicts, warnings, provenance,
     ...(gameWorld !== undefined ? { gameWorld } : {}),
   };
 }

@@ -12,7 +12,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { BOX_KITS } from "@storylet-studio/ops";
+import { BOX_KITS, GAME_KITS } from "@storylet-studio/ops";
+import type { ProjectKit } from "./project.js";
 
 describe("the box kit picker", () => {
   it("offers exactly the kits ops defines", () => {
@@ -36,5 +37,21 @@ describe("the box kit picker", () => {
     const block = renderer.slice(start, renderer.indexOf("\n}", start));
     const entries = [...block.matchAll(/\{\s*id:\s*"([a-z-]+)",\s*name:\s*"([^"]+)",\s*blurb:\s*"([^"]{20,})"/g)];
     expect(entries.length).toBe(BOX_KITS.length);
+  });
+});
+
+// New Project's kits, the same way (the CLI review, October 2026, item 14): the
+// gallery hard-coded its four, and `ProjectKit` with them. Both come from ops'
+// `GAME_KITS` now, plus the starter with Patter beside it, which is Storyletter's.
+describe("the New Project gallery", () => {
+  it("offers exactly ops' game kits, and the starter with Patter", () => {
+    const renderer = readFileSync(
+      fileURLToPath(new URL("../renderer/src/renderer.ts", import.meta.url)), "utf8");
+    const start = renderer.indexOf("const PROJECT_KITS");
+    expect(start, "PROJECT_KITS not found - has it been renamed?").toBeGreaterThan(-1);
+    const block = renderer.slice(start, renderer.indexOf("\n];", start));
+    const offered = [...block.matchAll(/\{\s*id:\s*"([a-z-]+)"/g)].map((m) => m[1]!);
+    const kits: ProjectKit[] = [...GAME_KITS, "with-patter"];
+    expect([...offered].sort(), "the New Project gallery and ops' GAME_KITS have drifted").toEqual([...kits].sort());
   });
 });

@@ -4,7 +4,8 @@
 // bindings and nothing else, so a fixture that says only that is the clearest.
 
 import { describe, expect, it } from "vitest";
-import { handReach, placeTiers, zonesOfHand } from "../src/reach.js";
+import { handReach, placeTiers } from "../src/reach.js";
+import { tagsOfHand } from "../src/place-axis.js";
 import type { ReachBox, ReachCard, ReachMap } from "../src/reach.js";
 import type { Hand, TagGroup } from "@storylet-studio/model";
 
@@ -74,8 +75,8 @@ describe("placeTiers", () => {
 
   it("lets a hole filled from a string, or from nothing declared, be any zone", () => {
     const decls = { story: [{ name: "anywhere", type: "string" as const, default: "" }] };
-    expect(zonesOfHand(project, village, wanderer, decls)).toEqual(["v_village", "v_forest", "v_cave"]);
-    expect(zonesOfHand(project, village, wanderer)).toEqual(["v_village", "v_forest", "v_cave"]);
+    expect(tagsOfHand(village, wanderer, zone, decls)).toEqual(["v_village", "v_forest", "v_cave"]);
+    expect(tagsOfHand(village, wanderer, zone)).toEqual(["v_village", "v_forest", "v_cave"]);
   });
 
   it("puts a zone-tagged card under Anywhere at a hand that binds no zone", () => {

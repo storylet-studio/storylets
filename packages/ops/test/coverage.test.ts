@@ -335,10 +335,10 @@ describe("coverage harness", () => {
     expect(cardRow(report, "c_once").played).toBe(OPTS.runs);
   });
 
-  it("a dealt-only card (no outcomes) is never asked to be played and cannot block exhaustion", () => {
-    // The news/codex pattern: dealt is the card's whole job - the game's UI
-    // reads the hand, nothing plays. Requiring a play of it made every run
-    // grind to the turn cap.
+  it("a dealt-only card (no outcomes) is never counted as played and cannot block exhaustion", () => {
+    // The news/codex pattern: dealt is the card's whole job. The sweep plays
+    // it with "" as a host would (ruling K), but there is no outcome to count,
+    // and requiring a play of it made every run grind to the turn cap.
     const source = project({
       cards: [
         { id: "c_once", redraw: "never" },
@@ -820,6 +820,215 @@ describe("runs dealt and played, rare cards, and the totals", () => {
     expect(report.runs).toBe(0);
     expect(report.rareThresholdPct).toBe(RARE_DEALT_PCT);
     expect(report.totals).toEqual({ cards: 1, dealt: 0, neverDealt: 1, rare: 0, dealtNeverPlayed: 0 });
+  });
+});
+
+// The CLI review of 2026-10-06 (design/cli-review-2026-10.md): item 6, rulings
+// K and L, the honesty net's read set (11) and the composed-name net's gaps.
+describe("a play the engine refuses", () => {
+  // The trigger: an outcome writing @hand.vibe, played from a hand that never
+  // composes vibe. The engine refuses the play (ruling B: all or nothing), and
+  // the sweep used to throw, losing the whole report.
+  const refusing = (): SourceProject => project({
+    tagGroups: [{ id: "d_zone", gameId: "zone", tags: [
+      { id: "v_docks", gameId: "docks", properties: [{ name: "vibe", type: "number", default: 0 }] },
+      { id: "v_strip", gameId: "strip" },
+    ] }],
+    hands: [
+      { id: "h_docks", gameId: "docks-h", rule: { bindings: { d_zone: "v_docks" }, slots: "unbounded" } },
+      { id: "h_strip", gameId: "strip-h", rule: { bindings: { d_zone: "v_strip" }, slots: "unbounded" } },
+    ],
+    cards: [{ id: "c_stir", outcomes: [{ id: "o_up", gameId: "up", changes: { "@hand.vibe": "1" } }] }],
+  });
+
+  it("an uncomposed @hand write is a diagnostic, and the sweep carries on", () => {
+    const report = runCoverage(refusing(), OPTS);
+    expect(report.runs).toBe(OPTS.runs);
+    const refused = report.diagnostics.find((d) => d.where === "card stir play");
+    expect(refused).toBeDefined();
+    expect(refused!.message).toContain("@hand.vibe is not composed");
+    // Where vibe IS composed, the same card plays.
+    expect(cardRow(report, "c_stir").played).toBeGreaterThan(0);
+  });
+
+  it("a refused play still counts its turn, as a turn with nothing playable does", () => {
+    // Only the hand that never composes vibe: every play is refused, so every
+    // run goes to the turn cap with nothing played.
+    const source = refusing();
+    source.boxes[0]!.hands.hands = source.boxes[0]!.hands.hands.filter((h) => h.id === "h_strip");
+    const report = runCoverage(source, OPTS);
+    expect(report.terminations).toEqual({ exhausted: 0, maxTurns: OPTS.runs, stuck: 0 });
+    expect(report.turns).toBe(OPTS.runs * OPTS.maxTurns);
+    expect(report.plays).toBe(0);
+    expect(report.diagnostics.find((d) => d.where === "card stir play")!.runs).toBe(OPTS.runs);
+  });
+
+  it("the composed-name net names the write too, before any run", () => {
+    expect(runCoverage(refusing(), OPTS).unprovidedHandRefs).toEqual([
+      { where: "card stir", ref: "@hand.vibe", hands: ["strip-h"] },
+    ]);
+  });
+});
+
+describe("a dealt card with no outcomes (ruling K)", () => {
+  // A one-slot hand whose top card is dealt-only and never redrawn. A host
+  // plays such a card with "" (a masthead, a notice), which frees the slot;
+  // the sweep held it for the whole run, so the card behind it read as never
+  // dealt.
+  const starving = (): SourceProject => project({
+    hands: [{ id: "h_one", gameId: "one", rule: { bindings: {}, slots: 1 } }],
+    cards: [
+      { id: "c_masthead", priority: 10, redraw: "never", outcomes: [] },
+      { id: "c_story" },
+    ],
+  });
+
+  it("is played with \"\", as a host does, so the card behind it comes up", () => {
+    const report = runCoverage(starving(), OPTS);
+    expect(cardRow(report, "c_masthead").dealtRuns).toBe(OPTS.runs);
+    expect(cardRow(report, "c_story").dealtRuns).toBe(OPTS.runs);
+  });
+
+  it("still never counts as played, nor as dealt and never played", () => {
+    const report = runCoverage(starving(), OPTS);
+    expect(cardRow(report, "c_masthead").played).toBe(0);
+    expect(cardRow(report, "c_masthead").playedRuns).toBe(0);
+    expect(report.totals.dealtNeverPlayed).toBe(0);
+  });
+});
+
+describe("the honesty net's read set", () => {
+  it("is the card's condition, its deck's gate and an expression priority", () => {
+    const report = runCoverage(project({
+      story: [
+        { name: "ready", type: "boolean", default: false },
+        { name: "keen", type: "number", default: 0 },
+      ],
+      deckCondition: "@story.ready",
+      cards: [{ id: "c_a", priority: "@story.keen" as never }],
+    }), OPTS);
+    expect(cardRow(report, "c_a").dealt).toBe(0);
+    expect(cardRow(report, "c_a").unwrittenRefs).toEqual(["@story.keen", "@story.ready"]);
+  });
+
+  it("leaves out an outcome's gate, which cannot stop the card being dealt", () => {
+    const report = runCoverage(project({
+      story: [
+        { name: "x", type: "boolean", default: false },
+        { name: "y", type: "boolean", default: false },
+      ],
+      cards: [{ id: "c_a", condition: "@story.x",
+        outcomes: [{ id: "o_a", gameId: "go", condition: "@story.y", changes: {} }] }],
+    }), OPTS);
+    expect(cardRow(report, "c_a").unwrittenRefs).toEqual(["@story.x"]);
+    // Still an unwritten input of the project: the outcome can never be played.
+    expect(report.unwrittenInputs).toEqual(["@story.x", "@story.y"]);
+  });
+});
+
+describe("the composed-name net: a hand's own condition", () => {
+  const zone = [{ id: "d_zone", gameId: "zone", tags: [
+    { id: "v_docks", gameId: "docks", properties: [{ name: "vibe", type: "number", default: 0 } as PropertyDecl] },
+    { id: "v_strip", gameId: "strip" },
+  ] }] as TagGroup[];
+
+  it("names a standalone hand whose rule condition reads a name it never composes", () => {
+    const source = project({
+      tagGroups: zone,
+      hands: [
+        { id: "h_docks", gameId: "docks-h", rule: { bindings: { d_zone: "v_docks" }, condition: "@hand.vibe >= 0", slots: "unbounded" } },
+        { id: "h_strip", gameId: "strip-h", rule: { bindings: { d_zone: "v_strip" }, condition: "@hand.vibe >= 0", slots: "unbounded" } },
+      ],
+      cards: [{ id: "c_plain" }],
+    });
+    expect(runCoverage(source, OPTS).unprovidedHandRefs).toEqual([
+      { where: "hand strip-h condition", ref: "@hand.vibe", hands: ["strip-h"] },
+    ]);
+  });
+
+  it("names the instances of a template whose condition reads a name they never compose", () => {
+    const source = project({
+      tagGroups: zone,
+      templates: [{ id: "t_street", gameId: "street", chooses: ["d_zone"], condition: "@hand.vibe >= 0",
+        slots: "unbounded", properties: [] }],
+      hands: [
+        { id: "h_docks", gameId: "docks-street", template: "t_street", chosen: { d_zone: "v_docks" } },
+        { id: "h_strip", gameId: "strip-street", template: "t_street", chosen: { d_zone: "v_strip" } },
+      ],
+      cards: [{ id: "c_plain" }],
+    });
+    expect(runCoverage(source, OPTS).unprovidedHandRefs).toEqual([
+      { where: "hand template street condition", ref: "@hand.vibe", hands: ["strip-street"] },
+    ]);
+  });
+});
+
+describe("the observed-edge probe (ruling L)", () => {
+  it("observes a card pinned to a hand, by peeking with that hand's place bound", () => {
+    const source = project({
+      story: [{ name: "open", type: "boolean", default: false }],
+      hands: [{ id: "h_docks", gameId: "docks", rule: { bindings: {}, slots: "unbounded" } }],
+      cards: [
+        { id: "c_key", outcomes: [{ id: "o_key", gameId: "turn", changes: { "@story.open": "true" } }] },
+        { id: "c_gate", condition: "@story.open", tags: { place: ["h_docks"] } },
+      ],
+    });
+    const report = runCoverage(source, { ...OPTS, observeEdges: true });
+    expect(report.observedEdges!.some((e) => e.from === "c_key" && e.to === "c_gate")).toBe(true);
+  });
+
+  it("peeks with the hand's fixed bindings, so a card the hand could never hold is not observed", () => {
+    const source = project({
+      story: [{ name: "open", type: "boolean", default: false }],
+      tagGroups: [{ id: "d_zone", gameId: "zone", tags: [{ id: "v_docks", gameId: "docks" }, { id: "v_strip", gameId: "strip" }] }],
+      hands: [{ id: "h_docks", gameId: "docks-h", rule: { bindings: { d_zone: "v_docks" }, slots: "unbounded" } }],
+      cards: [
+        { id: "c_key", outcomes: [{ id: "o_key", gameId: "turn", changes: { "@story.open": "true" } }] },
+        { id: "c_here", condition: "@story.open", tags: { d_zone: ["v_docks"] } },
+        { id: "c_elsewhere", condition: "@story.open", tags: { d_zone: ["v_strip"] } },
+      ],
+    });
+    const targets = new Set(runCoverage(source, { ...OPTS, observeEdges: true }).observedEdges!.map((e) => e.to));
+    expect(targets.has("c_here")).toBe(true);
+    expect(targets.has("c_elsewhere")).toBe(false);
+  });
+
+  // A peek composes no hand properties, so a card reading one faults inside
+  // the probe: a diagnostic the deal itself never raised.
+  const moody = (): SourceProject => project({
+    story: [{ name: "open", type: "boolean", default: false }],
+    hands: [{ id: "h_all", gameId: "all", rule: { bindings: {}, slots: "unbounded" },
+      properties: [{ name: "mood", type: "number", default: 0 }] }],
+    cards: [
+      { id: "c_key", outcomes: [{ id: "o_key", gameId: "turn", changes: { "@story.open": "true" } }] },
+      { id: "c_moody", condition: "@story.open and @hand.mood >= 0" },
+    ],
+  });
+
+  it("keeps its own peeks' diagnostics out of the report", () => {
+    const off = runCoverage(moody(), OPTS);
+    const on = runCoverage(moody(), { ...OPTS, observeEdges: true });
+    expect(off.diagnostics).toEqual([]);
+    expect(on.diagnostics).toEqual([]);
+  });
+
+  it("draws nothing: every tally is the same with the probe on and off (ruling A)", () => {
+    for (const source of [moody(), project({
+      tagGroups: [{ id: "d_zone", gameId: "zone", tags: [{ id: "v_docks", gameId: "docks" }, { id: "v_strip", gameId: "strip" }] }],
+      hands: [
+        { id: "h_docks", gameId: "docks-h", rule: { bindings: { d_zone: "v_docks" }, slots: 2 } },
+        { id: "h_strip", gameId: "strip-h", rule: { bindings: { d_zone: "v_strip" }, slots: 1 } },
+      ],
+      cards: [
+        { id: "c_a" }, { id: "c_b", tags: { d_zone: ["v_docks"] } }, { id: "c_c", tags: { d_zone: ["v_strip"] } },
+        { id: "c_d", redraw: 3 }, { id: "c_e", tags: { place: ["h_strip"] } },
+      ],
+    })]) {
+      const off = runCoverage(source, OPTS);
+      const { observedEdges, ...on } = runCoverage(source, { ...OPTS, observeEdges: true });
+      expect(observedEdges).toBeDefined();
+      expect(JSON.stringify(on)).toBe(JSON.stringify(off));
+    }
   });
 });
 

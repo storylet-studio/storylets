@@ -3,9 +3,9 @@
 //
 // Which cards a hand could ever be dealt: the runtime's tag matching
 // (engine.ts tagsMatch, schema 3.1 step 3) run over the bindings a hand makes
-// on every ask. A place-pinned card needs this hand among its places; for every
-// group the hand binds, the card lists the bound tag or omits the group (a
-// wildcard), unless the group is `required`.
+// on every ask. A card pinned to hands (its place tags) needs this hand among
+// them; for every group the hand binds, the card lists the bound tag or omits
+// the group (a wildcard), unless the group is `required`.
 //
 // ONE copy of the rule. Coverage reads it for its composed-name net (which
 // hands ask a card) and its per-hand report (what a hand's coverage is out
@@ -23,20 +23,16 @@
 // ---------------------------------------------------------------------------
 
 import { PLACE_GROUP, groupsOfBox, isHoleRef } from "@storylet-studio/model";
-import type { Hand, HandTemplate, TagGroup } from "@storylet-studio/model";
-import { bindingsOfHand, placeAxes, tagsOfHand, zoneGroupOf } from "./place-axis.js";
-import type { HoleDecls } from "./place-axis.js";
+import type { Hand, TagGroup } from "@storylet-studio/model";
+import { bindingsOfHand, handBindings, placeAxes, tagsOfHand } from "./place-axis.js";
+import type { HoleDecls, PlaceAxisBox, PlaceAxisMap } from "./place-axis.js";
 
 export type { HoleDecls } from "./place-axis.js";
 
-/** The parts of a box the rule reads. A bundle `Box` is one; the editor builds
- *  one from a source box's tags and hands shards. */
-export interface ReachBox<E> {
-  tagGroups: TagGroup[];
-  usesMap?: true;
-  handTemplates: Pick<HandTemplate<E>, "id" | "bindings" | "chooses">[];
-  hands: Hand<E>[];
-}
+/** The parts of a box the rule reads: place-axis.ts's `PlaceAxisBox`, which
+ *  reads the same parts. A bundle `Box` is one; the editor builds one from a
+ *  source box's tags and hands shards. */
+export type ReachBox<E> = PlaceAxisBox<E>;
 
 /** A card as the rule sees it: its tags, and nothing else. */
 export interface ReachCard {
@@ -45,9 +41,7 @@ export interface ReachCard {
 }
 
 /** Where the project map's group lives: `Bundle.map`, or the source map shard. */
-export interface ReachMap {
-  map?: { group: TagGroup };
-}
+export type ReachMap = PlaceAxisMap;
 
 /** One binding a hand makes on every ask. */
 export interface FixedBinding {
@@ -76,26 +70,17 @@ export interface HandReach<E> {
  *  refuses an untagged card exactly as a box's own would. */
 export function handReach<E>(bundle: ReachMap, box: ReachBox<E>): HandReach<E> {
   const required = new Set(groupsOfBox(bundle, box).filter((g) => g.required === true).map((g) => g.id));
-  const templatesById = new Map(box.handTemplates.map((t) => [t.id, t]));
   const cache = new Map<string, { fixed: FixedBinding[]; holes: Map<string, string> }>();
-  // As the runtime composes an ask: a template instance takes its template's
-  // bindings and its own chosen tags, a standalone hand its rule's bindings.
+  // As the runtime composes an ask (place-axis.ts `handBindings`), split into
+  // the bindings it makes whatever the run does and the holes it fills.
   const of = (hand: Hand<E>): { fixed: FixedBinding[]; holes: Map<string, string> } => {
     const found = cache.get(hand.id);
     if (found) return found;
     const fixed: FixedBinding[] = [];
     const holes = new Map<string, string>();
-    const add = (bindings: Record<string, string> | undefined, named: boolean): void => {
-      for (const [group, tag] of Object.entries(bindings ?? {})) {
-        if (isHoleRef(tag)) holes.set(group, tag);
-        else fixed.push({ group, tag, named });
-      }
-    };
-    if (hand.template !== undefined) {
-      add(templatesById.get(hand.template)?.bindings, false);
-      add(hand.chosen, true);
-    } else {
-      add(hand.rule?.bindings, true);
+    for (const { group, tag, named } of handBindings(box, hand)) {
+      if (isHoleRef(tag)) holes.set(group, tag);
+      else fixed.push({ group, tag, named });
     }
     const reach = { fixed, holes };
     cache.set(hand.id, reach);
@@ -179,15 +164,6 @@ export interface PlaceTiers {
   /** For a card gated by a `boundBy` group the hand does not bind: that group
    *  and the card's tags in it, by card id. */
   gated: Record<string, { group: string; tags: string[] }[]>;
-}
-
-/**
- * The zones a hand can be in: `tagsOfHand` over the project map's group, for a
- * box on the map. Empty off the map, or for a hand that binds no zone.
- */
-export function zonesOfHand<E>(bundle: ReachMap, box: ReachBox<E>, hand: Hand<E>, decls: HoleDecls = {}): string[] {
-  const group = zoneGroupOf(bundle, box);
-  return group === undefined ? [] : tagsOfHand(box, hand, group, decls);
 }
 
 /** Tier one hand's possible cards. `cards` is its own box's, in the order the

@@ -24,7 +24,7 @@ import {
   openPackBytes, packAddress, packProject, planConnect, planPull, pullPack, pushPack, menuState, projectStatusLine,
   pushedLine, reachable, readRemote, refusalPrompt, resolveLeave, unpushedShards, writeBase, writeRemote,
   levelLine, nothingToPush, serverProblems, ServerSession,
-  LEAVE_SETTLE_MS, REMOTE_FILE,
+  LEAVE_SETTLE_MS,
 } from "./remote.js";
 import type { InAppPrompt, LeaveChoice, LeavePrompt, ProjectAnchor, PullPlan, RemoteRecord } from "./remote.js";
 import { compileBundle, compileForLivePush, createProject, currentProjectHash, exportBundle, openProject, openResult, patterFolderFor, projectSettings, shareScopes, shareScopesDefault, validate, vcStatus } from "./project.js";
@@ -71,6 +71,7 @@ import type {
   BoxEdit, BoxKit, BoxMapDto, MapLayerPrefs, ProjectMapViewDto, CanvasFurnitureDto, CanvasRefDto, CardEdit, CommentDto, CommentMarkerDto, ReviewAt, ReviewItemDto, LastPlace, ConditionProperty, CoverageDriverDto, CoverageInfo, CoverageOrder, CoverageOverlayDto, CoverageReport, DeckGraph, LinksView, MapSiteDto, MapZoneDto, TagGroupEdit, HandEdit, OpenResult, PackMergeSummary, PackOffer, ContractBreakDto, LeavePromptDto, LeaveSettledDto, MapBackgroundDto, PaneState, Problem, ProjectMapDto, ProjectSettingsDto, ReplaceOptions, SearchOpen, ServerPullResult, ServerPushResult, TemplateEdit, ThemeChoice, VcStatusDto, ViewMode, WindowBounds,
 } from "../shared/api.js";
 import { JOB_PROGRESS_CHANNEL, MAP_CANVAS, PROJECT_CHANGED, PROJECT_MAP_ASSETS, PROJECT_MAP_CANVAS_ID } from "../shared/api.js";
+import type { LiveLinkStatus } from "../shared/api.js";   // Live Link: the chip's status, with a held save
 import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
 import { EXAMPLES } from "../shared/examples.js";
 
@@ -213,8 +214,9 @@ async function coverageJob(opts: CoverageRunOpts): Promise<{ report: CoverageRep
       // Always, in the editor: the sweep feeds the Links window's observed-edge
       // overlay, and an author who ran a coverage test and then found that
       // overlay empty because they had run "the wrong kind" would be right to
-      // call it broken. It costs about 1.7x on an operation that already has a
-      // progress bar and a Cancel.
+      // call it broken. It costs about twice a plain sweep (it peeks once per
+      // hand, measured 2026-10-06) on an operation that already has a progress
+      // bar and a Cancel.
       observeEdges: true,
       shouldStop: () => ctx.cancelled,
       onRun: (done, total) => ctx.step(done, total),
@@ -278,13 +280,23 @@ function ensureLiveLink(): LiveLinkServer {
     liveLink = createLiveLinkServer({
       currentBuildHash: () => (session ? currentProjectHash(session) : null),
       onFrame: (frame) => { windows.get("board")?.webContents.send("liveLink:frame", frame); },
-      onStatus: (status) => {
-        for (const w of [window, windows.get("board")]) if (w && !w.isDestroyed()) w.webContents.send("liveLink:status", status);
-        menu();   // keep the Play > Live Link tick in step
-      },
+      onStatus: sendLiveStatus,
     });
   }
   return liveLink;
+}
+/** Why the last save was not pushed to the connected game (a load error, or a
+ *  project that does not compile), for the chip's tip; cleared by the next
+ *  push. Without it the refusal was silent, and an author watching the game
+ *  for their edit had nothing to say why it never came. */
+let liveHeld: string | undefined;
+/** The status as the windows see it: the server's, with the held save. */
+const liveStatus = (status: LiveLinkStatus): LiveLinkStatus =>
+  (status.state === "connected" && liveHeld !== undefined ? { ...status, held: liveHeld } : status);
+function sendLiveStatus(status: LiveLinkStatus): void {
+  const shown = liveStatus(status);
+  for (const w of [window, windows.get("board")]) if (w && !w.isDestroyed()) w.webContents.send("liveLink:status", shown);
+  menu();   // keep the Play > Live Link tick in step
 }
 const liveLinkOn = (): boolean => liveLink?.isOn() ?? false;
 /** Live refresh: after a write, recompile and push to a connected game,
@@ -296,9 +308,11 @@ function scheduleLivePush(): void {
   if (!liveLink?.isOn() || liveLink.status().state !== "connected") return;
   clearTimeout(livePushTimer);
   livePushTimer = setTimeout(() => {
-    if (!session) return;
+    if (!session || !liveLink) return;
     const out = compileForLivePush(session);
-    if (out) liveLink?.pushBundle(out.hash, out.json);
+    const held = "error" in out ? out.error : undefined;
+    if (held !== liveHeld) { liveHeld = held; sendLiveStatus(liveLink.status()); }
+    if (!("error" in out)) liveLink.pushBundle(out.hash, out.json);
   }, 500);
 }
 
@@ -448,17 +462,16 @@ async function unpackToChosenDir(packPath: string): Promise<OpenResult | { error
   const target = dirPick.filePaths[0];
   if (dirPick.canceled || target === undefined) return null;
   try {
+    // The record a server-issued pack carries is NOT written by this route: the
+    // op returns it among the entries it never writes (`other`), and nothing
+    // here reads it. A pack opened by file is an ordinary project until somebody
+    // connects: the role it names would otherwise make the shape read-only in an
+    // editor that has no server to explain it and no menu to act on it.
     const { shards, assets, scopes } = await runUnpack(readFileSync(packPath), target);
-    // The record a server-issued pack carries is NOT written by this route. A
-    // pack opened by file is an ordinary project until somebody connects: the
-    // role it names would otherwise make the shape read-only in an editor that
-    // has no server to explain it and no menu to act on it.
-    //
     // The game's shared scopes the pack carried land in game-scopes/ inside the
     // project, where discovery looks first, so the pickers, checks and the
     // Board know the other tools' names here as they did where it was packed.
     const batch = writeTextFiles([...shards, ...scopes]
-      .filter((w) => w.path !== join(target, REMOTE_FILE))
       .map((w) => ({ filePath: w.path, content: w.content })));
     if (!batch.success) {
       const first = batch.results.find((r) => !r.success);
@@ -800,7 +813,9 @@ async function landPackNow(
 /** Write a plan's shards, sidecars and pictures. Returns the reason it could
  *  not, or nothing. */
 function commitPlan(plan: PullPlan): string | undefined {
-  const batch = writeTextFiles([...plan.writes, ...plan.sidecars, ...plan.scopes]
+  // Sidecars first: a shard holding provisional content must never land
+  // without the sidecar that says so.
+  const batch = writeTextFiles([...plan.sidecars, ...plan.writes, ...plan.scopes]
     .map((w) => ({ filePath: w.path, content: w.content })));
   if (!batch.success) {
     const first = batch.results.find((r) => !r.success);
@@ -855,7 +870,7 @@ async function serverPull(): Promise<ServerPullResult> {
   if (failed(base)) return { error: base.error };
   try {
     const plan = await planPull(ctx.dir, head.bytes, base.bytes);
-    const writes = [...plan.writes, ...plan.sidecars];
+    const writes = [...plan.sidecars, ...plan.writes];
     const before = captureBefore(writes.map((w) => w.path));
     const failure = commitPlan(plan);
     if (failure !== undefined) return { error: failure };
@@ -1417,9 +1432,9 @@ function wireIpc(): void {
 
   // Live Link (design/live-link.md): the chip and Play > Live Link toggle the
   // server; the Board asks for the snapshot when it enters Live mode.
-  ipcMain.handle("liveLink:start", () => { ensureLiveLink().start(); menu(); return ensureLiveLink().status(); });
-  ipcMain.handle("liveLink:stop", () => { ensureLiveLink().stop(); menu(); return ensureLiveLink().status(); });
-  ipcMain.handle("liveLink:status", () => ensureLiveLink().status());
+  ipcMain.handle("liveLink:start", () => { ensureLiveLink().start(); menu(); return liveStatus(ensureLiveLink().status()); });
+  ipcMain.handle("liveLink:stop", () => { liveHeld = undefined; ensureLiveLink().stop(); menu(); return ensureLiveLink().status(); });
+  ipcMain.handle("liveLink:status", () => liveStatus(ensureLiveLink().status()));
   ipcMain.handle("liveLink:snapshot", () => ensureLiveLink().snapshot());
   ipcMain.handle("liveLink:follow", (_e, flowId: string) => {
     const link = ensureLiveLink();
@@ -2487,7 +2502,7 @@ function wireIpc(): void {
       }
       // The returned World edit goes to the game's own file in the same batch,
       // so the one undo puts it back with the rest (game-scopes.ts).
-      const writes = [...merged.writes, ...merged.sidecars, ...returnedWorldWrites(merged.gameWorld)];
+      const writes = [...merged.sidecars, ...merged.writes, ...returnedWorldWrites(merged.gameWorld)];
       const before = captureBefore(writes.map((w) => w.path));
       if (!applyStates(writes.map((w) => ({ path: w.path, content: w.content })))) {
         return { error: "could not write the merge (locked or read-only?)" };

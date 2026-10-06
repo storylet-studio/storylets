@@ -139,6 +139,19 @@ describe("runReplace", () => {
     expect(write.content).toContain("weight: 3");
   });
 
+  it("covers the project map's group, written through the map's own planner (CLI review 2026-10, item 16)", () => {
+    const plan = runReplace(loaded, { query: "this beat belongs", replacement: "this scene belongs" });
+    expect(plan.hits.map((h) => [h.kind, h.id, h.field, h.after])).toEqual([
+      ["tagGroup", "d_zone", "purpose", "Where in the world this scene belongs."],
+    ]);
+    expect(plan.hits[0]!.location).toEqual(["Village"]);
+    expect(plan.writes.map((w) => w.path)).toEqual([join(exampleDir, "map.storyletmap")]);
+    const map = parseSource(plan.writes[0]!.content) as { schema: string; group: { purpose: string; tags: unknown[] } };
+    expect(map.schema).toBe("storylets/projectmap@0");
+    expect(map.group.purpose).toBe("Where in the world this scene belongs.");
+    expect(map.group.tags).toHaveLength(loaded.source!.map!.group.tags.length);
+  });
+
   it("is case-insensitive by default, case-sensitive on request, whole-word on request", () => {
     expect(runReplace(loaded, { query: "HAMMER", replacement: "x" }).hits).toHaveLength(2);
     expect(runReplace(loaded, { query: "HAMMER", replacement: "x", caseSensitive: true }).hits).toHaveLength(0);

@@ -23,12 +23,16 @@
 // having its own store, so they are counted apart and the warning names the
 // deck it means. Keying by bare name instead let one deck's read vouch for
 // another deck's write, which is how the Village hid a dead write for a week.
+// The owner is the deck's (or box's) internal id, as the stores are keyed;
+// the warning names its gameId.
 // ---------------------------------------------------------------------------
 
 import { compileProject } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import type { Bundle, Expression } from "@storylet-studio/model";
 import { effectiveGameId, groupsOfBox } from "@storylet-studio/model";
+import { keyOf, splitKey, writesOf } from "./analysis-common.js";
+import type { Owner } from "./analysis-common.js";
 
 type AstNode = Expression["ast"];
 
@@ -45,25 +49,8 @@ interface Life {
   flagsChecked: Map<string, Half>; flagsSet: Map<string, Half>;
 }
 
-/** Which deck or box a reference was seen in, for the scopes that are private
- *  to one. Empty for @world / @story, which are one thing project-wide. */
-interface Owner { box?: string; deck?: string }
-
-const SEP = "\u0000";
-/** Map key: owner-qualified for the private scopes, bare for the shared ones.
- *  `displayOf` splits it back into the ref and who owns it. */
-const keyOf = (ref: string, o: Owner): string =>
-  ref.startsWith("@deck.") ? `${o.deck ?? ""}${SEP}${ref}`
-  : ref.startsWith("@box.") ? `${o.box ?? ""}${SEP}${ref}`
-  : ref;
-const displayOf = (key: string): string => {
-  const i = key.indexOf(SEP);
-  if (i < 0) return key;
-  const owner = key.slice(0, i), ref = key.slice(i + 1);
-  return owner ? `${ref} in ${owner}` : ref;
-};
-/** The bare ref, for the tests that ask what SCOPE a key is in. */
-const refOf = (key: string): string => key.slice(key.indexOf(SEP) + 1);
+// Map keys are `keyOf`'s (analysis-common.ts): owner-qualified for the
+// private scopes, by the owner's internal id, and bare for the shared ones.
 
 const life = (m: Map<string, Life>, ref: string): Life => {
   let l = m.get(ref);
@@ -76,36 +63,30 @@ const half = (m: Map<string, Half>, name: string): Half => {
   return h;
 };
 
-/** Walk one AST, recording reads and flag checks/deltas against `ref` when the
- *  node is a flag call (whose first arg names the property). */
+const mark = (h: Half, where: string, at?: { path: string; where?: string }): void => { h.wheres.push(where); h.at ??= at; };
+
+/** Walk one AST, recording reads, and the flags a `check_flags` asks for
+ *  against the property its first argument names. What a WRITE sets is the
+ *  change's business (`writesOf`), not the expression's: `@y =
+ *  set_flags(@x, +a)` sets y's flag, and only reads x. */
 function scan(ast: AstNode, where: string, m: Map<string, Life>, owner: Owner, at?: { path: string; where?: string }): void {
   if (!Array.isArray(ast)) return;
   const [tag] = ast;
-  const mark = (h: Half): void => { h.wheres.push(where); h.at ??= at; };
   if (tag === "sv") {
-    mark(life(m, keyOf(`@${ast[1]}.${ast[2]}`, owner)).reads);
+    mark(life(m, keyOf(`@${ast[1]}.${ast[2]}`, owner)).reads, where, at);
     return;
   }
-  if (tag === "call" && (ast[1] === "check_flags" || ast[1] === "set_flags" || ast[1] === "clear_flags")) {
+  if (tag === "call" && ast[1] === "check_flags") {
     const target = ast[2];
-    const ref = Array.isArray(target) && target[0] === "sv" ? `@${target[1]}.${target[2]}` : undefined;
-    if (ref !== undefined) {
-      const l = life(m, keyOf(ref, owner));
-      // check_flags READS; set/clear also read (they take the current set).
-      mark(l.reads);
+    if (Array.isArray(target) && target[0] === "sv") {
+      const l = life(m, keyOf(`@${target[1]}.${target[2]}`, owner));
       for (const arg of ast.slice(3)) {
-        if (Array.isArray(arg) && arg[0] === "fd") {
-          const name = String(arg[2]);
-          if (ast[1] === "check_flags") mark(half(l.flagsChecked, name));
-          // set_flags +x sets; clear_flags -x clears, which only matters if
-          // something set it, so only additions count as "set".
-          else if (arg[1] === "+") mark(half(l.flagsSet, name));
-        }
+        if (Array.isArray(arg) && arg[0] === "fd") mark(half(l.flagsChecked, String(arg[2])), where, at);
       }
     }
-    for (const arg of ast.slice(2)) scan(arg as AstNode, where, m, owner, at);
-    return;
   }
+  // Every argument is read, the flag call's own property included (set and
+  // clear take the current set too).
   for (const part of (ast as unknown[]).slice(1)) scan(part as AstNode, where, m, owner, at);
 }
 
@@ -123,13 +104,23 @@ export function deadStateIssues(source: SourceProject, compiled?: Bundle): Issue
   const declsOf = (scope: string, decls: { name: string; type: string }[] | undefined, owner: Owner): void => {
     for (const d of decls ?? []) if (d.type === "quality") qualityRefs.add(keyOf(`@${scope}.${d.name}`, owner));
   };
+  // An owner's id, back to the gameId a warning names it by.
+  const ownerNames = new Map<string, string>();
   declsOf("world", bundle.world.properties, {});
   declsOf("story", bundle.story.properties, {});
   for (const box of bundle.boxes) {
-    const boxName = effectiveGameId(box);
-    declsOf("box", box.properties, { box: boxName });
-    for (const deck of box.decks) declsOf("deck", deck.properties, { box: boxName, deck: effectiveGameId(deck) });
+    ownerNames.set(box.id, effectiveGameId(box));
+    declsOf("box", box.properties, { box: box.id });
+    for (const deck of box.decks) {
+      ownerNames.set(deck.id, effectiveGameId(deck));
+      declsOf("deck", deck.properties, { box: box.id, deck: deck.id });
+    }
   }
+  /** A key as a warning says it: the ref, and the box or deck that owns it. */
+  const displayOf = (key: string): string => {
+    const { owner, ref } = splitKey(key);
+    return owner ? `${ref} in ${ownerNames.get(owner) ?? owner}` : ref;
+  };
 
   // Deck id -> the shard that carries it, for a warning's clickable address.
   const deckShardPaths = new Map<string, string>();
@@ -137,7 +128,7 @@ export function deadStateIssues(source: SourceProject, compiled?: Bundle): Issue
 
   const m = new Map<string, Life>();
   for (const box of bundle.boxes) {
-    const at = { box: effectiveGameId(box) };
+    const at: Owner = { box: box.id };
     for (const template of box.handTemplates) {
       if (template.condition) scan(template.condition.ast, `hand template ${effectiveGameId(template)}`, m, at);
     }
@@ -148,7 +139,7 @@ export function deadStateIssues(source: SourceProject, compiled?: Bundle): Issue
       if (group.boundBy !== undefined) life(m, keyOf(group.boundBy, at)).reads.wheres.push(`tag group ${effectiveGameId(group)}`);
     }
     for (const deck of box.decks) {
-      const inDeck = { ...at, deck: effectiveGameId(deck) };
+      const inDeck: Owner = { ...at, deck: deck.id };
       const deckPath = deckShardPaths.get(deck.id);
       const site = (cardGameId?: string): { path: string; where?: string } | undefined =>
         deckPath === undefined ? undefined : { path: deckPath, ...(cardGameId !== undefined ? { where: cardGameId } : {}) };
@@ -160,11 +151,14 @@ export function deadStateIssues(source: SourceProject, compiled?: Bundle): Issue
         for (const outcome of card.outcomes) {
           const where = `${effectiveGameId(card)}/${effectiveGameId(outcome)}`;
           if (outcome.condition) scan(outcome.condition.ast, `outcome ${where}`, m, inDeck, cardSite);
-          for (const [target, change] of Object.entries(outcome.changes)) {
+          for (const { target, expr, flags } of writesOf(outcome)) {
             const l = life(m, keyOf(target, inDeck));
             l.writes.wheres.push(`outcome ${where}`);
             l.writes.at ??= cardSite;
-            scan(change.ast, `outcome ${where}`, m, inDeck, cardSite);
+            // set_flags +x sets the TARGET's flag x; a -x clears, which only
+            // matters if something set it, so only additions count as "set".
+            for (const d of flags?.deltas ?? []) if (d.sign === "+") mark(half(l.flagsSet, d.flag), `outcome ${where}`, cardSite);
+            scan(expr.ast, `outcome ${where}`, m, inDeck, cardSite);
           }
         }
       }
@@ -176,7 +170,7 @@ export function deadStateIssues(source: SourceProject, compiled?: Bundle): Issue
   // Another engine's game-wide scope (`@patter.visits`): that engine writes it, where nothing here can see.
   const otherEngines = bundle.externalScopes ?? [];
   for (const [key, l] of [...m].sort(([a], [b]) => a.localeCompare(b))) {
-    const scoped = refOf(key), ref = displayOf(key);
+    const scoped = splitKey(key).ref, ref = displayOf(key);
     if (scoped.startsWith("@world.") || scoped.startsWith("@hand.")) continue;   // host-owned / composed
     if (otherEngines.some((t) => scoped.startsWith(`@${t}.`))) continue;          // another engine writes it
 

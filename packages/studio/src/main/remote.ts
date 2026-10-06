@@ -40,9 +40,7 @@ import tls from "node:tls";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { canonicalStringify, parseSource, walkProjectFiles } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS } from "@storylet-studio/model";
-import {
-  CONFLICT_SIDECAR_EXTENSION, conflictSidecar, runMerge, runPack, runUnpack,
-} from "@storylet-studio/ops";
+import { normalForm, planShardMerge, runPack, runUnpack } from "@storylet-studio/ops";
 
 /** The record beside the project's shards. Named for the file a pack from a
  *  server carries beside its manifest, because that file IS this record: a
@@ -171,26 +169,13 @@ export interface BaseRecord {
 }
 
 /**
- * A shard in the MERGE's own normal form: `runMerge(x, x, x)`.
- *
- * The order of an id-keyed array is never a change (the ruling of 2026-09-07,
- * which the far end compares by too). The merge sorts every keyed array and
- * every open map as it folds, so a pulled shard comes back ordered whether or
- * not the copy on disk was, and a comparison of canonical TEXT then reads a
- * sort as four edits nobody made. Asking the merge itself is what keeps the two
- * ends agreeing about what a change is: there is one normal form and it is the
- * one the merge already defines.
- *
- * A shard the merge cannot type - anything that is not one of ours - is its own
- * normal form, because there is no strategy to normalise it with.
+ * A shard in the MERGE's own normal form: `runMerge(x, x, x)`. The order of an
+ * id-keyed array is never a change (the ruling of 2026-09-07, which the far end
+ * compares by too), and the merge is what defines the one normal form. It lives
+ * in ops beside the merge now, which the pull's per-shard planner shares with
+ * `unpack --merge`; exported from here as it always was.
  */
-export function normalForm(shard: Record<string, unknown>): Record<string, unknown> {
-  try {
-    return runMerge(shard, shard, shard).merged;
-  } catch {
-    return shard;
-  }
-}
+export { normalForm };
 
 /** The same, over text: the normal form's canonical bytes. */
 const normalText = (text: string): string =>
@@ -885,20 +870,19 @@ export interface OpenedPack {
  * of the project is refused there as it is for the CLI.
  */
 export async function openPackBytes(bytes: Buffer | Uint8Array, dir: string): Promise<OpenedPack> {
-  const { shards, assets, scopes } = await runUnpack(bytes, dir);
+  const { shards, assets, scopes, other } = await runUnpack(bytes, dir);
   const out: OpenedPack = { shards: new Map(), assets: new Map(), scopes: new Map() };
   const rel = (path: string): string => relative(dir, path).split(sep).join("/");
-  for (const write of shards) {
-    const name = rel(write.path);
-    if (name === REMOTE_FILE) {
-      try {
-        const parsed = JSON.parse(write.content) as RemoteRecord;
-        if (parsed.schema === REMOTE_SCHEMA) out.remote = parsed;
-      } catch { /* a record we cannot read is a pack with none */ }
-      continue;
-    }
-    out.shards.set(name, write.content);
+  // The record is not a shard, so the op hands it back among the entries it
+  // never writes, and this is the one place that reads it.
+  const record = other.get(REMOTE_FILE);
+  if (record !== undefined) {
+    try {
+      const parsed = JSON.parse(record) as RemoteRecord;
+      if (parsed.schema === REMOTE_SCHEMA) out.remote = parsed;
+    } catch { /* a record we cannot read is a pack with none */ }
   }
+  for (const write of shards) out.shards.set(rel(write.path), write.content);
   for (const write of assets) out.assets.set(rel(write.path), write.bytes);
   for (const write of scopes) out.scopes.set(rel(write.path), write.content);
   return out;
@@ -997,45 +981,22 @@ export async function planPull(
   }
 
   for (const name of [...theirs.shards.keys()].sort()) {
-    const theirText = theirs.shards.get(name)!;
     const path = join(dir, name);
-    if (!existsSync(path)) {
-      plan.writes.push({ path, content: theirText });
-      plan.added++;
-      continue;
-    }
-    const read = (text: string, side: string): Record<string, unknown> => {
-      try { return parseSource(text) as Record<string, unknown>; } catch (e) {
-        throw new Error(`${name}: the ${side} copy will not parse (${e instanceof Error ? e.message : String(e)})`);
-      }
-    };
-    const ourText = readFileSync(path, "utf8");
-    if (isContractShard(name)) {
-      plan.replaced++;
-      if (shardHash(ourText) !== shardHash(theirText)) plan.writes.push({ path, content: theirText });
-      continue;
-    }
-    const ours = read(ourText, "local");
-    const baseText = ancestor?.get(name);
-    // NO BASE ENTRY means the shard did not exist at the revision we pulled, so
-    // there is no ancestor and every field of theirs reads as an add. `{}` is
-    // how `runMerge` is told that, and it is exempt from the schema-skew check
-    // for exactly this reason: an absence has no version to disagree with.
-    const result = runMerge(
-      baseText !== undefined ? read(baseText, "base") : {},
-      ours,
-      read(theirText, "pulled"),
-    );
-    const content = canonicalStringify(result.merged);
-    plan.merged++;
-    // Order alone is not a change, so a result the file already says is not a
-    // write. The merge's output is normal already; ours is put in the same form
-    // to be asked.
-    if (content !== canonicalStringify(normalForm(ours))) plan.writes.push({ path, content });
-    if (result.conflicts.length > 0) {
-      plan.sidecars.push({ path: `${path}${CONFLICT_SIDECAR_EXTENSION}`, content: conflictSidecar(result) });
-      plan.conflicts += result.conflicts.length;
-    }
+    // The disposition `unpack --merge` uses, from the one planner in ops, with
+    // the contract taken whole (see above). Present only theirs is an add; a
+    // result the file already says, in the merge's own normal form, is no write.
+    const step = planShardMerge({
+      rel: name, path, theirs: theirs.shards.get(name)!, base: ancestor?.get(name),
+      ours: existsSync(path) ? readFileSync(path, "utf8") : undefined,
+      replace: isContractShard(name),
+      sides: { theirs: "pulled", base: "base" },
+    });
+    if (step.outcome === "added") plan.added++;
+    else if (step.outcome === "replaced") plan.replaced++;
+    else plan.merged++;
+    if (step.write !== undefined) plan.writes.push(step.write);
+    if (step.sidecar !== undefined) plan.sidecars.push(step.sidecar);
+    plan.conflicts += step.result?.conflicts.length ?? 0;
   }
   for (const [name, bytes] of [...theirs.assets.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     const path = join(dir, name);

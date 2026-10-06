@@ -1,5 +1,6 @@
 export { newId, slug } from "./ids.js";
-export type { PlannedWrite } from "./write.js";
+export type { PlannedBinaryWrite, PlannedFileWrite, PlannedWrite } from "./write.js";
+export { isBinaryWrite } from "./write.js";
 export { findProjectDir, loadProject } from "./load.js";
 // The game's shared scopes folder (patterkit design/shared-scopes.md): reading it, writing the
 // Storylet Engine's file and the game's @world, and the previews' stand-in registry.
@@ -8,7 +9,7 @@ export {
   readGameFile, readGameScopes, staleScopesIssues, storyletsScopesText,
 } from "./game-scopes.js";
 export type { LoadedProject } from "./load.js";
-export { runInit, projectFolderName, GAME_KITS } from "./init.js";
+export { runInit, undoInit, projectFolderName, GAME_KITS } from "./init.js";
 export type { InitOptions, InitResult, GameKit } from "./init.js";
 export { runNewBox, BOX_KITS } from "./newbox.js";
 export { boxFolderWrites, boxFolderName } from "./box-folder.js";
@@ -37,15 +38,18 @@ export type {
 } from "./coverage.js";
 export { leastReachedFirst, rarelyDealt, sharePct, RARE_DEALT_PCT } from "./coverage-order.js";
 // What could come up at a hand, statically: coverage's per-hand reach and the editor's hand page
-export { handReach, placeTiers, zonesOfHand } from "./reach.js";
+export { handReach, placeTiers } from "./reach.js";
 export type { FixedBinding, HandReach, HoleDecls, NeverHere, PlaceTiers, ReachBox, ReachCard, ReachMap } from "./reach.js";
 // The one definition of a place axis: the Where row, Group by and the hand page's tiers all read it
-export { bindingsOfHand, isPlaceAxis, movesIn, placeAxes, tagsOfHand, zoneGroupOf } from "./place-axis.js";
-export type { PlaceAxisBox, PlaceAxisMap } from "./place-axis.js";
+export { bindingsOfHand, handBindings, movesIn, placeAxes, tagsOfHand, zoneGroupOf } from "./place-axis.js";
+export type { HandBinding, PlaceAxisBox, PlaceAxisMap } from "./place-axis.js";
+// A hand's declared @hand state, as the runtime's hand bags hold it
+export { handDeclarations } from "./analysis-common.js";
 export type { CoverageOrder } from "./coverage-order.js";
 export {
-  runMerge, detectMergeType, conflictSidecar, MergeInputError, CONFLICT_SIDECAR_EXTENSION,
+  runMerge, detectMergeType, conflictSidecar, normalForm, planShardMerge, MergeInputError, CONFLICT_SIDECAR_EXTENSION,
 } from "./merge.js";
+export type { ShardMergeInput, ShardMergeStep } from "./merge.js";
 export { analyseInfluence, cardNeighbourhood, describeContribution } from "./influence.js";
 // Find: property usage (the Property tab) and find-and-replace over item text (the Replace tab)
 export { runPropertyUsage, runPropertyUsageMany, parsePropertyQuery } from "./usage.js";
@@ -55,7 +59,7 @@ export type { ReplaceOptions, ReplaceHit, ReplaceField, ReplacePlan } from "./re
 // Pin on publish: the editor's Publish writes down every address still following its title
 export { planPins } from "./pin.js";
 // The paired Patter project: where it is, its published bundle, and cards against their scenes
-export { PATTER_BUNDLE_SCHEMA, findScene, isPerformed, performedBoxes, readPatterLink, patterPairingIssues, patterIssues, patterOutcomeReports, optionsOf, outcomesReported } from "./patter-link.js";
+export { PATTER_BUNDLE_SCHEMA, findScene, performedBoxes, readPatterLink, patterPairingIssues, patterIssues, patterOutcomeReports, optionsOf, outcomesReported } from "./patter-link.js";
 export type { PatterLink, PatterOption, PatterReport, PatterScenes, PatterSceneShape } from "./patter-link.js";
 export type { PinnedName, PinPlan } from "./pin.js";
 export {
@@ -67,7 +71,7 @@ export { boxColourOf, canvasFurniture, cardPositions, deckCanvas, planBoxColour,
 export type { CanvasRef } from "./view.js";
 export {
   boxMap, boxesOnMap, mapPath, mapSites, planForgetSites, planMapMigration, planMapSites,
-  planProjectMapFrames, planProjectMapGroup, projectMapGroup, projectMapPath,
+  planProjectMapFrames, planProjectMapGroup, projectMapPath,
 } from "./map.js";
 export { PROJECT_MAP_CANVAS, planProjectMapMigration } from "./project-map-migration.js";
 export type { PlannedMove, ProjectMapMigration } from "./project-map-migration.js";
@@ -81,13 +85,12 @@ export type {
   InfluenceGraph, InfluenceEdge, InfluenceNode, InfluenceScope, InfluenceOptions,
   InfluenceScopeName, EdgeClass, EdgeContribution, AnalysisWarning, AnalysisWarningKind, Neighbourhood,
 } from "./influence.js";
-export { runPack, readPackManifest, PackError, PACK_EXTENSION, PACK_MANIFEST, PACK_SCHEMA } from "./pack.js";
+export { runPack, readPackManifest, NotAPackError, PackError, PACK_EXTENSION, PACK_MANIFEST, PACK_SCHEMA } from "./pack.js";
 export type { PackManifest } from "./pack.js";
 export { runUnpack, runUnpackMerge, isUnsafeEntry, UnsafeEntryError } from "./unpack.js";
 export type { ProvenanceCheck } from "./unpack.js";
-export type { MergedShard, UnpackMergeResult } from "./unpack.js";
+export type { MergedShard, UnpackMergeResult, UnpackResult } from "./unpack.js";
 export type { MergeFileType, MergeResult, Conflict, Warning, ConflictKind } from "./merge.js";
-export { findConflictSidecars } from "./load.js";
 export type { Issue } from "@storylet-studio/compiler";
 export { parseSource, canonicalStringify } from "@storylet-studio/compiler";
 

@@ -71,7 +71,8 @@ const project = (opts: {
     file(`${b.folder}/hands.storylethands`, { schema: "storylets/hands@0", templates: b.templates ?? [], hands: b.hands ?? [] }),
     file(`${b.folder}/decks/main.storyletdeck`, {
       schema: "storylets/deck@0",
-      deck: { id: `k_${b.folder}`, gameId: "main", properties: [] },
+      // Named for its box: deck gameIds are project-wide unique (ruling M).
+      deck: { id: `k_${b.folder}`, gameId: `${b.folder}-main`, properties: [] },
       cards: b.cards ?? [],
     }),
     ...(b.map !== undefined ? [file(`${b.folder}/map.storyletmap`, b.map)] : []),

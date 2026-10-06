@@ -25,21 +25,18 @@ import {
 } from "@storylet-studio/model";
 import type { ContractShard, PropertyDecl, PropertyType } from "@storylet-studio/model";
 import { worldDeclarations } from "@storylet-studio/compiler";
-import type { Issue, SourceBox, SourceProject } from "@storylet-studio/compiler";
-
-/** A hand's declarations: a template instance inherits its template's, a
- *  standalone hand declares its own (the rule the runtime's hand bags use). */
-function handDecls(box: SourceBox, hand: SourceBox["hands"]["hands"][number]): PropertyDecl[] {
-  if (hand.template !== undefined) {
-    return box.hands.templates.find((t) => t.id === hand.template)?.properties ?? [];
-  }
-  return hand.properties ?? [];
-}
+import type { Issue, SourceProject } from "@storylet-studio/compiler";
+import { handDeclarations } from "./analysis-common.js";
 
 /**
  * Every declaration in the project, addressed the way `listProperties()` prints
  * it with the `@` dropped: "world.time_wall", "story.visits",
  * "box.street.mood", "value.docks.danger".
+ *
+ * Not the model's `propertyAddresses`, though it walks the same owners: that
+ * reads a COMPILED bundle and gives each declaration the one address a runtime
+ * prints, where this reads the source (a contract is checked without a
+ * compile) and accepts every address a runtime accepts, below.
  *
  * The owner segment is accepted as EITHER the gameId or the internal id, which
  * is the engine's own rule for a release (design/engine-server.md 4.4): the
@@ -92,7 +89,7 @@ function declarations(source: SourceProject): Map<string, { decl: PropertyDecl; 
       add("deck", both(deck.shard.deck), deck.shard.deck.properties, deck.path, effectiveGameId(deck.shard.deck));
     }
     for (const hand of box.hands.hands) {
-      add("hand", both(hand), handDecls(box, hand), `${box.path}/hands`, effectiveGameId(hand));
+      add("hand", both(hand), handDeclarations(box.hands.templates, hand), `${box.path}/hands`, effectiveGameId(hand));
     }
     for (const group of box.tags.groups) {
       for (const tag of group.tags) {
@@ -247,8 +244,8 @@ export interface ContractNote {
  * What each entity a contract depends on should say about itself, keyed by the
  * key an editor already has to hand.
  *
- * Keys are `hand:<gameId>`, `box:<gameId>`, `property:<path>` and
- * `field:<name>` - the four things a contract can name. Derived here rather than
+ * Keys are `hand:<gameId>`, `box:<gameId>`, `property:<path>`, `field:<name>`
+ * and `outcomeField:<name>` - the five things a contract can name. Derived here rather than
  * in the editor because a second reading of the same shard is how the refusal
  * and the explanation come to disagree, and because the CLI's `contract show`
  * needs exactly the same list.

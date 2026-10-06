@@ -93,7 +93,7 @@ import type { PushOptions } from "./server-dialog.js";
 import type {
   BoxEdit, BoxKit, CardDto, CardEdit, ConditionProperty, ContractBreakDto, TagGroupEdit, MenuCommand, OpenResult, PackOffer, Problem, ProjectDto,
   RemoteDto, ShardVcDto, TemplateEdit, StudioApi, StudioState, ThemeChoice,
-  BoxDto, CommentDto, CommentMarkerDto, CoverageOverlayDto, LiveLinkStatus, ReviewAt, ReviewItemDto } from "../../shared/api.js";
+  BoxDto, CommentDto, CommentMarkerDto, CoverageOverlayDto, LiveLinkStatus, ProjectKit, ReviewAt, ReviewItemDto } from "../../shared/api.js";
 
 declare global { interface Window { studio: StudioApi; } }
 const studio = window.studio;
@@ -113,10 +113,15 @@ let liveLinkChip: LinkStatusChip | undefined;
  *  boxes the game's hello named as the tip's extra sentence. */
 function linkStatusOf(s: LiveLinkStatus): LinkStatus {
   if (s.state !== "connected") return s;
+  // A save held back from the game says why in the tip, beside the boxes.
+  const note = [
+    s.boxes.length > 0 ? `Boxes: ${s.boxes.join(", ")}.` : "",
+    s.held !== undefined ? `Not sent, so the game runs the build before: ${s.held}` : "",
+  ].filter(Boolean).join(" ");
   return {
     state: "connected", port: s.port, build: s.build,
     ...(s.project !== undefined ? { project: s.project } : {}),
-    ...(s.boxes.length > 0 ? { note: `Boxes: ${s.boxes.join(", ")}.` } : {}),
+    ...(note !== "" ? { note } : {}),
   };
 }
 
@@ -2597,13 +2602,15 @@ function openBoxKitPicker(onPick: (kit: BoxKit) => void): void {
 }
 
 /** What New Project offers: the game kits, then the shipped examples. */
-type ProjectStart = "blank" | "with-patter" | "map-story" | "action-game" | `example:${string}`;
+type ProjectStart = ProjectKit | `example:${string}`;
 
 /** The game kits, read by New Project and by the welcome's Start group. */
-const PROJECT_KITS: KitGalleryItem<"blank" | "with-patter" | "map-story" | "action-game">[] = [
+// The ids are ops' GAME_KITS and "with-patter" (ProjectKit), held to that list by
+// main/box-kits.test.ts: the renderer cannot import ops to read it.
+const PROJECT_KITS: KitGalleryItem<ProjectKit>[] = [
   // NOT "Empty project ... and nothing else", which was false: init lands a box,
   // a `whats-next` hand and two wired cards, so a new project plays immediately.
-  { id: "blank", name: "Starter project",
+  { id: "starter", name: "Starter project",
     blurb: "One box, one place to deal to, and two cards that already work together. Add box kits to it as you go.",
     tile: "Two cards that already work together, ready to play.",
     features: ["A first scene", "Playable at once"],
@@ -2670,7 +2677,7 @@ function openNewProject(initial?: ProjectStart): void {
     ],
     onPick: (start, { name }) => {
       if (start.startsWith("example:")) { void adopt(studio.openExample(start.slice("example:".length))); return; }
-      if (name !== undefined) void adopt(studio.createProject(name, start as "blank" | "with-patter" | "map-story" | "action-game"));
+      if (name !== undefined) void adopt(studio.createProject(name, start as ProjectKit));
     },
   });
 }

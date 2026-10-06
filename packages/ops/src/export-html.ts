@@ -17,6 +17,7 @@ import { compileProject, mapDrawing, serialiseBundle } from "@storylet-studio/co
 import type { Issue, MapDrawing, SourceProject } from "@storylet-studio/compiler";
 import { effectiveGameId, handBinding, labelPoint } from "@storylet-studio/model";
 import { assetPath } from "./assets.js";
+import { projectFileStem } from "./export-xlsx.js";
 import type { LoadedProject } from "./load.js";
 import { mapSites } from "./map.js";
 import { PLAYABLE_PATTERPLAY_JS, PLAYABLE_PLAYER_JS } from "./playable-player.js";
@@ -153,8 +154,7 @@ const esc = (s: string): string => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "
 /** The suggested file name: the project's name, with path-hostile characters
  *  folded to spaces (the spreadsheet's rule, and Patterpad's safeStem). */
 export function playableFileName(source: SourceProject): string {
-  const stem = source.project.project.name.replace(/[/\\:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
-  return `${stem || "project"}.html`;
+  return `${projectFileStem(source)}.html`;
 }
 
 /** The demo page's look (packages/play-helpers/demo/index.html), minus the
@@ -257,7 +257,9 @@ function pagePatter(loaded: LoadedProject): { bundle: unknown; boxes: string[] }
  * editor through a Save dialog).
  */
 export function runExportHtml(loaded: LoadedProject): ExportHtmlResult {
-  if (!loaded.source) return { issues: loaded.issues };
+  // A load error refuses, as it does for the bundle (ruling M): a page missing
+  // whatever failed to load would play as though it were the project.
+  if (!loaded.source || loaded.issues.some((i) => i.severity === "error")) return { issues: loaded.issues };
   const source: SourceProject = {
     ...loaded.source,
     project: { ...loaded.source.project, export: { ...loaded.source.project.export, metadata: "full" } },
@@ -266,7 +268,7 @@ export function runExportHtml(loaded: LoadedProject): ExportHtmlResult {
   const all = [...loaded.issues, ...issues];
   if (!bundle) return { issues: all };
 
-  const title = source.project.project.name.trim() || "A Storylet Studio project";
+  const title = source.project.project.name.trim() || "A Storyletter project";
   // Every `<` in the JSON is escaped, so the data cannot close the <script> it sits in.
   const bundleJson = serialiseBundle(bundle).trimEnd().replace(/</g, "\\u003c");
   const mapsJson = JSON.stringify(playableMaps(loaded, all)).replace(/</g, "\\u003c");
@@ -294,7 +296,7 @@ export function runExportHtml(loaded: LoadedProject): ExportHtmlResult {
   <div id="col">
     <header>
       <h1>${esc(title)}</h1>
-      <span class="by">Storylet Studio</span>
+      <span class="by">Storyletter</span>
     </header>
     <div id="header-line"></div>
     <div id="board"></div>

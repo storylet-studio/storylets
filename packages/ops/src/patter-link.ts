@@ -333,13 +333,6 @@ export function performedBoxes(source: SourceProject): Set<string> | undefined {
   return Array.isArray(ids) && ids.length > 0 ? new Set(ids) : undefined;
 }
 
-/** Is this card in a box the project says Patter performs? False when the project names none. */
-export function isPerformed(source: SourceProject, cardId: string): boolean {
-  const performed = performedBoxes(source);
-  return performed !== undefined && source.boxes.some((b) => performed.has(b.box.box.id)
-    && b.decks.some((d) => d.shard.cards.some((c) => c.id === cardId)));
-}
-
 /** Everything `validate` says about the Patter pairing: the link's own problems, then the check. */
 export function patterIssues(loaded: LoadedProject): Issue[] {
   const { link, issues } = readPatterLink(loaded);

@@ -248,7 +248,7 @@ function results(r: CoverageReport): (HTMLElement | null)[] {
       ? el("section", { className: "block" },
           el("span", { className: "caption", text: `Warnings (${r.unprovidedHandRefs.length + r.diagnostics.length})` }),
           ...r.unprovidedHandRefs.map((u) => el("div", { className: "gap" },
-            el("span", { className: "gname", text: `${u.where} reads ${u.ref}` }),
+            el("span", { className: "gname", text: `${u.where} uses ${u.ref}` }),
             el("span", { className: "hint", text: `never composed by ${u.hands.join(", ")}` }))),
           ...r.diagnostics.map((d) => el("div", { className: "gap" },
             el("span", { className: "gname", text: d.where }),

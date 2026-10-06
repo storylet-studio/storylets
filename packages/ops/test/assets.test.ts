@@ -191,6 +191,17 @@ describe("orphans: files no map uses", () => {
     expect(assetUse(dir, project(groupWith("used.png"))).orphans).not.toContain(".DS_Store");
   });
 
+  it("never calls a box's shards pictures, when the box's folder is called assets (CLI review 2026-10, item 20)", () => {
+    // A box titled "Assets" lives in `assets/`, beside the pictures. Its shards
+    // are not orphans: the session-end sweep deletes orphans.
+    writeFileSync(join(dir, ASSETS_DIR, "box.storyletbox"), "{}");
+    writeFileSync(join(dir, ASSETS_DIR, "hands.storylethands"), "{}");
+    writeFileSync(join(dir, ASSETS_DIR, "box.storyletbox.storyletconflict"), "{}");
+    expect(assetUse(dir, project(groupWith("used.png"))).orphans).toEqual(["also-used.jpg", "left-over.png"]);
+    expect(orphanAssetPaths(dir, project(groupWith("used.png")))).toEqual(
+      ["also-used.jpg", "left-over.png"].map((name) => join(dir, ASSETS_DIR, name)));
+  });
+
   it("does not call a PLACED picture an orphan just because the file is gone", () => {
     // A pack that travelled without its assets leaves exactly this: an entry
     // whose file is missing. That is validation's warning to give, not a tidy's.

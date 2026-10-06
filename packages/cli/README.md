@@ -5,23 +5,28 @@
 and CI consume the same functions).
 
 ```
-storyletengine init [dir] [--name X]     scaffold a new .storylets project
+storyletengine init [dir] [--name X]     scaffold a new .storylets project from a game kit
+    [--kit starter|map-story|action-game]
 storyletengine new box [path] [--kit K]  add a box, scaffolded from a kit
 storyletengine validate [path]           publish gate + bundle staleness + canonical form
 storyletengine format [path] [--check]   rewrite shards to canonical form (alias: fmt)
-storyletengine export [path] [-o file]   compile to the .storyletsc bundle (-o - for stdout),
-                                         and bring game-scopes/storylets.scopes.json up to
-                                         date where the game shares its scopes
+storyletengine export [path] [-o FILE]   compile to the .storyletsc bundle (-o - for stdout),
+    [--map|--no-map]                     and bring game-scopes/storylets.scopes.json up to
+                                         date where the game shares its scopes; --map and
+                                         --no-map override the project's export.map
 storyletengine peek <box> [path]         look at the stock through the reference runtime
     [--where group=tag ...] [--n N] [--set path=value ...] [--seed N] [--deal-all]
 storyletengine deal <hand> [path]        refresh a hand through the reference runtime
     [--set path=value ...] [--seed N] [--deal-all]
 storyletengine resolve <query> [path]    find an item by gameId, id or title: where it lives
                                          (the same lookup as Storyletter's --at)
+storyletengine contract show             what each installation contract depends on
+    [installation] [path]
 storyletengine export-html [path]        one self-contained playable .html (runtime, board
-    [-o file]                            and bundle inlined; opens in any browser)
+    [-o FILE]                            and bundle inlined; opens in any browser)
 storyletengine export-xlsx [path] -o F   the whole project as a readable .xlsx workbook
 storyletengine links [path]              the influence graph: which cards open which
+    [--deck X | --box X | --card X] [--refs] [--json]
 storyletengine share-scopes [path] [--at DIR]  make the game's game-scopes/ folder and write this project's files into it
 storyletengine pack [path] -o FILE       pack a project into one portable .storyletpack
     [--assets|--no-assets]               (--assets carries the background pictures too)
@@ -32,10 +37,21 @@ storyletengine merge BASE OURS THEIRS    id-keyed 3-way merge (+ .storyletconfli
 storyletengine coverage [path]           seeded playthroughs: per-hand and per-card coverage
     [--runs N] [--max-turns M] [--seed S] [--order least|deck]
     [--json] [--fail-on-gap] [--propose]
+storyletengine --version                 print the version (also -v, version)
+storyletengine <command> --help          print one command's usage (also help <command>)
 ```
 
+A flag that takes a value takes it inline too: `--runs=50`, `--where=area=docks`.
+
 Exit codes: 0 ok, 1 the operation found problems, 2 usage. `merge` alone maps a
-malformed input to 2 as well, so a version-control driver can fall back.
+malformed input to 2 as well, so a version-control driver can fall back. Every
+usage error prints under one prefix, `usage: `, and ends on the command's whole
+short form.
+
+`export` and `export-html` refuse a project with a load error (a shard that does
+not parse, say), rather than build from the part that loaded; `links`,
+`coverage` and `share-scopes` exit 1 on one. Every command that loads the
+project prints its load issues.
 
 Where the game shares its scopes (a `game-scopes/` folder at or above the
 project, up to the repository root; patterkit design/shared-scopes.md),
@@ -54,11 +70,11 @@ old list back into the project.
 
 ## Shipping shape
 
-Three tiers, Patter's CLI distribution carried whole:
+Patter's CLI distribution, carried whole except for npm: the package is
+private, and nothing here is published there.
 
-- **npm**: `dist/cli.js` is **self-contained** (tsup inlines every workspace
-  and sibling dependency), so the published package runs with no
-  node_modules.
+- **`dist/cli.js`** is **self-contained** (tsup inlines every workspace
+  and sibling dependency), so `node dist/cli.js` runs with no node_modules.
 - **Standalone binaries**: `npm run build:standalone` (Bun `--compile`) emits
   one native executable per platform - no Node required. macOS binaries are
   Developer ID signed (hardened runtime + JIT entitlements,

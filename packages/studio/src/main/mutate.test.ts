@@ -503,6 +503,20 @@ describe("card mutations", () => {
     expect(reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.id === ratJob.id)!.gameId).toBe("dock-work");
   });
 
+  it("names a new deck apart from every box's decks, since a deck's address names no box", () => {
+    const session = scratchProject();
+    const first = createDeck(session, session.dto.boxes[0]!.id);
+    if ("error" in first) throw new Error(first.error);
+    const box = createBox(session);
+    if ("error" in box) throw new Error(box.error);
+    const second = createDeck(session, box.boxId);
+    if ("error" in second) throw new Error(second.error);
+    const decks = second.result.project.boxes.flatMap((b) => b.decks);
+    expect(decks.find((d) => d.id === first.deckId)!.gameId).toBe("new-deck");
+    expect(decks.find((d) => d.id === second.deckId)!.gameId).not.toBe("new-deck");
+    expect(second.result.problems.filter((p) => p.severity === "error")).toEqual([]);
+  });
+
   it("creates a deck (a new shard file), then deletes it when empty", () => {
     const session = scratchProject();
     const boxId = session.dto.boxes[0]!.id;
@@ -809,7 +823,9 @@ describe("box mutations", () => {
     const clone = created.result.project.boxes.find((b) => b.id === created.boxId)!;
     expect(clone.gameId).toBe("encounters-copy");
     // Structure carried whole: decks, cards, tags, templates, hands.
-    expect(clone.decks.map((d) => d.gameId).sort()).toEqual(["docks", "market"]);
+    // Deck gameIds are project-wide unique too (an @deck address names no box):
+    // the clone's decks rename, as its hands and cards do.
+    expect(clone.decks.map((d) => d.gameId).sort()).toEqual(["docks-copy", "market-copy"]);
     expect(clone.tagGroups.map((g) => g.gameId)).toEqual(["area"]);
     // Hand gameIds are API (project-wide unique): the clone's hands rename.
     expect(clone.hands[0]).toMatchObject({ gameId: "docks-street-copy", template: "street-hands" });
@@ -822,7 +838,7 @@ describe("box mutations", () => {
     expect(detail.chosen).toEqual([{ group: "area", value: "docks", values: ["docks", "market"] }]);
     // The clone's cards are tagged with the CLONE's tag ids (round-trip by
     // name), and their gameIds dedupe too (the play log speaks them).
-    const ambush = clone.decks.find((d) => d.gameId === "docks")!.cards.find((c) => c.gameId === "ambush-at-the-ford-copy")!;
+    const ambush = clone.decks.find((d) => d.gameId === "docks-copy")!.cards.find((c) => c.gameId === "ambush-at-the-ford-copy")!;
     expect(ambush.tags).toEqual([{ group: "area", values: ["docks"] }]);
   });
 

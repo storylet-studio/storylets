@@ -34,26 +34,23 @@ import { compileProject } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import type { Bundle, Expression, PropertyDecl } from "@storylet-studio/model";
 import { effectiveGameId } from "@storylet-studio/model";
-import { disjuncts, latchOf, scopedRef, terms } from "@wildwinter/expr";
+import { disjuncts, latchOf, terms } from "@wildwinter/expr";
 import type { Term } from "@wildwinter/expr";
+import { flagKey, keyOf, splitKey, writesOf } from "./analysis-common.js";
+import type { Owner } from "./analysis-common.js";
 
 type AstNode = Expression["ast"];
 
-/** Which deck or box a reference was seen in. @deck.x in one deck and @deck.x
- *  in another are different properties at runtime, so they are kept apart -
- *  the mistake deadstate.ts records having made once. */
-interface Owner { box?: string; deck?: string }
+// An owner is the box and deck a reference was seen in, by internal id
+// (analysis-common.ts): @deck.x in one deck and @deck.x in another are
+// different properties at runtime, so they are kept apart - the mistake
+// deadstate.ts records having made once.
 
-const SEP = "";
-const keyOf = (ref: string, o: Owner): string =>
-  ref.startsWith("@deck.") ? `${o.deck ?? ""}${SEP}${ref}`
-  : ref.startsWith("@box.") ? `${o.box ?? ""}${SEP}${ref}`
-  : ref;
 /** The half of a key a person reads: `@deck.connected`, or `@story.rel +met`. */
 const shown = (key: string): string => {
-  const bare = key.includes(SEP) ? key.slice(key.indexOf(SEP) + 1) : key;
-  const at = bare.indexOf(":");
-  return at < 0 ? bare : `${bare.slice(0, at)} +${bare.slice(at + 1)}`;
+  const { ref } = splitKey(key);
+  const at = ref.indexOf(":");
+  return at < 0 ? ref : `${ref.slice(0, at)} +${ref.slice(at + 1)}`;
 };
 
 // The latch GRAMMAR - which shapes assert a latch, and how a condition
@@ -64,7 +61,7 @@ const shown = (key: string): string => {
 // below is the part that genuinely differs, the walk over THIS model's decks,
 // boxes and cards.
 //
-// `keyOf` below is what makes it ours: an owner here is the box and deck a
+// `keyOf` is what makes it ours: an owner here is the box and deck a
 // reference was seen in.
 const latchOfAst = (ast: AstNode, owner: Owner) => latchOf(ast, owner, keyOf);
 const termsOfAst = (ast: AstNode, owner: Owner) => terms(ast, owner, keyOf);
@@ -91,9 +88,8 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
   };
 
   for (const box of bundle.boxes) {
-    const boxName = effectiveGameId(box);
     for (const deck of box.decks) {
-      const owner: Owner = { box: boxName, deck: effectiveGameId(deck) };
+      const owner: Owner = { box: box.id, deck: deck.id };
       for (const card of deck.cards) {
         const requires = disjuncts(card.condition?.ast ?? true as unknown as AstNode).length === 1
           ? termsOfAst(card.condition?.ast ?? (true as unknown as AstNode), owner)
@@ -104,7 +100,7 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
           // An outcome's own gate is a requirement too, on top of the card's.
           const gate = outcome.condition !== undefined ? termsOfAst(outcome.condition.ast, owner) : [];
           const need = [...requires, ...gate];
-          for (const [target, expr] of Object.entries(outcome.changes)) {
+          for (const { target, expr, flags } of writesOf(outcome)) {
             const key = keyOf(target, owner);
             const ast = expr.ast;
             // `@x = true`: a boolean latch.
@@ -113,14 +109,9 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
             // OTHER shape of write to a flags property - a clear, an
             // assignment, a computed value - breaks every flag it holds,
             // because we can no longer say the set only grows.
-            if (Array.isArray(ast) && ast[0] === "call" && ast[1] === "set_flags"
-              && scopedRef(ast[2] as AstNode) === target) {
-              let clean = true;
-              for (const arg of ast.slice(3)) {
-                if (Array.isArray(arg) && arg[0] === "fd" && arg[1] === "+") noteWrite(`${key}:${String(arg[2])}`, need);
-                else clean = false;
-              }
-              if (clean) continue;
+            if (flags?.onSelf === true) {
+              for (const d of flags.deltas) if (d.sign === "+") noteWrite(flagKey(key, d.flag), need);
+              if (!flags.other && flags.deltas.every((d) => d.sign === "+")) continue;
             }
             // Anything else: this ref is not a latch we can reason about.
             broken.add(key);
@@ -152,9 +143,15 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
   const otherEngines = bundle.externalScopes ?? [];
   const hostDriven = (key: string): boolean =>
     key.startsWith("@world.") || otherEngines.some((t) => key.startsWith(`@${t}.`));
+  // `@hand` is composed per HAND, from the hand's own bag or the tags it
+  // binds, so `@hand.met` at one hand and at another are different properties
+  // that every key here would merge, and one hand's default says nothing of
+  // another's. No ordering argument can rest on it either (the CLI review of
+  // 2026-10-06, item 9; deadstate.ts leaves @hand out for the same reason).
+  const composedPerHand = (key: string): boolean => key.startsWith("@hand.");
 
   const monotonic = (key: string): boolean =>
-    latched.has(key) && !broken.has(key) && !hostDriven(key);
+    latched.has(key) && !broken.has(key) && !hostDriven(key) && !composedPerHand(key);
 
   // Latches whose DECLARED DEFAULT already holds them, so they are true before
   // anything runs. They are still monotonic - nothing moves them back - but they
@@ -175,15 +172,14 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
       if (d.type === "boolean" && d.default === true) startsSet.add(key);
       // A flags property whose default already contains a flag starts that flag set.
       if (d.type === "flags" && Array.isArray(d.default)) {
-        for (const f of d.default) startsSet.add(`${key}:${String(f)}`);
+        for (const f of d.default) startsSet.add(flagKey(key, String(f)));
       }
     }
   };
   noteDefaults(bundle.story?.properties, "@story", "");
   for (const box of bundle.boxes) {
-    const boxName = effectiveGameId(box);
-    noteDefaults(box.properties, "@box", boxName);
-    for (const deck of box.decks) noteDefaults(deck.properties, "@deck", effectiveGameId(deck));
+    noteDefaults(box.properties, "@box", box.id);
+    for (const deck of box.decks) noteDefaults(deck.properties, "@deck", deck.id);
   }
 
   // --- 2. what must already be true before a latch can be set ---------------
@@ -233,9 +229,8 @@ export function reachabilityIssues(source: SourceProject, compiled?: Bundle): Is
   for (const sb of source.boxes) for (const d of sb.decks) deckPaths.set(d.shard.deck.id, d.path);
 
   for (const box of bundle.boxes) {
-    const boxName = effectiveGameId(box);
     for (const deck of box.decks) {
-      const owner: Owner = { box: boxName, deck: effectiveGameId(deck) };
+      const owner: Owner = { box: box.id, deck: deck.id };
       for (const card of deck.cards) {
         if (!card.condition) continue;
         let reason: string | undefined;

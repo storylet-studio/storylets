@@ -8,16 +8,17 @@
 // runInit: the caller commits them through its own write layer.
 // ---------------------------------------------------------------------------
 
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
-  BOX_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, SPATIAL, TAGS_SCHEMA, effectiveGameId, freeGameId, freeTitle, gameIdify, isSpatial,
+  BOX_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, SPATIAL, TAGS_SCHEMA, effectiveGameId, freeGameId, freeTitle, isSpatial,
 } from "@storylet-studio/model";
 import type { BoxShard, Card, DeckShard, HandsShard, HandTemplate, TagGroup, TagsShard } from "@storylet-studio/model";
 import type { SourceProject } from "@storylet-studio/compiler";
 import { newId } from "./ids.js";
 import type { LoadedProject } from "./load.js";
 import type { PlannedWrite } from "./write.js";
-import { boxFolderWrites } from "./box-folder.js";
+import { boxFolderName, boxFolderWrites } from "./box-folder.js";
 import { planProjectMapGroup } from "./map.js";
 
 /** A box kit: the scaffold a new box copies. Blank is always present; the
@@ -47,12 +48,31 @@ export interface NewBoxResult {
   folder: string;
 }
 
-/** The RPG kit's contents, freshly-idd per creation. */
+// --- the shapes the kits draw, here and in `init`'s game kits -----------------
+
 /** A rectangle as the four points a zone polygon wants, clockwise from the top
  *  left. The map's y runs down the screen, as the canvas does. */
-const rect = (x: number, y: number, w: number, h: number): { x: number; y: number }[] =>
+export const rect = (x: number, y: number, w: number, h: number): { x: number; y: number }[] =>
   [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
 
+/** A spatial district group with two zones drawn side by side, as the rpg kit
+ *  draws its areas: plain rectangles, meant to be redrawn. */
+export function districts(purpose: string, a: string, b: string): { group: TagGroup; first: string; second: string } {
+  const first = newId("v"), second = newId("v");
+  return {
+    first, second,
+    group: {
+      id: newId("d"), gameId: "district", purpose,
+      tags: [
+        { id: first, gameId: a, order: 0, templates: { [SPATIAL]: { polygon: rect(0, 0, 320, 240) } } },
+        { id: second, gameId: b, order: 1, templates: { [SPATIAL]: { polygon: rect(320, 0, 320, 240) } } },
+      ],
+      templates: { [SPATIAL]: { map: true } },
+    },
+  };
+}
+
+/** The RPG kit's contents, freshly-idd per creation. */
 function rpgKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckShard {
   boxShard.box.purpose = "Encounter beats: what could happen here now?";
   // A BOX property, not a project one: a kit writes only its own folder, so
@@ -168,23 +188,6 @@ function dialogueKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): De
 // Codex and News are boxes the game only READS; their unlocks come from the
 // rest of a real game, so each carries a small deck standing in for it.
 // ---------------------------------------------------------------------------
-
-/** A spatial district group with two zones drawn side by side, as the rpg kit
- *  draws its areas: plain rectangles, meant to be redrawn. */
-function districts(purpose: string, a: string, b: string): { group: TagGroup; first: string; second: string } {
-  const first = newId("v"), second = newId("v");
-  return {
-    first, second,
-    group: {
-      id: newId("d"), gameId: "district", purpose,
-      tags: [
-        { id: first, gameId: a, templates: { [SPATIAL]: { polygon: rect(0, 0, 320, 240) } } },
-        { id: second, gameId: b, templates: { [SPATIAL]: { polygon: rect(320, 0, 320, 240) } } },
-      ],
-      templates: { [SPATIAL]: { map: true } },
-    },
-  };
-}
 
 /** Job board: work on offer at boards around town. A job is taken, then its
  *  follow-up turns up, then it is done; how it went leaves heat behind. */
@@ -503,9 +506,24 @@ export function runNewBox(opts: NewBoxOptions): NewBoxResult {
   if (!source) throw new Error("not a loadable storylets project (fix its errors first)");
   const kit = opts.kit ?? "blank";
 
-  const taken = new Set(source.boxes.map((b) => effectiveGameId(b.box.box)));
+  // Taken: every box's ADDRESS, and every FOLDER, which are not the same thing
+  // once a box has been retitled (its folder follows the address it was made
+  // with). Until 2026-10-06 only addresses counted, so a box made as "New box"
+  // and retitled since left `new-box` looking free, and the next new box was
+  // written over it. Anything else at the project root (`assets`, a box's
+  // leftovers) counts too, unless it is an empty folder, which is what deleting
+  // a box leaves behind and holds nothing to collide with.
+  const holdsSomething = (name: string): boolean => {
+    try { return readdirSync(join(opts.loaded.dir, name)).length > 0; } catch { return true; }   // a file
+  };
+  let rootEntries: string[] = [];
+  try { rootEntries = readdirSync(opts.loaded.dir).filter(holdsSomething); } catch { /* nothing there yet */ }
+  const taken = new Set([
+    ...source.boxes.map((b) => effectiveGameId(b.box.box)),
+    ...source.boxes.map((b) => b.path.split("/")[0]!),
+    ...rootEntries,
+  ]);
   const title = freeTitle("New box", taken);
-  const folder = gameIdify(title);
   const boxId = newId("b");
   const boxShard: BoxShard = {
     schema: BOX_SCHEMA,
@@ -526,6 +544,14 @@ export function runNewBox(opts: NewBoxOptions): NewBoxResult {
     if (name !== effectiveGameId(hand)) hand.gameId = name;
     handNames.add(name);
   }
+  // Decks too: the compiler refuses two decks sharing a gameId, as it does every
+  // other, and a kit applied twice brings the same deck names twice.
+  const deckNames = new Set(source.boxes.flatMap((b) => b.decks.map((d) => effectiveGameId(d.shard.deck))));
+  for (const deck of decks) {
+    const name = freeGameId(effectiveGameId(deck.deck), deckNames);
+    if (name !== effectiveGameId(deck.deck)) deck.deck.gameId = name;
+    deckNames.add(name);
+  }
   const cardNames = new Set(source.boxes.flatMap((b) => b.decks.flatMap((d) => d.shard.cards.map((c) => effectiveGameId(c)))));
   for (const card of decks.flatMap((k) => k.cards)) {
     const name = freeGameId(effectiveGameId(card), cardNames);
@@ -538,7 +564,14 @@ export function runNewBox(opts: NewBoxOptions): NewBoxResult {
     ...boxFolderWrites(opts.loaded.dir, { box: boxShard, tags, hands, decks }),
     ...(map !== undefined ? [planProjectMapGroup(opts.loaded.dir, source, map)] : []),
   ];
-  return { writes, boxId, folder };
+  // Every write is a NEW file, by construction, so one that exists is a
+  // collision nothing above foresaw; refused, as `runInit` refuses, rather than
+  // written over somebody's work.
+  const collisions = writes.map((w) => w.path).filter((p) => existsSync(p));
+  if (collisions.length > 0) {
+    throw new Error(`refusing to overwrite existing file(s): ${collisions.join(", ")}`);
+  }
+  return { writes, boxId, folder: boxFolderName(boxShard) };
 }
 
 /**

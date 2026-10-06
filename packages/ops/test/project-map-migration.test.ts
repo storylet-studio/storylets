@@ -21,6 +21,7 @@ import { backgroundsOf } from "@storylet-studio/model";
 import type { TagGroup } from "@storylet-studio/model";
 import type { FormatResult } from "../src/format.js";
 import { runFormat } from "../src/format.js";
+import { planProjectMapMigration } from "../src/project-map-migration.js";
 import { loadProject } from "../src/load.js";
 import { runValidate } from "../src/validate.js";
 
@@ -91,7 +92,8 @@ function project(boxes: BoxOpts[], extra: { contract?: unknown; rootMap?: unknow
     });
     write(join(dir, b.folder, "decks", "main.storyletdeck"), {
       schema: "storylets/deck@0",
-      deck: { id: `k_${p}`, gameId: "main", properties: [] },
+      // Named per box: the compiler refuses two decks sharing a gameId.
+      deck: { id: `k_${p}`, gameId: `main-${p}`, properties: [] },
       cards: [{
         id: `c_${p}_hill`, gameId: `on-the-hill-${p}`, outcomes: [],
         ...(has ? { tags: { [`d_${p}_district`]: [`v_${p}_hill`], [`d_${p}_mood`]: [`v_${p}_calm`] }, condition: "@hand.danger >= 0" } : {}),
@@ -287,6 +289,20 @@ describe("what moves with the map", () => {
     expect(existsSync(join(dir, "assets", "plan.png"))).toBe(true);
     const { bundle } = compileProject(loadProject(dir).source!);
     expect(bundle!.map!.geometry!.backgrounds).toEqual([{ file: "assets/plan.png", x: 0, y: 0, width: 40, height: 10 }]);
+  });
+
+  it("never moves a picture whose name climbs out of the folder, and says so (CLI review 2026-10, item 8)", () => {
+    // A shard field is untrusted input: a pack, a merge or a hand edit can put
+    // anything in it, and `join` resolves "../" happily.
+    const dir = project([{ folder: "contracts", id: "b_con", p: "con", group: districtCopy("con", { picture: "../../outside.png" }) }]);
+    write(join(dir, "outside.png"), "somebody's file");
+    const loaded = loadProject(dir);
+    const result = planProjectMapMigration(dir, loaded.source!);
+    expect(result.moved).toEqual([]);
+    expect(result.issues.filter((i) => i.severity === "warning").map((i) => i.message)).toEqual([
+      'the map puts "../../outside.png" behind it, which is not a plain file name in contracts/assets/, so it is not moved',
+    ]);
+    expect(existsSync(join(dir, "outside.png"))).toBe(true);
   });
 
   it("moves every box's frames to the project map and leaves the box map shards with sites, or gone", () => {

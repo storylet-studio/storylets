@@ -10,6 +10,37 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **Publish Bundle refuses a project with a load error**, naming the file that would not load. A file that did not parse used to be left out and the rest published, so the bundle shipped without that deck's cards. Publish Playable HTML refuses it too.
+- **Live Link sends nothing into a running game while the project has a load error** or does not compile, and the Live link chip's tip says why. The game keeps the build it has until a save fixes it.
+- **The playable page you publish says Storyletter**, not the retired name, under the project's title.
+- **A Storyletpack lands only what a pack is for**: shards, pictures in the project's `assets/` folder and the game's scopes files. A pack carrying anything whose path starts with a dot (a `.git/config`, say) is refused whole, and any other file it carries is left out rather than written.
+- **Merge Returned Storyletpack rewrites only the files the merge changed.** A shard that comes back saying what it already says is left exactly as it is on disk, as a pull from a server already did.
+- **The files a new project starts with say Storyletter**, not the retired name, and its project file is written last.
+- **Find and Replace covers the project map's group** as it does every box's groups.
+- **Two decks can no longer share a name anywhere in the project**, as two cards, hands or boxes cannot: a deck's name is its address in a game, and the problems bar says which two files clash.
+- **Coverage plays a card that has no outcomes**, as a game does, so a masthead or a notice no longer holds its hand's slot for the whole run and hides the cards behind it. It is still never counted as dealt and never played.
+- **The Links window's observed links reach cards pinned to a hand.** The coverage run now looks hand by hand, so a card that only comes up at one hand can be seen opening: on the Village, 85 of its 86 cards, where it saw 14. A coverage run takes longer for it.
+- **Coverage's "gated on state nothing sets" hint reads what decides whether a card is dealt**: its condition, its deck's gate and a computed priority, and no longer an outcome's gate.
+- **Coverage names a hand whose own condition reads an @hand name it never has**, and an outcome that writes one, beside the cards that read one.
+- **The Links window draws a write of exactly the threshold as enabling** a card that asks for at least (`>=`) or at most (`<=`) that much. It was drawn as disabling it.
+
+### Fixed
+
+- **Publish Bundle writes in the same order as the command line**: a map's pictures first, then the bundle that names them, so a picture that cannot be written stops the publish before a bundle lands without it.
+- **Export Spreadsheet no longer freezes the app** when two deck titles share their first 31 characters. Their sheets are numbered, starting at 2.
+- **New Box no longer writes over a box you have renamed.** A box keeps the folder it was made in, and that folder now counts as taken; a kit added twice also names its second copy's decks apart.
+- **Two people moving different zones of the project map merge cleanly** in Merge Returned Storyletpack and a pull, instead of conflicting over the whole map.
+- **A box called Assets is no longer mistaken for pictures**: its files are never swept away as unused pictures at the end of a session, and a pack carries it as a box.
+- **The map upgrade never moves a background picture whose name points outside the box's folder**, and says so.
+- **Opening a file that is not a Storyletpack says so**, rather than reporting the zip reader's error.
+- **Coverage no longer stops when the engine refuses a play**, such as an outcome writing an @hand name the hand does not have. The refusal is listed among the run's warnings and the run carries on.
+- **Coverage no longer reports warnings raised by its own look-ahead** for the Links window, such as Port Meridian's "@hand.patrolled is not declared", which no deal ever raised.
+- **Validate no longer says a card can never be dealt because of @hand state**: every hand holds its own, so one hand's history says nothing about another's.
+- **Validate's unset-flag warning counts `@y = set_flags(@x, +a)` as setting y's flag**, not x's.
+- **New Deck, Duplicate Deck and Duplicate Box name a deck apart from every box's decks**, not only its own box's, so a second box's first deck no longer clashes with the first box's.
+
 ## [0.18.5] - 2026-10-06
 
 ### Changed

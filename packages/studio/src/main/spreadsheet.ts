@@ -9,6 +9,7 @@
 
 import { dirname, join } from "node:path";
 import { loadProject, runExportXlsx, spreadsheetFileName } from "@storylet-studio/ops";
+import { refusal } from "./project.js";
 import type { ProjectSession } from "./project.js";
 
 /** The workbook bytes and the default save path: `<Project name>.xlsx` beside
@@ -16,9 +17,7 @@ import type { ProjectSession } from "./project.js";
  *  sibling of the folder is where a Storyletpack lands too). */
 export async function spreadsheetExport(session: ProjectSession): Promise<{ buffer: Buffer; defaultPath: string } | { error: string }> {
   const loaded = loadProject(session.loaded.dir);
-  if (!loaded.source) {
-    return { error: loaded.issues.map((i) => i.message).join("; ") || "not a storylets project" };
-  }
+  if (!loaded.source) return { error: refusal(loaded.issues, "not a storylets project") };
   const { buffer } = await runExportXlsx(loaded.source);
   return { buffer, defaultPath: join(dirname(loaded.dir), spreadsheetFileName(loaded.source)) };
 }

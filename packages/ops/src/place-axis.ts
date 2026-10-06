@@ -31,7 +31,9 @@
 import { PLACE_GROUP, byDisplayOrder, effectiveGameId, isHoleRef, parseHoleRef } from "@storylet-studio/model";
 import type { Hand, HandTemplate, PropertyDecl, TagGroup } from "@storylet-studio/model";
 
-/** The parts of a box the rule reads. */
+/** The parts of a box the rule reads, here and in reach.ts (`ReachBox` is
+ *  this). A bundle `Box` is one; the editor builds one from a source box's tags
+ *  and hands shards. */
 export interface PlaceAxisBox<E> {
   tagGroups: TagGroup[];
   usesMap?: true;
@@ -39,7 +41,8 @@ export interface PlaceAxisBox<E> {
   hands: Hand<E>[];
 }
 
-/** Where the project map's group lives: `Bundle.map`, or the source map shard. */
+/** Where the project map's group lives: `Bundle.map`, or the source map shard.
+ *  reach.ts's `ReachMap` is this. */
 export interface PlaceAxisMap {
   map?: { group: TagGroup };
 }
@@ -49,21 +52,46 @@ export function zoneGroupOf<E>(bundle: PlaceAxisMap, box: Pick<PlaceAxisBox<E>, 
   return box.usesMap === true ? bundle.map?.group : undefined;
 }
 
-/** The groups one hand binds, fixed or filled from a property, by group id. A
- *  template instance binds its template's bindings and its own chosen tags; a
- *  standalone hand its rule's bindings. The value is a tag id or a hole
+/** One binding a hand makes, as written: the tag is a tag id, or a hole
+ *  reference ("@story.elder_at") filled at ask time. */
+export interface HandBinding {
+  group: string;
+  tag: string;
+  /** Names its group in the @hand bag: chosen and rule bindings do, a
+   *  template's own fixed binding does not (the runtime's askNames). */
+  named: boolean;
+}
+
+/**
+ * Every binding one hand makes, as the runtime composes its ask (engine.ts
+ * `askForHand`): a template instance takes its template's fixed bindings, then
+ * its own chosen tags; a standalone hand its rule's bindings. In that order, so
+ * a later binding of a group is the one that holds.
+ *
+ * ONE derivation, which `bindingsOfHand` here and `handReach` (reach.ts) both
+ * read: the two were written out separately, and a rule that two surfaces
+ * derive separately is a rule they will one day disagree about.
+ */
+export function handBindings<E>(box: Pick<PlaceAxisBox<E>, "handTemplates">, hand: Hand<E>): HandBinding[] {
+  const out: HandBinding[] = [];
+  const add = (bindings: Record<string, string> | undefined, named: boolean): void => {
+    for (const [group, tag] of Object.entries(bindings ?? {})) out.push({ group, tag, named });
+  };
+  if (hand.template !== undefined) {
+    add(box.handTemplates.find((t) => t.id === hand.template)?.bindings, false);
+    add(hand.chosen, true);
+  } else {
+    add(hand.rule?.bindings, true);
+  }
+  return out;
+}
+
+/** The groups one hand binds, fixed or filled from a property, by group id
+ *  (`handBindings`, place left out). The value is a tag id or a hole
  *  reference ("@story.elder_at"). */
 export function bindingsOfHand<E>(box: Pick<PlaceAxisBox<E>, "handTemplates">, hand: Hand<E>): Map<string, string> {
   const out = new Map<string, string>();
-  const add = (bindings: Record<string, string> | undefined): void => {
-    for (const [group, tag] of Object.entries(bindings ?? {})) if (group !== PLACE_GROUP) out.set(group, tag);
-  };
-  if (hand.template !== undefined) {
-    add(box.handTemplates.find((t) => t.id === hand.template)?.bindings);
-    add(hand.chosen);
-  } else {
-    add(hand.rule?.bindings);
-  }
+  for (const { group, tag } of handBindings(box, hand)) if (group !== PLACE_GROUP) out.set(group, tag);
   return out;
 }
 
@@ -87,11 +115,6 @@ export function placeAxes<E>(bundle: PlaceAxisMap, box: PlaceAxisBox<E>): string
   if (zone !== undefined) out.push(zone.id);
   for (const g of byDisplayOrder(box.tagGroups)) if (bound.has(g.id) && !out.includes(g.id)) out.push(g.id);
   return out;
-}
-
-/** Is this group a place axis for this box? */
-export function isPlaceAxis<E>(bundle: PlaceAxisMap, box: PlaceAxisBox<E>, groupId: string): boolean {
-  return placeAxes(bundle, box).includes(groupId);
 }
 
 /** The declarations a movable hole may be filled from, by scope: what decides

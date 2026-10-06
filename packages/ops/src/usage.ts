@@ -6,8 +6,9 @@
 // window's Property tab; the CLI could grow it.
 //
 // Built on the influence analysis rather than a second scan: `propertyRefs`
-// and `writesOfCard` (influence.ts) decide what a read and a write are, so the
-// Links window and this tab cannot disagree about what counts. Reads come from
+// (influence.ts) decides what a read is and `writesOf` (analysis-common.ts)
+// what a write is, as they do for the Links window, so the two cannot disagree
+// about what counts. Reads come from
 // the COMPILED bundle, because that is where a bare `@act` has been resolved to
 // its scope (`@story.act`); the source text alone cannot say which scope a bare
 // name lands in.
@@ -18,8 +19,9 @@ import type { Box, Bundle, Card, Expression } from "@storylet-studio/model";
 import { byDisplayOrder } from "@storylet-studio/model";
 import { effectiveGameId } from "@storylet-studio/model";
 import type { AstNode } from "@storylet-studio/model";
-import { propertyRefs, writesOfCard } from "./influence.js";
+import { propertyRefs } from "./influence.js";
 import type { InfluenceScopeName } from "./influence.js";
+import { writesOf } from "./analysis-common.js";
 import type { LoadedProject } from "./load.js";
 import { indexProject } from "./resolve.js";
 import type { ResolveEntry } from "./resolve.js";
@@ -147,21 +149,20 @@ function usesOfCard(
   reads(card.condition, cardEntry, "When", box, deckId);
   if (typeof card.priority !== "number") reads(card.priority, cardEntry, "priority", box, deckId);
 
-  // The writes, by the outcome that makes them. writesOfCard names the outcome
-  // by gameId (the influence graph's currency); the row needs the entry.
-  const writes = writesOfCard(card, () => {});
+  // The writes, by the outcome that makes them, one row per change.
   for (const outcome of byDisplayOrder(card.outcomes)) {
     const entry = entries.get(outcome.id);
     if (!entry) continue;
     reads(outcome.condition, entry, "outcome When", box, deckId);
-    const gameId = effectiveGameId(outcome);
-    for (const [target, expr] of Object.entries(outcome.changes)) {
+    for (const { target, scope, name, expr } of writesOf(outcome)) {
       const text = `${target} ← ${expr.src}`;
-      const written = writes.filter((w) => w.outcome === gameId && `@${w.scope}.${w.name}` === canonicalTarget(target));
       const seen = new Set<string>();
-      for (const w of written) {
-        const key = `@${w.scope}.${w.name}`;
-        if (seen.has(key) || !matches(w.scope, w.name, box, deckId)) continue;
+      // A change target is an object key that never went through the parser,
+      // so it is folded here as the parser folds a read (see the note on case
+      // in influence.ts); a scope the analysis does not know is no property.
+      const folded = name.toLowerCase();
+      if (SCOPES.has(scope) && matches(scope as InfluenceScopeName, folded, box, deckId)) {
+        const key = `@${scope}.${folded}`;
         seen.add(key);
         out.push({ property: key, use: "write", where: "outcome change", text, item: entry });
       }
@@ -174,11 +175,4 @@ function usesOfCard(
       }
     }
   }
-}
-
-/** A change target as the analysis names it: `@scope.name`, lower-cased the
- *  way influence.ts folds it (see the note on case there). */
-function canonicalTarget(target: string): string {
-  const bare = target.startsWith("@") ? target.slice(1) : target;
-  return `@${bare.toLowerCase()}`;
 }

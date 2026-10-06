@@ -212,6 +212,50 @@ describe("enable and disable: the load-bearing pair", () => {
   });
 });
 
+// The boundary of an inclusive comparison (the CLI review of 2026-10-06, item
+// 10): a write of exactly the threshold satisfies `>=` and `<=`, so it enables
+// them. Every comparison was read as strict, so a write of 10 against `>= 10`
+// was drawn as a disable.
+describe("the boundary of a threshold", () => {
+  const at = (condition: string): EdgeClass | undefined => edge(analyseInfluence(project({
+    story: [{ name: "gold", type: "number", default: 0 }],
+    cards: [setter("c_ten", "@story.gold", "10"), { id: "c_r", condition }],
+  })), "c_ten", "c_r");
+
+  it("a write of the threshold enables >= and <=", () => {
+    expect(at("@story.gold >= 10")).toBe("enable");
+    expect(at("@story.gold <= 10")).toBe("enable");
+  });
+
+  it("and disables > and <, which it does not satisfy", () => {
+    expect(at("@story.gold > 10")).toBe("disable");
+    expect(at("@story.gold < 10")).toBe("disable");
+  });
+
+  it("keeps the inclusive side when the operands are reversed", () => {
+    expect(at("10 <= @story.gold")).toBe("enable");
+    expect(at("10 >= @story.gold")).toBe("enable");
+    expect(at("10 < @story.gold")).toBe("disable");
+    expect(at("10 > @story.gold")).toBe("disable");
+  });
+
+  it("flips it under a not: not (> 10) is <= 10, and not (< 10) is >= 10", () => {
+    expect(at("not (@story.gold > 10)")).toBe("enable");
+    expect(at("not (@story.gold < 10)")).toBe("enable");
+    expect(at("not (@story.gold >= 10)")).toBe("disable");
+    expect(at("not (@story.gold <= 10)")).toBe("disable");
+  });
+
+  it("either side of the threshold still reads as before", () => {
+    const g = analyseInfluence(project({
+      story: [{ name: "gold", type: "number", default: 0 }],
+      cards: [setter("c_nine", "@story.gold", "9"), setter("c_eleven", "@story.gold", "11"), { id: "c_r", condition: "@story.gold >= 10" }],
+    }));
+    expect(edge(g, "c_nine", "c_r")).toBe("disable");
+    expect(edge(g, "c_eleven", "c_r")).toBe("enable");
+  });
+});
+
 describe("case in property names", () => {
   // The expression parser FOLDS every property reference to lower case, while
   // declarations are keyed verbatim by both the compiler and the runtime (which
@@ -349,6 +393,24 @@ describe("influence: the honest shrug", () => {
     }));
     expect(edge(g, "c_w", "c_r")).toBe("influence");
     expect(g.warnings.some((w) => w.kind === "computed-value")).toBe(true);
+  });
+
+  it("says each warning once per card, naming the card", () => {
+    // The same computed write in two outcomes of one card: one warning, not
+    // one per sighting, and the reader is told which card it is about.
+    const g = analyseInfluence(project({
+      story: [{ name: "gold", type: "number", default: 0 }, { name: "rep", type: "number", default: 0 }],
+      cards: [
+        { id: "c_w", outcomes: [
+          { id: "o_1", gameId: "one", changes: { "@story.gold": "@story.rep * 2" } },
+          { id: "o_2", gameId: "two", changes: { "@story.gold": "@story.rep * 2" } },
+        ] },
+      ],
+    }));
+    expect(g.warnings).toEqual([{
+      kind: "computed-value", card: "c_w", cardGameId: "w",
+      message: "the change to @story.gold is computed; its direction is undecidable",
+    }]);
   });
 
   it("a read inside arithmetic is influence", () => {

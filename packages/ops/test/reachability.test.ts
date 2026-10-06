@@ -16,6 +16,7 @@
 import { describe, expect, it } from "vitest";
 import type { SourceProject } from "@storylet-studio/compiler";
 import type { PropertyDecl } from "@storylet-studio/model";
+import { compileProject } from "@storylet-studio/compiler";
 import { reachabilityIssues } from "../src/reachability.js";
 
 interface CardFix {
@@ -230,6 +231,12 @@ describe("reachability: what it refuses to guess about", () => {
       },
     } as never);
     expect(named(source)).toEqual([]);
+    // Keyed by the deck's internal id, not its gameId (the CLI review's item
+    // 12): two decks sharing a gameId, in a bundle the compiler now refuses
+    // and built here by hand, are still two decks.
+    const { bundle } = compileProject(source);
+    bundle!.boxes[0]!.decks[1]!.gameId = "main";
+    expect(reachabilityIssues(source, bundle).map((i) => i.where)).toEqual([]);
   });
 });
 
@@ -325,5 +332,30 @@ describe("reachability: @world is the host's, so it anchors nothing", () => {
       { id: "c_act", condition: "@world.alarm", outcomes: [{ id: "o2", changes: { "@deck.acted": "true" } }] },
       { id: "fine", condition: "@deck.acted && !@world.alarm" },
     ], { deck: [{ ...LATCH, name: "acted" }], world: [{ ...HOST, name: "alarm" }] }))).toEqual([]);
+  });
+});
+
+// --- @hand ---------------------------------------------------------------------
+//
+// The CLI review of 2026-10-06, item 9. `@hand.met` is composed per hand, from
+// that hand's own bag or the tags it binds, so two hands' `@hand.met` are two
+// properties, and a default one hand starts with says nothing of another's.
+// Treating them as one latch is a guess, and this check does not guess:
+// deadstate.ts already leaves @hand out for the same reason.
+describe("reachability: @hand is composed per hand, so it anchors nothing", () => {
+  it("says nothing about a condition on @hand latches, which another hand may start with", () => {
+    const source = project([
+      { id: "c_meet", outcomes: [{ id: "o1", changes: { "@hand.met": "true" } }] },
+      { id: "c_see", condition: "@hand.met", outcomes: [{ id: "o2", changes: { "@hand.seen": "true" } }] },
+      // Dealt at once at hand b, which starts seen and not met.
+      { id: "c_fresh", condition: "@hand.seen && !@hand.met" },
+    ]);
+    source.boxes[0]!.hands.hands = [
+      { id: "h_a", gameId: "a", rule: { bindings: {}, slots: "unbounded" },
+        properties: [{ ...LATCH, name: "met" }, { ...LATCH, name: "seen" }] },
+      { id: "h_b", gameId: "b", rule: { bindings: {}, slots: "unbounded" },
+        properties: [{ ...LATCH, name: "met" }, { type: "boolean", default: true, name: "seen" }] },
+    ];
+    expect(named(source)).toEqual([]);
   });
 });

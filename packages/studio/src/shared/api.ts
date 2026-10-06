@@ -7,7 +7,7 @@
 
 import type { Bundle, PlayRung, PropertyType, SaveFile, ScalarValue } from "@storylet-studio/model";
 import type { JobProgress } from "@wildwinter/app-shell/job";
-import type { BoxKit, CoverageOrder, CoverageReport, PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
+import type { BoxKit, CoverageOrder, CoverageReport, GameKit, PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
 import type { IssueFix } from "@storylet-studio/compiler";
 import type { TraceEvent } from "@storylet-studio/runtime";   // Live Link: the frames carry the runtime's own events
 
@@ -620,6 +620,9 @@ export interface VcStatusDto {
  *  always present; RPG is the narrated encounters starter. Owned by ops
  *  (runNewBox), so the CLI and the editor scaffold the identical box. */
 export type { BoxKit };
+/** What New Project starts from: ops' game kits (`GAME_KITS`, the CLI's `init --kit`), and the
+ *  starter with a Patter project beside it, which is Storyletter's own. */
+export type ProjectKit = GameKit | "with-patter";
 export type { PlayRung };
 
 /**
@@ -1525,7 +1528,11 @@ export type LiveLinkStatus =
        *  (design/live-link.md, Patterpad's debug-link shape). */
       flows: string[];
       /** The flow the Board is currently following. */
-      following: string | null };
+      following: string | null;
+      /** Why the last save did not reach the game: the project has a load error or does not
+       *  compile, so nothing was pushed and the game runs the build before it. Cleared by the
+       *  next push. */
+      held?: string };
 
 /** The game's cheap snapshot: hand gameId -> card gameIds in dealt order, box
  *  gameId -> clock. */
@@ -1621,7 +1628,7 @@ export interface StudioApi {
   clearRecents(): Promise<void>;
   /** Scaffold a new project (runInit) under a chosen parent dir; null = cancelled. */
   /** `kit` "with-patter" also creates a Patter project beside it, paired, with a stub scene per card. */
-  createProject(name: string, kit?: "blank" | "with-patter" | "map-story" | "action-game"): Promise<OpenResult | { error: string } | null>;
+  createProject(name: string, kit?: ProjectKit): Promise<OpenResult | { error: string } | null>;
   /** Copy a shipped worked example somewhere the author owns, and open it. Null
    *  when they cancel the folder picker. */
   openExample(name: string): Promise<OpenResult | { error: string } | null>;

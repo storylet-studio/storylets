@@ -8,11 +8,18 @@
 // ---------------------------------------------------------------------------
 
 import { basename, join, resolve } from "node:path";
-import { existsSync, readdirSync } from "node:fs";
-import { BUNDLE_EXTENSION, MAP_SCHEMA, PLACE_GROUP, PROJECTMAP_SCHEMA, PROJECT_FOLDER_EXTENSION, SHARD_EXTENSIONS, SPATIAL } from "@storylet-studio/model";
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import {
+  BOX_SCHEMA, BUNDLE_EXTENSION, DECK_SCHEMA, HANDS_SCHEMA, MAP_SCHEMA, PLACE_GROUP, PROJECTMAP_SCHEMA, PROJECT_FOLDER_EXTENSION,
+  PROJECT_SCHEMA, SHARD_EXTENSIONS, SPATIAL, TAGS_SCHEMA,
+} from "@storylet-studio/model";
 import type { BoxShard, DeckShard, HandsShard, MapShard, ProjectMapShard, ProjectShard, PropertyDecl, TagGroup, TagsShard } from "@storylet-studio/model";
 import { canonicalStringify } from "@storylet-studio/compiler";
 import { newId, slug } from "./ids.js";
+import { boxFolderName, boxFolderWrites } from "./box-folder.js";
+import { CONFLICT_SIDECAR_EXTENSION } from "./merge.js";
+import { projectMapPath } from "./map.js";
+import { districts, rect } from "./newbox.js";
 import type { PlannedWrite } from "./write.js";
 
 /** The game kits `init` can start a project from, in picker order. The ONE list,
@@ -39,8 +46,6 @@ export interface InitResult {
   name: string;
 }
 
-/** Scaffold a new project as planned writes. Throws if `dir` already holds
- *  a project or the scaffold would overwrite anything. */
 /** The folder name a project of this name lands in. One rule, beside the code
  *  that enforces it: the editor's New Project dialog TELLS the author what it
  *  is about to create, and a second derivation of it would be a promise that
@@ -48,6 +53,8 @@ export interface InitResult {
 export const projectFolderName = (name: string): string =>
   (name.endsWith(PROJECT_FOLDER_EXTENSION) ? name : `${name}${PROJECT_FOLDER_EXTENSION}`);
 
+/** Scaffold a new project as planned writes. Throws if `dir` already holds
+ *  a project or the scaffold would overwrite anything. */
 export function runInit(opts: InitOptions): InitResult {
   const given = resolve(opts.dir);
   const dir = projectFolderName(given);
@@ -64,7 +71,7 @@ export function runInit(opts: InitOptions): InitResult {
   if (existing.length > 0) throw new Error(`a project already exists here: ${existing[0]}`);
 
   const project: ProjectShard = {
-    schema: "storylets/project@0",
+    schema: PROJECT_SCHEMA,
     project: { id: newId("proj"), name, version: "0.1.0" },
     // The play ladder's rung (design/engine-server.md 4.10). The kit sets it,
     // and the starter kit is a single-player game, so it lands on "solo": the
@@ -87,23 +94,24 @@ export function runInit(opts: InitOptions): InitResult {
   };
   const parts: KitParts = kit === "map-story" ? mapStoryParts() : kit === "action-game" ? actionGameParts() : { boxes: [starterParts()] };
   const projectFile = join(dir, `${stem}${SHARD_EXTENSIONS.project}`);
+  // The project shard LAST: it is what makes the folder a project, so a write
+  // that fails part way leaves no project behind to refuse the next attempt
+  // ("a project already exists here"). `undoInit` takes back the rest.
   const writes: PlannedWrite[] = [
-    { path: projectFile, content: canonicalStringify(project) },
     // The project map, for a kit that draws one: at the root, above the boxes
     // (design/project-map-contract.md 1.1), which opt in on their own shards.
-    ...(parts.map !== undefined ? [{ path: join(dir, `map${SHARD_EXTENSIONS.map}`), content: canonicalStringify(parts.map) }] : []),
+    ...(parts.map !== undefined ? [{ path: projectMapPath(dir), content: canonicalStringify(parts.map) }] : []),
     ...parts.boxes.flatMap((box) => [
-      { path: join(dir, box.folder, `box${SHARD_EXTENSIONS.box}`), content: canonicalStringify(box.box) },
-      { path: join(dir, box.folder, `tags${SHARD_EXTENSIONS.tags}`), content: canonicalStringify(box.tags) },
-      { path: join(dir, box.folder, `hands${SHARD_EXTENSIONS.hands}`), content: canonicalStringify(box.hands) },
-      { path: join(dir, box.folder, "decks", `${box.deckFile}${SHARD_EXTENSIONS.deck}`), content: canonicalStringify(box.deck) },
-      ...(box.sites !== undefined ? [{ path: join(dir, box.folder, `map${SHARD_EXTENSIONS.map}`), content: canonicalStringify(box.sites) }] : []),
+      ...boxFolderWrites(dir, { box: box.box, tags: box.tags, hands: box.hands, decks: [box.deck] }),
+      ...(box.sites !== undefined
+        ? [{ path: join(dir, boxFolderName(box.box), `map${SHARD_EXTENSIONS.map}`), content: canonicalStringify(box.sites) }] : []),
     ]),
     { path: join(dir, ".editorconfig"), content: EDITORCONFIG },
     { path: join(dir, ".gitattributes"), content: GITATTRIBUTES },
     { path: join(dir, ".gitignore"), content: GITIGNORE },
     { path: join(dir, ".vscode", "settings.json"), content: VSCODE_SETTINGS },
     { path: join(dir, "vcs-setup.md"), content: VCS_SETUP },
+    { path: projectFile, content: canonicalStringify(project) },
   ];
 
   const collisions = writes.map((w) => w.path).filter((p) => existsSync(p));
@@ -113,8 +121,21 @@ export function runInit(opts: InitOptions): InitResult {
   return { writes, dir, projectFile, name };
 }
 
+/**
+ * Take back an init whose writes failed part way: remove every file it planned
+ * that is now there. Every one of them is new by construction (`runInit`
+ * refuses to plan over anything that exists), so nothing removed here was
+ * anybody's before. Without it, the files that did land make the next attempt
+ * refuse to overwrite them. The empty folders are left; they block nothing.
+ */
+export function undoInit(result: InitResult): void {
+  for (const w of result.writes) rmSync(w.path, { force: true });
+}
+
+/** One box of a kit. Its folder and deck file follow the box's and the deck's
+ *  gameIds, as every box's do (`boxFolderWrites`). */
 interface BoxParts {
-  folder: string; deckFile: string; box: BoxShard; tags: TagsShard; hands: HandsShard; deck: DeckShard;
+  box: BoxShard; tags: TagsShard; hands: HandsShard; deck: DeckShard;
   /** Where the box's hands stand on the project map, when the kit places them. */
   sites?: MapShard;
 }
@@ -128,7 +149,7 @@ const projectMapOf = (group: TagGroup): ProjectMapShard => ({ schema: PROJECTMAP
 /** The starter: one box, one hand, and two cards that already work together. */
 function starterParts(): BoxParts {
   const box: BoxShard = {
-    schema: "storylets/box@0",
+    schema: BOX_SCHEMA,
     box: {
       id: newId("b"), gameId: "main",
       title: "Main", purpose: "Your first box of cards.",
@@ -137,9 +158,9 @@ function starterParts(): BoxParts {
       properties: [],
     },
   };
-  const tags: TagsShard = { schema: "storylets/tags@0", groups: [] };
+  const tags: TagsShard = { schema: TAGS_SCHEMA, groups: [] };
   const hands: HandsShard = {
-    schema: "storylets/hands@0",
+    schema: HANDS_SCHEMA,
     templates: [],
     hands: [{
       id: newId("h"), gameId: "whats-next",
@@ -149,7 +170,7 @@ function starterParts(): BoxParts {
     }],
   };
   const deck: DeckShard = {
-    schema: "storylets/deck@0",
+    schema: DECK_SCHEMA,
     deck: {
       id: newId("k"), gameId: "starter",
       title: "Starter", purpose: "Two cards that show the loop: draw, play, draw again.",
@@ -177,7 +198,7 @@ function starterParts(): BoxParts {
     ],
   };
 
-  return { folder: "main", deckFile: "starter", box, tags, hands, deck };
+  return { box, tags, hands, deck };
 }
 
 // ---------------------------------------------------------------------------
@@ -203,10 +224,6 @@ const MAP_STORY_PROPERTIES: PropertyDecl[] = [
   },
 ];
 
-/** A rectangle as the four points a zone polygon wants, clockwise from the top left. */
-const rect = (x: number, y: number, w: number, h: number): { x: number; y: number }[] =>
-  [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
-
 function mapStoryParts(): KitParts {
   const village = newId("v"), woods = newId("v");
   const region: TagGroup = {
@@ -219,7 +236,7 @@ function mapStoryParts(): KitParts {
     templates: { [SPATIAL]: { map: true } },
   };
   const box: BoxShard = {
-    schema: "storylets/box@0",
+    schema: BOX_SCHEMA,
     box: {
       id: newId("b"), gameId: "riverside",
       title: "Riverside", purpose: "A village on a map. The story starts at the well, and the rest of the map opens once it gets going.",
@@ -232,7 +249,7 @@ function mapStoryParts(): KitParts {
   const first = newId("t"), beyond = newId("t");
   const well = newId("h"), mill = newId("h"), hut = newId("h");
   const hands: HandsShard = {
-    schema: "storylets/hands@0",
+    schema: HANDS_SCHEMA,
     templates: [
       {
         id: first, gameId: "starting-place", title: "Where the story starts",
@@ -258,7 +275,7 @@ function mapStoryParts(): KitParts {
   };
   const at = (place: string): Record<string, string[]> => ({ [PLACE_GROUP]: [place] });
   const deck: DeckShard = {
-    schema: "storylets/deck@0",
+    schema: DECK_SCHEMA,
     deck: {
       id: newId("k"), gameId: "scenes",
       title: "Scenes", purpose: "Every scene and conversation, filed by the place it happens at, or the region it could happen anywhere in.",
@@ -303,7 +320,7 @@ function mapStoryParts(): KitParts {
   };
   return {
     map: projectMapOf(region),
-    boxes: [{ folder: "riverside", deckFile: "scenes", box, tags: { schema: "storylets/tags@0", groups: [] }, hands, deck, sites }],
+    boxes: [{ box, tags: { schema: TAGS_SCHEMA, groups: [] }, hands, deck, sites }],
   };
 }
 
@@ -344,19 +361,8 @@ const ACTION_GAME_PROPERTIES: PropertyDecl[] = [
  *  group, so one set of districts and one value of each district property,
  *  whichever box's hand is standing in it. */
 function cityDistricts(): { group: TagGroup; docks: string; oldTown: string } {
-  const docks = newId("v"), oldTown = newId("v");
-  return {
-    docks, oldTown,
-    group: {
-      id: newId("d"), gameId: "district",
-      purpose: "Where it is in the city, drawn on the project map. Every box on the map shares the same districts.",
-      tags: [
-        { id: docks, gameId: "docks", order: 0, templates: { [SPATIAL]: { polygon: rect(0, 0, 320, 240) } } },
-        { id: oldTown, gameId: "old-town", order: 1, templates: { [SPATIAL]: { polygon: rect(320, 0, 320, 240) } } },
-      ],
-      templates: { [SPATIAL]: { map: true } },
-    },
-  };
+  const d = districts("Where it is in the city, drawn on the project map. Every box on the map shares the same districts.", "docks", "old-town");
+  return { group: d.group, docks: d.first, oldTown: d.second };
 }
 
 function actionBox(
@@ -364,7 +370,7 @@ function actionBox(
   fields: BoxShard["box"]["fields"] = [], onMap = true,
 ): BoxShard {
   return {
-    schema: "storylets/box@0",
+    schema: BOX_SCHEMA,
     box: { id: newId("b"), gameId, order, title, purpose, ranking: { specificity }, fields, properties: [], ...(onMap ? { usesMap: true as const } : {}) },
   };
 }
@@ -374,11 +380,10 @@ function actionGameParts(): KitParts {
   // Contracts: OFFERED. The player chooses to take a job; a taken job has a next step.
   const board = newId("t");
   const contracts: BoxParts = {
-    folder: "contracts", deckFile: "jobs",
     box: actionBox(0, "contracts", "Contracts", "Jobs on offer at boards around the city: the player chooses one to take.", true),
-    tags: { schema: "storylets/tags@0", groups: [] },
+    tags: { schema: TAGS_SCHEMA, groups: [] },
     hands: {
-      schema: "storylets/hands@0",
+      schema: HANDS_SCHEMA,
       templates: [{ id: board, gameId: "job-board", title: "Job boards", purpose: "A board jobs are posted on: what work is on offer here, now.", chooses: [d.group.id], slots: 2, properties: [] }],
       hands: [
         { id: newId("h"), order: 0, title: "Dockside board", template: board, chosen: { [d.group.id]: d.docks } },
@@ -386,7 +391,7 @@ function actionGameParts(): KitParts {
       ],
     },
     deck: {
-      schema: "storylets/deck@0",
+      schema: DECK_SCHEMA,
       deck: { id: newId("k"), gameId: "jobs", title: "Jobs", purpose: "Every job and every next step of one.", properties: [] },
       cards: [
         {
@@ -416,11 +421,10 @@ function actionGameParts(): KitParts {
   const street = newId("t");
   const movedOn = () => ({ id: newId("o"), gameId: "moved-on", title: "Moved on", purpose: "Played by the game, not the player, when they walk away.", changes: {} });
   const encounters: BoxParts = {
-    folder: "encounters", deckFile: "street",
     box: actionBox(1, "encounters", "Encounters", "Trouble the game imposes as the player moves through the city.", true),
-    tags: { schema: "storylets/tags@0", groups: [] },
+    tags: { schema: TAGS_SCHEMA, groups: [] },
     hands: {
-      schema: "storylets/hands@0",
+      schema: HANDS_SCHEMA,
       templates: [{ id: street, gameId: "street", title: "Streets", purpose: "The street the player is on: what trouble finds them here, now.", chooses: [d.group.id], slots: 1, properties: [] }],
       hands: [
         { id: newId("h"), order: 0, title: "Dockside streets", template: street, chosen: { [d.group.id]: d.docks } },
@@ -428,7 +432,7 @@ function actionGameParts(): KitParts {
       ],
     },
     deck: {
-      schema: "storylets/deck@0",
+      schema: DECK_SCHEMA,
       deck: { id: newId("k"), gameId: "street", title: "Street", purpose: "What the city throws at the player.", properties: [] },
       cards: [
         {
@@ -449,12 +453,11 @@ function actionGameParts(): KitParts {
   // Items: HIDDEN. Found by exploring; the value field is for the game's economy.
   const stash = newId("t");
   const items: BoxParts = {
-    folder: "items", deckFile: "finds",
     box: actionBox(2, "items", "Items", "What exploring turns up. The value field is for the game's economy; the engine never reads it.", true,
       [{ name: "value", type: "number", default: 0, purpose: "What the find is worth to the game's economy." }]),
-    tags: { schema: "storylets/tags@0", groups: [] },
+    tags: { schema: TAGS_SCHEMA, groups: [] },
     hands: {
-      schema: "storylets/hands@0",
+      schema: HANDS_SCHEMA,
       templates: [{ id: stash, gameId: "stash", title: "Hiding places", purpose: "A hiding place the level marks: what is tucked away there, if anything.", chooses: [d.group.id], slots: 1, properties: [] }],
       hands: [
         { id: newId("h"), order: 0, title: "Container 7", template: stash, chosen: { [d.group.id]: d.docks } },
@@ -462,7 +465,7 @@ function actionGameParts(): KitParts {
       ],
     },
     deck: {
-      schema: "storylets/deck@0",
+      schema: DECK_SCHEMA,
       deck: { id: newId("k"), gameId: "finds", title: "Finds", purpose: "Everything there is to find, and where.", properties: [] },
       cards: [
         {
@@ -483,18 +486,17 @@ function actionGameParts(): KitParts {
   // from what the OTHER boxes wrote, which is the cross-box causality.
   const archive = newId("t");
   const codex: BoxParts = {
-    folder: "codex", deckFile: "entries",
     // Not on the map: an entry is about the city as a whole, not a district.
     box: actionBox(3, "codex", "Codex", "The box the game only reads: entries unlock from what the rest of the game did, and are never played.", false,
       [{ name: "body", type: "string", default: "", purpose: "The entry's text, for the game's codex page." }], false),
-    tags: { schema: "storylets/tags@0", groups: [] },
+    tags: { schema: TAGS_SCHEMA, groups: [] },
     hands: {
-      schema: "storylets/hands@0",
+      schema: HANDS_SCHEMA,
       templates: [{ id: archive, gameId: "archive", title: "The codex page", purpose: "The codex page: every unlocked entry. Slots is the page size.", chooses: [], slots: 12, properties: [] }],
       hands: [{ id: newId("h"), title: "Codex", template: archive, chosen: {} }],
     },
     deck: {
-      schema: "storylets/deck@0",
+      schema: DECK_SCHEMA,
       deck: { id: newId("k"), gameId: "entries", title: "Entries", purpose: "The codex's contents. Never played.", properties: [] },
       cards: [
         {
@@ -522,11 +524,10 @@ function actionGameParts(): KitParts {
   // background chatter, and the game clears the wire each news cycle.
   const screen = newId("t");
   const news: BoxParts = {
-    folder: "news", deckFile: "headlines",
     box: actionBox(4, "news", "News", "The city talking about what just happened. Never played: the game clears the wire each news cycle and re-deals the screens.", false),
-    tags: { schema: "storylets/tags@0", groups: [] },
+    tags: { schema: TAGS_SCHEMA, groups: [] },
     hands: {
-      schema: "storylets/hands@0",
+      schema: HANDS_SCHEMA,
       templates: [{ id: screen, gameId: "screen", title: "Public screens", purpose: "A public screen: the story of the moment, over the background chatter.", chooses: [d.group.id], slots: 2, properties: [] }],
       hands: [
         { id: newId("h"), order: 0, title: "Dock screen", template: screen, chosen: { [d.group.id]: d.docks } },
@@ -534,7 +535,7 @@ function actionGameParts(): KitParts {
       ],
     },
     deck: {
-      schema: "storylets/deck@0",
+      schema: DECK_SCHEMA,
       deck: { id: newId("k"), gameId: "headlines", title: "Headlines", purpose: "Every story the screens can run.", properties: [] },
       cards: [
         {
@@ -554,11 +555,19 @@ function actionGameParts(): KitParts {
 }
 
 // --- emitted file bodies (the extension ruling + merge hygiene) --------------
+//
+// Every list of shard extensions below is built from SHARD_EXTENSIONS, the one
+// list: until 2026-10-06 they were written out three times here, so a new shard
+// type had to be remembered in each or a new project's git would text-merge it.
 
-const SHARD_GLOB =
-  "storyletproj,storyletbox,storylettags,storylethands,storyletdeck,storyletview,storyletmap,storyletnotes,storyletcontract";
+/** Every shard extension without its dot (`storyletdeck`). */
+const SHARD_NAMES = Object.values(SHARD_EXTENSIONS).map((ext) => ext.slice(1));
+/** `*.storyletdeck`, padded so the attribute columns line up. */
+const PATTERN_WIDTH = Math.max(...SHARD_NAMES.map((name) => name.length)) + 3;
+const pattern = (name: string): string => `*.${name}`.padEnd(PATTERN_WIDTH);
+const eachShard = (attribute: string): string => SHARD_NAMES.map((name) => `${pattern(name)}${attribute}`).join("\n");
 
-const EDITORCONFIG = `# Storylet Studio source is UTF-8 + LF, always (the validator enforces this).
+const EDITORCONFIG = `# Storyletter source is UTF-8 + LF, always (the validator enforces this).
 root = true
 
 [*]
@@ -566,71 +575,45 @@ charset = utf-8
 end_of_line = lf
 insert_final_newline = true
 
-[*.{${SHARD_GLOB}}]
+[*.{${SHARD_NAMES.join(",")}}]
 indent_style = space
 indent_size = 2
 `;
 
-const GITATTRIBUTES = `# Storylet Studio source is UTF-8 + LF text (pinned; never let autocrlf touch it).
-*.storyletproj    text eol=lf
-*.storyletbox     text eol=lf
-*.storylettags    text eol=lf
-*.storylethands   text eol=lf
-*.storyletdeck    text eol=lf
-*.storyletview    text eol=lf
-*.storyletmap     text eol=lf
-*.storyletnotes   text eol=lf
-*.storyletcontract text eol=lf
+const GITATTRIBUTES = `# Storyletter source is UTF-8 + LF text (pinned; never let autocrlf touch it).
+${eachShard("text eol=lf")}
 
 # Id-keyed structured merge for storylets source (the 'storyletengine merge'
 # driver; see vcs-setup.md). Until it is registered, git falls back to a
 # normal text merge for these - the format carries the everyday cases anyway
-# (Tier 1 of the merge design).
-*.storyletproj    merge=storylets
-*.storyletbox     merge=storylets
-*.storylettags    merge=storylets
-*.storylethands   merge=storylets
-*.storyletdeck    merge=storylets
-# The two arrangement shards merge MOST: positions churn, and two designers
+# (Tier 1 of the merge design). Every shard has a strategy: the arrangement
+# shards (view and map) merge MOST, since positions churn and two designers
 # tidying different corners of a canvas, or of the map, must not conflict.
-*.storyletview    merge=storylets
-*.storyletmap     merge=storylets
-# Comments on the project, and an installation contract (every key merged
-# atomically).
-*.storyletnotes   merge=storylets
-*.storyletcontract merge=storylets
+${eachShard("merge=storylets")}
 
 # The compiled bundle is committed but REGENERATED, never hand-merged - keep
 # ours on conflict and rebuild ('storyletengine validate' catches a stale
 # one via the content hash). Needs a one-time
 # 'git config merge.ours.driver true' (see vcs-setup.md).
-*.storyletsc      text eol=lf merge=ours
+${pattern(BUNDLE_EXTENSION.slice(1))}text eol=lf merge=ours
 
 # Background images (an orientation aid on a map): bytes, so nothing should ever
 # try to diff, merge or normalise line endings in one. Plain git is fine for a
 # few MB of floor plan; if yours grow, git-lfs is the escape hatch and nothing
 # here depends on it.
-assets/**         binary
+${"assets/**".padEnd(PATTERN_WIDTH)}binary
 `;
 
-const GITIGNORE = `# Storylet Studio generated artifacts that are never source:
+const GITIGNORE = `# Storyletter generated artifacts that are never source:
 # Unresolved merge sidecar (a lingering one is a validate error):
-*.storyletconflict
+*${CONFLICT_SIDECAR_EXTENSION}
 `;
 
 const VSCODE_SETTINGS = `{
-  // Storylet Studio shards are JSON5 (trailing commas, comments) under per-type
+  // Storyletter shards are JSON5 (trailing commas, comments) under per-type
   // extensions - register them so highlighting and validation survive.
   "files.associations": {
-    "*.storyletproj": "json5",
-    "*.storyletbox": "json5",
-    "*.storylettags": "json5",
-    "*.storylethands": "json5",
-    "*.storyletdeck": "json5",
-    "*.storyletview": "json5",
-    "*.storyletmap": "json5",
-    "*.storyletnotes": "json5",
-    "*.storyletcontract": "json5"
+${SHARD_NAMES.map((name) => `    "*.${name}": "json5"`).join(",\n")}
   }
 }
 `;
@@ -644,7 +627,7 @@ hash).
 
 Register the merge drivers once per clone (git config is not repo-tracked):
 
-    git config merge.storylets.name "Storylet Studio structured merge"
+    git config merge.storylets.name "Storyletter structured merge"
     git config merge.storylets.driver "storyletengine merge %O %A %B -o %A --path %P"
     git config merge.ours.driver true
 

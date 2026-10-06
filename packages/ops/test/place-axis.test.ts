@@ -3,7 +3,7 @@
 // on the map. The Where row, Group by and the hand page's tiers all read it.
 
 import { describe, expect, it } from "vitest";
-import { bindingsOfHand, isPlaceAxis, movesIn, placeAxes, tagsOfHand } from "../src/place-axis.js";
+import { bindingsOfHand, handBindings, movesIn, placeAxes, tagsOfHand } from "../src/place-axis.js";
 import type { PlaceAxisBox, PlaceAxisMap } from "../src/place-axis.js";
 import type { TagGroup } from "@storylet-studio/model";
 
@@ -42,14 +42,14 @@ describe("placeAxes", () => {
     const hands = [{ id: "h", rule: { slots: 1, bindings: { d_npc: "v_gareth" } } }];
     expect(placeAxes(project, box({ usesMap: true, hands }))).toEqual(["d_zone", "d_npc"]);
     // Off the map the same group is nothing of the box's.
-    expect(isPlaceAxis(project, box({ hands }), "d_zone")).toBe(false);
+    expect(placeAxes(project, box({ hands }))).not.toContain("d_zone");
   });
 
   it("leaves out a group nothing binds, and an act bound only from state", () => {
     const hands = [{ id: "h", rule: { slots: 1 } }];
     expect(placeAxes(project, box({ hands }))).toEqual([]);
-    expect(isPlaceAxis(project, box({ hands }), "d_mood")).toBe(false);
-    expect(isPlaceAxis(project, box({ hands }), "d_act")).toBe(false);
+    expect(placeAxes(project, box({ hands }))).not.toContain("d_mood");
+    expect(placeAxes(project, box({ hands }))).not.toContain("d_act");
   });
 
   it("follows the box's display order for its own groups", () => {
@@ -65,6 +65,20 @@ describe("bindingsOfHand and tagsOfHand", () => {
     expect(Object.fromEntries(bindingsOfHand(b, hand))).toEqual({ d_kind: "v_topic", d_npc: "v_gareth" });
     expect(tagsOfHand(b, hand, npc)).toEqual(["v_gareth"]);
     expect(tagsOfHand(b, hand, area)).toEqual([]);
+  });
+
+  it("derives every binding once, naming its group only where the runtime's ask does", () => {
+    // handBindings is what both this file and reach.ts read: the template's own
+    // binding does not name its group in @hand, a chosen or rule binding does.
+    const b = box({ handTemplates: [{ id: "t", bindings: { d_kind: "v_topic", place: "h" }, chooses: ["d_npc"] }] });
+    expect(handBindings(b, { id: "h", template: "t", chosen: { d_npc: "@story.with" } })).toEqual([
+      { group: "d_kind", tag: "v_topic", named: false },
+      { group: "place", tag: "h", named: false },
+      { group: "d_npc", tag: "@story.with", named: true },
+    ]);
+    expect(handBindings(b, { id: "r", rule: { slots: 1, bindings: { d_area: "v_docks" } } })).toEqual([
+      { group: "d_area", tag: "v_docks", named: true },
+    ]);
   });
 
   it("reads a moving hand's enum for the tags it can be in", () => {

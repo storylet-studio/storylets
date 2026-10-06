@@ -8,6 +8,7 @@
 
 import { dirname, join } from "node:path";
 import { loadProject, playableFileName, runExportHtml } from "@storylet-studio/ops";
+import { refusal } from "./project.js";
 import type { ProjectSession } from "./project.js";
 
 /** The page text and the default save path: `<Project name>.html` beside the
@@ -15,9 +16,6 @@ import type { ProjectSession } from "./project.js";
 export function playableExport(session: ProjectSession): { html: string; defaultPath: string } | { error: string } {
   const loaded = loadProject(session.loaded.dir);
   const result = runExportHtml(loaded);
-  if (result.html === undefined || !loaded.source) {
-    const errors = result.issues.filter((i) => i.severity === "error").map((i) => i.message);
-    return { error: errors.join("; ") || "the project does not compile" };
-  }
+  if (result.html === undefined || !loaded.source) return { error: refusal(result.issues, "the project does not compile") };
   return { html: result.html, defaultPath: join(dirname(loaded.dir), playableFileName(loaded.source)) };
 }

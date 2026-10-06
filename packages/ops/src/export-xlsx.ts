@@ -41,15 +41,23 @@ export interface ExportXlsxOptions {
 
 const RESERVED_SHEETS = ["Overview", "Outcomes", "Hands", "Tag groups"] as const;
 
-/** exceljs forbids : \ / ? * [ ] in sheet names and caps them at 31 chars. */
-const cleanSheetName = (raw: string): string =>
-  raw.replace(/[:\\/?*[\]]/g, "-").trim().slice(0, 31) || "Deck";
+/** exceljs forbids : \ / ? * [ ] in sheet names and caps them at 31 chars.
+ *  The cap applies to the BASE, so a `suffix` (" (2)") always survives: cut
+ *  after it, two long titles that share their first 31 characters would make
+ *  every numbered candidate the same name. */
+const cleanSheetName = (raw: string, suffix = ""): string =>
+  `${raw.replace(/[:\\/?*[\]]/g, "-").trim().slice(0, 31 - suffix.length).trimEnd() || "Deck"}${suffix}`;
 
-/** The suggested file name: the project's name, with path-hostile characters
- *  folded to spaces (Patterpad's safeStem). */
+/** A suggested file name's stem: the project's name, with path-hostile
+ *  characters folded to spaces (Patterpad's safeStem), or "project". The one
+ *  rule for every export that suggests a name. */
+export function projectFileStem(source: SourceProject): string {
+  return source.project.project.name.replace(/[/\\:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "project";
+}
+
+/** The suggested file name for the spreadsheet. */
 export function spreadsheetFileName(source: SourceProject): string {
-  const stem = source.project.project.name.replace(/[/\\:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
-  return `${stem || "project"}.xlsx`;
+  return `${projectFileStem(source)}.xlsx`;
 }
 
 /** The authored display order: `order` where set, position otherwise (the
@@ -150,10 +158,9 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
   // number when even that collides. Excel treats names case-insensitively.
   const taken = new Set<string>(RESERVED_SHEETS.map((n) => n.toLowerCase()));
   const claim = (deckTitle: string, boxTitle: string): string => {
-    const candidates = [deckTitle, `${deckTitle} (${boxTitle})`];
-    for (let n = 2; ; n++) {
-      const raw = candidates.shift() ?? `${deckTitle} (${n})`;
-      const name = cleanSheetName(raw);
+    const candidates = [cleanSheetName(deckTitle), cleanSheetName(`${deckTitle} (${boxTitle})`)];
+    for (let n = 1; ; ) {
+      const name = candidates.shift() ?? cleanSheetName(deckTitle, ` (${++n})`);
       if (!taken.has(name.toLowerCase())) { taken.add(name.toLowerCase()); return name; }
     }
   };

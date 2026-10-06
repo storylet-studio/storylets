@@ -1051,7 +1051,7 @@ describe("publish-gate validation", () => {
       shard("c/hands.storylethands", { schema: "storylets/hands@0", templates: [], hands: [] }),
       shard("c/decks/main.storyletdeck", {
         schema: "storylets/deck@0",
-        deck: { id: "k_2", gameId: "main", properties: [] },
+        deck: { id: "k_2", gameId: "main-b2", properties: [] },
         cards: [],
       }),
     ]);
@@ -1142,11 +1142,34 @@ describe("publish-gate validation", () => {
       shard("c/hands.storylethands", { schema: "storylets/hands@0", templates: [], hands: [] }),
       shard("c/decks/main.storyletdeck", {
         schema: "storylets/deck@0",
-        deck: { id: "k_2", gameId: "main", properties: [] },
+        deck: { id: "k_2", gameId: "main-b2", properties: [] },
         cards: [],
       }),
     ]);
     expect(result.issues).toEqual([]);
+  });
+
+  // A deck's gameId is its address everywhere a deck is named (`deck.<gameId>.x`
+  // in setProperty and a save's report, the analyses' @deck keys), and the
+  // engine treats it as unique bundle-wide, so it is refused like every other
+  // project-wide gameId (ruling M, the CLI review of 2026-10-06).
+  it("flags two decks sharing a gameId, in different boxes", () => {
+    const result = compileFiles([
+      ...minimal([]),
+      shard("c/box.storyletbox", {
+        schema: "storylets/box@0",
+        box: { id: "b_2", gameId: "b2", ranking: { specificity: true }, fields: [], properties: [] },
+      }),
+      shard("c/tags.storylettags", { schema: "storylets/tags@0", groups: [] }),
+      shard("c/hands.storylethands", { schema: "storylets/hands@0", templates: [], hands: [] }),
+      shard("c/decks/main.storyletdeck", {
+        schema: "storylets/deck@0",
+        deck: { id: "k_2", gameId: "main", properties: [] },
+        cards: [],
+      }),
+    ]);
+    expect(errors(result.issues)).toEqual(['duplicate deck gameId "main" (also in b/decks/main.storyletdeck)']);
+    expect(result.issues.find((i) => i.severity === "error")!.path).toBe("c/decks/main.storyletdeck");
   });
 
   it("flags a duplicate id across shards", () => {

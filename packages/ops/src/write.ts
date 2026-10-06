@@ -18,3 +18,14 @@ export interface PlannedBinaryWrite {
   path: string;
   bytes: Uint8Array;
 }
+
+/**
+ * One write of a plan that holds both kinds, in the order the plan wants them
+ * committed: an export's map pictures, bundle and scopes file are one list, so
+ * the CLI and Storyletter cannot write them in two different orders. The
+ * caller still decides what to do with bytes, through `isBinaryWrite`.
+ */
+export type PlannedFileWrite = PlannedWrite | PlannedBinaryWrite;
+
+/** Is this write bytes rather than text? */
+export const isBinaryWrite = (write: PlannedFileWrite): write is PlannedBinaryWrite => "bytes" in write;

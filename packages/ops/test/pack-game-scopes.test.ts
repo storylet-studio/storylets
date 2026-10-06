@@ -162,18 +162,16 @@ describe("reading a pack: the snapshot is neither a shard nor an asset", () => {
     expect(scopes.every((w) => !existsSync(w.path))).toBe(true);   // planned, not written
   });
 
-  it("only a scopes file directly in the folder: anything else there is read as it always was", async () => {
+  it("only a scopes file directly in the folder: a shard there is a shard, and anything else is not written", async () => {
     const zip = new JSZip();
     zip.file("game-scopes/game.scopes.json", json(GAME));
     zip.file("game-scopes/game-scopes.storyletbox", "{}");
     zip.file("game-scopes/deeper/x.scopes.json", "{}");
     const target = tempDir();
-    const { shards, scopes } = await runUnpack(await zip.generateAsync({ type: "nodebuffer" }), target);
+    const { shards, scopes, other } = await runUnpack(await zip.generateAsync({ type: "nodebuffer" }), target);
     expect(scopes.map((w) => w.path)).toEqual([join(target, "game-scopes", "game.scopes.json")]);
-    expect(shards.map((w) => w.path).sort()).toEqual([
-      join(target, "game-scopes", "deeper", "x.scopes.json"),
-      join(target, "game-scopes", "game-scopes.storyletbox"),
-    ]);
+    expect(shards.map((w) => w.path)).toEqual([join(target, "game-scopes", "game-scopes.storyletbox")]);
+    expect([...other.keys()]).toEqual(["game-scopes/deeper/x.scopes.json"]);
   });
 
   it("refuses a scopes entry that would land outside the target, as any other", async () => {

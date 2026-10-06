@@ -13,31 +13,35 @@ import type { Bundle } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
 import { assetPath } from "./assets.js";
 import { planStoryletsScopes } from "./game-scopes.js";
-import type { PlannedBinaryWrite, PlannedWrite } from "./write.js";
+import type { PlannedBinaryWrite, PlannedFileWrite } from "./write.js";
 
 export interface ExportResult {
   issues: Issue[];
   bundle?: Bundle;
-  /** The bundle write (absent when compilation failed or `-o -` asked for stdout). */
-  write?: PlannedWrite;
   /** The serialised bundle (for stdout output). */
   text?: string;
+  /** Where the bundle goes (absent when compilation failed or `-o -` asked for stdout). */
+  path?: string;
   /**
-   * The background files the bundle refers to, ready to sit beside it.
+   * Everything the export writes, in the order to write it, for the caller to
+   * commit as it stands (the CLI and Storyletter used to order these three
+   * themselves, and differently):
    *
-   * Empty unless the project (or the caller) asked for maps. Bytes, not text,
-   * and separate from `write` for the reason `PlannedBinaryWrite` exists at all:
-   * a caller must decide what to do with bytes rather than have them handed to
-   * something built for shards.
+   * 1. The background files the bundle refers to, beside it. Empty unless the
+   *    project (or the caller) asked for maps. Bytes, not text, for the reason
+   *    `PlannedBinaryWrite` exists at all: a caller must decide what to do with
+   *    bytes rather than have them handed to something built for shards. First,
+   *    so a bundle never lands naming pictures that failed to.
+   * 2. The bundle.
+   * 3. The Storylet Engine's file in the game's shared scopes folder
+   *    (`game-scopes/storylets.scopes.json`), when the project has a folder and
+   *    the file does not already say what the project would write (patterkit
+   *    design/shared-scopes.md). Never when there is no folder: creating one is
+   *    an explicit act.
+   *
+   * Empty for stdout, which skips the pictures and the scopes file.
    */
-  assets: PlannedBinaryWrite[];
-  /**
-   * The Storylet Engine's file in the game's shared scopes folder
-   * (`game-scopes/storylets.scopes.json`), when the project has a folder and the file does
-   * not already say what the project would write (patterkit design/shared-scopes.md). Never
-   * for stdout, and never when there is no folder: creating one is an explicit act.
-   */
-  scopesWrite?: PlannedWrite;
+  writes: PlannedFileWrite[];
 }
 
 export interface ExportOptions {
@@ -91,13 +95,17 @@ function mapAssets(loaded: LoadedProject, bundlePath: string): PlannedBinaryWrit
 }
 
 export function runExport(loaded: LoadedProject, out?: string, opts: ExportOptions = {}): ExportResult {
-  if (!loaded.source) return { issues: loaded.issues, assets: [] };
+  // A load error refuses (ruling M, 2026-10-06). The loader drops what it
+  // cannot read and carries on, so one unparseable deck used to leave its cards
+  // out of a bundle that shipped with exit 0, and Live Link pushed the same
+  // gutted build into a running game. A warning still exports.
+  if (!loaded.source || loaded.issues.some((i) => i.severity === "error")) return { issues: loaded.issues, writes: [] };
   // An unresolved merge must not reach a bundle: the merged model is valid
   // canonical source with conflicted values resolved PROVISIONALLY to ours, so
   // exporting it ships somebody's discarded edit as though it were agreed.
   // merge.ts has said so since it was written; only validate enforced it.
   const unresolved = sidecarIssues(loaded.sidecars);
-  if (unresolved.length > 0) return { issues: [...loaded.issues, ...unresolved], assets: [] };
+  if (unresolved.length > 0) return { issues: [...loaded.issues, ...unresolved], writes: [] };
 
   // The override is applied to the source the compiler sees, so there is one
   // rule about what a bundle carries and it lives in the compiler.
@@ -110,9 +118,9 @@ export function runExport(loaded: LoadedProject, out?: string, opts: ExportOptio
 
   const { bundle, issues } = compileProject(source);
   const all = [...loaded.issues, ...issues];
-  if (!bundle) return { issues: all, assets: [] };
+  if (!bundle) return { issues: all, writes: [] };
   const text = serialiseBundle(bundle);
-  if (out === "-") return { issues: all, bundle, text, assets: [] };
+  if (out === "-") return { issues: all, bundle, text, writes: [] };
 
   const path = out ?? bundleOutputPath(loaded);
   const scopesWrite = planStoryletsScopes(loaded);
@@ -120,8 +128,11 @@ export function runExport(loaded: LoadedProject, out?: string, opts: ExportOptio
     issues: all,
     bundle,
     text,
-    write: { path, content: text },
-    assets: bundle.map?.geometry !== undefined ? mapAssets({ ...loaded, source }, path) : [],
-    ...(scopesWrite !== undefined ? { scopesWrite } : {}),
+    path,
+    writes: [
+      ...(bundle.map?.geometry !== undefined ? mapAssets({ ...loaded, source }, path) : []),
+      { path, content: text },
+      ...(scopesWrite !== undefined ? [scopesWrite] : []),
+    ],
   };
 }
