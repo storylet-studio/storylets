@@ -41,6 +41,6 @@
     "@wildwinter/scoperegistry": ">=0.7.0 <1.0.0"
   },
   "devDependencies": {
-    "@wildwinter/scoperegistry": ">=0.7.0 <1.0.0"
+    "@wildwinter/scoperegistry": "^0.8.1"
   }
 }
