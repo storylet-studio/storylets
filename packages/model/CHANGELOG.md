@@ -1,5 +1,11 @@
 # @storylet-studio/model
 
+## 0.9.1
+
+### Patch Changes
+
+- e67f29a: The `durable` flag's doc comments on a property declaration and a card now describe the runtime's durable verbs (`saveDurable`, `loadDurable`, `openFlow`'s `durable`), instead of calling the flag inert to the runtime.
+
 ## 0.9.0
 
 ### Minor Changes
