@@ -20,6 +20,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-07
+
 ### Fixed
 
 - **The playable page and a new project's files name the family again**: the page's credit and its fallback title say Storylet Studio, and so do the header comments in the `.editorconfig`, `.gitattributes` and `.gitignore` that `init` writes, and the merge driver's name. 0.13.0 changed them to Storyletter in error: Storylet Studio is the whole (the format, the engine, the editor), and Storyletter is the editor alone.

@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-07
+
 ### Changed
 
 - **Cmd+P opens the Board**, as it plays a scene in Patterpad. It was Cmd+T.
