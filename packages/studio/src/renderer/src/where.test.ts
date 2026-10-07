@@ -9,7 +9,7 @@ import { whereModel, whereSentence, whereWarning } from "./where.js";
 import type { BoxDto } from "../../shared/api.js";
 
 const box = {
-  id: "b", gameId: "village", ranking: { specificity: true }, fields: [], properties: [], decks: [], templates: [],
+  id: "b", gameId: "village", folder: "village", ranking: { specificity: true }, fields: [], properties: [], decks: [], templates: [],
   tagGroups: [
     { id: "d_zone", gameId: "zone", values: ["village", "forest"], spatial: true, placeAxis: true },
     { id: "d_mood", gameId: "mood", values: ["tense", "calm"] },

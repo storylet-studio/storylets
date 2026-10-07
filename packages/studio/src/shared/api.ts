@@ -484,6 +484,9 @@ export interface PropertyDeclDto {
 export interface BoxDto {
   id: string;
   gameId: string;
+  /** The box's folder in the project, which is where its files are. Usually
+   *  its gameId, but not once either changes: a retitled box keeps its folder. */
+  folder: string;
   /** The raw pinned gameId, absent when derived (see OutcomeDto). */
   gameIdPinned?: string;
   title?: string;

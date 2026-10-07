@@ -21,7 +21,7 @@ const deck: DeckDto = {
   }],
 };
 const box: BoxDto = {
-  id: "b_1", gameId: "box", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [], decks: [deck],
+  id: "b_1", gameId: "box", folder: "box", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [], decks: [deck],
   templates: [{ id: "t_1", gameId: "street-hands", bindings: ["zone = ?"], slots: "3", instances: 1 }],
   tagGroups: [{ id: "d_1", gameId: "zone", values: ["docks", "market"] }],
   hands: [{ id: "h_1", gameId: "docks-street", template: "street-hands", slots: 2, tags: {} }],
@@ -46,7 +46,7 @@ describe("navigator", () => {
     renderNav(host, project, undefined, new Set(), stubActions({ focus: focusFn }));
     expect(host.querySelector(".nav-maprow")).toBeNull();
     const onMap: BoxDto = { ...box, usesMap: true };
-    const mapped: ProjectDto = { ...project, map: { groupId: "d_map", gameId: "district", zones: 5 }, boxes: [onMap, { ...box, id: "b_2", gameId: "news" }] };
+    const mapped: ProjectDto = { ...project, map: { groupId: "d_map", gameId: "district", zones: 5 }, boxes: [onMap, { ...box, id: "b_2", gameId: "news", folder: "news" }] };
     renderNav(host, mapped, undefined, new Set(), stubActions({ focus: focusFn }));
     const rows = [...host.querySelectorAll(".nav-d0 .nav-label")].map((r) => r.textContent);
     expect(rows.slice(0, 2)).toEqual(["Story", "Map"]);

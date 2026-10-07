@@ -18,7 +18,7 @@ const card: CardDto = {
 };
 const deck: DeckDto = { id: "k_1", gameId: "main", properties: [], cards: [card] };
 const box: BoxDto = {
-  id: "b_1", gameId: "street", ranking: { specificity: true },
+  id: "b_1", gameId: "street", folder: "street", ranking: { specificity: true },
   fields: [{ name: "line", type: "string", default: "" }],
   outcomeFields: [{ name: "after", type: "string", default: "" }],
   properties: [], decks: [deck], templates: [], tagGroups: [], hands: [],

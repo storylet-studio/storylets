@@ -185,3 +185,35 @@ describe("the written listener (review 2026-10, smaller items)", () => {
     expect(told).toBe(1);
   });
 });
+
+describe("bookkeeping beside the project (undoing a pull, found 2026-10-07)", () => {
+  // The server record and its base sit beside the project outside version
+  // control: an undo restores them with plain writes, never through the VCS,
+  // and only once the project's own files have landed, so they never claim a
+  // revision the files are not at.
+  it("are restored with plain writes, never through version control", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "bookkeeping-"));
+    const shard = join(dir, "a.storyletdeck");
+    const record = join(dir, "storylets.server.json");
+    writeFileSync(shard, "new");
+    writeFileSync(record, "revision 2");
+    // A VCS that would refuse the record: were it written through the VCS, this would fail.
+    setProvider(new StubbornProvider((p) => same(p, record)));
+    const applied = await applyStates([{ path: shard, content: "old" }, { path: record, content: "revision 1", local: true }]);
+    expect(applied.ok).toBe(true);
+    expect(readFileSync(shard, "utf8")).toBe("old");
+    expect(readFileSync(record, "utf8")).toBe("revision 1");
+  });
+
+  it("stay as they are when the project's own files are refused", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "bookkeeping-"));
+    const shard = join(dir, "a.storyletdeck");
+    const record = join(dir, "storylets.server.json");
+    writeFileSync(shard, "new");
+    writeFileSync(record, "revision 2");
+    setProvider(new StubbornProvider((p) => same(p, shard)));
+    const applied = await applyStates([{ path: shard, content: "old" }, { path: record, content: "revision 1", local: true }]);
+    expect(applied.ok).toBe(false);
+    expect(readFileSync(record, "utf8")).toBe("revision 2");
+  });
+});

@@ -22,10 +22,11 @@ import {
   addressOf, askLeave, contractBreaks, failed, hashPack, leavePrompt, levelLine, normaliseAddress, nothingToPush,
   packAddress, packProject, planConnect, planPull, projectStatusLine, pullPack, pushPack, pushedLine, reachable,
   readRemote, refusalPrompt, resolveLeave, serverProblems, unpushedShards, writeBase, writeRemote,
-  LEAVE_SETTLE_MS, ServerSession,
+  BASE_FILE, LEAVE_SETTLE_MS, REMOTE_FILE, ServerSession,
 } from "./remote.js";
 import type { InAppPrompt, LeaveChoice, LeavePrompt, ProjectAnchor, PullPlan, RemoteRecord } from "./remote.js";
 import { applyStates, captureBefore, writeFailure } from "./history.js";
+import type { FileState } from "./history.js";
 import { HandedPaths } from "./trust.js";
 import { openResult, validate } from "./project.js";
 import type { ProjectSession } from "./project.js";
@@ -326,23 +327,31 @@ export function createExchange(deps: ExchangeDeps): Exchange {
       // project in a state neither end ever had. A pull that wrote nothing -
       // everything of theirs is already what is here - records no step: an undo
       // that puts nothing back is not a step anybody wants on their stack.
+      //
+      // The server record and the base are IN the step (as local bookkeeping,
+      // never through version control): undoing a pull puts the project back at
+      // the revision it was level with, so its old shards are not then pushed as
+      // if they were current over the work the pull brought in (found 2026-10-07).
+      const bookkeeping = [join(ctx.dir, REMOTE_FILE), join(ctx.dir, BASE_FILE)];
+      const local = (states: FileState[]): FileState[] => states.map((s) => ({ ...s, local: true }));
       const failure = await serialised(async () => {
-        const before = captureBefore(writes.map((w) => w.path));
+        const before = [...captureBefore(writes.map((w) => w.path)), ...local(captureBefore(bookkeeping))];
         const failed = await commitPlan(plan);
         if (failed !== undefined) return failed;
+        // Level with the server at ITS revision, and the base moves to what the
+        // server sent rather than to what is now on disk: a merge that folded
+        // local edits in leaves them unpushed, and they still differ from the
+        // pulled revision, so they still count. Saying "in sync" over them would
+        // be a lie.
+        writeRemote(ctx.dir, { ...ctx.remote, revision: head.revision, role: head.role });
+        writeBase(ctx.dir, head.revision, plan.base);
         if (writes.length > 0) {
           live().history.record("Pull from server", `pull:${stepKey()}`, before,
-            writes.map((w) => ({ path: w.path, content: w.content })));
+            [...writes.map((w) => ({ path: w.path, content: w.content })), ...local(captureBefore(bookkeeping))]);
         }
         return undefined;
       });
       if (failure !== undefined) return refuse(live(), failure);
-      // Level with the server at ITS revision, and the base moves to what the
-      // server sent rather than to what is now on disk: a merge that folded local
-      // edits in leaves them unpushed, and they still differ from the pulled
-      // revision, so they still count. Saying "in sync" over them would be a lie.
-      writeRemote(ctx.dir, { ...ctx.remote, revision: head.revision, role: head.role });
-      writeBase(ctx.dir, head.revision, plan.base);
       deps.schedulePush();
       deps.menu();
       return {

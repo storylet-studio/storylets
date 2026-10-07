@@ -12,7 +12,7 @@ const card = (id: string, tags: CardDto["tags"] = []): CardDto => ({
 
 /** A village: two decks, a map, two sites, a thread group. */
 const village: BoxDto = {
-  id: "b_v", gameId: "village", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [], templates: [],
+  id: "b_v", gameId: "village", folder: "village", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [], templates: [],
   usesMap: true,
   decks: [
     { id: "k_a", gameId: "ambients", title: "Ambients", properties: [], cards: [
@@ -36,7 +36,7 @@ const village: BoxDto = {
 
 /** A conversation box: hands chosen by npc, no map, no card naming a hand. */
 const talk: BoxDto = {
-  id: "b_t", gameId: "conversations", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [],
+  id: "b_t", gameId: "conversations", folder: "conversations", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [],
   templates: [{ id: "t_1", gameId: "talk", bindings: ["npc = ?"], slots: "3", instances: 2 }],
   decks: [{ id: "k_t", gameId: "topics", properties: [], cards: [
     card("rumour", [{ group: "npc", values: ["gareth", "mira"] }]),

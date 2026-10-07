@@ -104,3 +104,15 @@ describe("Links following the editor (2026-10-07)", () => {
     expect(handler("links:open")).toMatch(/"links:focus", cardId/);
   });
 });
+
+describe("undoing a pull (2026-10-07)", () => {
+  it("puts the server record and its base back with the shards, outside version control", () => {
+    const pull = SOURCE.slice(SOURCE.indexOf("const bookkeeping = [join(ctx.dir, REMOTE_FILE), join(ctx.dir, BASE_FILE)]"),
+      SOURCE.indexOf('"Pull from server"') + 400);
+    // Both sides of the history entry carry the bookkeeping, marked local.
+    expect(pull).toMatch(/const before = \[[^\n]*local\(captureBefore\(bookkeeping\)\)/);
+    expect(pull).toMatch(/history\.record\("Pull from server"[\s\S]*local\(captureBefore\(bookkeeping\)\)/);
+    // Written before the entry is recorded, so its "after" is the pulled revision.
+    expect(pull.indexOf("writeBase(")).toBeLessThan(pull.indexOf('"Pull from server"'));
+  });
+});

@@ -228,6 +228,7 @@ export function toDto(loaded: LoadedProject): ProjectDto {
       return {
       id: box.box.box.id,
       gameId: effectiveGameId(box.box.box),
+      folder: box.path,
       ...(!blank(box.box.box.gameId) ? { gameIdPinned: box.box.box.gameId } : {}),
       ...(box.box.box.title !== undefined ? { title: box.box.box.title } : {}),
       ...(box.box.box.purpose !== undefined ? { purpose: box.box.box.purpose } : {}),

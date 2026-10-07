@@ -38,14 +38,14 @@ export interface ProblemNames {
 
 /**
  * The box a problem's file belongs to: the one whose folder the path starts
- * with. A box's folder is its address (ops `boxFolderName`), and the path is
- * relative to the project. This used to ask whether the path merely CONTAINED
- * `<gameId>/`, so a box called `a` claimed `data/decks/...` and a problem in
- * one box could open another.
+ * with. The path is relative to the project. This used to ask whether the path
+ * merely CONTAINED `<gameId>/`, so a box called `a` claimed `data/decks/...`,
+ * and then matched the start against the gameId, which is not the folder once
+ * a box is renamed or its folder predates its address.
  */
-export function boxForPath<B extends { gameId: string }>(boxes: readonly B[], path: string): B | undefined {
+export function boxForPath<B extends { folder: string }>(boxes: readonly B[], path: string): B | undefined {
   const rel = path.replace(/\\/g, "/").replace(/^\.\//, "");
-  return boxes.find((b) => rel.startsWith(`${b.gameId}/`));
+  return boxes.find((b) => rel.startsWith(`${b.folder.replace(/\\/g, "/")}/`));
 }
 
 /** One message shape, and the code it means. First match wins, so a more

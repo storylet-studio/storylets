@@ -193,16 +193,23 @@ describe("problemText", () => {
 describe("boxForPath", () => {
   // The box a problem is attributed to is the one whose FOLDER the path starts
   // with. It used to be any box whose address appeared followed by a slash
-  // anywhere in the path, so a box called "a" claimed "data/decks/x".
-  const boxes = [{ gameId: "a" }, { gameId: "data" }, { gameId: "village" }];
+  // anywhere in the path, so a box called "a" claimed "data/decks/x"; then the
+  // address at the start, which is not the folder once a box is renamed.
+  const boxes = [{ gameId: "a", folder: "a" }, { gameId: "data", folder: "data" }, { gameId: "village", folder: "village" }];
 
   it("matches on the folder at the start of the path", () => {
     expect(boxForPath(boxes, "data/decks/x.storyletdeck")?.gameId).toBe("data");
     expect(boxForPath(boxes, "village/hands.storylethands")?.gameId).toBe("village");
   });
 
+  it("matches on the box's folder, not its address, once the two differ", () => {
+    const renamed = [{ gameId: "hamlet", folder: "village" }, { gameId: "village", folder: "village-2" }];
+    expect(boxForPath(renamed, "village/decks/x.storyletdeck")?.gameId).toBe("hamlet");
+    expect(boxForPath(renamed, "village-2/box.storyletbox")?.gameId).toBe("village");
+  });
+
   it("never on a folder that merely appears inside the path", () => {
-    expect(boxForPath([{ gameId: "a" }, { gameId: "decks" }], "data/decks/x.storyletdeck")).toBeUndefined();
+    expect(boxForPath([{ gameId: "a", folder: "a" }, { gameId: "decks", folder: "decks" }], "data/decks/x.storyletdeck")).toBeUndefined();
     expect(boxForPath(boxes, "old-village/decks/x.storyletdeck")).toBeUndefined();
   });
 

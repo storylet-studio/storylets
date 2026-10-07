@@ -17,7 +17,7 @@ const card = (tags: CardDto["tags"]): CardDto => ({
 const box = (c: CardDto): BoxDto => {
   const deck: DeckDto = { id: "k_1", gameId: "topics", title: "Topics", properties: [], cards: [c] };
   return {
-    id: "b_1", gameId: "talk", ranking: { specificity: true },
+    id: "b_1", gameId: "talk", folder: "talk", ranking: { specificity: true },
     fields: [], outcomeFields: [], properties: [], decks: [deck], templates: [],
     tagGroups: [
       { id: "g_npc", gameId: "npc", values: ["gareth", "mira"], placeAxis: true },

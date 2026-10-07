@@ -50,6 +50,8 @@ here is part of shipping, not a courtesy.
 
 ### Fixed
 
+- **Undoing a pull from the server puts the server record back too.** It used to undo the cards and leave the project marked as being at the pulled revision, so the next push could overwrite a colleague's work.
+- **A problem in a renamed box opens that box.** Problems were matched to boxes by game id rather than folder, so once a box's game id and folder differed, its problems opened nothing or the wrong box.
 - **Switching back to Storyletter no longer moves you.** The window used to redraw everything on focus, which dropped the caret, scrolled the navigator to the top and rebuilt a deck's canvas. Now nothing redraws unless a file changed on disk, and then only the navigator and the problems bar, and the open document only if its own content changed. A redraw of the document you're in keeps its scroll and the field you're typing in.
 - **Deleting several cards is one undo step**, as the question always promised, even when a box's Contents selection spans several decks. It was one step per card.
 - **Delete works on a card in a box's Contents tab**, from the right-click menu and the Delete key.

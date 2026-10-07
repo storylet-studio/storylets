@@ -8,7 +8,7 @@ import type { ProjectDto } from "../../shared/api.js";
 const project: ProjectDto = {
   dir: "/p", name: "Saltmarsh", threads: {}, storyPropertyCount: 0, play: "solo",
   boxes: [{
-    id: "b_1", gameId: "encounters", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [],
+    id: "b_1", gameId: "encounters", folder: "encounters", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [],
     decks: [{
       id: "k_docks", gameId: "docks", title: "Docks", gate: "@world.raining", properties: [],
       cards: [

@@ -12,7 +12,7 @@ import { setPlayRung } from "./play-ladder.js";
 import type { BoxDto, HandDetail } from "../../shared/api.js";
 
 const box: BoxDto = {
-  id: "b_1", gameId: "street", ranking: { specificity: true },
+  id: "b_1", gameId: "street", folder: "street", ranking: { specificity: true },
   fields: [], outcomeFields: [], properties: [], decks: [], templates: [], tagGroups: [], hands: [],
 };
 

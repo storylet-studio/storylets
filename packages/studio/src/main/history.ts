@@ -10,7 +10,7 @@
 // into a single entry, so undo steps by logical edit, not by keystroke.
 // ---------------------------------------------------------------------------
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 import { deleteFileAsync, writeTextFilesAsync } from "@wildwinter/simple-vc-lib";
 import type { VCWriteOutcome } from "@wildwinter/simple-vc-lib";
@@ -19,6 +19,10 @@ import type { VCWriteOutcome } from "@wildwinter/simple-vc-lib";
 export interface FileState {
   path: string;
   content: string | null;
+  /** Bookkeeping that lives beside the project but outside version control
+   *  (the server record and its base): restored with plain writes, never
+   *  checked out or added, once the versioned files have landed. */
+  local?: boolean;
 }
 
 interface Entry {
@@ -48,7 +52,8 @@ export type Applied = { ok: true } | { ok: false; error: string; wrote: boolean 
  * anyway, so a deck rename whose new path was refused lost the deck (the
  * Storyletter review of 2026-10, item 1).
  */
-export async function applyStates(states: FileState[]): Promise<Applied> {
+export async function applyStates(all: FileState[]): Promise<Applied> {
+  const states = all.filter((s) => s.local !== true);
   const writes = states.filter((s) => s.content !== null).map((s) => ({ filePath: s.path, content: s.content! }));
   if (writes.length > 0) {
     try {
@@ -69,6 +74,13 @@ export async function applyStates(states: FileState[]): Promise<Applied> {
     }
   }
   if (undeleted.length > 0) return { ok: false, error: `couldn't delete ${undeleted.join("; ")}`, wrote: writes.length > 0 };
+  // The bookkeeping last, and only once the project's own files have landed, so
+  // it never says the project is at a revision its files are not.
+  for (const s of all) {
+    if (s.local !== true) continue;
+    if (s.content === null) rmSync(s.path, { force: true });
+    else writeFileSync(s.path, s.content, "utf8");
+  }
   return { ok: true };
 }
 

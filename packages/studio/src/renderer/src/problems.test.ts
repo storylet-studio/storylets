@@ -16,12 +16,12 @@ const deck: DeckDto = {
   }],
 };
 const box: BoxDto = {
-  id: "b_1", gameId: "harbour", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [], decks: [deck],
+  id: "b_1", gameId: "harbour", folder: "harbour", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [], decks: [deck],
   templates: [{ id: "t_1", gameId: "street-hands", title: "Streets", bindings: [], slots: "3", instances: 1 }],
   tagGroups: [{ id: "g_1", gameId: "zone", values: ["docks", "market"] }],
   hands: [{ id: "h_1", gameId: "docks-street", title: "Docks street", slots: 2, tags: {} }],
 };
-const other: BoxDto = { ...box, id: "b_2", gameId: "news", title: "News", decks: [], templates: [], tagGroups: [], hands: [] };
+const other: BoxDto = { ...box, id: "b_2", gameId: "news", folder: "news", title: "News", decks: [], templates: [], tagGroups: [], hands: [] };
 const boxes = [box, other];
 
 const problem = (path: string, over: Partial<Problem> = {}): Problem =>

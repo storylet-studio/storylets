@@ -8,7 +8,7 @@ import { placeUsable } from "./navigation.js";
 import type { BoxDto, ProjectDto } from "../../shared/api.js";
 
 const box: BoxDto = {
-  id: "b_1", gameId: "harbour", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [],
+  id: "b_1", gameId: "harbour", folder: "harbour", ranking: { specificity: true }, fields: [], outcomeFields: [], properties: [],
   decks: [{ id: "k_1", gameId: "docks", properties: [], cards: [{
     id: "c_1", gameId: "ambush", condition: "", priority: 0, redraw: "never", tags: [], copies: "", sharedCopies: "", fields: [], outcomes: [],
   }] }],

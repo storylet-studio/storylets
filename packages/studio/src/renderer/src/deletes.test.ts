@@ -15,7 +15,7 @@ const card = (over: Partial<CardDto> = {}): CardDto => ({
 });
 const deck = (cards: CardDto[]): DeckDto => ({ id: "k_1", gameId: "arrival", title: "Arrival", properties: [], cards });
 const box = (over: Partial<BoxDto> = {}): BoxDto => ({
-  id: "b_1", gameId: "village", title: "The village", ranking: { specificity: true },
+  id: "b_1", gameId: "village", folder: "village", title: "The village", ranking: { specificity: true },
   fields: [], outcomeFields: [], properties: [], decks: [], templates: [], tagGroups: [], hands: [],
   ...over,
 });
