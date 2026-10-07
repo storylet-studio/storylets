@@ -25,7 +25,10 @@
   box-shadow: var(--shadow-1);
   cursor: default;
 }
-.canvasctl > * { opacity: 0.65; transition: opacity var(--dur-quick) var(--ease-standard); }
+/* No transition on the dimming: a cluster that fades as the pointer crosses the
+   canvas is motion nobody asked for (the design language keeps movement for
+   what the author did), so it simply changes. */
+.canvasctl > * { opacity: 0.65; }
 .nodestage:hover > .canvasctl > *, .canvasctl:focus-within > * { opacity: 1; }
 
 .canvasbtn {

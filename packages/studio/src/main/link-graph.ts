@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
 // The influence analysis, projected into the shapes the two link canvases draw.
 //
-// Out of index.ts so it can be tested without Electron: the IPC handlers there
-// fetch the source and the coverage report, and these decide what an edge
-// carries. Both canvases now read an edge's reasons (a hovered arrow says why it
+// Apart from the readers that use it (read/canvas.ts, read/links.ts) so it can
+// be tested on its own: they fetch the source and the coverage report, and
+// these decide what an edge carries. Both canvases now read an edge's reasons (a hovered arrow says why it
 // exists), so the projection is worth pinning rather than trusting.
 // ---------------------------------------------------------------------------
 

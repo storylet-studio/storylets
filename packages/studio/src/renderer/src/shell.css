@@ -1,7 +1,8 @@
 /* ---------------------------------------------------------------------------
-   Shell styles: consume tokens from theme.css only. Three panes - navigator |
-   centre | inspector - the centre is the constant, the sides are guests that
-   collapse to 0 width when closed (Patterpad's grammar).
+   Shell styles: consume tokens from theme.css only. Two panes - navigator |
+   centre - the centre is the constant, the navigator a guest that collapses to
+   0 width when closed (Patterpad's grammar). The inspector's slot is retired
+   and stays mounted, dormant and closed.
    --------------------------------------------------------------------------- */
 
 @import "./card-open.css";
@@ -26,6 +27,11 @@ body {
   user-select: none;
 }
 #app { height: 100%; display: flex; flex-direction: column; }
+/* The welcome and the workspace are both mounted once and take turns (renderer.ts
+   showWorkspace). Neither is a box of its own: their children lay out in #app's
+   column exactly as they did when they were #app's own children. */
+.welcome-host, .workspace { display: contents; }
+.welcome-host[hidden], .workspace[hidden] { display: none; }
 
 /* A section caption: sentence-case words, weight 600, in the UI face. The
    tracked-caps overline it used to be is retired ("Captions are words, not
@@ -43,7 +49,7 @@ body {
    defined; this only gives them the typography and the pointer the element
    rule used to hand them, in the same place in the cascade. */
 .nav-project, .nav-row, .nav-add, .listrow, .scard, .deck-card, .ctable-new, .doc-tab, .doc-collapsed,
-.outcome-row, .gid, .chip, .probstat, .stripbtn, .stripchip, .bgchip,
+.outcome-row, .gid, .chip, .probstat, .stripbtn,
 .insp-add, .settings-add, .mapside-row {
   font: inherit; cursor: pointer;
 }
@@ -65,13 +71,14 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    (.titlebar/.titlebar-inset, applied in mountShell - macOS only for the
    inset, matching the hiddenInset window). Storyletter adds only its own
    content styling on the shell's pane classes. */
-/* the inspector pane is retired (dormant): hide its toggle and resizer */
-.topbar > .pane-toggle:last-child, .pane-resizer-insp { display: none; }
+/* the inspector pane is retired (dormant): hide its resizer (the shell leaves
+   its toggle out, since the pane is not offered) */
+.pane-resizer-insp { display: none; }
 .pname { font-size: 13.5px; color: var(--muted); }
 /* the topbar Play affordance: the shell's `.btn`, sized for the bar */
 .topbtn { padding: 2px 10px; }
-/* autosave status: a dot + word, calm when saved, amber while pending/saving */
-/* The save indicator itself is the shell's (app-shell/save.css). */
+/* The autosave status (a dot + word, calm when saved, amber while pending or
+   saving) is the shell's save indicator, styled by app-shell/save.css. */
 
 /* --- navigator (content over the shell's .pane-nav) ------------------------- */
 .pane-nav { border-right: 1px solid var(--line-soft); background: var(--surface); }
@@ -82,8 +89,8 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    this, a row with overflow:hidden (the card sub-rows' ellipsis) zeroes its
    flex minimum size and gets crushed to a half-line of clipped text. */
 .pane-nav .pane-inner > * { flex: none; }
-/* The project's own row: no page of its own, so clicking it opens the
-   Settings dialog (the container leaf carries its settings, rule 10). */
+/* The project's own row: it opens the project's page (the boxes master), whose
+   menu holds Project settings. */
 .nav-project { display: block; width: 100%; text-align: left; font-family: var(--font-read); font-size: 16px; font-weight: 600; color: var(--ink); padding: 2px 8px 8px; }
 /* One row grammar for the whole tree: [chevron|spacer] label [count]. Depth is
    indentation; the open document's row is `sel`, its ancestors `on-path`. */
@@ -91,7 +98,6 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .nav-d0 { padding-left: 6px; }
 .nav-d1 { padding-left: 20px; }
 .nav-d2 { padding-left: 34px; }
-.nav-d3 { padding-left: 48px; }
 .nav-boxrow { font-weight: 600; }
 /* The Story row: the @story document, a fixed peer above the boxes. Box
    weight (it is a top-level document), with a breath below before the boxes. */
@@ -119,7 +125,6 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 /* quick add rows */
 .nav-add { display: block; width: 100%; text-align: left; color: var(--muted); font-size: 13px; padding-top: 2px; padding-bottom: 2px; }
 .nav-add.nav-d2 { padding-left: 46px; }
-.nav-add.nav-d3 { padding-left: 60px; }
 .nav-add:hover { color: var(--accent); }
 .nav-add-box { margin-top: 14px; padding-left: 6px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
 
@@ -136,8 +141,8 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
    are surfaces to fill, and a canvas stopping short of its own pane would read as
    a bug. */
 .pane-centre.measured > * { max-width: var(--doc-measure); width: 100%; }
-/* card / table view switch (top-right of the centre head): the shell's `.seg`,
-   its options sized up for the three view glyphs */
+/* the card / table / node view switch (at the right of the page's top bar):
+   the shell's `.seg`, its options sized up for the three view glyphs */
 .viewtoggle { align-self: center; }
 .viewtoggle .seg-opt { padding: 3px 9px; font-size: 13.5px; }
 /* Node view: the deck's cards on a canvas. It takes the height the centre has
@@ -155,22 +160,9 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
   position: relative;
 }
 
-/* A comment marker's hover line, and the invisible proxy its popover hangs off
-   (comment-markers.ts). Both are DOM rather than Konva: a tooltip wants to wrap
-   text, and the shell's anchored panel wants an element to measure. */
-.cmt-marker-tip {
-  position: absolute; z-index: 5;
-  transform: translateX(-50%);
-  max-width: 260px;
-  padding: 4px 7px;
-  border-radius: var(--radius-sm);
-  background: var(--ink);
-  color: var(--surface);
-  font-size: 12.5px; line-height: 1.35;
-  pointer-events: none;       /* it must never intercept the click it describes */
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
+/* A comment marker's invisible proxy, which its popover hangs off
+   (comment-markers.ts): DOM rather than Konva, because the shell's anchored
+   panel wants an element to measure. The hover line is the shell's tipAt. */
 .cmt-marker-proxy {
   position: absolute; width: 0; height: 0;
   pointer-events: none;
@@ -210,21 +202,16 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .cover-legend { flex: none; font-style: italic; opacity: 0.85; }
 .camerabtn { flex: none; padding: 3px 10px; }
 
-/* A canvas strip carries THREE voices, and giving them all one was the mistake
-   the map shipped with: its primary verbs wore the costume built for the camera
+/* A canvas strip carries two voices, and giving them one was the mistake the map
+   shipped with: its primary verbs wore the costume built for the camera
    controls, so the row read as a sentence rather than as a toolbar.
 
    1. VERBS (Add zone, Pin a hand): a real button. Bordered, on the card surface,
       grouped at the left, with a leading + so the act is legible before the words
       are read.
-   2. WAITING (a declared zone with no outline, a hand with no pin): chips. A
-      noun you pick, carrying its identity colour, visibly not a verb.
-   3. CAMERA (Fit all, Show selection): the shell's `.btn`, at the right. */
-/* Which map this is. The name alone read as a stray word, so it is labelled and
-   the NAME carries the weight. */
-.maphere { flex: none; display: inline-flex; align-items: baseline; gap: 5px; font-size: 12.5px; }
-.maphere-of { color: var(--muted); }
-.maphere-name { color: var(--ink); font-family: var(--font-mono); font-size: 0.95em; }
+   2. CAMERA (Fit all, Show selection): the shell's `.btn`, at the right.
+   (What is waiting to be placed lives on the map's side panel now, not as chips
+   in the strip.) */
 
 .nodestrip .striptools { flex: none; display: flex; align-items: center; gap: 6px; }
 .stripbtn {
@@ -241,21 +228,15 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 /* The one that gets you OUT of a gesture: the same shape, warned. */
 .stripbtn.cancel:hover { border-color: var(--danger); color: var(--danger); background: none; }
 
-.stripchip {
-  flex: none; display: inline-flex; align-items: center; gap: 5px;
-  font-size: 12px; color: var(--ink);
-  background: none; border: 1px dashed var(--line); border-radius: var(--radius-pill);
-  padding: 2px 10px 2px 7px;
-}
-.stripchip:hover { border-style: solid; border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 /* The identity dot, ONE rule for every place it appears (a chip, a pill, a
    row label, a key/value, the map's side panel): the same colour the zone
-   wears on the canvas and its tag wears in the inspector, so a chip is
-   recognisably ABOUT that thing. Callers paint the colour inline (chipDot). */
-.chip i, .pill i, .stripchip i, .doc-row-label i, .insp-kv i, .mapside-dot {
+   wears on the canvas and its tag wears on its tag group's page, so a chip is
+   recognisably ABOUT that thing. Callers paint the colour inline (widgets.ts
+   chipDot). */
+.chip i, .pill i, .doc-row-label i, .insp-kv i, .mapside-dot {
   flex: none; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor;
 }
-.stripchip i, .mapside-dot { opacity: 0.85; }
+.mapside-dot { opacity: 0.85; }
 
 /* The map's side panel: the canvas keeps the big column, the contents live in
    the spare width on the right (the Board's own map shape). One row a thing;
@@ -272,7 +253,6 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
   padding: 8px 12px 3px; font: 600 12.5px/1.3 var(--font-ui); color: var(--muted);
 }
 .mapside-cap:first-child { padding-top: 2px; }
-.mapside-waiting { font-weight: 400; font-size: 11.5px; }
 .mapside-row {
   display: flex; align-items: center; gap: 7px; width: 100%;
   padding: 3px 12px; border: none; background: none; text-align: left;
@@ -374,25 +354,6 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .boxsite .listname { display: inline-flex; align-items: center; gap: 8px; }
 .boxsite-meta { display: flex; align-items: center; gap: 8px; }
 
-/* A hand has no zone colour of its own until it is placed, so its chip carries
-   the pin's outline shape instead of a filled dot. */
-.stripchip.pin i { background: none; border: 1.5px solid currentColor; }
-
-/* A picture's chip. Not a chip in the "waiting to be placed" sense: this one is a
-   HANDLE on something already on the map, and the only handle a locked picture
-   has, since a locked one is invisible to the pointer. Solid rather than dashed
-   for exactly that reason - dashed means "not placed yet" in this strip. */
-.bgchip {
-  flex: none; font-size: 11.5px; color: var(--muted);
-  background: none; border: 1px solid var(--line); border-radius: var(--radius-sm);
-  padding: 2px 8px; font-family: var(--font-mono);
-  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.bgchip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-/* Hidden reads as absent; locked reads as fixed down. Both are states of a thing
-   that is still there, so neither disappears. */
-.bgchip.off { opacity: 0.5; text-decoration: line-through; }
-.bgchip.locked::before { content: "lock  "; letter-spacing: -0.02em; opacity: 0.7; }
 
 /* table (list) view of a deck's cards / a box's decks */
 .ctable-wrap { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
@@ -441,8 +402,6 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .scard.drop-after { box-shadow: 3px 0 0 var(--accent); }
 .ctable tr.drop-before td { box-shadow: inset 0 2px 0 var(--accent); }
 .ctable tr.drop-after td { box-shadow: inset 0 -2px 0 var(--accent); }
-.centre-head h2 { font-family: var(--font-read); font-size: 22.5px; font-weight: 600; margin: 0; }
-.centre-head .sub { color: var(--muted); font-size: 13.5px; font-style: italic; }
 
 .cards, .deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
 .scard, .deck-card {
@@ -485,9 +444,6 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .ctable tr.ct-group.rest th { color: var(--muted); }
 .ctable tr.ct-group th > * + * { margin-left: 8px; }
 .ctable .ct-also { display: block; font-family: var(--font-ui); font-size: 12px; font-style: italic; color: var(--muted); }
-/* The purpose field's label (B1). Quiet - it is the same word on every document
-   and the reader only needs it once - but present, because a placeholder is not
-   a label: it leaves the moment anything is typed. */
 /* The project name is a button (A13) and a DELIBERATE exception to "controls
    have edges": it is a title first and a door second, so it stays borderless
    and only takes the accent when reached for. Not `.btn`. */
@@ -502,6 +458,9 @@ button.pname:hover { color: var(--accent); }
 .kit-gallery-name { font: 15px var(--font-read); }
 .doc-explainer p { margin: 0 0 8px; font: 13.5px/1.5 var(--font-read); color: var(--ink); }
 .doc-explainer p:last-child { margin-bottom: 0; }
+/* The purpose field's label (B1). Quiet - it is the same word on every document
+   and the reader only needs it once - but present, because a placeholder is not
+   a label: it leaves the moment anything is typed. */
 .doc-purpose-label { font: 600 12.5px/1.2 var(--font-ui); color: var(--muted); margin-top: 2px; }
 /* What a VENUE depends on about this entity (design/engine-server.md 4.11).
    Always visible, unlike the teaching lines around it: it is not a gloss on the
@@ -537,17 +496,16 @@ button.chip { cursor: pointer; }
 .scard.ghost:hover, .deck-card.ghost:hover { border-color: var(--accent); color: var(--accent); }
 
 .rowlist { display: flex; flex-direction: column; gap: 8px; }
-.listrow { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left; width: 100%; padding: 10px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.listrow { position: relative; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left; width: 100%; padding: 10px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-md); }
 .listrow:hover { background: var(--card); border-color: var(--accent); }
 .listrow.ghost { border-style: dashed; background: none; color: var(--muted); align-items: center; flex-direction: row; }
 .listrow.ghost:hover { border-color: var(--accent); color: var(--accent); }
 .listname { font-family: var(--font-mono); font-size: 14.5px; color: var(--ink); }
 /* a titled item reads as a title (the mono voice is for name-like ids) */
 .listname.listtitle { font-family: var(--font-read); font-size: 15px; font-weight: 600; }
-/* a settings link in a rowlist: the gear costume (rule 10), never the add ghost */
 .listmeta { font-size: 12px; color: var(--muted); }
 
-/* --- inspector -------------------------------------------------------------- */
+/* --- the retired inspector pane ---------------------------------------------- */
 .pane-inspector { border-left: 1px solid var(--line-soft); background: var(--surface); }
 /* The retired inspector is mounted CLOSED (its grid column is 0), but a
    border still paints 1px wide and hangs past the window's right edge -
@@ -555,14 +513,17 @@ button.chip { cursor: pointer; }
    No pane, no border. */
 .panes.no-inspector .pane-inspector { border-left: 0; }
 .pane-inspector .pane-inner { padding: 16px; }
+
+/* --- a document's machinery: sections, panels, rows ---------------------------- */
 /* one rhythm (centre-clarity 4): 28px between sections, 6px label-to-panel,
-   10px between rows inside a panel; every document caps at the 760px measure */
+   10px between rows inside a panel; every document caps at the measure
+   (--doc-measure, above) */
 .insp-card { display: flex; flex-direction: column; gap: 28px; }
 .insp-card.cardedit { max-width: var(--doc-measure); width: 100%; }
 /* two materials (centre-clarity 1): paper (prose, chromeless, on the page)
    and panel - ONE container material for every machinery cluster. */
 .doc-sect { display: flex; flex-direction: column; gap: 6px; }
-/* Where a jump landed (renderer landOnSection, the Board's Why not? sending a
+/* Where a jump landed (navigation.ts landOnSection, the Board's Why not? sending a
    reason home): the panel lit for a moment, as app-shell's revealRow lights a
    settings row. A colour fade, so it stays under reduced motion. */
 .doc-sect.landed > .doc-panel { animation: doc-landed 1.8s var(--ease-standard) both; }
@@ -618,8 +579,6 @@ button.doc-collapsed:hover { background: none; }
 button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-collapsed-plus { color: var(--accent); border-color: var(--accent); }
 .doc-collapsed-sum { font-size: 12.5px; color: var(--muted); }
 .doc-collapsed-plus { margin-left: auto; color: var(--muted); display: inline-flex; align-items: center; border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 2px 6px; }
-.insp-head { display: flex; align-items: center; gap: 8px; }
-.insp-head .insp-label { flex: 1; }
 /* Remove: a `.btn` in the danger ink, filling on hover; it names its object. */
 .insp-del { color: var(--danger); }
 .insp-del:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: var(--surface); }
@@ -646,7 +605,6 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .doc-row-label { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* scalars don't stretch: selects size to content, only text fields fill */
 .doc-row > select.insp-input { width: auto; justify-self: start; }
-.insp-kv { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
 .insp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .insp-exed { min-height: 30px; }
 .insp-add, .settings-add { align-self: flex-start; border: 1px dashed var(--line); color: var(--muted); background: none; padding: 4px 12px; border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-size: 13px; }
@@ -672,14 +630,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 /* the address a VENUE is bound to (design/engine-server.md 4.11): marked, never
    disabled. The refusal is the server's, on push; here it is a hint. */
 .gid-bound { border-style: dashed; }
-/* the override popover */
-.gid-pop { display: flex; flex-direction: column; gap: 8px; min-width: 240px; }
-.gid-pop-note { margin: 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
-/* Patterpad's id-editor row: Reset to auto on the left, Set on the right, and a
-   hint that turns red rather than a field that quietly rewrites what you typed.
-   (The editor itself is the shell's openGameIdEditor, buttons included.) */
-.gid-pop-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.gid-pop-note.bad { color: var(--danger); }
+/* The override popover is the shell's openGameIdEditor, styles included. */
 /* the outcomes accordion in the centre: a light header row per outcome that
    expands in place to its full editor. */
 .cardedit-outcomes { display: flex; flex-direction: column; }
@@ -705,7 +656,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .outcome-row-sum { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
 .outcome-row-when { padding-left: 1.4em; }
 .outcome-body { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-top: 0; }
-/* the outcome's own paper: title + beat in the reading face, chromeless */
+/* the outcome's own paper: title + purpose in the reading face, chromeless */
 .outcome-body .outcome-title { font-family: var(--font-read); font-size: 16px; font-weight: 600; border: 0; background: none; padding: 0; border-radius: 0; }
 .outcome-body .outcome-title:focus-visible { outline: 0; box-shadow: 0 1px 0 var(--accent); }
 .outcome-body .outcome-beat { font-family: var(--font-read); font-size: 14px; line-height: 1.45; color: var(--muted); border: 0; background: none; padding: 0; border-radius: 0; resize: vertical; }
@@ -714,9 +665,7 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 /* How a paired Patter scene reaches the outcome: one line per way in, read-only. */
 .outcome-patter { font-family: var(--font-read); font-size: 14px; line-height: 1.45; color: var(--ink); }
 .cardedit-outcomes .insp-add { margin-top: 2px; }
-.insp-muted, .insp-ro { color: var(--muted); font-size: 13.5px; }
-.insp-ro.insp-mono { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
-.insp-kv { display: inline-flex; align-items: center; gap: 5px; }
+.insp-kv { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
 .doc-vblock .insp-ohead .insp-kv { flex: 1; }
 .doc-vblock .insp-ohead .insp-kv .insp-input { flex: 1; }
 
@@ -759,7 +708,6 @@ button.doc-collapsed:hover .doc-collapsed-sum, button.doc-collapsed:hover .doc-c
 .vc-badge { flex: none; font-size: 11.5px; line-height: 1; opacity: 0.9; }
 /* on a row: at the end of the line; on a card face: out of the grip's way */
 .nav-row > .vc-badge, .nav-project > .vc-badge { margin-left: 4px; }
-.listrow { position: relative; }
 .listrow > .vc-badge { position: absolute; top: 9px; right: 11px; }
 .scard > .vc-badge, .deck-card > .vc-badge { position: absolute; right: 11px; bottom: 9px; }
 .ctable td > .vc-badge { margin-left: 6px; }
@@ -860,8 +808,9 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
    The shell's (@wildwinter/app-shell/context-menu + context-menu.css, imported
    by theme.css so every window gets its look as well as its behaviour). */
 
-/* --- card editor in the centre (document-class content gets the width) ------ */
-/* the hierarchy trail: left-aligned ancestor segments, identical on every page */
+/* --- the centre's documents (document-class content gets the width) ---------- */
+/* The bar every page opens with (views.ts crumbTrail): the way up, the way back
+   to where you came from, and the page's own controls at the right. */
 .crumbs { display: flex; align-items: center; gap: 4px; margin: -6px 0 2px; font-size: 13px; }
 /* The hierarchy trail is retired (2026-08-04): the navigator already shows where
    you are and jumps anywhere, and the trail could not answer the "get me out of
@@ -912,7 +861,6 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 .outcome-gid { display: flex; align-items: center; gap: 8px; max-width: none; align-self: stretch; }
 .outcome-gid .gid { flex: 1; min-width: 0; }
 .doc-name { font-size: 17.5px; }
-/* the defining scalars, obvious near the top of the document */
 /* Settings tabs read as configuration (centre-clarity 7): grouped rows in a
    panel, caption + small description left, the control right, sized to fit */
 .cfg-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; align-items: center; }
@@ -946,7 +894,8 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
    button rule paints a background, and a full-width block turned one quiet line
    of path into a bar across the page. */
 .pdir:hover { color: var(--accent); background: none; }
-/* the container page's [Content | Settings] tabs, under the identity heading */
+/* a document's tab bar, under its identity heading, the tabs named for their
+   contents (tab-grammar 3) */
 .doc-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line-soft); }
 .doc-tab { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 14px; font-size: 13.5px; color: var(--muted); border: 0; border-bottom: 2px solid transparent; border-radius: 0; margin-bottom: -1px; background: none; cursor: pointer; }
 .doc-tab:hover { color: var(--ink); background: none; }
@@ -962,8 +911,8 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 /* master pages share the trail; their heading sits directly beneath it */
 .master-head { display: flex; flex-direction: column; gap: 4px; }
 
-/* the inspector holds a card's mechanical settings; a small note gives the
-   priority number meaning against how the box ranks. */
+/* A small note beside a control: what a number comes to (a Redraw in a timed
+   box), or what a setting does (a deck's When). */
 .insp-note { margin: -4px 0 0; font-size: 12px; line-height: 1.35; color: var(--muted); }
 /* The tuck above is for a note that is a flex child of the panel, where it
    trims the panel's own gap. A note that follows a cfg-panel instead (the

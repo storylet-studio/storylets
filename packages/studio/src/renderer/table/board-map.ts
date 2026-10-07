@@ -20,7 +20,7 @@ import {
   backgroundShape, drawBackground, drawSite, drawZone, paintZoneLabels, siteShape, zoneShape, LABEL_FLOOR,
   type BackgroundShape, type SiteShape, type ZoneShape,
 } from "../src/map-art.js";
-import { onImageReady } from "../src/image-cache.js";
+import { onImageReady, retryFailedImages } from "../src/image-cache.js";
 import type { BoxMapDto } from "../../shared/api.js";
 
 /** One item on the Board's map. The same shapes the editor draws. */
@@ -49,19 +49,27 @@ export interface BoardMapMarks {
 }
 
 export interface BoardMapActions {
-  /** A site was clicked: show that hand's cards. */
-  select: (handGameId: string | undefined) => void;
-  /** A ZONE was clicked: filter the whole Board to it, or clear the filter when
-   *  the selection goes. The map is the filter control while it is open. */
-  filter: (zoneId: string | undefined) => void;
+  /**
+   * A click on the map, in ONE call, so the Board renders once for it: the hand
+   * it picked (a site, or none), and, only when a zone is involved, the zone the
+   * whole Board is now filtered to (`{ id: undefined }` clears the filter). A
+   * zone is involved when one was clicked, or when the click took the selection
+   * off one. A site click leaves the filter alone. The map is the filter control
+   * while it is open.
+   */
+  pick: (handGameId: string | undefined, zone?: { id: string | undefined }) => void;
   /** A site was double-clicked: open the hand in the editor. Reveal, never
    *  during a live session drive-by - the Board marks, it does not navigate. */
   reveal: (handGameId: string) => void;
 }
 
 export interface MountedBoardMap {
-  /** New session state (a play, a deal, a filter): redraw the sites. */
+  /** New session state (a play, a deal, a filter): redraw the sites. The
+   *  selection follows the Board: the selected hand's site, else the zone the
+   *  Board is filtered to. Never reported back as a click. */
   update: (map: BoxMapDto, selected: string | undefined, marks: BoardMapMarks) => void;
+  /** Frame the whole map: another box's map, or another group's, came in. */
+  fit: () => void;
   destroy: () => void;
 }
 
@@ -69,6 +77,8 @@ export function mountBoardMap(
   host: HTMLElement, map: BoxMapDto, selected: string | undefined,
   marks: BoardMapMarks, actions: BoardMapActions,
 ): MountedBoardMap {
+  // A picture that failed last time (missing, then put back) gets another go.
+  retryFailedImages();
   let tokens = readCanvasTokens();
   let current = map;
   let chosen = selected;
@@ -113,6 +123,13 @@ export function mountBoardMap(
 
   let items = build();
   const byId = (id: string): BoardItem | undefined => items.find((i) => i.id === id);
+  /** True while `show` puts the Board's selection on the surface: that is the
+   *  Board talking to the map, and must not come back as a click. It used to,
+   *  and a zone click cleared its own filter on the way through. */
+  let syncing = false;
+  /** What the surface last had selected, by kind: a click that takes the
+   *  selection off a zone involves that zone. */
+  let selectedKind: BoardItem["kind"] | undefined;
   /** Sites are keyed by HAND id here and by hand gameId everywhere in the Board. */
   const handOf = (id: string): string | undefined => current.sites.find((p) => p.id === id)?.gameId;
 
@@ -132,8 +149,12 @@ export function mountBoardMap(
     onSelectionChange: (ids) => {
       // Pictures are locked here, so they never appear in a selection at all.
       const one = ids.length === 1 ? byId(ids[0]!) : undefined;
-      actions.select(one?.kind === "site" ? handOf(one.id) : undefined);
-      actions.filter(one?.kind === "zone" ? one.id : undefined);
+      const was = selectedKind;
+      selectedKind = one?.kind;
+      if (syncing) return;
+      if (one?.kind === "zone") actions.pick(undefined, { id: one.id });
+      else if (one?.kind === "site") actions.pick(handOf(one.id));
+      else actions.pick(undefined, ...(was === "zone" ? [{ id: undefined }] : []));
     },
     onActivate: (id) => {
       const hand = byId(id)?.kind === "site" ? handOf(id) : undefined;
@@ -271,12 +292,21 @@ export function mountBoardMap(
     });
   }
 
-  const show = (): void => {
-    surface.setItems(items);
+  /** What the surface should have selected: the chosen hand's site, or else
+   *  the zone the Board is filtered to, so a filter set from the dropdown and
+   *  one set by clicking the zone look the same. */
+  const selection = (): string[] => {
     if (chosen !== undefined) {
       const site = current.sites.find((p) => p.gameId === chosen);
-      surface.select(site ? [site.id] : []);
-    } else surface.select([]);
+      return site ? [site.id] : [];
+    }
+    return where.filtered !== undefined && current.zones.some((z) => z.id === where.filtered) ? [where.filtered] : [];
+  };
+
+  const show = (): void => {
+    surface.setItems(items);
+    syncing = true;
+    try { surface.select(selection()); } finally { syncing = false; }
     paintRun();
   };
 
@@ -304,6 +334,7 @@ export function mountBoardMap(
       show();
       maybePulse();
     },
+    fit() { surface.fitAll(); },
     destroy() { pulseAnim?.stop(); unwatchImages(); unwatch(); surface.destroy(); },
   };
 }

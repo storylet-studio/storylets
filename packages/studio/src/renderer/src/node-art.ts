@@ -16,7 +16,7 @@
 // ---------------------------------------------------------------------------
 
 import Konva from "konva";
-import type { CanvasItem, DrawContext } from "./canvas-surface.js";
+import { rescalable, type CanvasItem, type DrawContext } from "./canvas-surface.js";
 import { heatInk as coverageInk, type CardHeat } from "./coverage-art.js";
 import { charColour, type CanvasTokens } from "./canvas-tokens.js";
 import type { GraphEdge } from "../../shared/api.js";
@@ -46,11 +46,37 @@ const PAD_R = 12;
 const FOOT_H = 22;
 /** Below this the glyphs are mush, so the face abbreviates rather than shrinks. */
 export const TITLE_FLOOR = 0.34;
+/** The title: two lines of it at most, set from the top of the face. */
+const TITLE_PX = 14;
+const TITLE_LINE_HEIGHT = 1.25;
+const TITLE_TOP = 11;
+/** The foot's text, and how far into the foot band it sits. */
+const FOOT_PX = 10;
+const FOOT_TEXT_INSET = 6;
+/** The deck stripe and the coverage band hold these widths on SCREEN, as a
+ *  floor: they are identity and finding, and have to survive any zoom. */
+const STRIPE_PX = 4;
+const HEAT_BAND_PX = 3;
 /** Below this the foot goes; the deck stripe carries the deck on its own. */
-const FOOT_FLOOR = 0.6;
+export const FOOT_FLOOR = 0.6;
+
+/** The node canvas's snap step, in world units. */
+export const NODE_GRID = 20;
+
+/** The gaps Arrange leaves between cards, in world units. Chosen so that a step
+ *  is a whole number of grid squares (`NODE_GRID`, 20): 190 + 50 is 240
+ *  across and 76 + 44 is 120 down, so an arrangement lands on the grid a drop
+ *  would snap it to. The down gap was 40, which put every row after the first
+ *  off the grid by a multiple of four. */
+export const ARRANGE_GAP = { x: 50, y: 44 } as const;
 
 /** Where the author has put cards, keyed by card id. Sparse. */
 export type Placed = Record<string, { x: number; y: number }>;
+
+/** Where the default grid starts, and the gaps between its cards, in world
+ *  units. */
+const LAYOUT_ORIGIN = 60;
+const LAYOUT_GAP = { x: 50, y: 74 } as const;
 
 /**
  * Lay the deck out: the author's own positions where they exist, a default grid
@@ -67,12 +93,10 @@ export type Placed = Record<string, { x: number; y: number }>;
 export function gridLayout(
   cards: { id: string; title: string; deck: string }[], placed: Placed = {}, columns = 4,
 ): CardNode[] {
-  const gapX = 50;
-  const gapY = 74;
   return cards.map((card, i) => ({
     ...card,
-    x: placed[card.id]?.x ?? 60 + (i % columns) * (NODE_W + gapX),
-    y: placed[card.id]?.y ?? 60 + Math.floor(i / columns) * (NODE_H + gapY),
+    x: placed[card.id]?.x ?? LAYOUT_ORIGIN + (i % columns) * (NODE_W + LAYOUT_GAP.x),
+    y: placed[card.id]?.y ?? LAYOUT_ORIGIN + Math.floor(i / columns) * (NODE_H + LAYOUT_GAP.y),
     width: NODE_W,
     height: NODE_H,
     cornerRadius: NODE_RADIUS,
@@ -82,6 +106,9 @@ export function gridLayout(
 export function drawCardNode(item: CardNode, ctx: DrawContext): Konva.Group {
   const { tokens, scale } = ctx;
   const group = new Konva.Group();
+  /** What the zoom changes, set again in place on every zoom that crosses no
+   *  floor (canvas-surface `rescalable`). */
+  const fits: ((scale: number) => void)[] = [];
   group.add(new Konva.Rect({
     width: item.width, height: item.height,
     fill: tokens.card,
@@ -105,24 +132,24 @@ export function drawCardNode(item: CardNode, ctx: DrawContext): Konva.Group {
   const stripe = new Konva.Group({
     clipFunc: (c) => { c.beginPath(); c.roundRect(0, 0, item.width, item.height, NODE_RADIUS); },
   });
-  stripe.add(new Konva.Rect({
-    width: Math.max(4, 4 / scale), height: item.height,
-    fill: charColour(tokens, item.deck),
-  }));
+  const stripeRect = new Konva.Rect({ height: item.height, fill: charColour(tokens, item.deck) });
+  fits.push((s) => stripeRect.width(Math.max(STRIPE_PX, STRIPE_PX / s)));
+  stripe.add(stripeRect);
   group.add(stripe);
 
-  if (scale < TITLE_FLOOR) return group;
+  const done = (): Konva.Group =>
+    rescalable(group, scale, (s) => { for (const fit of fits) fit(s); }, [TITLE_FLOOR, FOOT_FLOOR]);
+  if (scale < TITLE_FLOOR) return done();
 
   // Two lines, then Konva truncates on the real font metrics: a fixed height is
   // what arms the ellipsis on a wrapped block, and measuring beats guessing at
   // character counts.
-  const titleSize = 14;
   group.add(new Konva.Text({
-    x: PAD_L, y: 11,
+    x: PAD_L, y: TITLE_TOP,
     width: item.width - PAD_L - PAD_R,
-    height: titleSize * 1.25 * 2,
+    height: TITLE_PX * TITLE_LINE_HEIGHT * 2,
     text: item.title,
-    fontFamily: tokens.fontRead, fontSize: titleSize, lineHeight: 1.25,
+    fontFamily: tokens.fontRead, fontSize: TITLE_PX, lineHeight: TITLE_LINE_HEIGHT,
     fill: tokens.ink,
     wrap: "word", ellipsis: true,
   }));
@@ -136,14 +163,13 @@ export function drawCardNode(item: CardNode, ctx: DrawContext): Konva.Group {
     const band = new Konva.Group({
       clipFunc: (c) => { c.beginPath(); c.roundRect(0, 0, item.width, item.height, NODE_RADIUS); },
     });
-    band.add(new Konva.Rect({
-      y: item.height - Math.max(3, 3 / scale), width: item.width, height: Math.max(3, 3 / scale),
-      fill: heatInk,
-    }));
+    const bar = new Konva.Rect({ width: item.width, fill: heatInk });
+    fits.push((s) => { const h = Math.max(HEAT_BAND_PX, HEAT_BAND_PX / s); bar.y(item.height - h); bar.height(h); });
+    band.add(bar);
     group.add(band);
   }
 
-  if (scale < FOOT_FLOOR) return group;
+  if (scale < FOOT_FLOOR) return done();
 
   // With the overlay on, the foot says what the band means. A colour nobody can
   // name is a decoration; the word is what makes it a report.
@@ -151,14 +177,14 @@ export function drawCardNode(item: CardNode, ctx: DrawContext): Konva.Group {
     : item.heat === "unplayed" ? "never played"
     : item.deck;
   group.add(new Konva.Text({
-    x: PAD_L, y: item.height - FOOT_H + 6,
+    x: PAD_L, y: item.height - FOOT_H + FOOT_TEXT_INSET,
     width: item.width - PAD_L - PAD_R,
     text: foot,
-    fontFamily: tokens.fontMono, fontSize: 10,
+    fontFamily: tokens.fontMono, fontSize: FOOT_PX,
     fill: heatInk ?? tokens.muted,
     wrap: "none", ellipsis: true,
   }));
-  return group;
+  return done();
 }
 
 /** A column caption drawn ON the canvas, so it pans and zooms with the column it

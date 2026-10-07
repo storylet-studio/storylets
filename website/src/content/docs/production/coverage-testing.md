@@ -16,8 +16,10 @@ is what a CI gate sees.
 
 **Review ▸ Coverage Test…** (`Shift+Cmd+C`) opens the **Coverage** window.
 
-Three fields, **runs**, **max turns**, and **seed**, and a **Run coverage** button. The same
-seed always reproduces the same run.
+Three fields, **Runs**, **Max turns**, and **Seed**, and a **Run coverage** button. The same
+seed always reproduces the same run. Nothing runs until you press it: the window opens on the
+last report, saying when it ran and whether the project has changed since, or on a Run
+button when there is none.
 
 While a sweep is running, a strip across the top shows how far along it is, how long it has
 taken and roughly how long is left, with a **Cancel** button. The editor stays usable

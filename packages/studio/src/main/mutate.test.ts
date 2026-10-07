@@ -31,7 +31,7 @@ import { effectiveGameId, isSpatial, polygonOf, backgroundsOf, PLACE_GROUP } fro
 import { commentsOf, markOf } from "@storylet-studio/model";
 import type { Comment, TagGroup } from "@storylet-studio/model";
 import type { ProjectSession } from "./project.js";
-import type { Problem } from "../shared/api.js";
+import type { OpenResult, Problem } from "../shared/api.js";
 import { REMOTE_FILE, forgetShardHashes, hashProject, unpushedShards, writeBase, writeRemote } from "./remote.js";
 
 const exampleDir = fileURLToPath(new URL("../../../../examples/saltmarsh.storylets", import.meta.url));
@@ -55,12 +55,12 @@ describe("arranging a canvas", () => {
   const viewFile = (session: ProjectSession): string =>
     join(session.loaded.dir, "encounters", "view.storyletview");
 
-  it("writes the box's sidecar and leaves the deck shard untouched", () => {
+  it("writes the box's sidecar and leaves the deck shard untouched", async () => {
     const session = scratchProject();
     const before = readFileSync(dockDeckFile(session), "utf8");
     const card = session.dto.boxes[0]!.decks[0]!.cards[0]!;
 
-    const result = moveCardsOnCanvas(session, docks, [{ id: card.id, x: 120, y: 40 }]);
+    const result = await moveCardsOnCanvas(session, docks, [{ id: card.id, x: 120, y: 40 }]);
     expect("error" in result).toBe(false);
     expect(existsSync(viewFile(session))).toBe(true);
     // Canonical JSON5 leaves identifier-safe keys unquoted, so the id appears bare.
@@ -68,50 +68,50 @@ describe("arranging a canvas", () => {
     expect(readFileSync(dockDeckFile(session), "utf8")).toBe(before);
   });
 
-  it("round-trips the position back through the graph read", () => {
+  it("round-trips the position back through the graph read", async () => {
     const session = scratchProject();
     const card = session.dto.boxes[0]!.decks[0]!.cards[0]!;
-    moveCardsOnCanvas(session, docks, [{ id: card.id, x: 120, y: 40 }]);
+    await moveCardsOnCanvas(session, docks, [{ id: card.id, x: 120, y: 40 }]);
     // Re-read from the reloaded session, which is what the canvas asks on open.
     const box = session.loaded.source!.boxes.find((b) => b.decks.some((d) => d.shard.deck.id === docks))!;
     expect(box.view?.canvases?.[docks]?.cards?.[card.id]).toEqual({ x: 120, y: 40 });
   });
 
-  it("is one undo step per drop", () => {
+  it("is one undo step per drop", async () => {
     const session = scratchProject();
     const card = session.dto.boxes[0]!.decks[0]!.cards[0]!;
-    moveCardsOnCanvas(session, docks, [{ id: card.id, x: 120, y: 40 }]);
-    moveCardsOnCanvas(session, docks, [{ id: card.id, x: 300, y: 200 }]);
+    await moveCardsOnCanvas(session, docks, [{ id: card.id, x: 120, y: 40 }]);
+    await moveCardsOnCanvas(session, docks, [{ id: card.id, x: 300, y: 200 }]);
     const positions = (): unknown => {
       const box = session.loaded.source!.boxes.find((b) => b.decks.some((d) => d.shard.deck.id === docks))!;
       return box.view?.canvases?.[docks]?.cards?.[card.id];
     };
     expect(positions()).toEqual({ x: 300, y: 200 });
-    undo(session);
+    await undo(session);
     // Back to the FIRST drop, not all the way to no arrangement: coalescing every
     // drag into one entry would make Cmd+Z discard an afternoon of tidying.
     expect(positions()).toEqual({ x: 120, y: 40 });
-    undo(session);
+    await undo(session);
     expect(positions()).toBeUndefined();
   });
 
-  it("does not write when a card is dropped where it already was", () => {
+  it("does not write when a card is dropped where it already was", async () => {
     const session = scratchProject();
     const card = session.dto.boxes[0]!.decks[0]!.cards[0]!;
-    moveCardsOnCanvas(session, docks, [{ id: card.id, x: 120, y: 40 }]);
+    await moveCardsOnCanvas(session, docks, [{ id: card.id, x: 120, y: 40 }]);
     const after = readFileSync(viewFile(session), "utf8");
-    const result = moveCardsOnCanvas(session, docks, [{ id: card.id, x: 120, y: 40 }]);
+    const result = await moveCardsOnCanvas(session, docks, [{ id: card.id, x: 120, y: 40 }]);
     expect("error" in result).toBe(false);
     expect(readFileSync(viewFile(session), "utf8")).toBe(after);
   });
 
-  it("lays a deck out by dependency in one undo step", () => {
+  it("lays a deck out by dependency in one undo step", async () => {
     const session = scratchProject();
     const deck = session.dto.boxes[0]!.decks[0]!;
     const ids = deck.cards.map((c) => c.id);
     const current = ids.map((id, i) => ({ id, x: i * 240, y: 0 }));
 
-    const laid = layoutDeck(session, docks, ids, current, { width: 190, height: 76, gapX: 50, gapY: 40 });
+    const laid = await layoutDeck(session, docks, ids, current, { width: 190, height: 76, gapX: 50, gapY: 40 });
     expect("error" in laid).toBe(false);
     if ("error" in laid) return;
     expect(laid.positions).toHaveLength(ids.length);
@@ -124,27 +124,27 @@ describe("arranging a canvas", () => {
       return box.view?.canvases?.[docks]?.cards;
     };
     expect(placed()).toBeDefined();
-    undo(session);
+    await undo(session);
     expect(placed()).toBeUndefined();
   });
 
-  it("refuses to lay out nothing", () => {
+  it("refuses to lay out nothing", async () => {
     const session = scratchProject();
-    expect(layoutDeck(session, docks, [], [], { width: 1, height: 1, gapX: 0, gapY: 0 }))
+    expect(await layoutDeck(session, docks, [], [], { width: 1, height: 1, gapX: 0, gapY: 0 }))
       .toEqual({ error: "nothing to lay out" });
   });
 
-  it("refuses a deck it does not know", () => {
+  it("refuses a deck it does not know", async () => {
     const session = scratchProject();
-    expect(moveCardsOnCanvas(session, "k_nope", [{ id: "c_x", x: 0, y: 0 }])).toEqual({ error: "unknown deck (id k_nope)" });
+    expect(await moveCardsOnCanvas(session, "k_nope", [{ id: "c_x", x: 0, y: 0 }])).toEqual({ error: "that deck isn't in the project any more" });
   });
 });
 
 describe("card mutations", () => {
-  it("saves a title + condition edit canonically and round-trips it", () => {
+  it("saves a title + condition edit canonically and round-trips it", async () => {
     const session = scratchProject();
     const ambush = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "ambush-at-the-ford")!;
-    const result = saveCard(session, docks, ambush.id, {
+    const result = await saveCard(session, docks, ambush.id, {
       title: "Ambush at the crossing",
       condition: "@hand.danger >= 3",
     });
@@ -166,29 +166,29 @@ describe("card mutations", () => {
     expect(card.condition).toBe("@hand.danger >= 3");
   });
 
-  it("coerces priority and redraw from typed text", () => {
+  it("coerces priority and redraw from typed text", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    saveCard(session, docks, ratJob.id, { priority: "@story.reputation + 1", redraw: "3" });
+    await saveCard(session, docks, ratJob.id, { priority: "@story.reputation + 1", redraw: "3" });
     const onDisk = readFileSync(dockDeckFile(session), "utf8");
     expect(onDisk).toContain('priority: "@story.reputation + 1"');   // expression -> string
     expect(onDisk).toContain("redraw: 3");                            // number literal
   });
 
-  it("toggles a tag by resolving tag gameIds to ids", () => {
+  it("toggles a tag by resolving tag gameIds to ids", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    saveCard(session, docks, ratJob.id, { tags: [{ group: "area", values: ["docks", "market"] }] });
+    await saveCard(session, docks, ratJob.id, { tags: [{ group: "area", values: ["docks", "market"] }] });
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     const card = reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.id === ratJob.id)!;
     expect(card.tags).toEqual([{ group: "area", values: ["docks", "market"] }]);
   });
 
-  it("homes a card to a hand: home values are hand gameIds, stored as hand ids", () => {
+  it("homes a card to a hand: home values are hand gameIds, stored as hand ids", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    saveCard(session, docks, ratJob.id, {
+    await saveCard(session, docks, ratJob.id, {
       tags: [{ group: "area", values: ["docks"] }, { group: PLACE_GROUP, values: ["docks-street"] }],
     });
     const onDisk = readFileSync(dockDeckFile(session), "utf8");
@@ -199,25 +199,25 @@ describe("card mutations", () => {
     expect(card.tags.find((t) => t.group === PLACE_GROUP)!.values).toEqual(["docks-street"]);
   });
 
-  it("saves copies when 2+, and clears it back to the default of 1", () => {
+  it("saves copies when 2+, and clears it back to the default of 1", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    saveCard(session, docks, ratJob.id, { copies: "3" });
+    await saveCard(session, docks, ratJob.id, { copies: "3" });
     expect(readFileSync(dockDeckFile(session), "utf8")).toContain("copies: 3");
     let reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.id === ratJob.id)!.copies).toBe("3");
 
-    saveCard(session, docks, ratJob.id, { copies: "1" });
+    await saveCard(session, docks, ratJob.id, { copies: "1" });
     expect(readFileSync(dockDeckFile(session), "utf8")).not.toContain("copies:");
     reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.id === ratJob.id)!.copies).toBe("");
   });
 
-  it("creates a card with a unique gameId and a default outcome, then deletes it", () => {
+  it("creates a card with a unique gameId and a default outcome, then deletes it", async () => {
     const session = scratchProject();
-    const created = createCard(session, docks);
+    const created = await createCard(session, docks);
     expect("error" in created).toBe(false);
     if ("error" in created) return;
     const newCard = created.result.project.boxes[0]!.decks[0]!.cards.find((c) => c.id === created.cardId)!;
@@ -225,21 +225,21 @@ describe("card mutations", () => {
     expect(newCard.outcomes).toHaveLength(1);
 
     // A second create dedupes the gameId.
-    const second = createCard(session, docks);
+    const second = await createCard(session, docks);
     if ("error" in second) return;
     const secondCard = second.result.project.boxes[0]!.decks[0]!.cards.find((c) => c.id === second.cardId)!;
     expect(secondCard.gameId).toBe("new-card-2");
 
-    const afterDelete = deleteCard(session, docks, created.cardId);
+    const afterDelete = await deleteCard(session, docks, created.cardId);
     if ("error" in afterDelete) return;
     expect(afterDelete.project.boxes[0]!.decks[0]!.cards.some((c) => c.id === created.cardId)).toBe(false);
   });
 
-  it("saving an outcome's gate and changes round-trips them", () => {
+  it("saving an outcome's gate and changes round-trips them", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
     const accepted = ratJob.outcomes[0]!;
-    saveCard(session, docks, ratJob.id, {
+    await saveCard(session, docks, ratJob.id, {
       outcomes: [{
         id: accepted.id, gameId: "accepted", title: "Take it",
         gate: "@story.reputation >= 0",
@@ -251,24 +251,24 @@ describe("card mutations", () => {
     expect(onDisk).toContain('"@story.reputation": "@story.reputation + 1"');
   });
 
-  it("saving an outcome's fields round-trips them, coerced as a card's are", () => {
+  it("saving an outcome's fields round-trips them, coerced as a card's are", async () => {
     // The outcome half of the card template (2026-09-13). The same coercion as
     // a card field: a number typed into a number field is stored as one.
     const session = scratchProject();
     // Declared first, as an author would: a field nothing declares is a publish
     // error, and this test should leave a project that still compiles.
-    saveBox(session, encBox, { outcomeFields: [
+    await saveBox(session, encBox, { outcomeFields: [
       { name: "after", type: "string", default: "" },
       { name: "weight", type: "number", default: "0" },
     ] });
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
     const accepted = ratJob.outcomes[0]!;
-    const edit = (fields: { name: string; value: string }[]): void => {
-      saveCard(session, docks, ratJob.id, {
+    const edit = async (fields: { name: string; value: string }[]): Promise<void> => {
+      await saveCard(session, docks, ratJob.id, {
         outcomes: [{ id: accepted.id, gameId: "accepted", title: "Take it", changes: [], fields }],
       });
     };
-    edit([{ name: "after", value: "The rat keeper nods." }, { name: "weight", value: "2" }]);
+    await edit([{ name: "after", value: "The rat keeper nods." }, { name: "weight", value: "2" }]);
     const onDisk = readFileSync(dockDeckFile(session), "utf8");
     expect(onDisk).toContain('after: "The rat keeper nods."');
     expect(onDisk).toContain("weight: 2");
@@ -281,7 +281,7 @@ describe("card mutations", () => {
     // Emptied: the key goes rather than storing "", and an outcome with
     // nothing set carries no `fields` key at all - so a project that has never
     // used one saves back exactly as it was read.
-    edit([{ name: "after", value: "" }, { name: "weight", value: "" }]);
+    await edit([{ name: "after", value: "" }, { name: "weight", value: "" }]);
     expect(readFileSync(dockDeckFile(session), "utf8")).not.toContain("after:");
     const empty = openProject(session.loaded.dir);
     if ("error" in empty) throw new Error(empty.error);
@@ -291,22 +291,22 @@ describe("card mutations", () => {
     expect("fields" in outcome).toBe(false);
   });
 
-  it("a blanked CARD field drops its key rather than storing \"\", so a typed field can be unset", () => {
+  it("a blanked CARD field drops its key rather than storing \"\", so a typed field can be unset", async () => {
     // Ruled 2026-09-13 alongside outcome fields, and Patterpad's rule for game
     // data: absence is "use the declared default". The old "" made "(unset)"
     // in a boolean or enum picker a publish error nothing in the UI could clear.
     const session = scratchProject();
-    saveBox(session, encBox, { fields: [
+    await saveBox(session, encBox, { fields: [
       { name: "cue", type: "string", default: "" },
       { name: "quiet", type: "boolean", default: "false" },
     ] });
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    saveCard(session, docks, ratJob.id, { fields: [{ name: "cue", value: "bell" }, { name: "quiet", value: "true" }] });
+    await saveCard(session, docks, ratJob.id, { fields: [{ name: "cue", value: "bell" }, { name: "quiet", value: "true" }] });
     let onDisk = readFileSync(dockDeckFile(session), "utf8");
     expect(onDisk).toContain('cue: "bell"');
     expect(onDisk).toContain("quiet: true");
 
-    saveCard(session, docks, ratJob.id, { fields: [{ name: "cue", value: "" }, { name: "quiet", value: "" }] });
+    await saveCard(session, docks, ratJob.id, { fields: [{ name: "cue", value: "" }, { name: "quiet", value: "" }] });
     onDisk = readFileSync(dockDeckFile(session), "utf8");
     expect(onDisk).not.toContain("cue:");
     expect(onDisk).not.toContain("quiet:");
@@ -318,11 +318,11 @@ describe("card mutations", () => {
     expect(card.fields?.["quiet"]).toBeUndefined();
   });
 
-  it("duplicates a card (fresh ids, deduped gameId, inserted after the original)", () => {
+  it("duplicates a card (fresh ids, deduped gameId, inserted after the original)", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
     const before = session.dto.boxes[0]!.decks[0]!.cards.length;
-    const dup = duplicateCard(session, docks, ratJob.id);
+    const dup = await duplicateCard(session, docks, ratJob.id);
     expect("error" in dup).toBe(false);
     if ("error" in dup) return;
     const reopened = openProject(session.loaded.dir);
@@ -337,13 +337,13 @@ describe("card mutations", () => {
     expect(clone.outcomes.every((o) => !origOutcomeIds.has(o.id))).toBe(true);
   });
 
-  it("moves a card before a target and the reorder persists", () => {
+  it("moves a card before a target and the reorder persists", async () => {
     const session = scratchProject();
     const cards0 = session.dto.boxes[0]!.decks[0]!.cards;
     const ambush = cards0.find((c) => c.gameId === "ambush-at-the-ford")!;
     const ratJob = cards0.find((c) => c.gameId === "rat-job")!;
     expect(cards0.findIndex((c) => c.id === ambush.id)).toBeLessThan(cards0.findIndex((c) => c.id === ratJob.id));
-    const r = moveCard(session, docks, ratJob.id, ambush.id, true);   // rat-job before ambush
+    const r = await moveCard(session, docks, ratJob.id, ambush.id, true);   // rat-job before ambush
     expect("error" in r).toBe(false);
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
@@ -357,7 +357,7 @@ describe("card mutations", () => {
     expect(onDisk).toContain("order: -1");
   });
 
-  it("reads and saves project settings (name + a story property) round-trip", () => {
+  it("reads and saves project settings (name + a story property) round-trip", async () => {
     const session = scratchProject();
     const before = projectSettings(session);
     expect(before.name).toBe("Saltmarsh");
@@ -366,7 +366,7 @@ describe("card mutations", () => {
       ...before, name: "Saltmarsh Revised",
       story: [...before.story, { name: "morale", type: "number", default: "5" }],
     };
-    const r = saveProjectSettings(session, next);
+    const r = await saveProjectSettings(session, next);
     expect("error" in r).toBe(false);
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
@@ -376,7 +376,7 @@ describe("card mutations", () => {
     expect(morale).toMatchObject({ type: "number", default: "5" });
   });
 
-  it("round-trips a property's purpose, and an emptied one deletes", () => {
+  it("round-trips a property's purpose, and an emptied one deletes", async () => {
     // The purpose is the pill's hover tip (expr-editor's propertyTip), so it
     // has to survive the save; and a cleared field must DELETE the key, not
     // store "" - the shard says nothing rather than saying nothing verbosely.
@@ -386,7 +386,7 @@ describe("card mutations", () => {
       ...before,
       story: [...before.story, { name: "morale", type: "number", default: "5", purpose: "how the crew feels" }],
     };
-    expect("error" in saveProjectSettings(session, next)).toBe(false);
+    expect("error" in await saveProjectSettings(session, next)).toBe(false);
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     const written = projectSettings(reopened.session);
@@ -396,7 +396,7 @@ describe("card mutations", () => {
       ...written,
       story: written.story.map((p) => (p.name === "morale" ? { ...p, purpose: "  " } : p)),
     };
-    expect("error" in saveProjectSettings(reopened.session, cleared)).toBe(false);
+    expect("error" in await saveProjectSettings(reopened.session, cleared)).toBe(false);
     const again = openProject(session.loaded.dir);
     if ("error" in again) throw new Error(again.error);
     const decl = again.session.loaded.source!.project.story.properties.find((p) => p.name === "morale")!;
@@ -407,7 +407,7 @@ describe("card mutations", () => {
   // the studio, shard -> DTO -> switch -> DTO -> shard, or the switch would
   // show a value the save then dropped. The DTO is a typed copy, so this is
   // where a missed mapping would hide.
-  it("round-trips writable on a @world property, and writes no key when the flag is off", () => {
+  it("round-trips writable on a @world property, and writes no key when the flag is off", async () => {
     const session = scratchProject();
     const before = projectSettings(session);
     const next = {
@@ -417,7 +417,7 @@ describe("card mutations", () => {
         { name: "gold", type: "number", default: "0" },
       ],
     };
-    expect("error" in saveProjectSettings(session, next)).toBe(false);
+    expect("error" in await saveProjectSettings(session, next)).toBe(false);
 
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
@@ -430,7 +430,7 @@ describe("card mutations", () => {
     expect("writable" in dto.find((d) => d.name === "gold")!).toBe(false);
   });
 
-  it("edits coverage drivers beside the world properties, and prunes the inert ones", () => {
+  it("edits coverage drivers beside the world properties, and prunes the inert ones", async () => {
     const session = scratchProject();
     const before = projectSettings(session);
     const next = {
@@ -444,7 +444,7 @@ describe("card mutations", () => {
         { ref: "@world.unused", kind: "recurring" as const, values: [] },
       ],
     };
-    expect("error" in saveProjectSettings(session, next)).toBe(false);
+    expect("error" in await saveProjectSettings(session, next)).toBe(false);
 
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
@@ -460,27 +460,27 @@ describe("card mutations", () => {
     expect(after.drivers.map((d) => d.ref)).toEqual(["@world.danger", "@world.raining"]);
   });
 
-  it("clears the drivers when the last row is removed", () => {
+  it("clears the drivers when the last row is removed", async () => {
     const session = scratchProject();
     const seeded = { ...projectSettings(session), drivers: [{ ref: "@world.raining", kind: "recurring" as const, cadence: "sometimes" as const, values: [true] }] };
-    saveProjectSettings(session, seeded);
+    await saveProjectSettings(session, seeded);
     const mid = openProject(session.loaded.dir);
     if ("error" in mid) throw new Error(mid.error);
     expect(projectSettings(mid.session).drivers).toHaveLength(1);
 
-    saveProjectSettings(mid.session, { ...projectSettings(mid.session), drivers: [] });
+    await saveProjectSettings(mid.session, { ...projectSettings(mid.session), drivers: [] });
     const after = openProject(mid.session.loaded.dir);
     if ("error" in after) throw new Error(after.error);
     expect(after.session.loaded.source!.project.coverage?.drivers).toBeUndefined();
     expect(projectSettings(after.session).drivers).toEqual([]);
   });
 
-  it("proposes drivers from the cards without writing them", () => {
+  it("proposes drivers from the cards without writing them", async () => {
     const session = scratchProject();
     // Gate a card on a declared @world property nothing writes: exactly the
     // case a driver exists for.
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    saveCard(session, docks, ratJob.id, { condition: "@world.danger >= 2" });
+    await saveCard(session, docks, ratJob.id, { condition: "@world.danger >= 2" });
 
     const proposed = proposeDrivers(session);
     const danger = proposed.find((d) => d.ref === "@world.danger");
@@ -494,22 +494,22 @@ describe("card mutations", () => {
     expect(reopened.session.loaded.source!.project.coverage?.drivers).toBeUndefined();
   });
 
-  it("renames a card gameId (slugged, in-shard)", () => {
+  it("renames a card gameId (slugged, in-shard)", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    saveCard(session, docks, ratJob.id, { gameId: "Dock Work" });
+    await saveCard(session, docks, ratJob.id, { gameId: "Dock Work" });
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.id === ratJob.id)!.gameId).toBe("dock-work");
   });
 
-  it("names a new deck apart from every box's decks, since a deck's address names no box", () => {
+  it("names a new deck apart from every box's decks, since a deck's address names no box", async () => {
     const session = scratchProject();
-    const first = createDeck(session, session.dto.boxes[0]!.id);
+    const first = await createDeck(session, session.dto.boxes[0]!.id);
     if ("error" in first) throw new Error(first.error);
-    const box = createBox(session);
+    const box = await createBox(session);
     if ("error" in box) throw new Error(box.error);
-    const second = createDeck(session, box.boxId);
+    const second = await createDeck(session, box.boxId);
     if ("error" in second) throw new Error(second.error);
     const decks = second.result.project.boxes.flatMap((b) => b.decks);
     expect(decks.find((d) => d.id === first.deckId)!.gameId).toBe("new-deck");
@@ -517,31 +517,31 @@ describe("card mutations", () => {
     expect(second.result.problems.filter((p) => p.severity === "error")).toEqual([]);
   });
 
-  it("creates a deck (a new shard file), then deletes it when empty", () => {
+  it("creates a deck (a new shard file), then deletes it when empty", async () => {
     const session = scratchProject();
     const boxId = session.dto.boxes[0]!.id;
-    const created = createDeck(session, boxId);
+    const created = await createDeck(session, boxId);
     expect("error" in created).toBe(false);
     if ("error" in created) return;
     const newDeck = created.result.project.boxes[0]!.decks.find((d) => d.id === created.deckId)!;
     expect(newDeck.gameId).toBe("new-deck");
     expect(existsSync(join(session.loaded.dir, "encounters", "decks", "new-deck.storyletdeck"))).toBe(true);
 
-    const deleted = deleteDeck(session, created.deckId);
+    const deleted = await deleteDeck(session, created.deckId);
     if ("error" in deleted) return;
     expect(deleted.project.boxes[0]!.decks.some((d) => d.id === created.deckId)).toBe(false);
     expect(existsSync(join(session.loaded.dir, "encounters", "decks", "new-deck.storyletdeck"))).toBe(false);
   });
 
-  it("refuses to delete a non-empty deck", () => {
+  it("refuses to delete a non-empty deck", async () => {
     const session = scratchProject();
-    const result = deleteDeck(session, docks);
+    const result = await deleteDeck(session, docks);
     expect(result).toEqual({ error: expect.stringContaining("cards first") });
   });
 
-  it("saves the deck gate and @deck properties and round-trips them", () => {
+  it("saves the deck gate and @deck properties and round-trips them", async () => {
     const session = scratchProject();
-    const r = renameDeck(session, docks, {
+    const r = await renameDeck(session, docks, {
       gate: "@story.reputation >= 0",
       properties: [{ name: "heat", type: "number", default: "0" }],
     });
@@ -556,11 +556,11 @@ describe("card mutations", () => {
     expect(cat.some((p) => p.scope === "deck" && p.name === "heat")).toBe(true);
   });
 
-  it("renames a deck and moves its file to match the gameId", () => {
+  it("renames a deck and moves its file to match the gameId", async () => {
     const session = scratchProject();
-    const result = renameDeck(session, docks, { title: "The Docks", gameId: "harbour" });
+    const result = await renameDeck(session, docks, { title: "The Docks", gameId: "harbour" });
     expect("error" in result).toBe(false);
-    const withPurpose = renameDeck(session, docks, { purpose: "Harbour-side beats." });
+    const withPurpose = await renameDeck(session, docks, { purpose: "Harbour-side beats." });
     expect("error" in withPurpose).toBe(false);
     expect("error" in result).toBe(false);
     expect(existsSync(join(session.loaded.dir, "encounters", "decks", "harbour.storyletdeck"))).toBe(true);
@@ -572,7 +572,7 @@ describe("card mutations", () => {
     expect(deck.gameId).toBe("harbour");
   });
 
-  it("adds coverage drivers for a host-gated card and writes them to the project shard", () => {
+  it("adds coverage drivers for a host-gated card and writes them to the project shard", async () => {
     const session = scratchProject();
     // Add a card gated on a new @world property nothing writes.
     const projFile = join(session.loaded.dir, "encounters", "decks", "docks.storyletdeck");
@@ -590,7 +590,7 @@ describe("card mutations", () => {
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
 
-    const result = addCoverageDrivers(reopened.session);
+    const result = await addCoverageDrivers(reopened.session);
     expect("error" in result).toBe(false);
     if ("error" in result) return;
     expect(result.added).toContain("@world.raining");
@@ -600,7 +600,7 @@ describe("card mutations", () => {
     expect(on.session.loaded.source!.project.coverage?.drivers?.["@world.raining"]).toBeDefined();
   });
 
-  it("builds the expr-editor catalogue across the five scopes", () => {
+  it("builds the expr-editor catalogue across the five scopes", async () => {
     const session = scratchProject();
     const cat = cardCatalogue(session, docks);
     expect(cat.find((p) => p.scope === "story" && p.name === "reputation")).toBeDefined();
@@ -622,11 +622,11 @@ describe("card mutations", () => {
   // A tag group declares properties every tag has (design/hand-typing.md step
   // B); a tag carries only its own starting value. The editor has to be able
   // to say both, or the DRY shape is source-only and Storyletter can't reach it.
-  it("declares a property on a group and a starting value on one tag", () => {
+  it("declares a property on a group and a starting value on one tag", async () => {
     const session = scratchProject();
     const g = tagGroupDetail(session, encBox, "d_zone");
     if (!g) throw new Error("the fixture needs its zone group");
-    const r = saveTagGroup(session, encBox, "d_zone", {
+    const r = await saveTagGroup(session, encBox, "d_zone", {
       properties: [{ name: "haunting", type: "number", default: "0" }],
       values: g.values.map((v) => (v.gameId === "market" ? { ...v, values: { haunting: "3" } } : v)),
     });
@@ -640,9 +640,9 @@ describe("card mutations", () => {
     expect(again.values.find((v) => v.gameId === "docks")?.values ?? {}).toEqual({});
   });
 
-  it("carries a quality's ladder into the catalogue, in order", () => {
+  it("carries a quality's ladder into the catalogue, in order", async () => {
     const session = scratchProject();
-    const r = renameDeck(session, docks, {
+    const r = await renameDeck(session, docks, {
       properties: [{ name: "debt", type: "quality", default: "quiet", stages: ["quiet", "troubled", "confronted"] }],
     });
     expect("error" in r).toBe(false);
@@ -656,36 +656,36 @@ describe("card mutations", () => {
 const encBox = "b_enc";
 
 describe("project settings", () => {
-  it("round-trips the unread-writes warning switch, absent when off", () => {
+  it("round-trips the unread-writes warning switch, absent when off", async () => {
     const session = scratchProject();
     const before = projectSettings(session);
     expect(before.warnUnreadWrites).toBe(false);
-    const r = saveProjectSettings(session, { ...before, warnUnreadWrites: true });
+    const r = await saveProjectSettings(session, { ...before, warnUnreadWrites: true });
     expect("error" in r).toBe(false);
     const opened = openProject(session.loaded.dir);
     if ("error" in opened) throw new Error(opened.error);
     expect(projectSettings(opened.session).warnUnreadWrites).toBe(true);
     // ...and turning it back off removes the key entirely, like export.map.
-    saveProjectSettings(opened.session, { ...projectSettings(opened.session), warnUnreadWrites: false });
+    await saveProjectSettings(opened.session, { ...projectSettings(opened.session), warnUnreadWrites: false });
     const shard = readFileSync(join(opened.session.loaded.dir, opened.session.loaded.source!.path), "utf8");
     expect(shard).not.toContain("validation");
   });
 });
 
 describe("the play ladder, written from the editor", () => {
-  it("round-trips the rung, and the starter project is a solo one", () => {
+  it("round-trips the rung, and the starter project is a solo one", async () => {
     const session = scratchProject();
     const before = projectSettings(session);
-    expect(saveProjectSettings(session, { ...before, play: "venue" })).not.toHaveProperty("error");
+    expect(await saveProjectSettings(session, { ...before, play: "venue" })).not.toHaveProperty("error");
     const opened = openProject(session.loaded.dir);
     if ("error" in opened) throw new Error(opened.error);
     expect(projectSettings(opened.session).play).toBe("venue");
     expect(opened.session.dto.play).toBe("venue");
   });
 
-  it("counts what is above each rung, which is what the dialog refuses with", () => {
+  it("counts what is above each rung, which is what the dialog refuses with", async () => {
     const session = scratchProject();
-    renameDeck(session, docks, { shared: true });
+    await renameDeck(session, docks, { shared: true });
     const opened = openProject(session.loaded.dir);
     if ("error" in opened) throw new Error(opened.error);
     const settings = projectSettings(opened.session);
@@ -695,9 +695,9 @@ describe("the play ladder, written from the editor", () => {
 });
 
 describe("box mutations", () => {
-  it("saves the box title and purpose and round-trips them", () => {
+  it("saves the box title and purpose and round-trips them", async () => {
     const session = scratchProject();
-    const r = saveBox(session, encBox, { title: "Street encounters", purpose: "Random beats out on the streets." });
+    const r = await saveBox(session, encBox, { title: "Street encounters", purpose: "Random beats out on the streets." });
     expect("error" in r).toBe(false);
     const box = openProject(session.loaded.dir);
     if ("error" in box) throw new Error(box.error);
@@ -706,9 +706,9 @@ describe("box mutations", () => {
     expect(b.purpose).toBe("Random beats out on the streets.");
   });
 
-  it("edits the box card fields and round-trips them", () => {
+  it("edits the box card fields and round-trips them", async () => {
     const session = scratchProject();
-    const result = saveBox(session, encBox, {
+    const result = await saveBox(session, encBox, {
       title: "Street encounters",
       fields: [
         { name: "patter-scene", type: "string", default: "" },
@@ -726,13 +726,13 @@ describe("box mutations", () => {
     ]);
   });
 
-  it("edits the box OUTCOME fields, and writes no key at all when the list empties", () => {
+  it("edits the box OUTCOME fields, and writes no key at all when the list empties", async () => {
     const session = scratchProject();
     const boxFile = join(session.loaded.dir, "encounters", "box.storyletbox");
     const before = readFileSync(boxFile, "utf8");
     expect(before).not.toContain("outcomeFields");   // or the second half proves nothing
 
-    expect(saveBox(session, encBox, { outcomeFields: [
+    expect(await saveBox(session, encBox, { outcomeFields: [
       { name: "after", type: "string", default: "" },
       { name: "cue", type: "enum", default: "silence", values: ["silence", "bell"] },
     ] })).not.toHaveProperty("error");
@@ -749,7 +749,7 @@ describe("box mutations", () => {
     // that declares none must read as it always did, so a project saved by an
     // editor that knows about the key is byte-identical to one that never met
     // it - which is the whole promise the format made when the key landed.
-    expect(saveBox(session, encBox, { outcomeFields: [] })).not.toHaveProperty("error");
+    expect(await saveBox(session, encBox, { outcomeFields: [] })).not.toHaveProperty("error");
     expect(readFileSync(boxFile, "utf8")).not.toContain("outcomeFields");
     reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
@@ -757,37 +757,37 @@ describe("box mutations", () => {
     expect(reopened.session.dto.boxes.find((b) => b.id === encBox)!.outcomeFields).toEqual([]);
   });
 
-  it("a box edit that says nothing about outcome fields leaves them alone", () => {
+  it("a box edit that says nothing about outcome fields leaves them alone", async () => {
     const session = scratchProject();
-    saveBox(session, encBox, { outcomeFields: [{ name: "after", type: "string", default: "" }] });
-    saveBox(session, encBox, { title: "Street encounters" });
+    await saveBox(session, encBox, { outcomeFields: [{ name: "after", type: "string", default: "" }] });
+    await saveBox(session, encBox, { title: "Street encounters" });
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.loaded.source!.boxes[0]!.box.box.outcomeFields)
       .toEqual([{ name: "after", type: "string", default: "" }]);
   });
 
-  it("edits the ranking specificity flag", () => {
+  it("edits the ranking specificity flag", async () => {
     const session = scratchProject();
-    saveBox(session, encBox, { ranking: { specificity: false } });
+    await saveBox(session, encBox, { ranking: { specificity: false } });
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.loaded.source!.boxes[0]!.box.box.ranking?.specificity).toBe(false);
   });
 
-  it("makes a box timed and round-trips the unit, to the shard and the DTO", () => {
+  it("makes a box timed and round-trips the unit, to the shard and the DTO", async () => {
     const session = scratchProject();
-    saveBox(session, encBox, { turn: { seconds: 60 } });
+    await saveBox(session, encBox, { turn: { seconds: 60 } });
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.loaded.source!.boxes[0]!.box.box.turn).toEqual({ seconds: 60 });
     expect(reopened.session.dto.boxes.find((x) => x.id === encBox)!.turn).toEqual({ seconds: 60 });
   });
 
-  it("untiming a box deletes turn rather than storing an empty one", () => {
+  it("untiming a box deletes turn rather than storing an empty one", async () => {
     const session = scratchProject();
-    saveBox(session, encBox, { turn: { seconds: 20 } });
-    saveBox(session, encBox, { turn: null });
+    await saveBox(session, encBox, { turn: { seconds: 20 } });
+    await saveBox(session, encBox, { turn: null });
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     const box = reopened.session.loaded.source!.boxes[0]!.box.box;
@@ -795,18 +795,18 @@ describe("box mutations", () => {
     expect(reopened.session.dto.boxes.find((x) => x.id === encBox)!.turn).toBeUndefined();
   });
 
-  it("an edit that says nothing about turns leaves a timed box timed", () => {
+  it("an edit that says nothing about turns leaves a timed box timed", async () => {
     const session = scratchProject();
-    saveBox(session, encBox, { turn: { seconds: 60 } });
-    saveBox(session, encBox, { title: "Street encounters" });
+    await saveBox(session, encBox, { turn: { seconds: 60 } });
+    await saveBox(session, encBox, { title: "Street encounters" });
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.loaded.source!.boxes[0]!.box.box.turn).toEqual({ seconds: 60 });
   });
 
-  it("creates a blank box: empty shards, nothing scaffolded", () => {
+  it("creates a blank box: empty shards, nothing scaffolded", async () => {
     const session = scratchProject();
-    const created = createBox(session);
+    const created = await createBox(session);
     if ("error" in created) throw new Error(created.error);
     const box = created.result.project.boxes.find((b) => b.id === created.boxId)!;
     expect(box.decks).toEqual([]);
@@ -815,9 +815,9 @@ describe("box mutations", () => {
     expect(box.hands).toEqual([]);
   });
 
-  it("duplicates a whole box: fresh ids throughout, cross-references remapped, valid on landing", () => {
+  it("duplicates a whole box: fresh ids throughout, cross-references remapped, valid on landing", async () => {
     const session = scratchProject();
-    const created = duplicateBox(session, encBox);
+    const created = await duplicateBox(session, encBox);
     if ("error" in created) throw new Error(created.error);
     expect(created.result.problems.filter((p) => p.severity === "error")).toEqual([]);
     const clone = created.result.project.boxes.find((b) => b.id === created.boxId)!;
@@ -842,34 +842,34 @@ describe("box mutations", () => {
     expect(ambush.tags).toEqual([{ group: "area", values: ["docks"] }]);
   });
 
-  it("deletes a whole box (every shard), and undo restores it", () => {
+  it("deletes a whole box (every shard), and undo restores it", async () => {
     const session = scratchProject();
-    const result = deleteBox(session, encBox);
+    const result = await deleteBox(session, encBox);
     expect("error" in result).toBe(false);
     if ("error" in result) return;
     expect(result.project.boxes.some((b) => b.id === encBox)).toBe(false);
     expect(existsSync(join(session.loaded.dir, "encounters", "box.storyletbox"))).toBe(false);
     expect(existsSync(join(session.loaded.dir, "encounters", "decks", "docks.storyletdeck"))).toBe(false);
-    const undone = undo(session);
+    const undone = await undo(session);
     expect(undone).not.toBeNull();
-    expect(undone!.project.boxes.some((b) => b.id === encBox)).toBe(true);
+    expect((undone as OpenResult).project.boxes.some((b) => b.id === encBox)).toBe(true);
     expect(existsSync(join(session.loaded.dir, "encounters", "decks", "docks.storyletdeck"))).toBe(true);
   });
 
-  it("reorders boxes, decks and hands with the cards' sparse-order rule", () => {
+  it("reorders boxes, decks and hands with the cards' sparse-order rule", async () => {
     const session = scratchProject();
     // Boxes: a fresh box lands after encounters (creation order); move it first.
-    const created = createBox(session);
+    const created = await createBox(session);
     if ("error" in created) throw new Error(created.error);
     expect(created.result.project.boxes.map((b) => b.id)).toEqual([encBox, created.boxId]);
-    const movedBox = moveBox(session, created.boxId, encBox, true);
+    const movedBox = await moveBox(session, created.boxId, encBox, true);
     expect("error" in movedBox).toBe(false);
     // Decks: market before docks.
-    moveDeck(session, "k_market", "k_docks", true);
+    await moveDeck(session, "k_market", "k_docks", true);
     // Hands: a new hand moved before the docks hand.
-    const hand = createHand(session, encBox);
+    const hand = await createHand(session, encBox);
     if ("error" in hand) throw new Error(hand.error);
-    moveHand(session, encBox, hand.handId, "h_docks", true);
+    await moveHand(session, encBox, hand.handId, "h_docks", true);
     // Every reorder persists through a fresh open (order rides the shards).
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
@@ -879,9 +879,9 @@ describe("box mutations", () => {
     expect(enc.hands.map((h) => h.id)).toEqual([hand.handId, "h_docks"]);
   });
 
-  it("creates a box from the RPG kit: the narrated starter, valid on landing", () => {
+  it("creates a box from the RPG kit: the narrated starter, valid on landing", async () => {
     const session = scratchProject();
-    const created = createBox(session, "rpg");
+    const created = await createBox(session, "rpg");
     if ("error" in created) throw new Error(created.error);
     // Scaffold, not framework: the kit lands with no validation errors.
     expect(created.result.problems.filter((p) => p.severity === "error")).toEqual([]);
@@ -914,9 +914,9 @@ describe("box mutations", () => {
     expect(box.decks[0]!.cards[0]!.tags).toEqual([{ group: "area-2", values: ["tavern"] }]);
   });
 
-  it("the dialogue kit lands valid, teaching its chapter", () => {
+  it("the dialogue kit lands valid, teaching its chapter", async () => {
     const session = scratchProject();
-    const dialogue = createBox(session, "dialogue");
+    const dialogue = await createBox(session, "dialogue");
     if ("error" in dialogue) throw new Error(dialogue.error);
     expect(dialogue.result.problems.filter((p) => p.severity === "error")).toEqual([]);
     const d = dialogue.result.project.boxes.find((b) => b.id === dialogue.boxId)!;
@@ -931,11 +931,11 @@ describe("box mutations", () => {
     expect(roads.copies).toBe("2");   // the DTO carries scalars as editable strings
   });
 
-  it("applying the same kit twice dedupes its hand and card names (they are API)", () => {
+  it("applying the same kit twice dedupes its hand and card names (they are API)", async () => {
     const session = scratchProject();
-    const first = createBox(session, "rpg");
+    const first = await createBox(session, "rpg");
     if ("error" in first) throw new Error(first.error);
-    const second = createBox(session, "rpg");
+    const second = await createBox(session, "rpg");
     if ("error" in second) throw new Error(second.error);
     expect(second.result.problems.filter((p) => p.severity === "error")).toEqual([]);
     const clone = second.result.project.boxes.find((b) => b.id === second.boxId)!;
@@ -945,10 +945,10 @@ describe("box mutations", () => {
 });
 
 describe("duplicate parity (surface review F5)", () => {
-  it("duplicates a deck: new shard file, fresh deck/card/outcome ids, deduped gameId", () => {
+  it("duplicates a deck: new shard file, fresh deck/card/outcome ids, deduped gameId", async () => {
     const session = scratchProject();
     const src = session.dto.boxes[0]!.decks.find((d) => d.id === docks)!;
-    const created = duplicateDeck(session, docks);
+    const created = await duplicateDeck(session, docks);
     if ("error" in created) throw new Error(created.error);
     const clone = created.result.project.boxes[0]!.decks.find((d) => d.id === created.deckId)!;
     expect(clone.id).not.toBe(docks);
@@ -958,9 +958,9 @@ describe("duplicate parity (surface review F5)", () => {
     expect(clone.cards.every((c) => !srcCardIds.has(c.id))).toBe(true);
   });
 
-  it("duplicates a hand template with a deduped gameId and the same contract", () => {
+  it("duplicates a hand template with a deduped gameId and the same contract", async () => {
     const session = scratchProject();
-    const created = duplicateTemplate(session, encBox, "t_street");
+    const created = await duplicateTemplate(session, encBox, "t_street");
     if ("error" in created) throw new Error(created.error);
     const detail = templateDetail(session, encBox, created.templateId)!;
     expect(detail.gameId).toBe("street-hands-copy");
@@ -968,9 +968,9 @@ describe("duplicate parity (surface review F5)", () => {
     expect(detail.slots).toBe("3");
   });
 
-  it("duplicates a hand with its template, chosen tags and slots", () => {
+  it("duplicates a hand with its template, chosen tags and slots", async () => {
     const session = scratchProject();
-    const created = duplicateHand(session, encBox, "h_docks");
+    const created = await duplicateHand(session, encBox, "h_docks");
     if ("error" in created) throw new Error(created.error);
     const detail = handDetail(session, encBox, created.handId)!;
     expect(detail.gameId).toBe("docks-street-copy");
@@ -979,10 +979,10 @@ describe("duplicate parity (surface review F5)", () => {
     expect(detail.slots).toBe("2");
   });
 
-  it("duplicates a tag group with fresh tag ids", () => {
+  it("duplicates a tag group with fresh tag ids", async () => {
     const session = scratchProject();
     const src = tagGroupDetail(session, encBox, "d_zone")!;
-    const created = duplicateTagGroup(session, encBox, "d_zone");
+    const created = await duplicateTagGroup(session, encBox, "d_zone");
     if ("error" in created) throw new Error(created.error);
     const clone = tagGroupDetail(session, encBox, created.groupId)!;
     expect(clone.gameId).toBe("area-copy");
@@ -1008,24 +1008,24 @@ describe("a venue's claim on the project", () => {
     return opened.session;
   };
 
-  it("says nothing on a project no venue has ever seen", () => {
+  it("says nothing on a project no venue has ever seen", async () => {
     const session = scratchProject();
     expect(handDetail(session, encBox, "h_docks")!.contract).toBeUndefined();
     expect(session.dto.boxes[0]!.contract).toBeUndefined();
   });
 
-  it("gives the bound hand one line, and leaves the others alone", () => {
+  it("gives the bound hand one line, and leaves the others alone", async () => {
     const session = installed({ hands: ["docks-street"] });
     expect(handDetail(session, encBox, "h_docks")!.contract)
       .toEqual(["Dealt at the-park"]);
   });
 
-  it("gives a ticked box its line, in the venue's own unit", () => {
+  it("gives a ticked box its line, in the venue's own unit", async () => {
     const session = installed({ boxes: { encounters: { turn: 60 } } });
     expect(toDto(session.loaded).boxes[0]!.contract).toEqual(["Ticked at the-park every 60s"]);
   });
 
-  it("puts a break in the problems bar as an error, naming the venue", () => {
+  it("puts a break in the problems bar as an error, naming the venue", async () => {
     const session = installed({ hands: ["the-forge"] });
     const issues = runValidate(session.loaded, { checkBundle: false }).issues;
     expect(issues.some((i) => i.severity === "error"
@@ -1034,7 +1034,7 @@ describe("a venue's claim on the project", () => {
 });
 
 describe("hands", () => {
-  it("reads a hand's detail: its template, one chosen row per hole, and slots", () => {
+  it("reads a hand's detail: its template, one chosen row per hole, and slots", async () => {
     const session = scratchProject();
     const detail = handDetail(session, encBox, "h_docks");
     expect(detail).not.toBeNull();
@@ -1046,16 +1046,16 @@ describe("hands", () => {
     expect(detail!.slots).toBe("2");
   });
 
-  it("offers the box's templates with their holes, for the picker", () => {
+  it("offers the box's templates with their holes, for the picker", async () => {
     const session = scratchProject();
     const detail = handDetail(session, encBox, "h_docks")!;
     expect(detail.templates).toEqual([{ gameId: "street-hands", chooses: ["area"], slots: "3" }]);
     expect(detail.groups).toEqual([{ gameId: "area", values: ["docks", "market"] }]);
   });
 
-  it("saves chosen tags, a slots override and @hand properties, and round-trips them", () => {
+  it("saves chosen tags, a slots override and @hand properties, and round-trips them", async () => {
     const session = scratchProject();
-    const saved = saveHand(session, encBox, "h_docks", {
+    const saved = await saveHand(session, encBox, "h_docks", {
       title: "The docks",
       chosen: [{ group: "area", value: "market" }],
       slots: "4",
@@ -1074,18 +1074,18 @@ describe("hands", () => {
     expect(hand.chosen).toEqual({ d_zone: "v_market" });
   });
 
-  it("fills a hole from a property, and stores the reference as authored", () => {
+  it("fills a hole from a property, and stores the reference as authored", async () => {
     // The hand that moves (design/engine-server.md 4.6). The picker's second
     // half offers the hand's own string / enum state and the declared @story /
     // @world properties; choosing one stores the reference, which names no tag
     // and so must survive the gameId round trip untouched.
     const session = scratchProject();
-    saveTemplate(session, encBox, "t_street", {
+    await saveTemplate(session, encBox, "t_street", {
       properties: [{ name: "zone", type: "enum", default: "docks", values: ["docks", "market"] }],
     });
     expect(handDetail(session, encBox, "h_docks")!.movableFrom).toContain("@hand.zone");
 
-    const saved = saveHand(session, encBox, "h_docks", { chosen: [{ group: "area", value: "@hand.zone" }] });
+    const saved = await saveHand(session, encBox, "h_docks", { chosen: [{ group: "area", value: "@hand.zone" }] });
     expect("error" in saved).toBe(false);
     expect(handDetail(session, encBox, "h_docks")!.chosen).toEqual([
       { group: "area", value: "@hand.zone", values: ["docks", "market"] },
@@ -1096,26 +1096,26 @@ describe("hands", () => {
     expect(hand.chosen).toEqual({ d_zone: "@hand.zone" });
 
     // And back to a literal tag: the hole stops moving.
-    saveHand(session, encBox, "h_docks", { chosen: [{ group: "area", value: "docks" }] });
+    await saveHand(session, encBox, "h_docks", { chosen: [{ group: "area", value: "docks" }] });
     expect(handDetail(session, encBox, "h_docks")!.chosen[0]!.value).toBe("docks");
   });
 
-  it("blank slots follow the template's own slot count", () => {
+  it("blank slots follow the template's own slot count", async () => {
     const session = scratchProject();
-    saveHand(session, encBox, "h_docks", { slots: "" });
+    await saveHand(session, encBox, "h_docks", { slots: "" });
     expect(handDetail(session, encBox, "h_docks")!.slots).toBe("");
   });
 
-  it("converts a template instance to standalone (an empty rule) and back", () => {
+  it("converts a template instance to standalone (an empty rule) and back", async () => {
     const session = scratchProject();
-    saveHand(session, encBox, "h_docks", { template: "" });
+    await saveHand(session, encBox, "h_docks", { template: "" });
     let detail = handDetail(session, encBox, "h_docks")!;
     expect(detail.template).toBeUndefined();
     expect(detail.chosen).toEqual([]);
     expect(detail.rule).toEqual({ bindings: [{ group: "area" }], slots: "unbounded" });
 
     // The standalone rule takes bindings, a condition and its own slots.
-    saveHand(session, encBox, "h_docks", {
+    await saveHand(session, encBox, "h_docks", {
       rule: { bindings: [{ group: "area", value: "docks" }], condition: "@story.reputation > 1", slots: "2" },
     });
     detail = handDetail(session, encBox, "h_docks")!;
@@ -1126,20 +1126,20 @@ describe("hands", () => {
     });
 
     // Back to the template: the rule is dropped (exactly one of template / rule).
-    saveHand(session, encBox, "h_docks", { template: "street-hands" });
+    await saveHand(session, encBox, "h_docks", { template: "street-hands" });
     detail = handDetail(session, encBox, "h_docks")!;
     expect(detail.template).toBe("street-hands");
     expect(detail.rule).toBeUndefined();
   });
 
-  it("hand properties reach the @hand catalogue", () => {
+  it("hand properties reach the @hand catalogue", async () => {
     const session = scratchProject();
-    saveHand(session, encBox, "h_docks", { properties: [{ name: "crowded", type: "boolean", default: "true" }] });
+    await saveHand(session, encBox, "h_docks", { properties: [{ name: "crowded", type: "boolean", default: "true" }] });
     const cat = cardCatalogue(session, "k_docks");
     expect(cat.some((p) => p.scope === "hand" && p.name === "crowded")).toBe(true);
   });
 
-  it("GROUP-declared properties reach the @hand catalogue, purpose and all", () => {
+  it("GROUP-declared properties reach the @hand catalogue, purpose and all", async () => {
     // The patrolled pattern (Port Meridian): declared ONCE on the group, set
     // per tag, flattened onto every tag by the compiler - so @hand.patrolled
     // is a legal read. The catalogue fed only per-TAG declarations, so the
@@ -1148,7 +1148,7 @@ describe("hands", () => {
     const session = scratchProject();
     const g = tagGroupDetail(session, encBox, "d_zone");
     if (!g) throw new Error("the fixture needs its zone group");
-    saveTagGroup(session, encBox, "d_zone", {
+    await saveTagGroup(session, encBox, "d_zone", {
       properties: [{ name: "patrolled", type: "boolean", default: "false", purpose: "Where the watch walks." }],
       values: g.values,
     });
@@ -1158,21 +1158,21 @@ describe("hands", () => {
     expect(entry?.purpose).toBe("Where the watch walks.");
   });
 
-  it("creates a hand (standalone, an empty rule) and deletes it", () => {
+  it("creates a hand (standalone, an empty rule) and deletes it", async () => {
     const session = scratchProject();
-    const created = createHand(session, encBox);
+    const created = await createHand(session, encBox);
     if ("error" in created) throw new Error(created.error);
     const detail = handDetail(session, encBox, created.handId)!;
     expect(detail.template).toBeUndefined();
     expect(detail.rule).toEqual({ bindings: [{ group: "area" }], slots: "unbounded" });
-    const deleted = deleteHand(session, encBox, created.handId);
+    const deleted = await deleteHand(session, encBox, created.handId);
     expect("error" in deleted).toBe(false);
     expect(handDetail(session, encBox, created.handId)).toBeNull();
   });
 });
 
 describe("hand template mutations", () => {
-  it("reads a template's detail: one binding row per tag group, holes marked", () => {
+  it("reads a template's detail: one binding row per tag group, holes marked", async () => {
     const session = scratchProject();
     const detail = templateDetail(session, encBox, "t_street");
     expect(detail).not.toBeNull();
@@ -1182,18 +1182,18 @@ describe("hand template mutations", () => {
     expect(detail!.instances).toEqual(["Docks street"]);
   });
 
-  it("saves the template's shared condition and round-trips it", () => {
+  it("saves the template's shared condition and round-trips it", async () => {
     const session = scratchProject();
-    const r = saveTemplate(session, encBox, "t_street", { condition: "@story.reputation > 1" });
+    const r = await saveTemplate(session, encBox, "t_street", { condition: "@story.reputation > 1" });
     expect("error" in r).toBe(false);
     expect(templateDetail(session, encBox, "t_street")!.condition).toBe("@story.reputation > 1");
-    saveTemplate(session, encBox, "t_street", { condition: "" });
+    await saveTemplate(session, encBox, "t_street", { condition: "" });
     expect(templateDetail(session, encBox, "t_street")!.condition).toBeUndefined();
   });
 
-  it("saves a template edit (purpose, slots, fixed binding) and round-trips it", () => {
+  it("saves a template edit (purpose, slots, fixed binding) and round-trips it", async () => {
     const session = scratchProject();
-    saveTemplate(session, encBox, "t_street", {
+    await saveTemplate(session, encBox, "t_street", {
       purpose: "What happens here?",
       slots: "2",
       bindings: [{ group: "area", value: "market" }],
@@ -1207,32 +1207,32 @@ describe("hand template mutations", () => {
     expect(template.chooses).toBeUndefined();
   });
 
-  it("closing a hole drops the stale chosen entries from instances", () => {
+  it("closing a hole drops the stale chosen entries from instances", async () => {
     const session = scratchProject();
     // area stops being a hole; h_docks chose docks for it, which must go.
-    saveTemplate(session, encBox, "t_street", { bindings: [{ group: "area", value: "market" }] });
+    await saveTemplate(session, encBox, "t_street", { bindings: [{ group: "area", value: "market" }] });
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     const hand = reopened.session.loaded.source!.boxes[0]!.hands.hands.find((h) => h.id === "h_docks")!;
     expect(hand.chosen).toBeUndefined();
   });
 
-  it("creates a template with a unique gameId, then deletes it", () => {
+  it("creates a template with a unique gameId, then deletes it", async () => {
     const session = scratchProject();
-    const created = createTemplate(session, encBox);
+    const created = await createTemplate(session, encBox);
     expect("error" in created).toBe(false);
     if ("error" in created) return;
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.loaded.source!.boxes[0]!.hands.templates.find((t) => t.id === created.templateId)!.gameId)
       .toBe("new-template");
-    const deleted = deleteTemplate(session, encBox, created.templateId);
+    const deleted = await deleteTemplate(session, encBox, created.templateId);
     expect("error" in deleted).toBe(false);
   });
 
-  it("refuses to delete a template a hand still instances", () => {
+  it("refuses to delete a template a hand still instances", async () => {
     const session = scratchProject();
-    const result = deleteTemplate(session, encBox, "t_street");
+    const result = await deleteTemplate(session, encBox, "t_street");
     expect(result).toEqual({ error: expect.stringContaining("instances") });
   });
 });
@@ -1248,10 +1248,10 @@ describe("the map (spatial tag groups)", () => {
     session.loaded.source!.boxes[0]!.tags.groups.find((g) => g.id === "d_zone")
       ?? session.loaded.source!.map!.group;
 
-  it("marks a group as a map, and stops, keesiteg any outlines", () => {
+  it("marks a group as a map, and stops, keesiteg any outlines", async () => {
     const session = scratchProject();
-    setGroupSpatial(session, encBox, "d_zone", true);
-    setZonePolygon(session, encBox, "d_zone", "v_docks", zoneShape);
+    await setGroupSpatial(session, encBox, "d_zone", true);
+    await setZonePolygon(session, encBox, "d_zone", "v_docks", zoneShape);
     expect(isSpatial(groupIn(session))).toBe(true);
     expect(polygonOf(groupIn(session).tags[0]!)).toEqual(zoneShape);
     // A map is the project's: the group has left the box for the root map
@@ -1260,13 +1260,13 @@ describe("the map (spatial tag groups)", () => {
     expect(session.loaded.source!.boxes[0]!.tags.groups.some((g) => g.id === "d_zone")).toBe(false);
     expect(session.loaded.source!.boxes[0]!.box.box.usesMap).toBe(true);
     // And a second map is refused: a project has one.
-    const other = createTagGroup(session, encBox);
+    const other = await createTagGroup(session, encBox);
     if ("error" in other) throw new Error(other.error);
-    expect(setGroupSpatial(session, encBox, other.groupId, true)).toMatchObject({ error: expect.stringContaining("has a map already") });
+    expect(await setGroupSpatial(session, encBox, other.groupId, true)).toMatchObject({ error: expect.stringContaining("has a map already") });
 
     // Turning it off is a display decision, not a licence to throw away an
     // afternoon of tracing.
-    setGroupSpatial(session, encBox, "d_zone", false);
+    await setGroupSpatial(session, encBox, "d_zone", false);
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     const group = reopened.session.loaded.source!.boxes[0]!.tags.groups.find((g) => g.id === "d_zone")!;
@@ -1277,10 +1277,10 @@ describe("the map (spatial tag groups)", () => {
     expect(reopened.session.loaded.source!.boxes[0]!.box.box.usesMap).toBeUndefined();
   });
 
-  it("writes geometry to the TAGS shard and nowhere else", () => {
+  it("writes geometry to the TAGS shard and nowhere else", async () => {
     const session = scratchProject();
     const before = readFileSync(dockDeckFile(session), "utf8");
-    setZonePolygon(session, encBox, "d_zone", "v_docks", zoneShape);
+    await setZonePolygon(session, encBox, "d_zone", "v_docks", zoneShape);
     const tags = readFileSync(join(session.loaded.dir, "encounters", "tags.storylettags"), "utf8");
     expect(tags).toContain("polygon");
     // A zone is not content: no deck, and neither arrangement shard either.
@@ -1289,13 +1289,13 @@ describe("the map (spatial tag groups)", () => {
     expect(existsSync(join(session.loaded.dir, "encounters", "map.storyletmap"))).toBe(false);
   });
 
-  it("keeps a zone's outline through an ordinary tag-group edit", () => {
+  it("keeps a zone's outline through an ordinary tag-group edit", async () => {
     // The editor sends identity and properties; it has never heard of geometry.
     // Rebuilding each tag from that DTO alone erased the polygons, which is the
     // most expensive undo in the app and silent.
     const session = scratchProject();
-    setZonePolygon(session, encBox, "d_zone", "v_docks", zoneShape);
-    saveTagGroup(session, encBox, "d_zone", {
+    await setZonePolygon(session, encBox, "d_zone", "v_docks", zoneShape);
+    await saveTagGroup(session, encBox, "d_zone", {
       values: [
         { id: "v_docks", gameId: "quayside", properties: [] },   // a rename
         { id: "v_market", gameId: "market", properties: [] },
@@ -1320,45 +1320,45 @@ describe("the map (spatial tag groups)", () => {
   /** Two zones side by side: the docks around the origin, the market to its
    *  right. The fixture ships tags with no geometry, and a rule about which zone
    *  a site is standing in needs zones to stand in. */
-  const drawZones = (session: ProjectSession): void => {
-    setZonePolygon(session, encBox, "d_zone", "v_docks",
+  const drawZones = async (session: ProjectSession): Promise<void> => {
+    await setZonePolygon(session, encBox, "d_zone", "v_docks",
       [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 200 }, { x: 0, y: 200 }]);
-    setZonePolygon(session, encBox, "d_zone", "v_market",
+    await setZonePolygon(session, encBox, "d_zone", "v_market",
       [{ x: 220, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 200 }, { x: 220, y: 200 }]);
   };
 
-  it("writes a site to the map shard as a POSITION, and nothing else", () => {
+  it("writes a site to the map shard as a POSITION, and nothing else", async () => {
     // Which zone it is in lives on the hand. A copy here could only go on to
     // disagree with it.
     const session = scratchProject();
     const hand = handsOf(session)[0]!.id;
-    const result = moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 40, y: 60 }]);
+    const result = await moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 40, y: 60 }]);
     expect("error" in result).toBe(false);
     expect(mapShardOf(session).map?.sites?.[hand]).toEqual({ x: 40, y: 60 });
     // And never in the view shard, which is where it used to land.
     expect(existsSync(join(session.loaded.dir, "encounters", "view.storyletview"))).toBe(false);
   });
 
-  it("REBINDS the hand when its site is dropped in another zone", () => {
+  it("REBINDS the hand when its site is dropped in another zone", async () => {
     // The move the whole view exists for: dragging a site from the docks to the
     // market is not cosmetic, it edits the hand's chosen tag. Nobody says which
     // zone that is: the position over the geometry decides.
     const session = scratchProject();
-    drawZones(session);
+    await drawZones(session);
     const hand = handsOf(session)[0]!;
     expect(hand.chosen).toEqual({ d_zone: "v_docks" });
-    const moved = moveSitesOnMap(session, encBox, "d_zone", [{ id: hand.id, x: 250, y: 50 }]);
+    const moved = await moveSitesOnMap(session, encBox, "d_zone", [{ id: hand.id, x: 250, y: 50 }]);
     expect(moved).toMatchObject({ rebound: [{ id: hand.id, zone: "v_market" }] });
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_market" });
   });
 
-  it("leaves a hand LOOSE when its site lands outside every zone", () => {
+  it("leaves a hand LOOSE when its site lands outside every zone", async () => {
     // Not a quiet keep-the-old-zone: the hand genuinely has no zone now, so the
     // binding goes and the compiler says what is wrong.
     const session = scratchProject();
-    drawZones(session);
+    await drawZones(session);
     const hand = handsOf(session)[0]!.id;
-    const moved = moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 900, y: 900 }]);
+    const moved = await moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 900, y: 900 }]);
     expect(moved).toMatchObject({ rebound: [{ id: hand, zone: null }] });
     expect(handsOf(session)[0]!.chosen).toBeUndefined();
     // Named the way an author sees it: the group's gameId, not `d_zone`.
@@ -1377,10 +1377,10 @@ describe("the map (spatial tag groups)", () => {
     // (design/project-map-contract.md), which is where its pictures are kept.
     const groupOf = (session: ProjectSession): TagGroup => session.loaded.source!.map!.group;
 
-    it("copies the file in and places it by the drop rule, in one act", () => {
+    it("copies the file in and places it by the drop rule, in one act", async () => {
       const session = scratchProject();
-      setGroupSpatial(session, encBox, "d_zone", true);
-      const added = addBackground(session, encBox, "d_zone", { name: "site-plan.png", bytes: PNG }, place);
+      await setGroupSpatial(session, encBox, "d_zone", true);
+      const added = await addBackground(session, encBox, "d_zone", { name: "site-plan.png", bytes: PNG }, place);
       expect("error" in added).toBe(false);
 
       // The bytes are on disk, byte-identical.
@@ -1395,176 +1395,176 @@ describe("the map (spatial tag groups)", () => {
       expect(bg!.width / bg!.height).toBeCloseTo(2, 1);
     });
 
-    it("never replaces a picture already in use", () => {
+    it("never replaces a picture already in use", async () => {
       const session = scratchProject();
-      setGroupSpatial(session, encBox, "d_zone", true);
-      addBackground(session, encBox, "d_zone", { name: "plan.png", bytes: PNG }, place);
-      addBackground(session, encBox, "d_zone", { name: "plan.png", bytes: PNG }, place);
+      await setGroupSpatial(session, encBox, "d_zone", true);
+      await addBackground(session, encBox, "d_zone", { name: "plan.png", bytes: PNG }, place);
+      await addBackground(session, encBox, "d_zone", { name: "plan.png", bytes: PNG }, place);
       expect(backgroundsOf(groupOf(session)).map((b) => b.file)).toEqual(["plan.png", "plan-2.png"]);
     });
 
-    it("puts a new picture at the FRONT, because you just added it", () => {
+    it("puts a new picture at the FRONT, because you just added it", async () => {
       const session = scratchProject();
-      setGroupSpatial(session, encBox, "d_zone", true);
-      addBackground(session, encBox, "d_zone", { name: "under.png", bytes: PNG }, place);
-      addBackground(session, encBox, "d_zone", { name: "over.png", bytes: PNG }, place);
+      await setGroupSpatial(session, encBox, "d_zone", true);
+      await addBackground(session, encBox, "d_zone", { name: "under.png", bytes: PNG }, place);
+      await addBackground(session, encBox, "d_zone", { name: "over.png", bytes: PNG }, place);
       expect(backgroundsOf(groupOf(session)).map((b) => b.file)).toEqual(["under.png", "over.png"]);
     });
 
-    it("undoes the ENTRY and keeps the file, so no undo deletes a site plan", () => {
+    it("undoes the ENTRY and keeps the file, so no undo deletes a site plan", async () => {
       // An orphan file is a far better outcome than an undo that destroys
       // somebody's only copy of an image, and a redo finds it still there.
       const session = scratchProject();
-      setGroupSpatial(session, encBox, "d_zone", true);
-      addBackground(session, encBox, "d_zone", { name: "site.png", bytes: PNG }, place);
-      expect(undo(session)).not.toBeNull();
+      await setGroupSpatial(session, encBox, "d_zone", true);
+      await addBackground(session, encBox, "d_zone", { name: "site.png", bytes: PNG }, place);
+      expect(await undo(session)).not.toBeNull();
       expect(backgroundsOf(groupOf(session))).toEqual([]);
       expect(existsSync(join(session.loaded.dir, "assets", "site.png"))).toBe(true);
     });
 
-    it("moves, scales and fades one, coalescing a gesture into one undo step", () => {
+    it("moves, scales and fades one, coalescing a gesture into one undo step", async () => {
       const session = scratchProject();
-      setGroupSpatial(session, encBox, "d_zone", true);
-      addBackground(session, encBox, "d_zone", { name: "site.png", bytes: PNG }, place);
+      await setGroupSpatial(session, encBox, "d_zone", true);
+      await addBackground(session, encBox, "d_zone", { name: "site.png", bytes: PNG }, place);
       const id = backgroundsOf(groupOf(session))[0]!.id;
 
       // A drag then a scale: one continuous gesture each, and coalescing means one
       // undo takes the picture back to where it was imported.
-      editBackground(session, encBox, "d_zone", id, { x: 10, y: 20 }, { coalesce: true });
-      editBackground(session, encBox, "d_zone", id, { width: 400, height: 200 }, { coalesce: true });
+      await editBackground(session, encBox, "d_zone", id, { x: 10, y: 20 }, { coalesce: true });
+      await editBackground(session, encBox, "d_zone", id, { width: 400, height: 200 }, { coalesce: true });
       expect(backgroundsOf(groupOf(session))[0]).toMatchObject({ x: 10, y: 20, width: 400, height: 200 });
 
       // Fading is a discrete command: its OWN step, so it does not swallow the drag.
-      editBackground(session, encBox, "d_zone", id, { opacity: 0.35 });
+      await editBackground(session, encBox, "d_zone", id, { opacity: 0.35 });
       expect(backgroundsOf(groupOf(session))[0]!.opacity).toBe(0.35);
-      expect(undo(session)).not.toBeNull();
+      expect(await undo(session)).not.toBeNull();
       const after = backgroundsOf(groupOf(session))[0]!;
       expect(after).toMatchObject({ x: 10, y: 20, width: 400, height: 200 });
       expect(after.opacity).toBeUndefined();   // the fade went, the gesture stayed
     });
 
-    it("clears a flag rather than writing it false", () => {
+    it("clears a flag rather than writing it false", async () => {
       // An absent key is the default everywhere in these shards, and `hidden:
       // false` is noise in a merge.
       const session = scratchProject();
-      setGroupSpatial(session, encBox, "d_zone", true);
-      addBackground(session, encBox, "d_zone", { name: "site.png", bytes: PNG }, place);
+      await setGroupSpatial(session, encBox, "d_zone", true);
+      await addBackground(session, encBox, "d_zone", { name: "site.png", bytes: PNG }, place);
       const id = backgroundsOf(groupOf(session))[0]!.id;
-      editBackground(session, encBox, "d_zone", id, { hidden: true, locked: true });
+      await editBackground(session, encBox, "d_zone", id, { hidden: true, locked: true });
       expect(backgroundsOf(groupOf(session))[0]).toMatchObject({ hidden: true, locked: true });
-      editBackground(session, encBox, "d_zone", id, { hidden: false, locked: false });
+      await editBackground(session, encBox, "d_zone", id, { hidden: false, locked: false });
       const raw = JSON.stringify(groupOf(session).templates);
       expect(raw).not.toContain("hidden");
       expect(raw).not.toContain("locked");
     });
 
-    it("floors a scale and clamps a fade, so nothing becomes ungrabbable", () => {
+    it("floors a scale and clamps a fade, so nothing becomes ungrabbable", async () => {
       const session = scratchProject();
-      setGroupSpatial(session, encBox, "d_zone", true);
-      addBackground(session, encBox, "d_zone", { name: "site.png", bytes: PNG }, place);
+      await setGroupSpatial(session, encBox, "d_zone", true);
+      await addBackground(session, encBox, "d_zone", { name: "site.png", bytes: PNG }, place);
       const id = backgroundsOf(groupOf(session))[0]!.id;
-      editBackground(session, encBox, "d_zone", id, { width: 0, height: -50, opacity: 5 });
+      await editBackground(session, encBox, "d_zone", id, { width: 0, height: -50, opacity: 5 });
       const bg = backgroundsOf(groupOf(session))[0]!;
       expect(bg.width).toBeGreaterThan(0);
       expect(bg.height).toBeGreaterThan(0);
       expect(bg.opacity).toBe(1);
     });
 
-    it("restacks among the pictures, and removing one keeps its file", () => {
+    it("restacks among the pictures, and removing one keeps its file", async () => {
       const session = scratchProject();
-      setGroupSpatial(session, encBox, "d_zone", true);
-      addBackground(session, encBox, "d_zone", { name: "under.png", bytes: PNG }, place);
-      addBackground(session, encBox, "d_zone", { name: "over.png", bytes: PNG }, place);
+      await setGroupSpatial(session, encBox, "d_zone", true);
+      await addBackground(session, encBox, "d_zone", { name: "under.png", bytes: PNG }, place);
+      await addBackground(session, encBox, "d_zone", { name: "over.png", bytes: PNG }, place);
       const under = backgroundsOf(groupOf(session))[0]!.id;
-      restackBackground(session, encBox, "d_zone", under, "front");
+      await restackBackground(session, encBox, "d_zone", under, "front");
       expect(backgroundsOf(groupOf(session)).map((b) => b.file)).toEqual(["over.png", "under.png"]);
 
       // Removing takes the ENTRY. The file stays, becomes an orphan, and is swept
       // when the session ends - by which point no undo can want it back.
-      removeBackground(session, encBox, "d_zone", under);
+      await removeBackground(session, encBox, "d_zone", under);
       expect(backgroundsOf(groupOf(session)).map((b) => b.file)).toEqual(["over.png"]);
       expect(existsSync(join(session.loaded.dir, "assets", "under.png"))).toBe(true);
-      expect(undo(session)).not.toBeNull();
+      expect(await undo(session)).not.toBeNull();
       expect(backgroundsOf(groupOf(session)).map((b) => b.file)).toEqual(["over.png", "under.png"]);
     });
 
-    it("refuses a group that is not a map", () => {
+    it("refuses a group that is not a map", async () => {
       const session = scratchProject();
-      const added = addBackground(session, encBox, "d_zone", { name: "x.png", bytes: PNG }, place);
+      const added = await addBackground(session, encBox, "d_zone", { name: "x.png", bytes: PNG }, place);
       expect("error" in added && added.error).toContain("not a map");
     });
 
-    it("imports a format it cannot measure, rather than refusing it", () => {
+    it("imports a format it cannot measure, rather than refusing it", async () => {
       // An SVG has no header to read: a square guess beats rejecting a map.
       const session = scratchProject();
-      setGroupSpatial(session, encBox, "d_zone", true);
+      await setGroupSpatial(session, encBox, "d_zone", true);
       const svg = Buffer.from("<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/>");
-      addBackground(session, encBox, "d_zone", { name: "plan.svg", bytes: svg }, place);
+      await addBackground(session, encBox, "d_zone", { name: "plan.svg", bytes: svg }, place);
       const [bg] = backgroundsOf(groupOf(session));
       expect(bg?.file).toBe("plan.svg");
       expect(bg!.width).toBe(bg!.height);
     });
   });
 
-  it("restacking a zone changes the drawing order and nobody's binding", () => {
+  it("restacking a zone changes the drawing order and nobody's binding", async () => {
     // The ruling of 2026-09-07 from a third direction: what is in FRONT of what
     // is a fact about the picture. A hand's zone is the hand's own, and only
     // dragging its pin says otherwise.
     const session = scratchProject();
     // The market is drawn INSIDE the docks, and listed after it, so it starts in
     // front and takes a pin dropped in the overlap.
-    setZonePolygon(session, encBox, "d_zone", "v_docks",
+    await setZonePolygon(session, encBox, "d_zone", "v_docks",
       [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 200 }, { x: 0, y: 200 }]);
-    setZonePolygon(session, encBox, "d_zone", "v_market",
+    await setZonePolygon(session, encBox, "d_zone", "v_market",
       [{ x: 40, y: 40 }, { x: 120, y: 40 }, { x: 120, y: 120 }, { x: 40, y: 120 }]);
     const hand = handsOf(session)[0]!.id;
-    moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 80, y: 80 }]);
+    await moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 80, y: 80 }]);
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_market" });
 
     const before = readFileSync(join(session.loaded.dir, "encounters", "hands.storylethands"), "utf8");
-    expect("error" in restackZone(session, encBox, "d_zone", "v_market", "back")).toBe(false);
+    expect("error" in await restackZone(session, encBox, "d_zone", "v_market", "back")).toBe(false);
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_market" });
     expect(readFileSync(join(session.loaded.dir, "encounters", "hands.storylethands"), "utf8")).toBe(before);
   });
 
-  it("writes nothing for a move that would change nothing", () => {
+  it("writes nothing for a move that would change nothing", async () => {
     const session = scratchProject();
-    drawZones(session);
+    await drawZones(session);
     const before = readFileSync(join(session.loaded.dir, "encounters", "tags.storylettags"), "utf8");
     // v_market is listed last, so it is already the frontmost.
-    const moved = restackZone(session, encBox, "d_zone", "v_market", "front");
+    const moved = await restackZone(session, encBox, "d_zone", "v_market", "front");
     expect("error" in moved).toBe(false);
     expect(readFileSync(join(session.loaded.dir, "encounters", "tags.storylettags"), "utf8")).toBe(before);
   });
 
-  it("clears the problem when the site is dragged back into a zone", () => {
+  it("clears the problem when the site is dragged back into a zone", async () => {
     // The other half of the loose-hand story: fixing it must actually retract the
     // error, or an author who has done the right thing is still being told off.
     const session = scratchProject();
-    drawZones(session);
+    await drawZones(session);
     const hand = handsOf(session)[0]!.id;
     const missing = 'nothing chosen for the tag group "area"';
 
-    const loosed = moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 900, y: 900 }]);
+    const loosed = await moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 900, y: 900 }]);
     expect("error" in loosed ? [] : loosed.result.problems.map((p) => p.message).join())
       .toContain(missing);
 
-    const fixed = moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 250, y: 50 }]);
+    const fixed = await moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 250, y: 50 }]);
     expect("error" in fixed ? ["?"] : fixed.result.problems.map((p) => p.message).join())
       .not.toContain(missing);
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_market" });
   });
 
-  it("DRAGGING A ZONE touches the tags shard and nothing else", () => {
+  it("DRAGGING A ZONE touches the tags shard and nothing else", async () => {
     // The fault of 2026-09-07, and the ruling that answers it. Dragging the
     // `door` zone about sixty points moved the geometry as asked AND stripped
     // `chosen` off two hands, one of them losing the block whole, with nothing
     // said and the project left invalid ("nothing chosen for the tag group").
     // Geometry is the designer's drawing; a binding is content.
     const session = scratchProject();
-    drawZones(session);
+    await drawZones(session);
     const hand = handsOf(session)[0]!.id;
-    moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 50, y: 50 }]);   // in the docks
+    await moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 50, y: 50 }]);   // in the docks
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
 
     const handsPath = join(session.loaded.dir, "encounters", "hands.storylethands");
@@ -1575,7 +1575,7 @@ describe("the map (spatial tag groups)", () => {
     // Drag the docks right away from the site. Nothing else covers it, and the
     // hand keeps the zone it was given: a pin sitting outside its outline is
     // visible and harmless, and dragging the pin is the gesture that moves it.
-    const shrunk = setZonePolygon(session, encBox, "d_zone", "v_docks",
+    const shrunk = await setZonePolygon(session, encBox, "d_zone", "v_docks",
       [{ x: 500, y: 500 }, { x: 560, y: 500 }, { x: 560, y: 560 }, { x: 500, y: 560 }]);
     expect("error" in shrunk).toBe(false);
     expect(readFileSync(join(session.loaded.dir, "encounters", "tags.storylettags"), "utf8"))
@@ -1585,70 +1585,70 @@ describe("the map (spatial tag groups)", () => {
     expect(readFileSync(mapPath, "utf8")).toBe(map);
 
     // And from the other side: an outline drawn over a site takes nobody in.
-    const grown = setZonePolygon(session, encBox, "d_zone", "v_market",
+    const grown = await setZonePolygon(session, encBox, "d_zone", "v_market",
       [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
     expect("error" in grown).toBe(false);
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
     expect(readFileSync(handsPath, "utf8")).toBe(hands);
   });
 
-  it("a zone drawn from nothing takes no hand in either", () => {
+  it("a zone drawn from nothing takes no hand in either", async () => {
     // The third geometry gesture, under the same ruling: a new outline over a
     // site is still somebody drawing, not somebody rebinding.
     const session = scratchProject();
-    drawZones(session);
+    await drawZones(session);
     const hand = handsOf(session)[0]!.id;
-    moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 50, y: 50 }]);
+    await moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 50, y: 50 }]);
     const handsPath = join(session.loaded.dir, "encounters", "hands.storylethands");
     const hands = readFileSync(handsPath, "utf8");
-    const drawn = createZone(session, encBox, "d_zone",
+    const drawn = await createZone(session, encBox, "d_zone",
       [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
     expect("error" in drawn).toBe(false);
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
     expect(readFileSync(handsPath, "utf8")).toBe(hands);
   });
 
-  it("a zone's shape is ONE undo step, and takes no binding with it", () => {
+  it("a zone's shape is ONE undo step, and takes no binding with it", async () => {
     const session = scratchProject();
-    drawZones(session);
+    await drawZones(session);
     const hand = handsOf(session)[0]!.id;
-    moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 50, y: 50 }]);
-    setZonePolygon(session, encBox, "d_zone", "v_docks",
+    await moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 50, y: 50 }]);
+    await setZonePolygon(session, encBox, "d_zone", "v_docks",
       [{ x: 500, y: 500 }, { x: 560, y: 500 }, { x: 560, y: 560 }, { x: 500, y: 560 }]);
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
-    expect(undo(session)).not.toBeNull();
+    expect(await undo(session)).not.toBeNull();
     expect(polygonOf(groupIn(session).tags[0]!))
       .toEqual([{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 200 }, { x: 0, y: 200 }]);
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
   });
 
-  it("leaves an UNPLACED hand's binding alone: no position, no opinion", () => {
+  it("leaves an UNPLACED hand's binding alone: no position, no opinion", async () => {
     // Otherwise one pin dragged out of every zone would loose every hand nobody
     // had placed yet. A copy of the first hand is the second: same binding, and
     // no site, because a duplicate is not standing anywhere.
     const session = scratchProject();
-    drawZones(session);
+    await drawZones(session);
     const placed = handsOf(session)[0]!.id;
-    const copied = duplicateHand(session, encBox, placed);
+    const copied = await duplicateHand(session, encBox, placed);
     expect("error" in copied).toBe(false);
     if ("error" in copied) return;
     const kept = { ...handsOf(session).find((h) => h.id === copied.handId)!.chosen };
     expect(kept).toEqual({ d_zone: "v_docks" });
 
-    moveSitesOnMap(session, encBox, "d_zone", [{ id: placed, x: 900, y: 900 }]);
+    await moveSitesOnMap(session, encBox, "d_zone", [{ id: placed, x: 900, y: 900 }]);
     expect(handsOf(session).find((h) => h.id === placed)!.chosen).toBeUndefined();
     expect(handsOf(session).find((h) => h.id === copied.handId)!.chosen).toEqual(kept);
   });
 
-  it("is ONE undo step: the site and the binding arrived from one gesture", () => {
+  it("is ONE undo step: the site and the binding arrived from one gesture", async () => {
     // Two shards, one commit. Undoing to a site in the market bound to the docks
     // would be a state the author never made.
     const session = scratchProject();
-    drawZones(session);
+    await drawZones(session);
     const hand = handsOf(session)[0]!.id;
-    moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 250, y: 50 }]);
+    await moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 250, y: 50 }]);
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_market" });
-    const undone = undo(session);
+    const undone = await undo(session);
     expect(undone).not.toBeNull();
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });
     // The map shard did not exist before the drag, so undoing takes the whole
@@ -1656,28 +1656,28 @@ describe("the map (spatial tag groups)", () => {
     expect(existsSync(join(session.loaded.dir, "encounters", "map.storyletmap"))).toBe(false);
   });
 
-  it("will not move one hand off a binding its TEMPLATE owns", () => {
+  it("will not move one hand off a binding its TEMPLATE owns", async () => {
     // A fixed binding is shared by every instance, so dragging one site must not
     // move the rest. The site still goes where it was dropped.
     const session = scratchProject();
-    drawZones(session);
+    await drawZones(session);
     const box = session.loaded.source!.boxes.find((b) => b.box.box.id === encBox)!;
     const template = box.hands.templates.find((t) => t.id === "t_street")!;
     delete template.chooses;
     template.bindings = { d_zone: "v_docks" };
     const hand = handsOf(session)[0]!.id;
 
-    const moved = moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 250, y: 50 }]);
+    const moved = await moveSitesOnMap(session, encBox, "d_zone", [{ id: hand, x: 250, y: 50 }]);
     expect(moved).toMatchObject({ rebound: [] });
     expect(handsOf(session)[0]!.chosen).toEqual({ d_zone: "v_docks" });   // untouched
     expect(mapShardOf(session).map?.sites?.[hand]).toEqual({ x: 250, y: 50 });
   });
 
-  it("is one undo step per shape", () => {
+  it("is one undo step per shape", async () => {
     const session = scratchProject();
-    setGroupSpatial(session, encBox, "d_zone", true);
-    setZonePolygon(session, encBox, "d_zone", "v_docks", zoneShape);
-    undo(session);
+    await setGroupSpatial(session, encBox, "d_zone", true);
+    await setZonePolygon(session, encBox, "d_zone", "v_docks", zoneShape);
+    await undo(session);
     expect(polygonOf(groupIn(session).tags[0]!)).toBeUndefined();
     // And the group is still a map: the two acts are separate steps.
     expect(isSpatial(groupIn(session))).toBe(true);
@@ -1685,7 +1685,7 @@ describe("the map (spatial tag groups)", () => {
 });
 
 describe("tag group mutations", () => {
-  it("reads a tag group's detail with tag properties", () => {
+  it("reads a tag group's detail with tag properties", async () => {
     const session = scratchProject();
     const detail = tagGroupDetail(session, encBox, "d_zone");
     expect(detail).not.toBeNull();
@@ -1694,9 +1694,9 @@ describe("tag group mutations", () => {
     expect(detail!.values[0]!.properties).toEqual([{ name: "danger", type: "number", default: "0" }]);
   });
 
-  it("saves a tag group edit (new tag) and round-trips it", () => {
+  it("saves a tag group edit (new tag) and round-trips it", async () => {
     const session = scratchProject();
-    saveTagGroup(session, encBox, "d_zone", {
+    await saveTagGroup(session, encBox, "d_zone", {
       values: [
         { id: "v_docks", gameId: "docks", properties: [{ name: "danger", type: "number", default: "1" }] },
         { id: "v_market", gameId: "market", properties: [] },
@@ -1716,16 +1716,16 @@ describe("tag group mutations", () => {
     expect(shown[0]!.properties).toEqual([{ name: "danger", type: "number", default: 1 }]);
   });
 
-  it("creates a tag group with a unique gameId, then deletes it", () => {
+  it("creates a tag group with a unique gameId, then deletes it", async () => {
     const session = scratchProject();
-    const created = createTagGroup(session, encBox);
+    const created = await createTagGroup(session, encBox);
     expect("error" in created).toBe(false);
     if ("error" in created) return;
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.loaded.source!.boxes[0]!.tags.groups.find((d) => d.id === created.groupId)!.gameId)
       .toBe("new-group");
-    const deleted = deleteTagGroup(session, encBox, created.groupId);
+    const deleted = await deleteTagGroup(session, encBox, created.groupId);
     expect("error" in deleted).toBe(false);
   });
 });
@@ -1743,28 +1743,28 @@ describe("canvas furniture", () => {
   const mapShard = (session: ProjectSession): string =>
     join(session.loaded.dir, "map.storyletmap");
   /** A session whose project has a map to draw on. */
-  const mapped = (): ProjectSession => {
+  const mapped = async (): Promise<ProjectSession> => {
     const session = scratchProject();
-    setGroupSpatial(session, encBox, "d_zone", true);
+    await setGroupSpatial(session, encBox, "d_zone", true);
     return session;
   };
 
-  it("writes the sidecar and no content shard", () => {
+  it("writes the sidecar and no content shard", async () => {
     const session = scratchProject();
     const deckBefore = readFileSync(dockDeckFile(session), "utf8");
-    const result = setCanvasFurniture(session, encBox, { kind: "deck", deck: docks },
+    const result = await setCanvasFurniture(session, encBox, { kind: "deck", deck: docks },
       { frames: [frame] }, "Draw a frame");
     expect("error" in result).toBe(false);
     expect(existsSync(sidecar(session))).toBe(true);
     expect(readFileSync(dockDeckFile(session), "utf8")).toBe(deckBefore);
   });
 
-  it("keeps the two canvases apart", () => {
-    const session = mapped();
+  it("keeps the two canvases apart", async () => {
+    const session = await mapped();
     const onMap = { id: "r_2", x: 5, y: 5, w: 40, h: 40, title: "The docks" };
-    setCanvasFurniture(session, encBox, { kind: "deck", deck: docks },
+    await setCanvasFurniture(session, encBox, { kind: "deck", deck: docks },
       { frames: [frame] }, "Draw a frame");
-    setCanvasFurniture(session, encBox, { kind: "map" },
+    await setCanvasFurniture(session, encBox, { kind: "map" },
       { frames: [onMap] }, "Draw a frame");
     const view = parseSource(readFileSync(sidecar(session), "utf8")) as ViewShard;
     expect(view.canvases![docks]!.frames).toEqual([frame]);
@@ -1773,36 +1773,36 @@ describe("canvas furniture", () => {
     expect(map.frames).toEqual([onMap]);
   });
 
-  it("a drag is one undo step however many frames it took; a command is its own", () => {
-    const session = mapped();
-    setCanvasFurniture(session, encBox, { kind: "map" }, { frames: [frame] }, "Draw a frame");
+  it("a drag is one undo step however many frames it took; a command is its own", async () => {
+    const session = await mapped();
+    await setCanvasFurniture(session, encBox, { kind: "map" }, { frames: [frame] }, "Draw a frame");
     // Three frames of one drag, sharing a coalescing key.
     for (const x of [10, 20, 30]) {
-      setCanvasFurniture(session, encBox, { kind: "map" },
+      await setCanvasFurniture(session, encBox, { kind: "map" },
         { frames: [{ ...frame, x }] }, "Move", "furniture:move");
     }
     const moved = () => (parseSource(readFileSync(mapShard(session), "utf8")) as ProjectMapShard).frames![0]!;
     expect(moved().x).toBe(30);
     // One undo takes the whole drag back to where it started, not to frame two.
-    undo(session);
+    await undo(session);
     expect(moved().x).toBe(0);
     // And a second undo takes the frame away entirely: drawing it was its own
     // step, and the map is left as making it left it.
-    undo(session);
+    await undo(session);
     expect((parseSource(readFileSync(mapShard(session), "utf8")) as ProjectMapShard).frames).toBeUndefined();
   });
 
-  it("says so rather than throwing when the box has gone", () => {
+  it("says so rather than throwing when the box has gone", async () => {
     const session = scratchProject();
-    expect(setCanvasFurniture(session, "b_nope", { kind: "map" },
-      { frames: [] }, "Draw a frame")).toEqual({ error: "unknown box (id b_nope)" });
+    expect(await setCanvasFurniture(session, "b_nope", { kind: "map" },
+      { frames: [] }, "Draw a frame")).toEqual({ error: "that box isn't in the project any more" });
   });
 
-  it("writes nothing when the furniture has not changed", () => {
-    const session = mapped();
-    setCanvasFurniture(session, encBox, { kind: "map" }, { frames: [frame] }, "Draw a frame");
+  it("writes nothing when the furniture has not changed", async () => {
+    const session = await mapped();
+    await setCanvasFurniture(session, encBox, { kind: "map" }, { frames: [frame] }, "Draw a frame");
     const before = readFileSync(mapShard(session), "utf8");
-    setCanvasFurniture(session, encBox, { kind: "map" }, { frames: [frame] }, "Draw a frame");
+    await setCanvasFurniture(session, encBox, { kind: "map" }, { frames: [frame] }, "Draw a frame");
     expect(readFileSync(mapShard(session), "utf8")).toBe(before);
   });
 
@@ -1811,7 +1811,7 @@ describe("canvas furniture", () => {
   // A project written before the split keeps its map under `map` in the view
   // shard. Storyletter never writes it back there: the first map edit of a box
   // moves the block, in the same commit and therefore the same undo step.
-  it("moves a map out of an old view shard on the first map edit", () => {
+  it("moves a map out of an old view shard on the first map edit", async () => {
     const session = scratchProject();
     const hands = session.loaded.source!.boxes.find((b) => b.box.box.id === encBox)!.hands.hands;
     const hand = hands[0]!.id;
@@ -1827,7 +1827,7 @@ describe("canvas furniture", () => {
     // map's), so the edit that moves the block is a site edit.
     const boxMapShard = join(live.loaded.dir, "encounters", "map.storyletmap");
 
-    moveSitesOnMap(live, encBox, "d_zone", [{ id: hand, x: 7, y: 8 }]);
+    await moveSitesOnMap(live, encBox, "d_zone", [{ id: hand, x: 7, y: 8 }]);
 
     const map = parseSource(readFileSync(boxMapShard, "utf8")) as MapShard;
     expect(map.map.sites).toEqual({ [hand]: { x: 7, y: 8 } });
@@ -1837,7 +1837,7 @@ describe("canvas furniture", () => {
     expect(view.canvases![docks]!.cards).toEqual({ c_1: { x: 1, y: 2 } });
 
     // One gesture, one undo: the move rides the edit that triggered it.
-    undo(live);
+    await undo(live);
     const back = parseSource(readFileSync(sidecar(live), "utf8")) as ViewShard;
     expect(back.map!.sites).toEqual({ [hand]: { x: 5, y: 6 } });
     expect(existsSync(boxMapShard)).toBe(false);
@@ -1851,111 +1851,111 @@ describe("threaded comments", () => {
   const threads = (session: ProjectSession): Comment[] =>
     commentsOf(session.loaded.source!.boxes.find((b) => b.box.box.id === encBox)!.notes);
 
-  it("posting creates the thread; posting again replies to it", () => {
+  it("posting creates the thread; posting again replies to it", async () => {
     const session = scratchProject();
-    postComment(session, "k_docks", "cmt_1", "Ada", "Does this land too early?");
+    await postComment(session, "k_docks", "cmt_1", "Ada", "Does this land too early?");
     expect(threads(session)).toHaveLength(1);
-    postComment(session, "k_docks", "cmt_1", "Bo", "I think so.");
+    await postComment(session, "k_docks", "cmt_1", "Bo", "I think so.");
     const only = threads(session)[0]!;
     expect(only.messages.map((m) => m.author)).toEqual(["Ada", "Bo"]);
     expect(existsSync(notesFile(session))).toBe(true);
   });
 
-  it("stamps a time on every message", () => {
+  it("stamps a time on every message", async () => {
     const session = scratchProject();
-    postComment(session, "k_docks", "cmt_1", "Ada", "hello");
+    await postComment(session, "k_docks", "cmt_1", "Ada", "hello");
     const ts = threads(session)[0]!.messages[0]!.ts;
     expect(Number.isNaN(new Date(ts).getTime())).toBe(false);
   });
 
   // --- every commentable thing (design/annotation.md 2) ----------------------
 
-  it("attaches to an OUTCOME, not only to the card that holds it", () => {
+  it("attaches to an OUTCOME, not only to the card that holds it", async () => {
     // The gap when outcome comments were added: the opener appeared and the
     // popover opened, and only POSTING failed, because the box lookup did not
     // walk into a card's outcomes. Opening a popover is not evidence.
     const session = scratchProject();
     const card = session.dto.boxes[0]!.decks[0]!.cards[0]!;
     const outcome = card.outcomes[0]!;
-    expect(postComment(session, outcome.id, "cmt_1", "Ada", "does this pay enough?"))
+    expect(await postComment(session, outcome.id, "cmt_1", "Ada", "does this pay enough?"))
       .not.toHaveProperty("error");
     expect(threads(session)[0]!.anchor).toBe(outcome.id);
   });
 
-  it("attaches to a box and to a tag group", () => {
+  it("attaches to a box and to a tag group", async () => {
     const session = scratchProject();
-    expect(postComment(session, encBox, "cmt_1", "Ada", "about this box")).not.toHaveProperty("error");
+    expect(await postComment(session, encBox, "cmt_1", "Ada", "about this box")).not.toHaveProperty("error");
     const group = session.loaded.source!.boxes.find((b) => b.box.box.id === encBox)!.tags.groups[0];
     if (group) {
-      expect(postComment(session, group.id, "cmt_2", "Ada", "about this group")).not.toHaveProperty("error");
+      expect(await postComment(session, group.id, "cmt_2", "Ada", "about this group")).not.toHaveProperty("error");
     }
   });
 
   // --- markers on a canvas (design/annotation.md 3) --------------------------
 
-  it("a marker dropped on empty canvas is anchored to the canvas", () => {
+  it("a marker dropped on empty canvas is anchored to the canvas", async () => {
     const session = scratchProject();
-    postComment(session, docks, "cmt_1", "Ada", "this corner is empty", { canvas: docks, x: 40, y: 60 });
+    await postComment(session, docks, "cmt_1", "Ada", "this corner is empty", { canvas: docks, x: 40, y: 60 });
     const only = threads(session)[0]!;
     expect(only.anchor).toBe(docks);
     expect(markOf(only)).toEqual({ canvas: docks, x: 40, y: 60 });
   });
 
-  it("a marker dropped on a card follows that card", () => {
+  it("a marker dropped on a card follows that card", async () => {
     const session = scratchProject();
     const card = session.dto.boxes[0]!.decks[0]!.cards[0]!;
-    postComment(session, card.id, "cmt_1", "Ada", "lands too early", { canvas: docks, x: 12, y: -8 });
+    await postComment(session, card.id, "cmt_1", "Ada", "lands too early", { canvas: docks, x: 12, y: -8 });
     expect(markOf(threads(session)[0]!)).toEqual({ canvas: docks, x: 12, y: -8, item: card.id });
   });
 
-  it("a REPLY cannot move a marker", () => {
+  it("a REPLY cannot move a marker", async () => {
     // Otherwise answering a comment from the other canvas would make it jump.
     const session = scratchProject();
-    postComment(session, docks, "cmt_1", "Ada", "here", { canvas: docks, x: 40, y: 60 });
-    postComment(session, docks, "cmt_1", "Bo", "agreed", { canvas: docks, x: 999, y: 999 });
+    await postComment(session, docks, "cmt_1", "Ada", "here", { canvas: docks, x: 40, y: 60 });
+    await postComment(session, docks, "cmt_1", "Bo", "agreed", { canvas: docks, x: 999, y: 999 });
     expect(markOf(threads(session)[0]!)).toEqual({ canvas: docks, x: 40, y: 60 });
   });
 
-  it("dragging a marker onto a card attaches it, and off again detaches it", () => {
+  it("dragging a marker onto a card attaches it, and off again detaches it", async () => {
     // One code path for both, because the anchor is decided by where the drag
     // ENDED rather than remembered from where it began.
     const session = scratchProject();
     const card = session.dto.boxes[0]!.decks[0]!.cards[0]!;
-    postComment(session, docks, "cmt_1", "Ada", "here", { canvas: docks, x: 40, y: 60 });
+    await postComment(session, docks, "cmt_1", "Ada", "here", { canvas: docks, x: 40, y: 60 });
 
-    moveComment(session, "cmt_1", docks, 10, 10, card.id);
+    await moveComment(session, "cmt_1", docks, 10, 10, card.id);
     expect(markOf(threads(session)[0]!)).toEqual({ canvas: docks, x: 10, y: 10, item: card.id });
 
-    moveComment(session, "cmt_1", docks, 300, 200);
+    await moveComment(session, "cmt_1", docks, 300, 200);
     expect(markOf(threads(session)[0]!)).toEqual({ canvas: docks, x: 300, y: 200 });
   });
 
-  it("says so rather than throwing when the marker has gone", () => {
+  it("says so rather than throwing when the marker has gone", async () => {
     const session = scratchProject();
-    expect(moveComment(session, "cmt_nope", docks, 0, 0)).toEqual({ error: "no such comment" });
+    expect(await moveComment(session, "cmt_nope", docks, 0, 0)).toEqual({ error: "no such comment" });
   });
 
-  it("resolving hides it from the counts; reopening brings it back", () => {
+  it("resolving hides it from the counts; reopening brings it back", async () => {
     const session = scratchProject();
-    postComment(session, "k_docks", "cmt_1", "Ada", "hello");
-    setCommentResolved(session, "cmt_1", true);
+    await postComment(session, "k_docks", "cmt_1", "Ada", "hello");
+    await setCommentResolved(session, "cmt_1", true);
     expect(toDto(session.loaded).threads["k_docks"]).toBeUndefined();
-    setCommentResolved(session, "cmt_1", false);
+    await setCommentResolved(session, "cmt_1", false);
     expect(toDto(session.loaded).threads["k_docks"]).toBe(1);
   });
 
-  it("a comment does not make the bundle stale either", () => {
+  it("a comment does not make the bundle stale either", async () => {
     const session = scratchProject();
     const before = projectHash(session.loaded.source!);
-    postComment(session, "k_docks", "cmt_1", "Ada", "hello");
+    await postComment(session, "k_docks", "cmt_1", "Ada", "hello");
     expect(projectHash(session.loaded.source!)).toBe(before);
   });
 
-  it("says so rather than throwing when the anchor is not a thing", () => {
+  it("says so rather than throwing when the anchor is not a thing", async () => {
     const session = scratchProject();
-    expect(postComment(session, "nope", "cmt_1", "Ada", "hello"))
+    expect(await postComment(session, "nope", "cmt_1", "Ada", "hello"))
       .toEqual({ error: "that is not something a comment can be attached to" });
-    expect(setCommentResolved(session, "cmt_nope", true)).toEqual({ error: "no such comment" });
+    expect(await setCommentResolved(session, "cmt_nope", true)).toEqual({ error: "no such comment" });
   });
 
 });
@@ -1965,20 +1965,20 @@ describe("threaded comments", () => {
 describe("quick-fixes", () => {
   /** Break the project the way an author does: point a change at a property
    *  nobody declared, and let the compiler raise the fix alongside. */
-  const withUndeclaredChange = (): { session: ProjectSession; problems: Problem[] } => {
+  const withUndeclaredChange = async (): Promise<{ session: ProjectSession; problems: Problem[] }> => {
     const session = scratchProject();
     const source = session.loaded.source!;
     const deck = source.boxes[0]!.decks.find((d) => d.shard.deck.id === docks)!;
     const card = deck.shard.cards[0]!;
-    const saved = saveCard(session, docks, card.id, {
+    const saved = await saveCard(session, docks, card.id, {
       outcomes: [{ ...card.outcomes[0]!, changes: [{ target: "@story.nonesuch", value: "1" }] }],
     } as never);
     if ("error" in saved) throw new Error(saved.error);
     return { session, problems: saved.problems };
   };
 
-  it("raises a declare-property fix WITH the diagnostic, so nothing parses a message", () => {
-    const { problems } = withUndeclaredChange();
+  it("raises a declare-property fix WITH the diagnostic, so nothing parses a message", async () => {
+    const { problems } = await withUndeclaredChange();
     const found = problems.find((p) => p.fix?.kind === "declare-property");
     // The fix carries the type read off the written value (here `1`, a number),
     // so the declaration it makes is not a blanket guess.
@@ -1988,14 +1988,14 @@ describe("quick-fixes", () => {
     });
   });
 
-  it("reads a latch as a boolean, which is the commonest write there is", () => {
+  it("reads a latch as a boolean, which is the commonest write there is", async () => {
     // The whole point of the change: `= true` used to declare a number
     // defaulting to 0, and the author had to go and fix every one.
-    const { session } = withUndeclaredChange();
+    const { session } = await withUndeclaredChange();
     const source = session.loaded.source!;
     const deck = source.boxes[0]!.decks[0]!;
     const card = deck.shard.cards[0]!;
-    const saved = saveCard(session, deck.shard.deck.id, card.id, {
+    const saved = await saveCard(session, deck.shard.deck.id, card.id, {
       outcomes: [{ ...card.outcomes[0]!, changes: [{ target: "@story.latched", value: "true" }] }],
     } as never);
     if ("error" in saved) throw new Error(saved.error);
@@ -2003,11 +2003,11 @@ describe("quick-fixes", () => {
     expect(fix).toMatchObject({ name: "latched", declType: "boolean", declDefault: false });
   });
 
-  it("declares the property, and the problem goes", () => {
-    const { session, problems } = withUndeclaredChange();
+  it("declares the property, and the problem goes", async () => {
+    const { session, problems } = await withUndeclaredChange();
     expect(problems.some((p) => p.fix?.kind === "declare-property")).toBe(true);
 
-    const result = declareProperty(session, "story", "nonesuch", "");
+    const result = await declareProperty(session, "story", "nonesuch", "");
     if ("error" in result) throw new Error(result.error);
     expect(result.problems.some((p) => p.message.includes("nonesuch"))).toBe(false);
 
@@ -2019,30 +2019,30 @@ describe("quick-fixes", () => {
     expect(decl).toEqual({ name: "nonesuch", type: "number", default: 0 });
   });
 
-  it("refuses to declare one twice rather than writing a duplicate", () => {
-    const { session } = withUndeclaredChange();
-    declareProperty(session, "story", "nonesuch", "");
-    expect(declareProperty(session, "story", "nonesuch", "")).toEqual({ error: '"nonesuch" is already declared' });
+  it("refuses to declare one twice rather than writing a duplicate", async () => {
+    const { session } = await withUndeclaredChange();
+    await declareProperty(session, "story", "nonesuch", "");
+    expect(await declareProperty(session, "story", "nonesuch", "")).toEqual({ error: '"nonesuch" is already declared' });
   });
 
-  it("has no canonical home for @hand, and says so instead of guessing one", () => {
+  it("has no canonical home for @hand, and says so instead of guessing one", async () => {
     const session = scratchProject();
-    expect(declareProperty(session, "hand", "mood", "")).toEqual(
+    expect(await declareProperty(session, "hand", "mood", "")).toEqual(
       { error: "@hand properties are not declared in one place" });
   });
 
-  it("is one undo step, like any other edit", () => {
-    const { session } = withUndeclaredChange();
-    declareProperty(session, "story", "nonesuch", "");
-    expect(undo(session)).not.toBeNull();
+  it("is one undo step, like any other edit", async () => {
+    const { session } = await withUndeclaredChange();
+    await declareProperty(session, "story", "nonesuch", "");
+    expect(await undo(session)).not.toBeNull();
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.loaded.source!.project.story.properties.some((d) => d.name === "nonesuch")).toBe(false);
   });
 
-  it("says so plainly when the dangling reference has already gone", () => {
+  it("says so plainly when the dangling reference has already gone", async () => {
     const session = scratchProject();
-    expect(repointTag(session, "h_nothing", "g_nothing", "t_old", "t_new"))
+    expect(await repointTag(session, "h_nothing", "g_nothing", "t_old", "t_new"))
       .toEqual({ error: "that tag reference has already gone" });
   });
 });
@@ -2050,11 +2050,11 @@ describe("quick-fixes", () => {
 describe("addNamedOutcome (the Patter quick fix)", () => {
   const firstCard = (session: ProjectSession) => session.loaded.source!.boxes[0]!.decks.find((d) => d.shard.cards.length > 0)!.shard.cards[0]!;
 
-  it("adds an outcome pinned to the scene's name, titled from it, after the card's others", () => {
+  it("adds an outcome pinned to the scene's name, titled from it, after the card's others", async () => {
     const session = scratchProject();
     const card = firstCard(session);
     const before = card.outcomes.length;
-    const r = addNamedOutcome(session, card.id, "pay-them-off");
+    const r = await addNamedOutcome(session, card.id, "pay-them-off");
     if ("error" in r) throw new Error(r.error);
     const after = firstCard(session);
     expect(after.outcomes).toHaveLength(before + 1);
@@ -2062,16 +2062,16 @@ describe("addNamedOutcome (the Patter quick fix)", () => {
     expect(added).toMatchObject({ gameId: "pay-them-off", title: "Pay them off", changes: {} });
     expect(added.order).toBe(Math.max(...after.outcomes.filter((o) => o !== added).map((o, i) => o.order ?? i)) + 1);
     // One undo step takes it away again.
-    undo(session);
+    await undo(session);
     expect(firstCard(session).outcomes).toHaveLength(before);
   });
 
-  it("refuses a name the card already has, and one that can't be an address", () => {
+  it("refuses a name the card already has, and one that can't be an address", async () => {
     const session = scratchProject();
     const card = firstCard(session);
     const existing = effectiveGameId(card.outcomes[0]!);
-    expect(addNamedOutcome(session, card.id, existing)).toEqual({ error: `this card already has an outcome "${existing}"` });
-    expect(addNamedOutcome(session, card.id, "Not An Address")).toEqual({ error: '"Not An Address" isn\'t a legal outcome name' });
+    expect(await addNamedOutcome(session, card.id, existing)).toEqual({ error: `this card already has an outcome "${existing}"` });
+    expect(await addNamedOutcome(session, card.id, "Not An Address")).toEqual({ error: '"Not An Address" isn\'t a legal outcome name' });
   });
 });
 
@@ -2089,7 +2089,7 @@ describe("an illegal pinned gameId", () => {
     deck.shard.deck.gameId = gameId;
   };
 
-  it("is reported by validate, which never looked before", () => {
+  it("is reported by validate, which never looked before", async () => {
     const session = scratchProject();
     poison(session, "Not An Address");
     const issues = runValidate(session.loaded, { checkBundle: false }).issues;
@@ -2097,7 +2097,7 @@ describe("an illegal pinned gameId", () => {
       i.severity === "error" && i.message.includes('deck gameId "Not An Address" is not a legal address'))).toBe(true);
   });
 
-  it("does NOT flag an entity that simply has no pinned gameId", () => {
+  it("does NOT flag an entity that simply has no pinned gameId", async () => {
     // The two derived paths are safe by construction and must not be checked:
     // `gameIdify` always yields something legal, and the last resort is the
     // entity's own id, which carries an underscore ("c_arrive") by convention.
@@ -2109,27 +2109,27 @@ describe("an illegal pinned gameId", () => {
     expect(issues.some((i) => i.message.includes("is not a legal address"))).toBe(false);
   });
 
-  it("refuses the rename that would write the file, with a message rather than a crash", () => {
+  it("refuses the rename that would write the file, with a message rather than a crash", async () => {
     // Renaming only the TITLE leaves the pinned gameId alone and hands it to the
     // path builder, which is how a poisoned shard reaches a write.
     const session = scratchProject();
     poison(session, "../../../evil");
-    const result = renameDeck(session, docks, { title: "Harmless retitle" });
+    const result = await renameDeck(session, docks, { title: "Harmless retitle" });
     expect(result).toEqual({
       error: 'this deck\'s gameId "../../../evil" is not a legal address, so it cannot be saved under it. Fix the gameId first.',
     });
   });
 
-  it("leaves nothing outside the project when it refuses", () => {
+  it("leaves nothing outside the project when it refuses", async () => {
     const session = scratchProject();
     poison(session, "../../../evil");
-    renameDeck(session, docks, { title: "Harmless retitle" });
+    await renameDeck(session, docks, { title: "Harmless retitle" });
     expect(existsSync(join(session.loaded.dir, "..", "..", "..", "evil.storyletdeck"))).toBe(false);
   });
 
-  it("still renames a deck whose address is legal", () => {
+  it("still renames a deck whose address is legal", async () => {
     const session = scratchProject();
-    const result = renameDeck(session, docks, { title: "The Docks At Night" });
+    const result = await renameDeck(session, docks, { title: "The Docks At Night" });
     expect("error" in result).toBe(false);
   });
 });
@@ -2137,30 +2137,30 @@ describe("an illegal pinned gameId", () => {
 // --- deleting a comment (design/annotation.md 9) -------------------------------
 
 describe("withdrawing a comment", () => {
-  const seed = (session: ProjectSession, bodies: string[]): string => {
+  const seed = async (session: ProjectSession, bodies: string[]): Promise<string> => {
     const id = "cmt_del";
-    bodies.forEach((body) => {
-      const r = postComment(session, docks, id, "Ada", body);
+    for (const body of bodies) {
+      const r = await postComment(session, docks, id, "Ada", body);
       if ("error" in r) throw new Error(r.error);
-    });
+    }
     return id;
   };
 
-  it("takes the whole thread when the withdrawn message was the only one", () => {
+  it("takes the whole thread when the withdrawn message was the only one", async () => {
     // The "solo" case, and it falls out of the one rule rather than being its
     // own branch: nothing readable is left, so there is no thread.
     const session = scratchProject();
-    const id = seed(session, ["Only thing I had to say"]);
-    const result = deleteCommentMessage(session, id, 0);
+    const id = await seed(session, ["Only thing I had to say"]);
+    const result = await deleteCommentMessage(session, id, 0);
     if ("error" in result) throw new Error(result.error);
     const box = session.loaded.source!.boxes[0]!;
     expect(commentsOf(box.notes).some((t) => t.id === id)).toBe(false);
   });
 
-  it("leaves a tombstone when the thread carries on around it", () => {
+  it("leaves a tombstone when the thread carries on around it", async () => {
     const session = scratchProject();
-    const id = seed(session, ["First", "Second", "Third"]);
-    const result = deleteCommentMessage(session, id, 1);
+    const id = await seed(session, ["First", "Second", "Third"]);
+    const result = await deleteCommentMessage(session, id, 1);
     if ("error" in result) throw new Error(result.error);
     const thread = commentsOf(session.loaded.source!.boxes[0]!.notes).find((t) => t.id === id)!;
     expect(thread.messages).toHaveLength(3);
@@ -2171,21 +2171,21 @@ describe("withdrawing a comment", () => {
     expect(thread.messages.map((m) => m.body)).toEqual(["First", "", "Third"]);
   });
 
-  it("really removes the words from the FILE, not just from the view", () => {
+  it("really removes the words from the FILE, not just from the view", async () => {
     // "Deleted" has to mean deleted: the person reaching for this may have typed
     // something they regret, in a directory under version control.
     const session = scratchProject();
-    const id = seed(session, ["Keep me", "Regrettable"]);
-    deleteCommentMessage(session, id, 1);
+    const id = await seed(session, ["Keep me", "Regrettable"]);
+    await deleteCommentMessage(session, id, 1);
     const onDisk = readFileSync(join(session.loaded.dir, "encounters", "notes.storyletnotes"), "utf8");
     expect(onDisk).not.toContain("Regrettable");
     expect(onDisk).toContain("Keep me");
   });
 
-  it("survives a reload: a tombstone is the one empty message the reader keeps", () => {
+  it("survives a reload: a tombstone is the one empty message the reader keeps", async () => {
     const session = scratchProject();
-    const id = seed(session, ["First", "Second"]);
-    deleteCommentMessage(session, id, 0);
+    const id = await seed(session, ["First", "Second"]);
+    await deleteCommentMessage(session, id, 0);
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     const thread = commentsOf(reopened.session.loaded.source!.boxes[0]!.notes).find((t) => t.id === id)!;
@@ -2193,33 +2193,33 @@ describe("withdrawing a comment", () => {
     expect(thread.messages[0]!.deleted).toBe(true);
   });
 
-  it("takes the thread when the LAST readable message goes, so tombstones cannot pile up", () => {
+  it("takes the thread when the LAST readable message goes, so tombstones cannot pile up", async () => {
     const session = scratchProject();
-    const id = seed(session, ["One", "Two"]);
-    deleteCommentMessage(session, id, 0);
-    const result = deleteCommentMessage(session, id, 1);
+    const id = await seed(session, ["One", "Two"]);
+    await deleteCommentMessage(session, id, 0);
+    const result = await deleteCommentMessage(session, id, 1);
     if ("error" in result) throw new Error(result.error);
     expect(commentsOf(session.loaded.source!.boxes[0]!.notes).some((t) => t.id === id)).toBe(false);
   });
 
-  it("refuses to withdraw the same message twice", () => {
+  it("refuses to withdraw the same message twice", async () => {
     const session = scratchProject();
-    const id = seed(session, ["First", "Second"]);
-    deleteCommentMessage(session, id, 0);
-    expect(deleteCommentMessage(session, id, 0)).toEqual({ error: "that comment is already deleted" });
+    const id = await seed(session, ["First", "Second"]);
+    await deleteCommentMessage(session, id, 0);
+    expect(await deleteCommentMessage(session, id, 0)).toEqual({ error: "that comment is already deleted" });
   });
 
-  it("says so plainly when the index is not there", () => {
+  it("says so plainly when the index is not there", async () => {
     const session = scratchProject();
-    const id = seed(session, ["Only"]);
-    expect(deleteCommentMessage(session, id, 4)).toEqual({ error: "that comment has already gone" });
+    const id = await seed(session, ["Only"]);
+    expect(await deleteCommentMessage(session, id, 4)).toEqual({ error: "that comment has already gone" });
   });
 
-  it("is one undo step, like any other edit", () => {
+  it("is one undo step, like any other edit", async () => {
     const session = scratchProject();
-    const id = seed(session, ["First", "Second"]);
-    deleteCommentMessage(session, id, 1);
-    expect(undo(session)).not.toBeNull();
+    const id = await seed(session, ["First", "Second"]);
+    await deleteCommentMessage(session, id, 1);
+    expect(await undo(session)).not.toBeNull();
     const thread = commentsOf(session.loaded.source!.boxes[0]!.notes).find((t) => t.id === id)!;
     expect(thread.messages[1]!.body).toBe("Second");
   });
@@ -2233,35 +2233,35 @@ describe("shared scarcity, written from the editor", () => {
     return reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === gameId)!;
   };
 
-  it("writes the deck's flag only when true, so an ordinary deck stays quiet", () => {
+  it("writes the deck's flag only when true, so an ordinary deck stays quiet", async () => {
     const session = scratchProject();
-    renameDeck(session, docks, { shared: true });
+    await renameDeck(session, docks, { shared: true });
     expect(readFileSync(dockDeckFile(session), "utf8")).toContain("shared: true");
-    renameDeck(session, docks, { shared: false });
+    await renameDeck(session, docks, { shared: false });
     expect(readFileSync(dockDeckFile(session), "utf8")).not.toContain("shared: true");
   });
 
-  it("a card's override is three-state: inherit CLEARS it rather than writing false", () => {
+  it("a card's override is three-state: inherit CLEARS it rather than writing false", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    saveCard(session, docks, ratJob.id, { shared: true });
+    await saveCard(session, docks, ratJob.id, { shared: true });
     expect(card(session, "rat-job").shared).toBe(true);
     // Not shared is a real answer, distinct from saying nothing: it overrides a
     // shared deck.
-    saveCard(session, docks, ratJob.id, { shared: false });
+    await saveCard(session, docks, ratJob.id, { shared: false });
     expect(card(session, "rat-job").shared).toBe(false);
-    saveCard(session, docks, ratJob.id, { shared: null });
+    await saveCard(session, docks, ratJob.id, { shared: null });
     expect(card(session, "rat-job").shared).toBeUndefined();
   });
 
-  it("sharedCopies takes an integer >= 1; blank or nonsense clears it", () => {
+  it("sharedCopies takes an integer >= 1; blank or nonsense clears it", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    saveCard(session, docks, ratJob.id, { sharedCopies: "5" });
+    await saveCard(session, docks, ratJob.id, { sharedCopies: "5" });
     expect(card(session, "rat-job").sharedCopies).toBe("5");
-    saveCard(session, docks, ratJob.id, { sharedCopies: "" });
+    await saveCard(session, docks, ratJob.id, { sharedCopies: "" });
     expect(card(session, "rat-job").sharedCopies).toBe("");
-    saveCard(session, docks, ratJob.id, { sharedCopies: "nope" });
+    await saveCard(session, docks, ratJob.id, { sharedCopies: "nope" });
     expect(card(session, "rat-job").sharedCopies).toBe("");
   });
 });
@@ -2276,26 +2276,26 @@ describe("durability, written from the editor", () => {
     return reopened.session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === gameId)!;
   };
 
-  it("writes the deck's flag only when true, so an ordinary deck stays quiet", () => {
+  it("writes the deck's flag only when true, so an ordinary deck stays quiet", async () => {
     const session = scratchProject();
-    renameDeck(session, docks, { durable: true });
+    await renameDeck(session, docks, { durable: true });
     expect(readFileSync(dockDeckFile(session), "utf8")).toContain("durable: true");
-    renameDeck(session, docks, { durable: false });
+    await renameDeck(session, docks, { durable: false });
     expect(readFileSync(dockDeckFile(session), "utf8")).not.toContain("durable: true");
   });
 
-  it("a card's override is three-state: inherit CLEARS it rather than writing false", () => {
+  it("a card's override is three-state: inherit CLEARS it rather than writing false", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    saveCard(session, docks, ratJob.id, { durable: true });
+    await saveCard(session, docks, ratJob.id, { durable: true });
     expect(card(session, "rat-job").durable).toBe(true);
-    saveCard(session, docks, ratJob.id, { durable: false });
+    await saveCard(session, docks, ratJob.id, { durable: false });
     expect(card(session, "rat-job").durable).toBe(false);
-    saveCard(session, docks, ratJob.id, { durable: null });
+    await saveCard(session, docks, ratJob.id, { durable: null });
     expect(card(session, "rat-job").durable).toBeUndefined();
   });
 
-  it("round-trips both axes on a declaration, which the DTO used to drop", () => {
+  it("round-trips both axes on a declaration, which the DTO used to drop", async () => {
     // The bug this is really about: `shared` was not on the declaration DTO at
     // all, so editing any @story property in a project that shared state saved
     // the flag away. A list saves whole; anything the DTO forgets is deleted.
@@ -2303,7 +2303,7 @@ describe("durability, written from the editor", () => {
     const before = projectSettings(session);
     const story = before.story.map((p) => (p.name === "reputation"
       ? { ...p, shared: false, durable: true } : p));
-    expect(saveProjectSettings(session, { ...before, story })).not.toHaveProperty("error");
+    expect(await saveProjectSettings(session, { ...before, story })).not.toHaveProperty("error");
     const opened = openProject(session.loaded.dir);
     if ("error" in opened) throw new Error(opened.error);
     const after = projectSettings(opened.session).story.find((p) => p.name === "reputation")!;
@@ -2321,7 +2321,7 @@ describe("what a write tells the server", () => {
   const remoteRecord = (session: ProjectSession): string =>
     join(session.loaded.dir, REMOTE_FILE);
 
-  it("leaves the record alone, and the count follows the shards", () => {
+  it("leaves the record alone, and the count follows the shards", async () => {
     const session = scratchProject();
     const dir = session.loaded.dir;
     writeRemote(dir, {
@@ -2333,21 +2333,21 @@ describe("what a write tells the server", () => {
     const written = readFileSync(remoteRecord(session), "utf8");
 
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    expect(saveCard(session, docks, ratJob.id, { title: "A different job" })).not.toHaveProperty("error");
+    expect(await saveCard(session, docks, ratJob.id, { title: "A different job" })).not.toHaveProperty("error");
     expect(unpushedShards(dir)).toBe(1);
     expect(readFileSync(remoteRecord(session), "utf8"), "the record is not a tally").toBe(written);
 
     // ...and an undo takes it back, which the tally could not: it counted the
     // undo as a further edit, so typing once and undoing it read as two.
-    expect(undo(session)).not.toBeNull();
+    expect(await undo(session)).not.toBeNull();
     expect(unpushedShards(dir)).toBe(0);
     expect(readFileSync(remoteRecord(session), "utf8")).toBe(written);
   });
 
-  it("counts nothing at all for a project with no server", () => {
+  it("counts nothing at all for a project with no server", async () => {
     const session = scratchProject();
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!;
-    saveCard(session, docks, ratJob.id, { title: "A different job" });
+    await saveCard(session, docks, ratJob.id, { title: "A different job" });
     expect(existsSync(remoteRecord(session))).toBe(false);
     expect(unpushedShards(session.loaded.dir)).toBe(0);
   });

@@ -10,17 +10,16 @@
 // ---------------------------------------------------------------------------
 
 import "../src/theme.css";
+import "../tool-window/base.css";
 import "./search.css";
 import "@wildwinter/app-shell/tooltip.css";
 import "@wildwinter/app-shell/toast.css";
-import { applyTheme } from "../src/theme.js";
-import { el } from "../src/dom.js";
-import { breadcrumb, confirmDialog, debounce, iconNode, initTooltips, metaLine, pinButton, plural, toast, toolWindowHead } from "@wildwinter/app-shell";
+import { breadcrumb, confirmDialog, debounce, el, iconNode, metaLine, pinButton, plural, toast, toolWindowHead } from "@wildwinter/app-shell";
+import { bootToolWindow } from "../tool-window/boot.js";
 import { searchIndex, searchMatch } from "../src/search.js";
 import type { SearchHit } from "../src/search.js";
-import type { ProjectDto, PropertyUsage, ReplaceHit, ReplaceOptions, ReviewAt, SearchMode, SearchOpen, StudioApi } from "../../shared/api.js";
+import type { ProjectDto, PropertyUsage, ReplaceHit, ReplaceOptions, ReviewAt, SearchMode, SearchOpen } from "../../shared/api.js";
 
-declare global { interface Window { studio: StudioApi; } }
 const studio = window.studio;
 
 const root = document.getElementById("find")!;
@@ -51,6 +50,18 @@ const PLACEHOLDER: Record<SearchMode, string> = {
 };
 
 
+/** Read the open project afresh (boot, and a different project underneath):
+ *  unconditionally, since the window holds nothing it could still use. No
+ *  project clears the hits, and the list says to open one. */
+async function loadProject(): Promise<void> {
+  const result = await studio.project();
+  project = result?.project;
+  void run();
+}
+
+/** Coming back to the window: re-index only when the
+ *  project changed on disk. `revalidate` answers null when nothing did, and the
+ *  index in hand is still the project's. */
 async function refreshProject(): Promise<void> {
   const result = await studio.revalidate();
   if (result) { project = result.project; void run(); }
@@ -86,12 +97,31 @@ function rowCount(): number {
 }
 
 function choose(i: number): void {
+  // The keyboard highlight goes where the pointer went, as Patterpad's does:
+  // a click that left it on the first row made the next arrow key start over.
+  setActive(i);
   if (mode === "find") { const hit = hits[i]; if (hit) void studio.searchReveal(hit.selection); }
   else if (mode === "property") { const u = usages[i]; if (u) void studio.searchReveal(placeOf(u)); }
   // Back to the field after a jump (Patterpad's manners, parity row 35): a
   // click on a row leaves the focus on that row, and the next thing an author
   // does is type or step, both of which the field owns.
   inputEl?.focus();
+}
+
+/** Move the highlight without rebuilding the list: hover calls this on every
+ *  row it enters, and a rebuild would replace the row under the pointer. */
+function setActive(i: number): void {
+  if (i === active) return;
+  listEl.querySelectorAll(".sr-row.active").forEach((r) => r.classList.remove("active"));
+  active = i;
+  listEl.querySelectorAll<HTMLElement>(".sr-row")[i]?.classList.add("active");
+}
+
+/** A result row: it highlights as the pointer reaches it, and opens on click. */
+function resultRow(i: number, ...children: (HTMLElement | null)[]): HTMLElement {
+  const row = el("button", { className: `sr-row${i === active ? " active" : ""}`, onClick: () => choose(i) }, ...children);
+  row.addEventListener("mouseenter", () => setActive(i));
+  return row;
 }
 
 /** Keep the keyboard's selection on screen: a list longer than the window
@@ -104,17 +134,26 @@ function scrollActiveIntoView(): void {
 
 // --- rendering ----------------------------------------------------------------
 
+/** The empty state with no project, in the words Patterpad's Find uses. */
+const NO_PROJECT = "Open a project to search.";
+
 function none(text: string): HTMLElement {
   return el("div", { className: "empty sr-none", text });
 }
 
+/** A tab with no rows: no project, nothing matching the query, or (no query
+ *  yet) what to type. */
+function emptyList(noMatch: string, prompt: string): void {
+  listEl.replaceChildren(none(!project ? NO_PROJECT : query.trim() ? noMatch : prompt));
+}
+
 function renderFind(): void {
   listEl.replaceChildren(...hits.map((hit, i) =>
-    el("button", { className: `sr-row${i === active ? " active" : ""}`, onClick: () => choose(i) },
+    resultRow(i,
       el("span", { className: "sr-kind", text: kindWord(hit.kind) }),
       el("span", { className: "sr-label", text: hit.label }),
       el("span", { className: "sr-sub" }, metaLine(hit.sublabel)))));
-  if (hits.length === 0) listEl.replaceChildren(none(project ? "nothing matches" : "no project open"));
+  if (hits.length === 0) emptyList("No matches.", "Type to find a deck, card, hand or tag.");
 }
 
 function renderProperty(): void {
@@ -125,14 +164,14 @@ function renderProperty(): void {
     const label = item.kind === "outcome"
       ? breadcrumb([item.location[item.location.length - 1] ?? "", item.title ?? item.gameId])
       : item.title ?? item.gameId;
-    return el("button", { className: `sr-row${i === active ? " active" : ""}`, onClick: () => choose(i) },
+    return resultRow(i,
       el("span", { className: "sr-kind", text: kindWord(item.kind) }),
       el("span", { className: "sr-label" }, label),
       el("span", { className: `sr-use ${u.use}`, text: u.use === "read" ? "reads" : "writes" }),
       el("span", { className: "sr-sub" }, metaLine([u.where, u.text])));
   }));
   if (usages.length === 0) {
-    listEl.replaceChildren(none(!project ? "no project open" : query.trim() ? "nothing reads or writes that" : "type a property: @gold, @story.act, @world.time_of_day"));
+    emptyList("Nothing reads or writes that property.", "Type a property, such as @gold, @story.act or @world.time_of_day.");
   }
 }
 
@@ -161,7 +200,7 @@ function renderReplace(): void {
     return row;
   }));
   if (replaceHits.length === 0) {
-    listEl.replaceChildren(none(!project ? "no project open" : query.trim() ? "nothing matches" : "type the text to find (titles, purposes, and the fields on cards and outcomes are searched)"));
+    emptyList("No matches.", "Type the text to replace in titles, purposes, and the fields on cards and outcomes.");
   }
 }
 
@@ -233,7 +272,9 @@ async function applyReplace(only?: ReplaceHit): Promise<void> {
   // Said twice on purpose: the list explains, the toast is the family's voice
   // for a failure in a tool window (parity row 19).
   if ("error" in res) { toast(`Replace failed: ${res.error}`, "error"); listEl.replaceChildren(none(`Replace failed: ${res.error}`)); return; }
-  await refreshProject();   // the applied hits are gone; the preview says so
+  // The applied hits are gone; the preview says so. Read unconditionally: main
+  // wrote the files itself, so to `revalidate` the disk has not moved.
+  await loadProject();
 }
 
 // --- modes --------------------------------------------------------------------
@@ -252,14 +293,12 @@ function setMode(next: SearchMode): void {
   inputEl.select();
 }
 
-function mount(): void {
-  const pin = pinButton({ pinned, onToggle: (on) => { pinned = on; void studio.setSearchPinned(on); } });
-  // Reset View re-pins every helper window in main and tells the window after
-  // the fact, so the button must be able to show a state it did not choose
-  // (app-shell 0.23.0). This window mounts once, so it keeps the handle and
-  // drives it; `set` deliberately does not call back into `onToggle`.
-  studio.onWindowPinned((on) => { pinned = on; pin.set(on); });
+/** The pin, built once and driven with `set`: main re-pins the window on
+ *  Reset View and tells it after the fact (app-shell 0.23.0), and `set`
+ *  deliberately does not call back into `onToggle`. */
+const pin = pinButton({ pinned, onToggle: (on) => { pinned = on; void studio.setSearchPinned(on); } });
 
+function mount(): void {
   // The tabs stand where the title did (Patterpad's bar: modes left, pin and
   // close right). The segmented control is our container, so it opts out of
   // the drag region itself; the shell's rule only covers the buttons inside.
@@ -327,16 +366,14 @@ function seed(open: SearchOpen): void {
 
 studio.onSearchSeed(seed);
 // A different project underneath: the hits on screen are the old one's.
-studio.onProjectChanged(() => void refreshProject());
+studio.onProjectChanged(() => void loadProject());
 
 async function boot(): Promise<void> {
-  initTooltips();
-  const state = await studio.getState();
-  applyTheme(state.theme);
-  studio.onTheme(applyTheme);
+  const state = await bootToolWindow({ onPinned: (on) => { pinned = on; pin.set(on); } });
   pinned = state.searchPinned;
+  pin.set(pinned);
   mount();
-  await refreshProject();
+  await loadProject();
   const pending = await studio.pendingSearchQuery();
   if (pending !== undefined) seed(pending);
 }

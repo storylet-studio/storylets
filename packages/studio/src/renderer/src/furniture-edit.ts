@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
-// Drawing and editing canvas furniture: the half of REGIONS that
-// is gestures rather than pixels (furniture-art.ts is the other half).
+// Drawing and editing canvas furniture: the half of FRAMES that is gestures
+// rather than pixels (furniture-art.ts is the other half).
 //
 // One controller, used by both canvases. The two views differ in what they draw
 // and what a drag MEANS - a card moving is a card moving, a pin moving rebinds a
@@ -18,9 +18,11 @@ import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { FURNITURE_COLOURS } from "@storylet-studio/model";
 import type { CanvasFurnitureDto, FrameDto } from "../../shared/api.js";
 import type { CanvasItem, CanvasSurface } from "./canvas-surface.js";
+import { boxBetween, type Point, type Rect } from "./canvas-geometry.js";
 
-/** A rectangle being dragged out, for the view's rubber band. */
-export interface FurnitureDraft { x: number; y: number; w: number; h: number }
+/** A rectangle being dragged out, for the view's rubber band (furniture-art
+ *  `paintDraftRect` draws it as it stands). */
+export type FurnitureDraft = Rect;
 
 export interface FurnitureDeps {
   surface: () => CanvasSurface<CanvasItem>;
@@ -33,6 +35,10 @@ export interface FurnitureDeps {
   save: (next: CanvasFurnitureDto, label: string, coalesce?: string) => void;
   /** Rebuild the items and the strip: the controller has changed the model. */
   repaint: () => void;
+  /** The frames may not be changed here: a map being read, or a deck canvas
+   *  whose arrangement this key may not write. Selecting a frame still works;
+   *  renaming, recolouring, restacking and removing do not. */
+  readOnly?: () => boolean;
 }
 
 export interface FurnitureController {
@@ -43,8 +49,11 @@ export interface FurnitureController {
   cancel: () => void;
   /** Take the furniture out of a drop and return what is left for the view. */
   absorbMoves: (moves: { id: string; x: number; y: number }[]) => { id: string; x: number; y: number }[];
-  /** Take the furniture out of a delete and return what is left. */
+  /** Take the furniture out of a delete, removing it, and return what is left. */
   absorbDelete: (ids: string[]) => string[];
+  /** Remove these frames: for a view that has to wait on a guarded delete of
+   *  the rest of the selection before it may take the frames too. */
+  remove: (ids: string[]) => void;
   /** A right-click landed on `id`: did it belong to furniture? */
   menu: (id: string, e: MouseEvent) => boolean;
   /** A double-click landed on `id`: did it belong to furniture? */
@@ -53,8 +62,18 @@ export interface FurnitureController {
   draft: () => FurnitureDraft | undefined;
   /** Is this id a piece of furniture? For a view deciding whose item it is. */
   owns: (id: string) => boolean;
+  /** The view is going: a name being typed is kept, not lost. */
   destroy: () => void;
 }
+
+/** A frame drawn smaller than this on either side was a flick, not a frame:
+ *  too small to see and impossible to grab. */
+const FRAME_MIN = 12;
+
+/** The name editor, in screen pixels: one line, the height of a frame's bar at
+ *  1:1, and never so narrow that a name cannot be read while it is typed. */
+const EDITOR_HEIGHT_PX = 22;
+const EDITOR_MIN_WIDTH_PX = 80;
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -87,6 +106,7 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
   const frames = (): FrameDto[] => model().frames;
   const owns = (id: string): boolean =>
     frames().some((r) => r.id === id);
+  const fixed = (): boolean => deps.readOnly?.() === true;
 
   const commit = (next: CanvasFurnitureDto, label: string, coalesce?: string): void => {
     deps.save(next, label, coalesce);
@@ -116,11 +136,10 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
         if (!corner) { corner = { x: at.x, y: at.y }; deps.repaint(); return; }
         const rect = normalise(corner, at);
         stop();
-        // A flick rather than a drag: too small to see and impossible to grab.
-        // Abandoned rather than saved, the same call the zone tracer makes when
-        // it has fewer than three points.
-        if (rect.w < 12 || rect.h < 12) return;
-        const frame: FrameDto = { id: furnitureId("r_"), x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+        // A flick rather than a drag: abandoned rather than saved, the same
+        // call the zone tracer makes when it has fewer than three points.
+        if (rect.width < FRAME_MIN || rect.height < FRAME_MIN) return;
+        const frame: FrameDto = { id: furnitureId("r_"), x: rect.x, y: rect.y, w: rect.width, h: rect.height };
         // Straight into naming it: a frame with no title is a coloured box, and
         // an author who drew one meant to call it something. The flag is set
         // BEFORE the save, because the save is what remounts the view.
@@ -162,11 +181,13 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
   function absorbDelete(ids: string[]): string[] {
     const mine = ids.filter(owns);
     if (mine.length === 0) return ids;
+    const rest = ids.filter((id) => !owns(id));
     removeAll(mine);
-    return ids.filter((id) => !owns(id));
+    return rest;
   }
 
   function removeAll(ids: string[]): void {
+    if (fixed() || ids.length === 0) return;
     const gone = new Set(ids);
     if (editing !== undefined && gone.has(editing)) closeEditor({ discard: true });
     commit({
@@ -178,12 +199,14 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
 
   function menu(id: string, e: MouseEvent): boolean {
     if (!owns(id)) return false;
-    const isRegion = frames().some((r) => r.id === id);
-    const list: { id: string; z?: number }[] = frames();
+    // Owned either way, so the view opens no menu of its own over a frame; a
+    // frame that may not be changed simply has nothing to offer.
+    if (fixed()) return true;
+    const list = frames();
     const at = list.findIndex((entry) => entry.id === id);
 
     openContextMenu(e.clientX, e.clientY, [
-      { label: isRegion ? "Rename…" : "Edit text…", onClick: () => openEditor(id) },
+      { label: "Rename…", onClick: () => openEditor(id) },
       ...FURNITURE_COLOURS.map((colour) => ({
         label: `Colour: ${colour}`, onClick: () => setColour(id, colour),
       })),
@@ -210,7 +233,6 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
    *  Furniture overlaps rarely and a stack of two has no middle; the two ends are
    *  the whole of what anybody reaches for. */
   function restack(id: string, move: "front" | "back"): void {
-    const isRegion = frames().some((r) => r.id === id);
     const list = frames();
     const zs = list.map((entry, i) => entry.z ?? i);
     const z = move === "front" ? Math.max(...zs) + 1 : Math.min(...zs) - 1;
@@ -228,6 +250,7 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
 
   function openEditor(id: string): void {
     closeEditor();
+    if (fixed()) return;
     const surface = deps.surface();
     const rect = surface.screenRect(id);
     if (!rect) return;
@@ -243,8 +266,8 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
     // the bar is rather than over the whole area.
     box.style.left = `${rect.x}px`;
     box.style.top = `${rect.y}px`;
-    box.style.width = `${Math.max(80, rect.width)}px`;
-    box.style.height = "22px";
+    box.style.width = `${Math.max(EDITOR_MIN_WIDTH_PX, rect.width)}px`;
+    box.style.height = `${EDITOR_HEIGHT_PX}px`;
     box.rows = 1;
 
     box.addEventListener("keydown", (e) => {
@@ -298,20 +321,26 @@ export function createFurniture(deps: FurnitureDeps): FurnitureController {
     cancel: () => { closeEditor({ discard: true }); if (armed) stop(); },
     absorbMoves,
     absorbDelete,
+    remove: (ids) => removeAll(ids.filter(owns)),
     menu,
+    // Reading mode must not rename a frame: a double-click there is the frame's
+    // all the same, so nothing else opens, but no editor does either.
     activate: (id) => { if (!owns(id)) return false; openEditor(id); return true; },
     draft: () => rubber,
     owns,
-    destroy: () => { closeEditor({ discard: true }); },
+    // A name half typed when the view goes (a save elsewhere remounting it, a
+    // switch to another document) is the author's, so it is kept as Enter or a
+    // click away would keep it.
+    destroy: () => { closeEditor(); },
   };
 }
 
-/** Two clicked corners into a rectangle, whichever way round they came. */
-function normalise(a: { x: number; y: number }, b: { x: number; y: number }): FurnitureDraft {
+/** Two clicked corners into a rectangle, whichever way round they came, in
+ *  whole units: the shard stores whole numbers. */
+function normalise(a: Point, b: Point): FurnitureDraft {
+  const box = boxBetween(a, b);
   return {
-    x: Math.round(Math.min(a.x, b.x)),
-    y: Math.round(Math.min(a.y, b.y)),
-    w: Math.round(Math.abs(b.x - a.x)),
-    h: Math.round(Math.abs(b.y - a.y)),
+    x: Math.round(box.x), y: Math.round(box.y),
+    width: Math.round(box.width), height: Math.round(box.height),
   };
 }

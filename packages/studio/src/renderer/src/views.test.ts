@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The nav + centre views, rendered headlessly: the navigator disambiguates
 // kinds with group labels, and the deck centre shows cards as title+beat
-// (the ranking machinery is recessive, in the inspector).
+// (the ranking machinery is recessive, on the card page).
 
 import { describe, expect, it, vi } from "vitest";
 import { cardHasContent, navId, projectLead, renderBoxCentre, renderDeckCentre, renderDecksCentre, renderHandsCentre, renderNav, renderProblems, renderProjectCentre } from "./views.js";
@@ -30,7 +30,7 @@ const project: ProjectDto = { dir: "/p", name: "Saltmarsh", threads: {}, storyPr
 
 const stubActions = (over: Partial<ViewActions> = {}): ViewActions => ({
   openThreads: () => 0, showComments: vi.fn(), focus: vi.fn(), toggleNav: vi.fn(), openProjectSettings: vi.fn(), revealProject: vi.fn(), inspectCard: vi.fn(), inspectTemplate: vi.fn(), inspectTagGroup: vi.fn(), inspectHand: vi.fn(), openHand: vi.fn(),
-  newCard: vi.fn(), newDeck: vi.fn(), newBox: vi.fn(), newTemplate: vi.fn(), newTagGroup: vi.fn(), newMap: vi.fn(), newHand: vi.fn(), editBox: vi.fn(), saveDeck: vi.fn(), saveBox: vi.fn(),
+  newCard: vi.fn(), newDeck: vi.fn(), newBox: vi.fn(), newTemplate: vi.fn(), newTagGroup: vi.fn(), newMap: vi.fn(), newHand: vi.fn(), editBox: vi.fn(), saveDeck: vi.fn(), saveBox: vi.fn(), saveDeckLater: vi.fn(), saveBoxLater: vi.fn(),
   duplicateBox: vi.fn(), deleteBox: vi.fn(), moveBox: vi.fn(), moveDeck: vi.fn(), moveHand: vi.fn(),
   duplicateCard: vi.fn(), deleteCard: vi.fn(), showLinks: vi.fn(), selectCard: vi.fn(), setViewMode: vi.fn(), mountNodeView: vi.fn(), mountBoxSites: vi.fn(), openMap: vi.fn(), useProjectMap: vi.fn(), cardGroup: () => undefined, setCardGroup: vi.fn(), deckCatalogue: () => [], moveCard: vi.fn(),
   duplicateDeck: vi.fn(), deleteDeck: vi.fn(), duplicateTemplate: vi.fn(), deleteTemplate: vi.fn(),
@@ -194,7 +194,7 @@ describe("the contract line on a box page", () => {
     renderBoxCentre(host, { ...box, contract: ["Ticked at the-park every 60s"] }, () => {}, stubActions());
     const gid = host.querySelector<HTMLElement>(".doc-gid .gid")!;
     expect(gid.classList.contains("gid-bound")).toBe(true);
-    expect(gid.title).toContain("Ticked at the-park every 60s");
+    expect(gid.dataset["tip"]).toContain("Ticked at the-park every 60s");
     // Marked, never disabled: the refusal is the server's, on push.
     expect(gid.hasAttribute("disabled")).toBe(false);
   });
@@ -211,7 +211,7 @@ describe("the contract line on a box page", () => {
     title.dispatchEvent(new Event("input", { bubbles: true }));
     expect(gid.textContent).toContain("the-long-street");
     expect(gid.classList.contains("gid-bound")).toBe(false);
-    expect(gid.title).not.toContain("Ticked at the-park");
+    expect(gid.dataset["tip"]).not.toContain("Ticked at the-park");
     expect([...host.querySelectorAll<HTMLElement>(".doc-contract")].filter((p) => !p.hidden)).toEqual([]);
   });
 
@@ -420,9 +420,11 @@ describe("deck centre", () => {
     const menu = document.querySelector(".ctxmenu")!;
     expect(menu).not.toBeNull();
     const items = [...menu.querySelectorAll<HTMLButtonElement>(".ctxmenu-item")].map((b) => b.textContent);
-    // "Links..." first: it is the one that asks a question rather than changing
+    // "Links…" first: it is the one that asks a question rather than changing
     // something, and the two that change something stay together at the bottom.
-    expect(items).toEqual(["Links...", "Duplicate", "Delete"]);
+    // The delete names its object, with an ellipsis only when a question
+    // follows: this card has content, so it asks.
+    expect(items).toEqual(["Links\u2026", "Duplicate", cardHasContent(deck.cards[0]!) ? "Delete card\u2026" : "Delete card"]);
     menu.querySelectorAll<HTMLButtonElement>(".ctxmenu-item")[1]!.click();   // Duplicate
     expect(duplicateCard).toHaveBeenCalledWith("b_1", "k_1", "c_1");
     expect(document.querySelector(".ctxmenu")).toBeNull();             // dismissed on action
@@ -572,6 +574,22 @@ describe("problems bar", () => {
     expect(jump).toHaveBeenCalledWith(problems[1]);
   });
 
+  it("capitalises the kind, takes its tone from the CURRENT problem, and says Go to issue (Patterpad's copy)", () => {
+    const host = document.createElement("div");
+    renderProblems(host, problems, 0, () => {}, () => {}, vi.fn());
+    expect(host.textContent).toContain("Error");
+    expect(host.textContent).not.toMatch(/\berror\b/);
+    const toneOf = (): string => [...host.classList, ...[...host.querySelectorAll("*")].flatMap((e) => [...e.classList])].find((c) => /tone|danger|warn|accent/.test(c)) ?? "";
+    const onError = toneOf();
+    renderProblems(host, problems, 1, () => {}, () => {}, vi.fn());
+    expect(host.textContent).toContain("Warning");
+    // Standing on the warning, the bar reads as a warning even though an error
+    // is elsewhere in the list.
+    expect(toneOf()).not.toBe(onError);
+    expect(toneOf()).toMatch(/warn/);
+    expect(host.querySelector<HTMLElement>(".stepbar-cur")!.dataset["tip"]).toBe("Go to issue");
+  });
+
   it("clamps an index the list has outgrown rather than drawing nothing", () => {
     const host = document.createElement("div");
     renderProblems(host, [problems[0]!], 5, () => {}, () => {}, vi.fn());
@@ -707,5 +725,74 @@ describe("Group by", () => {
     expect(host.querySelectorAll(".listrow").length).toBeGreaterThan(0);   // the rows stay
     expect([...host.querySelectorAll(".groupby .seg-opt")].map((b) => b.textContent)).toEqual(["Deck", "npc"]);
     expect([...host.querySelectorAll(".gb-head .gb-name")].map((h) => h.textContent)).toEqual(["Docks"]);
+  });
+});
+
+describe("copy and deletes (the October 2026 review, items 5 and 25)", () => {
+  it("the navigator's add row says + New deck, as everywhere else", () => {
+    const host = document.createElement("div");
+    const expanded = new Set([navId.box("b_1"), navId.collection("b_1", "decks")]);
+    renderNav(host, project, { kind: "deck", box: "b_1", deck: "k_1" } as Focus, expanded, stubActions());
+    expect([...host.querySelectorAll(".nav-add")].map((b) => b.textContent)).toContain("+ New deck");
+    expect(host.textContent).not.toContain("+ deck");
+  });
+
+  it("a deck face counts its cards with a real plural", () => {
+    const host = document.createElement("div");
+    renderDecksCentre(host, box, "cards", stubActions());
+    expect(host.querySelector(".deck-card .sub")!.textContent).toBe("1 card");
+  });
+
+  it("a hand with its own rule is called standalone, the one name Find and its page use", () => {
+    const host = document.createElement("div");
+    renderHandsCentre(host, { ...box, hands: [{ id: "h_2", gameId: "the-well", tags: {} }] }, stubActions());
+    expect(host.querySelector(".listmeta")!.textContent).toContain("standalone");
+    expect(host.textContent).not.toContain("standalone rule");
+  });
+
+  it("the project page's More opens a menu of what it offers", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const openProjectSettings = vi.fn();
+    renderProjectCentre(host, project, stubActions({ openProjectSettings }));
+    const more = host.querySelector<HTMLButtonElement>(".doc-menu")!;
+    expect(more.hasAttribute("title")).toBe(false);
+    more.click();
+    const items = [...document.querySelectorAll<HTMLButtonElement>(".ctxmenu-item")];
+    expect(items.map((b) => b.textContent)).toContain("Project settings\u2026");
+    items.find((b) => b.textContent === "Project settings\u2026")!.click();
+    expect(openProjectSettings).toHaveBeenCalled();
+    host.remove();
+  });
+
+  it("the project page's box row joins its counts with the metadata line, not typed dots", () => {
+    const host = document.createElement("div");
+    renderProjectCentre(host, project, stubActions());
+    expect(host.textContent).not.toContain("\u00b7");
+    expect(host.querySelector(".listmeta")!.textContent).toContain("1 deck");
+  });
+
+  it("a card's delete from a box's Contents names the card's own deck", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const deleteCard = vi.fn();
+    setDocTab("box:b_1", "contents");
+    renderBoxCentre(host, box, () => {}, stubActions({ deleteCard }));
+    const face = host.querySelector<HTMLButtonElement>(".scard:not(.ghost)")!;
+    face.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+    const del = [...document.querySelectorAll<HTMLButtonElement>(".ctxmenu-item")].find((b) => b.textContent?.startsWith("Delete card"))!;
+    del.click();
+    expect(deleteCard).toHaveBeenCalledWith("b_1", "k_1", "c_1");
+    host.remove();
+  });
+
+  it("a deck's menu offers a plain Delete deck: main refuses a deck with cards, so nothing is asked", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    renderDecksCentre(host, box, "cards", stubActions());
+    host.querySelector<HTMLElement>(".deck-card:not(.ghost)")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 5, clientY: 5 }));
+    expect([...document.querySelectorAll(".ctxmenu-item")].map((b) => b.textContent)).toContain("Delete deck");
+    document.querySelector<HTMLButtonElement>(".ctxmenu-item")!.click();   // dismiss
+    host.remove();
   });
 });

@@ -16,8 +16,7 @@
 // still listed the hidden box would defeat it.
 // ---------------------------------------------------------------------------
 
-import { iconNode } from "@wildwinter/app-shell";
-import { el } from "./dom.js";
+import { el, iconNode } from "@wildwinter/app-shell";
 import { boxColour, boxPin } from "./box-tint.js";
 import { handCardRow, openDeckPickerAcross, openDeckPickerFor } from "./inspector.js";
 import { NEVER_LABEL, anywhereLine, movingNote, tierLabel } from "./hand-tiers.js";

@@ -10,6 +10,86 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **Cmd+P opens the Board**, as it plays a scene in Patterpad. It was Cmd+T.
+- **The menus are in Patterpad's order.** File keeps Open Recent and Close Project with New and Open, then saving and the pack items; Duplicate sits below Select All; View runs Project Overview and Up a Level, then Back and Forward, then the panes; Follow System is first among the colour themes. On Linux the last File item says Quit (Exit stays on Windows), and macOS no longer lists Enter Full Screen twice.
+- **Menu items that need a project are greyed when none is open**: Close Project, Save, New Card, Share Scopes, The Board, the Publish items and the Storyletpack export and merge. New Card waits for a deck to be open.
+- **Review Feedback and Show Resolved Comments start off each time Storyletter opens**, as they do in Patterpad.
+- **Undo keeps the last 100 steps.**
+- **A double-clicked Storyletpack opens the way File > Open Storyletpack does**: into a folder you choose, merging into the project if the folder already holds it, with the progress strip.
+- **Every field saves as you type**, and Esc puts back what the field held when you clicked into it, everywhere. Card and outcome Fields values, a card's Redraw turns, hand and hand template slots, a box's turn seconds and tag names used to save only when you left the field, so Cmd+S, Play and the review walk could act on or lose a value you had just typed. A deck's or a box's title still saves when you leave it, since renaming either moves a file; their purposes now save as you type.
+- **Esc goes up a level from any page** when you're not typing in a field, as the back buttons' tips have always said. It used to work only from a card.
+- **Deletes ask only when there's something to lose**: a hand template with hands of its kind, a hand with a pin on the map, a box with decks or hands, a card with anything written on it. The question names what goes and says you can undo it, and the menus say "Delete card…" (with the ellipsis only when a question follows). A deck that still has cards, like a tag group that cards still use, is refused rather than asked about, saying why.
+- **Skipping the name prompt on first run is final**, as it is in Patterpad, and the prompt says "Welcome to Storyletter".
+- **The problems bar matches Patterpad's**: the kind reads "Error" or "Warning", the bar's colour follows the problem you're on rather than the worst one, and its tip says "Go to issue". Clicking the problem count goes to the first problem; its tip says "N problems. Click to step through them."
+- **The welcome screen lists eight recent projects**, as the File menu does.
+- **New Project's buttons say what follows**: "Choose location…" for a kit and "Open a copy…" for an example.
+- **Publish Bundle says "Published"**, as the other two Publish commands do, and the confirmations share one shape.
+- **Copy tidied against the house style**: "Links…", "+ New deck" in the navigator, "Remove tag" and "Remove outcome", real plurals ("1 card"), plain placeholders in Fields ("Text", "A number"), a sentence for an empty tier on a hand's Cards tab, "standalone" as the one name for a hand with its own rule, and the themed tooltip on the game id chip. The project page's More button opens a menu (Project settings…, Show in Finder) rather than going straight to Project settings.
+- **A new item's title is ready to type into** for every kind: boxes, hands, hand templates, tag groups and maps, and every duplicate, as it already was for cards and decks.
+- **Coverage waits for Run**, as Patterpad's does. The window opens on the last report, saying when it ran and marking it once the project has changed since, or on a Run button. It no longer sweeps when it opens or when the project changes.
+- **Coverage's fields read "Runs", "Max turns" and "Seed"**, and refuse a blank value, or 0 runs or turns, rather than reporting every card never dealt. Run waits until they're fixed. The Board's seed field reads "Seed" too.
+- **Escape on the Board clears a selected hand, or the zone selected on the map, before it closes the window.** Closing the Board once the session has moved on from its opening deal asks first, as Restart does, whichever way it is closed: Escape, its close button, Ctrl+W, Alt+F4 or the window menu. Quitting and installing an update never wait on it. Restart and Close no longer ask about an untouched session.
+- **The tool windows share one look**: the Board, Coverage, Links and Find draw the same frame, type size and fields. With no project open, each says in one sentence what to do.
+- **Find's empty states are sentences** ("No matches.", "Open a project to search."), and clicking or hovering a result moves the keyboard highlight to it, as in Patterpad.
+- **Links' Follow the editor is a toggle that stays put.** Turn it off to stay on the card shown.
+- **A restore on the Board says what it cost**: when a save no longer fits the build exactly, a note names the properties dropped or reset and counts the cards that left their hands.
+- **The Board's journal Copy takes what the journal shows**, with the same quotes and the same rows.
+- **Camera moves ease.** Fit everything, fit the selection, back to 100%, centring on a comment from the review walk, revealing an arrangement that landed off screen and returning to a pin on the map now travel there over a quarter of a second, rather than jumping. Your own pans and zooms, and a canvas reopening where you left it, stay instant, and none of it moves under Reduce motion.
+- **Delete in the map's Edit layout takes the selected pin, zone or picture off the map**, as its right-click Remove from the map does, in one undo step each. A picked corner of a zone is still what Delete removes when one is picked.
+- **Arrange has no single-letter key any more.** It is the Arrange button and the canvas's right-click menu; L did it before, and the family keeps no bare-letter shortcuts.
+- **The canvas's keys act on the canvas only when it is yours**: Cmd+A, Delete, F, Home and the zoom keys work while you last clicked on the canvas, or the pointer is over it with nothing else focused, and no longer reach through to a deck canvas while you're in the navigator.
+- **One cursor at a time on the canvases**: the hand while Space is held or a pan is under way, then what the pointer is over (an open hand on a card or a frame's bar you can drag, a resize arrow on a picture's corner, a pointer on a comment), then the armed tool's crosshair.
+- **A small wobble is a click everywhere**: dragging a card, panning and sweeping a marquee all start at the same three pixels. Shift or Cmd adds to the selection for a sweep as it does for a click, and Ctrl-click on macOS opens the menu, as right-click does.
+- **A comment's hover line is the app's own tooltip**, naming who wrote it.
+- **The zoom controls no longer fade** as the pointer crosses the canvas; they dim and brighten at once.
+- **A frame's name gives way below 60% zoom**, with the name in the hover tip there, rather than shrinking out of its bar.
+- **Arrange lays cards out on the grid**, so a card dragged afterwards snaps in step with its neighbours.
+- **Zooming a large canvas is two to three times cheaper**: a card, a pin or a frame is redrawn only when the zoom crosses the point where it shows or hides its name, and a placed, locked picture on the map is no longer redrawn while a pin is dragged.
+
+### Fixed
+
+- **Switching back to Storyletter no longer moves you.** The window used to redraw everything on focus, which dropped the caret, scrolled the navigator to the top and rebuilt a deck's canvas. Now nothing redraws unless a file changed on disk, and then only the navigator and the problems bar, and the open document only if its own content changed. A redraw of the document you're in keeps its scroll and the field you're typing in.
+- **Deleting several cards is one undo step**, as the question always promised, even when a box's Contents selection spans several decks. It was one step per card.
+- **Delete works on a card in a box's Contents tab**, from the right-click menu and the Delete key.
+- **The Story page saves like every other document**, so the save indicator, Play and Close see its edits.
+- **A problem opens the box it is in.** A box whose name appeared inside another box's folder path could claim that box's problems.
+- **The arrow keys no longer redraw a deck's canvas** in node view.
+- **A save that version control refuses changes nothing.** A batch of files is now written whole or not at all, and nothing is deleted unless the writes landed: renaming a deck whose new file was refused used to delete the deck, with nothing to undo. The message names the file and, where a lock is the reason, who holds it, and the project in the editor stays as the files say.
+- **Undo and Redo say when they can't write a file**, and keep the step so you can try again.
+- **Edits made while a push to a server is under way still count as unpushed** once it lands.
+- **Making a map is its own undo step.** It used to join the tag group edit before it, so one undo took both, and Create map is now one step rather than two.
+- **Deleting a hand takes its pin off the map in the same undo step**, rather than leaving a pin for a hand that is gone.
+- **Deleting a tag group that cards still use is refused**, saying how many cards carry it, as deleting a deck with cards in it is. Deleting something that has already gone says so rather than adding an empty undo step, and no message shows an internal id.
+- **Update prompts go to the editor window**, which is the one that answers them. With the Board or Find in front, a prompt waited five minutes and answered itself.
+- **A coverage test still running when you open another project is stopped**, and its report is not shown for the new one.
+- **Importing a session save into the Board reads older saves** that the engine still loads.
+- **Live Link refuses a connection from a web page**, by Patterpad's rule: a game that sends no origin (Unity, Godot) or a loopback one (Unreal's bare address, a browser game on a local dev server) connects; any other site, a sandboxed frame, and a name that only resolves to this machine are turned away.
+- **The Live Link chip reads "Live Link"**, capitalised as in the menus.
+- **Links follows again** after a project change, and an explicit Links… on a card always lands, even after you walked the graph. It used to keep showing the old project's cards.
+- **Links keeps its pan, zoom and selection** while the editor redraws. It used to rebuild its canvas and fit it on every editor render.
+- **Escape during a marquee in Links abandons the marquee** instead of closing the window.
+- **Coverage's Run and Add coverage drivers are disabled while a sweep runs.** A second click used to start a second sweep, and a sweep that finished after a project change showed the old project's report.
+- **Coverage refreshes its drivers note when you come back to it**, and keeps its scroll position across redraws.
+- **The Board's Live mode no longer paints the game's cards with your local session's run marks.**
+- **A failed play on the Board clears on the next thing that works**, rather than staying until a rebuild. Snapshots no longer carry over to another project.
+- **The Board's map**: clicking a pin no longer clears the zone filter, a click redraws once, not twice, and another box's or group's map is framed whole.
+- **The Board keeps the keyboard where it was** across its redraws, and a hand's header can be reached and selected from the keyboard.
+- **The Board stays linked to Patterpad after a rebuild.** It used to drop a working link and reconnect every ten seconds.
+- **Locked outcomes and Live mode's playthrough picker use the themed tooltip**, not the system's.
+- **A map picture scaled by its corners redraws at its new size** straight away, and a picture you moved stays put when you show or hide a layer. Both used to be saved but not shown, until something else redrew the map.
+- **A marquee round the cards inside a frame selects the cards, not the frame**: a frame is selected from its title bar, by a click or a sweep. And when a selection does hold a frame and cards, the frame goes only once the cards' delete is confirmed; cancelling used to keep the cards and lose the frame.
+- **Clicking a comment marker with a tool armed opens the comment** without also dropping a pin, a corner or a new comment where you clicked.
+- **Dropping a comment on a pin goes by the pin's dot**, as clicking it does, so a comment dropped just beside a pin no longer files itself against it.
+- **Another project's pictures and camera no longer show through.** A map picture or a remembered view from one project could appear in another that used the same names, as the examples do; a picture that failed to load is looked for again the next time the map opens, and a picture replaced on disk under the same name is shown afresh.
+- **Reading the map no longer renames a frame** on a double-click, and a frame name being typed when the canvas redraws is kept.
+- **Space held while switching to another app no longer leaves the canvas panning** on the next click.
+- **Select All (Cmd+A) selects the canvas's cards when you're working on the canvas**, and otherwise the text of the field you're in, never the whole window. The menu's built-in Select All took the key before the canvas could, as Patterpad found.
+- **The playable page you publish credits Storylet Studio again**, and a project without a name is "A Storylet Studio project" there. 0.18.6 changed both to Storyletter in error: Storylet Studio is the whole (the format, the engine, the editor), Storyletter the editor alone.
+- **The Board says what happened when the editor's project changes under it**: "Another project was opened in the editor. Restart to play it." or "The project was closed in the editor. Restart to clear the Board.", where it used to call either one a change to the project.
+- **Coverage remembers when its report ran** in the app itself, so "Ran 5 minutes ago" and "The project has changed since" survive closing the window, and are right after Add coverage drivers.
+
 ## [0.18.8] - 2026-10-06
 
 ### Fixed

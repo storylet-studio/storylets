@@ -9,7 +9,7 @@ const setCanvasCameras = vi.fn<(c: Record<string, unknown>) => Promise<void>>(as
 });
 
 const memory = await import("./canvas-memory.js");
-const { flushCameras, hydrateCameras, mapCameraKey, nodeCameraKey, recallCamera, rememberCamera } = memory;
+const { flushCameras, hydrateCameras, mapCameraKey, nodeCameraKey, recallCamera, rememberCamera, setCanvasProject } = memory;
 
 const cam = (x: number) => ({ x, y: 0, scale: 1 });
 /** What the last write-through sent. */
@@ -84,5 +84,29 @@ describe("hydrating", () => {
 
   it("survives having nothing to hydrate from", () => {
     expect(() => hydrateCameras(undefined)).not.toThrow();
+  });
+});
+
+describe("cameras belong to a project", () => {
+  // Deck ids and map group ids are unique only inside one project, and the worked
+  // examples share theirs: a camera left on one example's deck used to open the
+  // next example's deck of the same id looking at empty canvas.
+  it("keys the same deck in two projects apart", () => {
+    setCanvasProject("/work/the-village.storylets");
+    const village = nodeCameraKey("d_inn");
+    const villageMap = mapCameraKey("project", "g_zones");
+    setCanvasProject("/work/the-hamlet.storylets");
+    expect(nodeCameraKey("d_inn")).not.toBe(village);
+    expect(mapCameraKey("project", "g_zones")).not.toBe(villageMap);
+  });
+
+  it("gives one project's camera back to that project and not the other", () => {
+    setCanvasProject("/work/a");
+    rememberCamera(nodeCameraKey("d_1"), cam(7));
+    setCanvasProject("/work/b");
+    expect(recallCamera(nodeCameraKey("d_1"))).toBeUndefined();
+    setCanvasProject("/work/a");
+    expect(recallCamera(nodeCameraKey("d_1"))).toEqual(cam(7));
+    setCanvasProject("");
   });
 });

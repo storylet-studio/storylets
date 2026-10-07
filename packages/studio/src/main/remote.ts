@@ -234,6 +234,19 @@ export function hashShards(shards: Map<string, string>): Record<string, string> 
   return out;
 }
 
+/**
+ * The shards of a pack, hashed: the base a push moves to.
+ *
+ * What was SENT, not what is on disk when the far end answers. A push takes as
+ * long as the round trip, autosave carries on meanwhile, and a base hashed from
+ * the disk afterwards counted an edit typed during the push as pushed (the
+ * Storyletter review of 2026-10, item 2). `planPull` hashes the pack it was
+ * handed for the same reason.
+ */
+export async function hashPack(pack: Buffer | Uint8Array, dir: string): Promise<Record<string, string>> {
+  return hashShards((await openPackBytes(pack, dir)).shards);
+}
+
 /** Read the base, or nothing when there is none (or none we can read: a base we
  *  cannot parse is one we have no business guessing at). */
 export function readBase(dir: string): BaseRecord | undefined {

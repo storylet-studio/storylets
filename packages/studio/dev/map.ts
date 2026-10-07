@@ -25,11 +25,12 @@ import { mountCanvasSurface, type DrawContext } from "../src/renderer/src/canvas
 import { onImageReady } from "../src/renderer/src/image-cache.js";
 import { readCanvasTokens, watchCanvasTokens } from "../src/renderer/src/canvas-tokens.js";
 import {
-  drawSite, drawZone, paintZoneLabels, sitePoint, siteShape, zoneShape, LABEL_FLOOR, type SiteShape, type ZoneShape, backgroundShape, drawBackground, type BackgroundShape,
+  drawSite, drawZone, paintZoneLabels, sitePoint, siteShape, worldOutline, zoneShape, LABEL_FLOOR, type SiteShape, type ZoneShape, backgroundShape, drawBackground, type BackgroundShape,
 } from "../src/renderer/src/map-art.js";
 import {
-  closesShape, paintDraft, paintHandles, withVertexAfter, withVertexAt, withoutVertex, paintScaleHandles,
+  applyRect, closesShape, paintDraft, paintHandles, withVertexAfter, withVertexAt, withoutVertex, paintScaleHandles,
 } from "../src/renderer/src/map-edit.js";
+import { paintDraftRect } from "../src/renderer/src/furniture-art.js";
 import { zoneAt } from "../../model/src/spatial.js";
 import type { Polygon } from "../../model/src/spatial.js";
 import Konva from "konva";
@@ -81,7 +82,7 @@ const items: MapItem[] = [
 
 const zonesNow = (): { id: string; polygon: Polygon }[] =>
   items.filter((i): i is ZoneShape & { kind: "zone" } => i.kind === "zone")
-    .map((z) => ({ id: z.id, polygon: z.outline.map((p) => ({ x: z.x + p.x, y: z.y + p.y })) }));
+    .map((z) => ({ id: z.id, polygon: worldOutline(z) }));
 
 const host = document.getElementById("stage")!;
 const zoom = document.getElementById("zoom") as HTMLOutputElement;
@@ -91,6 +92,15 @@ const hover = document.getElementById("hover") as HTMLOutputElement;
 
 let tokens = readCanvasTokens();
 initTooltips();
+
+/** What the lab has "saved" of each picture: the stand-in for the map shard,
+ *  kept apart from the canvas's items exactly as the app keeps the shard apart
+ *  from its view, so a save that forgets the canvas shows up here too. */
+const shard = new Map<string, { x?: number; y?: number; width?: number; height?: number }>();
+function persist(id: string, edit: { x?: number; y?: number; width?: number; height?: number }): void {
+  shard.set(id, { ...shard.get(id), ...edit });
+  events.textContent = `saved ${id}: ${JSON.stringify(shard.get(id))}`;
+}
 
 /** A REAL floor plan, from dev/local (gitignored: see the folder's note). A
  *  2816x1536 PNG of about 10MB, which is the size these actually are - the whole
@@ -158,6 +168,8 @@ const surface = mountCanvasSurface<MapItem>({
     for (const move of moves) {
       const item = items.find((i) => i.id === move.id);
       if (item) { item.x = move.x; item.y = move.y; }
+      // A picture's new corner goes to the "shard" too, as the app's does.
+      if (item?.kind === "background") persist(item.id, { x: move.x, y: move.y });
     }
     // A dragged ZONE writes its new outline first, so the rule below is applied
     // against where the zones are NOW.
@@ -165,7 +177,7 @@ const surface = mountCanvasSurface<MapItem>({
       const item = items.find((i) => i.id === move.id);
       if (item?.kind !== "zone") continue;
       const zone = ZONES.find((z) => z.id === item.id);
-      if (zone) zone.polygon = item.outline.map((p) => ({ x: item.x + p.x, y: item.y + p.y }));
+      if (zone) zone.polygon = worldOutline(item);
     }
     const said = bindSitesToZones();
     surface.setItems(items);
@@ -194,12 +206,7 @@ function paintNames(): void {
       (id) => { const item = at(id); return item?.kind === "zone" ? item : undefined; });
     if (draft.length > 0) paintDraft(layer, scale, tokens, draft, pointer);
     if (preview) paintDraft(layer, scale, tokens, preview.polygon, undefined);
-    if (scaling) {
-      layer.add(new Konva.Rect({
-        x: scaling.x, y: scaling.y, width: scaling.width, height: scaling.height,
-        stroke: tokens.accent, strokeWidth: 1.5 / scale, dash: [6 / scale, 4 / scale], listening: false,
-      }));
-    }
+    if (scaling) paintDraftRect(layer, scale, tokens, scaling);
   });
 }
 
@@ -215,13 +222,17 @@ function repaint(): void {
       paintScaleHandles(layer, scale, tokens,
         { x: picture.x, y: picture.y, width: picture.width, height: picture.height }, {
           preview: (rect) => { scaling = rect; paintNames(); },
+          // The app's commit, step for step (map-tools `applyPicture`): the
+          // canvas's own copy through the shared `applyRect`, then the "shard".
+          // The lab used to write the new rect straight into its items as its
+          // way of saving, which drew the scaled picture whether or not the
+          // app's view would have, and so hid the app never redrawing it.
           commit: (rect) => {
             scaling = undefined;
-            const at = items.findIndex((i) => i.id === picture.id);
-            items[at] = { ...picture, ...rect };
+            applyRect(items, picture.id, rect);
             surface.setItems(items);
             repaint();
-            events.textContent = `scaled to ${rect.width}x${rect.height}`;
+            persist(picture.id, rect);
           },
         });
     });
@@ -229,7 +240,7 @@ function repaint(): void {
   }
   if (drawing || only?.kind !== "zone") { surface.setChrome(undefined); return; }
   const zone = only;
-  const outline = (): Polygon => zone.outline.map((p) => ({ x: zone.x + p.x, y: zone.y + p.y }));
+  const outline = (): Polygon => worldOutline(zone);
   surface.setChrome((layer, scale) => {
     paintHandles(layer, scale, tokens, outline(), {
       previewVertex: (i, to) => {
@@ -263,7 +274,7 @@ function reshape(id: string, polygon: Polygon): void {
 }
 
 /**
- * The app's rule, in the lab's own terms (mutate.ts `bindSitesToZones`): a pinned
+ * The app's rule, in the lab's own terms (main/mutate/map.ts `bindSitesToZones`): a pinned
  * hand belongs to the zone its pin is standing in, re-derived after EITHER side
  * moves, and a pin outside every zone leaves its hand loose (drawn hollow, and
  * an error in the app, where a hand that needs a zone must have one).
@@ -392,4 +403,4 @@ onImageReady(() => { surface.setItems(items); repaint(); });
 document.getElementById("bg")?.addEventListener("click", () => addBackground(false));
 document.getElementById("bglock")?.addEventListener("click", () => addBackground(true));
 
-(window as unknown as { lab: unknown }).lab = { surface, items, zonesNow, addBackground, droppedRect };
+(window as unknown as { lab: unknown }).lab = { surface, items, zonesNow, addBackground, droppedRect, shard };

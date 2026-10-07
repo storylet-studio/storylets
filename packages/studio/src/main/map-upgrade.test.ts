@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
 import { backgroundsOf } from "@storylet-studio/model";
 import type { TagGroup } from "@storylet-studio/model";
+import type { OpenResult } from "../shared/api.js";
 import { openProject } from "./project.js";
 import { redo, undo } from "./mutate.js";
 import { planMapUpgrade, upgradeProjectMap } from "./map-upgrade.js";
@@ -59,7 +60,7 @@ const open = (dir: string) => {
 };
 
 describe("upgrading a project from before the project map, in the app", () => {
-  it("says what it will do, then does it in one undo step", () => {
+  it("says what it will do, then does it in one undo step", async () => {
     const dir = oldVillage();
     const { session, problems } = open(dir);
     expect(problems.find((p) => p.severity === "error")?.fix).toEqual({ kind: "upgrade-project" });
@@ -70,7 +71,7 @@ describe("upgrading a project from before the project map, in the app", () => {
     expect(plan.report).toContain("picture moved to assets/village.jpg");
 
     const before = shards(dir);
-    const result = upgradeProjectMap(session);
+    const result = await upgradeProjectMap(session);
     if (!("project" in result)) throw new Error(JSON.stringify(result));
     expect(result.problems.filter((p) => p.severity === "error")).toEqual([]);
     expect(result.project.map).toBeDefined();
@@ -80,17 +81,17 @@ describe("upgrading a project from before the project map, in the app", () => {
     expect(existsSync(join(dir, "village", "assets", "village.jpg"))).toBe(true);
     expect(planMapUpgrade(session)).toBeUndefined();
 
-    const undone = undo(session)!;
+    const undone = (await undo(session)) as OpenResult;
     expect(shards(dir)).toEqual(before);
     expect(undone.problems.find((p) => p.severity === "error")?.fix).toEqual({ kind: "upgrade-project" });
-    expect(undo(session)).toBeNull();
+    expect(await undo(session)).toBeNull();
 
-    const redone = redo(session)!;
+    const redone = (await redo(session)) as OpenResult;
     expect(redone.problems.filter((p) => p.severity === "error")).toEqual([]);
     expect(existsSync(join(dir, "map.storyletmap"))).toBe(true);
   });
 
-  it("refuses with the planner's sentence and writes nothing", () => {
+  it("refuses with the planner's sentence and writes nothing", async () => {
     const dir = oldVillage();
     const tagsPath = join(dir, "village", "tags.storylettags");
     const tags = read(tagsPath) as { groups: unknown[] };
@@ -100,13 +101,13 @@ describe("upgrading a project from before the project map, in the app", () => {
     const refusal = 'box "village" has a tag "forest" in its group "area", and "forest" is a zone of the map, whose name will mean one thing across the project;'
       + ' rename the tag in "village", then run format again';
     expect(planMapUpgrade(session)!.refusals).toEqual([refusal]);
-    expect(upgradeProjectMap(session)).toEqual({ refused: [refusal] });
+    expect(await upgradeProjectMap(session)).toEqual({ refused: [refusal] });
     expect(shards(dir)).toEqual(before);
     expect(existsSync(join(dir, "assets"))).toBe(false);
-    expect(undo(session)).toBeNull();
+    expect(await undo(session)).toBeNull();
   });
 
-  it("asks nothing of a project already on the project map", () => {
+  it("asks nothing of a project already on the project map", async () => {
     const dir = join(mkdtempSync(join(tmpdir(), "map-upgrade-")), "the-village.storylets");
     cpSync(example, dir, { recursive: true });
     expect(planMapUpgrade(open(dir).session)).toBeUndefined();

@@ -74,3 +74,22 @@ describe("restacking", () => {
     expect(JSON.stringify(SQUARE)).toBe(before);
   });
 });
+
+describe("a picture's edit, applied to the canvas's own copy", () => {
+  // A quiet save changes the shard and not the screen: the view has to write the
+  // new rectangle into what it draws from, or a scaled picture is still drawn at
+  // its old size (the October 2026 review, finding 6).
+  it("replaces the item's rectangle and leaves everything else as it was", async () => {
+    const { applyRect } = await import("./map-edit.js");
+    const items = [
+      { id: "z_1", x: 0, y: 0, width: 10, height: 10, kind: "zone" },
+      { id: "g_1", x: 5, y: 5, width: 100, height: 50, kind: "background", title: "site.png" },
+    ];
+    const was = items[0];
+    expect(applyRect(items, "g_1", { width: 200, height: 100 })).toEqual(
+      { id: "g_1", x: 5, y: 5, width: 200, height: 100, kind: "background", title: "site.png" });
+    expect(items[1]!.width).toBe(200);
+    expect(items[0]).toBe(was);
+    expect(applyRect(items, "nope", { x: 1 })).toBeUndefined();
+  });
+});

@@ -4,30 +4,16 @@
    Open chip are the node view's own rules (.nodestage, card-open.css), so the
    two canvases cannot drift apart in styling. */
 
-* { box-sizing: border-box; }
-html, body { height: 100%; }
-body {
-  margin: 0;
-  background: var(--surface);
-  color: var(--ink);
-  font-family: var(--font-ui);
-  font-size: 13px;
-  -webkit-user-select: none;
-  user-select: none;
-  border: 1px solid var(--line-soft);
-}
+/* The base (ground, type, frame, fields) is the shared tool-window/base.css. */
 #links { height: 100%; display: flex; flex-direction: column; }
 
 /* No element `button` rule: the follow control is the shell's `.btn`
    (controls.css, via theme.css). */
 
-/* In the bar: the follow control, and the quiet statement of the same fact when
-   there is nothing to do about it. */
+/* In the bar: the follow toggle (the shell's .swin-follow, lit while on). */
 .swin-follow { padding: 2px 9px; }
-.swin-note { font-size: 11.5px; color: var(--muted); }
 
 .lbody { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 10px 12px 0; }
-.lbody .hint { color: var(--muted); font-size: 13.5px; max-width: 48ch; line-height: 1.5; margin: 6px 2px; }
 
 /* The canvas fills the body. .nodestage brings the border, the radius and the
    positioning the Open chip is placed against. */

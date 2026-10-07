@@ -5,7 +5,7 @@ sidebar:
   label: The Board
 ---
 
-Play ▸ The Board (`Cmd+T`), or the ▶ Play button in the top bar, opens the Board, a
+Play ▸ The Board (`Cmd+P`), or the ▶ Play button in the top bar, opens the Board, a
 separate window running the real runtime over your project, compiled in memory.
 
 This isn't a preview. It's the same engine your game ships with, so if a card is dealt

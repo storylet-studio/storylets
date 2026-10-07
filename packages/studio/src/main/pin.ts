@@ -14,7 +14,7 @@
 
 import { planPins } from "@storylet-studio/ops";
 import type { PinnedName } from "@storylet-studio/ops";
-import { commit } from "./mutate.js";
+import { commit } from "./mutate/write-path.js";
 import { isShapeShard, readRemote } from "./remote.js";
 import type { ProjectSession } from "./project.js";
 
@@ -25,13 +25,13 @@ const IN_DECK_SHARD = new Set<PinnedName["kind"]>(["deck", "card", "outcome"]);
 
 /** Pin every titled, unpinned address the session may write. Returns what was
  *  pinned (empty when nothing needed it), or the commit's error. */
-export function pinForPublish(session: ProjectSession): { pinned: PinnedName[] } | { error: string } {
+export async function pinForPublish(session: ProjectSession): Promise<{ pinned: PinnedName[] } | { error: string }> {
   const plan = planPins(session.loaded);
   const author = readRemote(session.loaded.dir)?.role === "author";
   const writes = author ? plan.writes.filter((w) => !isShapeShard(w.path)) : plan.writes;
   const pinned = author ? plan.pinned.filter((p) => IN_DECK_SHARD.has(p.kind)) : plan.pinned;
   if (writes.length === 0) return { pinned: [] };
-  const result = commit(session, "Pin game ids", `pin:${pinCounter++}`,
+  const result = await commit(session, "Pin game ids", `pin:${pinCounter++}`,
     writes.map((w) => ({ path: w.path, content: w.content })));
   return "error" in result ? result : { pinned };
 }

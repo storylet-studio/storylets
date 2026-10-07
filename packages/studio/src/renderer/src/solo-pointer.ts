@@ -6,7 +6,7 @@
 // once, so the zones' page and the map's panel need not each be handed it.
 // ---------------------------------------------------------------------------
 
-import { el } from "./dom.js";
+import { el } from "@wildwinter/app-shell";
 import { SOLO_SHARE_POINTER } from "./zone-share.js";
 
 let openSettings: ((section: string) => void) | undefined;

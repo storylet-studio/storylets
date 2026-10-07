@@ -54,6 +54,21 @@ describe("studio store", () => {
     expect(again.get().canvasCameras).toEqual({ "node:k_1": { x: 11, y: 20, scale: 0.5 } });
   });
 
+  it("starts Review Feedback and Show Resolved Comments off at launch, as Patterpad does (review 2026-10, section 2)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+    const last = new StudioStore(dir);
+    last.setReviewWalk(true);
+    last.setShowResolved(true);
+    // The next launch: the toggles were the last sitting's, not this one's.
+    const next = new StudioStore(dir);
+    next.resetReviewToggles();
+    expect(next.get().reviewWalk).toBe(false);
+    expect(next.get().showResolved).toBe(false);
+    // ...and on disk, so a window that reads the file sees the same.
+    expect(new StudioStore(dir).get().reviewWalk).toBe(false);
+    expect(new StudioStore(dir).get().showResolved).toBe(false);
+  });
+
   it("remembers the Board's follow choice, which is OFF until asked for", () => {
     // The Board marks rather than navigates; following is the opt-in, so a fresh
     // state file must not have it on.

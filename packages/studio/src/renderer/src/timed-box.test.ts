@@ -78,18 +78,32 @@ describe("the box page's Turns section", () => {
     expect(saveBox).toHaveBeenLastCalledWith("b_1", { turn: null });
   });
 
-  it("a typed unit is saved on change, and refused when it is not a whole second", () => {
+  // Ruling N: committed as it is typed, through the save controller, rather
+  // than on the blur, so Cmd+S and Play see it.
+  it("a typed unit is saved as it is typed, and refused when it is not a whole second", () => {
     const saveBox = vi.fn();
     const centre = document.createElement("div");
     renderBoxTabBody(centre, timedBox, "dealing", host({ saveBox }));
     const field = centre.querySelector<HTMLInputElement>("input.insp-short")!;
-    field.value = "20"; field.dispatchEvent(new Event("change"));
+    field.value = "20"; field.dispatchEvent(new Event("input"));
     expect(saveBox).toHaveBeenCalledWith("b_1", { turn: { seconds: 20 } });
     saveBox.mockClear();
     for (const bad of ["0", "-5", "1.5", ""]) {
-      field.value = bad; field.dispatchEvent(new Event("change"));
+      field.value = bad; field.dispatchEvent(new Event("input"));
     }
     expect(saveBox).not.toHaveBeenCalled();
+  });
+
+  it("Esc puts back the seconds the field had when it got focus, and saves that", () => {
+    const saveBox = vi.fn();
+    const centre = document.createElement("div");
+    renderBoxTabBody(centre, timedBox, "dealing", host({ saveBox }));
+    const field = centre.querySelector<HTMLInputElement>("input.insp-short")!;
+    field.dispatchEvent(new Event("focus"));
+    field.value = "20"; field.dispatchEvent(new Event("input"));
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(field.value).toBe("60");
+    expect(saveBox).toHaveBeenLastCalledWith("b_1", { turn: { seconds: 60 } });
   });
 });
 

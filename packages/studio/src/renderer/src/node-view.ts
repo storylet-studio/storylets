@@ -11,20 +11,21 @@
 // arrangement is the author's, so nothing here ever moves a card on its own.
 // ---------------------------------------------------------------------------
 
-import Konva from "konva";
-import { el } from "./dom.js";
-import { iconNode, plural, tipWithKey } from "@wildwinter/app-shell";
+import { el, plural } from "@wildwinter/app-shell";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { mountCanvasSurface, type CanvasItem, type CanvasSurface } from "./canvas-surface.js";
+import { sharedToolStrip, stripAddButton } from "./canvas-controls.js";
 import { nodeCameraKey, recallCamera, rememberCamera } from "./canvas-memory.js";
 import { readCanvasTokens, watchCanvasTokens } from "./canvas-tokens.js";
-import { drawCardNode, gridLayout, paintEdges, NODE_H, NODE_W, TITLE_FLOOR, type CardNode } from "./node-art.js";
 import {
-  drawFrame, frameShape, type FrameShape,
+  drawCardNode, gridLayout, paintEdges, ARRANGE_GAP, FOOT_FLOOR, NODE_GRID, NODE_H, NODE_W, TITLE_FLOOR, type CardNode,
+} from "./node-art.js";
+import {
+  drawFrame, frameShape, paintDraftRect, FURNITURE_TEXT_FLOOR, type FrameShape,
 } from "./furniture-art.js";
 import { createFurniture, type FurnitureController } from "./furniture-edit.js";
 import { mountOpenChip } from "./card-open.js";
-import { markerPainter, markerPoint } from "./comment-markers.js";
+import { createCommentTool, type CommentTool } from "./comment-markers.js";
 import { cardHeat, coverageLegend } from "./coverage-art.js";
 import { edgeKeyButton, edgeTip } from "./edge-key.js";
 import type { DeckDto, DeckGraph, CanvasFurnitureDto, CommentMarkerDto, CoverageOverlayDto } from "../../shared/api.js";
@@ -41,8 +42,12 @@ export interface NodeViewActions {
    *  it rather than at the end of the default grid. `pinned` is where every other
    *  card currently sits, so the insertion cannot shift them. */
   addAt: (at: { x: number; y: number }, pinned: { id: string; x: number; y: number }[]) => void;
-  /** Delete a selection, with whatever guard the app applies. */
-  removeMany: (cardIds: string[]) => void;
+  /** Delete a selection, with whatever guard the app applies. Resolves true
+   *  when the cards went and false when the author cancelled: a selection
+   *  that also holds frames removes them only once the cards have gone, so a
+   *  cancelled delete leaves everything where it was. An answer of nothing
+   *  (no promise) is taken as "do not know", and the frames stay. */
+  removeMany: (cardIds: string[]) => void | Promise<boolean>;
   /** Arrange by dependency; resolves to the new positions and any loops found. */
   layOut: (
     ids: string[], current: { id: string; x: number; y: number }[],
@@ -80,17 +85,22 @@ export interface NodeViewActions {
 export interface MountedNodeView {
   /** The selection changed elsewhere (the browse, Find, Links). */
   setSelected: (cardIds: string[]) => void;
-  /** Redraw the comment markers alone, after one is posted, moved or resolved.
-   *  Not a full remount: that would lose the camera and the selection. */
   /** Open one marker's thread, centring the canvas on it: the feedback walk's
    *  way in. False when that thread is not a marker on this canvas. */
   openMarker: (threadId: string) => boolean;
+  /** Redraw the comment markers alone, after one is posted, moved or resolved.
+   *  Not a full remount: that would lose the camera and the selection. */
   repaintMarkers: () => void;
   /** The overlay came, went or was re-run: re-read it onto the faces. NOT a
    *  remount, which would throw away the camera and the selection. */
   refreshCoverage: () => void;
   destroy: () => void;
 }
+
+/** Below this zoom a card is too small to carry the Open chip legibly: its face
+ *  is down to a title, and the chip would cover most of it. The face's own
+ *  floor for its foot, for the same reason. */
+const CHIP_FLOOR = FOOT_FLOOR;
 
 // Where the author was looking is remembered per deck, and put back on the way
 // in: the centre is rebuilt for all sorts of reasons (switching to Cards and
@@ -153,9 +163,9 @@ export function mountNodeView(
   ];
   /** The frames, shared with the map. Built after the surface. */
   let furniture: FurnitureController | undefined;
-  /** The comment tool is armed: the next click drops a marker. Held here rather
-   *  than asked of the surface, because the strip needs to say so. */
-  let commentArmed = false;
+  /** The comment tool, also built after the surface: the strip asks it whether
+   *  it is armed, and the strip is painted during the surface's mount. */
+  let comments: CommentTool | undefined;
   /** The CARDS, where they now are: what the deck's own commands take. */
   const cardsNow = (): { id: string; x: number; y: number }[] =>
     nodes.filter(isCard).map((n) => ({ id: n.id, x: n.x, y: n.y }));
@@ -174,9 +184,11 @@ export function mountNodeView(
   //
   // The label says which cards it will touch, because the answer changes with the
   // selection and "arrange" is not a command you want to guess the scope of.
+  // No key of its own: the family has no bare-letter accelerators (the
+  // October 2026 review), so Arrange is this button and the canvas's menu.
   const tidy = el("button", {
     className: "btn camerabtn", text: "Arrange all by links",
-    tip: tipWithKey("Arrange by what links the cards", "L"),
+    tip: "Arrange by what links the cards",
     onClick: () => layOut(),
   });
   // Greyed, never removed: a control that vanishes leaves an author wondering
@@ -210,7 +222,7 @@ export function mountNodeView(
     void (async () => {
       const was = new Map(cardsNow().map((n) => [n.id, { x: n.x, y: n.y }]));
       const laid = await actions.layOut(scope, cardsNow(),
-        { width: NODE_W, height: NODE_H, gapX: 50, gapY: 40 });
+        { width: NODE_W, height: NODE_H, gapX: ARRANGE_GAP.x, gapY: ARRANGE_GAP.y });
       if (!laid) return;
       let moved = false;
       for (const p of laid.positions) {
@@ -231,27 +243,16 @@ export function mountNodeView(
       // Cycles are reported, never hidden: cards that enable each other are a
       // legitimate thing to write, and the layout has just stacked them in one
       // column, which is worth explaining.
-      layoutNote = laid.cycles.length === 0 ? undefined : describeCycles(laid.cycles, deck);
+      layoutNote = laid.cycles.length === 0 ? undefined : describeCycles(laid.cycles, titleOf);
       paintStrip();
     })();
   }
 
   function paintStrip(): void {
     // A tool is armed: one instruction and a way out, the same shape the map's
-    // tracer uses. The comment tool joins the furniture's own hints here rather
-    // than inventing a second armed-state grammar for the same strip.
-    const hint = commentArmed ? "Click where the comment goes" : furniture?.hint();
-    if (hint !== undefined) {
-      strip.replaceChildren(
-        el("span", { className: "hint", text: hint }),
-        el("span", { className: "stripgap" }),
-        el("button", {
-          className: "stripbtn cancel", tip: tipWithKey("Abandon this", "Esc"),
-          onClick: () => { if (commentArmed) disarmComment(); else furniture?.cancel(); },
-        }, iconNode("close", 12), "Cancel"),
-      );
-      return;
-    }
+    // tracer uses, and the same comment and frame tools the map's strip offers.
+    const shared = sharedToolStrip(comments, furniture);
+    if (shared !== undefined) { strip.replaceChildren(...shared); return; }
     tidy.textContent = surface.selection().length > 1 ? "Arrange by links" : "Arrange all by links";
     const note = layoutNote === undefined ? [] : [el("span", { className: "hint", text: layoutNote })];
     // The overlay names itself in the strip and DATES its evidence: a canvas
@@ -273,18 +274,12 @@ export function mountNodeView(
     // ends at its status.
     // A frame is furniture on the canvas, so it is arranging; a comment lands in
     // the notes shard, which is the author's, so it is not.
-    const frame = el("button", {
-      className: "stripbtn", tip: "Draw a titled frame behind a group of cards",
-      onClick: () => furniture?.drawFrame(),
-    }, iconNode("add", 12), "Frame");
+    const frame = stripAddButton("Frame", "Draw a titled frame behind a group of cards", () => furniture?.drawFrame());
     frame.disabled = readOnly;
     strip.replaceChildren(
       el("div", { className: "striptools" },
         frame,
-        el("button", {
-          className: "stripbtn", tip: "Drop a comment on the canvas or on a card",
-          onClick: () => armComment(),
-        }, iconNode("add", 12), "Comment"),
+        stripAddButton("Comment", "Drop a comment on the canvas or on a card", () => comments?.arm()),
       ),
       ...describe(deck, graph), ...note, ...legend,
       // Beside the status it explains, and only when there are arrows to key.
@@ -298,7 +293,7 @@ export function mountNodeView(
   const surface: CanvasSurface<NodeItem> = mountCanvasSurface<NodeItem>({
     host: stage,
     tokens,
-    grid: 20,
+    grid: NODE_GRID,
     readOnly,
     draw: (item, ctx) => {
       if (isCard(item)) return drawCardNode(item, ctx);
@@ -306,20 +301,27 @@ export function mountNodeView(
     },
     onActivate: (id) => { if (furniture?.activate(id) !== true) actions.open(id); },
     onDelete: (ids) => {
-      const rest = furniture?.absorbDelete(ids) ?? ids;
-      if (rest.length > 0) actions.removeMany(rest);
+      // The CARDS first, through the app's guard; the frames only once they have
+      // gone. Frames used to be removed first, so cancelling "Delete 3 cards?"
+      // still lost the frame a marquee had taken with them.
+      const frames = ids.filter((id) => furniture?.owns(id) === true);
+      const cardIds = ids.filter((id) => furniture?.owns(id) !== true);
+      if (cardIds.length === 0) { furniture?.remove(frames); return; }
+      const answer = actions.removeMany(cardIds);
+      if (frames.length === 0 || !(answer instanceof Promise)) return;
+      const keep = furniture;
+      void answer.then((gone) => { if (gone) keep?.remove(frames); });
     },
     // No grace period here: a chip left beside a card that has moved away reads
     // as a bug, and nobody needs an Open button while they are dragging.
     onDragStart: () => chip.hide(),
-    onKey: (key) => { if (key === "l" && !readOnly) layOut(); },
-    // Below the title floor a card face is a blank rectangle with a deck stripe,
-    // which is right at that size and leaves a board of anonymous cards. The tip
-    // is the name back, at a size the zoom cannot touch.
+    // Below its floor a face gives its name up (a card is a blank rectangle with
+    // a deck stripe, a frame's bar is empty), which is right at that size and
+    // leaves a board of anonymous shapes. The tip is the name back, at a size
+    // the zoom cannot touch.
     hoverTip: (node, scale) => {
-      if (scale >= TITLE_FLOOR) return undefined;
-      if (isCard(node)) return node.title;
-      return node.title;
+      if (isCard(node)) return scale < TITLE_FLOOR ? node.title : undefined;
+      return scale < FURNITURE_TEXT_FLOOR ? (node.title ?? "Frame") : undefined;
     },
     // An arrow says why it is there. Cards win: the surface only asks when none
     // is under the pointer.
@@ -335,7 +337,7 @@ export function mountNodeView(
       // is opened by double-clicking its bar, which already works
       // (design/annotation.md 6).
       const openable = id !== undefined && furniture?.owns(id) !== true;
-      const rect = openable && surface.scale() >= 0.6 ? surface.screenRect(id) : undefined;
+      const rect = openable && surface.scale() >= CHIP_FLOOR ? surface.screenRect(id) : undefined;
       if (openable && rect) chip.show(id, rect);
       else chip.hideSoon();
     },
@@ -343,7 +345,7 @@ export function mountNodeView(
       // Follow the node while the camera moves; if it has gone, let it lapse.
       const id = chip.target();
       const rect = id === undefined || furniture?.owns(id) === true ? undefined : surface.screenRect(id);
-      if (id !== undefined && rect && surface.scale() >= 0.6) chip.show(id, rect);
+      if (id !== undefined && rect && surface.scale() >= CHIP_FLOOR) chip.show(id, rect);
       else chip.hideSoon();
     },
     // The same context menu the card and table views use, with the same words in
@@ -391,92 +393,28 @@ export function mountNodeView(
     get: () => graph.furniture,
     save: (next, label, coalesce) => actions.setFurniture(next, label, coalesce),
     repaint: () => { paintStrip(); paintBehind(); },
+    readOnly: () => readOnly,
   });
 
   /**
-   * Comment markers, in the surface's marker group (design/annotation.md 3).
+   * Comment markers and the tool that drops them (design/annotation.md 3).
    *
-   * `itemAt` answers with CARDS only. A marker dropped on a frame should sit on
-   * the canvas rather than follow the frame: a frame is a thing an author drew
-   * around content, it has no identity worth commenting on, and it moves for
-   * layout reasons that have nothing to do with what the comment is about.
+   * Filed against CARDS only. A marker dropped on a frame sits on the canvas
+   * rather than following the frame: a frame is a thing an author drew around
+   * content, it has no identity worth commenting on, and it moves for layout
+   * reasons that have nothing to do with what the comment is about.
    */
-  surface.setMarkers(markerPainter<NodeItem>({
+  comments = createCommentTool<NodeItem>({
+    surface, host: stage,
+    items: () => nodes,
+    carries: isCard,
     markers: () => actions.markers(),
-    open: (threadId, anchor) => actions.openThread(threadId, anchor),
-    moved: (threadId, x, y, item) => actions.moveMarker(threadId, x, y, item),
-    itemAt: (x, y) => {
-      const hit = nodes.find((n) =>
-        isCard(n) && x >= n.x && y >= n.y && x <= n.x + n.width && y <= n.y + n.height);
-      return hit?.id;
-    },
-    host: () => stage,
-  }, () => tokens));
-
-  /**
-   * Arm the comment tool: the next click drops a marker and opens its composer.
-   *
-   * The thread is not created by the click. Nothing is written until the first
-   * message is posted, which is the rule the whole comment feature keeps: opening
-   * a composer and thinking better of it must leave nothing behind.
-   */
-  function armComment(): void {
-    commentArmed = true;
-    surface.setTool({
-      cursor: "crosshair",
-      onClick: (at) => {
-        disarmComment();
-        const over = nodes.find((n) =>
-          isCard(n) && at.x >= n.x && at.y >= n.y && at.x <= n.x + n.width && at.y <= n.y + n.height);
-        // On a card, the marker's stored position is an OFFSET from that card, so
-        // it keeps its place beside the thing when the card moves.
-        const point = over ? { x: at.x - over.x, y: at.y - over.y } : at;
-        actions.startThread(point, over?.id, proxyFor(at));
-      },
-      // Escape, or another tool replacing this one.
-      onCancel: () => { commentArmed = false; paintStrip(); },
-    });
-    paintStrip();
-  }
-
-  function disarmComment(): void {
-    commentArmed = false;
-    surface.setTool(undefined);
-    paintStrip();
-  }
-
-
-  /**
-   * Open a marker's thread from OUTSIDE the canvas: the Review Feedback walk
-   * stepping onto a comment that lives here.
-   *
-   * A marker is a Konva shape, so it cannot be reached the way the walk reaches
-   * a document's topline bubble. It is centred first and its popover hangs off a
-   * proxy at its point, which is the whole reason a comment was dropped on a
-   * canvas rather than filed against the container: the place IS the subject.
-   */
-  function openMarker(threadId: string): boolean {
-    const marker = actions.markers().find((m) => m.id === threadId);
-    if (!marker) return false;
-    const point = markerPoint(marker, (id) => nodes.find((n) => n.id === id));
-    if (!point) return false;
-    surface.centreAt(point);
-    actions.openThread(threadId, proxyFor(point));
-    return true;
-  }
-
-  /** A zero-size element at a canvas point, for the composer popover to hang
-   *  off: the shell's anchored panel measures an element, and a canvas has none
-   *  at an arbitrary spot. */
-  function proxyFor(at: { x: number; y: number }): HTMLElement {
-    stage.querySelector(".cmt-marker-proxy")?.remove();
-    const screen = surface.toScreen(at);
-    const proxy = el("div", { className: "cmt-marker-proxy" });
-    proxy.style.left = `${Math.round(screen.x)}px`;
-    proxy.style.top = `${Math.round(screen.y)}px`;
-    stage.append(proxy);
-    return proxy;
-  }
+    openThread: (threadId, anchor) => actions.openThread(threadId, anchor),
+    startThread: (at, item, anchor) => actions.startThread(at, item, anchor),
+    moveMarker: (threadId, x, y, item) => actions.moveMarker(threadId, x, y, item),
+    tokens: () => tokens,
+    changed: () => paintStrip(),
+  });
 
   // `at` comes from the surface: it reports live positions, so the edges stay
   // attached to a card while it moves rather than catching up when it lands.
@@ -491,13 +429,7 @@ export function mountNodeView(
     surface.setBackdrop((layer, scale, at) => {
       paintEdges(layer, scale, tokens, graph.edges, cardAt(at));
       const band = furniture?.draft();
-      if (band) {
-        layer.add(new Konva.Rect({
-          x: band.x, y: band.y, width: band.w, height: band.h,
-          stroke: tokens.accent, strokeWidth: 1.5 / scale, dash: [6 / scale, 4 / scale],
-          listening: false,
-        }));
-      }
+      if (band) paintDraftRect(layer, scale, tokens, band);
     });
   };
   paintBehind();
@@ -526,12 +458,14 @@ export function mountNodeView(
   return {
     setSelected(cardIds) { surface.select([...cardIds]); paintStrip(); },
     repaintMarkers() { surface.repaintMarkers(); },
-    openMarker,
+    openMarker: (threadId) => comments?.open(threadId) === true,
     refreshCoverage() { dressCoverage(); surface.setItems(nodes); paintStrip(); },
     destroy() {
       // Remember the camera on the way out: this is the one moment we know both
       // the deck and where its canvas was looking.
       rememberCamera(nodeCameraKey(deck.id), surface.camera());
+      // A frame name being typed is kept, and its editor goes with the view.
+      furniture?.destroy();
       chip.destroy();
       unwatch();
       surface.destroy();
@@ -540,11 +474,7 @@ export function mountNodeView(
 }
 
 /** Name the loops in an author's own words: card titles, not ids. */
-function describeCycles(cycles: string[][], deck: DeckDto): string {
-  const title = (id: string): string => {
-    const card = deck.cards.find((c) => c.id === id);
-    return card?.title ?? card?.gameId ?? id;
-  };
+function describeCycles(cycles: string[][], title: (id: string) => string): string {
   const one = (members: string[]): string => members.map(title).join(", ");
   return cycles.length === 1
     ? `These cards enable each other, so they share a column: ${one(cycles[0]!)}.`

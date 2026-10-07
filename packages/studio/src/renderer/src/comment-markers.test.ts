@@ -46,3 +46,11 @@ describe("where a marker sits", () => {
       .toEqual({ x: 80, y: 180 });
   });
 });
+
+describe("a marker's hover line", () => {
+  it("says who, then what, in the shell's tooltip", async () => {
+    const { markerTipText } = await import("./comment-markers.js");
+    expect(markerTipText({ author: "Ada", gist: "Is this the inn?" })).toBe("Ada: Is this the inn?");
+    expect(markerTipText({ author: "", gist: "Is this the inn?" })).toBe("Is this the inn?");
+  });
+});

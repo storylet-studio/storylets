@@ -2,7 +2,7 @@
 // THE property/field declaration list - one component for every scope that
 // declares { name, type, default, values? } rows: world + story (the Project
 // Settings dialog), the box's card fields and @box state, @deck state, @hand
-// state, and a dimension value's properties (rules 6 of
+// state, and a tag's properties (rule 6 of
 // design/studio-editing-structure.md).
 //
 // The list itself is the shell's since the 2026-09 review (property-list.ts:
@@ -19,8 +19,7 @@
 // debounced autosave.
 // ---------------------------------------------------------------------------
 
-import { el } from "./dom.js";
-import { defaultControl, labelled, mountPropertyList as mountShellPropertyList } from "@wildwinter/app-shell";
+import { defaultControl, el, labelled, mountPropertyList as mountShellPropertyList } from "@wildwinter/app-shell";
 import type { PropertyListHandle } from "@wildwinter/app-shell";
 import type { PropertyDeclDto } from "../../shared/api.js";
 import { shows } from "./play-ladder.js";

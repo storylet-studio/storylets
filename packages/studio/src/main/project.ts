@@ -5,22 +5,23 @@
 // tests headlessly against the example project.
 // ---------------------------------------------------------------------------
 
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { boxColourOf, contractNotes, defaultGameScopesParent, handDeclarations, isBinaryWrite, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate, undoInit } from "@storylet-studio/ops";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { planProject } from "@patterkit/core";
 import { planCardScene } from "./patter-scene.js";
 import type { HoleDecls, Issue, LoadedProject, PatterReport, PatterScenes, PlaceAxisBox, PlaceAxisMap, PlannedFileWrite } from "@storylet-studio/ops";
 import { writeBinaryFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
-import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, worldDeclarations } from "@storylet-studio/compiler";
+import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, walkProjectFiles, worldDeclarations } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS, effectiveGameId, isSpatial, openThreadCounts, PLACE_GROUP } from "@storylet-studio/model";
-import type { Bundle, Card, CoverageDriver, Hand, HandTemplate, PlayRung, PropertyDecl } from "@storylet-studio/model";
+import type { Bundle, Card, CoverageDriver, Hand, HandTemplate, PlayRung } from "@storylet-studio/model";
 import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
 import { boardScopes, gameScopesDto, worldFileLabel } from "./game-scopes.js";
 import type {
   BoardPatterDto, BoardScopesDto, BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectKit, ProjectSettingsDto,
-  PropertyDeclDto, RemoteDto, ShardVcDto, VcStatusDto,
+  RemoteDto, ShardVcDto, VcStatusDto,
 } from "../shared/api.js";
+import { declDto } from "./decls.js";
 import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
 import { History } from "./history.js";
 import { resetShardStatus, shardStatus } from "./vc.js";
@@ -30,6 +31,9 @@ export interface ProjectSession {
   loaded: LoadedProject;
   dto: ProjectDto;
   history: History;
+  /** What the files said when the project was last read (`diskStamp`), so a
+   *  revalidate on focus can tell that nothing has changed and say so. */
+  stamp?: string;
 }
 
 /**
@@ -38,7 +42,7 @@ export interface ProjectSession {
  * (design/project-map-contract.md 1.5: one namespace of group names in an
  * opted-in box). A shallow copy with a widened `tags`, for READING: the zone
  * group lives in the root map shard, so nothing may write this copy's `tags`
- * back to the box's tags shard (mutate.ts `groupHome` is how a group is written).
+ * back to the box's tags shard (mutate/shards.ts `groupHome` is how a group is written).
  *
  * The minimal bridge until the editor learns the project map as a surface of
  * its own (the layered map, the opt-in line on the box page): every existing
@@ -98,23 +102,9 @@ const chipValues = (
 
 const blank = (src: string | undefined): boolean => src === undefined || src.trim() === "";
 
-// `shared` and `durable` ride along even where no list draws a switch for them
-// (design/flows.md and engine-server.md 4.2): a declaration list saves whole, so
-// a flag the DTO drops is a flag the next save deletes from the shard.
-const declDto = (d: PropertyDecl): PropertyDeclDto => ({
-  name: d.name, type: d.type,
-  default: d.default === undefined ? "" : typeof d.default === "string" ? d.default : JSON.stringify(d.default),
-  ...(d.values !== undefined ? { values: d.values } : {}),
-  ...(d.stages !== undefined ? { stages: d.stages } : {}),
-  ...(d.writable !== undefined ? { writable: d.writable } : {}),
-  ...(d.shared !== undefined ? { shared: d.shared } : {}),
-  ...(d.durable !== undefined ? { durable: d.durable } : {}),
-  ...(d.purpose !== undefined ? { purpose: d.purpose } : {}),
-});
-
 /** The shard's driver map as an ordered list for the editor. Sorted by ref so
  *  the list is stable across saves (the map has no order of its own). */
-const driverDtos = (drivers: Record<string, CoverageDriver> | undefined): CoverageDriverDto[] =>
+export const driverDtos = (drivers: Record<string, CoverageDriver> | undefined): CoverageDriverDto[] =>
   Object.entries(drivers ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([ref, d]) => ({
     ref, kind: d.kind, ...(d.cadence !== undefined ? { cadence: d.cadence } : {}), values: [...d.values],
   }));
@@ -347,7 +337,7 @@ export function openProject(path: string): { session: ProjectSession; problems: 
   if (!loaded.source) return { error: refusal(loaded.issues, "not a storylets project") };
   resetShardStatus();   // a new project never inherits the last one's VC answers
   return {
-    session: { loaded, dto: toDto(loaded), history: new History() },
+    session: { loaded, dto: toDto(loaded), history: new History(), stamp: diskStamp(loaded) },
     problems: runValidate(loaded, { checkBundle: false }).issues,
   };
 }
@@ -407,13 +397,50 @@ export async function vcStatus(session: ProjectSession): Promise<VcStatusDto> {
 }
 
 export function validate(session: ProjectSession): Problem[] {
-  // Re-read from disk: hand edits and VCS updates should always be seen.
+  // Re-read from disk: hand edits and VCS updates should always be seen. The
+  // stamp is taken BEFORE the read, so a file that changes during it reads as
+  // changed next time rather than as already seen.
+  const stamp = diskStamp(session.loaded);
   const loaded = loadProject(session.loaded.dir);
   if (loaded.source) {
     session.loaded = loaded;
     session.dto = toDto(loaded);
+    session.stamp = stamp;
   }
   return runValidate(loaded, { checkBundle: false }).issues;
+}
+
+/**
+ * Has nothing the project reads changed on disk since it was last read?
+ *
+ * Focus used to re-read and re-validate the project and repaint the open
+ * document on every alt-tab, which dropped the caret and the scroll (the
+ * Storyletter review of 2026-10, item 3). Patterpad only refreshes version
+ * control on focus; this lets the editor do the same unless a file changed.
+ */
+export function diskUnchanged(session: ProjectSession): boolean {
+  return session.stamp !== undefined && session.stamp === diskStamp(session.loaded);
+}
+
+/** Every file the project reads, by path, modification time and size: its own
+ *  folder, the game's shared scopes when they live outside it, and the paired
+ *  Patter bundle. Cheap (a stat per file, no reads), which is what lets focus
+ *  ask it every time. */
+function diskStamp(loaded: LoadedProject): string {
+  const dir = loaded.dir;
+  const lines: string[] = [];
+  const add = (root: string): void => {
+    for (const file of walkProjectFiles(root, [""])) {
+      try { const st = statSync(file); lines.push(`${file}\u0000${st.mtimeMs}\u0000${st.size}`); } catch { /* gone mid-walk: the next stamp says so */ }
+    }
+  };
+  try { add(dir); } catch { return `unreadable ${Date.now()}`; }
+  const scopes = loaded.source?.gameScopes?.dir;
+  if (scopes !== undefined && relative(dir, scopes).startsWith("..")) {
+    try { add(scopes); } catch { /* the folder went: loading says so */ }
+  }
+  lines.push(`patter\u0000${patterStamp(loaded)}`);
+  return lines.join("\n");
 }
 
 /** The kits New Project offers: ops' game kits, and the starter with a Patter project beside
@@ -431,7 +458,7 @@ export function createProject(parentDir: string, name: string, kit: ProjectKit =
     if (kit === "with-patter" && existsSync(patterDir)) return { error: `${basename(patterDir)} is already there` };
     const batch = writeTextFiles(result.writes.map((w) => ({ filePath: w.path, content: w.content })));
     // A half-written project would refuse every retry, so take back what landed.
-    if (!batch.success) { undoInit(result); return { error: "could not write the project files" }; }
+    if (!batch.success) { undoInit(result); return { error: "couldn't write the project files" }; }
     if (kit === "with-patter") {
       const paired = addPatterProject(result.dir, name, patterDir);
       if ("error" in paired) return paired;
@@ -465,7 +492,17 @@ function addPatterProject(storyletsDir: string, name: string, patterDir: string)
   writes.push({ filePath: join(storyletsDir, source.path), content: canonicalStringify(source.project) });
   for (const w of writes) mkdirSync(dirname(w.filePath), { recursive: true });
   const batch = writeTextFiles(writes);
-  return batch.success ? { ok: true } : { error: "could not write the Patter project" };
+  return batch.success ? { ok: true } : { error: "couldn't write the Patter project" };
+}
+
+/**
+ * The open project as it stands in main, with its problems: no re-read from
+ * disk. For a window that needs the project unconditionally (Find at boot and
+ * after a project change), where `revalidate` answers null when nothing on
+ * disk has changed.
+ */
+export function currentResult(session: ProjectSession): OpenResult {
+  return openResult(session, runValidate(session.loaded, { checkBundle: false }).issues);
 }
 
 export function openResult(session: ProjectSession, problems: Problem[]): OpenResult {
@@ -612,9 +649,9 @@ function commitPlanned(writes: readonly PlannedFileWrite[]): string | undefined 
   for (const w of writes) {
     if (isBinaryWrite(w)) {
       try { mkdirSync(dirname(w.path), { recursive: true }); } catch { /* the write says so */ }
-      if (!writeBinaryFile(w.path, w.bytes).success) return `could not write ${basename(w.path)}`;
+      if (!writeBinaryFile(w.path, w.bytes).success) return `couldn't write ${basename(w.path)}`;
     } else if (!writeTextFiles([{ filePath: w.path, content: w.content }]).success) {
-      return `could not write ${basename(w.path)}`;
+      return `couldn't write ${basename(w.path)}`;
     }
   }
   return undefined;
@@ -647,5 +684,5 @@ export function shareScopes(session: ProjectSession, parent: string): { error: s
   const plan = planShareScopes(session.loaded, parent);
   if ("error" in plan) return plan;
   const batch = writeTextFiles(plan.writes.map((w) => ({ filePath: w.path, content: w.content })));
-  return batch.success ? undefined : { error: "could not write the scopes files" };
+  return batch.success ? undefined : { error: "couldn't write the scopes files" };
 }

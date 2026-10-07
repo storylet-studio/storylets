@@ -12,8 +12,7 @@
 // question ("does my content come up?"), and this is the second.
 // ---------------------------------------------------------------------------
 
-import { el } from "../src/dom.js";
-import { formatCount, iconNode, metaLine, plural } from "@wildwinter/app-shell";
+import { el, formatCount, iconNode, metaLine, plural } from "@wildwinter/app-shell";
 import type { CoverageReport, SearchSelection } from "../../shared/api.js";
 
 type HandRow = CoverageReport["hands"][number];
@@ -58,7 +57,7 @@ function handRow(h: HandRow, openRow: OpenRow): HTMLElement {
     ...(possible === 0
       // Nothing is tagged or placed to come up here: say so, rather than draw
       // an empty bar that reads as a gap.
-      ? [el("span", { className: "qnone hint", text: "no card's tags let it come up here" })]
+      ? [el("span", { className: "qnone hint", text: "No card's tags let it come up here." })]
       : [
           el("span", { className: "bar" }, el("i", { className: "fill" })),
           el("span", { className: "count", text: `${seen}/${possible}` }),

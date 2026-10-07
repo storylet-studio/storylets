@@ -10,25 +10,27 @@
 // in the document itself (design review 2026-08, A17).
 // ---------------------------------------------------------------------------
 
-import { iconNode, metaLine, plural, renderStepperBar, tipWithKey, wireReorder } from "@wildwinter/app-shell";
+import { iconNode, plural, renderStepperBar, tipWithKey, wireReorder } from "@wildwinter/app-shell";
 import type { IconName } from "@wildwinter/app-shell";
 import { gameIdify, PLACE_GROUP } from "@storylet-studio/model";
-import { el } from "./dom.js";
-import { colourIndex } from "../../shell/colour.js";
+import { el } from "@wildwinter/app-shell";
+import { vcKeys } from "./vc-view.js";
 import { previewCondition } from "./expr-panels.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { currentDocTab, docTabs, documentHeading, setDocTab } from "./inspector.js";
 import { problemText } from "./problem-copy.js";
+import { boxConfirm, cardHasContent, deleteLabel, templateConfirm } from "./deletes.js";
 import { placeGroupsOf } from "./where.js";
 import { mapGlyph } from "./map-glyphs.js";
 import { boxColour, boxPin } from "./box-tint.js";
+import { boxChip, chip, listMeta, moreMenu, tableHead } from "./widgets.js";
 import { alsoUnder, boxEntries, groupEntries, groupOptions, resolveGroup } from "./card-groups.js";
 import type { CardGroup, GroupEntry, GroupKey, GroupOption, GroupPage } from "./card-groups.js";
 import type { ProblemNames } from "./problem-copy.js";
 import type { BoxDto, BoxEdit, CardDto, ConditionProperty, DeckDto, Problem, ProjectDto, ReviewItemDto, ViewMode } from "../../shared/api.js";
 
 /** What the centre shows + the nav highlight. Which tab a document is on is
- *  the document's own state (inspector.ts docTabState), not a focus kind.
+ *  the document's own state (doc-tab-memory.ts), not a focus kind.
  *  Hand templates and tags are box SETUP: they live as tabs on the box's
  *  page (like the card template), never as focus kinds or nav rows. */
 export type Focus =
@@ -58,8 +60,13 @@ export interface ViewActions {
   inspectHand(box: string, hand: string): void;
   /** Open a hand on its Cards tab: the ways in that are about the place. */
   openHand(box: string, hand: string): void;
+  /** Rename a deck or a box now: its title or address moves a file, so these
+   *  commit on blur and write at once. */
   saveDeck(deckId: string, edit: { title?: string; gameId?: string; purpose?: string }): void;
   saveBox(boxId: string, edit: BoxEdit): void;
+  /** The same edits through the save controller, as you type: a purpose. */
+  saveDeckLater(deckId: string, edit: { purpose?: string }): void;
+  saveBoxLater(boxId: string, edit: BoxEdit): void;
   newCard(box: string, deck: string): void;
   newDeck(box: string): void;
   newBox(): void;
@@ -90,7 +97,7 @@ export interface ViewActions {
   selectCard(card: string, how: SelectHow): void;
   setViewMode(mode: ViewMode): void;
   /** Fill a node-view container: fetch the deck's links, then mount the canvas.
-   *  Owned by the renderer because views.ts never touches IPC. */
+   *  Done in deck-canvas.ts, because views.ts never touches IPC. */
   mountNodeView(host: HTMLElement, deck: DeckDto): void;
   /** Fill an opted-in box's Map tab: its own sites on the project map. */
   mountBoxSites(host: HTMLElement, box: BoxDto): void;
@@ -113,13 +120,8 @@ export interface ViewActions {
   moveHand(box: string, hand: string, target: string, before: boolean): void;
 }
 
-// --- drag-reorder: the shell's wireReorder (dragstart / dragover-mark / drop) --
-// The marks (.dragging / .drop-before / .drop-after) are classes only; shell.css
-// draws them. Its onMove is (draggedId, before, targetId); the actions here
-// take (from, to, before), so the one wrapper below swaps the order, and arms
-// the settle.
-
-// --- the drop settle (FLIP) ---------------------------------------------------
+// --- drag-reorder, and the drop settle (FLIP) -----------------------------------
+//
 // A drop re-renders the list, and a list that re-renders snaps every item to
 // its new slot. Structural motion is the one kind the design language keeps
 // ("a row settling after a drop"), so the drop records where every reorderable
@@ -158,7 +160,13 @@ function playSettle(host: ParentNode): void {
   const ms = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--dur-settle")) || 200;
   window.setTimeout(() => { for (const n of moved) { n.style.transition = ""; n.style.transform = ""; } }, ms + 80);
 }
-/** Make `el` reorderable among its siblings; a drop arms the settle, then moves. */
+/**
+ * Make `el` reorderable among its siblings; a drop arms the settle, then moves.
+ * The shell's wireReorder does the dragging (dragstart / dragover-mark / drop);
+ * its marks (.dragging / .drop-before / .drop-after) are classes only, which
+ * shell.css draws. Its onMove is (draggedId, before, targetId); the actions here
+ * take (from, to, before), so this swaps the order.
+ */
 function wireDrop(el: HTMLElement, id: string, axis: "x" | "y", move: (from: string, to: string, before: boolean) => void): void {
   wireReorder(el, id, axis, (from, before, to) => { armSettle(el.parentElement ?? el); move(from, to, before); });
 }
@@ -185,22 +193,6 @@ function viewToggle(active: ViewMode, actions: ViewActions, withNode = false): H
 }
 
 /**
- * The bar every centre page opens with: a BACK button naming where it goes, and
- * the page's own controls on the right (the view switch, the card stepper).
- *
- * The hierarchy TRAIL that used to live here (Box › Decks › Deck) is gone as of
- * 2026-08-04. It was duplicating the navigator, which already answers "where am
- * I" by highlighting the open document's row and every ancestor on its path, and
- * already offers every multi-level jump the segments did. What the trail could
- * not do was answer the reflex it looked like it should: a row of quiet grey
- * words reads as a statement of location, not as a way out. So one control does
- * that job and names its destination (a drawn back chevron, then "Arrival").
- *
- * Callers still pass the whole ancestor path, because the LAST segment is the
- * back target, and because keeping the path here means the trail could come back
- * as one line if the navigator is ever hidden by default.
- */
-/**
  * Where the author came from, when that is NOT this page's parent.
  *
  * Up and back are two moves that coincide almost always: a card opened from its
@@ -208,7 +200,7 @@ function viewToggle(active: ViewMode, actions: ViewActions, withNode = false): H
  * a zone opened from the map, a card from Find or from Links - and going up then
  * lands you somewhere you have never been (structure rule 12, amended).
  *
- * Module state rather than a parameter threaded through every page: the renderer
+ * Module state rather than a parameter threaded through every page: navigation.ts
  * owns navigation and sets this as it navigates, and the alternative was four call
  * sites and their tests carrying something none of them decide.
  */
@@ -248,15 +240,22 @@ export function projectLead(
   return button;
 }
 
-/** A row's metadata, drawn: the shell's `metaLine` (a disc between parts,
- *  from CSS) wearing `.listmeta` for the row's size and colour. What used to
- *  be `${count} · ${sub}` typed into one span. */
-function listMeta(parts: (string | undefined)[]): HTMLElement {
-  const m = metaLine(parts);
-  m.classList.add("listmeta");
-  return m;
-}
-
+/**
+ * The bar every centre page opens with: a BACK button naming where it goes, and
+ * the page's own controls on the right (the view switch, the card stepper).
+ *
+ * The hierarchy TRAIL that used to live here (Box › Decks › Deck) is gone as of
+ * 2026-08-04. It was duplicating the navigator, which already answers "where am
+ * I" by highlighting the open document's row and every ancestor on its path, and
+ * already offers every multi-level jump the segments did. What the trail could
+ * not do was answer the reflex it looked like it should: a row of quiet grey
+ * words reads as a statement of location, not as a way out. So one control does
+ * that job and names its destination (a drawn back chevron, then "Arrival").
+ *
+ * Callers still pass the whole ancestor path, because the LAST segment is the
+ * back target, and because keeping the path here means the trail could come back
+ * as one line if the navigator is ever hidden by default.
+ */
 export function crumbTrail(segments: { label: string; go: () => void }[], ...right: (Node | null)[]): HTMLElement {
   const bar = el("div", { className: "crumbs" });
   const up = segments[segments.length - 1];
@@ -282,41 +281,17 @@ export function crumbTrail(segments: { label: string; go: () => void }[], ...rig
   return bar;
 }
 
-/** The container page's [Content | Settings] tab bar (title sits above it). */
-
-export function chipDot(name: string): HTMLElement {
-  const dot = el("i");
-  dot.style.background = `var(--char-${colourIndex(name)})`;
-  return dot;
-}
-export const chip = (name: string): HTMLElement => el("span", { className: "pill" }, chipDot(name), name);
-/** A box as a pill, tinted the way its sites are on the map. */
-export function boxChip(b: Pick<BoxDto, "id" | "gameId" | "title">): HTMLElement {
-  const c = chip(b.title ?? b.gameId);
-  const dot = c.querySelector("i");
-  if (dot) dot.style.background = boxColour(b.id);
-  return c;
-}
+// The pills and dots live in widgets.ts, beside the other small pieces the
+// documents share; re-exported for the views' callers.
+export { boxChip, chip, chipDot } from "./widgets.js";
 /** Colour an element (a glyph drawn in currentColor) and hand it back. */
 const tinted = (node: HTMLElement, colour: string): HTMLElement => { node.style.color = colour; return node; };
 
 // --- navigator ----------------------------------------------------------------
 
-/** The shard key(s) whose version-control state an item shows (see
- *  ShardVcDto in shared/api.ts). Space-separated when an item spans shards:
- *  a box row stands for its box + tags + hands shards, so its badge folds all
- *  three. Rows carry them as `data-vc`; the renderer paints the badges by
- *  walking that attribute, so a poll can re-badge without re-rendering (and
- *  without disturbing a document mid-edit). */
-export const vcKeys = {
-  project: "project",
-  /** A box row: everything the box itself owns (its decks badge separately). */
-  box: (boxId: string): string => `box:${boxId} tags:${boxId} hands:${boxId}`,
-  boxShard: (boxId: string): string => `box:${boxId}`,
-  tags: (boxId: string): string => `tags:${boxId}`,
-  hands: (boxId: string): string => `hands:${boxId}`,
-  deck: (deckId: string): string => `deck:${deckId}`,
-};
+// The shard keys a row carries as `data-vc` live with the rest of the
+// version-control surface (vc-view.ts); re-exported for the views' callers.
+export { vcKeys } from "./vc-view.js";
 
 /** Stable ids for the nav's expandable nodes (persisted per user). */
 export const navId = {
@@ -365,7 +340,6 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
     if (opts.count !== undefined) b.append(el("span", { className: "nav-n", text: String(opts.count) }));
     return b;
   };
-  // The project's own row: no page, so it opens the Settings dialog directly.
   // The project's own row opens its page (the boxes master); Settings
   // lives on that page's menu and under Cmd+, as before.
   const projectRow = el("button", { className: `nav-project${focus?.kind === "project" ? " sel" : ""}`, text: project.name, onClick: () => actions.focus({ kind: "project" }) });
@@ -417,7 +391,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
       path: inBox && focus.kind !== "box",
       onClick: () => actions.focus({ kind: "box", box: box.id }),
     });
-    boxRow.addEventListener("contextmenu", itemMenu(() => actions.duplicateBox(box.id), () => actions.deleteBox(box.id)));
+    boxRow.addEventListener("contextmenu", itemMenu("box", boxConfirm(box) !== undefined, () => actions.duplicateBox(box.id), () => actions.deleteBox(box.id)));
     host.append(boxRow);
     if (!expanded.has(boxNode)) continue;
 
@@ -453,10 +427,10 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
           sel: here,
           onClick: () => actions.focus({ kind: "deck", box: box.id, deck: deck.id }),
         });
-        deckRow.addEventListener("contextmenu", itemMenu(() => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
+        deckRow.addEventListener("contextmenu", itemMenu("deck", false, () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
         host.append(deckRow);
       }
-      host.append(el("button", { className: "nav-add nav-d2", text: "+ deck", onClick: () => actions.newDeck(box.id) }));
+      host.append(el("button", { className: "nav-add nav-d2", text: "+ New deck", onClick: () => actions.newDeck(box.id) }));
     });
 
     collection("Hands", "hands", box.hands.length);
@@ -466,29 +440,9 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
   host.append(el("button", { className: "nav-add nav-add-box nav-d0", text: "+ New box", onClick: () => actions.newBox() }));
 }
 
-/**
- * Has an author actually put anything in this card?
- *
- * A freshly made card is a placeholder: the title the app chose, one empty
- * "Continue" outcome, nothing else. Deleting one of those needs no ceremony.
- * Anything beyond that is work, and work gets a confirmation (Patter's pattern:
- * guard the destructive act, but only when there is something to lose).
- */
-export function cardHasContent(card: CardDto): boolean {
-  const placeholderTitle = card.title === undefined || /^New card( \d+)?$/.test(card.title);
-  const wrote = card.purpose !== undefined && card.purpose.trim() !== "";
-  const gated = card.condition !== undefined && card.condition.trim() !== "";
-  const tagged = card.tags.some((g) => g.values.length > 0);
-  const filled = card.fields.some((f) => f.value.trim() !== "");
-  // One outcome with no changes and the default title is what a new card ships
-  // with; anything more is authored.
-  const authoredOutcomes = card.outcomes.length > 1
-    || card.outcomes.some((o) => o.changes.length > 0 || o.gate !== undefined || (o.purpose ?? "") !== ""
-      // A filled outcome field is writing too: the after-line a venue reads is
-      // often the only thing an author put on the outcome.
-      || o.fields.some((f) => f.value.trim() !== ""));
-  return !placeholderTitle || wrote || gated || tagged || filled || authoredOutcomes;
-}
+// The delete guard's evidence for a card lives with the other deletes
+// (deletes.ts); re-exported for the callers that have always read it here.
+export { cardHasContent } from "./deletes.js";
 
 // --- one gesture grammar, all three views of a deck ---------------------------
 //
@@ -561,10 +515,10 @@ interface FaceExtras { also?: string[]; deck?: string; drag?: boolean }
 
 function cardFace(card: CardDto, catalogue: ConditionProperty[], selected: boolean, gestures: CardGestures, onContext: (e: MouseEvent) => void, extras: FaceExtras = {}): HTMLElement {
   // Title, then the eligibility condition (when this card fires), then the
-  // beat. The ranking machinery is recessive (in the inspector). The condition
-  // is a restrained, Patterpad-style "if" preview - a quiet prefix with
-  // toned-down pills (check_flags etc. render compactly via the dialect), not
-  // a loud chip strip (the vivid pills live in the inspector editor).
+  // purpose. The ranking machinery is recessive (on the card's own page). The
+  // condition is a restrained, Patterpad-style "if" preview - a quiet prefix
+  // with toned-down pills (check_flags etc. render compactly via the dialect),
+  // not a loud chip strip (the vivid pills live in the card's When editor).
   const face = el("button", { className: `scard${selected ? " sel" : ""}` },
     el("h3", { text: card.title ?? card.gameId }),
   );
@@ -599,14 +553,15 @@ function cardFace(card: CardDto, catalogue: ConditionProperty[], selected: boole
   return face;
 }
 
-const cardMenu = (box: string, deck: string, card: string, actions: ViewActions) =>
+const cardMenu = (box: string, deck: string, card: CardDto, actions: ViewActions) =>
   (e: MouseEvent): void => { e.preventDefault(); openContextMenu(e.clientX, e.clientY, [
     // "What else touches this?" is a question you ask ABOUT a card you can see,
     // so it belongs on the card, not only in a menu bar that first requires the
     // card to become the editor's selection.
-    { label: "Links...", onClick: () => actions.showLinks(card) },
-    { label: "Duplicate", onClick: () => actions.duplicateCard(box, deck, card) },
-    { label: "Delete", danger: true, onClick: () => actions.deleteCard(box, deck, card) },
+    { label: "Links\u2026", onClick: () => actions.showLinks(card.id) },
+    { label: "Duplicate", onClick: () => actions.duplicateCard(box, deck, card.id) },
+    // The object, and the ellipsis only when a question follows (deletes.ts).
+    { label: deleteLabel("card", cardHasContent(card)), danger: true, onClick: () => actions.deleteCard(box, deck, card.id) },
   ]); };
 
 export function renderDeckCentre(
@@ -631,8 +586,10 @@ export function renderDeckCentre(
   const heading = documentHeading("Deck", {
     title: { get: () => titled, set: (v) => { titled = v; }, placeholder: deck.gameId, commitOn: "blur", commit: () => actions.saveDeck(deck.id, { title: titled }) },
     gameId: { get: () => pinned, set: (v) => { pinned = v; }, fallback: deck.gameId, deriveFrom: () => titled, commit: () => actions.saveDeck(deck.id, { gameId: pinned }) },
-    purpose: { get: () => purpose, set: (v) => { purpose = v; }, placeholder: "What these cards are for", commitOn: "blur", commit: () => actions.saveDeck(deck.id, { purpose }) },
-    menu: [{ label: "Delete deck", danger: true, onClick: () => actions.deleteDeck(box.id, deck.id) }],
+    // The purpose is not a rename, so it commits as you type like every other
+    // field (ruling N); only the title waits for the blur.
+    purpose: { get: () => purpose, set: (v) => { purpose = v; }, placeholder: "What these cards are for", commit: () => actions.saveDeckLater(deck.id, { purpose }) },
+    menu: [{ label: deleteLabel("deck", false), danger: true, onClick: () => actions.deleteDeck(box.id, deck.id) }],
     comments: { on: deck.id, count: actions.openThreads(deck.id), open: (a) => actions.showComments(deck.id, titled || deck.gameId, a) },
   });
   // Cards first: a deck IS its cards, and that is the tab an author opens the page
@@ -673,7 +630,7 @@ export function renderDeckCentre(
       : el("div", { className: "gb-body" }, ...groupedCards(box, groups, {
           page: "deck", catalogue: () => catalogue, selectedCards, actions,
           gestures: () => gestures,
-          menu: (e) => cardMenu(box.id, deck.id, e.card.id, actions),
+          menu: (e) => cardMenu(box.id, deck.id, e.card, actions),
           ...(drag ? { move } : {}),
           ghost: () => el("button", { className: "scard ghost", text: "+ New card", onClick: newCard }),
         }));
@@ -793,10 +750,15 @@ function groupHead(box: BoxDto, g: CardGroup, actions: ViewActions, page: GroupP
   return el("div", { className: `gb-head${g.rest ? " rest" : ""}` },
     // A site's heading wears its pin, in its box's colour, on a box on the map.
     ...(go?.kind === "hand" && box.usesMap === true ? [boxPin(box.id)] : []),
-    name,
-    ...(g.sub !== undefined ? [el("span", { className: "gb-sub", text: g.sub })] : []),
-    el("span", { className: "gb-n", text: String(g.entries.length) }));
+    name, ...groupTail(g));
 }
+
+/** What follows a group's name, on the grid and in the table alike: its quiet
+ *  word, and how many cards are under it. */
+const groupTail = (g: CardGroup): HTMLElement[] => [
+  ...(g.sub !== undefined ? [el("span", { className: "gb-sub", text: g.sub })] : []),
+  el("span", { className: "gb-n", text: String(g.entries.length) }),
+];
 
 /** The node view's container. views.ts draws DOM and never talks to main, so the
  *  canvas is mounted by the action once the deck's links have been fetched. */
@@ -815,14 +777,14 @@ function deckTable(
 ): HTMLElement {
   const table = el("table", { className: "ctable" });
   // The card's own data (mirrors the card face), not the recessive ranking
-  // machinery (priority / redraw / outcomes live in the inspector).
+  // machinery (priority / redraw / outcomes live on the card's own page).
   // Where and Tags are DIFFERENT answers and shared one column: the audit
   // read a card's home hand under "TAGS" and learned a false model (that
   // placement is a tag). Where = the home group plus every place axis of the
   // box (ops place-axis.ts), the same rule the card's own Where sentence uses
   // (where.ts).
   const cols = ["", "Title", "gameId", "When", "Where", "Tags", ""];
-  table.append(el("thead", {}, el("tr", {}, ...cols.map((c) => el("th", { className: "overline", text: c })))));
+  table.append(tableHead(cols));
   const axes = placeGroupsOf(box);
   const isPlace = (group: string): boolean => group === PLACE_GROUP || axes.has(group);
   const body = el("tbody");
@@ -831,10 +793,7 @@ function deckTable(
     // A heading row per group, spanning the table: the table's version of the
     // grid's headings, so the two views of a deck group the same way.
     if (g.label !== "") {
-      const th = el("th", {},
-        el("span", { className: "gb-name", text: g.label }),
-        ...(g.sub !== undefined ? [el("span", { className: "gb-sub", text: g.sub })] : []),
-        el("span", { className: "gb-n", text: String(g.entries.length) }));
+      const th = el("th", {}, el("span", { className: "gb-name", text: g.label }), ...groupTail(g));
       th.colSpan = cols.length;
       body.append(el("tr", { className: `ct-group${g.rest ? " rest" : ""}` }, th));
     }
@@ -855,7 +814,7 @@ function deckTable(
         el("td", { className: "ct-open" }, openChip(c.id, gestures)),
       );
       wireCardGestures(row, c.id, gestures);
-      row.addEventListener("contextmenu", cardMenu(box.id, deck.id, c.id, actions));
+      row.addEventListener("contextmenu", cardMenu(box.id, deck.id, c, actions));
       if (move) wireDrop(row, c.id, "y", move);
       body.append(row);
     }
@@ -897,7 +856,7 @@ export function renderBoxCentre(
   const heading = documentHeading("Box", {
     title: { get: () => titled, set: (v) => { titled = v; }, placeholder: box.gameId, commitOn: "blur", commit: () => actions.saveBox(box.id, { title: titled }) },
     gameId: { get: () => pinned, set: (v) => { pinned = v; }, fallback: box.gameId, deriveFrom: () => titled, commit: () => actions.saveBox(box.id, { gameId: pinned }) },
-    purpose: { get: () => purpose, set: (v) => { purpose = v; }, placeholder: "What this box is for", commitOn: "blur", commit: () => actions.saveBox(box.id, { purpose }) },
+    purpose: { get: () => purpose, set: (v) => { purpose = v; }, placeholder: "What this box is for", commit: () => actions.saveBoxLater(box.id, { purpose }) },
     comments: { on: box.id, count: actions.openThreads(box.id), open: (a) => actions.showComments(box.id, titled || box.gameId, a) },
     menu: [
       { label: "Duplicate box", onClick: () => actions.duplicateBox(box.id) },
@@ -905,7 +864,7 @@ export function renderBoxCentre(
       // the page; main refuses it, with a sentence, while anything still names
       // a zone.
       ...(onMap ? [{ label: "Leave the project map", onClick: () => actions.useProjectMap(box.id, false) }] : []),
-      { label: "Delete box", danger: true, onClick: () => actions.deleteBox(box.id) },
+      { label: deleteLabel("box", boxConfirm(box) !== undefined), danger: true, onClick: () => actions.deleteBox(box.id) },
     ],
     // The venue's claim is on the NAME it bound: renaming the box in place lets
     // it go, and the line and the chip's mark go with it rather than standing
@@ -948,7 +907,7 @@ export function renderBoxCentre(
     body = boxTagsBody(box, actions, projectMap === undefined);
   } else if (tab === "map") {
     // This box's sites on the project map, and the door to it. The sites are
-    // filled by the renderer (they need IPC, which views.ts never touches).
+    // filled by map-page.ts (they need IPC, which views.ts never touches).
     const others = (projectMap?.users ?? []).filter((b) => b.id !== box.id);
     const intro = el("p", { className: "doc-tab-note" }, "The zones are the project's, drawn once",
       ...(others.length > 0 ? [", and shared with ", ...others.flatMap((b, i) => [...(i > 0 ? [" "] : []), boxChip(b)])] : []),
@@ -1003,7 +962,7 @@ export function renderBoxCentre(
             select: (card, how) => actions.selectCard(card, how),
             open: (card) => actions.inspectCard(box.id, e.deck.id, card),
           }),
-          menu: (e) => cardMenu(box.id, e.deck.id, e.card.id, actions),
+          menu: (e) => cardMenu(box.id, e.deck.id, e.card, actions),
           // Under Deck the heading names it; under anything else the card does.
           showDeck: by !== "deck",
         })));
@@ -1021,10 +980,10 @@ function boxTemplatesBody(box: BoxDto, actions: ViewActions): HTMLElement {
   for (const t of box.templates) {
     const row = el("button", { className: "listrow", onClick: () => actions.inspectTemplate(box.id, t.id) },
       el("span", { className: "listname", text: t.gameId }),
-      listMeta([t.bindings.join(", ") || "pulls the whole stock", `${t.slots} slot${t.slots === "1" ? "" : "s"}`]),
+      listMeta([t.bindings.join(", ") || "pulls the whole stock", /^\d+$/.test(t.slots) ? plural(Number(t.slots), "slot") : `${t.slots} slots`]),
       el("span", { className: "listmeta", text: `${plural(t.instances, "instance")}` }));
     row.dataset["vc"] = vcKeys.hands(box.id);
-    row.addEventListener("contextmenu", itemMenu(() => actions.duplicateTemplate(box.id, t.id), () => actions.deleteTemplate(box.id, t.id)));
+    row.addEventListener("contextmenu", itemMenu("hand template", templateConfirm(t) !== undefined, () => actions.duplicateTemplate(box.id, t.id), () => actions.deleteTemplate(box.id, t.id)));
     list.append(row);
   }
   list.append(el("button", { className: "listrow ghost", text: "+ New hand template", onClick: () => actions.newTemplate(box.id) }));
@@ -1036,7 +995,7 @@ function boxTemplatesBody(box: BoxDto, actions: ViewActions): HTMLElement {
     el("p", { className: "doc-tab-note", text: "A kind of hand. Write the rule once and every hand of this kind follows it, filling in its own choices." }),
     list);
   // This tab of the box page writes the HANDS shard, not the box shard, so it
-  // takes its read-only state from there (see applyVc in renderer.ts).
+  // takes its read-only state from there (see applyDoc in vc-view.ts).
   body.dataset["vcScope"] = vcKeys.hands(box.id);
   return body;
 }
@@ -1051,7 +1010,7 @@ function boxTagsBody(box: BoxDto, actions: ViewActions, canMakeMap: boolean): HT
       group.spatial ? el("span", { className: "listmeta", text: "map" }) : null,
       el("div", { className: "chips" }, ...group.values.map(chip)));
     row.dataset["vc"] = vcKeys.tags(box.id);
-    row.addEventListener("contextmenu", itemMenu(() => actions.duplicateTagGroup(box.id, group.id), () => actions.deleteTagGroup(box.id, group.id)));
+    row.addEventListener("contextmenu", itemMenu("tag group", false, () => actions.duplicateTagGroup(box.id, group.id), () => actions.deleteTagGroup(box.id, group.id)));
     list.append(row);
   }
   list.append(el("button", { className: "listrow ghost", text: "+ New tag group", onClick: () => actions.newTagGroup(box.id) }));
@@ -1072,12 +1031,14 @@ function boxTagsBody(box: BoxDto, actions: ViewActions, canMakeMap: boolean): HT
   return body;
 }
 
-/** Right-click Duplicate / Delete, the same pair every item row offers (F5). */
-const itemMenu = (duplicate: () => void, remove: () => void) => (e: MouseEvent): void => {
+/** Right-click Duplicate / Delete, the same pair every item row offers (F5).
+ *  The delete names its object, with an ellipsis when it will ask first
+ *  (`asks`, the evidence in deletes.ts). */
+const itemMenu = (noun: string, asks: boolean, duplicate: () => void, remove: () => void) => (e: MouseEvent): void => {
   e.preventDefault();
   openContextMenu(e.clientX, e.clientY, [
     { label: "Duplicate", onClick: duplicate },
-    { label: "Delete", danger: true, onClick: remove },
+    { label: deleteLabel(noun, asks), danger: true, onClick: remove },
   ]);
 };
 
@@ -1106,7 +1067,7 @@ export function renderDecksCentre(host: HTMLElement, box: BoxDto, mode: ViewMode
   let body: HTMLElement;
   if (mode === "table") {
     const table = el("table", { className: "ctable" });
-    table.append(el("thead", {}, el("tr", {}, ...["", "Deck", "gameId", "Cards", "Purpose"].map((c) => el("th", { className: "overline", text: c })))));
+    table.append(tableHead(["", "Deck", "gameId", "Cards", "Purpose"]));
     const tbody = el("tbody");
     for (const deck of box.decks) {
       const nameCell = el("td", { className: "ct-title", text: deck.title ?? deck.gameId });
@@ -1119,7 +1080,7 @@ export function renderDecksCentre(host: HTMLElement, box: BoxDto, mode: ViewMode
         el("td", { text: deck.purpose ?? "" }),
       );
       row.addEventListener("click", () => actions.focus({ kind: "deck", box: box.id, deck: deck.id }));
-      row.addEventListener("contextmenu", itemMenu(() => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
+      row.addEventListener("contextmenu", itemMenu("deck", false, () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
       wireDrop(row, deck.id, "y", move);
       tbody.append(row);
     }
@@ -1131,10 +1092,10 @@ export function renderDecksCentre(host: HTMLElement, box: BoxDto, mode: ViewMode
     for (const deck of box.decks) {
       const face = el("button", { className: "deck-card", onClick: () => actions.focus({ kind: "deck", box: box.id, deck: deck.id }) },
         el("h3", { text: deck.title ?? deck.gameId }),
-        el("span", { className: "sub", text: `${deck.cards.length} card(s)` }),
+        el("span", { className: "sub", text: plural(deck.cards.length, "card") }),
         deck.purpose ? el("p", { className: "beat", text: deck.purpose }) : null);
       face.dataset["vc"] = vcKeys.deck(deck.id);
-      face.addEventListener("contextmenu", itemMenu(() => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
+      face.addEventListener("contextmenu", itemMenu("deck", false, () => actions.duplicateDeck(box.id, deck.id), () => actions.deleteDeck(box.id, deck.id)));
       face.append(grip());
       wireDrop(face, deck.id, "x", move);
       body.append(face);
@@ -1157,12 +1118,13 @@ export function renderProjectCentre(host: HTMLElement, project: ProjectDto, acti
     el("div", { className: "doc-head" },
       el("div", { className: "doc-topline" },
         el("span", { className: "insp-label", text: "Project" }),
-        (() => {
-          const more = el("button", { className: "btn ghost icon doc-menu", tip: "More" }, iconNode("more"));
-          more.addEventListener("click", (e) => { e.preventDefault(); actions.openProjectSettings(); });
-          more.title = "Project Settings\u2026";
-          return more;
-        })()),
+        // A More button opens a menu, as it does on every other document: it
+        // used to open Project settings directly, under a native tooltip that
+        // said so and a themed one that said "More".
+        moreMenu([
+          { label: "Project settings\u2026", onClick: () => actions.openProjectSettings() },
+          { label: revealTip(), onClick: () => actions.revealProject() },
+        ])),
       el("h2", { className: "collection-title", text: project.name }),
       // WHERE this project is, which is the only thing that tells two copies of
       // the same name apart. Patterpad's overview carries the same line, in the
@@ -1176,9 +1138,9 @@ export function renderProjectCentre(host: HTMLElement, project: ProjectDto, acti
     const cards = box.decks.reduce((n, d) => n + d.cards.length, 0);
     const row = el("button", { className: "listrow draggable", onClick: () => actions.focus({ kind: "box", box: box.id }) },
       el("span", { className: "listname listtitle", text: box.title ?? box.gameId }),
-      el("span", { className: "listmeta", text: `${plural(box.decks.length, "deck")} \u00b7 ${plural(cards, "card")} \u00b7 ${plural(box.hands.length, "hand")}` }));
+      listMeta([plural(box.decks.length, "deck"), plural(cards, "card"), plural(box.hands.length, "hand")]));
     row.dataset["vc"] = vcKeys.box(box.id);
-    row.addEventListener("contextmenu", itemMenu(() => actions.duplicateBox(box.id), () => actions.deleteBox(box.id)));
+    row.addEventListener("contextmenu", itemMenu("box", boxConfirm(box) !== undefined, () => actions.duplicateBox(box.id), () => actions.deleteBox(box.id)));
     row.append(grip());
     wireDrop(row, box.id, "y", move);
     list.append(row);
@@ -1193,14 +1155,18 @@ export function renderHandsCentre(host: HTMLElement, box: BoxDto, actions: ViewA
   const head = masterHeading({ id: box.id, label: box.title ?? box.gameId }, "Hands", actions, "Where cards are dealt on the board. Each hand holds the cards it's dealt.");
   const list = el("div", { className: "rowlist" });
   for (const hand of box.hands) {
-    const kind = hand.template !== undefined ? hand.template : "standalone rule";
+    // "standalone": the one name for a hand with its own rule, as the hand's
+    // own Template choice and Find say it.
+    const kind = hand.template !== undefined ? hand.template : "standalone";
     // A titled hand reads as a title; only a bare gameId reads as a name.
     const row = el("button", { className: "listrow draggable", onClick: () => actions.openHand(box.id, hand.id) },
       el("span", { className: `listname${hand.title !== undefined ? " listtitle" : ""}`, text: hand.title ?? hand.gameId }),
       listMeta([kind, hand.slots !== undefined ? plural(hand.slots, "slot") : undefined]));
     // Every hand lives in the one hands shard, so they badge together.
     row.dataset["vc"] = vcKeys.hands(box.id);
-    row.addEventListener("contextmenu", itemMenu(() => actions.duplicateHand(box.id, hand.id), () => actions.deleteHand(box.id, hand.id)));
+    // A hand's evidence is its pin, which only the map knows: actions.ts asks
+    // it, so the label promises a question wherever there could be one.
+    row.addEventListener("contextmenu", itemMenu("hand", box.usesMap === true, () => actions.duplicateHand(box.id, hand.id), () => actions.deleteHand(box.id, hand.id)));
     row.append(grip());
     wireDrop(row, hand.id, "y", (from, to, before) => actions.moveHand(box.id, from, to, before));
     list.append(row);
@@ -1246,14 +1212,13 @@ export function renderProblems(
   // navigating and never steals focus; the review walk navigates because it is a
   // mode you entered. The rule that settles both, and this: an ambient surface
   // moves the VIEW, never the focus, and never over an uncommitted edit. The
-  // caller owns that guard (renderer.ts, `mayStepAway`), because only it knows
+  // caller owns that guard (save-queue.ts, `mayStepAway`), because only it knows
   // what is unsaved. See design-language.md and design review 2026-08, A2.
   //
   // THE BAR ITSELF IS THE SHELL'S (app-shell 0.18.0, `renderStepperBar`). Four
   // bars across the two apps are this one shape, and Patterpad drew its two with
   // parallel class sets for one idea. What stays here is what the shell must not
   // know: what a problem is, which of them are errors, and what a quick fix does.
-  const errors = problems.filter((p) => p.severity === "error").length;
   // The bar clamps `at` itself; the quick fix has to be built from the same
   // entry the bar is about to show, so it clamps to the same place.
   const current = problems[Math.min(Math.max(at, 0), problems.length - 1)];
@@ -1264,14 +1229,19 @@ export function renderProblems(
     items: problems.map((p) => {
       const names = namesFor?.(p);
       return {
-        kind: p.severity, kindClass: `sev-${p.severity}`,
+        // Capitalised, as Patterpad's category tag is ("Error", not "error").
+        kind: p.severity === "error" ? "Error" : "Warning", kindClass: `sev-${p.severity}`,
         where: names?.where ?? p.where ?? p.path,
         text: problemText(p, names),
       };
     }),
     at,
-    tone: errors > 0 ? "danger" : "warn",
-    tips: { prev: "Previous problem", next: "Next problem", go: "Go to what this is about" },
+    // The tone follows the CURRENT problem, not the worst one, as Patterpad's
+    // does: a warning reads softer than an error while you are standing on it.
+    // (This app keeps its own error colour, the danger tone, where Patterpad's
+    // bar wears its accent.)
+    tone: current?.severity === "warning" ? "warn" : "danger",
+    tips: { prev: "Previous problem", next: "Next problem", go: "Go to issue" },
     onStep,
     onGo: (i) => onJump(problems[i]!),
     actions: [current?.fix ? fixButton(current, current.fix, onFix) : null],

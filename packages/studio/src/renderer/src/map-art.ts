@@ -17,20 +17,37 @@
 
 import Konva from "konva";
 import { imageFor } from "./image-cache.js";
-import type { CanvasItem, DrawContext } from "./canvas-surface.js";
-import type { CanvasTokens } from "./canvas-tokens.js";
+import { rescalable, type CanvasItem, type DrawContext } from "./canvas-surface.js";
+import { rgba, type CanvasTokens } from "./canvas-tokens.js";
 import { labelPoint, polygonBounds, zonesAt } from "@storylet-studio/model";
 import type { Polygon, ViewPoint } from "@storylet-studio/model";
 
 /** A site is a point, so its "size" is chrome rather than content. */
 export const PIN_R = 9;
 const PIN_LABEL_GAP = 6;
+/** A pin's name, in screen pixels; a zone's is a size larger. */
+const PIN_LABEL_PX = 11;
+const ZONE_LABEL_PX = 12;
 /** Below this a zone's name is mush, so it goes rather than shrinking. */
 export const LABEL_FLOOR = 0.35;
 /** A zone's fill is a wash: the pictures under it and the pins on top have to
  *  read through it. Neutral (see the head of this file), so it is lighter than
  *  a coloured wash would be: a grey that strong reads as a shadow. */
 const ZONE_FILL_ALPHA = 0.1;
+/** A label's halo, and the room a zone's name keeps from its top edge, in
+ *  screen pixels. */
+const HALO_PX = 3;
+const LABEL_EDGE_GAP_PX = 3;
+/** How far a pin's rings stand outside its disc, in screen pixels: the
+ *  warning ring, the coverage ring at its coolest and the extra it gains at
+ *  the busiest hand, and the small dashed ring of an ambiguous pin. */
+const RING_GAP_PX = 4;
+const HEAT_RING_SPREAD_PX = 7;
+const AMBIGUOUS_RING_GAP_PX = 3;
+/** A filtered-out pin: still there, but not what is being looked at. */
+const QUIET_OPACITY = 0.35;
+/** A missing picture's name, in from its placeholder's corner. */
+const PLACEHOLDER_INSET_PX = 8;
 
 /** A zone as the canvas holds it: an item positioned at its bounding box's
  *  top-left, with the outline relative to that origin. */
@@ -109,6 +126,11 @@ export function zoneShape(zone: { id: string; title: string; name: string; polyg
   };
 }
 
+/** Back from a zone item to its polygon in world coordinates: the outline
+ *  where the item stands NOW, which after a drag is not where it loaded. */
+export const worldOutline = (zone: ZoneShape): Polygon =>
+  zone.outline.map((p) => ({ x: zone.x + p.x, y: zone.y + p.y }));
+
 export function drawZone(item: ZoneShape, ctx: DrawContext): Konva.Group {
   const { tokens, scale } = ctx;
   const group = new Konva.Group();
@@ -117,17 +139,17 @@ export function drawZone(item: ZoneShape, ctx: DrawContext): Konva.Group {
   const points: number[] = [];
   for (const p of item.outline) points.push(p.x, p.y);
 
-  group.add(new Konva.Line({
+  const edge = new Konva.Line({
     points, closed: true,
     fill: rgba(ink, ZONE_FILL_ALPHA),
     stroke: ink,
-    // A zone's edge is where its boundary IS, so it holds a floor on screen: at a
-    // whole-site zoom a hairline outline stops reading as a boundary at all.
-    strokeWidth: Math.max(1.5, 2 / scale),
-  }));
+  });
+  group.add(edge);
 
   // The NAME is not drawn here: see paintZoneLabels.
-  return group;
+  // A zone's edge is where its boundary IS, so it holds a floor on screen: at a
+  // whole-site zoom a hairline outline stops reading as a boundary at all.
+  return rescalable(group, scale, (s) => edge.strokeWidth(Math.max(1.5, 2 / s)));
 }
 
 /**
@@ -156,14 +178,14 @@ export function paintZoneLabels(
     const point = labelPoint(item.outline, { bias: "top" });
     const text = halo(new Konva.Text({
       text: item.title,
-      fontFamily: tokens.fontUi, fontSize: 12 / scale,
+      fontFamily: tokens.fontUi, fontSize: ZONE_LABEL_PX / scale,
       fill: tokens.ink, listening: false, align: "center",
     }), tokens, scale);
     // Clear of the zone's own top edge. The label point is a FRACTION down the
     // shape, which on a small zone lands within half a line of the border and the
     // name straddles it. The text knows its own height and the edge is right here,
     // so the clamp belongs at the drawing, not in the geometry.
-    const margin = 3 / scale;
+    const margin = LABEL_EDGE_GAP_PX / scale;
     text.position({
       x: item.x + point.x - text.width() / 2,
       y: Math.max(item.y + point.y - text.height() / 2, item.y + margin),
@@ -192,7 +214,7 @@ export function paintZoneLabels(
  */
 function halo(text: Konva.Text, tokens: CanvasTokens, scale: number): Konva.Text {
   text.stroke(tokens.surface);
-  text.strokeWidth(3 / scale);
+  text.strokeWidth(HALO_PX / scale);
   text.fillAfterStrokeEnabled(true);
   return text;
 }
@@ -204,9 +226,12 @@ export function drawSite(item: SiteShape, ctx: DrawContext): Konva.Group {
   const group = new Konva.Group();
   // Quiet, never hidden. A filtered map that dropped its sites would change
   // SHAPE as you filtered it, and a map you cannot recognise is not a map.
-  if (item.quiet === true) group.opacity(0.35);
+  if (item.quiet === true) group.opacity(QUIET_OPACITY);
   const ink = item.tint !== undefined ? (tokens.chars[item.tint % tokens.chars.length] ?? tokens.accent) : tokens.accent;
-  const r = PIN_R / scale;
+  const cx = item.width / 2, cy = item.height / 2;
+  /** Everything here is sized in SCREEN pixels and divided by the zoom, so it is
+   *  all set in one place and set again, in place, when the zoom changes. */
+  const fits: ((s: number) => void)[] = [];
 
   // The coverage HALO, outside the disc. The disc keeps its box's colour,
   // because that is whose the pin is and losing it would cost more than the
@@ -214,18 +239,22 @@ export function drawSite(item: SiteShape, ctx: DrawContext): Konva.Group {
   // whose hand stands where. A ring around it can be read alongside, the way a
   // highlight is.
   if (item.heat !== undefined) {
-    const cold = item.heat < 0;
-    group.add(new Konva.Circle({
-      x: item.width / 2, y: item.height / 2,
-      radius: r + (cold ? 4 : 4 + 7 * item.heat) / scale,
+    const heat = item.heat;
+    const cold = heat < 0;
+    const ring = new Konva.Circle({
+      x: cx, y: cy,
       // Never dealt into is a DASHED ring, not simply the faintest one: the
       // difference between "coldest" and "never" is the finding, and a
       // continuous scale cannot say it.
       stroke: cold ? tokens.warn : tokens.accent,
-      strokeWidth: 2 / scale,
-      opacity: cold ? 1 : 0.3 + 0.6 * item.heat,
-      dash: cold ? [3 / scale, 3 / scale] : undefined,
-    }));
+      opacity: cold ? 1 : 0.3 + 0.6 * heat,
+    });
+    fits.push((s) => {
+      ring.radius((PIN_R + RING_GAP_PX + (cold ? 0 : HEAT_RING_SPREAD_PX * heat)) / s);
+      ring.strokeWidth(2 / s);
+      ring.dash(cold ? [3 / s, 3 / s] : []);
+    });
+    group.add(ring);
   }
 
   // OFF ITS ZONE: the hand is bound to one zone and the pin stands in another,
@@ -233,46 +262,44 @@ export function drawSite(item: SiteShape, ctx: DrawContext): Konva.Group {
   // because this one is a mistake to put right: the game deals the hand where
   // it is bound, not where the pin is.
   if (item.strayFrom !== undefined) {
-    group.add(new Konva.Circle({
-      x: item.width / 2, y: item.height / 2, radius: r + 4 / scale,
-      stroke: tokens.warn, strokeWidth: 2.5 / scale,
-    }));
+    const ring = new Konva.Circle({ x: cx, y: cy, stroke: tokens.warn });
+    fits.push((s) => { ring.radius((PIN_R + RING_GAP_PX) / s); ring.strokeWidth(2.5 / s); });
+    group.add(ring);
   } else if (item.alsoInside !== undefined && item.alsoInside.length > 0) {
     // AMBIGUOUS CONTAINMENT: this pin sits inside more than one outline, and
     // only the frontmost owns it. A small dashed ring OUTSIDE the disc, so it
     // reads as an annotation rather than as part of the pin's colour. Not
     // danger: nothing is broken, the rule resolved it, and the author may well
     // have meant it.
-    group.add(new Konva.Circle({
-      x: item.width / 2, y: item.height / 2, radius: r + 3 / scale,
-      stroke: tokens.warn, strokeWidth: 1.5 / scale,
-      dash: [2 / scale, 2 / scale],
-    }));
+    const ring = new Konva.Circle({ x: cx, y: cy, stroke: tokens.warn });
+    fits.push((s) => { ring.radius((PIN_R + AMBIGUOUS_RING_GAP_PX) / s); ring.strokeWidth(1.5 / s); ring.dash([2 / s, 2 / s]); });
+    group.add(ring);
   }
 
-  group.add(new Konva.Circle({
-    x: item.width / 2, y: item.height / 2, radius: r,
+  const disc = new Konva.Circle({
+    x: cx, y: cy,
     // Hollow when nothing binds it: an unbound hand is a real state, and a site
     // that looked bound would be a lie about the content.
     fill: item.unbound ? tokens.surface : ink,
     stroke: item.unbound ? tokens.muted : tokens.surface,
-    strokeWidth: 2 / scale,
-    dash: item.unbound ? [3 / scale, 3 / scale] : undefined,
-  }));
+  });
+  fits.push((s) => {
+    disc.radius(PIN_R / s);
+    disc.strokeWidth(2 / s);
+    disc.dash(item.unbound ? [3 / s, 3 / s] : []);
+  });
+  group.add(disc);
 
   if (scale >= LABEL_FLOOR) {
-    const text = halo(new Konva.Text({
-      text: item.title,
-      fontFamily: tokens.fontUi, fontSize: 11 / scale,
-      fill: tokens.ink, listening: false,
-    }), tokens, scale);
-    text.position({
-      x: item.width / 2 + r + PIN_LABEL_GAP / scale,
-      y: item.height / 2 - text.height() / 2,
+    const text = new Konva.Text({ text: item.title, fill: tokens.ink, listening: false, fontFamily: tokens.fontUi });
+    fits.push((s) => {
+      text.fontSize(PIN_LABEL_PX / s);
+      halo(text, tokens, s);
+      text.position({ x: cx + (PIN_R + PIN_LABEL_GAP) / s, y: cy - text.height() / 2 });
     });
     group.add(text);
   }
-  return group;
+  return rescalable(group, scale, (s) => { for (const fit of fits) fit(s); }, [LABEL_FLOOR]);
 }
 
 /**
@@ -333,32 +360,37 @@ export function drawBackground(item: BackgroundShape, ctx: DrawContext): Konva.G
     group.add(new Konva.Image({
       image, x: 0, y: 0, width: item.width, height: item.height,
       opacity: item.opacity ?? 1,
-      // A tracing base is scaled, panned over and zoomed through constantly, and
-      // smoothing every frame of that is where the time would go.
+      // Smoothed: a site plan drawn at a third of its size without it is all
+      // jagged roof lines. A locked picture costs nothing to keep smooth, since
+      // it sits on a layer of its own and redraws only with the camera.
       imageSmoothingEnabled: true,
     }));
-    return group;
+    // Nothing in a picture is held to the screen, so a zoom never rebuilds it.
+    return rescalable(group, scale, () => undefined);
   }
 
-  group.add(new Konva.Rect({
+  const frame = new Konva.Rect({
     x: 0, y: 0, width: item.width, height: item.height,
     fill: rgba(tokens.muted, 0.06),
     stroke: tokens.lineSoft,
-    strokeWidth: Math.max(1, 1 / scale),
-    dash: [6 / scale, 5 / scale],
-  }));
+  });
+  group.add(frame);
   // Named, because "which picture is missing" is the only useful thing a
   // placeholder can say. Held to a screen size like every other label here.
+  let text: Konva.Text | undefined;
   if (scale >= LABEL_FLOOR) {
-    const text = new Konva.Text({
+    text = new Konva.Text({
       text: item.missing === true ? `${item.title} (not found)` : item.title,
-      fontFamily: tokens.fontUi, fontSize: 12 / scale,
-      fill: tokens.muted, listening: false,
+      fontFamily: tokens.fontUi, fill: tokens.muted, listening: false,
     });
-    text.position({ x: 8 / scale, y: 8 / scale });
     group.add(text);
   }
-  return group;
+  return rescalable(group, scale, (s) => {
+    frame.strokeWidth(Math.max(1, 1 / s));
+    frame.dash([6 / s, 5 / s]);
+    text?.fontSize(ZONE_LABEL_PX / s);
+    text?.position({ x: PLACEHOLDER_INSET_PX / s, y: PLACEHOLDER_INSET_PX / s });
+  }, [LABEL_FLOOR]);
 }
 
 /** The pin's item box: a point has no extent, so it gets a square the size of its
@@ -413,20 +445,3 @@ export function pinPlacement(
 /** Back from an item box to the point it marks. */
 export const sitePoint = (item: CanvasItem): ViewPoint =>
   ({ x: item.x + item.width / 2, y: item.y + item.height / 2 });
-
-/** A token colour at partial alpha. Tokens are hex or rgb(); Konva takes rgba. */
-export function rgba(colour: string, alpha: number): string {
-  const hex = /^#([0-9a-f]{6})$/i.exec(colour.trim());
-  if (hex) {
-    const n = parseInt(hex[1]!, 16);
-    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-  }
-  const rgb = /^rgba?\(([^)]+)\)$/i.exec(colour.trim());
-  if (rgb) {
-    const parts = rgb[1]!.split(",").map((p) => p.trim());
-    return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${alpha})`;
-  }
-  return colour;
-}
-
-

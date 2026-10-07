@@ -177,12 +177,12 @@ show, on [Keyboard shortcuts](/storyletter/shortcuts/).
 | Menu | Items |
 |---|---|
 | Storyletter (macOS only) | About Storyletter · User Information… |
-| File | New Project… (`Cmd+N`) · Open Project… (`Cmd+O`) · New Card (`Shift+Cmd+N`) · Save (`Cmd+S`) · Open Recent · Project Settings… (`Cmd+,`) · Share Scopes with Other Tools… · User Information… (Windows and Linux) · Close Project · Open Storyletpack… · Export as Storyletpack… · Merge Returned Storyletpack… · Connect to a Server… · Exit (Windows and Linux) |
-| Edit | Undo (`Cmd+Z`) · Redo (`Shift+Cmd+Z`) · Duplicate (`Cmd+D`) · Edit Scene in Patterpad (when the project is [paired with Patter](/storyletter/patter/)) · Cut · Copy · Paste · Select All · Find… (`Cmd+F`) · Replace… (`Cmd+Alt+F`; `Ctrl+H` on Windows and Linux) |
-| Play | The Board (`Cmd+T`) · Live Link |
+| File | New Project… (`Cmd+N`) · Open Project… (`Cmd+O`) · Open Storyletpack… · Open Recent · Close Project · Save (`Cmd+S`) · Export as Storyletpack… · Merge Returned Storyletpack… · Connect to a Server… · New Card (`Shift+Cmd+N`) · Project Settings… (`Cmd+,`) · Share Scopes with Other Tools… · User Information… (Windows and Linux) · Exit (Windows) or Quit (Linux) |
+| Edit | Undo (`Cmd+Z`) · Redo (`Shift+Cmd+Z`) · Cut · Copy · Paste · Select All · Duplicate (`Cmd+D`) · Edit Scene in Patterpad (when the project is [paired with Patter](/storyletter/patter/)) · Find… (`Cmd+F`) · Replace… (`Cmd+Alt+F`; `Ctrl+H` on Windows and Linux) |
+| Play | The Board (`Cmd+P`) · Live Link |
 | Review | Review Feedback (`Shift+Cmd+R`) · Next Feedback (`F8`) · Previous Feedback (`Shift+F8`) · Coverage Test… (`Shift+Cmd+C`) · Links… · Find Property Usage… · Show Resolved Comments |
 | Publish | Publish Playable HTML… · Publish Spreadsheet… · Publish Bundle (`Shift+Cmd+B`) · Auto Rebuild |
-| View | Show Navigator (`Cmd+1`) · Back · Forward · Up a Level (`Cmd+[`) · Project Overview · Reset View · Coverage Overlay · Colour Theme · Actual Size · Zoom In · Zoom Out · Toggle Full Screen |
+| View | Project Overview · Up a Level (`Cmd+[`) · Back · Forward · Show Navigator (`Cmd+1`) · Reset View · Coverage Overlay · Colour Theme · Actual Size · Zoom In · Zoom Out · Toggle Full Screen (Windows and Linux; macOS adds its own) |
 | Window | the platform's own window items |
 | Help | Open an Example ▸ (The Hamlet…, The Village…, Port Meridian…, The Hamlet (Patter Version)…) · Storyletter Documentation · Storylet Studio Documentation Home · Check for Updates… · About Storyletter (Windows and Linux) |
 
@@ -204,7 +204,7 @@ your edits settle, so the `.storyletsc` on disk never goes stale.
 bar does the same. **Coverage Overlay** tints the node canvas and the map by how much play
 reached each card or hand in your last coverage run (see
 [Coverage testing](/production/coverage-testing/)). A **▶ Play** button in the top bar
-opens the Board, the same as `Cmd+T`.
+opens the Board, the same as `Cmd+P`.
 
 **Live Link** starts a loopback link to a running game. Saving pushes the fresh bundle
 into the game, and the game streams its run back for the Board to watch. A connect chip

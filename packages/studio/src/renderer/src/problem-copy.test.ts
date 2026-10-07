@@ -2,7 +2,7 @@
 // has a code, every code has a sentence, the sentence names the thing by its
 // title, and no bracketed id or path ever reaches the bar.
 import { describe, expect, it } from "vitest";
-import { PROBLEM_CODES, STORYLETTER_PROBLEM_COPY, danglingId, problemCode, problemText } from "./problem-copy.js";
+import { PROBLEM_CODES, STORYLETTER_PROBLEM_COPY, boxForPath, danglingId, problemCode, problemText } from "./problem-copy.js";
 import type { Problem } from "../../shared/api.js";
 
 const problem = (message: string, over: Partial<Problem> = {}): Problem =>
@@ -187,5 +187,32 @@ describe("problemText", () => {
       .toBe("“Docks”’s gate doesn’t hold up: unknown function 'advanc'. Open it in the expression editor.");
     expect(problemText(problem("hand condition: unresolved world property reference '@world.zone'"), { title: "The Inn" }))
       .toBe("“The Inn”’s rule uses @world.zone, which isn’t set up yet. Declare it in the project settings, or fix the name.");
+  });
+});
+
+describe("boxForPath", () => {
+  // The box a problem is attributed to is the one whose FOLDER the path starts
+  // with. It used to be any box whose address appeared followed by a slash
+  // anywhere in the path, so a box called "a" claimed "data/decks/x".
+  const boxes = [{ gameId: "a" }, { gameId: "data" }, { gameId: "village" }];
+
+  it("matches on the folder at the start of the path", () => {
+    expect(boxForPath(boxes, "data/decks/x.storyletdeck")?.gameId).toBe("data");
+    expect(boxForPath(boxes, "village/hands.storylethands")?.gameId).toBe("village");
+  });
+
+  it("never on a folder that merely appears inside the path", () => {
+    expect(boxForPath([{ gameId: "a" }, { gameId: "decks" }], "data/decks/x.storyletdeck")).toBeUndefined();
+    expect(boxForPath(boxes, "old-village/decks/x.storyletdeck")).toBeUndefined();
+  });
+
+  it("reads a Windows separator and a leading ./ the same way", () => {
+    expect(boxForPath(boxes, "village\\decks\\x.storyletdeck")?.gameId).toBe("village");
+    expect(boxForPath(boxes, "./village/box.storyletbox")?.gameId).toBe("village");
+  });
+
+  it("leaves a project-level file to nobody", () => {
+    expect(boxForPath(boxes, "the-village.storyletproj")).toBeUndefined();
+    expect(boxForPath(boxes, "map.storyletmap")).toBeUndefined();
   });
 });

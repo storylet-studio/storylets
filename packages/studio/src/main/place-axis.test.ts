@@ -33,7 +33,7 @@ const PM_GROUP = "d_con_district";
 const PM_DOCKS = "v_con_docks";
 
 describe("the hand page off the map (Saltmarsh)", () => {
-  it("tiers Docks street's own area, so its docks cards are not 'no place'", () => {
+  it("tiers Docks street's own area, so its docks cards are not 'no place'", async () => {
     const s = scratch("saltmarsh.storylets");
     const tiers = handCards(s, "b_enc", "h_docks")!;
     expect(tiers.bound).toEqual(["area"]);
@@ -47,9 +47,9 @@ describe("the hand page off the map (Saltmarsh)", () => {
     expect(box.tagGroups.find((g) => g.gameId === "area")?.placeAxis).toBe(true);
   });
 
-  it("makes a card at a conversation hand tagged with its npc, not pinned to the hand", () => {
+  it("makes a card at a conversation hand tagged with its npc, not pinned to the hand", async () => {
     const s = scratch("saltmarsh.storylets");
-    const made = createBox(s, "dialogue");
+    const made = await createBox(s, "dialogue");
     if ("error" in made) throw new Error(made.error);
     const box = sourceBox(s, made.boxId);
     const gareth = box.hands.hands.find((h) => h.title === "Talking to Gareth")!;
@@ -60,17 +60,17 @@ describe("the hand page off the map (Saltmarsh)", () => {
     expect(tiers.tiers[0]!.cards.length).toBe(3);
     expect(tiers.anywhere.length).toBe(1);   // the weather: anyone's smalltalk
     const deck = box.decks[0]!.shard.deck.id;
-    const created = createCard(s, deck, gareth.id);
+    const created = await createCard(s, deck, gareth.id);
     if ("error" in created) throw new Error(created.error);
     const card = sourceBox(s, made.boxId).decks[0]!.shard.cards.find((c) => c.id === created.cardId)!;
     expect(card.tags).toEqual({ [npc.id]: [gareth.chosen![npc.id]!] });
   });
 
-  it("still pins a card made at a placed map hand to that hand", () => {
+  it("still pins a card made at a placed map hand to that hand", async () => {
     const s = scratch("the-village.storylets");
     const box = s.loaded.source!.boxes[0]!;
     const inn = box.hands.hands.find((h) => (h.title ?? "").includes("Inn"))!;
-    const created = createCard(s, box.decks[0]!.shard.deck.id, inn.id);
+    const created = await createCard(s, box.decks[0]!.shard.deck.id, inn.id);
     if ("error" in created) throw new Error(created.error);
     const card = s.loaded.source!.boxes[0]!.decks[0]!.shard.cards.find((c) => c.id === created.cardId)!;
     expect(card.tags).toEqual({ [PLACE_GROUP]: [inn.id] });
@@ -78,7 +78,7 @@ describe("the hand page off the map (Saltmarsh)", () => {
 });
 
 describe("the hand page on the map", () => {
-  it("shows a card placed here but filed to another zone, with the reason", () => {
+  it("shows a card placed here but filed to another zone, with the reason", async () => {
     const s = scratch("the-village.storylets");
     const box = s.loaded.source!.boxes[0]!;
     const zone = s.loaded.source!.map!.group;
@@ -95,7 +95,7 @@ describe("the hand page on the map", () => {
 });
 
 describe("Group by a place axis (Port Meridian)", () => {
-  it("files a card placed at a site under that site's district, never Untagged", () => {
+  it("files a card placed at a site under that site's district, never Untagged", async () => {
     const s = scratch("port-meridian.storylets");
     const box = toDto(s.loaded).boxes.find((b) => b.id === "b_contracts")!;
     const district = box.tagGroups.find((g) => g.gameId === "district")!;
@@ -105,7 +105,7 @@ describe("Group by a place axis (Port Meridian)", () => {
 });
 
 describe("a moving hand", () => {
-  it("is listed at every zone its property can name, marked as moving", () => {
+  it("is listed at every zone its property can name, marked as moving", async () => {
     const s = scratch("port-meridian.storylets");
     const source = s.loaded.source!;
     source.project.story = {
@@ -128,47 +128,47 @@ describe("a moving hand", () => {
 });
 
 describe("leaving the map", () => {
-  it("is refused while an expression reads a zone property, naming the card and where", () => {
+  it("is refused while an expression reads a zone property, naming the card and where", async () => {
     const s = scratch("port-meridian.storylets");
-    expect(useProjectMap(s, "b_codex", true)).not.toHaveProperty("error");
+    expect(await useProjectMap(s, "b_codex", true)).not.toHaveProperty("error");
     const card = sourceBox(s, "b_codex").decks[0]!.shard.cards[0]!;
     card.condition = "@hand.patrolled";
-    const refused = useProjectMap(s, "b_codex", false);
+    const refused = await useProjectMap(s, "b_codex", false);
     // Named by its title, with the card to open (the round-3 wording pass).
     expect(refused).toMatchObject({
       refused: { body: expect.stringContaining(`its card "${card.title}" reads @hand.patrolled in its When`), open: { kind: "card", id: card.id } },
     });
     card.condition = 'count_played_in("district", "docks") > 0';
-    expect(useProjectMap(s, "b_codex", false)).toMatchObject({ refused: { body: expect.stringContaining('count_played_in("district")') } });
+    expect(await useProjectMap(s, "b_codex", false)).toMatchObject({ refused: { body: expect.stringContaining('count_played_in("district")') } });
     delete card.condition;
-    const left = useProjectMap(s, "b_codex", false);
+    const left = await useProjectMap(s, "b_codex", false);
     expect(left).not.toHaveProperty("error");
     expect(left).not.toHaveProperty("refused");
   });
 
-  it("asks before deleting the box's positions on the map", () => {
+  it("asks before deleting the box's positions on the map", async () => {
     const s = scratch("port-meridian.storylets");
-    expect(useProjectMap(s, "b_codex", true)).not.toHaveProperty("error");
+    expect(await useProjectMap(s, "b_codex", true)).not.toHaveProperty("error");
     const hand = sourceBox(s, "b_codex").hands.hands[0]!;
     // Put down well away from every zone, so nothing is bound by it.
-    const moved = moveSitesOnMap(s, "b_codex", PM_GROUP, [{ id: hand.id, x: -99999, y: -99999 }]);
+    const moved = await moveSitesOnMap(s, "b_codex", PM_GROUP, [{ id: hand.id, x: -99999, y: -99999 }]);
     if ("error" in moved) throw new Error(moved.error);
-    const asked = useProjectMap(s, "b_codex", false);
+    const asked = await useProjectMap(s, "b_codex", false);
     expect(asked).toEqual({ confirm: { title: expect.stringContaining("off the project map"), body: expect.stringContaining("position") } });
     expect(sourceBox(s, "b_codex").box.box.usesMap).toBe(true);
-    expect(useProjectMap(s, "b_codex", false, true)).not.toHaveProperty("error");
+    expect(await useProjectMap(s, "b_codex", false, true)).not.toHaveProperty("error");
     expect(sourceBox(s, "b_codex").box.box.usesMap).toBeUndefined();
   });
 });
 
 describe("stop being a map", () => {
-  it("refuses while the map has pictures or frames, rather than losing them", () => {
+  it("refuses while the map has pictures or frames, rather than losing them", async () => {
     const s = scratch("saltmarsh.storylets");
-    expect(setGroupSpatial(s, "b_enc", "d_zone", true)).not.toHaveProperty("error");
+    expect(await setGroupSpatial(s, "b_enc", "d_zone", true)).not.toHaveProperty("error");
     const PNG = Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000" + "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082", "hex");
-    const added = addBackground(s, "b_enc", "d_zone", { name: "plan.png", bytes: PNG }, { view: { width: 100, height: 100 }, scale: 1, at: { x: 0, y: 0 } });
+    const added = await addBackground(s, "b_enc", "d_zone", { name: "plan.png", bytes: PNG }, { view: { width: 100, height: 100 }, scale: 1, at: { x: 0, y: 0 } });
     expect(added).not.toHaveProperty("error");
-    const refused = setGroupSpatial(s, "b_enc", "d_zone", false);
+    const refused = await setGroupSpatial(s, "b_enc", "d_zone", false);
     expect(refused).toEqual({ error: expect.stringContaining("1 picture") });
     expect(s.loaded.source!.map).toBeDefined();
     expect(framesOf(s.loaded.source!.map!)).toEqual([]);

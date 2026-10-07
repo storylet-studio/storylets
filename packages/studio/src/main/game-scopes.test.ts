@@ -55,11 +55,11 @@ const projectShard = (session: ProjectSession): ProjectShard =>
 const readJson = (path: string): any => JSON.parse(readFileSync(path, "utf8"));
 
 describe("saving the project writes the Storylet Engine's file", () => {
-  it("a story declaration lands in storylets.scopes.json, the project's @world copy is synced, and one undo takes both back", () => {
+  it("a story declaration lands in storylets.scopes.json, the project's @world copy is synced, and one undo takes both back", async () => {
     const { root, session } = scratch(true);
     const ours = join(root, "game-scopes", "storylets.scopes.json");
     expect(existsSync(ours)).toBe(false);
-    const r = declareProperty(session, "story", "debt", "");
+    const r = await declareProperty(session, "story", "debt", "");
     expect("error" in r).toBe(false);
     expect(readJson(ours)).toEqual({
       version: 1, owner: "Storylet Engine",
@@ -72,13 +72,13 @@ describe("saving the project writes the Storylet Engine's file", () => {
     // The copy of @world now says what game.scopes.json says (the shared file wins).
     expect(projectShard(session).world.properties).toEqual([{ name: "danger", type: "number", default: 2, purpose: "How bad it is out there" }]);
 
-    undo(session);
+    await undo(session);
     expect(existsSync(ours)).toBe(false);
     expect(projectShard(session).story.properties.map((p) => p.name)).toEqual(["reputation", "visited"]);
     expect(projectShard(session).world.properties).toEqual([{ name: "danger", type: "number", default: 0 }]);
   });
 
-  it("publishing writes it too, and never when it already says the same", () => {
+  it("publishing writes it too, and never when it already says the same", async () => {
     const { root, session } = scratch(true);
     const ours = join(root, "game-scopes", "storylets.scopes.json");
     expect("error" in exportBundle(session)).toBe(false);
@@ -90,18 +90,18 @@ describe("saving the project writes the Storylet Engine's file", () => {
 });
 
 describe("the World settings, where the game shares its scopes", () => {
-  it("read game.scopes.json, and name it", () => {
+  it("read game.scopes.json, and name it", async () => {
     const { session } = scratch(true);
     const s = projectSettings(session);
     expect(s.world.map((d) => [d.name, d.default])).toEqual([["danger", "2"]]);
     expect(s.worldFile).toBe("game-scopes/game.scopes.json");
   });
 
-  it("write game.scopes.json first, keep its other scopes, and copy the same declarations into the project", () => {
+  it("write game.scopes.json first, keep its other scopes, and copy the same declarations into the project", async () => {
     const { root, session } = scratch(true);
     const s = projectSettings(session);
     s.world = [...s.world, { name: "is_night", type: "boolean", default: "false" }];
-    expect("error" in saveProjectSettings(session, s)).toBe(false);
+    expect("error" in await saveProjectSettings(session, s)).toBe(false);
     const game = readJson(join(root, "game-scopes", "game.scopes.json"));
     expect(game.scopes).toEqual([
       { token: "world", declarations: [
@@ -118,28 +118,28 @@ describe("the World settings, where the game shares its scopes", () => {
     expect(session.dto.gameScopes!.sharedWorld).toBe(true);
   });
 
-  it("re-read game.scopes.json before writing: another tool's new scope survives", () => {
+  it("re-read game.scopes.json before writing: another tool's new scope survives", async () => {
     const { root, session } = scratch(true);
     const s = projectSettings(session);
     const path = join(root, "game-scopes", "game.scopes.json");
     writeFileSync(path, json({ ...GAME, scopes: [...GAME.scopes, { token: "party", declarations: [{ name: "size", type: "number", default: 3 }] }] }));
-    expect("error" in saveProjectSettings(session, s)).toBe(false);
+    expect("error" in await saveProjectSettings(session, s)).toBe(false);
     expect(readJson(path).scopes.map((x: { token: string }) => x.token)).toEqual(["world", "player", "weather", "party"]);
   });
 
-  it("refuse to write over a game.scopes.json that won't parse, and change nothing", () => {
+  it("refuse to write over a game.scopes.json that won't parse, and change nothing", async () => {
     const { root, session } = scratch(true);
     const s = projectSettings(session);
     writeFileSync(join(root, "game-scopes", "game.scopes.json"), "{ broken");
     const before = readFileSync(join(session.loaded.dir, "saltmarsh.storyletproj"), "utf8");
-    const r = saveProjectSettings(session, s);
+    const r = await saveProjectSettings(session, s);
     expect("error" in r && r.error).toMatch(/game.scopes.json can't be read/);
     expect(readFileSync(join(session.loaded.dir, "saltmarsh.storyletproj"), "utf8")).toBe(before);
   });
 
-  it("the declare quick-fix for @world goes to the game's file as well", () => {
+  it("the declare quick-fix for @world goes to the game's file as well", async () => {
     const { root, session } = scratch(true);
-    expect("error" in declareProperty(session, "world", "is_night", "", { type: "boolean", default: false })).toBe(false);
+    expect("error" in await declareProperty(session, "world", "is_night", "", { type: "boolean", default: false })).toBe(false);
     expect(readJson(join(root, "game-scopes", "game.scopes.json")).scopes[0].declarations.map((d: { name: string }) => d.name))
       .toEqual(["danger", "is_night"]);
     expect(projectShard(session).world.properties.map((d) => d.name)).toEqual(["danger", "is_night"]);
@@ -147,7 +147,7 @@ describe("the World settings, where the game shares its scopes", () => {
 });
 
 describe("what the editors are told", () => {
-  it("the picker offers the other tools' properties with their owner, and @world from the game's file", () => {
+  it("the picker offers the other tools' properties with their owner, and @world from the game's file", async () => {
     const { session } = scratch(true);
     const cat = cardCatalogue(session, "k_docks");
     expect(cat.find((p) => p.scope === "patter" && p.name === "visits")).toEqual({
@@ -158,12 +158,12 @@ describe("what the editors are told", () => {
     expect(cat.some((p) => p.scope === "story" && p.owner !== undefined)).toBe(false);   // our own, from the project
   });
 
-  it("the project says which tokens the folder declares, and which are opaque", () => {
+  it("the project says which tokens the folder declares, and which are opaque", async () => {
     const { root, session } = scratch(true);
     expect(session.dto.gameScopes).toEqual({ dir: join(root, "game-scopes"), tokens: ["player", "weather", "patter"], opaque: ["weather"], sharedWorld: true });
   });
 
-  it("the Board gets the folder beside the bundle", () => {
+  it("the Board gets the folder beside the bundle", async () => {
     const { session } = scratch(true);
     const r = compileBundle(session);
     if ("error" in r) throw new Error(r.error);
@@ -173,7 +173,7 @@ describe("what the editors are told", () => {
 });
 
 describe("Share Scopes with Other Tools", () => {
-  it("makes the folder at the repository root, writes both files, and keeps the project's @world", () => {
+  it("makes the folder at the repository root, writes both files, and keeps the project's @world", async () => {
     const { root, session } = scratch(false);
     expect(shareScopesDefault(session)).toBe(root);
     const before = readFileSync(join(session.loaded.dir, "saltmarsh.storyletproj"), "utf8");
@@ -189,7 +189,7 @@ describe("Share Scopes with Other Tools", () => {
     expect(shareScopes(reopened.session, root)).toEqual({ error: `this project already shares its scopes, through ${join(root, "game-scopes")}` });
   });
 
-  it("names the folder in the project when the walk wouldn't find it", () => {
+  it("names the folder in the project when the walk wouldn't find it", async () => {
     const { session } = scratch(false);
     const elsewhere = mkdtempSync(join(tmpdir(), "elsewhere-"));
     expect(shareScopes(session, elsewhere)).toBeUndefined();
@@ -202,12 +202,12 @@ describe("Share Scopes with Other Tools", () => {
 });
 
 describe("with no folder", () => {
-  it("a save writes the project and nothing else, and the World settings name no file", () => {
+  it("a save writes the project and nothing else, and the World settings name no file", async () => {
     const { root, session } = scratch(false);
     const s = projectSettings(session);
     expect(s.worldFile).toBeUndefined();
     s.world = [...s.world, { name: "is_night", type: "boolean", default: "false" }];
-    expect("error" in saveProjectSettings(session, s)).toBe(false);
+    expect("error" in await saveProjectSettings(session, s)).toBe(false);
     expect(existsSync(join(root, "game-scopes"))).toBe(false);
     expect(projectShard(session).world.properties.map((d) => d.name)).toEqual(["danger", "is_night"]);
     expect(session.dto.gameScopes).toBeUndefined();
@@ -231,7 +231,7 @@ describe("merging a returned pack, where the game shares its scopes", () => {
   /** What Merge Returned Storyletpack writes, as its commit batches it. */
   async function merge(session: ProjectSession, sent: Buffer, returned: Buffer) {
     const merged = await runUnpackMerge(returned, sent, session.loaded.dir);
-    expect(applyStates([...merged.writes, ...merged.sidecars, ...returnedWorldWrites(merged.gameWorld)])).toBe(true);
+    expect(await applyStates([...merged.writes, ...merged.sidecars, ...returnedWorldWrites(merged.gameWorld)])).toEqual({ ok: true });
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     return { merged, session: reopened.session };
@@ -241,7 +241,7 @@ describe("merging a returned pack, where the game shares its scopes", () => {
     const { root, session } = scratch(true);
     // A save first, so the project's copy of @world is level with the game's file, as it is
     // for any project Storyletter has saved since the folder was made.
-    expect("error" in declareProperty(session, "story", "debt", "")).toBe(false);
+    expect("error" in await declareProperty(session, "story", "debt", "")).toBe(false);
     const { sent, returned } = await roundTrip(session, (theirs) => {
       const path = join(theirs, "saltmarsh.storyletproj");
       const shard = parseSource(readFileSync(path, "utf8")) as ProjectShard;
@@ -254,13 +254,13 @@ describe("merging a returned pack, where the game shares its scopes", () => {
       .toEqual(["danger", "tide"]);
 
     // The next save re-syncs the project's copy from the game's file, and the edit is still there.
-    expect("error" in declareProperty(after, "story", "owed", "")).toBe(false);
+    expect("error" in await declareProperty(after, "story", "owed", "")).toBe(false);
     expect(projectShard(after).world.properties.map((d) => d.name)).toEqual(["danger", "tide"]);
   });
 
   it("with the World left alone, nothing is said and game.scopes.json is not touched", async () => {
     const { root, session } = scratch(true);
-    expect("error" in declareProperty(session, "story", "debt", "")).toBe(false);
+    expect("error" in await declareProperty(session, "story", "debt", "")).toBe(false);
     const before = readFileSync(join(root, "game-scopes", "game.scopes.json"), "utf8");
     const { sent, returned } = await roundTrip(session, (theirs) => {
       // Their snapshot changed, which is never merged back.
@@ -272,7 +272,7 @@ describe("merging a returned pack, where the game shares its scopes", () => {
     expect(readFileSync(join(root, "game-scopes", "game.scopes.json"), "utf8")).toBe(before);
   });
 
-  it("says why when game.scopes.json won't parse, and writes nothing there", () => {
+  it("says why when game.scopes.json won't parse, and writes nothing there", async () => {
     const gameWorld = { path: "/g/game-scopes/game.scopes.json", error: "game.scopes.json can't be read" };
     expect(returnedWorldSummary(gameWorld)).toEqual({ gameWorldError: "game.scopes.json can't be read" });
     expect(returnedWorldWrites(gameWorld)).toEqual([]);

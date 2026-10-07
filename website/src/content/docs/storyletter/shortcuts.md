@@ -21,7 +21,7 @@ Shortcuts are shown for macOS (`Cmd`). On Windows and Linux, use Ctrl wherever y
 | `Cmd+D` | Duplicate the selection |
 | `Cmd+F` | Find, across the project |
 | `Cmd+Alt+F` (`Ctrl+H` on Windows and Linux) | Replace text across the project: the Find window's Replace tab |
-| `Cmd+T` | The Board |
+| `Cmd+P` | The Board |
 | `Shift+Cmd+R` | Review Feedback (toggle the [review walk](/storyletter/reviewing/)) |
 | `F8` / `Shift+F8` | Next / Previous Feedback |
 | `Shift+Cmd+C` | Coverage Test |
@@ -37,7 +37,7 @@ a save takes, not just the text field you're in.
 
 | Key | Action |
 |---|---|
-| `Esc` | In a field, leave the field. In a card, go back to its deck |
+| `Esc` | In a field, put back what it held when you clicked in. Anywhere else, go up a level, as the back button does |
 | `↑` / `↓` | In a card, step to the previous or next card in the deck |
 | `Cmd+↑` / `Cmd+←` | Up a Level, the same as `Cmd+[` (when no field has the cursor) |
 | `↑` `↓` `←` `→` | In a deck's Card or Table view, move the selection |
@@ -54,7 +54,6 @@ letters, not chords.
 |---|---|
 | `F` | Fit the selection |
 | `Home` | Fit everything |
-| `L` | Arrange by links (node canvas only): two or more selected cards, or every card otherwise |
 | `Cmd+0` | Back to 100% |
 | `Cmd+=` / `Cmd+-` | Zoom in and out |
 | `Cmd+A` | Select everything that isn't locked |
@@ -71,7 +70,9 @@ letters, not chords.
 mid-draw it abandons the drawing, with a marquee up it drops the marquee, and with a
 selection it clears the selection. In a tool window it closes an open panel before it closes
 the window. On the Board that runs all the way through the play: a chosen outcome, then the
-open card, then the snapshot panel, and only then the window.
+open card, then the snapshot panel, then a selected hand or map zone, and only then the
+window. Closing a Board whose session has moved on asks first, as Restart does, however you
+close it.
 
 ## In the Find window
 

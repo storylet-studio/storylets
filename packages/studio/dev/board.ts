@@ -75,15 +75,13 @@ const marks = (): BoardMapMarks => ({
 });
 
 const map = mountBoardMap(stage, MAP, selected, marks(), {
-  select: (hand) => {
+  // One call per click, as the Board takes it: the hand, and the zone only
+  // when one is involved.
+  pick: (hand, zone) => {
     selected = hand;
+    if (zone) filtered = zone.id;
     side.textContent = hand === undefined ? "nothing selected" : `selected: ${hand} (holding ${HELD[hand] ?? 0})`;
-    events.textContent = `select ${hand ?? "(none)"}`;
-    map.update(MAP, selected, marks());
-  },
-  filter: (zone) => {
-    filtered = zone;
-    events.textContent = `filter ${zone ?? "(all)"}`;
+    events.textContent = `select ${hand ?? "(none)"}${zone ? `, filter ${zone.id ?? "(all)"}` : ""}`;
     map.update(MAP, selected, marks());
   },
   reveal: (hand) => { events.textContent = `reveal ${hand} in the editor`; },

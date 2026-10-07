@@ -1,17 +1,6 @@
 /* The Find window - a frameless tool; consumes theme.css tokens only. */
 
-* { box-sizing: border-box; }
-html, body { height: 100%; }
-body {
-  margin: 0;
-  background: var(--surface);
-  color: var(--ink);
-  font-family: var(--font-ui);
-  font-size: 13px;
-  -webkit-user-select: none;
-  user-select: none;
-  border: 1px solid var(--line-soft);
-}
+/* The base (ground, type, frame, fields) is the shared tool-window/base.css. */
 #find { height: 100%; display: flex; flex-direction: column; }
 
 /* No element `button` rule: actions wear the shell's `.btn` and the tabs its
@@ -29,7 +18,7 @@ body {
 .swin-input {
   font: inherit; font-size: 15px;
   background: none; color: var(--ink);
-  border: 0; border-bottom: 1px solid var(--line-soft);
+  border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0;
   padding: 10px 12px;
   -webkit-user-select: text; user-select: text;
 }

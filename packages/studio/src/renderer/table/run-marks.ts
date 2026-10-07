@@ -20,6 +20,18 @@
 // State only: what is marked, never how it is drawn.
 // ---------------------------------------------------------------------------
 
+/** What a hand row and a pin read to wear their marks: the local session's
+ *  run, or nothing at all (Live mode, where the game's run is not this one). */
+export type MarksSource = Pick<RunMarks, "now" | "visitedHand" | "visitedCard">;
+
+/** No marks: Live mode shows the game's run, and the local session's trail
+ *  does not belong on it. */
+export const NO_MARKS: MarksSource = {
+  now: () => undefined,
+  visitedHand: () => false,
+  visitedCard: () => false,
+};
+
 export interface RunMarks {
   /** A card was played from a hand: the new running position. */
   played: (handGameId: string, cardId: string) => void;
@@ -29,8 +41,6 @@ export interface RunMarks {
   visitedHand: (handGameId: string) => boolean;
   /** Has this card been played this run? */
   visitedCard: (cardId: string) => boolean;
-  /** Has anything happened yet? For a view deciding whether to say so. */
-  any: () => boolean;
   /** Back to nothing: a restart, or a snapshot restore. */
   reset: () => void;
 }
@@ -49,7 +59,6 @@ export function runMarks(): RunMarks {
     now: () => current,
     visitedHand: (handGameId) => hands.has(handGameId),
     visitedCard: (cardId) => cards.has(cardId),
-    any: () => current !== undefined,
     reset() {
       current = undefined;
       hands.clear();

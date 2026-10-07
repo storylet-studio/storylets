@@ -10,8 +10,7 @@
 // than the old default.
 // ---------------------------------------------------------------------------
 
-import { gameIdify, isValidGameId, openAnchoredPanel } from "@wildwinter/app-shell";
-import { el } from "./dom.js";
+import { el, gameIdify, isValidGameId, openAnchoredPanel } from "@wildwinter/app-shell";
 
 /** Ask for the new zone's name; resolves with what was typed ("" for none). */
 export function askZoneName(anchor: HTMLElement): Promise<string> {

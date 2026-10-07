@@ -13,8 +13,7 @@
 // World section read as one grammar.
 // ---------------------------------------------------------------------------
 
-import { el } from "./dom.js";
-import { bindPropertyRef, dupGuard, expandableRow, firstIllegalPropertyName, focusNewRow, iconBtn,
+import { bindPropertyRef, dupGuard, el, expandableRow, firstIllegalPropertyName, focusNewRow, iconBtn,
   labelled, moveItem } from "@wildwinter/app-shell";
 import type { SettingsSectionHandle } from "@wildwinter/app-shell";
 import type { CoverageDriverDto } from "../../shared/api.js";
@@ -112,7 +111,7 @@ export function mountDriverList(host: HTMLElement, drivers: CoverageDriverDto[],
 
       const up = iconBtn("up", "Move up", () => { if (moveItem(drivers, i, -1)) { render(); changed(); } }, i === 0);
       const down = iconBtn("down", "Move down", () => { if (moveItem(drivers, i, 1)) { render(); changed(); } }, i === drivers.length - 1);
-      const del = iconBtn("close", "Remove", () => { drivers.splice(i, 1); render(); changed(); }, false, true);
+      const del = iconBtn("close", "Remove driver", () => { drivers.splice(i, 1); render(); changed(); }, false, true);
 
       list.append(expandableRow({ line: [ref, values, kind, up, down, del], details: [cadenceRow] }));
     });

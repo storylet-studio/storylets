@@ -56,13 +56,18 @@ function code(text: string): string {
     .replace(/^[^\n]*?\/\/.*$/gm, (line) => (line.includes("//") ? line.slice(0, line.indexOf("//")) : line));
 }
 
+/** The tool windows' shared boot (tool-window/boot.ts), which mounts the host
+ *  for the four of them: a window that calls it has made the call. */
+const toolBoot = code(readFileSync(join(here, "tool-window", "boot.ts"), "utf8"));
+
 describe("the tooltip host", () => {
   it("is mounted by every renderer, and there is more than one of them", () => {
     const entries = entryPoints();
     expect(entries.length).toBeGreaterThanOrEqual(5);   // the editor plus four tool windows
+    expect(toolBoot, "bootToolWindow no longer calls initTooltips()").toMatch(/initTooltips\(/);
     for (const { name, source } of entries) {
-      expect(source, `${name} never calls initTooltips(), so its hand-set data-tips are dead`)
-        .toMatch(/initTooltips\(/);
+      expect(source, `${name} never calls initTooltips() or bootToolWindow(), so its hand-set data-tips are dead`)
+        .toMatch(/initTooltips\(|bootToolWindow\(/);
     }
   });
 
@@ -70,7 +75,7 @@ describe("the tooltip host", () => {
     // 0.28.0's other half: options used to be "first call wins" and are now "the
     // last explicit call wins". We pass none today; if a `suppressed` predicate
     // is ever added, it must be the app that passes it, from one place.
-    for (const { name, source } of entryPoints()) {
+    for (const { name, source } of [...entryPoints(), { name: "tool-window/boot.ts", source: toolBoot }]) {
       const calls = [...source.matchAll(/initTooltips\(([^)]*)\)/g)].map((m) => m[1]!.trim());
       expect(calls.filter((c) => c !== ""), `${name} passes tooltip options`).toEqual([]);
     }

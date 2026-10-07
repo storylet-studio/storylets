@@ -12,13 +12,16 @@
 // on every open dialog. This holds us to it. SAVE dialogs are deliberately out
 // of scope in both apps: a save panel shows a filename field and the extension
 // filter, which already say what is about to happen.
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { mainFiles } from "./main-source.js";
 
-const SOURCE = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+/** Each `showOpenDialog(...)` call's options block in main, with where it is. */
+function openDialogs(): { line: string; body: string }[] {
+  return mainFiles().flatMap(({ path, text }) => dialogsIn(text).map((d) => ({ line: `main/${path}:${d.line}`, body: d.body })));
+}
 
-/** Each `showOpenDialog(...)` call's options block, with the line it starts on. */
-function openDialogs(): { line: number; body: string }[] {
+/** Each `showOpenDialog(...)` call's options block in one module, with the line it starts on. */
+function dialogsIn(SOURCE: string): { line: number; body: string }[] {
   const found: { line: number; body: string }[] = [];
   const marker = "showOpenDialog(";
   for (let at = SOURCE.indexOf(marker); at !== -1; at = SOURCE.indexOf(marker, at + 1)) {
@@ -43,7 +46,7 @@ describe("native open dialogs", () => {
   it("every one carries a message and a buttonLabel, not a macOS-invisible title alone", () => {
     const bare = openDialogs()
       .filter((d) => !d.body.includes("message:") || !d.body.includes("buttonLabel:"))
-      .map((d) => `main/index.ts:${d.line}`);
+      .map((d) => d.line);
     expect(bare).toEqual([]);
   });
 });

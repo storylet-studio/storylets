@@ -46,7 +46,7 @@ import {
 import {
   BASE_FILE, FINGERPRINT_CHANGED, LINK_PIN_REFUSED, PIN_REFUSED, PULL_AS_DESIGNER, REMOTE_FILE,
   ServerSession, addressOf, askLeave, contractBreaks, failed,
-  fingerprintHex, forgetShardHashes, hashProject, isShapeShard, leaveChoice, leavePrompt, levelLine, menuState,
+  fingerprintHex, forgetShardHashes, hashPack, hashProject, isShapeShard, leaveChoice, leavePrompt, levelLine, menuState,
   normalForm, normaliseAddress, nothingToPush, openPackBytes, pair, packAddress, packProject,
   planConnect, planPull, projectStatusLine, pullPack, pushPack, pushedLine, readBase, readRemote,
   reachable, refusalPrompt, refuseWrite, remoteInPack, resolveLeave, samePin, serverProblems, shardHash,
@@ -330,14 +330,14 @@ describe("the Server menu", () => {
     installation: "the-park", version: "seed", revision: 3, role: "author",
   };
 
-  it("is there only with a remote AND a key for it", () => {
+  it("is there only with a remote AND a key for it", async () => {
     expect(menuState(undefined, true, 0)).toBeUndefined();
     expect(menuState(remote, false, 0)).toBeUndefined();
     expect(menuState(remote, true, 0)).toEqual({ status: "In sync" });
     expect(menuState(remote, true, 2)).toEqual({ status: "2 edits unpushed" });
   });
 
-  it("says which of the three things is true", () => {
+  it("says which of the three things is true", async () => {
     expect(statusLine({ revision: 3, edits: 0 })).toBe("In sync");
     expect(statusLine({ revision: 3, edits: 0, head: 3 })).toBe("In sync");
     expect(statusLine({ revision: 3, edits: 0, head: 7 })).toBe("Behind: revision 7 on the server");
@@ -526,7 +526,7 @@ describe("pushing", () => {
 describe("what the far end says, and where it is shown", () => {
   const anchor = { dir: join("/tmp", "saltmarsh.storylets"), project: "saltmarsh.storyletproj" };
 
-  it("reads 'nothing to push' as a remark rather than a refusal", () => {
+  it("reads 'nothing to push' as a remark rather than a refusal", async () => {
     expect(nothingToPush({
       error: 'Nothing in that pack differs from revision 3 of "seed", so there is nothing to push.',
       code: "bad_request",
@@ -539,7 +539,7 @@ describe("what the far end says, and where it is shown", () => {
     expect(nothingToPush({ error: "fetch failed", offline: true })).toBe(false);
   });
 
-  it("names shards the way the project does", () => {
+  it("names shards the way the project does", async () => {
     const rows = serverProblems(anchor, "That push breaks 1 thing this end depends on.", [
       {
         severity: "error", path: "encounters/hands.storylethands", where: "the-wall",
@@ -562,7 +562,7 @@ describe("what the far end says, and where it is shown", () => {
     expect(rows[2]!.severity).toBe("warning");
   });
 
-  it("files a refusal once, however the details repeat it", () => {
+  it("files a refusal once, however the details repeat it", async () => {
     const refusal = "That push does not merge cleanly against revision 4.";
     expect(serverProblems(anchor, refusal, undefined)).toEqual([
       { severity: "error", path: "saltmarsh.storyletproj", message: refusal },
@@ -580,7 +580,7 @@ describe("what the far end says, and where it is shown", () => {
 // project switch used to keep it: the window went on saying where the one just
 // closed stood (2026-09-07).
 describe("the server state a sitting holds", () => {
-  it("forgets every project's standing when the project changes", () => {
+  it("forgets every project's standing when the project changes", async () => {
     const sitting = new ServerSession();
     sitting.noteHead("/projects/one", 7);
     sitting.shownEdits = 3;
@@ -628,18 +628,18 @@ describe("what Storyletter sends is in the format's own canonical form", () => {
     // One edit through each shard the editor writes: a card (deck), a box, a
     // hand and its map site, a zone outline (tags), a canvas (view), a comment
     // (notes), and the project file.
-    expect("error" in saveCard(session, deck.id, deck.cards[0]!.id, { title: "Rewritten" })).toBe(false);
-    expect("error" in saveBox(session, box.id, { purpose: "Rewritten too" })).toBe(false);
-    const hand = createHand(session, box.id);
+    expect("error" in await saveCard(session, deck.id, deck.cards[0]!.id, { title: "Rewritten" })).toBe(false);
+    expect("error" in await saveBox(session, box.id, { purpose: "Rewritten too" })).toBe(false);
+    const hand = await createHand(session, box.id);
     if ("error" in hand) throw new Error(hand.error);
     const group = session.loaded.source!.boxes[0]!.tags.groups[0]!;
-    expect("error" in setGroupSpatial(session, box.id, group.id, true)).toBe(false);
-    expect("error" in setZonePolygon(session, box.id, group.id, group.tags[0]!.id,
+    expect("error" in await setGroupSpatial(session, box.id, group.id, true)).toBe(false);
+    expect("error" in await setZonePolygon(session, box.id, group.id, group.tags[0]!.id,
       [{ x: 0, y: 0 }, { x: 90, y: 0 }, { x: 90, y: 90 }, { x: 0, y: 90 }])).toBe(false);
-    expect("error" in moveSitesOnMap(session, box.id, group.id,
+    expect("error" in await moveSitesOnMap(session, box.id, group.id,
       [{ id: hand.handId, x: 40, y: 40 }])).toBe(false);
-    expect("error" in moveCardsOnCanvas(session, deck.id, [{ id: deck.cards[0]!.id, x: 30, y: 60 }])).toBe(false);
-    expect("error" in postComment(session, deck.cards[0]!.id, "t_1", "Sam", "Does this read?")).toBe(false);
+    expect("error" in await moveCardsOnCanvas(session, deck.id, [{ id: deck.cards[0]!.id, x: 30, y: 60 }])).toBe(false);
+    expect("error" in await postComment(session, deck.cards[0]!.id, "t_1", "Sam", "Does this read?")).toBe(false);
 
     expect(notCanonical(session.loaded.dir)).toEqual([]);
 
@@ -699,7 +699,7 @@ describe("the note and the breaks a push carries", () => {
     expect(server.pushes.at(-1)!.acknowledge).toEqual(["hand:h_inn", "village/village.storyletbox"]);
   });
 
-  it("reads a refusal that named nothing tickable as no breaks at all", () => {
+  it("reads a refusal that named nothing tickable as no breaks at all", async () => {
     expect(contractBreaks(undefined)).toEqual([]);
     expect(contractBreaks("that is not a list")).toEqual([]);
     // A row with nothing to say is a row with nothing to tick.
@@ -781,7 +781,7 @@ describe("two jobs at one venue", () => {
     expect(pulled.role).toBe("author");
   });
 
-  it("forgetting the open project's key leaves the other job's alone", () => {
+  it("forgetting the open project's key leaves the other job's alone", async () => {
     const settings = mkdtempSync(join(tmpdir(), "remote-forget-slot-"));
     const store = new StudioStore(settings);
     store.setServerKey(server.origin, { key: "author-key", role: "author" });
@@ -802,7 +802,7 @@ describe("two jobs at one venue", () => {
 });
 
 describe("the role, in the editor", () => {
-  it("reads the shape shards off the writer's list", () => {
+  it("reads the shape shards off the writer's list", async () => {
     expect(isShapeShard("a.storyletbox")).toBe(true);
     expect(isShapeShard("a.storylettags")).toBe(true);
     expect(isShapeShard("a.storylethands")).toBe(true);
@@ -817,14 +817,14 @@ describe("the role, in the editor", () => {
     expect(isShapeShard("README.md")).toBe(false);
   });
 
-  it("refuses an author's write to the shape and allows a designer's", () => {
+  it("refuses an author's write to the shape and allows a designer's", async () => {
     expect(refuseWrite("author", ["/p/a.storyletbox"])).toBe(PULL_AS_DESIGNER);
     expect(refuseWrite("author", ["/p/a.storyletdeck"])).toBeUndefined();
     expect(refuseWrite("designer", ["/p/a.storyletbox"])).toBeUndefined();
     expect(refuseWrite(undefined, ["/p/a.storyletbox"])).toBeUndefined();
   });
 
-  it("lets an author arrange a canvas and refuses them the map", () => {
+  it("lets an author arrange a canvas and refuses them the map", async () => {
     // The two halves of the shard that split (9.1 point 5), each on the side the
     // ruling put it: a deck's canvas is the author's to push, a hand's position
     // ships in the bundle and stays the designer's.
@@ -833,7 +833,7 @@ describe("the role, in the editor", () => {
     expect(refuseWrite("designer", ["/p/village/map.storyletmap"])).toBeUndefined();
   });
 
-  it("stops the write itself, not only the controls", () => {
+  it("stops the write itself, not only the controls", async () => {
     const dir = copyExample("role");
     const opened = openProject(dir);
     expect("error" in opened).toBe(false);
@@ -846,12 +846,12 @@ describe("the role, in the editor", () => {
     writeRemote(dir, remote);
 
     const box = session.dto.boxes[0]!;
-    const refused = saveBox(session, box.id, { purpose: "an author reaching at the shape" });
+    const refused = await saveBox(session, box.id, { purpose: "an author reaching at the shape" });
     expect(refused).toEqual({ error: PULL_AS_DESIGNER });
 
     // The same edit under a designer's key lands.
     writeRemote(dir, { ...remote, role: "designer" });
-    const allowed = saveBox(session, box.id, { purpose: "a designer changing the shape" });
+    const allowed = await saveBox(session, box.id, { purpose: "a designer changing the shape" });
     expect("error" in allowed).toBe(false);
   });
 });
@@ -877,47 +877,58 @@ describe("unpushed shards", () => {
     return { dir, session: opened.session };
   };
 
-  it("is nothing at all until something differs", () => {
+  it("is nothing at all until something differs", async () => {
     const { dir } = levelProject("count-level");
     expect(unpushedShards(dir)).toBe(0);
     expect(statusLine({ revision: 1, edits: unpushedShards(dir) })).toBe("In sync");
   });
 
-  it("reads in sync again after an undo: a typed edit put back is not unpushed", () => {
+  it("reads in sync again after an undo: a typed edit put back is not unpushed", async () => {
     const { dir, session } = levelProject("count-undo");
     const deck = session.dto.boxes[0]!.decks[0]!;
     const card = deck.cards[0]!;
-    expect("error" in saveCard(session, deck.id, card.id, { title: "An edited title" })).toBe(false);
+    expect("error" in await saveCard(session, deck.id, card.id, { title: "An edited title" })).toBe(false);
     expect(unpushedShards(dir)).toBe(1);
 
     // THE FAULT THIS REPLACED: type then undo read as two edits, because both
     // were counted and neither was compared with anything.
-    expect(undo(session)).not.toBeNull();
+    expect(await undo(session)).not.toBeNull();
     expect(unpushedShards(dir)).toBe(0);
 
     // ...and a redo puts it back to one, for the same reason: the shard differs.
-    expect(redo(session)).not.toBeNull();
+    expect(await redo(session)).not.toBeNull();
     expect(unpushedShards(dir)).toBe(1);
   });
 
-  it("counts SHARDS, however many times each was typed in", () => {
+  it("counts SHARDS, however many times each was typed in", async () => {
     const { dir, session } = levelProject("count-shards");
     const deck = session.dto.boxes[0]!.decks[0]!;
     const card = deck.cards[0]!;
-    saveCard(session, deck.id, card.id, { title: "An edited title" });
-    saveCard(session, deck.id, card.id, { title: "An edited title again" });
-    saveCard(session, deck.id, card.id, { title: "And once more" });
+    await saveCard(session, deck.id, card.id, { title: "An edited title" });
+    await saveCard(session, deck.id, card.id, { title: "An edited title again" });
+    await saveCard(session, deck.id, card.id, { title: "And once more" });
     expect(unpushedShards(dir), "one shard, three keystrokes").toBe(1);
 
     // A second shard is a second difference.
-    commit(session, "test", "struct:1", [{
+    await commit(session, "test", "struct:1", [{
       path: join(dir, "extra.storyletnotes"), content: "{schema:'storylets/notes@0'}\n",
     }]);
     expect(unpushedShards(dir)).toBe(2);
     expect(statusLine({ revision: 1, edits: unpushedShards(dir) })).toBe("2 edits unpushed");
   });
 
-  it("forgives a reformat and notices a hand edit", () => {
+  it("an edit made while a push is in the air still counts once the push lands (review 2026-10, item 2)", async () => {
+    const { dir } = levelProject("count-during-push");
+    // The pack is made, and sent; while the far end is answering, autosave writes
+    // a shard. The base has to be what was SENT, or that edit reads as pushed.
+    const pack = await packProject(dir);
+    const deck = findDeck(dir);
+    writeFileSync(deck.path, deck.text.replace(deck.title, "Typed during the push"), "utf8");
+    writeBase(dir, 2, await hashPack(pack, dir));
+    expect(unpushedShards(dir)).toBe(1);
+  });
+
+  it("forgives a reformat and notices a hand edit", async () => {
     const { dir } = levelProject("count-canonical");
     const deck = findDeck(dir);
     // The same shard, spaced differently: the base is a hash of the CANONICAL
@@ -929,7 +940,7 @@ describe("unpushed shards", () => {
     expect(unpushedShards(dir)).toBe(1);
   });
 
-  it("counts a shard added or deleted since the pull", () => {
+  it("counts a shard added or deleted since the pull", async () => {
     const { dir } = levelProject("count-addremove");
     writeFileSync(join(dir, "extra.storyletnotes"), "{schema:'storylets/notes@0'}\n", "utf8");
     expect(unpushedShards(dir)).toBe(1);
@@ -941,7 +952,7 @@ describe("unpushed shards", () => {
     expect(unpushedShards(dir), "a deleted shard is a difference the server has not seen").toBe(1);
   });
 
-  it("says nothing unpushed for a project with no base, and none for one with no remote", () => {
+  it("says nothing unpushed for a project with no base, and none for one with no remote", async () => {
     const dir = copyExample("count-no-base");
     expect(unpushedShards(dir)).toBe(0);
     expect(readRemote(dir)).toBeUndefined();
@@ -954,7 +965,7 @@ describe("unpushed shards", () => {
   // `properties` in the project file, `fields` in two box shards - and a base
   // of canonical TEXT counted the sort. The format sorts a list keyed by ID on
   // its own way out, so these are the lists where the two ends could disagree.
-  it("does not count the order of a name-keyed list", () => {
+  it("does not count the order of a name-keyed list", async () => {
     const { dir } = levelProject("count-order-hash");
     const proj = findProject(dir);
     const reversed = reorderProperties(proj.text);
@@ -1023,7 +1034,7 @@ describe("the prompt on the way out", () => {
     indexOf(prompt, label);
   const nativeRefusal = async (): Promise<number> => { throw new Error("the native box must not be reached"); };
 
-  it("names its project, says where it stands, and offers the act it is in the middle of", () => {
+  it("names its project, says where it stands, and offers the act it is in the middle of", async () => {
     // IT NAMES THE PROJECT (2026-09-07). This is asked at the one moment two are
     // in play - opening one over another, which is how connecting to a server
     // lands a pulled project - and unnamed it read as if it were about the one
@@ -1038,14 +1049,14 @@ describe("the prompt on the way out", () => {
     expect(projectStatusLine("This Room", { revision: 3, edits: 1 })).toBe("This Room: 1 edit unpushed");
   });
 
-  it("falls back to the general word for a project with no name to give", () => {
+  it("falls back to the general word for a project with no name to give", async () => {
     expect(leavePrompt("  ", standing, "quit", true)).toMatchObject({
       message: "This project: 3 edits unpushed",
       detail: "This project has edits the server has not seen.",
     });
   });
 
-  it("offers no push when the server cannot be reached, and says so", () => {
+  it("offers no push when the server cannot be reached, and says so", async () => {
     const prompt = leavePrompt("This Room", standing, "quit", false);
     expect(prompt.detail).toBe(
       "This Room has edits the server has not seen, and the server cannot be reached.");
@@ -1065,7 +1076,7 @@ describe("the prompt on the way out", () => {
     });
   }
 
-  it("reads an index that is not a button as a cancel", () => {
+  it("reads an index that is not a button as a cancel", async () => {
     const prompt = leavePrompt("This Room", standing, "quit", true);
     expect(leaveChoice(prompt, 7)).toBe("cancel");
     expect(leaveChoice(prompt, -1)).toBe("cancel");
@@ -1179,7 +1190,7 @@ describe("leaving with edits the server has not seen", () => {
 describe("a refused push, at the prompt", () => {
   const standing = { revision: 3, edits: 1 };
 
-  it("shows the refusal, and offers one way out of it", () => {
+  it("shows the refusal, and offers one way out of it", async () => {
     const prompt = refusalPrompt("This Room", standing, PULL_AS_DESIGNER);
     expect(prompt).toMatchObject({
       message: "This Room: 1 edit unpushed",
@@ -1389,7 +1400,7 @@ function selfSigned(cn: string): { cert: string; key: string; fingerprint: strin
 }
 
 describe("what was typed into the Address field", () => {
-  it("reads a whole pairing link as an address, a code and a certificate", () => {
+  it("reads a whole pairing link as an address, a code and a certificate", async () => {
     expect(readPairingLink("https://the-park.local:4480/pair/PFYB-H6VW?fingerprint=SHA256:abc")).toEqual({
       address: "https://the-park.local:4480",
       code: "PFYB-H6VW",
@@ -1397,7 +1408,7 @@ describe("what was typed into the Address field", () => {
     });
   });
 
-  it("leaves a bare address alone, and pins nothing", () => {
+  it("leaves a bare address alone, and pins nothing", async () => {
     expect(readPairingLink("  https://the-park.local:4480  ")).toEqual({
       address: "https://the-park.local:4480",
     });
@@ -1405,7 +1416,7 @@ describe("what was typed into the Address field", () => {
     expect(readPairingLink("the-park.local:4480")).toEqual({ address: "the-park.local:4480" });
   });
 
-  it("takes the code out of a link that names no certificate", () => {
+  it("takes the code out of a link that names no certificate", async () => {
     expect(readPairingLink("http://127.0.0.1:4480/pair/PFYB-H6VW")).toEqual({
       address: "http://127.0.0.1:4480",
       code: "PFYB-H6VW",
@@ -1417,7 +1428,7 @@ describe("the same number, however it is written", () => {
   const certificate = selfSigned("the same number");
   const hex = fingerprintHex(certificate.fingerprint);
 
-  it("reads the three shapes one number arrives in", () => {
+  it("reads the three shapes one number arrives in", async () => {
     expect(hex).toMatch(/^[0-9a-f]{64}$/);
     // What Node's own `fingerprint256` gives: colons, and upper case.
     const colonised = (hex.match(/../g) ?? []).join(":").toUpperCase();
@@ -1425,7 +1436,7 @@ describe("the same number, however it is written", () => {
     expect(fingerprintHex(hex)).toBe(hex);
   });
 
-  it("reduces anything that is not thirty-two bytes to nothing, which matches nothing", () => {
+  it("reduces anything that is not thirty-two bytes to nothing, which matches nothing", async () => {
     expect(fingerprintHex("aa:bb")).toBe("");
     expect(fingerprintHex("")).toBe("");
     expect(samePin("", "")).toBe(false);

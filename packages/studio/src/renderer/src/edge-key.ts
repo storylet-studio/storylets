@@ -12,8 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import "./edge-key.css";
-import { openAnchoredPanel } from "@wildwinter/app-shell";
-import { el } from "./dom.js";
+import { el, openAnchoredPanel } from "@wildwinter/app-shell";
 import { edgesAt, edgeStroke, ARROW_LENGTH, ARROW_WIDTH, type CardNode, type EdgeStroke } from "./node-art.js";
 import { explainEdges } from "../links/links-explain.js";
 import type { CanvasTokens } from "./canvas-tokens.js";
@@ -40,6 +39,8 @@ export const EVIDENCE_KEY: readonly { evidence: NonNullable<GraphEdge["evidence"
 const SVG = "http://www.w3.org/2000/svg";
 const SAMPLE_W = 40;
 const SAMPLE_H = 12;
+/** The key panel: wide enough for a sample, a word and its gloss on one line. */
+const KEY_PANEL_WIDTH = 440;
 
 /** One arrow, drawn at one to one with exactly the stroke the canvas uses. */
 export function edgeSample(stroke: EdgeStroke): SVGSVGElement {
@@ -107,7 +108,7 @@ export function edgeKeyButton(opts: {
     className: opts.className, text: "Key", tip: "What the arrows mean",
     onClick: () => {
       const panel = openAnchoredPanel({
-        anchor: button, className: "edgekey", title: "Arrows", width: 440, prefer: "below",
+        anchor: button, className: "edgekey", title: "Arrows", width: KEY_PANEL_WIDTH, prefer: "below",
       });
       panel?.body.append(...edgeKeyRows(opts.tokens(), opts.evidence()));
     },

@@ -24,9 +24,8 @@
 // dialog. The buttons are the family's `.btn` / `.btn.primary`.
 // ---------------------------------------------------------------------------
 
-import { labelled } from "@wildwinter/app-shell";
+import { el, labelled } from "@wildwinter/app-shell";
 import { dialogFrame } from "@wildwinter/app-shell/dialog";
-import { el } from "./dom.js";
 import { readPairingLink } from "../../shared/api.js";
 import type { LeavePromptDto, LeaveSettledDto } from "../../shared/api.js";
 

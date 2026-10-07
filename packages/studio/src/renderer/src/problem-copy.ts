@@ -36,6 +36,18 @@ export interface ProblemNames {
   where?: string;
 }
 
+/**
+ * The box a problem's file belongs to: the one whose folder the path starts
+ * with. A box's folder is its address (ops `boxFolderName`), and the path is
+ * relative to the project. This used to ask whether the path merely CONTAINED
+ * `<gameId>/`, so a box called `a` claimed `data/decks/...` and a problem in
+ * one box could open another.
+ */
+export function boxForPath<B extends { gameId: string }>(boxes: readonly B[], path: string): B | undefined {
+  const rel = path.replace(/\\/g, "/").replace(/^\.\//, "");
+  return boxes.find((b) => rel.startsWith(`${b.gameId}/`));
+}
+
 /** One message shape, and the code it means. First match wins, so a more
  *  specific shape sits above a looser one that would also match it. */
 const SHAPES: [RegExp, string][] = [

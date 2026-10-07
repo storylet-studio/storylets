@@ -339,6 +339,10 @@ export class StudioStore {
   }
   setShowResolved(on: boolean): void { this.store.patchApp({ showResolved: on }); }
   setReviewWalk(on: boolean): void { this.store.patchApp({ reviewWalk: on }); }
+  /** Review Feedback and Show Resolved Comments start every launch off, as
+   *  Patterpad's do: both are for a review sitting, and a walk or an archive
+   *  left on from last week is a surprise rather than a preference. */
+  resetReviewToggles(): void { this.store.patchApp({ reviewWalk: false, showResolved: false }); }
   setCoverageOverlay(on: boolean): void { this.store.patchApp({ coverageOverlay: on }); }
   setCoverageOrder(order: CoverageOrder): void { this.store.patchApp({ coverageOrder: order }); }
 

@@ -7,16 +7,19 @@
 // mutating a ProjectSettingsDto that saves whole.
 // ---------------------------------------------------------------------------
 
-import { el } from "./dom.js";
 import { mountPropertyList } from "./prop-list.js";
 import { mountDriverList } from "./driver-list.js";
-import { mountSettingsDialog, labelled, lockControls } from "@wildwinter/app-shell";
+import { el, mountSettingsDialog, labelled, lockControls } from "@wildwinter/app-shell";
 import { shapeNotice } from "./vc-view.js";
+import { ok } from "./results.js";
 import type { SettingsDialog, SettingsSectionHandle } from "@wildwinter/app-shell";
 import type { OpenResult, PlayRung, ProjectSettingsDto, PropertyDeclDto, StudioApi } from "../../shared/api.js";
 import { PLAY_RUNGS, RUNG_BLURB, RUNG_LABEL } from "./play-ladder.js";
 
-function textField(value: string, onInput: (v: string) => void): HTMLInputElement {
+/** A text field in the Settings dialog, which saves whole on Save rather than
+ *  as it is typed (a dialog, not a document; the documents' fields are
+ *  fields.ts). */
+function dialogField(value: string, onInput: (v: string) => void): HTMLInputElement {
   const input = el("input");
   input.value = value;
   input.addEventListener("input", () => onInput(input.value));
@@ -110,7 +113,7 @@ export function createProjectSettings(
           unread.addEventListener("change", () => { d.warnUnreadWrites = unread.checked; });
           // The paired Patter project: typed, or chosen, as a path relative to this project.
           d.patterProject ??= "";
-          const patter = textField(d.patterProject, (v) => { d.patterProject = v; });
+          const patter = dialogField(d.patterProject, (v) => { d.patterProject = v; });
           patter.placeholder = "None";
           const choose = el("button", { className: "set-choose", text: "Choose…" });
           choose.type = "button";
@@ -121,8 +124,8 @@ export function createProjectSettings(
           const patterRow = el("div", { className: "set-inline" });
           patterRow.append(patter, choose);
           h.append(
-            labelled("Name", textField(d.name, (v) => { d.name = v; })),
-            labelled("Version", textField(d.version, (v) => { d.version = v; })),
+            labelled("Name", dialogField(d.name, (v) => { d.name = v; })),
+            labelled("Version", dialogField(d.version, (v) => { d.version = v; })),
             ...playField(d),
             labelled("Warn about unread state", unread),
             el("p", { className: "set-note", text: "Also flag state an outcome writes that no condition reads. It's off by default, because cards are often written ahead of the content that will read them. A gate on state nothing writes always warns, whatever this says." }),
@@ -171,7 +174,7 @@ export function createProjectSettings(
           const map = el("input"); map.type = "checkbox"; map.checked = d.exportMap;
           map.addEventListener("change", () => { d.exportMap = map.checked; });
           h.append(
-            labelled("Bundle path", textField(d.bundlePath, (v) => { d.bundlePath = v; })),
+            labelled("Bundle path", dialogField(d.bundlePath, (v) => { d.bundlePath = v; })),
             labelled("Metadata", meta),
             labelled("Include the maps", map),
             el("p", { className: "set-note", text: "Zone shapes and background pictures ship with the bundle, and the pictures are written beside it. The engine ignores them. This is for a host that draws its own map." }),
@@ -183,7 +186,7 @@ export function createProjectSettings(
       ],
       onSave: async () => {
         const result = await studio.saveProjectSettings(data!);
-        if ("error" in result) { onError(result.error); return; }
+        if (!ok(result, onError)) return;
         onSaved(result);
       },
     });

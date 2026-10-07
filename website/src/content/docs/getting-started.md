@@ -127,7 +127,7 @@ the top bar shows where that's got to. `Cmd+S` flushes anything still pending.
 
 ## 5. Play it
 
-Press **▶ Play**, or `Cmd+T`. **The Board** opens beside the editor.
+Press **▶ Play**, or `Cmd+P`. **The Board** opens beside the editor.
 
 This isn't a preview. It's the same engine your game will ship with, so if a card comes up
 here, it'll come up in your build.

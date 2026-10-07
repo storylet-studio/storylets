@@ -11,7 +11,9 @@
 // ---------------------------------------------------------------------------
 
 import { existsSync, readFileSync } from "node:fs";
-import { deleteFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
+import { basename } from "node:path";
+import { deleteFileAsync, writeTextFilesAsync } from "@wildwinter/simple-vc-lib";
+import type { VCWriteOutcome } from "@wildwinter/simple-vc-lib";
 
 /** A file's content, or null when the file is absent (created / deleted). */
 export interface FileState {
@@ -31,14 +33,67 @@ export function captureBefore(paths: string[]): FileState[] {
   return paths.map((path) => ({ path, content: existsSync(path) ? readFileSync(path, "utf8") : null }));
 }
 
-/** Apply file states through the VC layer: write content, or delete when null.
- *  Returns false if any write failed. */
-export function applyStates(states: FileState[]): boolean {
+/** What applying a set of states came to. `wrote` says whether the writes
+ *  landed before something else (a delete) failed, which decides whether there
+ *  is now a change on disk for the history to know about. */
+export type Applied = { ok: true } | { ok: false; error: string; wrote: boolean };
+
+/**
+ * Apply file states through the VC layer: write content, or delete when null.
+ *
+ * ALL OR NOTHING, and off the main thread (simple-vc-lib 0.5.0, as Patterpad's
+ * `commitWrites`): every file is checked out first, and if any one is refused
+ * nothing is written. The deletes run only once the whole batch has landed.
+ * Under 0.4.1 a refused write carried on past the refusal and the deletes ran
+ * anyway, so a deck rename whose new path was refused lost the deck (the
+ * Storyletter review of 2026-10, item 1).
+ */
+export async function applyStates(states: FileState[]): Promise<Applied> {
   const writes = states.filter((s) => s.content !== null).map((s) => ({ filePath: s.path, content: s.content! }));
-  const batch = writes.length > 0 ? writeTextFiles(writes) : { success: true };
-  for (const s of states) if (s.content === null && existsSync(s.path)) deleteFile(s.path);
-  return batch.success;
+  if (writes.length > 0) {
+    try {
+      const batch = await writeTextFilesAsync(writes, "utf8", { allOrNothing: true });
+      if (!batch.success) return { ok: false, error: writeFailure(batch.results), wrote: false };
+    } catch (e) {
+      return { ok: false, error: `couldn't save: ${e instanceof Error ? e.message : String(e)}`, wrote: false };
+    }
+  }
+  const undeleted: string[] = [];
+  for (const s of states) {
+    if (s.content !== null || !existsSync(s.path)) continue;
+    try {
+      const gone = await deleteFileAsync(s.path);
+      if (!gone.success) undeleted.push(`${basename(s.path)} (${gone.message || gone.status})`);
+    } catch (e) {
+      undeleted.push(`${basename(s.path)} (${e instanceof Error ? e.message : String(e)})`);
+    }
+  }
+  if (undeleted.length > 0) return { ok: false, error: `couldn't delete ${undeleted.join("; ")}`, wrote: writes.length > 0 };
+  return { ok: true };
 }
+
+/**
+ * What a refused batch says: the file, and why. A refusal names who holds it
+ * ("'docks.storyletdeck' is locked by bob@bob-ws"); every other file in an
+ * all-or-nothing batch reports only that it was not prepared because of that
+ * one, which is not worth repeating.
+ */
+export function writeFailure(results: VCWriteOutcome[]): string {
+  const failed = results.filter((r) => !r.success);
+  const refused = failed.filter((r) => r.status === "locked" || r.status === "outOfDate");
+  const say = (r: VCWriteOutcome): string => {
+    const name = basename(r.filePath);
+    const why = r.message || r.status;
+    return why.includes(name) ? why : `${name} (${why})`;
+  };
+  if (refused.length > 0) return `nothing was saved: ${refused.map(say).join("; ")}`;
+  return `couldn't save ${failed.map(say).join("; ") || "the project"}`;
+}
+
+/** How many steps Undo keeps. Patterpad's editor history is ProseMirror's, whose
+ *  default depth is a hundred; the same here. A step holds whole shards before
+ *  and after, so an uncapped stack grew for as long as the window stayed open. */
+export const UNDO_LIMIT = 100;
 
 /** Merge state lists by path, `override` winning. */
 function mergeStates(base: FileState[], override: FileState[]): FileState[] {
@@ -69,6 +124,7 @@ export class History {
       top.after = mergeStates(top.after, after);       // keep the latest after per path
     } else {
       this.undoStack.push({ label, key, before, after });
+      if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
     }
     this.redoStack = [];
   }
@@ -105,5 +161,18 @@ export class History {
     if (!entry) return undefined;
     this.undoStack.push(entry);
     return entry.after;
+  }
+
+  /** An undo whose states could not be written: the step goes back where it
+   *  was, so the author can try again once the file can be written. */
+  undoFailed(): void {
+    const entry = this.redoStack.pop();
+    if (entry) this.undoStack.push(entry);
+  }
+
+  /** The same for a redo that could not be written. */
+  redoFailed(): void {
+    const entry = this.undoStack.pop();
+    if (entry) this.redoStack.push(entry);
   }
 }

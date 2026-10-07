@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // The project map's layers: which are showing, their order, and which one
-// "+ Site" adds to (the surfacing review's plan item 2, the author's layered
+// "+ Hand" adds to (the surfacing review's plan item 2, the author's layered
 // map view of 2026-10-01).
 //
 // Each box on the map is a layer of its own sites; Zones and Pictures are
@@ -14,7 +14,7 @@
 //     again puts back exactly what the solo put aside. Any other visibility
 //     change forgets the solo, so a stale "restore" cannot undo work since.
 //   - One box layer is ACTIVE. It is the one named, when it is still on the
-//     map, else the top one. "+ Site" goes into it, so the new site's box is
+//     map, else the top one. "+ Hand" goes into it, so the new hand's box is
 //     never asked; selecting a site makes its box active.
 //   - The order is the person's, top first, and sets pin draw order: the top
 //     layer's pins draw over the rest. Zones and Pictures are not in it. They
@@ -74,7 +74,7 @@ export function toggleLayer(prefs: MapLayerPrefs, layer: string): MapLayerPrefs 
   return withHidden(unsolo(prefs), hidden);
 }
 
-/** Show one layer, leaving the rest as they are: what "+ Site" does to a hidden
+/** Show one layer, leaving the rest as they are: what "+ Hand" does to a hidden
  *  active layer, so the site it makes is drawn where the click put it (a pin
  *  made into a hidden layer was created and never seen). Ends a solo, as any
  *  change but the restoring click does. */

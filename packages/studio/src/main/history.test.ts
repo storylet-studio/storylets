@@ -28,88 +28,88 @@ const titleOf = (session: ProjectSession, id: string): string | undefined =>
   session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.id === id)?.title;
 
 describe("undo / redo", () => {
-  it("undoes a card edit and redoes it", () => {
+  it("undoes a card edit and redoes it", async () => {
     const session = scratchProject();
     const id = ambushId(session);
-    saveCard(session, docks, id, { title: "Renamed once" });
+    await saveCard(session, docks, id, { title: "Renamed once" });
     expect(titleOf(session, id)).toBe("Renamed once");
 
-    const undone = undo(session);
+    const undone = await undo(session);
     expect(undone).not.toBeNull();
     expect(titleOf(session, id)).toBe("Ambush at the ford");   // back to the original
 
-    const redone = redo(session);
+    const redone = await redo(session);
     expect(redone).not.toBeNull();
     expect(titleOf(session, id)).toBe("Renamed once");
   });
 
-  it("coalesces consecutive edits to one card into a single undo step", () => {
+  it("coalesces consecutive edits to one card into a single undo step", async () => {
     const session = scratchProject();
     const id = ambushId(session);
-    saveCard(session, docks, id, { title: "A" });
-    saveCard(session, docks, id, { title: "AB" });
-    saveCard(session, docks, id, { title: "ABC" });
+    await saveCard(session, docks, id, { title: "A" });
+    await saveCard(session, docks, id, { title: "AB" });
+    await saveCard(session, docks, id, { title: "ABC" });
 
-    undo(session);   // one undo reverses the whole typing burst
+    await undo(session);   // one undo reverses the whole typing burst
     expect(titleOf(session, id)).toBe("Ambush at the ford");
-    expect(undo(session)).toBeNull();   // nothing before it
+    expect(await undo(session)).toBeNull();   // nothing before it
   });
 
-  it("starts a fresh step when a different card is edited", () => {
+  it("starts a fresh step when a different card is edited", async () => {
     const session = scratchProject();
     const ambush = ambushId(session);
     const ratJob = session.dto.boxes[0]!.decks[0]!.cards.find((c) => c.gameId === "rat-job")!.id;
-    saveCard(session, docks, ambush, { title: "Ambush X" });
-    saveCard(session, docks, ratJob, { title: "Rat X" });
+    await saveCard(session, docks, ambush, { title: "Ambush X" });
+    await saveCard(session, docks, ratJob, { title: "Rat X" });
 
-    undo(session);   // reverses only the rat-job edit
+    await undo(session);   // reverses only the rat-job edit
     expect(titleOf(session, ratJob)).toBe("A rat job");
     expect(titleOf(session, ambush)).toBe("Ambush X");
-    undo(session);
+    await undo(session);
     expect(titleOf(session, ambush)).toBe("Ambush at the ford");
   });
 
-  it("undoes card create (the file loses the card) and delete", () => {
+  it("undoes card create (the file loses the card) and delete", async () => {
     const session = scratchProject();
-    const created = createCard(session, docks);
+    const created = await createCard(session, docks);
     if ("error" in created) throw new Error(created.error);
     expect(session.dto.boxes[0]!.decks[0]!.cards.some((c) => c.id === created.cardId)).toBe(true);
-    undo(session);
+    await undo(session);
     expect(session.dto.boxes[0]!.decks[0]!.cards.some((c) => c.id === created.cardId)).toBe(false);
-    redo(session);
+    await redo(session);
     expect(session.dto.boxes[0]!.decks[0]!.cards.some((c) => c.id === created.cardId)).toBe(true);
   });
 
-  it("undoes deck create by removing the new shard file", () => {
+  it("undoes deck create by removing the new shard file", async () => {
     const session = scratchProject();
-    const created = createDeck(session, session.dto.boxes[0]!.id);
+    const created = await createDeck(session, session.dto.boxes[0]!.id);
     if ("error" in created) throw new Error(created.error);
     const file = join(session.loaded.dir, "encounters", "decks", "new-deck.storyletdeck");
     expect(existsSync(file)).toBe(true);
-    undo(session);
+    await undo(session);
     expect(existsSync(file)).toBe(false);
   });
 
-  it("undoes a deck rename, moving the file back", () => {
+  it("undoes a deck rename, moving the file back", async () => {
     const session = scratchProject();
-    renameDeck(session, docks, { title: "The Docks", gameId: "harbour" });
+    await renameDeck(session, docks, { title: "The Docks", gameId: "harbour" });
     const dir = join(session.loaded.dir, "encounters", "decks");
     expect(existsSync(join(dir, "harbour.storyletdeck"))).toBe(true);
     expect(existsSync(join(dir, "docks.storyletdeck"))).toBe(false);
 
-    undo(session);
+    await undo(session);
     expect(existsSync(join(dir, "harbour.storyletdeck"))).toBe(false);
     expect(existsSync(join(dir, "docks.storyletdeck"))).toBe(true);
     expect(readFileSync(join(dir, "docks.storyletdeck"), "utf8")).toContain('gameId: "docks"');
   });
 
-  it("a new edit after an undo clears the redo stack", () => {
+  it("a new edit after an undo clears the redo stack", async () => {
     const session = scratchProject();
     const id = ambushId(session);
-    saveCard(session, docks, id, { title: "One" });
-    undo(session);
-    saveCard(session, docks, id, { title: "Two" });   // a fresh edit
-    expect(redo(session)).toBeNull();                 // "One" is no longer redoable
+    await saveCard(session, docks, id, { title: "One" });
+    await undo(session);
+    await saveCard(session, docks, id, { title: "Two" });   // a fresh edit
+    expect(await redo(session)).toBeNull();                 // "One" is no longer redoable
     expect(titleOf(session, id)).toBe("Two");
   });
 });

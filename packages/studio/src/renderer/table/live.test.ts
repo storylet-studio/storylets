@@ -88,8 +88,7 @@ describe("the Board's Live mode", () => {
     run.apply({ t: "board", flow: "main", hands: { x: [a] }, turns: {} });
     expect(run.apply({ t: "trace", flow: "main", event: { type: "play", card: a, outcome: "go", turn: 1 } }).played).toBe(a);
     expect(run.log).toHaveLength(1);
-    const again = run.apply({ t: "hello", build: "stale" });
-    expect(again.reset).toBe(true);
+    run.apply({ t: "hello", build: "stale" });
     expect(run.log).toHaveLength(0);
     expect(run.hands).toEqual({});
   });

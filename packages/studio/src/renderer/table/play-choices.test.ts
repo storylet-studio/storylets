@@ -4,7 +4,7 @@
 // shut, keeps its own buttons.
 
 import { describe, expect, it, vi } from "vitest";
-import { playChoices, playedTail } from "./play-choices.js";
+import { playChoices } from "./play-choices.js";
 
 const labels = (row: HTMLElement): string[] => [...row.querySelectorAll("button")].map((b) => b.textContent ?? "");
 
@@ -40,8 +40,10 @@ describe("the Board's play choices", () => {
     expect(done).not.toHaveBeenCalled();
   });
 
-  it("writes the journal's play line without an arrow for a card played with none", () => {
-    expect(`played "masthead"${playedTail("", "->")}`).toBe(`played "masthead"`);
-    expect(`played "ambush"${playedTail("fight", "->")}`).toBe(`played "ambush" -> fight`);
+  it("explains a locked outcome in the themed rollover, never a native title", () => {
+    const row = playChoices([{ gameId: "bribe", available: false }], vi.fn(), vi.fn());
+    const b = row.querySelector("button")!;
+    expect(b.title).toBe("");
+    expect(b.dataset["tip"]).toMatch(/^Unavailable\./);
   });
 });

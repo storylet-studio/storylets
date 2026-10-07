@@ -18,7 +18,7 @@
 // ONE UNDO STEP. Every shard the move writes or deletes goes through `commit`,
 // which records the whole set as one history entry, exactly as a merged pack's
 // or a deleted box's writes are. The pictures are the exception, as they are
-// for Add a background (mutate.ts `addBackground`): bytes are not in the undo
+// for Add a background (mutate/map.ts `addBackground`): bytes are not in the undo
 // history, so they are COPIED to the project's assets folder rather than moved,
 // and the box's own copies are left where they were. Undo then puts the old
 // shards back and the old map finds its pictures where it always did; the
@@ -31,7 +31,7 @@ import { writeBinaryFile } from "@wildwinter/simple-vc-lib";
 import { loadProject, planProjectMapMigration, runFormat } from "@storylet-studio/ops";
 import type { MapUpgradeDto, OpenResult } from "../shared/api.js";
 import type { FileState } from "./history.js";
-import { commit } from "./mutate.js";
+import { commit } from "./mutate/write-path.js";
 import type { ProjectSession } from "./project.js";
 
 /**
@@ -56,9 +56,9 @@ export function planMapUpgrade(session: ProjectSession): MapUpgradeDto | undefin
  * Run the upgrade: `format` as the CLI runs it, one undo step. Refused, it
  * writes nothing and returns the planner's sentences.
  */
-export function upgradeProjectMap(session: ProjectSession): OpenResult | { error: string } | { refused: string[] } {
+export async function upgradeProjectMap(session: ProjectSession): Promise<OpenResult | { error: string } | { refused: string[] }> {
   const loaded = loadProject(session.loaded.dir);
-  if (loaded.source === undefined) return { error: "the project could not be read" };
+  if (loaded.source === undefined) return { error: "the project couldn't be read" };
   const result = runFormat(loaded);
   const refused = result.issues.filter((i) => i.severity === "error").map((i) => i.message);
   if (refused.length > 0) return { refused };
@@ -72,7 +72,7 @@ export function upgradeProjectMap(session: ProjectSession): OpenResult | { error
     // project from before the project map has no assets folder at its root.
     try { mkdirSync(dirname(move.to), { recursive: true }); } catch { /* said below */ }
     const written = writeBinaryFile(move.to, readFileSync(move.from));
-    if (!written.success) return { error: `could not copy ${basename(move.from)} to the project's assets folder` };
+    if (!written.success) return { error: `couldn't copy ${basename(move.from)} to the project's assets folder` };
   }
   const states: FileState[] = [
     ...result.changed.map((w) => ({ path: w.path, content: w.content })),

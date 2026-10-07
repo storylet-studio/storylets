@@ -9,11 +9,12 @@
 // Properties means @scope state declarations. Every condition is "When"
 // plus a hint saying whose. Derived usage is a recessive footer.
 //
-// Edits flow through the debounced saves the renderer owns; structural edits
-// (add/remove outcome, params, values) redraw the document in place.
+// Edits flow through the save queue (save-queue.ts) as they are typed;
+// structural edits (add/remove outcome, params, values) redraw the document in
+// place.
 // ---------------------------------------------------------------------------
 
-import { iconNode, metaLine, openAnchoredPanel, openGameIdEditor, plural } from "@wildwinter/app-shell";
+import { el, iconNode, openAnchoredPanel, openGameIdEditor, plural } from "@wildwinter/app-shell";
 import { currentDocTab, setDocTab } from "./doc-tab-memory.js";
 import { isAnywhere, placeGroupsOf, whereModel, whereWarning } from "./where.js";
 import { NEVER_LABEL, anywhereLine, gateLabel, movingNote, tierCount, tierLabel } from "./hand-tiers.js";
@@ -23,10 +24,11 @@ import type { ShareScope } from "./zone-share.js";
 // rather than the shell: this is the same rule the compiler and the CLI use, and
 // model/test/id-parity.test.ts holds the two copies to each other.
 import { gameIdify, isHoleRef, turnSpan, PLACE_GROUP } from "@storylet-studio/model";
-import { el } from "./dom.js";
+import { bindField, inputField, option, optionSelect, segmented } from "./fields.js";
+import { cardHasContent, deleteLabel } from "./deletes.js";
 
 import { openContextMenu, openPopover } from "@wildwinter/app-shell/context-menu";
-import { chipDot } from "./views.js";
+import { chipDot, commentBubble, listMeta, moreMenu } from "./widgets.js";
 import { boxColour } from "./box-tint.js";
 import { mountChanges, mountCondition, previewCondition } from "./expr-panels.js";
 import { mountPropertyList, valueControl } from "./prop-list.js";
@@ -53,40 +55,31 @@ export type Inspected =
   | { kind: "hand"; box: string; hand: string }
   | { kind: "tagGroup"; box: string; group: string };
 
+/** What the document pages ask of the editor (actions.ts builds it): the
+ *  saves, the deletes, the comment openers and the few lookups that need main.
+ *  Only what the pages here call; creating things is actions.ts's own business. */
 export interface InspectorHost {
-  /** Has this thing any documentation notes of its own? For the header icon. */
   /** How many OPEN comment threads it has, for the header bubble. */
   openThreads(id: string): number;
   /** Open the comment popover, anchored to the element that was clicked. */
   showComments(id: string, subject: string, anchor: HTMLElement): void;
-  /** Open the notes modal for it. `subject` is what to call it in the title. */
-  /** Persist a card edit (debounced). */
+  /** Persist a card edit (through the save controller). */
   saveCard(deckId: string, cardId: string, edit: CardEdit): void;
-  /** Rename/edit a deck (immediate: identity fields, blur-committed). */
-  saveDeck(deckId: string, edit: DeckEdit): void;
-  /** The deck's Settings document (gate + @deck state), debounced. */
+  /** The deck's Dealing and Properties tabs (gate, flags, @deck state). */
   saveDeckConfig(deckId: string, edit: DeckEdit): void;
-  /** Delete this card / deck (returns to the deck / box). */
+  /** Delete this card (back to its deck). */
   deleteCard(deckId: string, cardId: string): void;
-  deleteDeck(box: string, deckId: string): void;
-  /** Persist a box / template / tag-group edit (background; refreshes the problem bar). */
+  /** Persist a box / template / tag-group / hand edit (through the save controller). */
   saveBox(boxId: string, edit: BoxEdit): void;
-  /** Immediate identity save for the box overview (title/gameId/purpose). */
-  saveBoxIdentity(boxId: string, edit: BoxEdit): void;
   saveTemplate(boxId: string, templateId: string, edit: TemplateEdit): void;
   saveTagGroup(boxId: string, groupId: string, edit: TagGroupEdit): void;
   saveHand(boxId: string, handId: string, edit: HandEdit): void;
-  /** Create / delete a template or tag group (structural; re-selects). */
-  createTemplate(boxId: string): void;
+  /** Delete one (asking first when it holds something; back to its list). */
   deleteTemplate(boxId: string, templateId: string): void;
-  createTagGroup(boxId: string): void;
-  /** Create a tag group that is already a map. */
-  createMap(boxId: string): void;
   deleteTagGroup(boxId: string, groupId: string): void;
+  deleteHand(boxId: string, handId: string): void;
   /** Make this tag group a map, or stop. Traced outlines are kept either way. */
   setGroupSpatial(boxId: string, groupId: string, on: boolean): void;
-  createHand(boxId: string): void;
-  deleteHand(boxId: string, handId: string): void;
   /** What could come up at a hand, tiered (main asks ops `placeTiers`). */
   handCards(boxId: string, handId: string): Promise<HandCardsDto | null>;
   /** A deck's condition catalogue: what its cards' `if` lines are read
@@ -137,8 +130,7 @@ export function handCardRow(
   const also = (card.tags.find((t) => t.group === PLACE_GROUP)?.values ?? [])
     .filter((g) => g !== here)
     .map((g) => box.hands.find((x) => x.gameId === g)?.title ?? g);
-  const meta = metaLine([deck.title ?? deck.gameId, also.length > 0 ? `also at ${also.join(", ")}` : undefined]);
-  meta.classList.add("listmeta");
+  const meta = listMeta([deck.title ?? deck.gameId, also.length > 0 ? `also at ${also.join(", ")}` : undefined]);
   return el("button", { className: `listrow handcard${extra.why !== undefined ? " never" : ""}`, onClick: () => open(deck.id, card.id) },
     el("span", { className: "handcard-head" }, el("span", { className: "listname listtitle", text: card.title ?? card.gameId }), meta,
       ...(extra.gates ?? []).map((g) => el("span", { className: "chip handcard-gate", text: gateLabel(g) }))),
@@ -161,7 +153,7 @@ export function openDeckPickerFor(anchor: HTMLElement, box: BoxDto, pick: (deckI
   if (!panel) return;
   panel.body.classList.add("deckpick-list");
   if (box.decks.length === 0) {
-    panel.body.append(el("p", { className: "doc-tab-note", text: "This box has no decks yet. Make one first, from the navigator's + deck." }));
+    panel.body.append(el("p", { className: "doc-tab-note", text: "This box has no decks yet. Make one first, with + New deck in the navigator." }));
     return;
   }
   const last = lastDeckFor.get(box.id);
@@ -196,7 +188,7 @@ export function openDeckPickerAcross(anchor: HTMLElement, boxes: BoxDto[], pick:
   if (!panel) return;
   panel.body.classList.add("deckpick-list");
   if (withDecks.length === 0) {
-    panel.body.append(el("p", { className: "doc-tab-note", text: "No box on the map has a deck yet. Make one first, from the navigator's + deck." }));
+    panel.body.append(el("p", { className: "doc-tab-note", text: "No box on the map has a deck yet. Make one first, with + New deck in the navigator." }));
     return;
   }
   let focus: HTMLElement | undefined;
@@ -296,48 +288,19 @@ function cfgCheck(checked: boolean, onChange: (v: boolean) => void): HTMLInputEl
   return cb;
 }
 
-// Commit on input (autosave is continuous, and the save indicator responds to
-// the first keystroke), with a final commit on change/blur. Callers that must
-// only act on blur (a deck rename that moves the file) pass a no-op onChange
-// and attach their own change listener.
-function textField(value: string, className: string, onInput: (v: string) => void, onChange: () => void): HTMLInputElement {
-  const input = el("input", { className });
-  input.value = value;
-  // An identifier is not prose: no red squiggle under a gameId or a mono name
-  // (parity row 52). Prose fields keep the platform's check.
-  if (/\binsp-mono\b|\bdoc-name\b/.test(className)) input.spellcheck = false;
-  input.addEventListener("input", () => { onInput(input.value); onChange(); });
-  input.addEventListener("change", onChange);
-  return input;
-}
-
-/**
- * The one thing a click-to-edit title owes: Esc puts back what it held when it
- * got focus (parity row 50). The value goes back and `restore` re-takes it, so
- * a title that commits as it is typed is committed back too; the window's own
- * Esc handler then blurs the field, and with the value where it started no
- * change event follows.
- */
-function escapeRestores(input: HTMLInputElement, restore: (value: string) => void): void {
-  let atFocus = input.value;
-  input.addEventListener("focus", () => { atFocus = input.value; });
-  input.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || input.value === atFocus) return;
-    input.value = atFocus;
-    restore(atFocus);
-  });
-}
+// Every field here commits through fields.ts: as you type, through the save
+// controller, with Esc putting back what the field held when it got focus
+// (ruling N). Only the deck and box titles wait for the blur (views.ts).
 
 // --- the card level (the big editor) ------------------------------------------
 
 let seq = 0;
 const freshOutcomeId = (): string => `o_new_${Date.now().toString(36)}_${seq++}`;
 
-// A card edits across two panes (the centre authoring document + the inspector's
-// settings), so there is one shared edit object mutated by both and saved as a
-// whole. gameId keys seed from the *pinned* value (empty when the address is
-// derived), so the editor can show the computed name as a placeholder. The array
-// keys are always present so the editor can push/splice without undefined guards.
+// A card's page edits one shared edit object, saved as a whole. gameId keys
+// seed from the *pinned* value (empty when the address is derived), so the
+// editor can show the computed name as a placeholder. The array keys are always
+// present so the editor can push/splice without undefined guards.
 function editFromCard(card: CardDto): Required<CardEdit> {
   return {
     gameId: card.gameIdPinned ?? "",
@@ -420,7 +383,11 @@ function gameIdField(
     const usual = pinned
       ? `Game id, pinned: editing the title no longer changes it${shut ? "" : " (click to edit)"}`
       : `Game id, following the title until the bundle is first published${shut ? "" : " (click to override)"}`;
-    root.title = bound?.length ? [...bound, usual].join("\n") : usual;
+    // The themed tip, not the platform's own (the house style: one tooltip
+    // system in the window).
+    const tip = bound?.length ? [...bound, usual].join("\n") : usual;
+    root.dataset["tip"] = tip;
+    root.setAttribute("aria-label", tip);
     // No "Pinned"/"Auto" word: Patterpad's manner, where a derived id reads muted
     // (`.gid-auto`) and a pinned one plainly, and the tooltip says which.
     root.replaceChildren(el("span", { className: "gid-value", text: pinned || derived() || "(unnamed)" }));
@@ -448,20 +415,12 @@ const parseChange = (line: string): { target: string; value: string } => {
   return at < 0 ? { target: line, value: "" } : { target: line.slice(0, at), value: line.slice(at + 3) };
 };
 
-// A card edits across two panes that share one edit object: the wide centre is
-// the authoring document (title, when, beat, tags, fields, outcomes) and
-// the inspector holds the mechanical settings (gameId, priority, redraw). A
-// single shared edit means both panes mutate and save the same object.
-//
-// Outcomes are document-class too (their gate + changes are wide expression
-// editors), so they live in the centre as an accordion: a light row per outcome
-// that expands in place to its full editor - see renderCardWorkspace.
+// Outcomes are document-class (their gate + changes are wide expression
+// editors), so they live on the card's page as an accordion: a light row per
+// outcome that expands in place to its full editor - see renderCardWorkspace.
 let cardEditKey: string | undefined;
 let expandedOutcome: string | undefined;
 
-/** Open one outcome, from outside: the Review Feedback walk arriving at a thread
- *  anchored to it. The card editor draws on the next render, so this only sets
- *  where it should land. */
 /**
  * Open this card's editor with one outcome already expanded: the feedback walk
  * arriving at a comment filed on an outcome.
@@ -486,6 +445,22 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
   if (expandedOutcome && !edit.outcomes.some((o) => o.id === expandedOutcome)) expandedOutcome = undefined;
   const commit = (): void => h.saveCard(deck.id, card.id, edit);
   const setExpanded = (id: string | undefined): void => { expandedOutcome = id; drawCentre(); };
+  /** File the card under a tag of a group, or take it out of it (the Tags
+   *  section's chips and the Where picker's alike); a group left holding
+   *  nothing goes. */
+  const toggle = (group: string, value: string): void => {
+    let m = edit.tags.find((x) => x.group === group);
+    if (!m) { m = { group, values: [] }; edit.tags.push(m); }
+    m.values = m.values.includes(value) ? m.values.filter((v) => v !== value) : [...m.values, value];
+    edit.tags = edit.tags.filter((x) => x.values.length > 0);
+    commit(); drawCentre();
+  };
+  /** The Where answer's Change button, on the sentence and on the foot row. */
+  const changeWhere = (): HTMLElement => {
+    const change = el("button", { className: "btn where-edit", text: "Change", tip: "Choose the hands and regions this card comes up at" });
+    change.addEventListener("click", () => openWherePicker(change));
+    return change;
+  };
 
   function drawCentre(): void {
     const tabKey = `card:${key}`;
@@ -495,7 +470,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       title: { get: () => edit.title ?? "", set: (v) => { edit.title = v; }, placeholder: "Card title", commit },
       gameId: { get: () => edit.gameId ?? "", set: (v) => { edit.gameId = v; }, fallback: card.gameId, deriveFrom: () => edit.title ?? "", commit },
       purpose: { get: () => edit.purpose ?? "", set: (v) => { edit.purpose = v; }, placeholder: "What happens when this card plays", commit },
-      menu: [{ label: "Delete card", danger: true, onClick: () => h.deleteCard(deck.id, card.id) }],
+      menu: [{ label: deleteLabel("card", cardHasContent(card)), danger: true, onClick: () => h.deleteCard(deck.id, card.id) }],
       comments: { on: card.id, count: h.openThreads(card.id), open: (a) => h.showComments(card.id, edit.title ?? card.gameId, a) },
     }));
     const setN = edit.fields.filter((f) => f.value.trim() !== "").length;
@@ -538,22 +513,19 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     const condHost = el("div", { className: "insp-exed" });
     mountCondition(condHost, { src: edit.condition ?? "", properties: catalogue, onChange: (src) => { edit.condition = src; commit(); lead?.paintWhen(); } });
     const whenSect = section("When", "the condition to be dealt", condHost);
-    // Where a Why not? reason lands (renderer landOnSection), named with its
+    // Where a Why not? reason lands (navigation.ts landOnSection), named with its
     // card, so a landing never lights the When of the card that was showing.
     whenSect.dataset.land = "when";
     whenSect.dataset.landFor = `card:${deck.id}/${card.id}`;
     view.append(whenSect);
 
-    const priority = textField(edit.priority ?? "", "insp-input insp-mono insp-short", (v) => { edit.priority = v; }, commit);
+    const priority = inputField(edit.priority ?? "", "insp-input insp-mono insp-short", { mode: "input", set: (v) => { edit.priority = v; }, commit });
     priority.placeholder = "0";
-    const seg = el("div", { className: "seg insp-seg" });
     const isNumber = /^\d+$/.test(edit.redraw ?? "");
-    for (const [label, value] of [["always", "always"], ["never", "never"], ["turns", "5"]] as [string, string][]) {
-      const on = label === "turns" ? isNumber : edit.redraw === value;
-      const b = el("button", { className: `seg-opt${on ? " on" : ""}`, text: label });
-      b.addEventListener("click", () => { edit.redraw = label === "turns" ? (isNumber ? edit.redraw : "5") : value; commit(); drawCentre(); });
-      seg.append(b);
-    }
+    const seg = segmented(([["always", "always"], ["never", "never"], ["turns", "5"]] as [string, string][]).map(([label, value]) => ({
+      label, on: label === "turns" ? isNumber : edit.redraw === value,
+      pick: () => { edit.redraw = value; commit(); drawCentre(); },
+    })));
     const turns = el("input", { className: "insp-input insp-mono insp-short" });
     turns.value = isNumber ? (edit.redraw ?? "") : ""; turns.placeholder = "3"; turns.disabled = !isNumber;
     // In a TIMED box the number here is a length of time, not a count of plays
@@ -568,17 +540,10 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
         ? `${turns.value} turns (${turnSpan(Number(turns.value), unit, true)})` : "";
     };
     sayTime();
-    turns.addEventListener("input", () => { if (/^\d+$/.test(turns.value)) edit.redraw = turns.value; sayTime(); });
-    turns.addEventListener("change", commit);
-    const copies = textField(edit.copies ?? "", "insp-input insp-mono insp-short", (v) => { edit.copies = v; }, commit);
+    bindField(turns, { mode: "input", set: (v) => { if (/^\d+$/.test(v)) edit.redraw = v; }, after: sayTime, commit });
+    const copies = inputField(edit.copies ?? "", "insp-input insp-mono insp-short", { mode: "input", set: (v) => { edit.copies = v; }, commit });
     copies.placeholder = "1";
 
-    /** Scarcity across playthroughs (design/shared-scarcity.md), as THREE
-     *  states, because two would lie: a card that says nothing takes its
-     *  deck's flag, and "inherit" has to be visibly different from "not
-     *  shared" or an author cannot tell why a card in a shared pile is
-     *  scarce. The default choice names what the deck actually says, so the
-     *  answer is on the card page rather than one click away. */
     /** The three-state control the two axes share: not set / on / off, with
      *  the "not set" choice naming what the DECK actually says, so the answer
      *  is on the card page rather than one click away. */
@@ -586,20 +551,19 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       value: boolean | null, deckSays: boolean, word: string,
       set: (v: boolean | null) => void,
     ): HTMLElement => {
-      const seg = el("div", { className: "seg insp-seg" });
       const states: [string, boolean | null][] = [
         [deckSays ? `deck (${word})` : `deck (not ${word})`, null],
         [word, true],
         [`not ${word}`, false],
       ];
-      for (const [label, v] of states) {
-        const b = el("button", { className: `seg-opt${value === v ? " on" : ""}`, text: label });
-        b.addEventListener("click", () => { set(v); commit(); drawCentre(); });
-        seg.append(b);
-      }
-      return seg;
+      return segmented(states.map(([label, v]) => ({ label, on: value === v, pick: () => { set(v); commit(); drawCentre(); } })));
     };
 
+    /** Scarcity across playthroughs (design/shared-scarcity.md), as THREE
+     *  states, because two would lie: a card that says nothing takes its
+     *  deck's flag, and "inherit" has to be visibly different from "not
+     *  shared" or an author cannot tell why a card in a shared pile is
+     *  scarce. Then durability across the run, the same way. */
     const sharedRows = (): HTMLElement[] => {
       const rows: HTMLElement[] = [];
       const effective = edit.shared === null ? deck.shared === true : edit.shared === true;
@@ -613,8 +577,8 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
         // Only when it can do something: sharedCopies on an unshared card is a
         // dead setting, and the compiler says so. Better not to offer it.
         if (effective) {
-          const world = textField(edit.sharedCopies ?? "", "insp-input insp-mono insp-short",
-            (v) => { edit.sharedCopies = v; }, commit);
+          const world = inputField(edit.sharedCopies ?? "", "insp-input insp-mono insp-short",
+            { mode: "input", set: (v) => { edit.sharedCopies = v; }, commit });
           world.placeholder = edit.copies.trim() || "1";
           rows.push(cfgRow("In the world",
             "How many hands may hold it anywhere, across every playthrough. Blank means the same as Copies, "
@@ -674,13 +638,7 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
         for (const value of group.values) {
           const on = edit.tags.find((m) => m.group === group.name)?.values.includes(value) ?? false;
           const chip = el("button", { className: `chip${on ? " on" : ""}` }, chipDot(value), value);
-          chip.addEventListener("click", () => {
-            let m = edit.tags.find((x) => x.group === group.name);
-            if (!m) { m = { group: group.name, values: [] }; edit.tags.push(m); }
-            m.values = m.values.includes(value) ? m.values.filter((v) => v !== value) : [...m.values, value];
-            edit.tags = edit.tags.filter((x) => x.values.length > 0);
-            commit(); drawCentre();
-          });
+          chip.addEventListener("click", () => toggle(group.name, value));
           row.append(chip);
         }
         tagBody.push(el("div", { className: "doc-row doc-row-top" }, el("span", { className: "doc-row-label", text: group.name }), row));
@@ -719,10 +677,8 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
         for (const v of c.values) line.append(el("span", { className: "chip on" }, chipDot(v), `${c.group}: ${v}`));
       }
     }
-    const open = el("button", { className: "btn where-edit", text: "Change", tip: "Choose the hands and regions this card comes up at" });
-    open.addEventListener("click", () => openWherePicker(open));
     const warning = whereWarning(m);
-    const body = el("div", { className: "where-body" }, el("div", { className: "where-head" }, line, open));
+    const body = el("div", { className: "where-body" }, el("div", { className: "where-head" }, line, changeWhere()));
     if (warning !== undefined) body.append(el("p", { className: "where-warn", text: warning }));
     return section("Where", "where this card can come up", body);
   }
@@ -804,24 +760,15 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
           el("div", { className: "where-note-acts" }, choose,
             el("button", { className: "btn", text: "Anywhere is right", onClick: () => { madeInDeck.delete(card.id); drawCentre(); } })))));
     }
-    const change = el("button", { className: "btn where-edit", text: "Change", tip: "Choose the hands and regions this card comes up at" });
-    change.addEventListener("click", () => openWherePicker(change));
     root.append(el("div", { className: "where-foot" },
       el("span", { text: `In ${deck.title ?? deck.gameId}, ${box.title ?? box.gameId}` }),
-      el("span", { className: "crumb-spacer" }), change));
+      el("span", { className: "crumb-spacer" }), changeWhere()));
     return { root, paintWhen };
   }
 
   /** The picker: hands and regions in separate sections, because a hand plus
    *  a region is an AND and a single flat list invites the union reading. */
   function openWherePicker(anchor: HTMLElement): void {
-    const toggle = (group: string, value: string): void => {
-      let m = edit.tags.find((x) => x.group === group);
-      if (!m) { m = { group, values: [] }; edit.tags.push(m); }
-      m.values = m.values.includes(value) ? m.values.filter((v) => v !== value) : [...m.values, value];
-      edit.tags = edit.tags.filter((x) => x.values.length > 0);
-      commit(); drawCentre();
-    };
     openPopover(anchor, () => {
       const wrap = el("div", { className: "where-pick" });
       const homes = edit.tags.find((t) => t.group === PLACE_GROUP)?.values ?? [];
@@ -893,30 +840,43 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
 function fieldRow(decl: FieldDeclDto, current: string, set: (value: string) => void, commit: () => void): HTMLElement {
   let control: HTMLElement;
   if (decl.type === "boolean" || (decl.type === "enum" && (decl.values?.length ?? 0) > 0)) {
-    const sel = el("select", { className: "insp-input insp-mono" });
-    const none = el("option", { text: "(unset)" }); none.value = ""; sel.append(none);
-    const opts = decl.type === "boolean" ? ["true", "false"] : decl.values!;
-    for (const v of opts) { const o = el("option", { text: v }); o.value = v; if (v === current) o.selected = true; sel.append(o); }
-    sel.addEventListener("change", () => { set(sel.value); commit(); });
-    control = sel;
+    control = optionSelect(decl.type === "boolean" ? ["true", "false"] : decl.values!, current,
+      (v) => { set(v); commit(); }, { none: "(unset)" });
   } else {
-    // string / number / flags: text, coerced on save.
-    const input = el("input", { className: "insp-input insp-mono" });
-    input.value = current; input.placeholder = `<${decl.type}>`;
-    input.addEventListener("input", () => set(input.value));
-    input.addEventListener("change", commit);
+    // string / number / flags: text, coerced on save. Committed as typed, so
+    // Cmd+S, Play and the review walk see it (it used to wait for the blur).
+    const input = inputField(current, "insp-input insp-mono", { mode: "input", set, commit });
+    input.placeholder = FIELD_PLACEHOLDER[decl.type] ?? "Value";
     control = input;
   }
   return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label", text: decl.name }), control);
 }
 
-// The identity panel every entity's inspector opens with: Title (where the type
-// has one) + gameId, in the shared subpanel chrome, then any type-specific
-// extras. When a title is present the gameId is the auto/pinned field that
-// derives from it (and refreshes as the title is typed, both being in this one
-// pane); without a title (query, dimension) the gameId is a plain field. A title
-// commits per-keystroke by default; deck passes "blur" since its save moves the
-// shard file.
+/** One tag group as a label row: its colour dot and name, then its control. */
+const tagGroupRow = (group: string, control: HTMLElement): HTMLElement =>
+  el("div", { className: "doc-row" }, el("span", { className: "doc-row-label" }, chipDot(group), group), control);
+
+/**
+ * Unbounded, or bounded and how many: the Slots control a hand template and a
+ * standalone hand share. `choose` takes the segment picked ("3" is where a
+ * newly bounded hand starts); `typed` takes a whole number typed beside it.
+ */
+function slotsControl(bounded: boolean, size: string, choose: (slots: "unbounded" | "3") => void, typed: (count: string) => void, commit: () => void): HTMLElement {
+  const seg = segmented(([["unbounded", !bounded], ["bounded", bounded]] as [string, boolean][]).map(([label, on]) => ({
+    label, on, pick: () => choose(label === "unbounded" ? "unbounded" : "3"),
+  })));
+  const field = inputField(bounded ? size : "", "insp-input insp-mono insp-short",
+    { mode: "input", set: (v) => { if (/^\d+$/.test(v)) typed(v); }, commit });
+  field.placeholder = "3"; field.disabled = !bounded;
+  return el("div", { className: "insp-segrow" }, seg, field);
+}
+
+/** What an empty field of each type asks for, in plain words (the house
+ *  style: never an angle-bracketed stub). */
+const FIELD_PLACEHOLDER: Record<string, string> = {
+  string: "Text", number: "A number", flags: "Flags, separated by commas", enum: "A value",
+};
+
 /** The shared declaration list (rule 6), wrapped for centre editors: mounts
  *  into a fresh host and feeds every change to the caller's autosave. */
 function propList(
@@ -931,13 +891,21 @@ function propList(
   return host;
 }
 
+/** A declaration list as a tab's whole panel, which reads as empty (a single
+ *  quiet line) while it has nothing in it. */
+function propPanel(decls: PropertyDeclDto[], onChange: () => void, addLabel: string, opts: Parameters<typeof propList>[3] = {}): HTMLElement {
+  return el("div", { className: `doc-panel${decls.length === 0 ? " empty" : ""}` }, propList(decls, onChange, addLabel, opts));
+}
+
 interface IdentityField { get: () => string; set: (v: string) => void; }
 
 // The document heading every centre editor opens with (beneath any back
 // crumb): a quiet type label with an overflow menu (Delete lives there), the
 // editable Title (or, for name-only entities, the gameId as the name), the
 // gameId auto/pin chip, and the Purpose - identity all in one place, quietly
-// editable (inspector-free model, ux-changes v3).
+// editable (inspector-free model, ux-changes v3). Every field commits as it is
+// typed except a title with `commitOn: "blur"`, the deck's and the box's,
+// whose rename moves a file (fields.ts).
 export function documentHeading(label: string, opts: {
   title?: IdentityField & { placeholder?: string; commit: () => void; commitOn?: "input" | "blur" };
   /** Name-only entities (query, dimension): the gameId IS the name. */
@@ -954,43 +922,23 @@ export function documentHeading(label: string, opts: {
    *  lets it go, and the line and the chip's mark go with it. Absent means it
    *  always holds, which is what everything but a rename field wants. */
   contractHolds?: () => boolean;
-  purpose?: IdentityField & { placeholder?: string; commit: () => void; commitOn?: "input" | "blur" };
+  purpose?: IdentityField & { placeholder?: string; commit: () => void };
   /** A quiet line under the title saying what KIND of thing this is, in the
    *  author's own words: a hand's template title ("Places in the village"). */
   kind?: string;
   menu?: { label: string; danger?: boolean; onClick: () => void }[];
   /** The comment-thread opener, in the TOPLINE beside the More menu: the row that
    *  means "about this whole document". Patterpad puts it in the inspector
-   *  level's action row; we have no inspector, so this is the equivalent. */
-  /** `on` is the id the thread is filed against. It is stamped on the bubble so a
+   *  level's action row; we have no inspector, so this is the equivalent.
+   *  `on` is the id the thread is filed against. It is stamped on the bubble so a
    *  caller holding only an id can FIND this anchor once the document renders,
    *  which is how the feedback walk arrives at a comment it navigated to. */
   comments?: { on: string; count: number; open: (anchor: HTMLElement) => void };
-  afterEdit?: () => void;
 }): HTMLElement {
   const head = el("div", { className: "doc-head" });
   const topline = el("div", { className: "doc-topline" }, caption(label));
-  if (opts.comments) {
-    const c = opts.comments;
-    const bubble = el("button", {
-      className: `btn ghost doc-thread${c.count > 0 ? " has" : ""}`,
-      tip: c.count > 0 ? `${plural(c.count, "open comment")}` : "Comment on this",
-    }, iconNode("comment", 12), c.count > 0 ? String(c.count) : null);
-    bubble.dataset.threadFor = c.on;
-    bubble.dataset.tipNone = "Comment on this";
-    bubble.addEventListener("click", (e) => { e.preventDefault(); c.open(bubble); });
-    topline.append(bubble);
-  }
-  if (opts.menu?.length) {
-    const items = opts.menu;
-    const more = el("button", { className: "btn ghost icon doc-menu", tip: "More" }, iconNode("more"));
-    more.addEventListener("click", (e) => {
-      const r = more.getBoundingClientRect();
-      e.preventDefault();
-      openContextMenu(r.left, r.bottom + 4, items);
-    });
-    topline.append(more);
-  }
+  if (opts.comments) topline.append(commentBubble(opts.comments.on, opts.comments.count, opts.comments.open));
+  if (opts.menu?.length) topline.append(moreMenu(opts.menu));
   head.append(topline);
   // The venue's claim, built once and shown while it holds. One line per
   // installation and nothing at all otherwise, which is the density rule: a
@@ -1019,10 +967,7 @@ export function documentHeading(label: string, opts: {
     const t = opts.title;
     const input = el("input", { className: "insp-input insp-title doc-title" });
     input.value = t.get(); input.placeholder = t.placeholder ?? "Title";
-    const took = (v: string): void => { t.set(v); gid?.refresh(); paintClaim(); if ((t.commitOn ?? "input") === "input") { t.commit(); opts.afterEdit?.(); } };
-    input.addEventListener("input", () => took(input.value));
-    input.addEventListener("change", () => { t.commit(); opts.afterEdit?.(); });
-    escapeRestores(input, took);
+    bindField(input, { mode: t.commitOn ?? "input", set: t.set, after: () => { gid?.refresh(); paintClaim(); }, commit: t.commit });
     titleRow.append(input);
   }
   if (opts.name) {
@@ -1030,10 +975,7 @@ export function documentHeading(label: string, opts: {
     const input = el("input", { className: "insp-input insp-mono doc-title doc-name" });
     input.value = n.get(); input.placeholder = n.placeholder ?? "Name";
     input.spellcheck = false;   // a name, not prose (parity row 52)
-    const took = (v: string): void => { n.set(v); n.commit(); opts.afterEdit?.(); };
-    input.addEventListener("input", () => took(input.value));
-    input.addEventListener("change", () => { n.commit(); opts.afterEdit?.(); });
-    escapeRestores(input, took);
+    bindField(input, { mode: "input", set: n.set, commit: n.commit });
     titleRow.append(input);
   }
   if (gid) titleRow.append(el("div", { className: "doc-gid" }, gid.root));
@@ -1058,8 +1000,7 @@ export function documentHeading(label: string, opts: {
     head.append(el("label", { className: "doc-purpose-label", text: "Purpose" }));
     const ta = el("textarea", { className: "insp-input insp-beat doc-purpose" });
     ta.value = p.get(); ta.rows = 2; ta.placeholder = p.placeholder ?? "";
-    ta.addEventListener("input", () => { p.set(ta.value); if ((p.commitOn ?? "input") === "input") p.commit(); });
-    ta.addEventListener("change", () => { p.commit(); opts.afterEdit?.(); });
+    bindField(ta, { mode: "input", set: p.set, commit: p.commit });
     head.append(ta);
   }
   return head;
@@ -1088,28 +1029,6 @@ function fillOutcomeHeader(row: HTMLElement, o: OutcomeEdit, open: boolean, cata
   const kids: HTMLElement[] = [line];
   if (o.gate) kids.push(el("div", { className: "cardwhen outcome-row-when" }, el("span", { className: "cardwhen-if", text: "if" }), previewCondition(o.gate, catalogue)));
   row.replaceChildren(...kids);
-}
-
-/**
- * The comment opener for a sub-item: an outcome, which is the one commentable
- * thing that is not a document of its own (design/annotation.md section 2).
- *
- * The same bubble as a document topline, in the outcome's own BODY rather than
- * the card's header, because a thread about "the player pays the toll" belongs to
- * that outcome and not to the card that holds it. In the body rather than the
- * closed row for the same reason the row carries no other control: a hairline
- * row of ten outcomes with ten bubbles on it would be noise, and the count is
- * already visible on the card's own bubble.
- */
-function commentBubble(on: string, count: number, open: (anchor: HTMLElement) => void): HTMLElement {
-  const bubble = el("button", {
-    className: `btn ghost doc-thread${count > 0 ? " has" : ""}`,
-    tip: count > 0 ? `${plural(count, "open comment")}` : "Comment on this outcome",
-  }, iconNode("comment", 12), count > 0 ? String(count) : null);
-  bubble.dataset.threadFor = on;
-  bubble.dataset.tipNone = "Comment on this outcome";
-  bubble.addEventListener("click", (e) => { e.preventDefault(); open(bubble); });
-  return bubble;
 }
 
 /**
@@ -1194,7 +1113,7 @@ function outcomeAccordion(edit: Required<CardEdit>, outcomeFields: FieldDeclDto[
         { label: "Move up", onClick: () => move(o, -1), disabled: edit.outcomes.indexOf(o) === 0 },
         { label: "Move down", onClick: () => move(o, 1), disabled: edit.outcomes.indexOf(o) === edit.outcomes.length - 1 },
         { label: "Duplicate", onClick: () => duplicate(o) },
-        { label: "Remove", danger: true, onClick: () => remove(o) },
+        { label: "Remove outcome", danger: true, onClick: () => remove(o) },
       ]);
     });
     item.append(header);
@@ -1214,10 +1133,11 @@ function outcomeAccordion(edit: Required<CardEdit>, outcomeFields: FieldDeclDto[
   return list;
 }
 
-// The expanded outcome's full editor - wide, inline in the centre. Field edits
-// commit and refresh the header (syncHeader) so its summary stays live.
+/** How the card's paired Patter scene reaches an outcome (OutcomeDto.patter). */
 type PatterReach = NonNullable<OutcomeDto["patter"]>;
 
+// The expanded outcome's full editor - wide, inline in the centre. Field edits
+// commit and refresh the header (syncHeader) so its summary stays live.
 function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: ConditionProperty[], commit: () => void, syncHeader: () => void, remove: () => void, h: InspectorHost, patter?: PatterReach): HTMLElement {
   const save = (): void => { commit(); syncHeader(); };
   const body = el("div", { className: "outcome-body" });
@@ -1229,11 +1149,19 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
     () => o.gameId ?? "", (v) => { o.gameId = v; },
     () => gameIdify(o.title ?? "") || o.id, save,
   );
-  const title = textField(o.title ?? "", "insp-input outcome-title", (v) => { o.title = v; gameId.refresh(); }, save);
+  const title = inputField(o.title ?? "", "insp-input outcome-title", { mode: "input", set: (v) => { o.title = v; }, after: () => gameId.refresh(), commit: save });
   title.placeholder = "Outcome title";
   body.append(title);
+  // The comment opener for a sub-item: an outcome, which is the one commentable
+  // thing that is not a document of its own (design/annotation.md section 2).
+  // The same bubble as a document topline, in the outcome's own BODY rather
+  // than the card's header, because a thread about "the player pays the toll"
+  // belongs to that outcome and not to the card that holds it. In the body
+  // rather than the closed row for the same reason the row carries no other
+  // control: a hairline row of ten outcomes with ten bubbles on it would be
+  // noise, and the count is already visible on the card's own bubble.
   body.append(el("div", { className: "doc-gid outcome-gid" }, gameId.root,
-    commentBubble(o.id, h.openThreads(o.id), (a) => h.showComments(o.id, o.title || o.gameId, a))));
+    commentBubble(o.id, h.openThreads(o.id), (a) => h.showComments(o.id, o.title || o.gameId, a), "Comment on this outcome")));
 
   // The seventh type, and labelled like the other six (B1). This one is built
   // by hand rather than through documentHeading, which is how it came to be the
@@ -1243,8 +1171,7 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
   purpose.value = o.purpose ?? "";
   purpose.rows = 2;
   purpose.placeholder = "What this outcome does";
-  purpose.addEventListener("input", () => { o.purpose = purpose.value; commit(); });
-  purpose.addEventListener("change", commit);
+  bindField(purpose, { mode: "input", set: (v) => { o.purpose = v; }, commit });
   body.append(purpose);
 
   // How the card's Patter scene reaches this outcome, when the project is paired with a Patter
@@ -1289,12 +1216,6 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
   body.append(el("button", { className: "btn insp-del small outcome-remove", text: "Remove outcome", onClick: remove }));
   return body;
 }
-
-// The card's mechanical settings - the inspector level: the host-facing gameId
-// (computed from the title until pinned) and how the card ranks against rivals.
-
-// --- the deck level -----------------------------------------------------------
-
 
 // --- the hand level -------------------------------------------------------------
 // A hand is a place on the board (schema 2.6): an instance of a hand template
@@ -1411,7 +1332,9 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
       el("div", { className: "doc-sect-head" }, caption(label), el("span", { className: "handcard-n", text: String(refs.length) })),
       refs.length > 0
         ? el("div", { className: "rowlist handcards" }, ...refs.map(cardRow))
-        : el("p", { className: "doc-tab-note", text: "None." }));
+        // A sentence, not "None.": the house style's empty state names the
+        // missing thing (rule 35).
+        : el("p", { className: "doc-tab-note", text: "No cards could come up here this way." }));
     const boxName = box.title ?? box.gameId;
     // ANYWHERE IS A COUNT, not a list (plan item 1): in a big box it is most of
     // the box, and a place page that listed it would stop being about the place.
@@ -1461,7 +1384,8 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
       title: { get: () => edit.title, set: (v) => { edit.title = v; }, placeholder: "Hand title", commit },
       gameId: { get: () => edit.gameId, set: (v) => { edit.gameId = v; }, fallback: detail.gameId, deriveFrom: () => edit.title, commit },
       purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "What sits here, and why", commit },
-      menu: [{ label: "Delete hand", danger: true, onClick: () => h.deleteHand(boxId, detail.id) }],
+      // A hand's evidence is its pin, which only the map knows (deletes.ts).
+      menu: [{ label: deleteLabel("hand", box.usesMap === true), danger: true, onClick: () => h.deleteHand(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.title || detail.gameId, a) },
       // A venue binds a NAME, so the claim holds only while this hand still
       // answers to the one it bound. Renaming it in place is exactly when a
@@ -1495,24 +1419,17 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
     if (tab === "slots") {
       if (standalone()) {
         const isBounded = edit.rule !== undefined && edit.rule.slots !== "unbounded" && String(edit.rule.slots).trim() !== "";
-        const seg = el("div", { className: "seg insp-seg" });
-        for (const [label, on] of [["unbounded", !isBounded], ["bounded", isBounded]] as [string, boolean][]) {
-          const b = el("button", { className: `seg-opt${on ? " on" : ""}`, text: label });
-          b.addEventListener("click", () => {
+        const slots = slotsControl(isBounded, isBounded ? String(edit.rule!.slots) : "",
+          (next) => {
             if (!edit.rule) edit.rule = { bindings: [], condition: "", slots: "unbounded" };
-            edit.rule.slots = label === "unbounded" ? "unbounded" : (isBounded ? edit.rule.slots : "3");
+            edit.rule.slots = next;
             commit(); draw();
-          });
-          seg.append(b);
-        }
-        const size = el("input", { className: "insp-input insp-mono insp-short" });
-        size.value = isBounded ? String(edit.rule!.slots) : ""; size.placeholder = "3"; size.disabled = !isBounded;
-        size.addEventListener("input", () => { if (/^\d+$/.test(size.value) && edit.rule) edit.rule.slots = size.value; });
-        size.addEventListener("change", commit);
+          },
+          (count) => { if (edit.rule) edit.rule.slots = count; }, commit);
         view.append(el("div", { className: "doc-panel cfg-panel" },
-          cfgRow("Slots", "How many cards this hand holds.", el("div", { className: "insp-segrow" }, seg, size))));
+          cfgRow("Slots", "How many cards this hand holds.", slots)));
       } else {
-        const slots = textField(edit.slots, "insp-input insp-mono insp-short", (v) => { edit.slots = v; }, commit);
+        const slots = inputField(edit.slots, "insp-input insp-mono insp-short", { mode: "input", set: (v) => { edit.slots = v; }, commit });
         slots.placeholder = String(declared);
         // Load-bearing subtitle: "blank follows the template" is the entire
         // meaning of an empty control, so it does not wait to be approached.
@@ -1526,7 +1443,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
 
     if (tab === "properties") {
       if (standalone()) {
-        view.append(el("div", { className: `doc-panel${(edit.properties ?? []).length === 0 ? " empty" : ""}` }, propList(edit.properties ?? [], commit, "+ Property", { shareScope: "hand" })),
+        view.append(propPanel(edit.properties ?? [], commit, "+ Property", { shareScope: "hand" }),
           el("p", { className: "doc-tab-note", text: "Properties this hand carries for its cards, as @hand." }));
       } else {
         view.append(el("p", { className: "doc-tab-note", text: "These come from this hand's template. Edit them there and every hand of that kind follows." }));
@@ -1537,18 +1454,12 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
 
     // Dealing: which kind of hand this is. An instance fills its template's
     // holes; a standalone hand carries its own rule inline.
-    const pick = el("select", { className: "insp-input" });
-    const alone = el("option", { text: "(standalone, its own rule)" }); alone.value = ""; if (standalone()) alone.selected = true;
-    pick.append(alone);
-    for (const t of detail.templates) {
-      const o = el("option", { text: t.gameId });
-      o.value = t.gameId; if (t.gameId === edit.template) o.selected = true;
-      pick.append(o);
-    }
-    pick.addEventListener("change", () => {
-      edit.template = pick.value;
-      if (pick.value !== "") {
-        const t = detail.templates.find((x) => x.gameId === pick.value);
+    // "standalone": the one name for a hand with its own rule, as the Hands
+    // list and Find say it.
+    const pick = optionSelect(detail.templates.map((t) => t.gameId), edit.template ?? "", (value) => {
+      edit.template = value;
+      if (value !== "") {
+        const t = detail.templates.find((x) => x.gameId === value);
         edit.chosen = (t?.chooses ?? []).map((group) => ({
           group, value: edit.chosen?.find((c) => c.group === group)?.value ?? "",
         }));
@@ -1557,7 +1468,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
         edit.rule = { bindings: [], condition: "", slots: "unbounded" };
       }
       commit(); redraw();
-    });
+    }, { none: "(standalone)", className: "insp-input" });
     view.append(section("Template", "the kind of hand this is", pick));
 
     if (!standalone()) {
@@ -1569,17 +1480,13 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
           const current = edit.chosen?.find((c) => c.group === group)?.value ?? "";
           const options = detail.groups.find((g) => g.gameId === group)?.values
             ?? detail.chosen.find((c) => c.group === group)?.values ?? [];
-          const sel = el("select", { className: "insp-input insp-mono" });
-          const none = el("option", { text: "(choose)" }); none.value = ""; sel.append(none);
-          for (const v of options) { const o = el("option", { text: v }); o.value = v; if (v === current) o.selected = true; sel.append(o); }
-          appendPropertyFills(sel, detail.movableFrom, current);
-          if (isHoleRef(current)) moves = true;
-          sel.addEventListener("change", () => {
+          const sel = optionSelect(options, current, (value) => {
             edit.chosen = (edit.chosen ?? []).filter((c) => c.group !== group);
-            if (sel.value) edit.chosen.push({ group, value: sel.value });
+            if (value) edit.chosen.push({ group, value });
             commit(); redraw();
-          });
-          return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label" }, chipDot(group), group), sel);
+          }, { none: "(choose)", extra: (s) => appendPropertyFills(s, detail.movableFrom, current) });
+          if (isHoleRef(current)) moves = true;
+          return tagGroupRow(group, sel);
         });
         view.append(section("Chosen tags",
           moves ? "filling the template's holes (one of them moves with a property)"
@@ -1594,17 +1501,13 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
         let moves = false;
         const rows = detail.groups.map((group) => {
           const current = rule.bindings?.find((b) => b.group === group.gameId);
-          const sel = el("select", { className: "insp-input insp-mono" });
-          const none = el("option", { text: "(any)" }); none.value = ""; sel.append(none);
-          for (const v of group.values) { const o = el("option", { text: v }); o.value = v; if (current?.value === v) o.selected = true; sel.append(o); }
-          appendPropertyFills(sel, detail.movableFrom, current?.value ?? "");
-          if (isHoleRef(current?.value ?? "")) moves = true;
-          sel.addEventListener("change", () => {
+          const sel = optionSelect(group.values, current?.value ?? "", (value) => {
             rule.bindings = (rule.bindings ?? []).filter((b) => b.group !== group.gameId);
-            if (sel.value) rule.bindings.push({ group: group.gameId, value: sel.value });
+            if (value) rule.bindings.push({ group: group.gameId, value });
             commit(); redraw();
-          });
-          return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label" }, chipDot(group.gameId), group.gameId), sel);
+          }, { none: "(any)", extra: (s) => appendPropertyFills(s, detail.movableFrom, current?.value ?? "") });
+          if (isHoleRef(current?.value ?? "")) moves = true;
+          return tagGroupRow(group.gameId, sel);
         });
         view.append(section("Pulls cards tagged",
           moves ? "the rule's bindings (one of them moves with a property)"
@@ -1664,18 +1567,16 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     const turnsHost = el("div");
     const drawTurns = (): void => {
       const timed = seconds !== undefined;
-      const seg = el("div", { className: "seg insp-seg" });
-      for (const [label, on] of [["a play", !timed], ["every N seconds of play", timed]] as [string, boolean][]) {
-        const b = el("button", { className: `seg-opt${on ? " on" : ""}`, text: label });
-        // A click on the choice already made does nothing: it must not reset a
-        // seconds the designer has typed.
-        if (!on) b.addEventListener("click", () => {
+      // A click on the choice already made does nothing (the helper's rule): it
+      // must not reset a seconds the designer has typed.
+      const seg = segmented(([["a play", !timed], ["every N seconds of play", timed]] as [string, boolean][]).map(([label, on]) => ({
+        label, on,
+        pick: () => {
           seconds = timed ? undefined : 60;
           h.saveBox(box.id, { turn: seconds === undefined ? null : { seconds } });
           drawTurns();
-        });
-        seg.append(b);
-      }
+        },
+      })));
       const field = el("input", { className: "insp-input insp-mono insp-short" });
       field.value = timed ? String(seconds) : "";
       // "N", as the Redraw field does: the placeholder convention is a shown
@@ -1690,10 +1591,16 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
         const n = Number(field.value);
         return /^\d+$/.test(field.value.trim()) && Number.isInteger(n) && n > 0 ? n : undefined;
       };
-      field.addEventListener("input", () => say(typed()));
-      field.addEventListener("change", () => {
-        const n = typed();
-        if (n !== undefined) { seconds = n; h.saveBox(box.id, { turn: { seconds: n } }); }
+      // Committed as typed (ruling N), and only while it is a whole number of
+      // seconds: a half-typed or cleared field writes nothing.
+      bindField(field, {
+        mode: "input",
+        set: () => { /* read back by `typed` */ },
+        after: () => say(typed()),
+        commit: () => {
+          const n = typed();
+          if (n !== undefined) { seconds = n; h.saveBox(box.id, { turn: { seconds: n } }); }
+        },
       });
       say(seconds);
       turnsHost.replaceChildren(
@@ -1718,7 +1625,7 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     // It has one now that a second list shares the page: an unlabelled list
     // above a labelled one reads as the labelled one's preamble.
     view.append(sectHead("Card fields"),
-      el("div", { className: `doc-panel${fields.length === 0 ? " empty" : ""}` }, propList(fields, () => h.saveBox(box.id, { fields }), "+ Field", { sharingSwitches: false })),
+      propPanel(fields, () => h.saveBox(box.id, { fields }), "+ Field", { sharingSwitches: false }),
       el("p", { className: "doc-tab-note", text: "The fields every card in this box can carry." }));
     // The outcome half, on the SAME tab (2026-09-13). The tab vocabulary is
     // fixed (storyletter.md), and these are two halves of one template rather
@@ -1728,11 +1635,11 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     // 6), same sharing answer: field data carries no state.
     const outcomeFields: FieldDeclDto[] = box.outcomeFields.map((f) => ({ ...f, values: f.values ? [...f.values] : undefined }));
     view.append(sectHead("Outcome fields"),
-      el("div", { className: `doc-panel${outcomeFields.length === 0 ? " empty" : ""}` }, propList(outcomeFields, () => h.saveBox(box.id, { outcomeFields }), "+ Field", { sharingSwitches: false })),
+      propPanel(outcomeFields, () => h.saveBox(box.id, { outcomeFields }), "+ Field", { sharingSwitches: false }),
       el("p", { className: "doc-tab-note", text: "The fields every outcome in this box can carry. They're handed to the game with the press." }));
   } else {
     const properties: PropertyDeclDto[] = box.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
-    view.append(el("div", { className: `doc-panel${properties.length === 0 ? " empty" : ""}` }, propList(properties, () => h.saveBox(box.id, { properties }), "+ Property", { shareScope: "box" })),
+    view.append(propPanel(properties, () => h.saveBox(box.id, { properties }), "+ Property", { shareScope: "box" }),
       el("p", { className: "doc-tab-note", text: "Properties the whole box carries, as @box." }));
   }
   centre.replaceChildren(view);
@@ -1779,7 +1686,7 @@ export function renderDeckTabBody(host: HTMLElement, box: BoxDto, deck: DeckDto,
     if (deckRows.length > 0) view.append(el("div", { className: "doc-panel cfg-panel" }, ...deckRows));
   } else {
     const properties: PropertyDeclDto[] = deck.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
-    view.append(el("div", { className: `doc-panel${properties.length === 0 ? " empty" : ""}` }, propList(properties, () => h.saveDeckConfig(deck.id, { properties }), "+ Property", { shareScope: "deck" })),
+    view.append(propPanel(properties, () => h.saveDeckConfig(deck.id, { properties }), "+ Property", { shareScope: "deck" }),
       el("p", { className: "doc-tab-note", text: "Properties this deck carries for its cards, as @deck." }));
   }
   host.replaceChildren(view);
@@ -1815,7 +1722,7 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
       title: { get: () => edit.title, set: (v) => { edit.title = v; }, placeholder: "What you call hands of this kind", commit },
       gameId: { get: () => edit.gameId, set: (v) => { edit.gameId = v; }, fallback: detail.gameId, deriveFrom: () => edit.title, commit },
       purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "What kind of hand this is", commit },
-      menu: [{ label: "Delete hand template", danger: true, onClick: () => h.deleteTemplate(boxId, detail.id) }],
+      menu: [{ label: deleteLabel("hand template", detail.instances.length > 0), danger: true, onClick: () => h.deleteTemplate(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.title || detail.gameId, a) },
     }));
     const holes = edit.bindings.filter((b) => b.hole).length;
@@ -1834,18 +1741,11 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
       view.append(section("When", "the condition a card must also satisfy, shared by every instance", condHost));
 
       const isBounded = edit.slots !== "unbounded";
-      const seg = el("div", { className: "seg insp-seg" });
-      for (const [label, on] of [["unbounded", !isBounded], ["bounded", isBounded]] as [string, boolean][]) {
-        const b = el("button", { className: `seg-opt${on ? " on" : ""}`, text: label });
-        b.addEventListener("click", () => { edit.slots = label === "unbounded" ? "unbounded" : (isBounded ? edit.slots : "3"); commit(); draw(); });
-        seg.append(b);
-      }
-      const size = el("input", { className: "insp-input insp-mono insp-short" });
-      size.value = isBounded ? edit.slots : ""; size.placeholder = "3"; size.disabled = !isBounded;
-      size.addEventListener("input", () => { if (/^\d+$/.test(size.value)) edit.slots = size.value; });
-      size.addEventListener("change", commit);
+      const slots = slotsControl(isBounded, edit.slots,
+        (next) => { edit.slots = next; commit(); draw(); },
+        (count) => { edit.slots = count; }, commit);
       view.append(el("div", { className: "doc-panel cfg-panel" },
-        cfgRow("Slots", "The default hand size. An instance may override it.", el("div", { className: "insp-segrow" }, seg, size)),
+        cfgRow("Slots", "The default hand size. An instance may override it.", slots),
       ));
 
       view.append(derivedFooter(detail.instances.length > 0
@@ -1856,7 +1756,7 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
     }
 
     if (tab === "properties") {
-      view.append(el("div", { className: `doc-panel${edit.properties.length === 0 ? " empty" : ""}` }, propList(edit.properties, commit, "+ Property", { shareScope: "hand" })),
+      view.append(propPanel(edit.properties, commit, "+ Property", { shareScope: "hand" }),
         el("p", { className: "doc-tab-note", text: "Properties every hand of this kind carries as @hand, each with its own values." }));
       centre.replaceChildren(view);
       return;
@@ -1870,13 +1770,13 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
     };
     const bindBody: HTMLElement[] = detail.groups.map((group) => {
       const current = edit.bindings.find((b) => b.group === group.gameId);
+      // Encoded so one select carries three kinds of answer: "" any, "?:" a
+      // hole, "v:<tag>" a fixed tag.
+      const now = current?.hole ? "?:" : current?.value !== undefined ? `v:${current.value}` : "";
       const select = el("select", { className: "insp-input insp-mono" });
-      const none = el("option", { text: "(any)" }); none.value = ""; if (!current?.value && !current?.hole) none.selected = true;
-      select.append(none);
-      const hole = el("option", { text: "the instance chooses" }); hole.value = "?:"; if (current?.hole) hole.selected = true;
-      select.append(hole);
+      select.append(option("", "(any)", now), option("?:", "the instance chooses", now));
       const grpV = el("optgroup"); grpV.label = "fixed tag";
-      for (const v of group.values) { const o = el("option", { text: v }); o.value = `v:${v}`; if (current?.value === v) o.selected = true; grpV.append(o); }
+      for (const v of group.values) grpV.append(option(`v:${v}`, v, now));
       select.append(grpV);
       select.addEventListener("change", () => {
         const val = select.value;
@@ -1885,7 +1785,7 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
         else setBinding(group.gameId, { group: group.gameId });
         commit();
       });
-      return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label" }, chipDot(group.gameId), group.gameId), select);
+      return tagGroupRow(group.gameId, select);
     });
     view.append(bindBody.length > 0
       ? el("div", { className: "doc-panel" }, el("div", { className: "doc-panel-rows" }, ...bindBody))
@@ -1919,7 +1819,8 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
     view.append(documentHeading("Tag group", {
       name: { get: () => edit.gameId, set: (v) => { edit.gameId = v; }, placeholder: "group-name", commit },
       purpose: { get: () => edit.purpose, set: (v) => { edit.purpose = v; }, placeholder: "What this group classifies", commit },
-      menu: [{ label: "Delete tag group", danger: true, onClick: () => h.deleteTagGroup(boxId, detail.id) }],
+      // No question: main refuses a group cards still carry, saying how many.
+      menu: [{ label: deleteLabel("tag group", false), danger: true, onClick: () => h.deleteTagGroup(boxId, detail.id) }],
       comments: { on: detail.id, count: h.openThreads(detail.id), open: (a) => h.showComments(detail.id, edit.gameId, a) },
     }));
 
@@ -1927,11 +1828,9 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
     // not their own heavier cards (one panel material, centre-clarity 1).
     const valBody: HTMLElement[] = edit.values.map((v, i) => {
       const block = el("div", { className: "doc-vblock" });
-      const name = el("input", { className: "insp-input insp-mono" });
-      name.value = v.gameId; name.placeholder = "Tag name";
-      name.addEventListener("input", () => { v.gameId = name.value; });
-      name.addEventListener("change", commit);
-      const del = el("button", { className: "btn insp-del small", text: "Remove", onClick: () => { edit.values.splice(i, 1); commit(); redraw(); } });
+      const name = inputField(v.gameId, "insp-input insp-mono", { mode: "input", set: (value) => { v.gameId = value; }, commit });
+      name.placeholder = "Tag name";
+      const del = el("button", { className: "btn insp-del small", text: "Remove tag", onClick: () => { edit.values.splice(i, 1); commit(); redraw(); } });
       // Up/down beside Remove, which is Patterpad's trio for a list of settings
       // rows (`moveItem` in its dom.ts, used by the field, property and cast
       // lists). Tags are stored id-sorted now, so the order an author arranges

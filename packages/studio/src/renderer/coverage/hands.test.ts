@@ -72,7 +72,7 @@ describe("the per-hand block", () => {
     const row = handsBlock(report([hand({ cardsPossible: [], cardsDealt: [], cardsNeverDealt: [], deals: 0 })]), openRow).querySelector(".qrow")!;
     expect(row.querySelector(".count")).toBeNull();
     expect(row.querySelector(".bar")).toBeNull();
-    expect(text(row.querySelector(".qnone"))).toBe("no card's tags let it come up here");
+    expect(text(row.querySelector(".qnone"))).toBe("No card's tags let it come up here.");
   });
 
   it("names the box above its hands only when there is more than one box", () => {

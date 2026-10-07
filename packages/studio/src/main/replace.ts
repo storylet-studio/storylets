@@ -8,7 +8,7 @@
 
 import { runPropertyUsage, runPropertyUsageMany, runReplace } from "@storylet-studio/ops";
 import type { PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
-import { commit } from "./mutate.js";
+import { commit } from "./mutate/write-path.js";
 import type { ProjectSession } from "./project.js";
 import type { OpenResult } from "../shared/api.js";
 
@@ -41,11 +41,11 @@ let replaceCounter = 0;
 /** Apply: every touched shard in one commit, one undo step. The caller has
  *  had the editor flush its pending edits first, so nothing in the air is
  *  lost or overwritten. */
-export function applyReplace(session: ProjectSession, opts: ReplaceOptions): (OpenResult & { count: number; items: number }) | { error: string } {
+export async function applyReplace(session: ProjectSession, opts: ReplaceOptions): Promise<(OpenResult & { count: number; items: number }) | { error: string }> {
   if (!opts.query.trim()) return { error: "nothing to find" };
   const plan = runReplace(session.loaded, opts);
   if (plan.writes.length === 0) return { error: "nothing matches" };
-  const result = commit(session, `Replace "${opts.query}"`, `replace:${replaceCounter++}`,
+  const result = await commit(session, `Replace "${opts.query}"`, `replace:${replaceCounter++}`,
     plan.writes.map((w) => ({ path: w.path, content: w.content })));
   if ("error" in result) return result;
   return { ...result, count: plan.hits.length, items: plan.items };

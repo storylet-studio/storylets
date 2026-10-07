@@ -155,3 +155,33 @@ describe("edgesAt", () => {
     expect(edgesAt([edge("a", "gone", "enable")], at, { x: 150, y: 25 }, 1)).toEqual([]);
   });
 });
+
+describe("a card face following the zoom", () => {
+  // Every zoom frame used to destroy and rebuild every card to resize its
+  // screen-constant parts; a face now says how to do that in place, and is
+  // rebuilt only when a floor is crossed (canvas-surface `rescalable`).
+  it("resizes its deck stripe in place, on the same nodes", async () => {
+    const { drawCardNode, TITLE_FLOOR } = await import("./node-art.js");
+    const tokens = { card: "#fff", line: "#ccc", ink: "#000", muted: "#888", chars: ["#f00"], fontRead: "serif", fontMono: "mono" } as unknown as CanvasTokens;
+    // Below the title floor, so nothing measures text (no canvas in this suite).
+    const scale = TITLE_FLOOR / 2;
+    const group = drawCardNode({ id: "c", title: "T", deck: "D", x: 0, y: 0, width: NODE_W, height: NODE_H }, { tokens, scale });
+    const stripe = group.find("Rect").find((r) => r.height() === NODE_H && r.width() < NODE_W)!;
+    expect(stripe.width()).toBeCloseTo(4 / scale);
+    // A zoom that crosses no floor follows in place, on the very same node.
+    const { refit } = await import("./canvas-surface.js");
+    expect(refit(group, scale * 1.5)).toBe(true);
+    expect(stripe.width()).toBeCloseTo(4 / (scale * 1.5));
+    // Past the title floor the face needs a title it does not have: a rebuild.
+    expect(refit(group, TITLE_FLOOR * 1.5)).toBe(false);
+  });
+});
+
+describe("Arrange's gaps", () => {
+  it("make every step a whole number of grid squares, so an arrangement is on the grid", async () => {
+    const { ARRANGE_GAP } = await import("./node-art.js");
+    const GRID = 20;   // node-view's
+    expect((NODE_W + ARRANGE_GAP.x) % GRID).toBe(0);
+    expect((NODE_H + ARRANGE_GAP.y) % GRID).toBe(0);
+  });
+});

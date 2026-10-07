@@ -4,7 +4,7 @@
 // holds and where every clock is; `trace` events are the story, and they are
 // the runtime's own TraceEvents, so the journal and the Why not? tab read
 // them with the code they already have. Pure over the frames, so it tests
-// headlessly; the DOM layer in table.ts renders what this holds.
+// headlessly; live-mode.ts and the rail render what this holds.
 // ---------------------------------------------------------------------------
 
 import { LIVE_LOG_CAP } from "../../shared/api.js";
@@ -27,8 +27,6 @@ export interface LiveRunDeps {
 export interface LiveApplied {
   dealt: string[];
   played?: string;
-  /** True when the game (re)connected: a new run, the table cleared. */
-  reset: boolean;
 }
 
 export interface LiveRun {
@@ -124,7 +122,7 @@ export function createLiveRun(deps: LiveRunDeps): LiveRun {
     },
     reset,
     apply(frame: LiveLinkFrame): LiveApplied {
-      const out: LiveApplied = { dealt: [], reset: false };
+      const out: LiveApplied = { dealt: [] };
       // Everything but the handshake belongs to one participant, and this view
       // follows one. A frame from anyone else is somebody else's story.
       if (frame.t !== "hello") {
@@ -135,7 +133,6 @@ export function createLiveRun(deps: LiveRunDeps): LiveRun {
         case "hello":
           reset();
           project = frame.project;
-          out.reset = true;
           break;
         case "board":
           hands = { ...frame.hands };

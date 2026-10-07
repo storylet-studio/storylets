@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import { canonicalStringify, loadProjectFiles, parseProjectFiles, parseSource, compileProject } from "@storylet-studio/compiler";
 import type { Bundle } from "@storylet-studio/model";
-import { Table, boardRefusal, boardRegistry, coerceStateInput } from "./model.js";
+import { Table, boardRefusal, boardRegistry, coerceStateInput, loadReportNote } from "./model.js";
+import type { LoadReport } from "@storylet-studio/model";
 import type { BoardScopesDto } from "../../shared/api.js";
 
 const exampleDir = fileURLToPath(new URL("../../../../../examples/saltmarsh.storylets", import.meta.url));
@@ -30,9 +31,8 @@ describe("the Board model", () => {
     const hands = table.hands();
     const docks = hands.find((h) => h.gameId === "docks-street")!;
     expect(docks).toBeDefined();
-    expect(docks.template).toBe("street-hands");
-    expect(docks.chosen).toEqual(["area = docks"]);
-    expect(docks.slots).toBe(2);
+    // The whole slice by name: the board's filter key.
+    expect(docks.tags["area"]).toBe("docks");
     expect(docks.box).toBe("encounters");
   });
 
@@ -85,7 +85,7 @@ describe("the Board model", () => {
     expect(outcomes.find((o) => o.gameId === "stand-and-fight")!.available).toBe(true);
 
     table.session.play("c_ambush", "stand-and-fight", "docks-street");
-    expect(table.turn("encounters")).toBe(1);
+    expect(table.clocks().find((c) => c.box === "encounters")!.turn).toBe(1);
     expect(table.session.getProperty("story.reputation")).toBe(1);
     expect(table.session.getProperty("value.v_docks.danger")).toBe(2);   // @hand write-back
     expect(table.log.some((e) => e.type === "play")).toBe(true);
@@ -353,5 +353,50 @@ describe("standing the other engines in", () => {
     expect(boardRefusal(message, empty)).toMatch(/^This project names @patter, which another engine provides\. The Board stands other engines in from the game's shared scopes, but no file in game-scopes declares @patter\. It belongs in patter\.scopes\.json/);
     const game = boardRefusal("this content names @player, which no engine on this registry registered: give every engine the game's one registry", empty);
     expect(game).toMatch(/It belongs in game\.scopes\.json, the game's own scopes/);
+  });
+});
+
+describe("a restore's cost (the Board's toast after a restore)", () => {
+  const exact: LoadReport = {
+    exact: true, project: "p", version: { saved: "1", bundle: "1" }, hash: { saved: "a", bundle: "a" }, flows: ["main"],
+    evicted: [], droppedCooldowns: [], droppedSpent: [], droppedProperties: [], defaultedProperties: [], retypedProperties: [],
+  };
+
+  it("says nothing when the save went back as it was, or only its build differs", () => {
+    expect(loadReportNote(exact)).toBeUndefined();
+    expect(loadReportNote({ ...exact, exact: false, hash: { saved: "a", bundle: "b" } })).toBeUndefined();
+  });
+
+  it("names what was dropped, defaulted and reset, and counts the cards that left", () => {
+    expect(loadReportNote({
+      ...exact, exact: false,
+      evicted: [{ flow: "main", hand: "docks-street", card: "ambush", reason: "vanished" }],
+      droppedProperties: [{ path: "story.gold" }],
+      defaultedProperties: [{ path: "story.heat" }, { path: "world.rain" }],
+    })).toBe("The save didn't fit this build exactly. 1 card left its hand, @story.gold was dropped, and @story.heat and @world.rain took their defaults.");
+  });
+
+  it("counts properties when there are many", () => {
+    const many = ["a", "b", "c", "d"].map((n) => ({ path: `story.${n}` }));
+    expect(loadReportNote({ ...exact, exact: false, retypedProperties: many }))
+      .toBe("The save didn't fit this build exactly. 4 properties no longer fit and were reset.");
+  });
+
+  it("is what Restore hands back: a save from the same build restores exactly", () => {
+    const table = new Table(exampleBundle(), 0);
+    table.dealAll();
+    const report = new Table(exampleBundle(), 0).loadFile(JSON.parse(JSON.stringify(table.saveFile())));
+    expect(report.exact).toBe(true);
+    expect(loadReportNote(report)).toBeUndefined();
+  });
+});
+
+describe("a game's card by its gameId (Live mode)", () => {
+  it("finds the bundle's card, and still gives an unknown one a face", () => {
+    const table = new Table(exampleBundle(), 0);
+    const gameId = table.label("c_ambush").gameId;
+    expect(gameId).not.toBe("c_ambush");   // the hop under test is a real one
+    expect(table.faceByGameId(gameId, "docks-street")).toMatchObject({ id: "c_ambush", gameId, from: "docks-street" });
+    expect(table.faceByGameId("not-in-this-build", "docks-street")).toEqual({ id: "not-in-this-build", gameId: "not-in-this-build", from: "docks-street" });
   });
 });

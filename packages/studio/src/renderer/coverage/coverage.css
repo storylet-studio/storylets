@@ -1,26 +1,11 @@
 /* The Coverage window - consumes theme.css tokens only. Kept spare. */
 
-* { box-sizing: border-box; }
-html, body { height: 100%; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-ui);
-  font-size: 14px;
-  -webkit-user-select: none;
-  user-select: none;
-}
+/* The base (ground, type, frame, fields) is the shared tool-window/base.css. */
 #coverage { height: 100%; display: flex; flex-direction: column; }
 
 /* Section captions are `.caption` (theme.css): words, not an overline. */
 /* No element `button` rule: actions wear the shell's `.btn` (controls.css,
    via theme.css); the result rows carry their own reset below. */
-input {
-  font: inherit; background: var(--card); color: var(--ink);
-  border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 4px 8px;
-  -webkit-user-select: text; user-select: text;
-}
 
 /* The bar IS the shell's .swin-head (drag region, padding, border, the no-drag
    rule for its controls); .cbar only adds the gap this window's fields need.
@@ -30,6 +15,8 @@ input {
 .cbar .cname { font-family: var(--font-read); font-size: 13.5px; color: var(--muted); }
 .cbar .field { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
 .cbar .num { width: 64px; font-family: var(--font-mono); font-size: 12.5px; }
+/* A refused setting (blank, or below its floor): marked, and Run waits. */
+.cbar .num.invalid { border-color: var(--danger); }
 
 /* The driver note: quiet when drivers exist, a shade warmer when none do -
    the reader needs to know the test was never told how to reach @world. */
@@ -44,6 +31,11 @@ input {
 .cnote .btn { padding: 3px 10px; }
 
 .cbody.stale { opacity: 0.5; }
+/* Nothing run yet: the sentence, and the button that runs it. */
+.cempty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+/* When the report ran, quiet; a shade warmer once the project has moved on. */
+.cran { margin: 0 0 -12px; color: var(--muted); font-size: 12.5px; }
+.cran.stale { color: var(--warn); }
 .cbody { flex: 1; overflow-y: auto; padding: 24px 28px; display: flex; flex-direction: column; gap: 24px; max-width: 720px; }
 .hint { color: var(--muted); font-size: 13.5px; }
 

@@ -7,10 +7,10 @@
 // gated shut is not that card: it keeps its locked buttons, because the
 // question it poses is "why can I not do that", not "there is nothing to do".
 //
-// Kept apart from table.ts, which is a whole window with a preload behind it,
+// Kept apart, with nothing of the window in it (no state, no preload),
 // so the rule can be tested on its own.
 
-import { el } from "../src/dom.js";
+import { el } from "@wildwinter/app-shell";
 
 export interface PlayChoice { gameId: string; title?: string; available: boolean }
 
@@ -25,15 +25,11 @@ export function playChoices(outcomes: readonly PlayChoice[], choose: (gameId: st
   }
   for (const o of outcomes) {
     const b = el("button", { className: o.available ? "btn" : "btn disabled", text: `${o.title ?? o.gameId}${o.available ? "" : " (locked)"}` });
-    if (!o.available) b.title = "Unavailable. This outcome's condition isn't met in the current state.";
+    // The themed rollover, as every other tip in the window: a native `title`
+    // drew the system's own box beside the family's.
+    if (!o.available) b.dataset["tip"] = "Unavailable. This outcome's condition isn't met in the current state.";
     else b.addEventListener("click", () => choose(o.gameId));
     row.append(b);
   }
   return row;
-}
-
-/** What follows a played card's name in the journal: the arrow and the
- *  outcome, or nothing for a card played with none (""). */
-export function playedTail(outcome: string, arrow: string): string {
-  return outcome === "" ? "" : ` ${arrow} ${outcome}`;
 }

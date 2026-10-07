@@ -18,7 +18,7 @@ import type { ProjectKit } from "./project.js";
 describe("the box kit picker", () => {
   it("offers exactly the kits ops defines", () => {
     const renderer = readFileSync(
-      fileURLToPath(new URL("../renderer/src/renderer.ts", import.meta.url)), "utf8");
+      fileURLToPath(new URL("../renderer/src/kits.ts", import.meta.url)), "utf8");
     // The picker's block, so a `kits:` array elsewhere in the file cannot stand in.
     const start = renderer.indexOf("function openBoxKitPicker");
     expect(start, "openBoxKitPicker not found - has it been renamed?").toBeGreaterThan(-1);
@@ -32,7 +32,7 @@ describe("the box kit picker", () => {
   it("gives every kit a name and a blurb", () => {
     // A kit with no blurb is a card an author cannot choose between.
     const renderer = readFileSync(
-      fileURLToPath(new URL("../renderer/src/renderer.ts", import.meta.url)), "utf8");
+      fileURLToPath(new URL("../renderer/src/kits.ts", import.meta.url)), "utf8");
     const start = renderer.indexOf("function openBoxKitPicker");
     const block = renderer.slice(start, renderer.indexOf("\n}", start));
     const entries = [...block.matchAll(/\{\s*id:\s*"([a-z-]+)",\s*name:\s*"([^"]+)",\s*blurb:\s*"([^"]{20,})"/g)];
@@ -46,7 +46,7 @@ describe("the box kit picker", () => {
 describe("the New Project gallery", () => {
   it("offers exactly ops' game kits, and the starter with Patter", () => {
     const renderer = readFileSync(
-      fileURLToPath(new URL("../renderer/src/renderer.ts", import.meta.url)), "utf8");
+      fileURLToPath(new URL("../renderer/src/kits.ts", import.meta.url)), "utf8");
     const start = renderer.indexOf("const PROJECT_KITS");
     expect(start, "PROJECT_KITS not found - has it been renamed?").toBeGreaterThan(-1);
     const block = renderer.slice(start, renderer.indexOf("\n];", start));

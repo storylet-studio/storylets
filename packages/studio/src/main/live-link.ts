@@ -24,6 +24,7 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import { LIVE_LOG_CAP } from "../shared/api.js";
 import type { LiveLinkBoard, LiveLinkFrame, LiveLinkSnapshot, LiveLinkStatus, LiveLinkTrace } from "../shared/api.js";
+import { isLocalOrigin } from "@wildwinter/app-shell/util";
 
 export const LIVE_LINK_PORT = 4472;
 
@@ -179,8 +180,14 @@ export function createLiveLinkServer(deps: LiveLinkDeps): LiveLinkServer {
     start(): void {
       if (wss) return;
       try {
-        // Loopback only: only processes on this machine can reach it.
-        wss = new WebSocketServer({ host: "127.0.0.1", port }, () => push());   // "listening" once actually bound
+        // Loopback only: only processes on this machine can reach it. And not a
+        // web page on it: any site can open a WebSocket to localhost, and the
+        // browser stamps the upgrade with the page's Origin (isLocalOrigin, the
+        // Storyletter review of 2026-10, section 2; Patterpad's rule).
+        wss = new WebSocketServer({
+          host: "127.0.0.1", port,
+          verifyClient: (info: { origin?: string }) => isLocalOrigin(info.origin),
+        }, () => push());   // "listening" once actually bound
       } catch (e) {
         deps.onStatus({ state: "error", message: e instanceof Error ? e.message : String(e) });
         wss = null;
@@ -221,3 +228,7 @@ function isNumberMap(v: unknown): v is Record<string, number> {
   if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
   return Object.values(v as Record<string, unknown>).every((n) => typeof n === "number");
 }
+/** Whether a connection's Origin is this machine, so a game may take the slot:
+ *  the family's one rule, shared with Patterpad's Live Link (app-shell util). */
+export { isLocalOrigin };
+

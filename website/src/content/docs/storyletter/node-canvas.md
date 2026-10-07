@@ -40,7 +40,7 @@ You never draw an arrow yourself. Change a condition and the arrows change with 
 ## Arranging
 
 Drag a card and it stays where you put it. Nothing moves your arrangement on its own: not
-a save, not an undo, not switching to Cards and back. **Arrange all by links** (`L`) lays
+a save, not an undo, not switching to Cards and back. **Arrange all by links** lays
 the cards out by their dependencies. With two or more cards selected, it arranges just those, and the button reads
 **Arrange by links**.
 The story's flow reads left to right, following the enabling links first; cards nothing

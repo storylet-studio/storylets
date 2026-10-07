@@ -16,6 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 import { PIN_R, siteShape } from "./map-art.js";
+import { hitsItem, meetsBox } from "./canvas-geometry.js";
 
 const site = (at: { x: number; y: number }) =>
   siteShape({ id: "h_1", title: "The Inn", name: "the-inn", at, zone: "d_1", zoneName: "village" });
@@ -48,25 +49,14 @@ describe("a site's selection edge", () => {
 //
 // `itemAtPointer` refuses to believe boxes for constant-screen-size items and
 // asks Konva's hit graph instead. A marquee cannot do that - there is no pointer
-// to hit-test with - so it does the geometry itself, and until now it did not.
-// The maths is duplicated here rather than exported, because what is being pinned
-// is the BEHAVIOUR at a zoom, and a test that imported the function would pass
-// just as happily if the function were wrong.
+// to hit-test with - so it does the geometry itself (canvas-geometry `meetsBox`).
+// This runs the REAL `meetsBox` on a real `siteShape`, so it fails if either the
+// geometry or the shape's declared disc goes wrong; the cases are hand-worked
+// from the radius on screen, not read off the code.
 // ---------------------------------------------------------------------------
 
-/** Circle-versus-rectangle, as canvas-surface's `meetsBox` does it. */
-function discMeets(centre: { x: number; y: number }, radius: number, scale: number,
-                   box: { x: number; y: number; width: number; height: number }): boolean {
-  const r = radius / scale;
-  const nx = Math.min(Math.max(centre.x, box.x), box.x + box.width);
-  const ny = Math.min(Math.max(centre.y, box.y), box.y + box.height);
-  return (centre.x - nx) ** 2 + (centre.y - ny) ** 2 <= r * r;
-}
-
 describe("a marquee over a site", () => {
-  const at = { x: 100, y: 100 };
-  const item = site(at);
-  const centre = { x: item.x + item.width / 2, y: item.y + item.height / 2 };
+  const item = site({ x: 100, y: 100 });
   /** The box test the marquee used to do, for comparison. */
   const boxMeets = (box: { x: number; y: number; width: number; height: number }): boolean =>
     item.x < box.x + box.width && item.x + item.width > box.x
@@ -78,25 +68,22 @@ describe("a marquee over a site", () => {
     // is 60 world units across and the box is 18, so the dot on screen reaches
     // well beyond the box: a sweep at 115 is on the dot and outside the box.
     const box = { x: 115, y: 100, width: 2, height: 2 };
-    expect(discMeets(centre, PIN_R, 0.3, box)).toBe(true);
+    expect(meetsBox(item, box, 0.3)).toBe(true);
     expect(boxMeets(box)).toBe(false);   // what the marquee used to answer
   });
 
   it("takes a sweep that crosses the dot, zoomed in", () => {
-    // At 300% the disc is 3 world units across and the box is still 18, so a
+    // At 300% the disc is 3 world units in radius and the box is still 18, so a
     // sweep 6 units out misses the dot and the box catches it. Both agree that a
     // sweep ON the dot is a hit, which is the case that must never regress.
-    const onIt = { x: 99, y: 99, width: 2, height: 2 };
-    expect(discMeets(centre, PIN_R, 3, onIt)).toBe(true);
+    expect(meetsBox(item, { x: 99, y: 99, width: 2, height: 2 }, 3)).toBe(true);
     const nearMiss = { x: 106, y: 106, width: 2, height: 2 };
-    expect(discMeets(centre, PIN_R, 3, nearMiss)).toBe(false);
+    expect(meetsBox(item, nearMiss, 3)).toBe(false);
     expect(boxMeets(nearMiss)).toBe(true);
   });
 
   it("counts a box that swallows the disc whole", () => {
-    // The nearest-point clamp gives this for free: inside the box, the nearest
-    // point IS the centre, so the distance is zero.
-    expect(discMeets(centre, PIN_R, 1, { x: 0, y: 0, width: 400, height: 400 })).toBe(true);
+    expect(meetsBox(item, { x: 0, y: 0, width: 400, height: 400 }, 1)).toBe(true);
   });
 
   it("differs from the box even at 1:1, and the disc is the one that matches the screen", () => {
@@ -105,7 +92,17 @@ describe("a marquee over a site", () => {
     // corner never touched the dot.
     const corner = { x: 91, y: 91, width: 1, height: 1 };
     expect(boxMeets(corner)).toBe(true);
-    expect(discMeets(centre, PIN_R, 1, corner)).toBe(false);
+    expect(meetsBox(item, corner, 1)).toBe(false);
+  });
+});
+
+describe("a comment dropped on a site", () => {
+  it("lands on it by the disc, not the box: beside the dot is beside the pin", () => {
+    // The comment tool asks `hitsItem`, so a drop in the corner of the box at 1:1
+    // is on empty map, and the same drop zoomed out (a bigger dot) is on the pin.
+    const item = site({ x: 100, y: 100 });
+    expect(hitsItem(item, { x: 107, y: 107 }, 1)).toBe(false);
+    expect(hitsItem(item, { x: 107, y: 107 }, 0.5)).toBe(true);
   });
 });
 

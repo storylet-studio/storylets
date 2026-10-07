@@ -5,7 +5,7 @@
 // display-ready projections of the source project.
 // ---------------------------------------------------------------------------
 
-import type { Bundle, PlayRung, PropertyType, SaveFile, ScalarValue } from "@storylet-studio/model";
+import type { Bundle, LoadReport, PlayRung, PropertyType, SaveFile, ScalarValue } from "@storylet-studio/model";
 import type { JobProgress } from "@wildwinter/app-shell/job";
 import type { BoxKit, CoverageOrder, CoverageReport, GameKit, PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
 import type { IssueFix } from "@storylet-studio/compiler";
@@ -32,7 +32,7 @@ export type { JobProgress } from "@wildwinter/app-shell/job";
 export const JOB_PROGRESS_CHANNEL = "job:progress";
 
 /** A different project is now open. Sent to every tool window that shows
- *  something about the project (the satellite registry in main/index.ts), so
+ *  something about the project (the satellite registry in main/windows.ts), so
  *  none of them is left describing one that has gone. Declared here for the
  *  same reason as the channel above: the preload is sandboxed. */
 export const PROJECT_CHANGED = "project:changed";
@@ -171,7 +171,7 @@ export interface LastPlace {
   tab?: string;
   /** Written by a build whose hand page leads with its Cards tab. A hand place
    *  without it was left on the old page, whose first tab was Dealing, so its
-   *  tab is not restored once: see `restoredPlace` in renderer.ts. */
+   *  tab is not restored once: see `restoredPlace` in navigation.ts. */
   handCards?: boolean;
 }
 
@@ -1384,12 +1384,20 @@ export interface PackMergeSummary {
 /** What the Coverage window needs to open: the project it is looking at, how
  *  many drivers are configured (the note above the results), the pin, and any
  *  report cached from earlier this session. */
+/** When the cached coverage report ran, and the project hash it ran on (kept
+ *  by main beside the report, so the window can say "Ran 5 minutes ago" and
+ *  whether the project has changed since). `hash` is null when the project
+ *  would not load. */
+export interface CoverageRan { at: string; hash: string | null }
+
 export interface CoverageInfo {
   hasProject: boolean;
   name: string;
   driverCount: number;
   pinned: boolean;
   last?: CoverageReport;
+  /** When `last` ran: present exactly when `last` is. */
+  ran?: CoverageRan;
 }
 
 /**
@@ -1568,6 +1576,8 @@ export type MenuCommand =
   | { cmd: "search-property" }
   | { cmd: "undo" }
   | { cmd: "redo" }
+  // Edit > Select All in the editor: scoped to the canvas or the field (Patterpad's rule).
+  | { cmd: "select-all" }
   | { cmd: "table" }
   | { cmd: "new-project" }
   | { cmd: "open-example"; file: string }
@@ -1626,15 +1636,23 @@ export interface StudioApi {
   /** File ▸ Open Recent ▸ Clear Recents: forget every recent project (the
    *  menu and the welcome screen empty; nothing on disk is touched). */
   clearRecents(): Promise<void>;
-  /** Scaffold a new project (runInit) under a chosen parent dir; null = cancelled. */
-  /** `kit` "with-patter" also creates a Patter project beside it, paired, with a stub scene per card. */
+  /** Scaffold a new project (runInit) under a chosen parent dir; null = cancelled.
+   *  `kit` "with-patter" also creates a Patter project beside it, paired, with a
+   *  stub scene per card. */
   createProject(name: string, kit?: ProjectKit): Promise<OpenResult | { error: string } | null>;
   /** Copy a shipped worked example somewhere the author owns, and open it. Null
    *  when they cancel the folder picker. */
   openExample(name: string): Promise<OpenResult | { error: string } | null>;
   /** Re-read the project from disk and re-validate (files are the truth:
-   *  hand edits and VCS updates surface here). Null when nothing is open. */
+   *  hand edits and VCS updates surface here). Null when nothing is open, and
+   *  null when nothing the project reads has changed on disk since it was last
+   *  read: the caller then repaints nothing. */
   revalidate(): Promise<OpenResult | null>;
+  /** The open project and its problems as main holds them, with no re-read
+   *  from disk. Null only when no project is open. What a tool window boots
+   *  on and re-reads when the project changes, where `revalidate` would answer
+   *  null for a project nothing has touched. */
+  project(): Promise<OpenResult | null>;
   /** The per-shard version-control snapshot behind the lock / read-only /
    *  out-of-date badges. Throttled and cached in main (a remote read is a
    *  server hit under SVN and Plastic), so this is cheap to call on load,
@@ -1694,29 +1712,37 @@ export interface StudioApi {
    *  Null when the hand is gone. */
   handCards(boxId: string, handId: string): Promise<HandCardsDto | null>;
   saveHand(boxId: string, handId: string, edit: HandEdit): Promise<OpenResult | { error: string }>;
-  /** A new standalone hand. `site` also pins it on the project map there, in
-   *  the same undo step, binding the zone it lands in: the map's "+ Site". */
   /** A new hand: standalone, or an instance of `templateId` (the map's
-   *  "+ Hand" menu); pinned at `site` when given, in one undo step. */
+   *  "+ Hand" menu). `site` also pins it on the project map there, in the same
+   *  undo step, binding the zone it lands in: the map's "+ Site". */
   createHand(boxId: string, site?: { x: number; y: number }, templateId?: string): Promise<{ result: OpenResult; handId: string } | { error: string }>;
   deleteHand(boxId: string, handId: string): Promise<OpenResult | { error: string }>;
   tagGroupDetail(boxId: string, groupId: string): Promise<TagGroupDetail | null>;
   saveTagGroup(boxId: string, groupId: string, edit: TagGroupEdit): Promise<OpenResult | { error: string }>;
   createTagGroup(boxId: string): Promise<{ result: OpenResult; groupId: string } | { error: string }>;
+  /** A new tag group that is already the project's map: the group and its map
+   *  in ONE commit, one undo step. Refused, with nothing made, when the project
+   *  has a map already. */
+  createGroupAsMap(boxId: string): Promise<{ result: OpenResult; groupId: string } | { error: string }>;
+  /** Refused while any of the box's cards is tagged with the group, saying how
+   *  many: confirm by that evidence first. An id not in the box is an error. */
   deleteTagGroup(boxId: string, groupId: string): Promise<OpenResult | { error: string }>;
 
   // --- editing (M1) ----------------------------------------------------------
   /** Apply a card edit, write canonically, re-validate. */
   saveCard(deckId: string, cardId: string, edit: CardEdit): Promise<OpenResult | { error: string }>;
-  /** Add a new card to a deck; the result carries the new card's id. */
-  /** A new card in a deck. `place` is a hand id the card is made AT (the hand
-   *  page's "+ New card here"), written as its place tag. */
-  /** A new card in `deckId`: made at a hand (`place`, a hand id) or filed to a
+  /** A new card in `deckId`; the result carries its id. Made AT a hand
+   *  (`place`, a hand id: the hand page's "+ New card here"), or filed to a
    *  project map zone (`zone`, its tag id), or neither. */
   createCard(deckId: string, place?: string, zone?: string): Promise<{ result: OpenResult; cardId: string } | { error: string }>;
   /** Clone a card (fresh id, deduped gameId), inserted after the original. */
   duplicateCard(deckId: string, cardId: string): Promise<{ result: OpenResult; cardId: string } | { error: string }>;
   deleteCard(deckId: string, cardId: string): Promise<OpenResult | { error: string }>;
+  /** Delete several cards of one deck as ONE commit and one undo step. A card
+   *  not in the deck refuses the whole delete. */
+  deleteCards(deckId: string, cardIds: string[]): Promise<OpenResult | { error: string }>;
+  /** Cards from several decks (a box's Contents selection), as one undo step. */
+  deleteCardsAcross(groups: { deckId: string; cardIds: string[] }[]): Promise<OpenResult | { error: string }>;
   /** Reorder: move a card before/after a target card in its deck. */
   moveCard(deckId: string, cardId: string, targetId: string, before: boolean): Promise<OpenResult | { error: string }>;
   /** The expr-editor property catalogue reachable from a card in this deck. */
@@ -1731,9 +1757,14 @@ export interface StudioApi {
   /** Rename a deck (title and/or gameId; the file moves with the gameId). */
   renameDeck(deckId: string, edit: DeckEdit): Promise<OpenResult | { error: string }>;
 
-  /** Undo / redo the last committed change (file-state based). Null = nothing to do. */
-  undo(): Promise<OpenResult | null>;
-  redo(): Promise<OpenResult | null>;
+  /** Undo / redo the last committed change (file-state based). Null = nothing
+   *  to do. An error when the files could not be written (a lock, say): the
+   *  step stays where it was, to try again. */
+  undo(): Promise<OpenResult | { error: string } | null>;
+  redo(): Promise<OpenResult | { error: string } | null>;
+  /** Editor only: whether its page has a deck in focus, so the menu's New Card
+   *  is live only when it has somewhere to put a card. Send on a change. */
+  setDeckFocused(on: boolean): Promise<void>;
 
   // --- the Board (M2) --------------------------------------------------------
   /** Open the live-session window. */
@@ -1780,9 +1811,10 @@ export interface StudioApi {
   /** Reset View's window half: Board + Find back to default size, centred,
    *  re-pinned; remembered bounds cleared (Patterpad's rescue). */
   resetWindows(): Promise<void>;
-  /** Compile the (freshly re-read) project to a bundle for the Board. */
-  /** `stamp` is what `projectHash()` returns while this bundle is current: the content hash, and
-   *  the Patter bundle's modification time when the Board plays Patter scenes. */
+  /** Compile the (freshly re-read) project to a bundle for the Board. `stamp`
+   *  is what `projectHash()` returns while this bundle is current: the content
+   *  hash, and the Patter bundle's modification time when the Board plays
+   *  Patter scenes. */
   tableBundle(): Promise<{ bundle: Bundle; name: string; play: PlayRung; stamp: string; scopes?: BoardScopesDto; patter?: BoardPatterDto } | { error: string }>;
   /** The current source content hash (compare to a running bundle's
    *  content.hash to tell if the Board is out of date). Null if it won't load. */
@@ -1791,16 +1823,20 @@ export interface StudioApi {
    *  pickers are the one legitimately native seam). Null = cancelled. */
   exportSave(file: SaveFile, suggestedName: string): Promise<{ path: string } | { error: string } | null>;
   /** Read a session save from a .storyletsave file (native open dialog);
-   *  the name is the file's basename, ready to label a snapshot. Null = cancelled. */
-  importSave(): Promise<{ file: SaveFile; name: string } | { error: string } | null>;
+   *  the name is the file's basename, ready to label a snapshot. Null = cancelled.
+   *  Takes what play-helpers' `loadState` takes (a version 1 engine envelope
+   *  too). `report` is what the load would cost against the project as it
+   *  compiles now (the engine's LoadReport), when main could work it out; the
+   *  Board's own `loadGame` returns the same for the build it is running. */
+  importSave(): Promise<{ file: SaveFile; name: string; report?: LoadReport } | { error: string } | null>;
 
   // --- coverage + export (M2b) ----------------------------------------------
   /** The last run, projected for the canvas overlays. Undefined when no run has
    *  happened this session: the overlay then says so rather than drawing a map
    *  of zeroes, which would read as "nothing is covered". */
   coverageOverlay(): Promise<CoverageOverlayDto | undefined>;
-  /** The problems bar's quick-fixes. Ordinary undoable mutations that return the
-   *  fresh project, so the bar re-validates like any other edit. */
+  // The problems bar's quick-fixes. Ordinary undoable mutations that return the
+  // fresh project, so the bar re-validates like any other edit.
   /** `guess` is the type read off the value being written, where the compiler
    *  could read it; without it the declaration falls back to a number. */
   declareProperty(scope: string, name: string, owner: string, guess?: { type: PropertyType; default: ScalarValue }): Promise<OpenResult | { error: string }>;
@@ -1831,19 +1867,18 @@ export interface StudioApi {
    *  job: progress arrives on onJobProgress. The result is cached in main, so
    *  reopening the window shows it again. `cancelled` marks a partial report -
    *  its `runs` is what it actually managed. */
-  coverageRun(opts: { runs?: number; maxTurns?: number; seed?: number }): Promise<{ report: CoverageReport; name: string; cancelled?: boolean } | { error: string }>;
+  coverageRun(opts: { runs?: number; maxTurns?: number; seed?: number }): Promise<{ report: CoverageReport; name: string; ran: CoverageRan; cancelled?: boolean } | { error: string }>;
   /** Stop the running sweep. It stops between runs and keeps what it has. */
   coverageCancel(): Promise<void>;
   /** Propose coverage drivers from the conditions and add them to the project
    *  shard (undoable); returns the fresh project + a re-run report. */
-  coverageAddDrivers(opts: { runs?: number; maxTurns?: number; seed?: number }): Promise<{ report: CoverageReport; added: string[]; cancelled?: boolean } | { error: string }>;
+  coverageAddDrivers(opts: { runs?: number; maxTurns?: number; seed?: number }): Promise<{ report: CoverageReport; added: string[]; ran: CoverageRan; cancelled?: boolean } | { error: string }>;
   /** Progress from a long job in main (the shared shell's kit). */
   onJobProgress(handler: (progress: JobProgress) => void): void;
   /** Propose drivers from the conditions WITHOUT writing: the settings
    *  dialog's "Propose from story", which saves with the rest of the dialog. */
   proposeDrivers(): Promise<CoverageDriverDto[]>;
   // --- the Links lens (#57) --------------------------------------------------
-  /** Open the Links window. */
   /** Open the Links lens, or bring it forward if it is already open. With a card,
    *  point it at that card: the card context menus do this, so the lens can be
    *  asked about a card without first making it the editor's selection. */
@@ -1880,7 +1915,6 @@ export interface StudioApi {
   createZone(
     boxId: string, groupId: string, polygon: { x: number; y: number }[], name?: string,
   ): Promise<{ result: OpenResult; tagId: string } | { error: string }>;
-  /** Set or clear a zone's outline: one undo step per shape. */
   /** Import a picture behind a map: opens a picker, copies the file into the
    *  project's assets folder, and places it by the drop rule. Null when the author
    *  cancelled. `place` is the CAMERA at the moment of the ask, so the picture
@@ -1908,13 +1942,12 @@ export interface StudioApi {
   restackZone(
     boxId: string, groupId: string, tagId: string, move: "front" | "forward" | "backward" | "back",
   ): Promise<{ result: OpenResult } | { error: string }>;
+  /** Set or clear a zone's outline: one undo step per shape. */
   setZonePolygon(
     boxId: string, groupId: string, tagId: string, polygon: { x: number; y: number }[] | undefined,
   ): Promise<{ result: OpenResult } | { error: string }>;
   /** Take hands off the map: the sites go, the hands stay. */
   removeSitesFromMap(boxId: string, handIds: string[]): Promise<OpenResult | { error: string }>;
-  /** Record where hand sites now sit. `zone: null` says "in no zone", which is
-   *  different from leaving the binding alone. */
   /** Sites moved: where each one now is. Which zone that is, and so which hands
    *  are rebound, is decided in main from the position over the geometry; the
    *  position and the binding are one commit, so they undo together. */
@@ -1937,10 +1970,11 @@ export interface StudioApi {
   ): Promise<OpenResult | { error: string }>;
   /** Mark a thread complete, or reopen it. */
   setCommentResolved(threadId: string, resolved: boolean): Promise<OpenResult | { error: string }>;
-  /** The markers drawn on one canvas: a deck id, or `map:<boxId>`. */
   /** Withdraw one message from a thread, by its index in that thread. The whole
    *  thread goes when nothing readable would be left. */
   deleteComment(threadId: string, index: number): Promise<OpenResult | { error: string }>;
+  /** The markers drawn on one canvas: a deck id, `map:<boxId>`, or the project
+   *  map's `map`. */
   commentMarkers(canvas: string): Promise<CommentMarkerDto[]>;
   /**
    * Every comment thread in the project, in reading order, for the Review
@@ -2006,14 +2040,23 @@ export interface StudioApi {
   /** Editor only: tell main which card is selected, so an open Links window
    *  follows along. Fire and forget. */
   setLinkFocus(cardId: string | undefined): Promise<void>;
-  /** Links window: the focus changed under it. */
+  /** Links window: the editor's selection moved, or the author asked for
+   *  Links... on a card. Only those: a project change is `onLinkReset`. */
   onLinkFocus(handler: (cardId: string | undefined) => void): void;
+  /** Links window: the project changed or closed underneath it. Whatever it
+   *  shows, walked or not, describes a project that is no longer open. */
+  onLinkReset(handler: () => void): void;
   /** Links window: float over the editor. */
   setLinksPinned(on: boolean): Promise<void>;
   /** Links window: close itself (Esc), as Find does. */
   closeLinks(): Promise<void>;
-  /** Close the Board from its own chrome (Esc, or the close button). */
+  /** Close the Board from its own chrome (Esc, or the close button), once the
+   *  Board has asked whatever it needed to: main lets this close through. */
   closeBoard(): Promise<void>;
+  /** Main stopped a close the Board did not ask for (Ctrl+W, Alt+F4, the window
+   *  menu): run the Board's own close, which asks when the session is at stake
+   *  (ruling Q, review 2026-10). */
+  onBoardAskClose(handler: () => void): void;
   /** Close the Coverage window from its own chrome (Esc, or the close button). */
   closeCoverage(): Promise<void>;
 
@@ -2024,11 +2067,10 @@ export interface StudioApi {
   /** Coverage window: bring the editor forward with Project Settings open at
    *  a section ("world" for the drivers). */
   openProjectSettings(section: string): Promise<void>;
-  /** Coverage window only: a different project was opened underneath it. */
   /** A DIFFERENT project was opened underneath this window: whatever it is
    *  showing describes a project that is no longer open. Every tool window
    *  that reads the project should listen (see the satellite registry in
-   *  main/index.ts). */
+   *  main/windows.ts). */
   onProjectChanged(handler: () => void): void;
   /** Compile and write the .storyletsc bundle to its declared path. `pin` is
    *  the manual Publish's: first write down every address still following its
@@ -2061,10 +2103,10 @@ export interface StudioApi {
    *  Null = cancelled. */
   exportPack(): Promise<{ path: string } | { error: string } | null>;
 
-  /** Fold a RETURNED pack into the open project, merging by id against the
-   *  pack that was sent. Null = cancelled. */
-  /** Pick the two packs and RUN the merge, without writing: the summary is what
-   *  the confirmation is built from. Null when a picker was cancelled. */
+  /** Folding a RETURNED pack into the open project, merging by id against the
+   *  pack that was sent, first half: pick the two packs and RUN the merge,
+   *  without writing. The summary is what the confirmation is built from. Null
+   *  when a picker was cancelled. */
   mergePackPlan(): Promise<{ summary: PackMergeSummary } | { error: string } | null>;
   /** Write the planned merge. Null when there is nothing planned (the author said
    *  no, or the plan was already committed). */
@@ -2144,3 +2186,240 @@ export interface StudioApi {
   /** Live download progress, for a dialog opened with `progress: true`. */
   onUpdaterDownloadProgress(handler: (p: UpdaterDownloadProgress) => void): void;
 }
+
+// --- the channels -------------------------------------------------------------
+//
+// Every name that crosses the bridge, in one place both ends are written
+// against. The preload invokes through `INVOKE_CHANNELS` and main registers its
+// handlers through it (main ipc/registrar.ts), so a channel spelt two ways is a
+// type error, and an argument list that drifts from the method it serves is one
+// too. A contract test (preload/channels.test.ts) holds what the types cannot:
+// every channel here has exactly one handler in main, and the preload calls
+// every one.
+//
+// The updater's seven channels are the shell's and stay out of this list: the
+// preload writes them out literally, and updater-channels.test.ts holds them.
+
+/**
+ * Every channel the renderer INVOKES, and the `StudioApi` method that invokes
+ * it. One channel per method, so a method's signature IS its channel's: the
+ * arguments main's handler receives and the answer it gives.
+ */
+export const INVOKE_CHANNELS = {
+  "state:get": "getState",
+  "project:openDialog": "openProjectDialog",
+  "project:openPath": "openProjectPath",
+  "project:reveal": "revealProject",
+  "project:create": "createProject",
+  "example:open": "openExample",
+  "project:close": "closeProject",
+  "state:clearRecents": "clearRecents",
+  "project:revalidate": "revalidate",
+  "project:current": "project",
+  "project:vcStatus": "vcStatus",
+  "state:setTheme": "setTheme",
+  "state:setLastPlace": "setLastPlace",
+  "state:setPanes": "setPanes",
+  "state:setAutoRebuild": "setAutoRebuild",
+  "state:setViewMode": "setViewMode",
+  "state:setNavExpanded": "setNavExpanded",
+  "state:setMapLayers": "setMapLayers",
+  "state:setCardGroup": "setCardGroup",
+  "state:setCanvasCameras": "setCanvasCameras",
+  "project:settings": "projectSettings",
+  "project:saveSettings": "saveProjectSettings",
+  "box:create": "createBox",
+  "box:duplicate": "duplicateBox",
+  "box:delete": "deleteBox",
+  "box:move": "moveBox",
+  "deck:move": "moveDeck",
+  "hand:move": "moveHand",
+  "box:save": "saveBox",
+  "box:catalogue": "boxCatalogue",
+  "deck:duplicate": "duplicateDeck",
+  "template:duplicate": "duplicateTemplate",
+  "hand:duplicate": "duplicateHand",
+  "tag-group:duplicate": "duplicateTagGroup",
+  "hand:detail": "handDetail",
+  "hand:cards": "handCards",
+  "hand:save": "saveHand",
+  "hand:create": "createHand",
+  "hand:delete": "deleteHand",
+  "template:detail": "templateDetail",
+  "template:save": "saveTemplate",
+  "template:create": "createTemplate",
+  "template:delete": "deleteTemplate",
+  "tag-group:detail": "tagGroupDetail",
+  "tag-group:save": "saveTagGroup",
+  "tag-group:create": "createTagGroup",
+  "tag-group:createMap": "createGroupAsMap",
+  "tag-group:delete": "deleteTagGroup",
+  "card:save": "saveCard",
+  "card:create": "createCard",
+  "card:duplicate": "duplicateCard",
+  "card:move": "moveCard",
+  "card:delete": "deleteCard",
+  "card:deleteMany": "deleteCards",
+  "card:deleteAcross": "deleteCardsAcross",
+  "card:catalogue": "cardCatalogue",
+  "deck:create": "createDeck",
+  "deck:delete": "deleteDeck",
+  "deck:rename": "renameDeck",
+  "menu:setDeckFocused": "setDeckFocused",
+  "edit:undo": "undo",
+  "edit:redo": "redo",
+  "table:open": "openTable",
+  "board:setPin": "setBoardPinned",
+  "state:setBoardFollow": "setBoardFollow",
+  "state:setBoardView": "setBoardView",
+  "state:setBoardBox": "setBoardBox",
+  "search:open": "openSearch",
+  "search:pendingQuery": "pendingSearchQuery",
+  "search:setPin": "setSearchPinned",
+  "search:reveal": "searchReveal",
+  "search:close": "closeSearch",
+  "search:propertyUsage": "propertyUsage",
+  "search:propertyUsageMany": "propertyUsageMany",
+  "search:replacePreview": "replacePreview",
+  "search:replaceApply": "replaceApply",
+  "editor:flushed": "editorFlushed",
+  "view:resetWindows": "resetWindows",
+  "table:bundle": "tableBundle",
+  "project:hash": "projectHash",
+  "table:exportSave": "exportSave",
+  "table:importSave": "importSave",
+  "coverage:open": "openCoverage",
+  "coverage:info": "coverageInfo",
+  "problem:declareProperty": "declareProperty",
+  "problem:repointTag": "repointTag",
+  "problem:addOutcome": "addOutcome",
+  "problem:createScene": "createPatterScene",
+  "project:planMapUpgrade": "planMapUpgrade",
+  "project:upgradeProjectMap": "upgradeProjectMap",
+  "coverage:overlay": "coverageOverlay",
+  "coverage:setOverlay": "setCoverageOverlay",
+  "coverage:run": "coverageRun",
+  "coverage:addDrivers": "coverageAddDrivers",
+  "coverage:cancel": "coverageCancel",
+  "coverage:propose": "proposeDrivers",
+  "coverage:setPin": "setCoveragePinned",
+  "coverage:setOrder": "setCoverageOrder",
+  "settings:open": "openProjectSettings",
+  "links:open": "openLinks",
+  "links:for": "linksFor",
+  "graph:deck": "deckGraph",
+  "map:box": "boxMap",
+  "map:project": "projectMaps",
+  "map:view": "projectMapView",
+  "map:zone": "mapZone",
+  "map:use": "useProjectMap",
+  "map:colour": "setBoxColour",
+  "map:setSpatial": "setGroupSpatial",
+  "map:createZone": "createZone",
+  "map:addBackground": "addBackground",
+  "map:editBackground": "editBackground",
+  "map:restackBackground": "restackBackground",
+  "map:removeBackground": "removeBackground",
+  "map:restack": "restackZone",
+  "map:setPolygon": "setZonePolygon",
+  "map:removeSites": "removeSitesFromMap",
+  "map:moveSites": "moveSitesOnMap",
+  "comments:for": "commentsFor",
+  "comments:post": "postComment",
+  "comments:resolve": "setCommentResolved",
+  "comments:delete": "deleteComment",
+  "comments:markers": "commentMarkers",
+  "review:feedback": "reviewFeedback",
+  "review:setWalk": "setReviewWalk",
+  "comments:move": "moveComment",
+  "identity:get": "identity",
+  "identity:offer": "offeredIdentity",
+  "identity:set": "setIdentity",
+  "comments:showResolved": "setShowResolved",
+  "shell:openExternal": "openExternal",
+  "canvas:setFurniture": "setCanvasFurniture",
+  "view:moveCards": "moveCardsOnCanvas",
+  "view:newCard": "createCardOnCanvas",
+  "view:layout": "layoutDeck",
+  "links:setFocus": "setLinkFocus",
+  "links:setPin": "setLinksPinned",
+  "links:close": "closeLinks",
+  "board:close": "closeBoard",
+  "coverage:close": "closeCoverage",
+  "bundle:export": "exportBundle",
+  "xlsx:export": "exportXlsx",
+  "html:export": "exportHtml",
+  "pack:export": "exportPack",
+  "project:shareScopes": "shareScopes",
+  "patter:choose": "choosePatterProject",
+  "patter:edit": "editInPatterpad",
+  "pack:choose": "choosePack",
+  "pack:openAt": "openPackAt",
+  "server:connect": "connectServer",
+  "server:forget": "forgetServer",
+  "server:pull": "serverPull",
+  "server:push": "serverPush",
+  "pack:mergePlan": "mergePackPlan",
+  "pack:mergeCommit": "mergePackCommit",
+  "pack:mergeDrop": "mergePackDrop",
+  "project:launchTarget": "launchTarget",
+  "liveLink:start": "liveLinkStart",
+  "liveLink:stop": "liveLinkStop",
+  "liveLink:status": "liveLinkStatus",
+  "liveLink:snapshot": "liveLinkSnapshot",
+  "liveLink:follow": "liveLinkFollow",
+} as const satisfies Record<string, keyof StudioApi>;
+
+export type InvokeChannel = keyof typeof INVOKE_CHANNELS;
+type Serves<C extends InvokeChannel> = StudioApi[(typeof INVOKE_CHANNELS)[C]];
+/** What the renderer passes on `C`, as the method that invokes it takes them. */
+export type InvokeArgs<C extends InvokeChannel> = Parameters<Serves<C>>;
+/** What main answers on `C`, as the method that invokes it promises it. */
+export type InvokeResult<C extends InvokeChannel> = Awaited<ReturnType<Serves<C>>>;
+
+/** A channel's payload, declared for the type and nothing else: the value is
+ *  never read, only the list of names is. */
+const carries = <T>(): T => undefined as T;
+
+/**
+ * Everything main SENDS a window unasked, and what each carries. `void` is a
+ * nudge with nothing in it. Three of these are sent by the shell rather than by
+ * us (`state:pinned` by the tool-window kit, `links:reset` and PROJECT_CHANGED
+ * by the session's satellites, both on names main hands it), and are here
+ * because the preload listens on them all the same.
+ */
+export const PUSH_CHANNELS = {
+  "state:theme": carries<ThemeChoice>(),
+  "state:pinned": carries<boolean>(),
+  "search:seed": carries<SearchOpen>(),
+  "search:navigate": carries<ReviewAt>(),
+  "editor:flush": carries<void>(),
+  "replace:applied": carries<number>(),
+  "coverage:done": carries<void>(),
+  [JOB_PROGRESS_CHANNEL]: carries<JobProgress>(),
+  [PROJECT_CHANGED]: carries<void>(),
+  "links:focus": carries<string | undefined>(),
+  "links:reset": carries<void>(),
+  "board:askClose": carries<void>(),
+  "project:opened": carries<OpenResult | { error: string } | PackOffer>(),
+  "liveLink:status": carries<LiveLinkStatus>(),
+  "liveLink:frame": carries<LiveLinkFrame>(),
+  "menu": carries<MenuCommand>(),
+  "server:leave-prompt": carries<LeavePromptDto>(),
+  "server:leave-settled": carries<LeaveSettledDto>(),
+};
+
+export type PushChannel = keyof typeof PUSH_CHANNELS;
+export type PushPayload<C extends PushChannel> = (typeof PUSH_CHANNELS)[C];
+/** The arguments after the channel name: none for a nudge, else the payload. */
+export type PushArgs<C extends PushChannel> = [PushPayload<C>] extends [void] ? [] : [PushPayload<C>];
+
+/** What the renderer SENDS main without waiting for an answer. */
+export const SEND_CHANNELS = {
+  "app:ready": carries<void>(),
+  "server:leave-shown": carries<void>(),
+  "server:leave-reply": carries<number>(),
+};
+
+export type SendChannel = keyof typeof SEND_CHANNELS;
+export type SendArgs<C extends SendChannel> = [(typeof SEND_CHANNELS)[C]] extends [void] ? [] : [(typeof SEND_CHANNELS)[C]];

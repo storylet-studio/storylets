@@ -79,7 +79,7 @@ describe("a venue's claim on a hand's name", () => {
     const centre = draw(bound());
     expect(claim(centre)).toEqual(["Dealt at the-park"]);
     expect(chip(centre).classList.contains("gid-bound")).toBe(true);
-    expect(chip(centre).title).toContain("Dealt at the-park");
+    expect(chip(centre).dataset["tip"]).toContain("Dealt at the-park");
     // Marked, never disabled: the refusal is the server's, on push.
     expect(chip(centre).disabled).toBe(false);
   });
@@ -95,7 +95,7 @@ describe("a venue's claim on a hand's name", () => {
     expect(chip(centre).textContent).toContain("the-long-wall");
     expect(claim(centre)).toEqual([]);
     expect(chip(centre).classList.contains("gid-bound")).toBe(false);
-    expect(chip(centre).title).not.toContain("Dealt at the-park");
+    expect(chip(centre).dataset["tip"]).not.toContain("Dealt at the-park");
   });
 
   it("takes the claim back when the bound name is typed back", () => {
@@ -117,7 +117,7 @@ describe("a venue's claim on a hand's name", () => {
 describe("the address chip when the page cannot be typed in", () => {
   it("offers the click while the page is the author's to change", () => {
     const centre = draw(bound({ gameId: "the-wall", contract: undefined }));
-    expect(chip(centre).title).toContain("click to override");
+    expect(chip(centre).dataset["tip"]).toContain("click to override");
   });
 
   it("drops the click hint once the page is shut", () => {
@@ -127,8 +127,8 @@ describe("the address chip when the page cannot be typed in", () => {
     lockControls(centre, true);
     refreshGameIds(centre);
     expect(chip(centre).disabled).toBe(true);
-    expect(chip(centre).title).toContain("Game id");
-    expect(chip(centre).title).not.toContain("click");
+    expect(chip(centre).dataset["tip"]).toContain("Game id");
+    expect(chip(centre).dataset["tip"]).not.toContain("click");
   });
 
   it("offers it again when the page is opened up", () => {
@@ -138,6 +138,6 @@ describe("the address chip when the page cannot be typed in", () => {
     lockControls(centre, false);
     refreshGameIds(centre);
     expect(chip(centre).disabled).toBe(false);
-    expect(chip(centre).title).toContain("click to override");
+    expect(chip(centre).dataset["tip"]).toContain("click to override");
   });
 });

@@ -1,0 +1,41 @@
+/* The base every tool window shares: the Board, Coverage, Links and Find.
+   Tokens from theme.css only; the drag bar, pin and close are the shell's
+   .swin-* chrome (app-shell tool-window.css, arriving via theme.css).
+
+   One copy, after four that had drifted apart on the window's ground, its
+   type size, its frame and its fields' padding. The values are Find's and
+   Links': a frameless window draws its own hairline edge, on the surface
+   tier, at the chrome's 13px. The Board keeps the ground and the reading size
+   of a workspace, argued in table.css. */
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  -webkit-user-select: none;
+  user-select: none;
+  border: 1px solid var(--line-soft);
+}
+
+/* A window's own fields (Coverage's and the Board's run settings, the Board's
+   selects). Compact, since they sit in bars beside buttons. A window with a
+   field of another kind (Find's query box) styles it by class. */
+input, select {
+  font: inherit;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+
+/* A window with nothing to show yet (no project, no card, no run): the
+   shell's .empty sentence, given room to breathe. */
+.tw-empty { padding: 16px 18px; }

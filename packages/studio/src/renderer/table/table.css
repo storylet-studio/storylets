@@ -1,17 +1,15 @@
 /* The Board window - consumes theme.css tokens only. */
 
-* { box-sizing: border-box; }
-html, body { height: 100%; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-ui);
-  font-size: 14px;
-  -webkit-user-select: none;
-  user-select: none;
-}
+/* The base (frame, fields) is the shared tool-window/base.css. The Board
+   keeps two of its own values there, argued: it is a workspace the size of
+   the editor rather than a helper floating over it, laid out as panels (the
+   navigator, the hands, the rail) on a ground, so its body is the --bg tier
+   the panels stand out from, and it reads at the editor's 14px. */
+body { background: var(--bg); font-size: 14px; }
 #table { height: 100%; display: flex; flex-direction: column; }
+/* Everything under the head, which render() rebuilds; the head stays mounted.
+   No box of its own, so the strip and the body sit in #table's column. */
+.tcontent { display: contents; }
 
 /* Section captions are `.caption` (theme.css): words, not an overline. */
 /* No element `button` rule: actions wear the shell's `.btn`, the switches its
@@ -19,17 +17,6 @@ body {
    than the disabled attribute, so its rollover can still say why. */
 .btn.disabled { opacity: 0.45; cursor: default; }
 .btn.disabled:hover { border-color: var(--line); background: var(--surface); }
-input, select {
-  font: inherit;
-  background: var(--card);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 5px 9px;
-  -webkit-user-select: text;
-  user-select: text;
-}
-input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
 
 /* The SESSION strip: seed, snapshots, restart. The window's own chrome is the
    shell's .swin-head above it, so this no longer restates a drag region or
@@ -158,6 +145,8 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
   display: flex; flex-direction: column; gap: 8px;
 }
 .hhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; cursor: pointer; }
+/* The header is a button to the keyboard (Enter or Space selects the hand). */
+.hhead:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
 .hname { font-family: var(--font-read); font-weight: 600; font-size: 15px; }
 .htags { display: inline-flex; gap: 6px; }
 .hcards { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }

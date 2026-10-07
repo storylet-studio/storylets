@@ -24,7 +24,7 @@ import "../src/renderer/src/card-open.css";
 import { mountOpenChip } from "../src/renderer/src/card-open.js";
 import { mountCanvasSurface, type BackdropPainter } from "../src/renderer/src/canvas-surface.js";
 import { readCanvasTokens, watchCanvasTokens } from "../src/renderer/src/canvas-tokens.js";
-import { drawCardNode, gridLayout, paintEdges, NODE_H, NODE_W, type CardNode, TITLE_FLOOR } from "../src/renderer/src/node-art.js";
+import { drawCardNode, gridLayout, paintEdges, ARRANGE_GAP, NODE_H, NODE_W, type CardNode, TITLE_FLOOR } from "../src/renderer/src/node-art.js";
 import { layoutByDependency } from "../../ops/src/layout.js";
 import type { GraphEdge } from "../src/shared/api.js";
 
@@ -136,7 +136,7 @@ document.getElementById("layout")!.addEventListener("click", () => {
   const anchor = nodes.filter((n) => scope.includes(n.id))
     .reduce((best, n) => (n.x < best.x || (n.x === best.x && n.y < best.y) ? n : best));
   const result = layoutByDependency(scope, edges, {
-    width: NODE_W, height: NODE_H, gapX: 50, gapY: 40, origin: { x: anchor.x, y: anchor.y },
+    width: NODE_W, height: NODE_H, gapX: ARRANGE_GAP.x, gapY: ARRANGE_GAP.y, origin: { x: anchor.x, y: anchor.y },
   });
   for (const p of result.positions) {
     const node = nodes.find((n) => n.id === p.id);

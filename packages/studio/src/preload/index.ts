@@ -5,246 +5,241 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import { JOB_PROGRESS_CHANNEL, PROJECT_CHANGED } from "../shared/api.js";
-import type { JobProgress } from "../shared/api.js";
 import type {
-  BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, LeavePromptDto, MapLayerPrefs, LeaveSettledDto, LiveLinkFrame, LiveLinkStatus, MenuCommand, OpenResult, PackOffer, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
+  BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, MapLayerPrefs, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
   ProjectKit, UpdaterPromptOptions,
   UpdaterDownloadProgress,
+  InvokeArgs, InvokeChannel, InvokeResult, PushArgs, PushChannel, SendArgs, SendChannel,
 } from "../shared/api.js";
 import type { SaveFile } from "@storylet-studio/model";
 
+/** Ask main, on a channel of the contract's (`INVOKE_CHANNELS`): the name, the
+ *  arguments and the answer are all checked against the method it serves. */
+const invoke = <C extends InvokeChannel>(channel: C, ...args: InvokeArgs<C>): Promise<InvokeResult<C>> =>
+  ipcRenderer.invoke(channel, ...args) as Promise<InvokeResult<C>>;
+
+/** Hear main on a channel of the contract's (`PUSH_CHANNELS`), with its payload
+ *  and not the event. Returns the way to stop listening. */
+const listen = <C extends PushChannel>(channel: C, handler: (...payload: PushArgs<C>) => void): (() => void) => {
+  const listener = (_event: unknown, ...payload: unknown[]): void => handler(...(payload as PushArgs<C>));
+  ipcRenderer.on(channel, listener);
+  return () => { ipcRenderer.removeListener(channel, listener); };
+};
+
+/** Tell main something without waiting (`SEND_CHANNELS`). */
+const tell = <C extends SendChannel>(channel: C, ...args: SendArgs<C>): void => ipcRenderer.send(channel, ...args);
+
 const api: StudioApi = {
-  getState: () => ipcRenderer.invoke("state:get"),
-  openProjectDialog: () => ipcRenderer.invoke("project:openDialog"),
-  openProjectPath: (path: string) => ipcRenderer.invoke("project:openPath", path),
-  revealProject: () => { void ipcRenderer.invoke("project:reveal"); },
-  createProject: (name: string, kit?: ProjectKit) => ipcRenderer.invoke("project:create", name, kit),
-  openExample: (name: string) => ipcRenderer.invoke("example:open", name),
-  closeProject: () => ipcRenderer.invoke("project:close"),
-  clearRecents: () => ipcRenderer.invoke("state:clearRecents"),
-  revalidate: () => ipcRenderer.invoke("project:revalidate"),
-  vcStatus: () => ipcRenderer.invoke("project:vcStatus"),
-  setTheme: (theme: ThemeChoice) => ipcRenderer.invoke("state:setTheme", theme),
-  onTheme: (handler: (theme: ThemeChoice) => void) => {
-    ipcRenderer.on("state:theme", (_event, theme: ThemeChoice) => handler(theme));
-  },
-  onWindowPinned: (handler: (pinned: boolean) => void) => {
-    ipcRenderer.on("state:pinned", (_event, pinned: boolean) => handler(pinned));
-  },
-  setLastPlace: (place: LastPlace) => ipcRenderer.invoke("state:setLastPlace", place),
-  setPanes: (panes: PaneState) => ipcRenderer.invoke("state:setPanes", panes),
-  setAutoRebuild: (on: boolean) => ipcRenderer.invoke("state:setAutoRebuild", on),
-  setViewMode: (mode: ViewMode) => ipcRenderer.invoke("state:setViewMode", mode),
-  setNavExpanded: (ids: string[]) => ipcRenderer.invoke("state:setNavExpanded", ids),
-  setMapLayers: (groupId: string, prefs: MapLayerPrefs) => ipcRenderer.invoke("state:setMapLayers", groupId, prefs),
-  setCardGroup: (boxId: string, page: "contents" | "deck", key: string) => ipcRenderer.invoke("state:setCardGroup", boxId, page, key),
+  getState: () => invoke("state:get"),
+  openProjectDialog: () => invoke("project:openDialog"),
+  openProjectPath: (path: string) => invoke("project:openPath", path),
+  revealProject: () => { void invoke("project:reveal"); },
+  createProject: (name: string, kit?: ProjectKit) => invoke("project:create", name, kit),
+  openExample: (name: string) => invoke("example:open", name),
+  closeProject: () => invoke("project:close"),
+  clearRecents: () => invoke("state:clearRecents"),
+  revalidate: () => invoke("project:revalidate"),
+  project: () => invoke("project:current"),
+  vcStatus: () => invoke("project:vcStatus"),
+  setTheme: (theme: ThemeChoice) => invoke("state:setTheme", theme),
+  onTheme: (handler) => { listen("state:theme", handler); },
+  onWindowPinned: (handler) => { listen("state:pinned", handler); },
+  setLastPlace: (place: LastPlace) => invoke("state:setLastPlace", place),
+  setPanes: (panes: PaneState) => invoke("state:setPanes", panes),
+  setAutoRebuild: (on: boolean) => invoke("state:setAutoRebuild", on),
+  setViewMode: (mode: ViewMode) => invoke("state:setViewMode", mode),
+  setNavExpanded: (ids: string[]) => invoke("state:setNavExpanded", ids),
+  setMapLayers: (groupId: string, prefs: MapLayerPrefs) => invoke("state:setMapLayers", groupId, prefs),
+  setCardGroup: (boxId: string, page: "contents" | "deck", key: string) => invoke("state:setCardGroup", boxId, page, key),
   setCanvasCameras: (cameras: Record<string, { x: number; y: number; scale: number }>) =>
-    ipcRenderer.invoke("state:setCanvasCameras", cameras),
-  projectSettings: () => ipcRenderer.invoke("project:settings"),
-  saveProjectSettings: (dto: ProjectSettingsDto) => ipcRenderer.invoke("project:saveSettings", dto),
-  createBox: (kit) => ipcRenderer.invoke("box:create", kit),
-  duplicateBox: (boxId: string) => ipcRenderer.invoke("box:duplicate", boxId),
-  deleteBox: (boxId: string) => ipcRenderer.invoke("box:delete", boxId),
-  moveBox: (boxId: string, targetId: string, before: boolean) => ipcRenderer.invoke("box:move", boxId, targetId, before),
-  moveDeck: (deckId: string, targetId: string, before: boolean) => ipcRenderer.invoke("deck:move", deckId, targetId, before),
-  moveHand: (boxId: string, handId: string, before_target: string, before: boolean) => ipcRenderer.invoke("hand:move", boxId, handId, before_target, before),
-  saveBox: (boxId: string, edit: BoxEdit) => ipcRenderer.invoke("box:save", boxId, edit),
-  boxCatalogue: (boxId: string) => ipcRenderer.invoke("box:catalogue", boxId),
-  duplicateDeck: (deckId: string) => ipcRenderer.invoke("deck:duplicate", deckId),
-  duplicateTemplate: (boxId: string, templateId: string) => ipcRenderer.invoke("template:duplicate", boxId, templateId),
-  duplicateHand: (boxId: string, handId: string) => ipcRenderer.invoke("hand:duplicate", boxId, handId),
-  duplicateTagGroup: (boxId: string, groupId: string) => ipcRenderer.invoke("tag-group:duplicate", boxId, groupId),
-  handDetail: (boxId: string, handId: string) => ipcRenderer.invoke("hand:detail", boxId, handId),
-  handCards: (boxId: string, handId: string) => ipcRenderer.invoke("hand:cards", boxId, handId),
-  saveHand: (boxId: string, handId: string, edit: HandEdit) => ipcRenderer.invoke("hand:save", boxId, handId, edit),
-  createHand: (boxId: string, site?: { x: number; y: number }, templateId?: string) => ipcRenderer.invoke("hand:create", boxId, site, templateId),
-  deleteHand: (boxId: string, handId: string) => ipcRenderer.invoke("hand:delete", boxId, handId),
-  templateDetail: (boxId: string, templateId: string) => ipcRenderer.invoke("template:detail", boxId, templateId),
-  saveTemplate: (boxId: string, templateId: string, edit: TemplateEdit) => ipcRenderer.invoke("template:save", boxId, templateId, edit),
-  createTemplate: (boxId: string) => ipcRenderer.invoke("template:create", boxId),
-  deleteTemplate: (boxId: string, templateId: string) => ipcRenderer.invoke("template:delete", boxId, templateId),
-  tagGroupDetail: (boxId: string, groupId: string) => ipcRenderer.invoke("tag-group:detail", boxId, groupId),
-  saveTagGroup: (boxId: string, groupId: string, edit: TagGroupEdit) => ipcRenderer.invoke("tag-group:save", boxId, groupId, edit),
-  createTagGroup: (boxId: string) => ipcRenderer.invoke("tag-group:create", boxId),
-  deleteTagGroup: (boxId: string, groupId: string) => ipcRenderer.invoke("tag-group:delete", boxId, groupId),
-  saveCard: (deckId: string, cardId: string, edit: CardEdit) => ipcRenderer.invoke("card:save", deckId, cardId, edit),
-  createCard: (deckId: string, place?: string, zone?: string) => ipcRenderer.invoke("card:create", deckId, place, zone),
-  duplicateCard: (deckId: string, cardId: string) => ipcRenderer.invoke("card:duplicate", deckId, cardId),
-  moveCard: (deckId: string, cardId: string, targetId: string, before: boolean) => ipcRenderer.invoke("card:move", deckId, cardId, targetId, before),
-  deleteCard: (deckId: string, cardId: string) => ipcRenderer.invoke("card:delete", deckId, cardId),
-  cardCatalogue: (deckId: string) => ipcRenderer.invoke("card:catalogue", deckId),
-  createDeck: (boxId: string) => ipcRenderer.invoke("deck:create", boxId),
-  deleteDeck: (deckId: string) => ipcRenderer.invoke("deck:delete", deckId),
-  renameDeck: (deckId: string, edit: DeckEdit) => ipcRenderer.invoke("deck:rename", deckId, edit),
-  undo: () => ipcRenderer.invoke("edit:undo"),
-  redo: () => ipcRenderer.invoke("edit:redo"),
-  openTable: () => ipcRenderer.invoke("table:open"),
-  setBoardPinned: (on: boolean) => ipcRenderer.invoke("board:setPin", on),
-  setBoardFollow: (on: boolean) => ipcRenderer.invoke("state:setBoardFollow", on),
-  setBoardView: (view: "list" | "map") => ipcRenderer.invoke("state:setBoardView", view),
-  setBoardBox: (box: string) => ipcRenderer.invoke("state:setBoardBox", box),
-  openSearch: (open?: SearchOpen) => ipcRenderer.invoke("search:open", open),
-  pendingSearchQuery: () => ipcRenderer.invoke("search:pendingQuery"),
-  onSearchSeed: (handler: (open: SearchOpen) => void) => {
-    ipcRenderer.on("search:seed", (_event, open: SearchOpen) => handler(open));
-  },
-  setSearchPinned: (on: boolean) => ipcRenderer.invoke("search:setPin", on),
-  searchReveal: (selection: ReviewAt) => ipcRenderer.invoke("search:reveal", selection),
-  closeSearch: () => ipcRenderer.invoke("search:close"),
+    invoke("state:setCanvasCameras", cameras),
+  projectSettings: () => invoke("project:settings"),
+  saveProjectSettings: (dto: ProjectSettingsDto) => invoke("project:saveSettings", dto),
+  createBox: (kit) => invoke("box:create", kit),
+  duplicateBox: (boxId: string) => invoke("box:duplicate", boxId),
+  deleteBox: (boxId: string) => invoke("box:delete", boxId),
+  moveBox: (boxId: string, targetId: string, before: boolean) => invoke("box:move", boxId, targetId, before),
+  moveDeck: (deckId: string, targetId: string, before: boolean) => invoke("deck:move", deckId, targetId, before),
+  moveHand: (boxId: string, handId: string, before_target: string, before: boolean) => invoke("hand:move", boxId, handId, before_target, before),
+  saveBox: (boxId: string, edit: BoxEdit) => invoke("box:save", boxId, edit),
+  boxCatalogue: (boxId: string) => invoke("box:catalogue", boxId),
+  duplicateDeck: (deckId: string) => invoke("deck:duplicate", deckId),
+  duplicateTemplate: (boxId: string, templateId: string) => invoke("template:duplicate", boxId, templateId),
+  duplicateHand: (boxId: string, handId: string) => invoke("hand:duplicate", boxId, handId),
+  duplicateTagGroup: (boxId: string, groupId: string) => invoke("tag-group:duplicate", boxId, groupId),
+  handDetail: (boxId: string, handId: string) => invoke("hand:detail", boxId, handId),
+  handCards: (boxId: string, handId: string) => invoke("hand:cards", boxId, handId),
+  saveHand: (boxId: string, handId: string, edit: HandEdit) => invoke("hand:save", boxId, handId, edit),
+  createHand: (boxId: string, site?: { x: number; y: number }, templateId?: string) => invoke("hand:create", boxId, site, templateId),
+  deleteHand: (boxId: string, handId: string) => invoke("hand:delete", boxId, handId),
+  templateDetail: (boxId: string, templateId: string) => invoke("template:detail", boxId, templateId),
+  saveTemplate: (boxId: string, templateId: string, edit: TemplateEdit) => invoke("template:save", boxId, templateId, edit),
+  createTemplate: (boxId: string) => invoke("template:create", boxId),
+  deleteTemplate: (boxId: string, templateId: string) => invoke("template:delete", boxId, templateId),
+  tagGroupDetail: (boxId: string, groupId: string) => invoke("tag-group:detail", boxId, groupId),
+  saveTagGroup: (boxId: string, groupId: string, edit: TagGroupEdit) => invoke("tag-group:save", boxId, groupId, edit),
+  createTagGroup: (boxId: string) => invoke("tag-group:create", boxId),
+  createGroupAsMap: (boxId: string) => invoke("tag-group:createMap", boxId),
+  deleteTagGroup: (boxId: string, groupId: string) => invoke("tag-group:delete", boxId, groupId),
+  saveCard: (deckId: string, cardId: string, edit: CardEdit) => invoke("card:save", deckId, cardId, edit),
+  createCard: (deckId: string, place?: string, zone?: string) => invoke("card:create", deckId, place, zone),
+  duplicateCard: (deckId: string, cardId: string) => invoke("card:duplicate", deckId, cardId),
+  moveCard: (deckId: string, cardId: string, targetId: string, before: boolean) => invoke("card:move", deckId, cardId, targetId, before),
+  deleteCard: (deckId: string, cardId: string) => invoke("card:delete", deckId, cardId),
+  deleteCards: (deckId: string, cardIds: string[]) => invoke("card:deleteMany", deckId, cardIds),
+  deleteCardsAcross: (groups: { deckId: string; cardIds: string[] }[]) => invoke("card:deleteAcross", groups),
+  cardCatalogue: (deckId: string) => invoke("card:catalogue", deckId),
+  createDeck: (boxId: string) => invoke("deck:create", boxId),
+  deleteDeck: (deckId: string) => invoke("deck:delete", deckId),
+  renameDeck: (deckId: string, edit: DeckEdit) => invoke("deck:rename", deckId, edit),
+  setDeckFocused: (on: boolean) => invoke("menu:setDeckFocused", on),
+  undo: () => invoke("edit:undo"),
+  redo: () => invoke("edit:redo"),
+  openTable: () => invoke("table:open"),
+  setBoardPinned: (on: boolean) => invoke("board:setPin", on),
+  setBoardFollow: (on: boolean) => invoke("state:setBoardFollow", on),
+  setBoardView: (view: "list" | "map") => invoke("state:setBoardView", view),
+  setBoardBox: (box: string) => invoke("state:setBoardBox", box),
+  openSearch: (open?: SearchOpen) => invoke("search:open", open),
+  pendingSearchQuery: () => invoke("search:pendingQuery"),
+  onSearchSeed: (handler) => { listen("search:seed", handler); },
+  setSearchPinned: (on: boolean) => invoke("search:setPin", on),
+  searchReveal: (selection: ReviewAt) => invoke("search:reveal", selection),
+  closeSearch: () => invoke("search:close"),
   // Find's Property and Replace tabs
-  propertyUsage: (query: string) => ipcRenderer.invoke("search:propertyUsage", query),
-  propertyUsageMany: (queries: string[]) => ipcRenderer.invoke("search:propertyUsageMany", queries),
-  replacePreview: (opts: ReplaceOptions) => ipcRenderer.invoke("search:replacePreview", opts),
-  replaceApply: (opts: ReplaceOptions) => ipcRenderer.invoke("search:replaceApply", opts),
-  onEditorFlush: (handler: () => void) => { ipcRenderer.on("editor:flush", () => handler()); },
-  editorFlushed: () => ipcRenderer.invoke("editor:flushed"),
-  onReplaceApplied: (handler: (count: number) => void) => {
-    ipcRenderer.on("replace:applied", (_event, count: number) => handler(count));
-  },
-  onSearchNavigate: (handler: (selection: ReviewAt) => void) => {
-    ipcRenderer.on("search:navigate", (_event, selection: ReviewAt) => handler(selection));
-  },
-  resetWindows: () => ipcRenderer.invoke("view:resetWindows"),
-  tableBundle: () => ipcRenderer.invoke("table:bundle"),
-  projectHash: () => ipcRenderer.invoke("project:hash"),
-  exportSave: (file: SaveFile, suggestedName: string) => ipcRenderer.invoke("table:exportSave", file, suggestedName),
-  importSave: () => ipcRenderer.invoke("table:importSave"),
-  openCoverage: () => ipcRenderer.invoke("coverage:open"),
-  coverageInfo: () => ipcRenderer.invoke("coverage:info"),
-  declareProperty: (scope, name, owner, guess) => ipcRenderer.invoke("problem:declareProperty", scope, name, owner, guess),
-  repointTag: (holder, group, from, to) => ipcRenderer.invoke("problem:repointTag", holder, group, from, to),
-  addOutcome: (card, gameId) => ipcRenderer.invoke("problem:addOutcome", card, gameId),
-  createPatterScene: (card) => ipcRenderer.invoke("problem:createScene", card),
-  planMapUpgrade: () => ipcRenderer.invoke("project:planMapUpgrade"),
-  upgradeProjectMap: () => ipcRenderer.invoke("project:upgradeProjectMap"),
-  coverageOverlay: () => ipcRenderer.invoke("coverage:overlay"),
-  onCoverageDone: (handler) => {
-    const listener = (): void => handler();
-    ipcRenderer.on("coverage:done", listener);
-    return () => ipcRenderer.removeListener("coverage:done", listener);
-  },
-  setCoverageOverlay: (on) => ipcRenderer.invoke("coverage:setOverlay", on),
-  coverageRun: (opts: { runs?: number; maxTurns?: number; seed?: number }) => ipcRenderer.invoke("coverage:run", opts),
-  coverageAddDrivers: (opts: { runs?: number; maxTurns?: number; seed?: number }) => ipcRenderer.invoke("coverage:addDrivers", opts),
-  coverageCancel: () => ipcRenderer.invoke("coverage:cancel"),
-  proposeDrivers: () => ipcRenderer.invoke("coverage:propose"),
-  onJobProgress: (handler: (progress: JobProgress) => void) => {
-    ipcRenderer.on(JOB_PROGRESS_CHANNEL, (_event, progress: JobProgress) => handler(progress));
-  },
-  setCoveragePinned: (on: boolean) => ipcRenderer.invoke("coverage:setPin", on),
-  setCoverageOrder: (order) => ipcRenderer.invoke("coverage:setOrder", order),
-  openProjectSettings: (section: string) => ipcRenderer.invoke("settings:open", section),
-  onProjectChanged: (handler: () => void) => {
-    ipcRenderer.on(PROJECT_CHANGED, () => handler());
-  },
-  openLinks: (cardId?: string) => ipcRenderer.invoke("links:open", cardId),
-  linksFor: (cardId?: string) => ipcRenderer.invoke("links:for", cardId),
-  deckGraph: (deckId: string) => ipcRenderer.invoke("graph:deck", deckId),
-  boxMap: (boxId: string, groupId?: string) => ipcRenderer.invoke("map:box", boxId, groupId),
-  projectMaps: () => ipcRenderer.invoke("map:project"),
-  projectMapView: () => ipcRenderer.invoke("map:view"),
-  mapZone: (tagId: string) => ipcRenderer.invoke("map:zone", tagId),
-  useProjectMap: (boxId: string, on: boolean, confirmed?: boolean) => ipcRenderer.invoke("map:use", boxId, on, confirmed),
-  setBoxColour: (boxId: string, colour: number) => ipcRenderer.invoke("map:colour", boxId, colour),
-  setGroupSpatial: (boxId: string, groupId: string, on: boolean) => ipcRenderer.invoke("map:setSpatial", boxId, groupId, on),
+  propertyUsage: (query: string) => invoke("search:propertyUsage", query),
+  propertyUsageMany: (queries: string[]) => invoke("search:propertyUsageMany", queries),
+  replacePreview: (opts: ReplaceOptions) => invoke("search:replacePreview", opts),
+  replaceApply: (opts: ReplaceOptions) => invoke("search:replaceApply", opts),
+  onEditorFlush: (handler) => { listen("editor:flush", handler); },
+  editorFlushed: () => invoke("editor:flushed"),
+  onReplaceApplied: (handler) => { listen("replace:applied", handler); },
+  onSearchNavigate: (handler) => { listen("search:navigate", handler); },
+  resetWindows: () => invoke("view:resetWindows"),
+  tableBundle: () => invoke("table:bundle"),
+  projectHash: () => invoke("project:hash"),
+  exportSave: (file: SaveFile, suggestedName: string) => invoke("table:exportSave", file, suggestedName),
+  importSave: () => invoke("table:importSave"),
+  openCoverage: () => invoke("coverage:open"),
+  coverageInfo: () => invoke("coverage:info"),
+  declareProperty: (scope, name, owner, guess) => invoke("problem:declareProperty", scope, name, owner, guess),
+  repointTag: (holder, group, from, to) => invoke("problem:repointTag", holder, group, from, to),
+  addOutcome: (card, gameId) => invoke("problem:addOutcome", card, gameId),
+  createPatterScene: (card) => invoke("problem:createScene", card),
+  planMapUpgrade: () => invoke("project:planMapUpgrade"),
+  upgradeProjectMap: () => invoke("project:upgradeProjectMap"),
+  coverageOverlay: () => invoke("coverage:overlay"),
+  onCoverageDone: (handler) => listen("coverage:done", handler),
+  setCoverageOverlay: (on) => invoke("coverage:setOverlay", on),
+  coverageRun: (opts: { runs?: number; maxTurns?: number; seed?: number }) => invoke("coverage:run", opts),
+  coverageAddDrivers: (opts: { runs?: number; maxTurns?: number; seed?: number }) => invoke("coverage:addDrivers", opts),
+  coverageCancel: () => invoke("coverage:cancel"),
+  proposeDrivers: () => invoke("coverage:propose"),
+  onJobProgress: (handler) => { listen(JOB_PROGRESS_CHANNEL, handler); },
+  setCoveragePinned: (on: boolean) => invoke("coverage:setPin", on),
+  setCoverageOrder: (order) => invoke("coverage:setOrder", order),
+  openProjectSettings: (section: string) => invoke("settings:open", section),
+  onProjectChanged: (handler) => { listen(PROJECT_CHANGED, handler); },
+  openLinks: (cardId?: string) => invoke("links:open", cardId),
+  linksFor: (cardId?: string) => invoke("links:for", cardId),
+  deckGraph: (deckId: string) => invoke("graph:deck", deckId),
+  boxMap: (boxId: string, groupId?: string) => invoke("map:box", boxId, groupId),
+  projectMaps: () => invoke("map:project"),
+  projectMapView: () => invoke("map:view"),
+  mapZone: (tagId: string) => invoke("map:zone", tagId),
+  useProjectMap: (boxId: string, on: boolean, confirmed?: boolean) => invoke("map:use", boxId, on, confirmed),
+  setBoxColour: (boxId: string, colour: number) => invoke("map:colour", boxId, colour),
+  setGroupSpatial: (boxId: string, groupId: string, on: boolean) => invoke("map:setSpatial", boxId, groupId, on),
   createZone: (boxId: string, groupId: string, polygon: { x: number; y: number }[], name?: string) =>
-    ipcRenderer.invoke("map:createZone", boxId, groupId, polygon, name),
+    invoke("map:createZone", boxId, groupId, polygon, name),
   addBackground: (
     boxId: string, groupId: string,
     place: { view: { width: number; height: number }; scale: number; at: { x: number; y: number } },
-  ) => ipcRenderer.invoke("map:addBackground", boxId, groupId, place),
+  ) => invoke("map:addBackground", boxId, groupId, place),
   editBackground: (
     boxId: string, groupId: string, backgroundId: string,
     edit: { x?: number; y?: number; width?: number; height?: number; opacity?: number; hidden?: boolean; locked?: boolean },
     opts?: { coalesce?: boolean },
-  ) => ipcRenderer.invoke("map:editBackground", boxId, groupId, backgroundId, edit, opts ?? {}),
+  ) => invoke("map:editBackground", boxId, groupId, backgroundId, edit, opts ?? {}),
   restackBackground: (boxId: string, groupId: string, backgroundId: string, move: "front" | "forward" | "backward" | "back") =>
-    ipcRenderer.invoke("map:restackBackground", boxId, groupId, backgroundId, move),
+    invoke("map:restackBackground", boxId, groupId, backgroundId, move),
   removeBackground: (boxId: string, groupId: string, backgroundId: string) =>
-    ipcRenderer.invoke("map:removeBackground", boxId, groupId, backgroundId),
+    invoke("map:removeBackground", boxId, groupId, backgroundId),
   restackZone: (boxId: string, groupId: string, tagId: string, move: "front" | "forward" | "backward" | "back") =>
-    ipcRenderer.invoke("map:restack", boxId, groupId, tagId, move),
+    invoke("map:restack", boxId, groupId, tagId, move),
   setZonePolygon: (boxId: string, groupId: string, tagId: string, polygon: { x: number; y: number }[] | undefined) =>
-    ipcRenderer.invoke("map:setPolygon", boxId, groupId, tagId, polygon),
-  removeSitesFromMap: (boxId: string, handIds: string[]) => ipcRenderer.invoke("map:removeSites", boxId, handIds),
+    invoke("map:setPolygon", boxId, groupId, tagId, polygon),
+  removeSitesFromMap: (boxId: string, handIds: string[]) => invoke("map:removeSites", boxId, handIds),
   moveSitesOnMap: (boxId: string, groupId: string, placements: { id: string; x: number; y: number }[]) =>
-    ipcRenderer.invoke("map:moveSites", boxId, groupId, placements),
-  commentsFor: (anchor) => ipcRenderer.invoke("comments:for", anchor),
-  postComment: (anchor, threadId, body, mark) => ipcRenderer.invoke("comments:post", anchor, threadId, body, mark),
-  setCommentResolved: (threadId, resolved) => ipcRenderer.invoke("comments:resolve", threadId, resolved),
-  deleteComment: (threadId, index) => ipcRenderer.invoke("comments:delete", threadId, index),
-  commentMarkers: (canvas) => ipcRenderer.invoke("comments:markers", canvas),
-  reviewFeedback: (showResolved) => ipcRenderer.invoke("review:feedback", showResolved),
-  setReviewWalk: (on) => ipcRenderer.invoke("review:setWalk", on),
-  moveComment: (threadId, canvas, x, y, item) => ipcRenderer.invoke("comments:move", threadId, canvas, x, y, item),
-  identity: () => ipcRenderer.invoke("identity:get"),
-  offeredIdentity: () => ipcRenderer.invoke("identity:offer"),
-  setIdentity: (identity) => ipcRenderer.invoke("identity:set", identity),
-  setShowResolved: (on) => ipcRenderer.invoke("comments:showResolved", on),
-  openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
-  appReady: () => ipcRenderer.send("app:ready"),
+    invoke("map:moveSites", boxId, groupId, placements),
+  commentsFor: (anchor) => invoke("comments:for", anchor),
+  postComment: (anchor, threadId, body, mark) => invoke("comments:post", anchor, threadId, body, mark),
+  setCommentResolved: (threadId, resolved) => invoke("comments:resolve", threadId, resolved),
+  deleteComment: (threadId, index) => invoke("comments:delete", threadId, index),
+  commentMarkers: (canvas) => invoke("comments:markers", canvas),
+  reviewFeedback: (showResolved) => invoke("review:feedback", showResolved),
+  setReviewWalk: (on) => invoke("review:setWalk", on),
+  moveComment: (threadId, canvas, x, y, item) => invoke("comments:move", threadId, canvas, x, y, item),
+  identity: () => invoke("identity:get"),
+  offeredIdentity: () => invoke("identity:offer"),
+  setIdentity: (identity) => invoke("identity:set", identity),
+  setShowResolved: (on) => invoke("comments:showResolved", on),
+  openExternal: (url) => invoke("shell:openExternal", url),
+  appReady: () => tell("app:ready"),
   setCanvasFurniture: (boxId, ref, furniture, label, coalesce) =>
-    ipcRenderer.invoke("canvas:setFurniture", boxId, ref, furniture, label, coalesce),
+    invoke("canvas:setFurniture", boxId, ref, furniture, label, coalesce),
   moveCardsOnCanvas: (deckId: string, placements: { id: string; x: number; y: number }[]) =>
-    ipcRenderer.invoke("view:moveCards", deckId, placements),
+    invoke("view:moveCards", deckId, placements),
   createCardOnCanvas: (deckId: string, at: { x: number; y: number }, pinned: { id: string; x: number; y: number }[]) =>
-    ipcRenderer.invoke("view:newCard", deckId, at, pinned),
+    invoke("view:newCard", deckId, at, pinned),
   layoutDeck: (
     deckId: string, ids: string[], current: { id: string; x: number; y: number }[],
     size: { width: number; height: number; gapX: number; gapY: number },
-  ) => ipcRenderer.invoke("view:layout", deckId, ids, current, size),
-  setLinkFocus: (cardId: string | undefined) => ipcRenderer.invoke("links:setFocus", cardId),
-  onLinkFocus: (handler: (cardId: string | undefined) => void) => {
-    ipcRenderer.on("links:focus", (_event, cardId: string | undefined) => handler(cardId));
-  },
-  setLinksPinned: (on: boolean) => ipcRenderer.invoke("links:setPin", on),
-  closeLinks: () => ipcRenderer.invoke("links:close"),
-  closeBoard: () => ipcRenderer.invoke("board:close"),
-  closeCoverage: () => ipcRenderer.invoke("coverage:close"),
-  exportBundle: (opts) => ipcRenderer.invoke("bundle:export", opts),
-  exportXlsx: () => ipcRenderer.invoke("xlsx:export"),   // Publish Spreadsheet
-  exportHtml: () => ipcRenderer.invoke("html:export"),   // Publish Playable HTML
-  exportPack: () => ipcRenderer.invoke("pack:export"),
-  shareScopes: () => ipcRenderer.invoke("project:shareScopes"),
-  choosePatterProject: () => ipcRenderer.invoke("patter:choose"),
-  editInPatterpad: (cardId: string) => ipcRenderer.invoke("patter:edit", cardId),
-  choosePack: () => ipcRenderer.invoke("pack:choose"),
-  openPackAt: (path: string) => ipcRenderer.invoke("pack:openAt", path),
+  ) => invoke("view:layout", deckId, ids, current, size),
+  setLinkFocus: (cardId: string | undefined) => invoke("links:setFocus", cardId),
+  onLinkFocus: (handler) => { listen("links:focus", handler); },
+  onLinkReset: (handler) => { listen("links:reset", handler); },
+  setLinksPinned: (on: boolean) => invoke("links:setPin", on),
+  closeLinks: () => invoke("links:close"),
+  closeBoard: () => invoke("board:close"),
+  onBoardAskClose: (handler) => { listen("board:askClose", handler); },
+  closeCoverage: () => invoke("coverage:close"),
+  exportBundle: (opts) => invoke("bundle:export", opts),
+  exportXlsx: () => invoke("xlsx:export"),   // Publish Spreadsheet
+  exportHtml: () => invoke("html:export"),   // Publish Playable HTML
+  exportPack: () => invoke("pack:export"),
+  shareScopes: () => invoke("project:shareScopes"),
+  choosePatterProject: () => invoke("patter:choose"),
+  editInPatterpad: (cardId: string) => invoke("patter:edit", cardId),
+  choosePack: () => invoke("pack:choose"),
+  openPackAt: (path: string) => invoke("pack:openAt", path),
   // The pack exchange: three calls, and the key never crosses this bridge.
   connectServer: (address: string, code: string, fingerprint?: string) =>
-    ipcRenderer.invoke("server:connect", address, code, fingerprint),
-  forgetServer: (address: string) => ipcRenderer.invoke("server:forget", address),
-  serverPull: () => ipcRenderer.invoke("server:pull"),
+    invoke("server:connect", address, code, fingerprint),
+  forgetServer: (address: string) => invoke("server:forget", address),
+  serverPull: () => invoke("server:pull"),
   serverPush: (note?: string, acknowledge?: string[]) =>
-    ipcRenderer.invoke("server:push", note, acknowledge),
-  mergePackPlan: () => ipcRenderer.invoke("pack:mergePlan"),
-  mergePackCommit: () => ipcRenderer.invoke("pack:mergeCommit"),
-  mergePackDrop: () => ipcRenderer.invoke("pack:mergeDrop"),
-  launchTarget: () => ipcRenderer.invoke("project:launchTarget"),
-  onProjectOpened: (handler: (result: OpenResult | { error: string } | PackOffer) => void) => {
-    ipcRenderer.on("project:opened", (_event, result: OpenResult | { error: string } | PackOffer) => handler(result));
-  },
+    invoke("server:push", note, acknowledge),
+  mergePackPlan: () => invoke("pack:mergePlan"),
+  mergePackCommit: () => invoke("pack:mergeCommit"),
+  mergePackDrop: () => invoke("pack:mergeDrop"),
+  launchTarget: () => invoke("project:launchTarget"),
+  onProjectOpened: (handler) => { listen("project:opened", handler); },
   // Live Link (design/live-link.md)
-  liveLinkStart: () => ipcRenderer.invoke("liveLink:start"),
-  liveLinkStop: () => ipcRenderer.invoke("liveLink:stop"),
-  liveLinkStatus: () => ipcRenderer.invoke("liveLink:status"),
-  onLiveLinkStatus: (handler: (status: LiveLinkStatus) => void) => {
-    ipcRenderer.on("liveLink:status", (_event, status: LiveLinkStatus) => handler(status));
-  },
-  liveLinkSnapshot: () => ipcRenderer.invoke("liveLink:snapshot"),
-  liveLinkFollow: (flowId: string) => ipcRenderer.invoke("liveLink:follow", flowId),
-  onLiveLinkFrame: (handler: (frame: LiveLinkFrame) => void) => {
-    ipcRenderer.on("liveLink:frame", (_event, frame: LiveLinkFrame) => handler(frame));
-  },
-  onMenu: (handler: (command: MenuCommand) => void) => {
-    ipcRenderer.on("menu", (_event, command: MenuCommand) => handler(command));
-  },
+  liveLinkStart: () => invoke("liveLink:start"),
+  liveLinkStop: () => invoke("liveLink:stop"),
+  liveLinkStatus: () => invoke("liveLink:status"),
+  onLiveLinkStatus: (handler) => { listen("liveLink:status", handler); },
+  liveLinkSnapshot: () => invoke("liveLink:snapshot"),
+  liveLinkFollow: (flowId: string) => invoke("liveLink:follow", flowId),
+  onLiveLinkFrame: (handler) => { listen("liveLink:frame", handler); },
+  onMenu: (handler) => { listen("menu", handler); },
 
   // The way out of a project the server has not seen the whole of. Shaped like
   // the updater's prompt below: main sends the question, the renderer draws it
   // in the app's own dialog, and the answer goes back as a button index.
-  onLeavePrompt: (handler: (opts: LeavePromptDto) => Promise<number>) => {
-    ipcRenderer.on("server:leave-prompt", (_event, opts: LeavePromptDto) => {
+  onLeavePrompt: (handler) => {
+    listen("server:leave-prompt", (opts) => {
       // TWO messages, not one. "shown" goes back at once and is how main tells a
       // renderer that is drawing the dialog from one that is not there at all;
       // the reply comes when somebody clicks, which is however long a person
@@ -252,10 +247,10 @@ const api: StudioApi = {
       // after four seconds.
       let answer: Promise<number>;
       try { answer = handler(opts); } catch { answer = Promise.resolve(opts.cancelId); }
-      ipcRenderer.send("server:leave-shown");
+      tell("server:leave-shown");
       void answer.then(
-        (idx) => ipcRenderer.send("server:leave-reply", idx),
-        () => ipcRenderer.send("server:leave-reply", opts.cancelId),
+        (idx) => tell("server:leave-reply", idx),
+        () => tell("server:leave-reply", opts.cancelId),
       );
     });
   },
@@ -263,9 +258,7 @@ const api: StudioApi = {
   // ...and what becomes of that dialog once it has been answered. It is held
   // open past the click, so somebody has to take it down: either with a closing
   // word (a push landed) or with nothing to say (cancelled, left, refused).
-  onLeaveSettled: (handler: (opts: LeaveSettledDto) => void) => {
-    ipcRenderer.on("server:leave-settled", (_event, opts: LeaveSettledDto) => handler(opts));
-  },
+  onLeaveSettled: (handler) => { listen("server:leave-settled", handler); },
 
   // The auto-updater's four channels. The names are the shell's UPDATER_CHANNELS
   // values, written out literally rather than imported: this file is the sandbox

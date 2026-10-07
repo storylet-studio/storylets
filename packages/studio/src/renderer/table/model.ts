@@ -2,13 +2,13 @@
 // The Board's non-DOM logic: driving the reference Engine (one "main" Flow;
 // the flow tools come later, design/flows.md) and shaping its results for
 // display. Pure over a live engine, so it is testable headlessly
-// against a compiled bundle (the DOM layer in table.ts is the thin shell).
+// against a compiled bundle (the window, table.ts and its parts, is the thin shell).
 // ---------------------------------------------------------------------------
 
 import { Engine } from "@storylet-studio/runtime";
 import type { Flow, LogEntry, TraceVerdict } from "@storylet-studio/runtime";
 import { SAVEFILE_SCHEMA, effectiveGameId, groupsOfBox, valueAddresses } from "@storylet-studio/model";
-import type { Bundle, PropertyBag, SaveFile, ScalarValue, TagGroup } from "@storylet-studio/model";
+import type { Bundle, LoadReport, PropertyBag, SaveFile, ScalarValue, TagGroup } from "@storylet-studio/model";
 import { ENGINE_SCOPES } from "@storylet-studio/dialect";
 import { GAME_SCOPES_DIR, GAME_SCOPES_FILE, standInRegistry } from "@wildwinter/scoperegistry/scopes";
 import { ScopeRegistry } from "@wildwinter/scoperegistry";
@@ -110,12 +110,6 @@ export interface HandView {
   id: string;
   gameId: string;
   title?: string;
-  /** The template it instances, as a gameId; absent = standalone. */
-  template?: string;
-  /** Slot cap override; absent = the template's / rule's slots. */
-  slots?: number;
-  /** Chosen tags, e.g. "area = docks". */
-  chosen: string[];
   /** Every tag the hand binds (fixed + chosen), group gameId -> tag gameId:
    *  the board's filter key ("show all hands in the forest"). */
   tags: Record<string, string>;
@@ -301,10 +295,6 @@ export class Table {
     return r.kind;
   }
 
-  turn(boxGameId: string): number {
-    return this.session.turn(boxGameId);
-  }
-
   /** The Board's @world values (the engine self-backs the container; the
    *  Board is the host, so saving them is the Board's job). */
   worldValues(): PropertyBag {
@@ -328,9 +318,11 @@ export class Table {
   /** Restore from a save file: the envelope first (loadGame rebuilds every
    *  flow, so the "main" handle is re-taken), then the file's @world values
    *  over the reseeded container. The retained journal starts afresh - it
-   *  belongs to the flow, and the flow is new. */
-  loadFile(file: BoardSaveFile): void {
-    this.engine.loadGame(file.engine);
+   *  belongs to the flow, and the flow is new. Returns the engine's LoadReport:
+   *  what the save cost against this build (`loadReportNote` says it), the
+   *  report play-helpers' `loadState` hands its caller too. */
+  loadFile(file: BoardSaveFile): LoadReport {
+    const report = this.engine.loadGame(file.engine);
     // Patter's flows, when both the Board and the file have them; the registry below restores
     // its properties with everyone else's.
     if (this.patter && file.patter !== undefined) this.patter.loadGame(file.patter as Parameters<PatterEngine["loadGame"]>[0]);
@@ -342,6 +334,7 @@ export class Table {
     for (const [name, value] of Object.entries(file.world ?? {})) {
       try { this.engine.setProperty(`world.${name}`, value); } catch { /* an orphaned key: dropped */ }
     }
+    return report;
   }
 
   /**
@@ -466,10 +459,6 @@ export class Table {
           id: hand.id,
           gameId: hand.gameId ?? hand.id,
           ...(hand.title !== undefined ? { title: hand.title } : {}),
-          ...(template !== undefined ? { template: template.gameId ?? template.id } : {}),
-          ...(hand.slots !== undefined ? { slots: hand.slots } : {}),
-          chosen: Object.entries(hand.chosen ?? {}).map(([g, t]) =>
-            `${groupNames.get(g) ?? g} = ${tagNames.get(t) ?? t}`),
           tags: bound,
           box: box.gameId ?? box.id,
           boxId: box.id,
@@ -523,10 +512,10 @@ export class Table {
    *  what a hand holds (Live mode). A gameId this bundle does not know (the
    *  game is on a different build) still gets a face, named by the gameId. */
   faceByGameId(gameId: string, from: string): DealtView {
-    for (const [id, label] of this.cardLabels) {
-      if (label.gameId === gameId) return { id, gameId, ...(label.title !== undefined ? { title: label.title } : {}), from };
-    }
-    return { id: gameId, gameId, from };
+    const id = this.cardIdsByGameId.get(gameId);
+    const label = id !== undefined ? this.cardLabels.get(id) : undefined;
+    if (id === undefined || label === undefined) return { id: gameId, gameId, from };
+    return { id, gameId, ...(label.title !== undefined ? { title: label.title } : {}), from };
   }
 
   /** Deal every hand, returning each hand's contents (the board: an
@@ -649,6 +638,41 @@ export class Table {
     return rows;
   }
 }
+
+/** "a", "a and b", "a, b, and c" (the Oxford comma, house style). */
+function andList(items: readonly string[]): string {
+  if (items.length <= 2) return items.join(" and ");
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
+/** Properties named when there are a few, counted when there are more. */
+function properties(list: readonly { path: string }[], one: string, many: string): string {
+  if (list.length <= 3) return `${andList(list.map((p) => `@${p.path}`))} ${list.length === 1 ? one : many}`;
+  return `${list.length} properties ${many}`;
+}
+
+/**
+ * What a restore cost, as the sentence the Board's toast says, or undefined
+ * when it cost nothing worth saying. A save from another build of the same
+ * project restores with drift reported, never refused (design/engine-server.md
+ * 4.9): cards that left their hands, properties dropped, defaulted or reset to
+ * their default. A different version or hash alone is not a loss, and is not
+ * said.
+ */
+export function loadReportNote(report: LoadReport): string | undefined {
+  const parts: string[] = [];
+  const evicted = report.evicted.length;
+  if (evicted > 0) parts.push(`${evicted === 1 ? "1 card" : `${evicted} cards`} left ${evicted === 1 ? "its hand" : "their hands"}`);
+  if (report.droppedProperties.length > 0) parts.push(properties(report.droppedProperties, "was dropped", "were dropped"));
+  if (report.defaultedProperties.length > 0) parts.push(properties(report.defaultedProperties, "took its default", "took their defaults"));
+  if (report.retypedProperties.length > 0) parts.push(properties(report.retypedProperties, "no longer fit and was reset", "no longer fit and were reset"));
+  const cooldowns = report.droppedCooldowns.length + report.droppedSpent.length;
+  if (cooldowns > 0) parts.push(`${cooldowns === 1 ? "1 cooldown" : `${cooldowns} cooldowns`} for cards no longer in this build ${cooldowns === 1 ? "was" : "were"} dropped`);
+  if (parts.length === 0) return undefined;
+  return `The save didn't fit this build exactly. ${capitalise(andList(parts))}.`;
+}
+
+const capitalise = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Parse a poked value from text: JSON5-ish scalar, else the raw string. */
 export function coerceStateInput(raw: string): ScalarValue {

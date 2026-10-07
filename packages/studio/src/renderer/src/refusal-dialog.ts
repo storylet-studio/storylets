@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { dialogFrame } from "@wildwinter/app-shell/dialog";
-import { el } from "./dom.js";
+import { el } from "@wildwinter/app-shell";
 
 /** Say why not, and offer to open the thing in the way. Resolves true when the
  *  author chose to open it; without `openLabel` there is only OK. */

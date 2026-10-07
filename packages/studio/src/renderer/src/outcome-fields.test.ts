@@ -81,7 +81,7 @@ describe("an open outcome's Fields block", () => {
     return centre;
   };
 
-  it("draws a row per declared field, with the type as the placeholder", () => {
+  it("draws a row per declared field, with the type as the placeholder in plain words", () => {
     const centre = openOutcome(declaring([
       { name: "after", type: "string", default: "" },
       { name: "cue", type: "enum", default: "silence", values: ["silence", "bell"] },
@@ -89,7 +89,7 @@ describe("an open outcome's Fields block", () => {
     expect(centre.textContent).toContain("Fields");
     expect([...centre.querySelectorAll(".doc-row-label")].map((s) => s.textContent)).toEqual(["after", "cue"]);
     // Rule 7: a declared type is a contract, so an enum offers its values.
-    expect(centre.querySelector<HTMLInputElement>(".outcome-body input.insp-mono")!.placeholder).toBe("<string>");
+    expect(centre.querySelector<HTMLInputElement>(".outcome-body input.insp-mono")!.placeholder).toBe("Text");
     expect([...centre.querySelectorAll<HTMLSelectElement>(".outcome-body select option")].map((o) => o.value))
       .toEqual(["", "silence", "bell"]);
   });

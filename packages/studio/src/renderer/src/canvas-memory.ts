@@ -15,9 +15,17 @@
 // The write is DEBOUNCED because the source is a camera: onCamera fires on every
 // frame of a pan, and a settings file rewritten sixty times a second would be a
 // remarkable way to spend a disk.
+//
+// Keys carry the PROJECT. A deck's id and a map's group id are only unique
+// within one project, and the worked examples share theirs, so a camera left on
+// one example's deck used to open the next example's deck of the same id
+// looking at empty canvas. The project is the one open in this window, said
+// once on the way in (`setCanvasProject`), which also empties the picture cache
+// for the same reason (image-cache.ts).
 // ---------------------------------------------------------------------------
 
 import type { Camera } from "./canvas-surface.js";
+import { setImageProject } from "./image-cache.js";
 
 const studio = window.studio;
 
@@ -32,12 +40,24 @@ const WRITE_DELAY = 400;
 
 let timer: number | undefined;
 let dirty = false;
+/** The open project, as its folder or its server address: what scopes a key. */
+let project = "";
 
-/** The key for a deck's node canvas / a box's map. Prefixed by view, because a
- *  box's map and a deck of the same id are different places to be looking. */
-export const nodeCameraKey = (deckId: string): string => `node:${deckId}`;
+/** The project this window now has open. Call it on every arrival; the same
+ *  project again changes nothing. */
+export function setCanvasProject(id: string): void {
+  project = id;
+  setImageProject(id);
+}
+
+/** The key for a deck's node canvas / the project's map. Prefixed by view,
+ *  because a map and a deck of the same id are different places to be looking,
+ *  and by the project, because two projects' ids are not two places. With no
+ *  project said, the key is the old unscoped one. */
+const scoped = (key: string): string => (project === "" ? key : `${project}|${key}`);
+export const nodeCameraKey = (deckId: string): string => scoped(`node:${deckId}`);
 export const mapCameraKey = (boxId: string, groupId: string | undefined): string =>
-  `map:${boxId}:${groupId ?? ""}`;
+  scoped(`map:${boxId}:${groupId ?? ""}`);
 
 /** Seed from the user's saved state, once, at boot. */
 export function hydrateCameras(saved: Record<string, Camera> | undefined): void {

@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import { dialogFrame } from "@wildwinter/app-shell/dialog";
-import { el } from "./dom.js";
+import { el } from "@wildwinter/app-shell";
 import type { MapUpgradeDto } from "../../shared/api.js";
 
 /** The planner's sentences are the CLI's, and two of them are not true of the

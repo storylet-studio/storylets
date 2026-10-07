@@ -8,7 +8,6 @@ import { runMarks } from "./run-marks.js";
 describe("run marks", () => {
   it("says nothing before the first play", () => {
     const marks = runMarks();
-    expect(marks.any()).toBe(false);
     expect(marks.now()).toBeUndefined();
     expect(marks.visitedHand("the-inn")).toBe(false);
   });
@@ -55,7 +54,6 @@ describe("run marks", () => {
     const marks = runMarks();
     marks.played("the-inn", "c_ambush");
     marks.reset();
-    expect(marks.any()).toBe(false);
     expect(marks.now()).toBeUndefined();
     expect(marks.visitedHand("the-inn")).toBe(false);
     expect(marks.visitedCard("c_ambush")).toBe(false);

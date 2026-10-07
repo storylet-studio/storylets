@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import { createLiveLinkServer } from "./live-link.js";
+import { createLiveLinkServer, isLocalOrigin } from "./live-link.js";
 import type { LiveLinkServer } from "./live-link.js";
 import type { LiveLinkFrame, LiveLinkStatus } from "../shared/api.js";
 
@@ -177,6 +177,55 @@ describe("the Live Link server", () => {
     h.server.pushBundle("h2", "{}");   // now in sync: not pushed again
     await new Promise((r) => setTimeout(r, 50));
     expect(g.received).toHaveLength(1);
+    g.close();
+  });
+
+  it("accepts no Origin, and a loopback one with or without a scheme (Patterpad's rule)", () => {
+    expect(isLocalOrigin(undefined)).toBe(true);                  // Unity, Godot, Node
+    expect(isLocalOrigin("")).toBe(true);
+    expect(isLocalOrigin("127.0.0.1")).toBe(true);                // Unreal's libwebsockets sends the bare address
+    expect(isLocalOrigin("localhost:5173")).toBe(true);
+    expect(isLocalOrigin("http://localhost:5173")).toBe(true);    // a browser game on a local dev server
+    expect(isLocalOrigin("http://127.0.0.1:8080")).toBe(true);
+    expect(isLocalOrigin("http://[::1]:3000")).toBe(true);
+  });
+
+  it("refuses every other site, a sandboxed frame's null, and a name that only resolves to loopback", () => {
+    expect(isLocalOrigin("https://example.com")).toBe(false);
+    expect(isLocalOrigin("null")).toBe(false);
+    expect(isLocalOrigin("http://localhost.example.com")).toBe(false);
+    expect(isLocalOrigin("http://127.0.0.1.nip.io")).toBe(false);
+    expect(isLocalOrigin("not a url at all")).toBe(false);
+  });
+
+  it("lets a browser game on a local dev server, and Unreal's bare address, connect", async () => {
+    for (const origin of ["http://localhost:5173", "127.0.0.1"]) {
+      const h = await up("h1");
+      const opened = await new Promise<string>((resolve) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${h.port}`, { origin });
+        ws.on("open", () => { ws.close(); resolve("opened"); });
+        ws.on("unexpected-response", (_req, res) => resolve(`refused ${res.statusCode}`));
+        ws.on("error", () => resolve("refused"));
+      });
+      expect(opened, origin).toBe("opened");
+    }
+  });
+
+  it("refuses a web page's connection: an Origin that is not this machine (review 2026-10, section 2)", async () => {
+    const h = await up("h1");
+    // A web page on any site can open a WebSocket to localhost, and the browser
+    // stamps it with the page's Origin.
+    const refused = await new Promise<string>((resolve) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${h.port}`, { origin: "https://somewhere.example" });
+      ws.on("open", () => { ws.close(); resolve("opened"); });
+      ws.on("unexpected-response", (_req, res) => resolve(`refused ${res.statusCode}`));
+      ws.on("error", () => resolve("refused"));
+    });
+    expect(refused).toMatch(/^refused/);
+    // And the server is still there for the game.
+    const g = await game(h.port);
+    g.send({ t: "hello", v: 2, build: "h1", flows: ["main"] });
+    await h.until(() => last(h.statuses).state === "connected");
     g.close();
   });
 

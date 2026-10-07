@@ -68,6 +68,21 @@ export function charColour(tokens: CanvasTokens, name: string): string {
   return ramp[colourIndex(name) % ramp.length] ?? tokens.accent;
 }
 
+/** A token colour at partial alpha. Tokens are hex or rgb(); Konva takes rgba. */
+export function rgba(colour: string, alpha: number): string {
+  const hex = /^#([0-9a-f]{6})$/i.exec(colour.trim());
+  if (hex) {
+    const n = parseInt(hex[1]!, 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  }
+  const rgb = /^rgba?\(([^)]+)\)$/i.exec(colour.trim());
+  if (rgb) {
+    const parts = rgb[1]!.split(",").map((p) => p.trim());
+    return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${alpha})`;
+  }
+  return colour;
+}
+
 /** Which of the theme's ink or surface reads better on `fill`: the one with
  *  the higher WCAG contrast. For a number drawn on a coloured disc, where the
  *  disc is one of twelve stored box colours in either theme, so neither ink

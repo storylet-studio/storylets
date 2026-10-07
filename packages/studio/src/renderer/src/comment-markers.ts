@@ -21,17 +21,24 @@
 // It draws into the surface's MARKER GROUP, a sibling of the chrome group on one
 // layer, so moving a marker never rebuilds the map's handles. See
 // "The layer budget" in the brief for why that is a group and not a layer.
+//
+// The COMMENT TOOL lives here too (`createCommentTool`): arming it, dropping a
+// marker, and opening one from the feedback walk were the same forty lines in
+// the node view and the map, and had already begun to differ.
 // ---------------------------------------------------------------------------
 
 import Konva from "konva";
-import { iconNode } from "@wildwinter/app-shell";
-import type { CanvasItem } from "./canvas-surface.js";
+import { hideTip, iconNode, tipAt } from "@wildwinter/app-shell";
+import { hoverCursor, type CanvasItem, type CanvasSurface } from "./canvas-surface.js";
+import { itemAt } from "./canvas-geometry.js";
 import type { CanvasTokens } from "./canvas-tokens.js";
 import type { CommentMarkerDto } from "../../shared/api.js";
 
 /** The disc's radius in SCREEN pixels: big enough to hit, small enough to sit
  *  beside a card without hiding its title. */
 const R = 11;
+/** The vocabulary's drawing grid: every icon is drawn on a 24-unit square. */
+const ICON_GRID = 24;
 
 export interface MarkerHost {
   /** The markers to draw, as main resolved them. */
@@ -42,10 +49,11 @@ export interface MarkerHost {
   open: (threadId: string, anchor: HTMLElement) => void;
   /** A drag ended: `item` is what it was dropped on, absent for empty canvas. */
   moved: (threadId: string, x: number, y: number, item?: string) => void;
-  /** What is under this canvas point, for deciding a drop's anchor. Cards only:
-   *  furniture and other markers do not carry comments. */
-  itemAt: (x: number, y: number) => string | undefined;
-  /** The stage's container, for the popover proxy and the cursor. */
+  /** What is under this canvas point at this zoom, for deciding a drop's anchor.
+   *  Cards or pins only: furniture and other markers do not carry comments. The
+   *  zoom matters for a pin, whose disc keeps its size on screen. */
+  itemAt: (x: number, y: number, scale: number) => string | undefined;
+  /** The stage's container, for the popover proxy. */
   host: () => HTMLElement;
 }
 
@@ -81,6 +89,10 @@ export function markerPainter<T extends CanvasItem>(
       if (!point) continue;
       group.add(drawMarker(marker, point, scale, t, host, at));
     }
+    // A repaint destroys the disc under the pointer without a mouseleave, so a
+    // tip of ours left up would hang there; the next move over a disc brings it
+    // back.
+    if (tipShowing !== undefined && !host.markers().some((m) => m.id === tipShowing)) clearTip();
   };
 }
 
@@ -108,14 +120,14 @@ function drawMarker<T extends CanvasItem>(
   // canvas should be able to see that a place was discussed and settled.
   const done = marker.open === 0;
 
-  const disc = new Konva.Circle({
+  const disc = hoverCursor(new Konva.Circle({
     radius: r,
     fill: done ? tokens.surface : tokens.accent,
     stroke: done ? tokens.muted : tokens.surface,
     strokeWidth: 1.5 / scale,
     // The only SHAPE in the marker that listens.
     listening: true,
-  });
+  }), "pointer");
   disc.setAttr("markerId", marker.id);
   group.add(disc);
 
@@ -123,13 +135,13 @@ function drawMarker<T extends CanvasItem>(
   // bubbles use (one source), scaled so its 20-unit body sits inside the disc.
   // The stroke scales with the path (Konva's default), so 2.571 on the 24 grid
   // is the family's weight at this size, as it is everywhere else.
-  const k = (r * 1.25) / 24;
+  const k = (r * 1.25) / ICON_GRID;
   group.add(new Konva.Path({
     data: commentPath(),
     stroke: done ? tokens.muted : tokens.surface,
     strokeWidth: 2.571,
     lineCap: "round", lineJoin: "round",
-    x: -12 * k, y: -12 * k, scaleX: k, scaleY: k,
+    x: -(ICON_GRID / 2) * k, y: -(ICON_GRID / 2) * k, scaleX: k, scaleY: k,
     listening: false,
   }));
 
@@ -149,7 +161,7 @@ function drawMarker<T extends CanvasItem>(
     }));
   }
 
-  wireGestures(disc, group, marker, host, at);
+  wireGestures(disc, group, marker, host, at, scale);
   return group;
 }
 
@@ -162,27 +174,26 @@ function drawMarker<T extends CanvasItem>(
  */
 function wireGestures<T extends CanvasItem>(
   disc: Konva.Circle, group: Konva.Group, marker: CommentMarkerDto, host: MarkerHost,
-  at: (id: string) => T | undefined,
+  at: (id: string) => T | undefined, scale: number,
 ): void {
   const container = host.host();
 
+  // The cursor is the surface's to set (the disc says what it wants with
+  // `hoverCursor`); the hover line is the shell's tooltip, the one every other
+  // tip in the app is, rather than a bubble of the marker's own.
   disc.on("mouseenter", () => {
-    container.style.cursor = "pointer";
-    if (marker.gist !== "") showTip(container, group, marker.gist, marker.author);
+    if (marker.gist !== "") showTip(container, group, marker);
   });
-  disc.on("mouseleave", () => {
-    container.style.cursor = "";
-    hideTip(container);
-  });
+  disc.on("mouseleave", () => clearTip());
 
   disc.on("click", (e) => {
     e.cancelBubble = true;
-    hideTip(container);
+    clearTip();
     host.open(marker.id, proxyAt(container, group));
   });
 
   // The drag moves the GROUP (disc plus its glyph), so the whole marker travels.
-  disc.on("dragstart", (e) => { e.cancelBubble = true; hideTip(container); });
+  disc.on("dragstart", (e) => { e.cancelBubble = true; clearTip(); });
   disc.draggable(true);
   disc.on("dragmove", (e) => {
     e.cancelBubble = true;
@@ -199,7 +210,7 @@ function wireGestures<T extends CanvasItem>(
     // that card, with the offset preserving where it was put; dropped on empty
     // canvas it stays where it is. Dragging one OFF a card is the second case,
     // which is why detaching needs no code of its own.
-    const item = host.itemAt(x, y);
+    const item = host.itemAt(x, y, scale);
     const origin = item === undefined ? undefined : at(item);
     if (item !== undefined && origin) host.moved(marker.id, x - origin.x, y - origin.y, item);
     else host.moved(marker.id, x, y);
@@ -208,11 +219,9 @@ function wireGestures<T extends CanvasItem>(
 
 // --- the hover line and the popover's anchor ---------------------------------
 //
-// Both are DOM, not Konva: a tooltip wants to wrap text and a popover wants an
-// element to hang off. They sit in the stage's container, positioned from the
-// marker's screen box.
+// The line is the shell's tooltip; the anchor is DOM, since a popover wants an
+// element to hang off. Both are placed from the marker's screen box.
 
-const TIP = "cmt-marker-tip";
 const PROXY = "cmt-marker-proxy";
 
 /**
@@ -226,47 +235,148 @@ const PROXY = "cmt-marker-proxy";
  * the wrong distance again once zoomed). On a canvas panned by 241px they landed
  * 241px off, which is what "a long way from the object" looks like.
  */
-function screenBox(group: Konva.Group): { left: number; top: number; bottom: number } {
+function screenBox(group: Konva.Group): { left: number; top: number; bottom: number; width: number; height: number } {
   const box = group.getClientRect();
-  return { left: box.x + box.width / 2, top: box.y, bottom: box.y + box.height };
+  return { left: box.x + box.width / 2, top: box.y, bottom: box.y + box.height, width: box.width, height: box.height };
 }
 
-function showTip(container: HTMLElement, group: Konva.Group, text: string, author: string): void {
-  hideTip(container);
-  const tip = document.createElement("div");
-  tip.className = TIP;
-  // WHO, then what. A marker is a person asking something, and on a canvas with
-  // several of them the name is what tells them apart at a glance; the gist alone
-  // reads as an anonymous sticky.
-  if (author !== "") {
-    const who = document.createElement("b");
-    who.textContent = author;
-    tip.append(who, document.createTextNode(` ${text}`));
-  } else {
-    tip.textContent = text;
-  }
-  const at = screenBox(group);
-  tip.style.left = `${Math.round(at.left)}px`;
-  tip.style.top = `${Math.round(at.bottom + 6)}px`;
-  container.append(tip);
+/** The marker whose line is up, so a repaint can take it down. */
+let tipShowing: string | undefined;
+
+/** WHO, then what. A marker is a person asking something, and on a canvas with
+ *  several of them the name is what tells them apart at a glance; the gist alone
+ *  reads as an anonymous sticky. */
+export function markerTipText(marker: { gist: string; author: string }): string {
+  return marker.author === "" ? marker.gist : `${marker.author}: ${marker.gist}`;
 }
 
-function hideTip(container: HTMLElement): void {
-  container.querySelector(`.${TIP}`)?.remove();
+function showTip(container: HTMLElement, group: Konva.Group, marker: CommentMarkerDto): void {
+  const box = group.getClientRect();
+  const origin = container.getBoundingClientRect();
+  tipShowing = marker.id;
+  tipAt(`cmt-marker:${marker.id}`, {
+    left: origin.left + box.x, top: origin.top + box.y, width: box.width, height: box.height,
+  }, markerTipText(marker));
 }
 
-/** A zero-size element at the marker, for the shell's anchored panel to hang
- *  off. Replaced rather than accumulated, and left in place while the panel is
- *  open so it has something to measure. */
-function proxyAt(container: HTMLElement, group: Konva.Group): HTMLElement {
+function clearTip(): void {
+  if (tipShowing === undefined) return;
+  tipShowing = undefined;
+  hideTip();
+}
+
+/** A zero-size element at a point in the container's own pixels, for the
+ *  shell's anchored panel to hang off: it measures an element, and a canvas has
+ *  none at an arbitrary spot. Replaced rather than accumulated, and left in
+ *  place while the panel is open so it has something to measure. */
+export function markerProxy(container: HTMLElement, at: { x: number; y: number }): HTMLElement {
   container.querySelector(`.${PROXY}`)?.remove();
   const proxy = document.createElement("div");
   proxy.className = PROXY;
-  const at = screenBox(group);
-  proxy.style.left = `${Math.round(at.left)}px`;
-  proxy.style.top = `${Math.round(at.top)}px`;
+  proxy.style.left = `${Math.round(at.x)}px`;
+  proxy.style.top = `${Math.round(at.y)}px`;
   container.append(proxy);
   return proxy;
+}
+
+function proxyAt(container: HTMLElement, group: Konva.Group): HTMLElement {
+  const at = screenBox(group);
+  return markerProxy(container, { x: at.left, y: at.top });
+}
+
+// --- the comment tool ------------------------------------------------------------
+
+export interface CommentToolDeps<T extends CanvasItem> {
+  surface: CanvasSurface<T>;
+  /** The stage's container. */
+  host: HTMLElement;
+  /** Every item on the canvas, in draw order. */
+  items: () => readonly T[];
+  /** Which of them a comment can be filed against: a card, a pin. */
+  carries: (item: T) => boolean;
+  markers: () => CommentMarkerDto[];
+  openThread: (threadId: string, anchor: HTMLElement) => void;
+  startThread: (at: { x: number; y: number }, item: string | undefined, anchor: HTMLElement) => void;
+  moveMarker: (threadId: string, x: number, y: number, item?: string) => void;
+  tokens: () => CanvasTokens;
+  /** The tool was armed or put down: the strip says so. */
+  changed: () => void;
+}
+
+export interface CommentTool {
+  arm: () => void;
+  disarm: () => void;
+  armed: () => boolean;
+  /** Open one marker's thread from OUTSIDE the canvas, centring on it: the
+   *  feedback walk's way in. False when that thread is not a marker here. */
+  open: (threadId: string) => boolean;
+}
+
+/**
+ * The comment tool and the markers, for one canvas.
+ *
+ * Arming it makes the next click drop a marker and open its composer. The click
+ * creates nothing: nothing is written until the first message is posted, which
+ * is the rule the whole comment feature keeps, since opening a composer and
+ * thinking better of it must leave nothing behind.
+ *
+ * Dropped on something that carries comments, the stored position is an OFFSET
+ * from it, so the marker keeps its place beside the thing when the thing moves.
+ * "On" is judged as drawn (canvas-geometry `itemAt`): a pin by its disc, which
+ * holds its size on screen, and not by its box, which does not.
+ */
+export function createCommentTool<T extends CanvasItem>(deps: CommentToolDeps<T>): CommentTool {
+  let armed = false;
+  const { surface, host } = deps;
+  const carrierAt = (point: { x: number; y: number }, scale: number): T | undefined =>
+    itemAt(deps.items(), point, scale, deps.carries);
+  const proxyFor = (at: { x: number; y: number }): HTMLElement => markerProxy(host, surface.toScreen(at));
+
+  surface.setMarkers(markerPainter<T>({
+    markers: deps.markers,
+    open: deps.openThread,
+    moved: deps.moveMarker,
+    itemAt: (x, y, scale) => carrierAt({ x, y }, scale)?.id,
+    host: () => host,
+  }, deps.tokens));
+
+  function disarm(): void {
+    armed = false;
+    surface.setTool(undefined);
+    deps.changed();
+  }
+
+  function arm(): void {
+    armed = true;
+    surface.setTool({
+      cursor: "crosshair",
+      onClick: (at) => {
+        disarm();
+        const over = carrierAt(at, surface.scale());
+        const point = over ? { x: at.x - over.x, y: at.y - over.y } : at;
+        deps.startThread(point, over?.id, proxyFor(at));
+      },
+      // Escape, or another tool replacing this one.
+      onCancel: () => { armed = false; deps.changed(); },
+    });
+    deps.changed();
+  }
+
+  function open(threadId: string): boolean {
+    const marker = deps.markers().find((m) => m.id === threadId);
+    if (!marker) return false;
+    const point = markerPoint(marker, (id) => deps.items().find((i) => i.id === id));
+    if (!point) return false;
+    // A marker is a Konva shape, so it cannot be reached the way the walk
+    // reaches a document's topline bubble: the canvas centres on it and the
+    // popover hangs off a proxy at its point. The camera eases there, so the
+    // proxy goes where the point is GOING: the middle of the view.
+    surface.centreAt(point);
+    deps.openThread(threadId, markerProxy(host, { x: host.clientWidth / 2, y: host.clientHeight / 2 }));
+    return true;
+  }
+
+  return { arm, disarm, armed: () => armed, open };
 }
 
 // The `d` of the vocabulary's comment drawing, read once from the shell's own

@@ -5,8 +5,7 @@
 // Rebuilt whenever recents or the theme change.
 // ---------------------------------------------------------------------------
 
-import { app, Menu, shell } from "electron";
-import type { BrowserWindow } from "electron";
+import { app, BrowserWindow, Menu, shell } from "electron";
 import { basename } from "node:path";
 import { PROJECT_FOLDER_EXTENSION } from "@storylet-studio/model";
 import {
@@ -15,9 +14,8 @@ import {
 } from "@wildwinter/app-shell/menu";
 import type { MenuCommand, StudioState } from "../shared/api.js";
 import { EXAMPLES } from "../shared/examples.js";
+import { push } from "./ipc/push.js";
 import { manualCheckForUpdates } from "@wildwinter/app-shell/updater";
-
-const isMac = process.platform === "darwin";
 
 /**
  * The Server menu's state, or nothing at all.
@@ -35,6 +33,14 @@ export interface ServerMenuState {
   status: string;
 }
 
+/** What the menu needs to know about the open project to grey what cannot act:
+ *  whether there is one, and whether the editor has a deck in focus for New
+ *  Card to add to (the renderer says, through `setDeckFocused`). */
+export interface MenuProject {
+  open: boolean;
+  deckFocused: boolean;
+}
+
 /** `liveLink`: the Live Link server is up (listening or connected), so Play >
  *  Live Link shows ticked; it is the server's state, not a remembered one.
  *  `server`: the open project came from one and we still hold its key. */
@@ -42,8 +48,13 @@ export function refreshMenu(
   window: BrowserWindow | undefined, state: StudioState, liveLink = false, server?: ServerMenuState,
   /** The open project names its Patter project, so Edit Scene in Patterpad has somewhere to go. */
   patter = false,
+  /** Items that need a project are greyed without one, Patterpad's mechanism:
+   *  the menu is rebuilt with the state, and each such item carries `enabled`. */
+  project: MenuProject = { open: false, deckFocused: false },
 ): void {
-  const send = (command: MenuCommand) => () => window?.webContents.send("menu", command);
+  const isMac = process.platform === "darwin";
+  const open = project.open;
+  const send = (command: MenuCommand) => () => { if (window) push(window.webContents, "menu", command); };
   // The family's labels AND keys, from the shell's tables rather than typed
   // here (the menu spine, app-shell 0.16.0; the File / Play / Review / Publish /
   // View tables since the 2026-09 review). Every spine item is SPREAD, so an
@@ -99,24 +110,21 @@ export function refreshMenu(
     {
       label: "File",
       submenu: [
+        // Patterpad's File, group for group: the project's way in and out
+        // first (New, Open, the pack, Open Recent, Close Project), then saving
+        // and sending, then the item-level act, then the project's settings,
+        // then Quit at the foot where there is no app menu (review 2026-10,
+        // item 24).
+        //
         // New before Open, as Patterpad has it and as every File menu does.
         // There was no New item at all and no Cmd+N: the only route to a new
         // project was a bare input on the welcome screen, so with one already
         // open you could not start another (design review 2026-08, A5).
         { ...FILE_MENU.newProject, click: send({ cmd: "new-project" }) },
         { ...FILE_MENU.openProject, click: send({ cmd: "open" }) },
-        { type: "separator" },
-        // A6: half the keyboard was folklore. New Card was a BARE N with no menu
-        // item and no cue - a bare letter as an accelerator appears nowhere in
-        // Patterpad's vocabulary - and Save was handled in the keydown while
-        // being absent from File. A menu item is where a family user looks, and
-        // it makes the accelerator discoverable for nothing.
-        //
-        // Shift+Cmd+N is Patterpad's key for New Scene, which is the same act one
-        // container down.
-        { label: "New Card", accelerator: "Shift+CmdOrCtrl+N", click: send({ cmd: "new-card" }) },
-        { type: "separator" },
-        { ...FILE_MENU.save, click: send({ cmd: "save" }) },
+        // A pack is a single FILE, so it needs its own picker (Patterpad's
+        // Open Patterpack, in the same place).
+        { label: "Open Storyletpack\u2026", click: send({ cmd: "open-pack" }) },
         {
           ...FILE_MENU.openRecent,
           // The shell's submenu: the name with the PATH beside it, because the
@@ -131,31 +139,19 @@ export function refreshMenu(
             home: app.getPath("home"),
           }),
         },
-        { ...FILE_MENU.projectSettings, click: send({ cmd: "project-settings" }) },
-        // The game's shared scopes folder (patterkit design/shared-scopes.md): creating it is
-        // an explicit act, never a side effect, and this is the act. Beside Project Settings
-        // because it is about the project's place in the game rather than about any one shard.
-        { label: "Share Scopes with Other Tools\u2026", click: send({ cmd: "share-scopes" }) },
-        // Who comments are signed as. Beside Project Settings and NOT in it: the
-        // name belongs to the person at the keyboard, not to the project, which
-        // is the same reason it lives in the app's state.
-        //
-        // "User Information" is Patterpad's label, in Patterpad's place: the app
-        // menu on macOS, the foot of File everywhere else. An earlier cut called
-        // it "Your Name" - a nicer phrase and the wrong one, because a menu item
-        // is part of the family's vocabulary.
-        ...(isMac ? [] : [{ ...APP_MENU.userInfo, click: send({ cmd: "identity" }) }]),
-        { type: "separator" },
-        // The send envelope (Reboot 7.1): handing the project to someone with
-        // no shared version control, and taking their edits back afterwards.
         // The way back to the welcome screen, and so to the shipped examples
         // (the author's report: once in a project there was none). JetBrains'
         // File > Close Project, with the shell owning the teardown order.
-        { ...FILE_MENU.closeProject, click: send({ cmd: "close-project" }) },
+        { ...FILE_MENU.closeProject, enabled: open, click: send({ cmd: "close-project" }) },
         { type: "separator" },
-        { label: "Open Storyletpack\u2026", click: send({ cmd: "open-pack" }) },
-        { label: "Export as Storyletpack\u2026", click: send({ cmd: "export-pack" }) },
-        { label: "Merge Returned Storyletpack\u2026", click: send({ cmd: "merge-pack" }) },
+        // A6: half the keyboard was folklore. Save was handled in the keydown
+        // while being absent from File. A menu item is where a family user
+        // looks, and it makes the accelerator discoverable for nothing.
+        { ...FILE_MENU.save, enabled: open, click: send({ cmd: "save" }) },
+        // The send envelope (Reboot 7.1): handing the project to someone with
+        // no shared version control, and taking their edits back afterwards.
+        { label: "Export as Storyletpack\u2026", enabled: open, click: send({ cmd: "export-pack" }) },
+        { label: "Merge Returned Storyletpack\u2026", enabled: open, click: send({ cmd: "merge-pack" }) },
         // The pack exchange's one door, beside the other pack items because it
         // is the same act over a wire: it asks for an address and a code, and
         // it is for somebody who already has both. Everything else the exchange
@@ -169,13 +165,33 @@ export function refreshMenu(
         // ever grows the other half.
         { label: "Connect to a Server\u2026", click: send({ cmd: "connect-server" }) },
         { type: "separator" },
+        // New Card was a BARE N with no menu item and no cue - a bare letter as
+        // an accelerator appears nowhere in Patterpad's vocabulary. Shift+Cmd+N
+        // is Patterpad's key for New Scene, which is the same act one container
+        // down, and like it this needs somewhere to put the card: a deck in focus.
+        { label: "New Card", accelerator: "Shift+CmdOrCtrl+N", enabled: open && project.deckFocused, click: send({ cmd: "new-card" }) },
+        { type: "separator" },
+        { ...FILE_MENU.projectSettings, click: send({ cmd: "project-settings" }) },
+        // The game's shared scopes folder (patterkit design/shared-scopes.md): creating it is
+        // an explicit act, never a side effect, and this is the act. Beside Project Settings
+        // because it is about the project's place in the game rather than about any one shard.
+        { label: "Share Scopes with Other Tools\u2026", enabled: open, click: send({ cmd: "share-scopes" }) },
+        // Who comments are signed as. Beside Project Settings and NOT in it: the
+        // name belongs to the person at the keyboard, not to the project, which
+        // is the same reason it lives in the app's state.
+        //
+        // "User Information" is Patterpad's label, in Patterpad's place: the app
+        // menu on macOS, the foot of File everywhere else.
+        ...(isMac ? [] : [{ ...APP_MENU.userInfo, click: send({ cmd: "identity" }) }]),
         // A12: on macOS there is NO File > Close Window, which is Patterpad's
-        // written decision and was reversed here without a note. Quit in the app
-        // menu and the window's own close button already cover it, and a Close
-        // that leaves the app running with no window is a state neither app
-        // wants. Elsewhere, Quit belongs at the foot of File as it always does,
-        // under the word Windows and Linux menus use for it (parity row 24).
-        ...(isMac ? [] : [{ role: "quit" as const, label: "Exit" }]),
+        // written decision. Quit in the app menu and the window's own close
+        // button already cover it. Elsewhere Quit belongs at the foot of File,
+        // under the word each platform uses: "Exit" on Windows, "Quit" on Linux
+        // (Patterpad's labels).
+        ...(isMac ? [] : [
+          { type: "separator" as const },
+          { role: "quit" as const, label: process.platform === "win32" ? "Exit" : "Quit" },
+        ]),
       ],
     },
     {
@@ -187,12 +203,28 @@ export function refreshMenu(
         { ...EDIT_MENU.undo, click: send({ cmd: "undo" }) },
         { ...EDIT_MENU.redo, click: send({ cmd: "redo" }) },
         { type: "separator" },
+        { role: "cut" }, { role: "copy" }, { role: "paste" },
+        // NOT the native role, which selects the whole page, and which also took
+        // Cmd+A before a canvas could select its cards (review 2026-10). In the
+        // editor it goes to the renderer, which offers it to the canvas and then
+        // to the focused field; a tool window keeps the native behaviour, as in
+        // Patterpad (whose menu this is).
+        {
+          label: "Select All",
+          accelerator: "CmdOrCtrl+A",
+          click: () => {
+            const focused = BrowserWindow.getFocusedWindow();
+            if (focused && focused !== window) { focused.webContents.selectAll(); return; }
+            if (window) push(window.webContents, "menu", { cmd: "select-all" });
+          },
+        },
+        { type: "separator" },
+        // Below Select All, as Patterpad has it: the text roles together, then
+        // the acts on the open item.
         { ...EDIT_MENU.duplicate, click: send({ cmd: "duplicate" }) },
         // Only while the project is paired with a Patter project (its `patter`): the card's scene
         // is the scene named after it (Reboot 10). Beside Duplicate, as the other act on the open item.
         ...(patter ? [{ label: "Edit Scene in Patterpad", click: send({ cmd: "edit-in-patterpad" }) }] : []),
-        { type: "separator" },
-        { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" },
         { type: "separator" },
         // Find lives in Edit (Patterpad's placement, the platform convention).
         { ...EDIT_MENU.find, click: send({ cmd: "search" }) },
@@ -207,13 +239,15 @@ export function refreshMenu(
     {
       label: "Play",
       submenu: [
-        { label: "The Board", accelerator: "CmdOrCtrl+T", click: send({ cmd: "table" }) },
+        // Cmd+P, as Play Scene is in Patterpad (ruling O, 2026-10-06): both
+        // topbar buttons say Play, and Patterpad's Cmd+T changes a line's type.
+        { label: "The Board", accelerator: "CmdOrCtrl+P", enabled: open, click: send({ cmd: "table" }) },
         { type: "separator" },
         // Live Link (design/live-link.md): Patterpad's item, label and place.
         // Ticked while the server is up (listening or connected); the
         // bottom-right connect chip mirrors the same state. No accelerator,
         // as Patterpad has none.
-        { ...PLAY_MENU.liveLink, type: "checkbox", checked: liveLink, click: send({ cmd: "live-link" }) },
+        { ...PLAY_MENU.liveLink, type: "checkbox", checked: liveLink, enabled: open || liveLink, click: send({ cmd: "live-link" }) },
       ],
     },
     // Patterpad's REVIEW menu, adopted: it is where that app keeps Coverage
@@ -260,14 +294,14 @@ export function refreshMenu(
       submenu: [
         // The playable export (parity audit 9.3): Patterpad's first Publish item,
         // the page for players ahead of the workbook for readers.
-        { ...PUBLISH_MENU.playableHtml, click: send({ cmd: "export-html" }) },
+        { ...PUBLISH_MENU.playableHtml, enabled: open, click: send({ cmd: "export-html" }) },
         // The readable export (parity audit 9.5): Patterpad's "Publish Readable
         // Script…" slot, the person-facing output ABOVE the game-facing bundle,
         // and the menu's verb ("Publish", never "Export", for anything handed to
         // others). "Spreadsheet" needs no "Readable" the way a script does.
-        { label: "Publish Spreadsheet…", click: send({ cmd: "export-xlsx" }) },
+        { label: "Publish Spreadsheet…", enabled: open, click: send({ cmd: "export-xlsx" }) },
         { type: "separator" },
-        { ...PUBLISH_MENU.bundle, click: send({ cmd: "export" }) },
+        { ...PUBLISH_MENU.bundle, enabled: open, click: send({ cmd: "export" }) },
         { type: "separator" },
         { ...PUBLISH_MENU.autoRebuild, type: "checkbox", checked: state.autoRebuild, click: send({ cmd: "toggle-auto-rebuild" }) },
       ],
@@ -288,23 +322,26 @@ export function refreshMenu(
     {
       label: "View",
       submenu: [
+        // Patterpad's three groups, in its order (review 2026-10, item 24):
+        // hierarchy, then history, then the panes.
+        //
+        // The overview's door, and the one a family user looks for first (A13):
+        // Patterpad has View > Project Overview. Up a Level climbs; Cmd+[ is the
+        // key advertised because it is unambiguous (Cmd+Up and Cmd+Left are OS
+        // text keys first, which is exactly what A1 had to fix).
+        { ...VIEW_MENU.projectOverview, click: send({ cmd: "project-overview" }) },
+        { ...VIEW_MENU.upALevel, click: send({ cmd: "go-up" }) },
+        { type: "separator" },
+        // History's axis, beside hierarchy's: Back retraces jumps. The labels
+        // and platform-split keys are the shell's (GO_MENU), so the family
+        // cannot disagree on them. Always enabled: the arrows in the trail
+        // carry the greyed state, and a step with nowhere to go is a quiet no-op.
+        { label: GO_MENU.back.label, accelerator: isMac ? GO_MENU.back.acceleratorMac : GO_MENU.back.acceleratorOther, click: send({ cmd: "nav-back" }) },
+        { label: GO_MENU.forward.label, accelerator: isMac ? GO_MENU.forward.acceleratorMac : GO_MENU.forward.acceleratorOther, click: send({ cmd: "nav-forward" }) },
+        { type: "separator" },
         // The inspector pane is retired (ux-changes v3); its menu slot and Cmd+2
         // are reserved for a future genuinely-optional reference pane.
         { label: PANE_MENU.showNav.label, type: "checkbox", checked: state.panes.nav, accelerator: PANE_MENU.showNav.accelerator, click: send({ cmd: "toggle-nav" }) },
-        // The overview's second door, and the one a family user looks for first
-        // (A13). Patterpad has View > Project Overview.
-        // The up-level trio had no menu home either. Cmd+[ is the one advertised
-        // because it is unambiguous: Cmd+Up and Cmd+Left do the same thing but
-        // are OS text keys first, which is exactly what A1 had to fix.
-        // History's axis, beside hierarchy's: Back retraces jumps, Up a Level
-        // climbs. The labels and platform-split keys are the shell's (GO_MENU),
-        // so the family cannot disagree on them. Always enabled: the arrows in
-        // the trail carry the greyed state, and a step with nowhere to go is a
-        // quiet no-op.
-        { label: GO_MENU.back.label, accelerator: process.platform === "darwin" ? GO_MENU.back.acceleratorMac : GO_MENU.back.acceleratorOther, click: send({ cmd: "nav-back" }) },
-        { label: GO_MENU.forward.label, accelerator: process.platform === "darwin" ? GO_MENU.forward.acceleratorMac : GO_MENU.forward.acceleratorOther, click: send({ cmd: "nav-forward" }) },
-        { ...VIEW_MENU.upALevel, click: send({ cmd: "go-up" }) },
-        { ...VIEW_MENU.projectOverview, click: send({ cmd: "project-overview" }) },
         { ...PANE_MENU.resetView, click: send({ cmd: "reset-view" }) },
         { type: "separator" },
         // No accelerator, deliberately. Patterpad has no analogue to copy a key
@@ -317,18 +354,23 @@ export function refreshMenu(
         { type: "separator" },
         {
           ...VIEW_MENU.colourTheme,
+          // Follow System first, as Patterpad lists it: the default, then the palettes.
           submenu: [
+            themeItem("Follow System", "system"),
             themeItem("Chambray", "chambray"), themeItem("Indigo", "indigo"),
             themeItem("Linen", "linen"), themeItem("Baize", "baize"),
-            themeItem("Follow System", "system"),
           ],
         },
         { type: "separator" },
         // The platform's own zoom and full-screen items, which Patterpad's View
         // menu carries and this one had left out (parity row 24).
         { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" },
-        { type: "separator" },
-        { role: "togglefullscreen" },
+        // macOS appends its OWN Enter Full Screen to the View menu of a window
+        // that can go full screen, so declaring the role there listed it twice
+        // (Patterpad's finding). Windows and Linux get no such item.
+        ...(isMac ? [] : [{ type: "separator" as const }, { role: "togglefullscreen" as const }]),
+        // Reload and the developer tools in development builds only (section 6
+        // of the review: Patterpad is to follow).
         ...(app.isPackaged ? [] : [
           { type: "separator" as const },
           { role: "reload" as const },

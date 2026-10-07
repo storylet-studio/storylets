@@ -15,10 +15,11 @@
 //   - every handle holds a constant size on screen, or it is unclickable when
 //     zoomed out and enormous when zoomed in
 //
-// Pure drawing plus geometry; the gestures live in map-view.ts.
+// Pure drawing plus geometry; the gestures live in map-tools.ts.
 // ---------------------------------------------------------------------------
 
 import Konva from "konva";
+import { hoverCursor } from "./canvas-surface.js";
 import type { CanvasTokens } from "./canvas-tokens.js";
 import type { Polygon, ViewPoint } from "@storylet-studio/model";
 
@@ -88,12 +89,6 @@ export interface HandleActions {
 }
 
 /**
- * The handles on a selected zone: one per vertex to reshape, one per edge to
- * insert. Drawn into the surface's CHROME layer, which listens, so they can be
- * grabbed; every handler stops the event so a handle drag is not also a canvas
- * gesture.
- */
-/**
  * Corner handles for a background: scale it, keeping its shape.
  *
  * Corners only, and always PROPORTIONAL. A background is a photograph of a real
@@ -124,11 +119,14 @@ export function paintScaleHandles(
   const ratio = rect.width / Math.max(1, rect.height);
 
   for (const corner of corners) {
-    const handle = new Konva.Circle({
+    // The diagonal resize cursor for the corner it is: top-left and bottom-right
+    // pull along one diagonal, the other two along the other.
+    const diagonal = (corner.at.x < corner.anchor.x) === (corner.at.y < corner.anchor.y) ? "nwse-resize" : "nesw-resize";
+    const handle = hoverCursor(new Konva.Circle({
       x: corner.at.x, y: corner.at.y, radius: r,
       fill: tokens.surface, stroke: tokens.accent, strokeWidth: 2 / scale,
       draggable: true,
-    });
+    }), diagonal);
     /** The rectangle this pointer position implies, with the shape kept. */
     const shaped = (to: { x: number; y: number }): { x: number; y: number; width: number; height: number } => {
       const wanted = { width: Math.abs(to.x - corner.anchor.x), height: Math.abs(to.y - corner.anchor.y) };
@@ -157,6 +155,13 @@ export function paintScaleHandles(
   }
 }
 
+/**
+ * The handles on a selected zone: one per vertex to reshape, one per edge to
+ * insert. Drawn into the surface's CHROME layer, which listens, so they can be
+ * grabbed; every handler stops the event so a handle drag is not also a canvas
+ * gesture. Each says which cursor it wants (`hoverCursor`) and the surface sets
+ * it, so a handle rebuilt under the pointer cannot leave its cursor behind.
+ */
 export function paintHandles(
   layer: Konva.Container, scale: number, tokens: CanvasTokens,
   polygon: Polygon, actions: HandleActions, selected?: number,
@@ -168,29 +173,27 @@ export function paintHandles(
   polygon.forEach((p, i) => {
     const next = polygon[(i + 1) % polygon.length]!;
     const mid = { x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 };
-    const insert = new Konva.Circle({
+    const insert = hoverCursor(new Konva.Circle({
       x: mid.x, y: mid.y, radius: INSERT_R / scale,
       fill: tokens.surface, stroke: tokens.accent, strokeWidth: 1.5 / scale, opacity: 0.9,
-    });
+    }), "copy");
     // NOT cancelling the mousedown: the surface needs to see that a press landed on
     // chrome (it suppresses its own context menu for one), and it already ignores
     // presses whose target is not the stage, so nothing here starts a marquee.
     insert.on("click", (e) => { e.cancelBubble = true; actions.insertVertex(i, mid); });
-    insert.on("mouseenter", () => { layer.getStage()?.container().style.setProperty("cursor", "copy"); });
-    insert.on("mouseleave", () => { layer.getStage()?.container().style.removeProperty("cursor"); });
     layer.add(insert);
   });
 
   polygon.forEach((p, i) => {
     const isSelected = selected === i;
-    const handle = new Konva.Circle({
+    const handle = hoverCursor(new Konva.Circle({
       x: p.x, y: p.y, radius: isSelected ? r * 1.35 : r,
       // A selected corner is filled from the ink and ringed, so "this is the one
       // Delete will take" is legible without a legend.
       fill: isSelected ? tokens.ink : tokens.accent,
       stroke: tokens.surface, strokeWidth: (isSelected ? 2 : 1.5) / scale,
       draggable: true,
-    });
+    }), "move");
     handle.on("dragmove", (e) => { e.cancelBubble = true; actions.previewVertex(i, { x: e.target.x(), y: e.target.y() }); });
     handle.on("dragend", (e) => {
       e.cancelBubble = true;
@@ -210,8 +213,6 @@ export function paintHandles(
       actions.selectVertex(i);
       actions.menuForVertex(i, e.evt);
     });
-    handle.on("mouseenter", () => { layer.getStage()?.container().style.setProperty("cursor", "move"); });
-    handle.on("mouseleave", () => { layer.getStage()?.container().style.removeProperty("cursor"); });
     layer.add(handle);
   });
 }
@@ -228,3 +229,23 @@ export const withVertexAfter = (polygon: Polygon, index: number, at: ViewPoint):
  *  with two is not a shape and the author would have destroyed it by accident. */
 export const withoutVertex = (polygon: Polygon, index: number): Polygon | undefined =>
   (polygon.length <= 3 ? undefined : polygon.filter((_, i) => i !== index));
+
+/**
+ * Write a new place or size into the canvas's OWN copy of an item, by id, and
+ * return the item as it now is (undefined when there is none).
+ *
+ * A view holds its own copy of every shape, and a quiet save (one that does not
+ * remount the view) changes the shard and nothing on screen. So a picture
+ * scaled by its corners stayed drawn at its old size until something else
+ * rebuilt the map. The map and its lab both apply an edit through this before
+ * persisting it, so the lab cannot quietly paper over a view that forgets to.
+ */
+export function applyRect<T extends { id: string; x: number; y: number; width: number; height: number }>(
+  items: T[], id: string, rect: { x?: number; y?: number; width?: number; height?: number },
+): T | undefined {
+  const at = items.findIndex((i) => i.id === id);
+  if (at < 0) return undefined;
+  const next = { ...items[at]!, ...rect };
+  items[at] = next;
+  return next;
+}

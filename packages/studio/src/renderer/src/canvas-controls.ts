@@ -17,8 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import "./canvas-controls.css";
-import { tipWithKey } from "@wildwinter/app-shell";
-import { el } from "./dom.js";
+import { el, iconNode, tipWithKey, type Child } from "@wildwinter/app-shell";
 
 /** The four the cluster draws, on the shell's grammar: the 24 grid, the
  *  2.571 stroke (1.5px at 14px), round caps and joins, currentColor, and the
@@ -124,4 +123,48 @@ export function mountCanvasControls(host: HTMLElement, actions: CanvasControlAct
     },
     destroy() { bar.remove(); },
   };
+}
+
+// --- the strip under a canvas ---------------------------------------------------
+
+/** The glyph size in a strip button, the strip's own scale. */
+export const STRIP_ICON_PX = 12;
+
+/**
+ * The strip under a canvas while a tool is armed: one instruction and a way
+ * out, and nothing else. Every armed state on both canvases (tracing a zone,
+ * placing a pin, drawing a frame, dropping a comment) says it this way, so the
+ * grammar is written once.
+ */
+export function armedStrip(hint: string, cancel: () => void): HTMLElement[] {
+  return [
+    el("span", { className: "hint", text: hint }),
+    el("span", { className: "stripgap" }),
+    el("button", {
+      className: "stripbtn cancel", tip: tipWithKey("Abandon this", "Esc"), onClick: cancel,
+    }, iconNode("close", STRIP_ICON_PX), "Cancel"),
+  ];
+}
+
+/**
+ * The armed strip for the two tools both canvases carry, the comment tool and
+ * the furniture's, or undefined when neither is armed. The comment tool wins:
+ * arming it puts any other tool down, so only a stale hint could disagree.
+ */
+export function sharedToolStrip(
+  comments: { armed: () => boolean; disarm: () => void } | undefined,
+  furniture: { hint: () => string | undefined; cancel: () => void } | undefined,
+): HTMLElement[] | undefined {
+  const armed = comments?.armed() === true;
+  const hint = armed ? "Click where the comment goes" : furniture?.hint();
+  if (hint === undefined) return undefined;
+  return armedStrip(hint, () => { if (armed) comments?.disarm(); else furniture?.cancel(); });
+}
+
+/** A strip verb that ADDS something to the canvas, in the strip's add voice:
+ *  the drawn plus, then the word, then anything the verb carries after it. */
+export function stripAddButton(
+  label: string, tip: string, onClick: (e: MouseEvent) => void, ...after: Child[]
+): HTMLButtonElement {
+  return el("button", { className: "stripbtn", tip, onClick }, iconNode("add", STRIP_ICON_PX), label, ...after);
 }

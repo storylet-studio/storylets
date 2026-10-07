@@ -17,16 +17,16 @@
 // disagree about which card leads.
 // ---------------------------------------------------------------------------
 
-import { el } from "../src/dom.js";
-import { formatCount, metaLine, plural } from "@wildwinter/app-shell";
+import { el, formatCount, metaLine, plural } from "@wildwinter/app-shell";
 import { leastReachedFirst, sharePct } from "@storylet-studio/ops/coverage-order";
 import type { CoverageOrder, CoverageReport, SearchSelection } from "../../shared/api.js";
 
 type CardRow = CoverageReport["cards"][number];
 
 /** Give an element a themed rollover without making it the accessible name
- *  (`tip` on `el` does both, which suits an icon button, not a heading). */
-function withTip<T extends HTMLElement>(node: T, tip: string): T {
+ *  (`tip` on `el` does both, which suits an icon button, not a heading). The
+ *  one copy: the window's own run line uses it too. */
+export function withTip<T extends HTMLElement>(node: T, tip: string): T {
   node.dataset["tip"] = tip;
   return node;
 }

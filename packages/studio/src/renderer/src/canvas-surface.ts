@@ -8,6 +8,11 @@
 // You hand it items and a `draw` that turns one item into a Konva.Group, and it
 // places, hit-tests, selects and moves them. It knows nothing about cards.
 //
+// The RULES are out of this file, where they can be tested without a canvas:
+// the arithmetic in canvas-geometry.ts, who owns the keyboard and what each key
+// and cursor means in canvas-input.ts, and the eased camera's clock in
+// canvas-tween.ts. What stays is the state, the Konva, and the wiring.
+//
 // Conventions carried from the old system, which paid for them once already
 // (../storylets-old/docs/developer/storymap-canvas.md section 2):
 //   - chrome scales INVERSELY with zoom, so rings and handles stay a constant
@@ -30,6 +35,18 @@ import Konva from "konva";
 import { hideTip, isEditableTarget, tipAt } from "@wildwinter/app-shell";
 import { mountCanvasControls, type CanvasControls } from "./canvas-controls.js";
 import type { CanvasTokens } from "./canvas-tokens.js";
+import {
+  DRAG_THRESHOLD_PX, allInView, boxBetween, centredCamera, clampScale, contentBounds, crossesFloor, frameCamera,
+  isAdditive, isContextPress, meetsBox, onGridLine, pastDragThreshold, screenToWorld, snapDelta, viewCentre,
+  visibleRect, worldRectToScreen, worldToScreen, zoomAbout, type Camera, type Point, type Rect,
+} from "./canvas-geometry.js";
+import { canvasKey, cursorFor, escapeTakes, ownsKeys } from "./canvas-input.js";
+import { cameraMotion, startCameraTween, type CameraTween } from "./canvas-tween.js";
+
+export type { Camera } from "./canvas-geometry.js";
+// Where the key rules live now (canvas-input.ts); exported from here as well,
+// which is where callers have always found it.
+export { escapeTakes };
 
 /** The minimum a surface needs to know about a thing it draws. */
 export interface CanvasItem {
@@ -71,6 +88,14 @@ export interface CanvasItem {
    * ring cannot drift from the disc.
    */
   discRadius?: number;
+  /**
+   * The part of the item that answers the pointer, relative to its origin, in
+   * world units, when that is not the whole box. A frame's is its title bar: the
+   * body is drawn without listening so the cards inside it stay clickable, and a
+   * marquee has to agree, or a sweep round those cards takes the frame as well
+   * (canvas-geometry `meetsBox`).
+   */
+  hitArea?: { x: number; y: number; width: number; height: number };
 }
 
 export interface DrawContext {
@@ -91,8 +116,10 @@ export interface CanvasSurfaceOptions<T extends CanvasItem> {
   host: HTMLElement;
   tokens: CanvasTokens;
   /** Turn one item into a group drawn at the ORIGIN: the surface positions it.
-   *  Called again when the items, the zoom or the theme change. NOT on selection
-   *  (see DrawContext), and never during a drag. */
+   *  Called again when the items or the theme change, and on a zoom only when
+   *  the group did not say how to follow one (`rescalable`) or the zoom crossed
+   *  one of its floors. NOT on selection (see DrawContext), and never during a
+   *  drag. */
   draw: (item: T, ctx: DrawContext) => Konva.Group;
   /** Snap step in world units. 0 disables the grid and snapping. */
   grid?: number;
@@ -117,7 +144,9 @@ export interface CanvasSurfaceOptions<T extends CanvasItem> {
   onActivate?: (id: string) => void;
   onDelete?: (ids: string[]) => void;
   /** A plain letter key the surface does not claim, lowercased. The guard against
-   *  firing while the author is typing lives here, so every caller gets it. */
+   *  firing while the author is typing lives here, so every caller gets it, as
+   *  does the one against a key meant for something else (canvas-input
+   *  `ownsKeys`). */
   onKey?: (key: string) => void;
   /** Right-click: `id` is the item under the pointer, or undefined for empty
    *  canvas, and `world` is where the click landed in canvas coordinates so a
@@ -141,7 +170,8 @@ export interface CanvasSurfaceOptions<T extends CanvasItem> {
    *
    *  For the label a zoom has taken away. Every canvas here abbreviates as it
    *  shrinks (a card loses its title below 34%, a zone and a pin lose their names
-   *  below 35%), which is right - text scaled to two pixels is worse than no text
+   *  below 35%, a frame its name below 60%), which is right - text scaled to two
+   *  pixels is worse than no text
    *  - but it leaves a board of anonymous shapes with no way to ask which is
    *  which short of zooming back in. The tip is DOM, so it holds its size however
    *  far out the camera is: that is the whole point of it.
@@ -208,13 +238,6 @@ export interface CanvasTool {
   onCancel?: () => void;
 }
 
-/** Where the camera is looking: the stage offset and the zoom. */
-export interface Camera {
-  x: number;
-  y: number;
-  scale: number;
-}
-
 export interface CanvasSurface<T extends CanvasItem> {
   /** Replace the items. The selection survives for ids that still exist. */
   setItems: (items: T[]) => void;
@@ -245,10 +268,10 @@ export interface CanvasSurface<T extends CanvasItem> {
    * GROUP, so the two repaint independently: a marker drag must not rebuild the
    * map's vertex handles, and dragging a vertex must not make markers flicker.
    *
-   * A group rather than a layer of its own on purpose. Konva warns above six
-   * layers and this file already has six; z-order inside a layer is child order,
-   * and `listening` is per-node, so a group buys the separation at no cost.
-   * See design/annotation.md, "The layer budget".
+   * A group rather than a layer of its own on purpose: every layer is a canvas
+   * of its own (see the layer note in the body), and z-order inside a layer is
+   * child order with `listening` per node, so a group buys the separation at no
+   * cost. See design/annotation.md, "The layer budget".
    */
   setMarkers: (paint: BackdropPainter<T> | undefined) => void;
   /** Repaint just the markers: after posting, moving or resolving one. */
@@ -258,7 +281,8 @@ export interface CanvasSurface<T extends CanvasItem> {
   setTool: (tool: CanvasTool | undefined) => void;
   selection: () => string[];
   select: (ids: string[]) => void;
-  /** Frame everything: the "I am lost" command. */
+  /** Frame everything: the "I am lost" command. Eases there, unless this is the
+   *  canvas's first camera, which simply arrives. */
   fitAll: () => void;
   /**
    * The OPENING frame for a view whose labels vanish below a zoom (the map's
@@ -284,6 +308,9 @@ export interface CanvasSurface<T extends CanvasItem> {
   actualSize: () => void;
   zoomBy: (factor: number) => void;
   scale: () => number;
+  /** The world point at the middle of the view: where something added "here"
+   *  should land. */
+  visibleCentre: () => { x: number; y: number };
   /** Where an item is on SCREEN right now, for a caller placing DOM chrome over
    *  the canvas. Undefined when the item is not known. */
   screenRect: (id: string) => { x: number; y: number; width: number; height: number } | undefined;
@@ -295,8 +322,10 @@ export interface CanvasSurface<T extends CanvasItem> {
    *  (switching away from a canvas and back, an undo, any re-render) must not
    *  throw away where the author was looking. */
   camera: () => Camera;
+  /** Put a remembered camera back, INSTANTLY: a restore is where the author
+   *  already was, so easing into it would read as the view drifting. */
   setCamera: (camera: Camera) => void;
-  /** Put an item in the middle without changing the zoom. */
+  /** Put an item in the middle without changing the zoom, easing there. */
   centreOn: (id: string) => void;
   /** The same for a PLACE rather than an item: what the feedback walk needs to
    *  arrive at a marker floating on empty canvas, where there is no item to name. */
@@ -310,11 +339,87 @@ const MAX_SCALE = 3;
 const FIT_PADDING = 48;
 /** Below this, a grid line every few pixels is noise rather than orientation. */
 const GRID_MIN_PX = 8;
+/** One press of zoom in or out: the cluster's buttons and Cmd+= / Cmd+-. */
+export const ZOOM_STEP = 1.2;
+/** The wheel's zoom, per pixel of deltaY: a pinch arrives as many small deltas
+ *  and a mouse notch as one of about a hundred, and an exponential treats the
+ *  two alike. */
+const WHEEL_ZOOM_BASE = 1.0025;
+/** The window two left clicks have to fall inside to mean "open this". Konva's
+ *  own default, kept so the canvas agrees with the rest of the app. */
+const DOUBLE_CLICK_MS = 400;
+/** A major grid line every this many minor ones. */
+const GRID_MAJOR_EVERY = 5;
+/** The selection ring's stroke, in screen pixels, and the ground-coloured halo
+ *  under it as a multiple of that (see `paintOverlay`). */
+const RING_PX = 2;
+const HALO_RATIO = 2.6;
+/** The box a backdrop tip hangs off, centred on the pointer, in screen pixels:
+ *  a line has no rectangle of its own worth anchoring to. */
+const BACKDROP_TIP_PX = 12;
+
+/** Is this macOS? Ctrl-click there is the context menu, and the add-to-selection
+ *  key is Cmd rather than Ctrl. */
+const MAC = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
+
+// --- following the zoom without a rebuild -------------------------------------
+
+interface Fitter { fit: (scale: number) => void; floors: readonly number[]; drawnAt: number }
+const fitters = new WeakMap<Konva.Group, Fitter>();
+
+/**
+ * Say how a drawn group follows the zoom WITHOUT being rebuilt, and return it.
+ *
+ * A face holds its chrome at a constant size on screen (a stroke of one pixel, a
+ * disc of nine), which means every such size is divided by the zoom, and until
+ * this existed every zoom frame destroyed every item and drew it again to get
+ * them: 12ms a frame at 86 cards, 40 at 300, almost all of it Konva measuring
+ * text it had measured the frame before. `fit` sets just the scale-dependent
+ * attributes on nodes that already exist; it is called once here, so a draw
+ * function writes those sizes in one place only.
+ *
+ * `floors` are the zooms at which the face changes SHAPE (a title appearing, a
+ * label going): crossing one rebuilds the item, because no attribute can add a
+ * node that is not there. A group drawn without this is rebuilt on every zoom,
+ * as before, so a canvas that never adopts it loses nothing.
+ */
+export function rescalable(
+  group: Konva.Group, scale: number, fit: (scale: number) => void, floors: readonly number[] = [],
+): Konva.Group {
+  fit(scale);
+  fitters.set(group, { fit, floors, drawnAt: scale });
+  return group;
+}
+
+/**
+ * Follow a zoom in place, if the group said how and no floor lies between:
+ * true when it did (or had nothing to do), false when it must be rebuilt.
+ */
+export function refit(group: Konva.Group, scale: number): boolean {
+  const fitter = fitters.get(group);
+  if (!fitter) return false;
+  if (fitter.drawnAt === scale) return true;
+  if (crossesFloor(fitter.floors, fitter.drawnAt, scale)) return false;
+  fitter.fit(scale);
+  fitter.drawnAt = scale;
+  return true;
+}
+
+/** The cursor a piece of interactive chrome (a vertex handle, a comment marker)
+ *  wants while the pointer is over it. Set as an attribute and READ by the
+ *  surface's one cursor rule, rather than written to the container by each
+ *  handle: four writers that did not know about each other left a "move" cursor
+ *  behind after a handle was rebuilt under the pointer. */
+export const HOVER_CURSOR_ATTR = "hoverCursor";
+export function hoverCursor<N extends Konva.Node>(node: N, cursor: string): N {
+  node.setAttr(HOVER_CURSOR_ATTR, cursor);
+  return node;
+}
 
 export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOptions<T>): CanvasSurface<T> {
   let tokens = opts.tokens;
   const snap = opts.grid ?? 0;
-  const opts_fitMargin = {
+  const fitMargin = {
     top: opts.fitMargin?.top ?? 0, right: opts.fitMargin?.right ?? 0,
     bottom: opts.fitMargin?.bottom ?? 0, left: opts.fitMargin?.left ?? 0,
   };
@@ -334,25 +439,29 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     height: Math.max(1, opts.host.clientHeight),
   });
 
-  // THREE layers, and the reason for exactly three is worth reading before adding
-  // a fourth. A Konva layer is its own <canvas>: the only thing that buys you is
+  // FOUR layers, and the reason for exactly four is worth reading before adding
+  // a fifth. A Konva layer is its own <canvas>: the only thing that buys you is
   // INDEPENDENT REDRAW, and Konva warns above five because each one costs memory
-  // and a compositing pass. This surface had six and warned on every mount.
+  // and a compositing pass. This surface once had six and warned on every mount.
   //
-  // Two earn a canvas of their own:
+  // Three earn a canvas of their own:
   //   - the GRID, which redraws on a camera change and nothing else.
-  //   - the BACKDROP, because a 10MB site plan must not be repainted every time a
-  //     card moves a pixel.
+  //   - the BACKDROP (a deck's edges), which redraws on every drag frame.
+  //   - the BASE: locked items at the bottom of the stack, which is to say a
+  //     map's pictures once they are placed. A 10MB site plan is the most
+  //     expensive thing any canvas here draws, and while it shared the items'
+  //     canvas every frame of a pin drag drew it again.
   // Everything else repaints together, so it is one layer with five groups. Z-order
   // inside a layer is just child order and `listening` is per-node, so the bands
   // are exactly what they were.
   const gridLayer = new Konva.Layer({ listening: false });
   const backdropLayer = new Konva.Layer({ listening: false });
+  const baseLayer = new Konva.Layer({ listening: false });
   const mainLayer = new Konva.Layer();
-  stage.add(gridLayer, backdropLayer, mainLayer);
+  stage.add(gridLayer, backdropLayer, baseLayer, mainLayer);
 
-  /** The items themselves. Listens, and is turned off wholesale when a document
-   *  somebody else holds is on screen. */
+  /** The items themselves. Listens, and is turned off wholesale while a tool
+   *  owns the left button. */
   const contentGroup = new Konva.Group();
   /** Above the items, below the selection: for anything a later item must not be
    *  able to cover. The map's zone names live here, because zones NEST (a square
@@ -368,6 +477,9 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
    *  a marker sits above a handle rather than under it. */
   const markerGroup = new Konva.Group();
   mainLayer.add(contentGroup, foreGroup, overlayGroup, chromeGroup, markerGroup);
+  /** The leading run of locked items (see the layer note). */
+  const baseGroup = new Konva.Group({ listening: false });
+  baseLayer.add(baseGroup);
 
   /** Is this node inside that group? For telling a press on chrome from a press on
    *  an item, now that both live on one layer and `getLayer()` can no longer
@@ -391,21 +503,38 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     });
   }
 
+  const view = (): { width: number; height: number } => ({ width: stage.width(), height: stage.height() });
+  const cameraNow = (): Camera => ({ x: stage.x(), y: stage.y(), scale: stage.scaleX() });
+
   /** The world rectangle currently on screen. */
-  function visibleWorldRect(): { x: number; y: number; width: number; height: number } {
-    const scale = stage.scaleX();
-    return {
-      x: -stage.x() / scale,
-      y: -stage.y() / scale,
-      width: stage.width() / scale,
-      height: stage.height() / scale,
-    };
+  const visibleWorldRect = (): Rect => visibleRect(cameraNow(), view());
+
+  function worldPointer(): Point {
+    return screenToWorld(cameraNow(), stage.getPointerPosition() ?? { x: 0, y: 0 });
   }
 
-  function worldPointer(): { x: number; y: number } {
-    const p = stage.getPointerPosition() ?? { x: 0, y: 0 };
-    const scale = stage.scaleX();
-    return { x: (p.x - stage.x()) / scale, y: (p.y - stage.y()) / scale };
+  // --- the cursor -------------------------------------------------------------
+  // ONE rule, in one place (canvas-input `cursorFor`), set from here only.
+  /** What the pointer is over wants, read from the hit graph on each move. */
+  let overCursor: string | undefined;
+  let draggingItem = false;
+
+  function resolveCursor(): void {
+    const cursor = cursorFor({ panning: panning !== undefined, spaceHeld, draggingItem, over: overCursor, tool: tool?.cursor });
+    if (opts.host.style.cursor !== cursor) opts.host.style.cursor = cursor;
+  }
+
+  /** The cursor whatever is drawn under the pointer asks for: a piece of chrome
+   *  says so itself (`hoverCursor`), and an item that would move if dragged
+   *  offers the open hand. */
+  function cursorUnderPointer(hit: Konva.Node | null): string | undefined {
+    for (let n: Konva.Node | null = hit; n && n !== mainLayer; n = n.getParent()) {
+      const wanted = n.getAttr(HOVER_CURSOR_ATTR) as string | undefined;
+      if (wanted !== undefined) return wanted;
+      const id = n.id();
+      if (id !== "" && groups.get(id) === n) return n.draggable() ? "grab" : undefined;
+    }
+    return undefined;
   }
 
   // --- the grid ---------------------------------------------------------------
@@ -417,8 +546,8 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     sceneFunc: (ctx) => {
       if (snap <= 0) return;
       const scale = stage.scaleX();
-      const view = visibleWorldRect();
-      const major = snap * 5;
+      const shown = visibleWorldRect();
+      const major = snap * GRID_MAJOR_EVERY;
 
       const rule = (step: number, colour: string, skipMajor: boolean): void => {
         if (step * scale < GRID_MIN_PX) return;
@@ -426,15 +555,15 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
         ctx.lineWidth = 1 / scale;          // one screen pixel at any zoom
         const first = (v: number): number => Math.floor(v / step) * step;
         ctx.beginPath();
-        for (let x = first(view.x); x <= view.x + view.width; x += step) {
-          if (skipMajor && isMultiple(x, major)) continue;
-          ctx.moveTo(x, view.y);
-          ctx.lineTo(x, view.y + view.height);
+        for (let x = first(shown.x); x <= shown.x + shown.width; x += step) {
+          if (skipMajor && onGridLine(x, major)) continue;
+          ctx.moveTo(x, shown.y);
+          ctx.lineTo(x, shown.y + shown.height);
         }
-        for (let y = first(view.y); y <= view.y + view.height; y += step) {
-          if (skipMajor && isMultiple(y, major)) continue;
-          ctx.moveTo(view.x, y);
-          ctx.lineTo(view.x + view.width, y);
+        for (let y = first(shown.y); y <= shown.y + shown.height; y += step) {
+          if (skipMajor && onGridLine(y, major)) continue;
+          ctx.moveTo(shown.x, y);
+          ctx.lineTo(shown.x + shown.width, y);
         }
         ctx.stroke();
       };
@@ -445,44 +574,82 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
   });
   gridLayer.add(grid);
 
-  function isMultiple(v: number, of: number): boolean {
-    const r = Math.abs(v % of);
-    return r < 1e-6 || of - r < 1e-6;
-  }
-
   // --- items ------------------------------------------------------------------
   const groups = new Map<string, Konva.Group>();
+
+  /** One item's group, drawn at this zoom, positioned and wired. */
+  function buildGroup(item: T, scale: number): Konva.Group {
+    const group = opts.draw(item, { tokens, scale });
+    group.position({ x: item.x, y: item.y });
+    group.id(item.id);
+    if (item.locked === true) {
+      // Not a target: no drag, and out of the hit graph entirely so a press
+      // reaches whatever the author actually meant.
+      group.listening(false);
+    } else {
+      group.draggable(opts.readOnly !== true);
+      // The one threshold (canvas-geometry), so a wobble that would not start a
+      // pan or a marquee does not start a drag either.
+      group.dragDistance(DRAG_THRESHOLD_PX);
+      wireItem(group, item);
+    }
+    return group;
+  }
 
   function paintItems(): void {
     // NEVER rebuild the items under a live drag. A repaint destroys every group
     // and builds new ones, which pulls the node out from under Konva's drag: the
     // card stops following the pointer and the drag ends up doing nothing at all,
-    // silently. A zoom, a window resize or a theme change mid-drag would all do
-    // it. The repaint waits for the drop instead.
+    // silently. A window resize or a theme change mid-drag would both do it. The
+    // repaint waits for the drop instead.
     if (dragStart || pressed) { repaintAfterDrag = true; return; }
     contentGroup.destroyChildren();
+    baseGroup.destroyChildren();
     groups.clear();
     const scale = stage.scaleX();
+    // Locked items at the BOTTOM of the stack go to the base layer; the first
+    // item that is not locked ends the run, so the stacking order is exactly the
+    // list's, whichever layer each lands on.
+    let base = true;
     for (const item of items) {
-      const group = opts.draw(item, { tokens, scale });
-      group.position({ x: item.x, y: item.y });
-      group.id(item.id);
-      if (item.locked === true) {
-        // Not a target: no drag, and out of the hit graph entirely so a press
-        // reaches whatever the author actually meant.
-        group.listening(false);
-      } else {
-        group.draggable(opts.readOnly !== true);
-        wireItem(group, item);
-      }
-      contentGroup.add(group);
+      const group = buildGroup(item, scale);
+      if (base && item.locked === true) baseGroup.add(group);
+      else { base = false; contentGroup.add(group); }
       groups.set(item.id, group);
     }
+    baseLayer.batchDraw();
     mainLayer.batchDraw();
     paintOverlay();
   }
 
-  /** The selection rings, and the marquee. In their own layer so their strokes
+  /**
+   * Follow a zoom. A group that said how (`rescalable`) has its screen-constant
+   * sizes updated in place, unless the zoom crossed one of its floors; anything
+   * else is rebuilt where it stands. Safe mid-drag for the first kind, since no
+   * node is destroyed; a rebuild waits for the drop, as `paintItems` does.
+   */
+  function rescaleItems(): void {
+    const scale = stage.scaleX();
+    const busy = dragStart !== undefined || pressed;
+    for (const item of items) {
+      const group = groups.get(item.id);
+      if (!group || refit(group, scale)) continue;
+      if (busy) { repaintAfterDrag = true; continue; }
+      const parent = group.getParent();
+      if (!parent) continue;
+      const at = group.zIndex();
+      const fresh = buildGroup(item, scale);
+      fresh.position(group.position());
+      group.destroy();
+      parent.add(fresh);
+      fresh.zIndex(at);
+      groups.set(item.id, fresh);
+    }
+    baseLayer.batchDraw();
+    mainLayer.batchDraw();
+  }
+
+  /** The selection rings, and the marquee. In their own group so their strokes
    *  stay one width on screen and nothing drawn later can occlude them. Read
    *  from the live groups, not from `items`, so a drag in flight is truthful. */
   function paintOverlay(): void {
@@ -493,21 +660,17 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     // is exactly what `.scard.sel` does in the DOM (the border recolours, plus
     // 1px outside). Any offset at all leaves a sliver of board showing between
     // the ring and the card, and a gap reads as broken rather than as selected.
-    const ring = 2 / scale;
+    const ring = RING_PX / scale;
     // Two strokes per ring: a wider one in the canvas ground colour underneath
     // the accent. On a plain canvas the understroke vanishes into the ground;
     // over a background picture it is what keeps the ring legible, because an
     // accent-only stroke over busy art has no contrast to count on.
-    const halo = ring * 2.6;
+    const halo = ring * HALO_RATIO;
     const strokes: [string, number][] = [[tokens.bg, halo], [tokens.accent, ring]];
     for (const id of selected) {
       const group = groups.get(id);
       const item = items.find((i) => i.id === id);
       if (!group || !item) continue;
-      // An item that is not a rectangle says so, and its ring follows its own
-      // edge. A ring round the bounding box of a zone polygon would enclose
-      // whatever else happens to fall in that box, which on a map (an L-shaped
-      // corridor wrapped round a courtyard) is somebody else's zone.
       // A marker whose size is CHROME: its edge is a disc that keeps its size on
       // screen, so the ring is computed per draw rather than carried as points.
       if (item.discRadius !== undefined) {
@@ -520,6 +683,10 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
         }
         continue;
       }
+      // An item that is not a rectangle says so, and its ring follows its own
+      // edge. A ring round the bounding box of a zone polygon would enclose
+      // whatever else happens to fall in that box, which on a map (an L-shaped
+      // corridor wrapped round a courtyard) is somebody else's zone.
       if (item.outline) {
         const points: number[] = [];
         for (const p of item.outline) points.push(group.x() + p.x, group.y() + p.y);
@@ -564,17 +731,14 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     if (!same) opts.onSelectionChange?.([...selected]);
   }
 
-  /** The window two left clicks have to fall inside to mean "open this". Konva's
-   *  own default, kept so the canvas agrees with the rest of the app. */
-  const DOUBLE_CLICK_MS = 400;
-  /** The last left click on an item, for the double-click count above. Cleared once
-   *  it has been used, so three clicks are not two double clicks. */
+  /** The last left click on an item, for the double-click count. Cleared once it
+   *  has been used, so three clicks are not two double clicks. */
   let lastLeftUp: { id: string; at: number } | undefined;
 
   // --- dragging ---------------------------------------------------------------
   // Dragging one of several selected items moves them all: the selection is the
   // unit of work.
-  let dragStart: Map<string, { x: number; y: number }> | undefined;
+  let dragStart: Map<string, Point> | undefined;
   /** A repaint that arrived mid-gesture and has to wait for the pointer to lift. */
   let repaintAfterDrag = false;
   /** An item is under a held pointer. A drag has not necessarily started yet -
@@ -582,18 +746,39 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
    *  between the press and that first move loses the node just as thoroughly, so
    *  the whole press is protected, not just the drag. */
   let pressed = false;
+  /** The press was the context menu's (a Ctrl-click on macOS), which must not
+   *  also drag the item it landed on. */
+  let pressedForMenu = false;
+  /** A drag has moved something since the items were last drawn. The rings,
+   *  the edges and the foreground follow it ONCE per frame, just before Konva
+   *  draws the dragged layer (which its drag has already asked for): mousemove
+   *  arrives faster than the screen refreshes, and each of those repaints
+   *  rebuilt every edge. Doing it in a frame of our own instead drew the ring
+   *  and the edges a frame behind the card. */
+  let dragDirty = false;
+  mainLayer.on("beforeDraw", () => {
+    if (!dragDirty) return;
+    dragDirty = false;
+    paintOverlay();
+    repaintBackdrop(true);
+  });
 
   function wireItem(group: Konva.Group, item: T): void {
     group.on("mousedown touchstart", (e) => {
+      const evt = e.evt;
       // Only the LEFT button is the item's: middle and right belong to the camera
       // (pan) and the menu, so they bubble to the stage. Checking for button 2
       // alone left middle-drag dead whenever it happened to start over a card.
-      if (e.evt instanceof MouseEvent && e.evt.button !== 0) return;
+      // A Ctrl-click on macOS IS a right-click, so it bubbles too.
+      if (evt instanceof MouseEvent && (evt.button !== 0 || isContextPress(evt, MAC))) {
+        pressedForMenu = evt.button === 0;
+        return;
+      }
       e.cancelBubble = true;                 // never a camera pan or a marquee
       pressed = true;
-      const evt = e.evt;
-      const additive = evt instanceof MouseEvent && (evt.shiftKey || evt.metaKey || evt.ctrlKey);
-      if (additive) {
+      pressedForMenu = false;
+      takeFocus();
+      if (evt instanceof MouseEvent && isAdditive(evt, MAC)) {
         const next = new Set(selected);
         if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
         setSelection([...next]);
@@ -603,6 +788,8 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     });
 
     group.on("dragstart", () => {
+      // Konva starts a left-button drag on any press; a Ctrl-click is the menu's.
+      if (pressedForMenu) { group.stopDrag(); return; }
       // Everything that will move, remembered, so one dragged group can apply
       // its delta to the whole selection.
       dragStart = new Map();
@@ -621,6 +808,8 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
       // Open button while they are moving something anyway.
       clearHover();
       hideTip();
+      draggingItem = true;
+      resolveCursor();
       opts.onDragStart?.();
     });
 
@@ -637,30 +826,27 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
         if (id === item.id) continue;
         groups.get(id)?.position({ x: origin.x + dx, y: origin.y + dy });
       }
-      paintOverlay();
-      // Edges follow the card as it moves. Letting them snap into place after the
-      // drop looks broken, and the backdrop reads live positions, so this is the
-      // whole cost of it.
-      repaintBackdrop();
+      // Edges follow the card as it moves, since letting them snap into place
+      // after the drop looks broken; the backdrop reads live positions. Once a
+      // frame, however many moves arrived in it (see `dragDirty`).
+      dragDirty = true;
+      mainLayer.batchDraw();
     });
 
     group.on("dragend", (e) => {
       e.cancelBubble = true;
-      // Now the grid bites, once. The DRAGGED item is what snaps, and everything
-      // else moves by that same delta, so a selection keeps its internal spacing
-      // instead of collapsing onto the grid one item at a time.
+      dragDirty = false;
+      draggingItem = false;
+      // Now the grid bites, once (canvas-geometry `snapDelta`).
       const from = dragStart?.get(item.id);
-      let dx = group.x() - (from?.x ?? group.x());
-      let dy = group.y() - (from?.y ?? group.y());
-      if (snap > 0 && from) {
-        dx = Math.round((from.x + dx) / snap) * snap - from.x;
-        dy = Math.round((from.y + dy) / snap) * snap - from.y;
-      }
+      const delta = from
+        ? snapDelta(from, { x: group.x() - from.x, y: group.y() - from.y }, snap)
+        : { x: 0, y: 0 };
       const moves: { id: string; x: number; y: number }[] = [];
       for (const [id, origin] of dragStart ?? []) {
         const g = groups.get(id);
         if (!g) continue;
-        const to = { x: origin.x + dx, y: origin.y + dy };
+        const to = { x: origin.x + delta.x, y: origin.y + delta.y };
         g.position(to);
         if (to.x !== origin.x || to.y !== origin.y) moves.push({ id, ...to });
         const it = items.find((i) => i.id === id);
@@ -672,6 +858,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
       if (repaintAfterDrag) { repaintAfterDrag = false; paintItems(); }
       paintOverlay();
       repaintBackdrop();
+      resolveCursor();
       if (moves.length > 0) opts.onMove?.(moves);
     });
 
@@ -683,7 +870,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     // the map before the menu could be read. Touch keeps Konva's dbltap, which has
     // no buttons to confuse.
     group.on("mouseup", (e) => {
-      if (!(e.evt instanceof MouseEvent) || e.evt.button !== 0) return;
+      if (!(e.evt instanceof MouseEvent) || e.evt.button !== 0 || isContextPress(e.evt, MAC)) return;
       const now = e.evt.timeStamp;
       const again = lastLeftUp !== undefined && lastLeftUp.id === item.id && now - lastLeftUp.at < DOUBLE_CLICK_MS;
       lastLeftUp = again ? undefined : { id: item.id, at: now };
@@ -701,15 +888,33 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
   // --- marquee ----------------------------------------------------------------
   // Plain left drag on empty space, as in every node editor and every drawing
   // tool. Panning is deliberately NOT on the left button (see the camera below).
-  let marqueeFrom: { x: number; y: number } | undefined;
-  let marqueeTo: { x: number; y: number } | undefined;
+  let marqueeFrom: Point | undefined;
+  let marqueeTo: Point | undefined;
+  /** Where the marquee started on SCREEN, for the drag threshold. */
+  let marqueeFromScreen: Point | undefined;
+  let marqueeSwept = false;
   let marqueeAdditive = false;
 
-  function boxBetween(a: { x: number; y: number }, b: { x: number; y: number }): { x: number; y: number; width: number; height: number } {
-    return {
-      x: Math.min(a.x, b.x), y: Math.min(a.y, b.y),
-      width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y),
-    };
+  // --- keys belong to the canvas only when it is the author's subject ----------
+  // The rule is canvas-input `ownsKeys`; this keeps the state it reads.
+  opts.host.tabIndex = -1;
+  opts.host.style.outline = "none";
+  let pointerOver = opts.host.matches(":hover");
+  const onEnter = (): void => { pointerOver = true; };
+  const onLeave = (): void => { pointerOver = false; };
+  opts.host.addEventListener("pointerenter", onEnter);
+  opts.host.addEventListener("pointerleave", onLeave);
+  const ownsKeysNow = (): boolean => {
+    const active = document.activeElement;
+    return ownsKeys({
+      focusInside: active !== null && opts.host.contains(active),
+      pointerOver,
+      nothingFocused: active === null || active === document.body,
+    });
+  };
+  /** A press on the canvas takes the keyboard, as a press on any control does. */
+  function takeFocus(): void {
+    if (!opts.host.contains(document.activeElement)) opts.host.focus({ preventScroll: true });
   }
 
   // --- camera -----------------------------------------------------------------
@@ -733,17 +938,18 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
   // the menu before the pointer moved. We preventDefault it always and open our
   // own menu from the right mouse UP, when we know whether it was a click or a
   // drag. (Blueprints does the same on Windows, where the event happens to arrive
-  // on release anyway.)
-  /** The last press landed on the chrome layer (a vertex handle), so the canvas
-   *  keeps its hands off this gesture. */
+  // on release anyway.) A Ctrl-click on macOS is a right-click throughout.
+  /** The last press landed on the chrome layer (a vertex handle) or a marker, so
+   *  the canvas keeps its hands off this gesture. */
   let pressedChrome = false;
-  let panning: { pointer: { x: number; y: number }; origin: { x: number; y: number }; button: number } | undefined;
+  let panning: { pointer: Point; origin: Point; menu: boolean } | undefined;
   let panMoved = false;
   let spaceHeld = false;
 
   stage.on("mousedown", (e) => {
     const evt = e.evt;
     if (!(evt instanceof MouseEvent)) return;
+    takeFocus();
     // Whether this press landed on CHROME, recorded now rather than read back at
     // the mouseup. A handle's own handler may repaint the chrome layer (picking a
     // corner out does), which destroys the very node that was pressed, so by the
@@ -767,10 +973,12 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     // A pan gesture works ANYWHERE, over an item as much as over empty board: the
     // camera is not the item's business, and a right-drag that stopped working
     // because it happened to start on a card would be a mystery to its author.
-    if (evt.button === 1 || evt.button === 2 || (evt.button === 0 && spaceHeld)) {
+    const menu = isContextPress(evt, MAC);
+    if (evt.button === 1 || menu || (evt.button === 0 && spaceHeld)) {
       evt.preventDefault();
+      stopTween();
       const p = stage.getPointerPosition();
-      if (p) panning = { pointer: { ...p }, origin: { x: stage.x(), y: stage.y() }, button: evt.button };
+      if (p) panning = { pointer: { ...p }, origin: { x: stage.x(), y: stage.y() }, menu };
       return;
     }
     // A tool owns the left button: no marquee, no selection, no drag. The click
@@ -783,7 +991,9 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     if (evt.button !== 0) return;
     marqueeFrom = worldPointer();
     marqueeTo = marqueeFrom;
-    marqueeAdditive = evt.shiftKey;
+    marqueeFromScreen = stage.getPointerPosition() ?? undefined;
+    marqueeSwept = false;
+    marqueeAdditive = isAdditive(evt, MAC);
     paintOverlay();
   });
 
@@ -800,33 +1010,29 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
    * and outside its box, and the zone underneath claimed the rollover. The hit
    * graph has neither problem, and it costs no repaint to ask.
    */
-  function itemAtPointer(): string | undefined {
-    const pos = stage.getPointerPosition();
-    if (!pos) return undefined;
-    // Hit-test the whole layer and walk UP from what was hit, which is how this
-    // has always worked; `groups` is the authority on what an id belongs to,
-    // because a caller is free to give its own shapes ids and those are not items.
-    //
-    // Content, chrome and markers now share a layer, so what comes back may be a
-    // vertex handle or a comment marker. Those are not items, the walk finds
-    // nothing for them in `groups`, and this returns undefined - which is the
-    // right answer, not a gap: pressing a handle that happens to sit over a card
-    // is pressing the handle, and the surface has already decided what a press on
-    // chrome means (see `pressedChrome`).
-    let node: Konva.Node | null = mainLayer.getIntersection(pos);
-    while (node && node !== mainLayer) {
+  function itemAtPointer(hit: Konva.Node | null = hitAtPointer()): string | undefined {
+    // Walk UP from what was hit; `groups` is the authority on what an id belongs
+    // to, because a caller is free to give its own shapes ids and those are not
+    // items. What comes back may be a vertex handle or a comment marker, which
+    // are not items: undefined is the right answer for those, since pressing a
+    // handle over a card is pressing the handle (see `pressedChrome`).
+    for (let node: Konva.Node | null = hit; node && node !== mainLayer; node = node.getParent()) {
       const id = node.id();
       if (id !== "" && groups.get(id) === node) return id;
-      node = node.getParent();
     }
     return undefined;
+  }
+
+  function hitAtPointer(): Konva.Node | null {
+    const pos = stage.getPointerPosition();
+    return pos ? mainLayer.getIntersection(pos) : null;
   }
 
   /** What the pointer is over. No repaint: reading the hit graph does not touch
    *  the scene, which is what lets hover be tracked at all (see DrawContext). */
   let hovered: string | undefined;
-  function trackHover(): void {
-    const found = itemAtPointer();
+  function trackHover(hit: Konva.Node | null): void {
+    const found = itemAtPointer(hit);
     if (found !== hovered) {
       hovered = found;
       // Onto an item: the arrow's tip goes before the item's own can arrive.
@@ -834,13 +1040,13 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
       opts.onHover?.(hovered);
       paintHoverTip();
     }
-    trackBackdropTip();
+    trackBackdropTip(hit);
   }
 
   /** The key of the backdrop tip showing, if one is. Kept apart from `hovered`
    *  because the backdrop is not an item: nothing else hears about it. */
   let backdropKey: string | undefined;
-  function trackBackdropTip(): void {
+  function trackBackdropTip(hit: Konva.Node | null): void {
     if (opts.backdropTip === undefined) return;
     // Anything drawn above the backdrop wins: an item, a handle, a marker. An
     // item's own tip is `paintHoverTip`'s, and `trackHover` has already taken
@@ -848,7 +1054,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     const pos = stage.getPointerPosition();
     const ask = opts.backdropTip;
     const said = pos
-      ? backdropTipAt(hovered !== undefined, mainLayer.getIntersection(pos) !== null,
+      ? backdropTipAt(hovered !== undefined, hit !== null,
         () => ask(worldPointer(), stage.scaleX(), liveItem))
       : undefined;
     if (!pos || said === undefined) { clearBackdropTip(); return; }
@@ -856,7 +1062,8 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     // A small box at the pointer, in viewport coordinates: a line has no
     // rectangle of its own worth anchoring to.
     const origin = stage.container().getBoundingClientRect();
-    tipAt(said.key, { left: origin.left + pos.x - 6, top: origin.top + pos.y - 6, width: 12, height: 12 }, said.text);
+    const half = BACKDROP_TIP_PX / 2;
+    tipAt(said.key, { left: origin.left + pos.x - half, top: origin.top + pos.y - half, width: BACKDROP_TIP_PX, height: BACKDROP_TIP_PX }, said.text);
   }
 
   function clearBackdropTip(): void {
@@ -892,6 +1099,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
   }
 
   stage.on("mousemove", () => {
+    const hit = hitAtPointer();
     // A tool wants every move, for its rubber band, and no hover chrome.
     if (tool !== undefined) {
       clearHover();
@@ -899,67 +1107,40 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     }
     // Hover is meaningless mid-gesture, and chrome that follows a dragging card
     // is a distraction.
-    else if (dragStart || panning || marqueeFrom) clearHover(); else trackHover();
+    else if (dragStart || panning || marqueeFrom) clearHover(); else trackHover(hit);
+    overCursor = panning || marqueeFrom ? undefined : cursorUnderPointer(hit);
+    resolveCursor();
     if (panning) {
       const p = stage.getPointerPosition();
       if (!p) return;
-      if (Math.abs(p.x - panning.pointer.x) > 2 || Math.abs(p.y - panning.pointer.y) > 2) panMoved = true;
+      if (pastDragThreshold(panning.pointer, p)) panMoved = true;
       stage.position({
         x: panning.origin.x + (p.x - panning.pointer.x),
         y: panning.origin.y + (p.y - panning.pointer.y),
       });
-      afterCamera();
+      afterCamera(false);
       return;
     }
     if (marqueeFrom) {
+      const p = stage.getPointerPosition();
+      if (p && marqueeFromScreen && pastDragThreshold(marqueeFromScreen, p)) marqueeSwept = true;
       marqueeTo = worldPointer();
       paintOverlay();
     }
   });
 
-  /**
-   * Does the item, AS DRAWN at this zoom, meet this world box?
-   *
-   * The box on a `CanvasItem` is what the surface positions and drags by, and for
-   * anything drawn at a constant SCREEN size it is not what you can see. A site's
-   * box is 18 world units while its disc is always 9 screen pixels across, so at
-   * 30% a marquee that came nowhere near the visible dot still took it, and at
-   * 300% one swept straight across the dot missed. `itemAtPointer` already
-   * refuses to believe boxes for exactly this reason and asks Konva's hit graph
-   * instead; a marquee cannot, because there is no pointer to hit-test with, so
-   * it has to do the geometry itself.
-   *
-   * A disc gets a real circle-versus-rectangle test rather than a square standing
-   * in for it. Substituting a screen-sized BOX would fix the scale half and leave
-   * the corners over-selecting, which is the same kind of lie one size smaller.
-   *
-   * NOT done here, knowingly: a zone polygon still meets by its bounding box, so
-   * a marquee inside the courtyard an L-shaped corridor wraps around takes the
-   * corridor. That is the other lie `itemAtPointer` lists, it needs
-   * polygon-versus-rectangle, and no map has yet been drawn where it bites.
-   */
-  function meetsBox(i: T, box: { x: number; y: number; width: number; height: number }): boolean {
-    if (i.discRadius !== undefined) {
-      const cx = i.x + i.width / 2, cy = i.y + i.height / 2;
-      const r = i.discRadius / stage.scaleX();
-      // The nearest point of the box to the centre: inside it, that is the centre
-      // itself, so a box swallowing the disc reads as a hit without a special case.
-      const nx = Math.min(Math.max(cx, box.x), box.x + box.width);
-      const ny = Math.min(Math.max(cy, box.y), box.y + box.height);
-      return (cx - nx) ** 2 + (cy - ny) ** 2 <= r * r;
-    }
-    return i.x < box.x + box.width && i.x + i.width > box.x
-      && i.y < box.y + box.height && i.y + i.height > box.y;
-  }
-
   const endGesture = (): void => {
+    const wasPanning = panning !== undefined;
     panning = undefined;
+    if (wasPanning) resolveCursor();
     if (!marqueeFrom || !marqueeTo) return;
     const box = boxBetween(marqueeFrom, marqueeTo);
-    const drawn = box.width > 1 || box.height > 1;
+    const swept = marqueeSwept;
     marqueeFrom = undefined;
     marqueeTo = undefined;
-    if (!drawn) {
+    marqueeFromScreen = undefined;
+    marqueeSwept = false;
+    if (!swept) {
       // A click, not a sweep: empty space clears, which is the one gesture that
       // must not be swallowed by having a marquee at all.
       if (selected.size > 0 && !marqueeAdditive) setSelection([]);
@@ -967,8 +1148,10 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
       return;
     }
     // Intersection, not containment: a marquee that only takes fully-enclosed
-    // items feels broken when you sweep across a dense cluster.
-    const hits = items.filter((i) => i.locked !== true && meetsBox(i, box));
+    // items feels broken when you sweep across a dense cluster. As DRAWN, though
+    // (canvas-geometry `meetsBox`): a disc by its disc, a frame by its bar.
+    const scale = stage.scaleX();
+    const hits = items.filter((i) => i.locked !== true && meetsBox(i, box, scale));
     const ids = hits.map((i) => i.id);
     setSelection(marqueeAdditive ? [...selected, ...ids] : ids);
   };
@@ -985,7 +1168,11 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     if (panning || marqueeFrom) endGesture();
   };
   window.addEventListener("mouseup", onWindowUp);
-  stage.on("mouseleave", clearHover);
+  stage.on("mouseleave", () => {
+    clearHover();
+    overCursor = undefined;
+    resolveCursor();
+  });
 
   // Right-click. The surface has no menu of its own: every other view in this app
   // opens a DOM context menu, so the canvas reports the click and reuses it.
@@ -996,15 +1183,18 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
 
   stage.on("mouseup", (e) => {
     if (!(e.evt instanceof MouseEvent)) return;
+    const menu = isContextPress(e.evt, MAC);
     // A tool's placement: on the UP, and not when the gesture was a pan, so
-    // right-dragging your way around the canvas never drops a vertex.
-    if (tool !== undefined && e.evt.button === 0) {
+    // right-dragging your way around the canvas never drops a vertex. Nor when
+    // the press was on a marker or a handle: clicking a comment marker with a
+    // tool armed opens the thread, and must not ALSO drop whatever the tool drops.
+    if (tool !== undefined && e.evt.button === 0 && !menu) {
       const dragged = panMoved;
       endGesture();
-      if (!dragged) tool.onClick(worldPointer());
+      if (!dragged && !pressedChrome) tool.onClick(worldPointer());
       return;
     }
-    if (e.evt.button !== 2) return;
+    if (!menu) return;
     const dragged = panMoved;
     endGesture();
     if (dragged) return;                                  // that was a pan
@@ -1024,9 +1214,10 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     e.evt.preventDefault();
     const pointer = stage.getPointerPosition();
     if (!pointer) return;
+    stopTween();
     if (e.evt.ctrlKey || e.evt.metaKey) {
       // Zoom about the POINTER, so whatever is under the cursor stays put.
-      zoomAt(pointer, Math.pow(1.0025, -e.evt.deltaY));
+      zoomAt(pointer, Math.pow(WHEEL_ZOOM_BASE, -e.evt.deltaY));
       return;
     }
     // Shift makes the wheel horizontal, as it does in every browser and every
@@ -1037,23 +1228,22 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     afterCamera(false);
   });
 
-  function zoomAt(pointer: { x: number; y: number }, factor: number): void {
-    const scale = stage.scaleX();
-    const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * factor));
-    if (next === scale) return;
-    const world = { x: (pointer.x - stage.x()) / scale, y: (pointer.y - stage.y()) / scale };
-    stage.scale({ x: next, y: next });
-    stage.position({ x: pointer.x - world.x * next, y: pointer.y - world.y * next });
+  function zoomAt(pointer: Point, factor: number): void {
+    const next = zoomAbout(cameraNow(), pointer, factor, MIN_SCALE, MAX_SCALE);
+    if (!next) return;
+    stage.scale({ x: next.scale, y: next.scale });
+    stage.position({ x: next.x, y: next.y });
+    everPlaced = true;
     afterCamera();
   }
 
   /** After any camera move. A pan only needs the grid, the backdrop and the
-   *  overlay; a zoom also redraws the items, because `draw` is handed the scale
-   *  and is allowed to abbreviate at small sizes.
+   *  overlay; a zoom also follows the items (`rescaleItems`), because `draw` is
+   *  handed the scale and is allowed to abbreviate at small sizes.
    *
    *  Coalesced to one frame: wheel and mousemove arrive faster than the screen
-   *  refreshes, and a zoom repaint rebuilds every node. The camera itself moves
-   *  synchronously, so anything reading the scale back sees it at once. */
+   *  refreshes. The camera itself moves synchronously, so anything reading the
+   *  scale back sees it at once. */
   let cameraFrame = 0;
   let cameraZoomed = false;
 
@@ -1062,22 +1252,81 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     if (cameraFrame !== 0) return;
     cameraFrame = requestAnimationFrame(() => {
       cameraFrame = 0;
-      const withItems = cameraZoomed;
-      cameraZoomed = false;
-      gridLayer.batchDraw();
-      repaintBackdrop();
-      repaintChrome();
-      // Markers hold a constant size on screen, so they redraw with the camera
-      // exactly as chrome does.
-      repaintMarkers();
-      if (withItems) paintItems(); else paintOverlay();
-      refreshControls();
-      // A backdrop tip is about a line that has just moved out from under the
-      // pointer: it goes, and the next move asks again.
-      clearBackdropTip();
-      paintHoverTip();
-      opts.onCamera?.(stage.scaleX());
+      repaintCamera();
     });
+  }
+
+  /** The camera's repaint, now: the frame `afterCamera` waits for, and each step
+   *  of an eased move, which is already inside a frame. */
+  function repaintCamera(): void {
+    const withItems = cameraZoomed;
+    cameraZoomed = false;
+    gridLayer.batchDraw();
+    repaintBackdrop();
+    repaintChrome();
+    // Markers hold a constant size on screen, so they redraw with the camera
+    // exactly as chrome does.
+    repaintMarkers();
+    if (withItems) rescaleItems();
+    paintOverlay();
+    refreshControls();
+    // A backdrop tip is about a line that has just moved out from under the
+    // pointer: it goes, and the next move asks again.
+    clearBackdropTip();
+    paintHoverTip();
+    opts.onCamera?.(stage.scaleX());
+  }
+
+  // --- eased camera moves ---------------------------------------------------------
+  // A command that moves the camera (fit, fit the selection, centre on, reveal,
+  // back to 100%) EASES there (canvas-tween.ts runs the move). A gesture never
+  // eases (it IS the author's hand), and nor does a restored camera, which is
+  // where they already were.
+  /** A camera has been placed: the first one simply arrives, since there is no
+   *  "where you were" to travel from. */
+  let everPlaced = false;
+  let tween: CameraTween | undefined;
+
+  function stopTween(): void {
+    if (tween === undefined) return;
+    tween.stop();
+    tween = undefined;
+  }
+
+  /** Where the camera is going: the end of a move in flight, or where it is. */
+  const cameraTarget = (): Camera => tween?.to ?? cameraNow();
+
+  function applyCamera(to: Camera): void {
+    const zoomed = to.scale !== stage.scaleX();
+    stage.scale({ x: to.scale, y: to.scale });
+    stage.position({ x: to.x, y: to.y });
+    everPlaced = true;
+    afterCamera(zoomed);
+  }
+
+  function stillMotion(): boolean {
+    return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function moveCamera(to: Camera, ease: boolean): void {
+    stopTween();
+    const from = cameraNow();
+    if (from.x === to.x && from.y === to.y && from.scale === to.scale) return;
+    if (!ease || !everPlaced || stillMotion()) { applyCamera(to); return; }
+    const style = getComputedStyle(document.documentElement);
+    const motion = cameraMotion((name) => style.getPropertyValue(name));
+    if (motion.ms <= 0) { applyCamera(to); return; }
+    const move = startCameraTween(from, to, motion, view(), (at, done) => {
+      const zoomed = at.scale !== stage.scaleX();
+      stage.scale({ x: at.scale, y: at.scale });
+      stage.position({ x: at.x, y: at.y });
+      // Already inside a frame, so the repaint is now rather than the next one.
+      if (cameraFrame !== 0) { cancelAnimationFrame(cameraFrame); cameraFrame = 0; }
+      cameraZoomed = cameraZoomed || zoomed;
+      repaintCamera();
+      if (done && tween === move) tween = undefined;
+    });
+    tween = move;
   }
 
   /**
@@ -1099,7 +1348,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     // on empty ground. Handles keep listening, because a tool and a handle never
     // coexist (arming a tool clears the selection they belong to).
     contentGroup.listening(next === undefined);
-    opts.host.style.cursor = next?.cursor ?? "";
+    resolveCursor();
     if (next !== undefined) setSelection([]);
     outgoing?.onCancel?.();
   }
@@ -1114,10 +1363,12 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
    * after a few pixels. So a caller can refresh what it is drawing without
    * disturbing what the hand is holding.
    */
-  function repaintBackdrop(): void {
+  function repaintBackdrop(now = false): void {
     backdropLayer.destroyChildren();
     backdrop?.(backdropLayer, stage.scaleX(), liveItem);
-    backdropLayer.batchDraw();
+    // `now` from inside the items' own draw, so the edges land in the same
+    // frame as the card they follow rather than the next one.
+    if (now) backdropLayer.draw(); else backdropLayer.batchDraw();
     foreGroup.destroyChildren();
     foreground?.(foreGroup, stage.scaleX(), liveItem);
     mainLayer.batchDraw();
@@ -1150,24 +1401,9 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
 
   /** Where an item is on screen right now, relative to the stage's container.
    *  Hoisted out of the public surface because the hover tip needs it too. */
-  function screenRectOf(id: string): { x: number; y: number; width: number; height: number } | undefined {
+  function screenRectOf(id: string): Rect | undefined {
     const item = liveItem(id);
-    if (!item) return undefined;
-    const scale = stage.scaleX();
-    return {
-      x: stage.x() + item.x * scale, y: stage.y() + item.y * scale,
-      width: item.width * scale, height: item.height * scale,
-    };
-  }
-
-  function contentBounds(of: T[]): { x: number; y: number; width: number; height: number } | undefined {
-    if (of.length === 0) return undefined;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const i of of) {
-      minX = Math.min(minX, i.x); minY = Math.min(minY, i.y);
-      maxX = Math.max(maxX, i.x + i.width); maxY = Math.max(maxY, i.y + i.height);
-    }
-    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    return item ? worldRectToScreen(cameraNow(), item) : undefined;
   }
 
   /** A fit asked for before the surface had a size, to be honoured once it has
@@ -1179,19 +1415,38 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
   /** A readable opening asked for before the surface had a size. */
   let pendingFloor: { floor: number; focus: () => T[] } | undefined;
 
-  function fitAll(): void { pendingFloor = undefined; frame(items, { magnify: false, keepZoomIfItFits: false }); }
+  const sized = (): boolean => stage.width() > 1 && stage.height() > 1;
 
+  /** The camera that frames these items (canvas-geometry `frameCamera`). */
+  function framing(subject: T[], how: { magnify: boolean; keepZoomIfItFits: boolean }, current = cameraTarget().scale): Camera | undefined {
+    return frameCamera(contentBounds(subject), view(), current, {
+      padding: FIT_PADDING, margin: fitMargin, minScale: MIN_SCALE, maxScale: MAX_SCALE, ...how,
+    });
+  }
+
+  function frame(subject: T[], how: { magnify: boolean; keepZoomIfItFits: boolean }, ease = true): void {
+    if (!sized()) { pendingFit = true; return; }
+    const to = framing(subject, how);
+    if (to) moveCamera(to, ease);
+  }
+
+  function fitAll(ease = true): void { pendingFloor = undefined; frame(items, { magnify: false, keepZoomIfItFits: false }, ease); }
+
+  /** The opening frame (see the interface): worked out whole, then placed at
+   *  once. An opening is an arrival, not a move. */
   function fitReadable(floor: number, focus: () => T[]): void {
-    if (stage.width() <= 1 || stage.height() <= 1) { pendingFit = true; pendingFloor = { floor, focus }; return; }
-    fitAll();
-    if (stage.scaleX() >= floor) return;
+    if (!sized()) { pendingFit = true; pendingFloor = { floor, focus }; return; }
+    pendingFloor = undefined;
+    const how = { magnify: false, keepZoomIfItFits: false };
+    const all = framing(items, how);
+    if (!all) return;
+    if (all.scale >= floor) { moveCamera(all, false); return; }
     const subject = focus();
     const bounds = contentBounds(subject);
-    if (!bounds) return;
-    frame(subject, { magnify: false, keepZoomIfItFits: false });
-    if (stage.scaleX() >= floor) return;
-    stage.scale({ x: floor, y: floor });
-    centreWorld({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 });
+    const near = bounds ? framing(subject, how) : undefined;
+    if (!bounds || !near) { moveCamera(all, false); return; }
+    if (near.scale >= floor) { moveCamera(near, false); return; }
+    moveCamera(centredCamera({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }, floor, view()), false);
   }
 
   /** Centre the selection. The zoom is left alone when the selection already fits
@@ -1202,57 +1457,8 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     frame(items.filter((i) => selected.has(i.id)), { magnify: false, keepZoomIfItFits: true });
   }
 
-  /** Is every one of these items fully inside the viewport as it stands? */
-  function allInView(subject: T[]): boolean {
-    if (subject.length === 0) return true;
-    const scale = stage.scaleX();
-    const margin = 8;
-    return subject.every((item) => {
-      const x = stage.x() + item.x * scale;
-      const y = stage.y() + item.y * scale;
-      return x >= margin && y >= margin
-        && x + item.width * scale <= stage.width() - margin
-        && y + item.height * scale <= stage.height() - margin;
-    });
-  }
-
-  function frame(subject: T[], opts: { magnify: boolean; keepZoomIfItFits: boolean }): void {
-    if (stage.width() <= 1 || stage.height() <= 1) { pendingFit = true; return; }
-    const bare = contentBounds(subject);
-    if (!bare) return;
-    const m = opts_fitMargin;
-    const box = {
-      x: bare.x - m.left, y: bare.y - m.top,
-      width: bare.width + m.left + m.right,
-      height: bare.height + m.top + m.bottom,
-    };
-    const room = {
-      // A pane too narrow for the padding still gets a usable scale rather than
-      // a negative one that clamps to the minimum zoom.
-      width: Math.max(40, stage.width() - FIT_PADDING * 2),
-      height: Math.max(40, stage.height() - FIT_PADDING * 2),
-    };
-    // Fit shrinks to reveal; it never MAGNIFIES. A deck of two cards framed at
-    // 300% draws cards several times the size they are designed at, which reads
-    // as a mistake rather than as a fit. Zooming in is the author's to ask for.
-    const ceiling = opts.magnify ? MAX_SCALE : 1;
-    const needed = Math.min(
-      ceiling,
-      Math.max(MIN_SCALE, Math.min(
-        room.width / Math.max(1, box.width),
-        room.height / Math.max(1, box.height),
-      )),
-    );
-    const current = stage.scaleX();
-    const scale = opts.keepZoomIfItFits && current <= needed ? current : needed;
-    stage.scale({ x: scale, y: scale });
-    centreWorld({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
-  }
-
-  function centreWorld(at: { x: number; y: number }): void {
-    const scale = stage.scaleX();
-    stage.position({ x: stage.width() / 2 - at.x * scale, y: stage.height() / 2 - at.y * scale });
-    afterCamera();
+  function centreWorld(at: Point, ease = true): void {
+    moveCamera(centredCamera(at, cameraTarget().scale, view()), ease);
   }
 
   /**
@@ -1265,64 +1471,67 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
    * jump happened even when the scale was ALREADY 1, so the button had a visible
    * effect while doing nothing.
    *
-   * Zooming about the centre is what every canvas tool does and it composes:
-   * at 100% already, `zoomAt` finds no change to make and the view holds
-   * perfectly still. Getting back to content you have panned away from is
-   * "fit everything", which is the button next door.
+   * Zooming about the centre is what every canvas tool does and it composes: at
+   * 100% already the target is where the camera is, and the view holds still.
+   * Getting back to content you have panned away from is "fit everything", which
+   * is the button next door.
    */
   function actualSize(): void {
-    zoomCentre(1 / stage.scaleX());
+    moveCamera(centredCamera(viewCentre(cameraTarget(), view()), 1, view()), true);
   }
 
   // --- keys -------------------------------------------------------------------
   // Guarded so nothing fires while the author is typing in a field somewhere
-  // (the shell's one answer, which counts a <select> too).
-  const typing = (target: EventTarget | null): boolean => isEditableTarget(target);
-
+  // (the shell's one answer, which counts a <select> too); the rest of the
+  // rules, ownership included, are canvas-input `canvasKey`.
   const onKeyDown = (e: KeyboardEvent): void => {
-    if (typing(e.target)) return;
-    if (e.key === " ") { spaceHeld = true; opts.host.style.cursor = "grab"; return; }
-    const mod = e.metaKey || e.ctrlKey;
-    if ((e.key === "Delete" || e.key === "Backspace") && selected.size > 0) {
-      e.preventDefault();
-      opts.onDelete?.([...selected]);
+    if (isEditableTarget(e.target)) return;
+    const key = canvasKey(e, {
+      tool: tool !== undefined, owns: ownsKeysNow(), marquee: marqueeFrom !== undefined, selected: selected.size,
+    });
+    if (key === undefined) return;            // not ours: the editor may go up a level
+    if (typeof key === "object") { opts.onKey?.(key.letter); return; }
+    if (key === "holdSpace") {
+      // A key-repeat says nothing new.
+      if (!spaceHeld) { spaceHeld = true; resolveCursor(); }
       return;
     }
-    // A tool owns Enter and Escape: confirm the shape, or abandon it. This is the
-    // convention the old system's canvas settled on and it is worth keeping
-    // (Delete / Escape / Enter mean delete, cancel-the-draw, confirm-the-draw).
-    if (tool !== undefined) {
-      if (e.key === "Enter") { e.preventDefault(); tool.onCommit?.(); return; }
-      if (e.key === "Escape") { e.preventDefault(); useTool(undefined); return; }
+    // Everything else the canvas does with a key, it says it did.
+    e.preventDefault();
+    switch (key) {
+      case "commitTool": tool?.onCommit?.(); return;
+      case "cancelTool": useTool(undefined); return;
+      case "delete": opts.onDelete?.([...selected]); return;
+      case "dropMarquee":
+        marqueeFrom = undefined; marqueeTo = undefined; marqueeFromScreen = undefined; marqueeSwept = false;
+        paintOverlay();
+        return;
+      case "clearSelection": setSelection([]); return;
+      case "selectAll": setSelection(items.filter((i) => i.locked !== true).map((i) => i.id)); return;
+      case "actualSize": actualSize(); return;
+      case "zoomIn": zoomCentre(ZOOM_STEP); return;
+      case "zoomOut": zoomCentre(1 / ZOOM_STEP); return;
+      case "showSelection": showSelection(); return;
+      case "fitAll": fitAll(); return;
     }
-    if (e.key === "Escape") {
-      if (marqueeFrom) { marqueeFrom = undefined; marqueeTo = undefined; paintOverlay(); return; }
-      if (selected.size > 0) setSelection([]);
-      return;
-    }
-    if (mod && e.key.toLowerCase() === "a") {
-      e.preventDefault();
-      setSelection(items.filter((i) => i.locked !== true).map((i) => i.id));
-      return;
-    }
-    if (mod && e.key === "0") { e.preventDefault(); actualSize(); return; }
-    // Unmodified F and Home, which is the reflex every node and 3D tool has
-    // trained (Unreal focuses the selection on F, Blender and Unreal frame
-    // everything on Home). Deliberately NOT Cmd+F: that is Find, app-wide, and
-    // this listener is on the window, so binding it here quietly stole it.
-    if (!mod && e.key.toLowerCase() === "f") { e.preventDefault(); showSelection(); return; }
-    if (!mod && e.key === "Home") { e.preventDefault(); fitAll(); return; }
-    if (!mod && e.key.length === 1) opts.onKey?.(e.key.toLowerCase());
-    if (mod && (e.key === "=" || e.key === "+")) { e.preventDefault(); zoomCentre(1.2); return; }
-    if (mod && e.key === "-") { e.preventDefault(); zoomCentre(1 / 1.2); return; }
   };
   const onKeyUp = (e: KeyboardEvent): void => {
-    if (e.key === " ") { spaceHeld = false; opts.host.style.cursor = ""; }
+    if (e.key === " " && spaceHeld) { spaceHeld = false; resolveCursor(); }
+  };
+  /** The window losing focus takes every held key with it, and the keyup that
+   *  would have released Space goes to some other application: without this the
+   *  hand stayed, and the next left press panned instead of selecting. */
+  const onBlur = (): void => {
+    spaceHeld = false;
+    if (panning) endGesture();
+    resolveCursor();
   };
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", onBlur);
 
   function zoomCentre(factor: number): void {
+    stopTween();
     zoomAt({ x: stage.width() / 2, y: stage.height() / 2 }, factor);
   }
 
@@ -1336,7 +1545,7 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
       pendingFit = false;
       const readable = pendingFloor;
       if (readable !== undefined) fitReadable(readable.floor, readable.focus);
-      else fitAll();
+      else fitAll(false);
       return;
     }
     // NOT a zoom: a resize changes how much you can see, never how big anything
@@ -1351,10 +1560,10 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
   observer.observe(opts.host);
 
   controls = mountCanvasControls(opts.host, {
-    fitAll,
+    fitAll: () => fitAll(),
     fitSelection: showSelection,
-    zoomIn: () => zoomCentre(1.2),
-    zoomOut: () => zoomCentre(1 / 1.2),
+    zoomIn: () => zoomCentre(ZOOM_STEP),
+    zoomOut: () => zoomCentre(1 / ZOOM_STEP),
     actualSize,
   });
   refreshControls();
@@ -1379,43 +1588,44 @@ export function mountCanvasSurface<T extends CanvasItem>(opts: CanvasSurfaceOpti
     setTool: useTool,
     selection: () => [...selected],
     select: (ids) => setSelection(ids),
-    fitAll,
+    fitAll: () => fitAll(),
     fitReadable,
     showSelection,
     revealIfOffscreen(ids) {
       const subject = items.filter((i) => ids.includes(i.id));
-      if (subject.length === 0 || allInView(subject)) return;
+      if (subject.length === 0 || allInView(subject, cameraTarget(), view())) return;
       frame(subject, { magnify: false, keepZoomIfItFits: true });
     },
     actualSize,
     zoomBy: (factor) => zoomCentre(factor),
     scale: () => stage.scaleX(),
+    visibleCentre: () => viewCentre(cameraTarget(), view()),
     screenRect: screenRectOf,
-    toScreen: (at) => ({
-      x: at.x * stage.scaleX() + stage.x(),
-      y: at.y * stage.scaleY() + stage.y(),
-    }),
-    camera: () => ({ x: stage.x(), y: stage.y(), scale: stage.scaleX() }),
+    toScreen: (at) => worldToScreen(cameraNow(), at),
+    camera: cameraNow,
     setCamera(camera) {
-      const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, camera.scale));
-      stage.scale({ x: scale, y: scale });
-      stage.position({ x: camera.x, y: camera.y });
+      const scale = clampScale(camera.scale, MIN_SCALE, MAX_SCALE);
       // A restored camera counts as a fit: nothing is pending any more.
       pendingFit = false;
       pendingFloor = undefined;
-      afterCamera();
+      moveCamera({ x: camera.x, y: camera.y, scale }, false);
+      everPlaced = true;
     },
     centreOn(id) {
       const item = items.find((i) => i.id === id);
       if (item) centreWorld({ x: item.x + item.width / 2, y: item.y + item.height / 2 });
     },
-    centreAt: centreWorld,
+    centreAt: (at) => centreWorld(at),
     resize: onResize,
     destroy() {
       if (cameraFrame !== 0) cancelAnimationFrame(cameraFrame);
+      stopTween();
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
       window.removeEventListener("mouseup", onWindowUp);
+      opts.host.removeEventListener("pointerenter", onEnter);
+      opts.host.removeEventListener("pointerleave", onLeave);
       observer.disconnect();
       hideTip();
       controls?.destroy();
