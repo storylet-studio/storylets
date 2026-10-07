@@ -72,11 +72,12 @@ describe("what init writes, and in what order (CLI review 2026-10, items 17 and 
     }
   });
 
-  it("names the editor Storyletter, never the retired Storylet Studio", () => {
+  it("names the format's family, Storylet Studio, in the files a project starts with", () => {
+    // Storylet Studio is the whole (the format, the engine, the editor); Storyletter
+    // is only the editor, and these files describe the format, not the app.
     for (const kit of GAME_KITS) {
       const result = runInit({ dir: mkdtempSync(join(tmpdir(), "init-name-")), name: "Kit", kit });
-      for (const w of result.writes) expect(w.content, w.path).not.toContain("Storylet Studio");
-      expect(result.writes.find((w) => w.path.endsWith(".gitattributes"))!.content).toContain("Storyletter");
+      expect(result.writes.find((w) => w.path.endsWith(".gitattributes"))!.content).toContain("Storylet Studio");
     }
   });
 

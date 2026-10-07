@@ -567,7 +567,7 @@ const PATTERN_WIDTH = Math.max(...SHARD_NAMES.map((name) => name.length)) + 3;
 const pattern = (name: string): string => `*.${name}`.padEnd(PATTERN_WIDTH);
 const eachShard = (attribute: string): string => SHARD_NAMES.map((name) => `${pattern(name)}${attribute}`).join("\n");
 
-const EDITORCONFIG = `# Storyletter source is UTF-8 + LF, always (the validator enforces this).
+const EDITORCONFIG = `# Storylet Studio source is UTF-8 + LF, always (the validator enforces this).
 root = true
 
 [*]
@@ -580,7 +580,7 @@ indent_style = space
 indent_size = 2
 `;
 
-const GITATTRIBUTES = `# Storyletter source is UTF-8 + LF text (pinned; never let autocrlf touch it).
+const GITATTRIBUTES = `# Storylet Studio source is UTF-8 + LF text (pinned; never let autocrlf touch it).
 ${eachShard("text eol=lf")}
 
 # Id-keyed structured merge for storylets source (the 'storyletengine merge'
@@ -604,13 +604,13 @@ ${pattern(BUNDLE_EXTENSION.slice(1))}text eol=lf merge=ours
 ${"assets/**".padEnd(PATTERN_WIDTH)}binary
 `;
 
-const GITIGNORE = `# Storyletter generated artifacts that are never source:
+const GITIGNORE = `# Storylet Studio generated artifacts that are never source:
 # Unresolved merge sidecar (a lingering one is a validate error):
 *${CONFLICT_SIDECAR_EXTENSION}
 `;
 
 const VSCODE_SETTINGS = `{
-  // Storyletter shards are JSON5 (trailing commas, comments) under per-type
+  // Storylet Studio shards are JSON5 (trailing commas, comments) under per-type
   // extensions - register them so highlighting and validation survive.
   "files.associations": {
 ${SHARD_NAMES.map((name) => `    "*.${name}": "json5"`).join(",\n")}
@@ -627,7 +627,7 @@ hash).
 
 Register the merge drivers once per clone (git config is not repo-tracked):
 
-    git config merge.storylets.name "Storyletter structured merge"
+    git config merge.storylets.name "Storylet Studio structured merge"
     git config merge.storylets.driver "storyletengine merge %O %A %B -o %A --path %P"
     git config merge.ours.driver true
 

@@ -113,8 +113,8 @@ describe("runExportHtml on the example project", () => {
     expect(refused.issues.some((i) => i.severity === "error" && i.message.startsWith("unparseable JSON5"))).toBe(true);
   });
 
-  it("says Storyletter, never the retired name", () => {
-    expect(html).not.toContain("Storylet Studio");
+  it("credits the family, Storylet Studio: a game is made with the whole, not with the editor", () => {
+    expect(html).toContain('<span class="by">Storylet Studio</span>');
   });
 
   it("reports the load issues, and no page, for a folder with no project", () => {

@@ -268,7 +268,7 @@ export function runExportHtml(loaded: LoadedProject): ExportHtmlResult {
   const all = [...loaded.issues, ...issues];
   if (!bundle) return { issues: all };
 
-  const title = source.project.project.name.trim() || "A Storyletter project";
+  const title = source.project.project.name.trim() || "A Storylet Studio project";
   // Every `<` in the JSON is escaped, so the data cannot close the <script> it sits in.
   const bundleJson = serialiseBundle(bundle).trimEnd().replace(/</g, "\\u003c");
   const mapsJson = JSON.stringify(playableMaps(loaded, all)).replace(/</g, "\\u003c");
@@ -296,7 +296,7 @@ export function runExportHtml(loaded: LoadedProject): ExportHtmlResult {
   <div id="col">
     <header>
       <h1>${esc(title)}</h1>
-      <span class="by">Storyletter</span>
+      <span class="by">Storylet Studio</span>
     </header>
     <div id="header-line"></div>
     <div id="board"></div>
