@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-07
+
 ### Changed
 
 - **Edit ▸ Show Scene in Patterpad** is the item's new name. It was "Edit Scene in Patterpad"; Patterpad's mirror is "Show Card in Storyletter", and neither app edits the other's file.
