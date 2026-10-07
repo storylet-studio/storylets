@@ -932,9 +932,8 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
    quiet, per the density pass. */
 .set-cap { margin: 22px 0 0; font: 600 13px/1.3 var(--font-ui); }
 .set-note { margin: 2px 0 8px; font-size: 12px; line-height: 1.4; color: var(--muted); max-width: 52ch; }
-/* A path field with its picker beside it (Project Settings > General > Patter project). */
-.set-inline { display: flex; align-items: center; gap: 8px; }
-.set-inline input { flex: 1; min-width: 0; }
+/* The picker beside a path field (Project Settings > General > Patter project,
+   in the shell's `.shell-inline`). */
 .set-choose { font: inherit; font-size: 13px; padding: 4px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: none; color: var(--muted); cursor: pointer; }
 .set-choose:hover { color: var(--accent); border-color: var(--accent); }
 /* An inline link-shaped button inside a note (the Story page's pointer to
@@ -957,12 +956,6 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 .set-scope { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
 .set-ref input.set-name { min-width: 64px; }
 .set-rowline input.set-values { flex: 1 1 192px; min-width: 96px; }
-/* A text field behind the expander (Purpose, on every list) fills its line
-   instead of sitting at the browser's default twenty characters: a purpose is
-   a sentence. Checkboxes and selects keep their own width. Patterpad's Purpose
-   is as narrow, and `labelled` + `.set-details` are the shell's, so this rule
-   is the shell's to take (app-shell settings.css); drop it here when it does. */
-.set-details .shell-labelled > input:not([type=checkbox]):not([type=radio]) { flex: 1; min-width: 0; }
 .set-actions { display: flex; gap: 8px; }
 
 /* --- toast: the shell's now (@wildwinter/app-shell/toast.css) ---------------- */

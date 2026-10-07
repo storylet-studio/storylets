@@ -46,7 +46,7 @@ export interface MenuProject {
  *  `server`: the open project came from one and we still hold its key. */
 export function refreshMenu(
   window: BrowserWindow | undefined, state: StudioState, liveLink = false, server?: ServerMenuState,
-  /** The open project names its Patter project, so Edit Scene in Patterpad has somewhere to go. */
+  /** The open project names its Patter project, so Show Scene in Patterpad has somewhere to go. */
   patter = false,
   /** Items that need a project are greyed without one, Patterpad's mechanism:
    *  the menu is rebuilt with the state, and each such item carries `enabled`. */
@@ -171,7 +171,7 @@ export function refreshMenu(
         // down, and like it this needs somewhere to put the card: a deck in focus.
         { label: "New Card", accelerator: "Shift+CmdOrCtrl+N", enabled: open && project.deckFocused, click: send({ cmd: "new-card" }) },
         { type: "separator" },
-        { ...FILE_MENU.projectSettings, click: send({ cmd: "project-settings" }) },
+        { ...FILE_MENU.projectSettings, enabled: open, click: send({ cmd: "project-settings" }) },
         // The game's shared scopes folder (patterkit design/shared-scopes.md): creating it is
         // an explicit act, never a side effect, and this is the act. Beside Project Settings
         // because it is about the project's place in the game rather than about any one shard.
@@ -221,17 +221,18 @@ export function refreshMenu(
         { type: "separator" },
         // Below Select All, as Patterpad has it: the text roles together, then
         // the acts on the open item.
-        { ...EDIT_MENU.duplicate, click: send({ cmd: "duplicate" }) },
+        { ...EDIT_MENU.duplicate, enabled: open, click: send({ cmd: "duplicate" }) },
         // Only while the project is paired with a Patter project (its `patter`): the card's scene
         // is the scene named after it (Reboot 10). Beside Duplicate, as the other act on the open item.
-        ...(patter ? [{ label: "Edit Scene in Patterpad", click: send({ cmd: "edit-in-patterpad" }) }] : []),
+        ...(patter ? [{ label: "Show Scene in Patterpad", click: send({ cmd: "edit-in-patterpad" }) }] : []),
         { type: "separator" },
         // Find lives in Edit (Patterpad's placement, the platform convention).
-        { ...EDIT_MENU.find, click: send({ cmd: "search" }) },
+        { ...EDIT_MENU.find, enabled: open, click: send({ cmd: "search" }) },
         // Replace is Find's second tab, on the platform's key for it.
         {
           label: EDIT_MENU.replace.label,
           accelerator: isMac ? EDIT_MENU.replace.acceleratorMac : EDIT_MENU.replace.acceleratorOther,
+          enabled: open,
           click: send({ cmd: "replace" }),
         },
       ],
@@ -241,7 +242,7 @@ export function refreshMenu(
       submenu: [
         // Cmd+P, as Play Scene is in Patterpad (ruling O, 2026-10-06): both
         // topbar buttons say Play, and Patterpad's Cmd+T changes a line's type.
-        { label: "The Board", accelerator: "CmdOrCtrl+P", enabled: open, click: send({ cmd: "table" }) },
+        { label: "The Board", ...PLAY_MENU.play, enabled: open, click: send({ cmd: "table" }) },
         { type: "separator" },
         // Live Link (design/live-link.md): Patterpad's item, label and place.
         // Ticked while the server is up (listening or connected); the
@@ -265,26 +266,26 @@ export function refreshMenu(
         // The walk is a MODE you enter, which is what earns it the right to
         // navigate on each step where the ambient problems bar does not.
         {
-          ...REVIEW_MENU.reviewFeedback, type: "checkbox", checked: state.reviewWalk ?? false,
+          ...REVIEW_MENU.reviewFeedback, type: "checkbox", checked: state.reviewWalk ?? false, enabled: open,
           click: send({ cmd: "review-walk", on: !(state.reviewWalk ?? false) }),
         },
-        { ...REVIEW_MENU.nextFeedback, click: send({ cmd: "review-next" }) },
-        { ...REVIEW_MENU.previousFeedback, click: send({ cmd: "review-prev" }) },
+        { ...REVIEW_MENU.nextFeedback, enabled: open, click: send({ cmd: "review-next" }) },
+        { ...REVIEW_MENU.previousFeedback, enabled: open, click: send({ cmd: "review-prev" }) },
         { type: "separator" },
         // "Coverage Test…", the family's name for it and its key (parity row 24).
-        { ...REVIEW_MENU.coverageTest, click: send({ cmd: "coverage" }) },
+        { ...REVIEW_MENU.coverageTest, enabled: open, click: send({ cmd: "coverage" }) },
         // No accelerator, matching Patterpad's Find Property Usage: an
         // occasional lens, and Shift+Cmd+L is spoken for over there (Find
         // Lines by Writing Status), so the family keeps that key free.
-        { label: "Links\u2026", click: send({ cmd: "links" }) },
+        { label: "Links\u2026", enabled: open, click: send({ cmd: "links" }) },
         // Patterpad's item, in Patterpad's menu: Find's Property tab, for "where
         // is @x read or written?". No accelerator there either.
-        { ...REVIEW_MENU.findPropertyUsage, click: send({ cmd: "search-property" }) },
+        { ...REVIEW_MENU.findPropertyUsage, enabled: open, click: send({ cmd: "search-property" }) },
         { type: "separator" },
         // Patterpad's item, and its default: a resolved thread is done, and a
         // reviewer asks to see the archive rather than being shown it.
         {
-          ...REVIEW_MENU.showResolvedComments, type: "checkbox", checked: state.showResolved,
+          ...REVIEW_MENU.showResolvedComments, type: "checkbox", checked: state.showResolved, enabled: open,
           click: send({ cmd: "show-resolved", on: !state.showResolved }),
         },
       ],
@@ -329,8 +330,8 @@ export function refreshMenu(
         // Patterpad has View > Project Overview. Up a Level climbs; Cmd+[ is the
         // key advertised because it is unambiguous (Cmd+Up and Cmd+Left are OS
         // text keys first, which is exactly what A1 had to fix).
-        { ...VIEW_MENU.projectOverview, click: send({ cmd: "project-overview" }) },
-        { ...VIEW_MENU.upALevel, click: send({ cmd: "go-up" }) },
+        { ...VIEW_MENU.projectOverview, enabled: open, click: send({ cmd: "project-overview" }) },
+        { ...VIEW_MENU.upALevel, enabled: open, click: send({ cmd: "go-up" }) },
         { type: "separator" },
         // History's axis, beside hierarchy's: Back retraces jumps. The labels
         // and platform-split keys are the shell's (GO_MENU), so the family

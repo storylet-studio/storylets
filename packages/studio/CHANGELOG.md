@@ -10,6 +10,15 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **Edit ▸ Show Scene in Patterpad** is the item's new name. It was "Edit Scene in Patterpad"; Patterpad's mirror is "Show Card in Storyletter", and neither app edits the other's file.
+- **Every menu item that needs a project is greyed without one**: Project Settings, Duplicate, Find and Replace, the whole Review menu, Project Overview and Up a Level join the items already greyed.
+- **Project Settings' switches are the family's settings toggle**, with what each does under it, as in Patterpad. A save that's refused (a version control lock, say) keeps the dialog open with your edits in it, instead of closing and losing them.
+- **When Storyletter can't find Patterpad, it asks in its own window**, with Cancel first, as Patterpad asks when it can't find Storyletter.
+- **Copy matched to Patterpad and the house style**: the review bar's tags are capitalised and its tips say "feedback"; tables head the column "Game ID"; the publish and pack toasts read "Bundle published", "Storyletpack exported" and so on, with the file on its own line; an error from a command reads as a sentence; Replace's and a mismatched merge's questions end "You can undo this."; and the About box's description is one sentence.
+- **Back and Forward start afresh with each project**, so on the welcome screen they no longer look as if they lead somewhere.
+
 ## [0.19.0] - 2026-10-07
 
 ### Changed

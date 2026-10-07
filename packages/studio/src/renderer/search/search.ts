@@ -263,7 +263,7 @@ async function applyReplace(only?: ReplaceHit): Promise<void> {
     const items = new Set(replaceHits.map((h) => h.id)).size;
     const ok = await confirmDialog({
       title: `Replace ${plural(n, "occurrence")} across ${plural(items, "item")}?`,
-      body: `Every “${query}” becomes “${replacement}”. One undo step puts them all back.`,
+      body: `Every “${query}” becomes “${replacement}”. You can undo this.`,
       confirmLabel: "Replace",
     });
     if (!ok) return;

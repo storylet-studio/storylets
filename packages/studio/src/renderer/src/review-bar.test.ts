@@ -62,13 +62,13 @@ describe("the review bar", () => {
     // It is only in the walk because Show Resolved asked for it, so it says so.
     renderReviewBar(host, [item({ resolved: true })], 0, true, vi.fn(), vi.fn(), vi.fn());
     const cat = host.querySelector(".stepbar-cat");
-    expect(cat?.textContent).toBe("resolved");
+    expect(cat?.textContent).toBe("Resolved");
     expect(cat?.classList.contains("done")).toBe(true);
   });
 
   it("says when a thread is a marker on a canvas", () => {
     renderReviewBar(host, [item({ canvas: "k_1" })], 0, true, vi.fn(), vi.fn(), vi.fn());
-    expect(host.querySelector(".stepbar-cat")?.textContent).toBe("marker");
+    expect(host.querySelector(".stepbar-cat")?.textContent).toBe("Marker");
   });
 
   it("the message is the way there, and the close button leaves", () => {

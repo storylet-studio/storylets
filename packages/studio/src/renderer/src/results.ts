@@ -24,12 +24,27 @@ export const flashError = (message: string): void => flash(message, "error");
 export const quietly = (): void => { /* nothing to say */ };
 
 /**
+ * Main's error as a sentence: a capital first and a full stop last, since it
+ * often arrives as a fragment ("no project open"). Patterpad's `landed()` reads
+ * its refusals the same way. A reason that opens with a file name or an address
+ * ("storylets.server.json is…", "@story.x…") keeps its case, which is the name's.
+ */
+export function sentence(error: string): string {
+  const t = error.trim();
+  if (t === "") return t;
+  const first = t.split(/\s/, 1)[0]!;
+  const named = /[./@_`"“'‘]/.test(first);
+  const s = named ? t : t[0]!.toUpperCase() + t.slice(1);
+  return /[.!?…]$/.test(s) ? s : `${s}.`;
+}
+
+/**
  * Did a mutation land? Reports the error and answers false if not.
  *
- * A type guard, so the caller's `r` narrows afterwards. `report` is the toast
- * unless the caller says where else the sentence goes.
+ * A type guard, so the caller's `r` narrows afterwards. `report` is the toast,
+ * said as a sentence, unless the caller says where else the sentence goes.
  */
-export function ok<T extends object>(r: T | { error: string }, report: (error: string) => void = flashError): r is T {
+export function ok<T extends object>(r: T | { error: string }, report: (error: string) => void = (e) => flashError(sentence(e))): r is T {
   if ("error" in r) { report((r as { error: string }).error); return false; }
   return true;
 }

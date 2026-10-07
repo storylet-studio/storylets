@@ -60,9 +60,10 @@ export function createExchange(ctx: ExchangeContext) {
     const result = await withJob("bundle", "Publishing the bundle…", () => studio.exportBundle({ pin: true }));
     // Re-read even on a failure: the pins may have landed before the export failed.
     if (!ok(result)) { void ctx.refreshProject(); return; }
-    // "Published", the menu's own verb, as the other two Publish commands say.
-    const pinned = result.pinned > 0 ? `, and pinned ${plural(result.pinned, "game id")} that followed a title` : "";
-    flash(`Published ${baseName(result.path)}${pinned}`, "ok");
+    // "Published", the menu's own verb, after the thing published (house style rule 31, and
+    // Patterpad's "Bundle published"), with the file on its own line.
+    const pinned = result.pinned > 0 ? `\nPinned ${plural(result.pinned, "Game ID")} that followed a title` : "";
+    flash(`Bundle published\n${baseName(result.path)}${pinned}`, "ok");
     void ctx.refreshProject();
   }
 
@@ -74,7 +75,7 @@ export function createExchange(ctx: ExchangeContext) {
     const result = await withJob("spreadsheet", "Publishing the spreadsheet…", () => studio.exportXlsx());
     if (result === null) return;
     if (!ok(result)) return;
-    flash(`Published ${baseName(result.path)}`, "ok");
+    flash(`Spreadsheet published\n${baseName(result.path)}`, "ok");
   }
 
   /** Publish Playable HTML: the project as one self-contained page that plays
@@ -85,7 +86,7 @@ export function createExchange(ctx: ExchangeContext) {
     const result = await withJob("playable", "Publishing the playable page…", () => studio.exportHtml());
     if (result === null) return;
     if (!ok(result)) return;
-    flash(`Published ${baseName(result.path)}`, "ok");
+    flash(`Playable HTML published\n${baseName(result.path)}`, "ok");
   }
 
   // --- the game's shared scopes folder (patterkit design/shared-scopes.md) -------
@@ -102,7 +103,7 @@ export function createExchange(ctx: ExchangeContext) {
     if (result === null) return;
     if (!ctx.applied(result)) return;
     if (!(await ctx.reloadCatalogue())) ctx.render();
-    flash("Shared the project's scopes with the game's other tools", "ok");
+    flash("Scopes shared with the game's other tools", "ok");
   }
 
   // --- the send envelope (.storyletpack) ---------------------------------------
@@ -113,7 +114,7 @@ export function createExchange(ctx: ExchangeContext) {
     const result = await withJob("pack", "Packing the project…", () => studio.exportPack());
     if (result === null) return;
     if (!ok(result)) return;
-    flash(`Packed ${baseName(result.path)}`, "ok");
+    flash(`Storyletpack exported\n${baseName(result.path)}`, "ok");
   }
 
   /**
@@ -290,7 +291,7 @@ export function createExchange(ctx: ExchangeContext) {
       // nothing. Written as prose that reads without the break rather than as prose
       // that needs one it will not get.
       body: provenance !== undefined
-        ? `${provenance} Merging anyway would give you ${counts}.${conflictLine}${worldLine}`
+        ? `${provenance} Merging anyway would give you ${counts}.${conflictLine}${worldLine} You can undo this.`
         : `${counts}.${conflictLine}${worldLine} You can undo this.`,
       confirmLabel: "Merge",
     });

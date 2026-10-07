@@ -87,7 +87,7 @@ let session: ProjectSession | undefined;
 /** The editor has a deck in focus, so New Card has somewhere to put a card.
  *  The renderer says so (`setDeckFocused`); main cannot see the editor's page. */
 let deckFocused = false;
-/** Whether the menu last drew Edit Scene in Patterpad (see `noteProjectWritten`). */
+/** Whether the menu last drew Show Scene in Patterpad (see `noteProjectWritten`). */
 let shownPatter = false;
 
 const jobs = createJobs();
@@ -121,7 +121,7 @@ const tools = createWindowsIpc({
 
 // --- the menu, and the window's title -------------------------------------------
 
-/** Is the open project paired with a Patter project (its `patter`)? Edit Scene in Patterpad
+/** Is the open project paired with a Patter project (its `patter`)? Show Scene in Patterpad
  *  shows only then, and the menu is rebuilt when a write changes the answer. */
 const patterPaired = (): boolean => session?.loaded.source?.project.patter !== undefined;
 

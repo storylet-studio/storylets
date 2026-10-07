@@ -114,7 +114,11 @@ describe("View (item 24)", () => {
 describe("items that need a project (item 24)", () => {
   const needing = ["Close Project", "Share Scopes with Other Tools…", "New Card", "Save", "The Board",
     "Publish Playable HTML…", "Publish Spreadsheet…", "Publish Bundle", "Export as Storyletpack…",
-    "Merge Returned Storyletpack…"];
+    "Merge Returned Storyletpack…",
+    // and the rest of the one rule (the Patterpad review, 2026-10-07)
+    "Project Settings…", "Duplicate", "Find…", "Replace…",
+    "Review Feedback", "Next Feedback", "Previous Feedback", "Coverage Test…", "Links…", "Find Property Usage…",
+    "Show Resolved Comments", "Project Overview", "Up a Level"];
 
   it("are greyed with no project open", async () => {
     const all = everyItem(await menuOn("darwin", { open: false, deckFocused: false }));

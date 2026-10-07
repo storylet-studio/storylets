@@ -9,7 +9,7 @@
 
 import { mountPropertyList } from "./prop-list.js";
 import { mountDriverList } from "./driver-list.js";
-import { el, mountSettingsDialog, labelled, lockControls } from "@wildwinter/app-shell";
+import { el, mountSettingsDialog, labelled, labelledToggle, lockControls } from "@wildwinter/app-shell";
 import { shapeNotice } from "./vc-view.js";
 import { ok } from "./results.js";
 import type { SettingsDialog, SettingsSectionHandle } from "@wildwinter/app-shell";
@@ -109,8 +109,6 @@ export function createProjectSettings(
       sections: [
         { id: "general", label: "General", group: "Project", mount: (h) => {
           const d = data!;
-          const unread = el("input"); unread.type = "checkbox"; unread.checked = d.warnUnreadWrites;
-          unread.addEventListener("change", () => { d.warnUnreadWrites = unread.checked; });
           // The paired Patter project: typed, or chosen, as a path relative to this project.
           d.patterProject ??= "";
           const patter = dialogField(d.patterProject, (v) => { d.patterProject = v; });
@@ -121,16 +119,19 @@ export function createProjectSettings(
             const picked = await studio.choosePatterProject();
             if (picked) { patter.value = picked.path; d.patterProject = picked.path; }
           })());
-          const patterRow = el("div", { className: "set-inline" });
+          const patterRow = el("div", { className: "shell-inline" });
           patterRow.append(patter, choose);
           h.append(
             labelled("Name", dialogField(d.name, (v) => { d.name = v; })),
             labelled("Version", dialogField(d.version, (v) => { d.version = v; })),
             ...playField(d),
-            labelled("Warn about unread state", unread),
-            el("p", { className: "set-note", text: "Also flag state an outcome writes that no condition reads. It's off by default, because cards are often written ahead of the content that will read them. A gate on state nothing writes always warns, whatever this says." }),
-            labelled("Patter project", patterRow),
-            el("p", { className: "set-note", text: "The Patter project whose scenes these cards play, named after them. Each card is checked against its scene in the Patter project's published bundle, and Edit ▸ Edit Scene in Patterpad opens it." }),
+            labelledToggle("Warn about unread state", {
+              checked: d.warnUnreadWrites,
+              hint: "Also flag state an outcome writes that no condition reads. It's off by default, because cards are often written ahead of the content that will read them. A gate on state nothing writes always warns, whatever this says.",
+              onChange: (on) => { d.warnUnreadWrites = on; },
+            }).row,
+            labelled("Patter project", patterRow,
+              "The Patter project whose scenes these cards play, named after them. Each card is checked against its scene in the Patter project's published bundle, and Edit ▸ Show Scene in Patterpad opens it."),
           );
           return {};
         } },
@@ -169,24 +170,26 @@ export function createProjectSettings(
           meta.addEventListener("change", () => { d.metadata = meta.value as "full" | "stripped"; });
           const turns = el("input"); turns.type = "number"; turns.value = String(d.playAdvancesTurns);
           turns.addEventListener("input", () => { const n = Number(turns.value); if (Number.isFinite(n)) d.playAdvancesTurns = n; });
-          // Beside Metadata, because it is the same kind of switch: authoring
-          // data that may or may not ship.
-          const map = el("input"); map.type = "checkbox"; map.checked = d.exportMap;
-          map.addEventListener("change", () => { d.exportMap = map.checked; });
           h.append(
             labelled("Bundle path", dialogField(d.bundlePath, (v) => { d.bundlePath = v; })),
             labelled("Metadata", meta),
-            labelled("Include the maps", map),
-            el("p", { className: "set-note", text: "Zone shapes and background pictures ship with the bundle, and the pictures are written beside it. The engine ignores them. This is for a host that draws its own map." }),
-            labelled("Play advances turns", turns),
-            el("p", { className: "set-note", text: "How far a play moves the clock of the box the card came from. A timed box (one whose Turns setting counts seconds) is advanced by the game's clock instead, so its plays advance nothing." }),
+            // Beside Metadata, because it is the same kind of switch: authoring
+            // data that may or may not ship.
+            labelledToggle("Include the maps", {
+              checked: d.exportMap,
+              hint: "Zone shapes and background pictures ship with the bundle, and the pictures are written beside it. The engine ignores them. This is for a host that draws its own map.",
+              onChange: (on) => { d.exportMap = on; },
+            }).row,
+            labelled("Play advances turns", turns,
+              "How far a play moves the clock of the box the card came from. A timed box (one whose Turns setting counts seconds) is advanced by the game's clock instead, so its plays advance nothing."),
           );
           return {};
         } },
       ],
       onSave: async () => {
         const result = await studio.saveProjectSettings(data!);
-        if (!ok(result, onError)) return;
+        // Refused (a lock, say): the dialog stays open with the edits in it.
+        if (!ok(result, onError)) return false;
         onSaved(result);
       },
     });

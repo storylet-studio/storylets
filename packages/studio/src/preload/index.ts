@@ -210,7 +210,7 @@ const api: StudioApi = {
   exportPack: () => invoke("pack:export"),
   shareScopes: () => invoke("project:shareScopes"),
   choosePatterProject: () => invoke("patter:choose"),
-  editInPatterpad: (cardId: string) => invoke("patter:edit", cardId),
+  editInPatterpad: (cardId: string, locate?: boolean) => invoke("patter:edit", cardId, locate),
   choosePack: () => invoke("pack:choose"),
   openPackAt: (path: string) => invoke("pack:openAt", path),
   // The pack exchange: three calls, and the key never crosses this bridge.

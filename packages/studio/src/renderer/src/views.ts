@@ -783,7 +783,7 @@ function deckTable(
   // placement is a tag). Where = the home group plus every place axis of the
   // box (ops place-axis.ts), the same rule the card's own Where sentence uses
   // (where.ts).
-  const cols = ["", "Title", "gameId", "When", "Where", "Tags", ""];
+  const cols = ["", "Title", "Game ID", "When", "Where", "Tags", ""];
   table.append(tableHead(cols));
   const axes = placeGroupsOf(box);
   const isPlace = (group: string): boolean => group === PLACE_GROUP || axes.has(group);
@@ -1067,7 +1067,7 @@ export function renderDecksCentre(host: HTMLElement, box: BoxDto, mode: ViewMode
   let body: HTMLElement;
   if (mode === "table") {
     const table = el("table", { className: "ctable" });
-    table.append(tableHead(["", "Deck", "gameId", "Cards", "Purpose"]));
+    table.append(tableHead(["", "Deck", "Game ID", "Cards", "Purpose"]));
     const tbody = el("tbody");
     for (const deck of box.decks) {
       const nameCell = el("td", { className: "ct-title", text: deck.title ?? deck.gameId });
@@ -1237,9 +1237,8 @@ export function renderProblems(
     }),
     at,
     // The tone follows the CURRENT problem, not the worst one, as Patterpad's
-    // does: a warning reads softer than an error while you are standing on it.
-    // (This app keeps its own error colour, the danger tone, where Patterpad's
-    // bar wears its accent.)
+    // does: a warning reads softer than an error while you are standing on it,
+    // and an error is in the danger colour in both apps (ruling R, 2026-10).
     tone: current?.severity === "warning" ? "warn" : "danger",
     tips: { prev: "Previous problem", next: "Next problem", go: "Go to issue" },
     onStep,
@@ -1311,14 +1310,14 @@ export function renderReviewBar(
   if (!on) { host.hidden = true; host.replaceChildren(); return; }
   renderStepperBar(host, {
     items: items.map((item) => ({
-      kind: item.resolved === true ? "resolved" : (item.canvas !== undefined ? "marker" : "comment"),
+      kind: item.resolved === true ? "Resolved" : (item.canvas !== undefined ? "Marker" : "Comment"),
       kindClass: item.resolved === true ? "done" : undefined,
       where: item.where,
       text: `${item.author}: ${item.text}`,
     })),
     at,
     tone: "accent",
-    tips: { prev: tipWithKey("Previous comment", "Shift+F8"), next: tipWithKey("Next comment", "F8"), go: "Go to this comment" },
+    tips: { prev: tipWithKey("Previous feedback", "Shift+F8"), next: tipWithKey("Next feedback", "F8"), go: "Go to this feedback" },
     onStep,
     onGo: (i) => onGo(items[i]!),
     // An EMPTY walk still shows its bar. Entering the mode and seeing nothing at
@@ -1326,6 +1325,6 @@ export function renderReviewBar(
     // which is exactly the difference `empty` encodes in the shell's bar.
     empty: "No open comments.",
     onClose,
-    closeTip: "Leave the feedback walk",
+    closeTip: "Exit review feedback",
   });
 }

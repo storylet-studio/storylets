@@ -102,7 +102,7 @@ typed in Patterpad since you last published.
 
 ## Opening the scene in Patterpad
 
-With a card open, **Edit ▸ Edit Scene in Patterpad** opens Patterpad at that card's scene. If
+With a card open, **Edit ▸ Show Scene in Patterpad** opens Patterpad at that card's scene. If
 Patterpad is already open on the project it jumps there. The menu item only appears once the
 projects are paired.
 

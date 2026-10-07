@@ -1,4 +1,4 @@
-// Finding Patterpad for Edit Scene in Patterpad. The platform is passed in, so
+// Finding Patterpad for Show Scene in Patterpad. The platform is passed in, so
 // what each one looks for is tested here without Spotlight or a real install.
 
 import { describe, expect, it } from "vitest";

@@ -178,7 +178,7 @@ show, on [Keyboard shortcuts](/storyletter/shortcuts/).
 |---|---|
 | Storyletter (macOS only) | About Storyletter · User Information… |
 | File | New Project… (`Cmd+N`) · Open Project… (`Cmd+O`) · Open Storyletpack… · Open Recent · Close Project · Save (`Cmd+S`) · Export as Storyletpack… · Merge Returned Storyletpack… · Connect to a Server… · New Card (`Shift+Cmd+N`) · Project Settings… (`Cmd+,`) · Share Scopes with Other Tools… · User Information… (Windows and Linux) · Exit (Windows) or Quit (Linux) |
-| Edit | Undo (`Cmd+Z`) · Redo (`Shift+Cmd+Z`) · Cut · Copy · Paste · Select All · Duplicate (`Cmd+D`) · Edit Scene in Patterpad (when the project is [paired with Patter](/storyletter/patter/)) · Find… (`Cmd+F`) · Replace… (`Cmd+Alt+F`; `Ctrl+H` on Windows and Linux) |
+| Edit | Undo (`Cmd+Z`) · Redo (`Shift+Cmd+Z`) · Cut · Copy · Paste · Select All · Duplicate (`Cmd+D`) · Show Scene in Patterpad (when the project is [paired with Patter](/storyletter/patter/)) · Find… (`Cmd+F`) · Replace… (`Cmd+Alt+F`; `Ctrl+H` on Windows and Linux) |
 | Play | The Board (`Cmd+P`) · Live Link |
 | Review | Review Feedback (`Shift+Cmd+R`) · Next Feedback (`F8`) · Previous Feedback (`Shift+F8`) · Coverage Test… (`Shift+Cmd+C`) · Links… · Find Property Usage… · Show Resolved Comments |
 | Publish | Publish Playable HTML… · Publish Spreadsheet… · Publish Bundle (`Shift+Cmd+B`) · Auto Rebuild |

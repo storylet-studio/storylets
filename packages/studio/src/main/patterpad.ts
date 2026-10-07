@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Edit Scene in Patterpad: open the paired Patter project (the project shard's
+// Show Scene in Patterpad: open the paired Patter project (the project shard's
 // `patter`) in Patterpad, at the scene named after a card (Reboot 10: a card's
 // gameId is its scene's address).
 //

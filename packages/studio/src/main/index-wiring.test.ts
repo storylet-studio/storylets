@@ -116,3 +116,11 @@ describe("undoing a pull (2026-10-07)", () => {
     expect(pull.indexOf("writeBase(")).toBeLessThan(pull.indexOf('"Pull from server"'));
   });
 });
+
+describe("Show Scene in Patterpad (the Patterpad review, 2026-10-07)", () => {
+  it("hands the can't-find question to the window instead of a native message box", () => {
+    const edit = handler("patter:edit");
+    expect(edit).toContain("Storyletter can't find Patterpad");
+    expect(edit).not.toContain("showMessageBox");
+  });
+});

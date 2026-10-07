@@ -2096,10 +2096,13 @@ export interface StudioApi {
   // --- the paired Patter project (the project shard's `patter`) --------------
   /** Pick a Patter project for Project Settings, as a path relative to this project. Null = cancelled. */
   choosePatterProject(): Promise<{ path: string } | null>;
-  /** Edit Scene in Patterpad: open the paired Patter project at the scene named after the card.
+  /** Show Scene in Patterpad: open the paired Patter project at the scene named after the card.
    *  `published` says whether the Patter project's published bundle already has that scene.
-   *  Null = cancelled (Patterpad wasn't found and the author didn't point at it). */
-  editInPatterpad(cardId: string): Promise<{ address: string; published: boolean } | { error: string } | null>;
+   *  When Patterpad can't be found, `locate` is the question to ask in the window (the shell's
+   *  confirm, as Patterpad asks its mirror); asked again with `locate` true, main offers the file
+   *  picker. Null = cancelled (the author didn't point at it). */
+  editInPatterpad(cardId: string, locate?: boolean): Promise<
+    { address: string; published: boolean } | { locate: { title: string; body: string } } | { error: string } | null>;
 
   // --- the send envelope (.storyletpack, Reboot 7.1) -------------------------
   /** Write the open project to a .storyletpack (native save dialog).

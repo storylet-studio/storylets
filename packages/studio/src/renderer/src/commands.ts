@@ -12,6 +12,7 @@ import { isEditableTarget, showAbout } from "@wildwinter/app-shell";
 import type { PaneShell } from "@wildwinter/app-shell";
 import { STORYLETTER_WORDMARK } from "./wordmark.js";
 import { flash, flashError, ok } from "./results.js";
+import { showInPatterpad } from "./show-in-patterpad.js";
 import { remember } from "./session.js";
 import type { Navigation } from "./navigation.js";
 import type { SaveQueue } from "./save-queue.js";
@@ -125,14 +126,14 @@ export function createCommands(ctx: CommandsContext) {
     }
   }
 
-  /** Edit > Edit Scene in Patterpad: the open card's scene, in the paired Patter
+  /** Edit > Show Scene in Patterpad: the open card's scene, in the paired Patter
    *  project. Pending edits land first, since a gameId just typed is the address
    *  Patterpad is asked for. */
   async function editInPatterpad(): Promise<void> {
     const ins = nav.inspected;
     if (ins?.kind !== "card") { flashError("Open a card first. Its scene is the one named after it."); return; }
     await saves.flush();
-    const result = await studio.editInPatterpad(ins.card);
+    const result = await showInPatterpad(studio, ins.card);
     if (result === null) return;
     if (!ok(result)) return;
     flash(result.published
@@ -177,7 +178,7 @@ export function createCommands(ctx: CommandsContext) {
         appName: "Storyletter",
         wordmark: STORYLETTER_WORDMARK,
         version: command.version,
-        blurb: "A studio for storylets. Content that offers itself when the moment is right.",
+        blurb: "A studio for storylets, the content that offers itself when the moment is right.",
         // Storylet Studio, not PatterKit. These two lines were scaffolded from
         // Patterpad's About and never changed, so the shipped app told anyone who
         // opened it that it belonged to the sibling project and sent them to the

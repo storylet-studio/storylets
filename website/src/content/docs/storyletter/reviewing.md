@@ -52,7 +52,7 @@ its own notes file. A comment on a hand is kept with the hand's box.
 through every open thread in the project, one at a time:
 
 - **F8** steps to the next thread and Shift+F8 to the previous. The walk loops.
-- The bar names what the comment is about and who wrote it. Click **Go to this comment**
+- The bar names what the comment is about and who wrote it. Click **Go to this feedback**
   and the editor opens the item and its thread.
 - If there's nothing open, the bar says "No open comments."
 

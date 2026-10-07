@@ -92,3 +92,37 @@ describe("Project Settings under an author's key", () => {
     expect(frame.querySelector<HTMLButtonElement>(".settings-save")!.hidden).toBe(false);
   });
 });
+
+describe("Project Settings, the Patterpad review (2026-10-07)", () => {
+  it("draws its switches as the family's settings toggle, with the sentence as the field's hint", async () => {
+    document.body.replaceChildren();
+    const panel = createProjectSettings(studio(), () => {}, () => {}, () => false);
+    panel.open();
+    const frame = await opened();
+    const toggle = [...frame.querySelectorAll<HTMLElement>(".shell-toggle")].find((t) => t.textContent?.includes("Warn about unread state"));
+    expect(toggle).toBeDefined();
+    const box = toggle!.querySelector<HTMLInputElement>("input[type=checkbox]")!;
+    const hint = document.getElementById(box.getAttribute("aria-describedby") ?? "");
+    expect(hint?.textContent).toContain("no condition reads");
+    expect(frame.querySelector(".set-inline")).toBeNull();
+    expect(frame.querySelector(".shell-inline input")).not.toBeNull();
+  });
+
+  it("stays open with the edits in it when the save is refused, saying why", async () => {
+    document.body.replaceChildren();
+    const said: string[] = [];
+    let saved = 0;
+    const panel = createProjectSettings(studio(), () => { saved++; }, (msg) => said.push(msg), () => false);
+    panel.open();
+    const frame = await opened();
+    const name = frame.querySelector<HTMLInputElement>(".settings-panels input")!;
+    name.value = "Saltmarsh, renamed";
+    name.dispatchEvent(new Event("input"));
+    frame.querySelector<HTMLButtonElement>(".settings-save")!.click();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    expect(said).toEqual(["not reached in these tests"]);
+    expect(saved).toBe(0);
+    expect(frame.open).toBe(true);
+    expect(name.value).toBe("Saltmarsh, renamed");
+  });
+});

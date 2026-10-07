@@ -187,6 +187,10 @@ export function createNavigation(ctx: NavigationContext) {
     forward(): void { travel((c) => history.forward(c)); },
     canBack(): boolean { return history.canBack(); },
     canForward(): boolean { return history.canForward(); },
+    /** Forget both sides when the places stop meaning anything: another project
+     *  opened, or the welcome screen with none. `usable` already hid the old
+     *  project's places, but the arrows looked live (Patterpad clears on both). */
+    clearHistory(): void { history.clear(); },
 
     /**
      * Where the author is standing right now, as an arriveFrom return: a label

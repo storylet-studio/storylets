@@ -21,7 +21,7 @@ import type { MainContext } from "../context.js";
 import type { Ipc } from "./registrar.js";
 import { sessionGuards } from "./registrar.js";
 import { EXAMPLES } from "../../shared/examples.js";
-import type { OpenResult, ProjectSettingsDto, VcStatusDto } from "../../shared/api.js";
+import type { OpenResult, ProjectSettingsDto, StudioApi, VcStatusDto } from "../../shared/api.js";
 
 export interface ProjectIpcDeps extends Pick<MainContext, "session" | "editor" | "store" | "openAt"> {
   /** May the author leave the open project? (exchange.ts) */
@@ -243,9 +243,9 @@ export function registerProject(ipc: Ipc, deps: ProjectIpcDeps): void {
     return { path: relative(deps.session()!.loaded.dir, dir).split(sep).join("/") };
   });
 
-  // Edit Scene in Patterpad: the paired Patter project, at the scene named after the card.
+  // Show Scene in Patterpad: the paired Patter project, at the scene named after the card.
   // Patterpad forwards a second launch to the running app, which jumps in place.
-  ipc.handle("patter:edit", async (_e, cardId): Promise<{ address: string; published: boolean } | { error: string } | null> => {
+  ipc.handle("patter:edit", async (_e, cardId, locate): ReturnType<StudioApi["editInPatterpad"]> => {
     const session = deps.session();
     if (!session?.loaded.source) return { error: "no project open" };
     const { link, issues } = readPatterLink(session.loaded);
@@ -256,14 +256,11 @@ export function registerProject(ipc: Ipc, deps: ProjectIpcDeps): void {
     const store = deps.store();
     let executable = findPatterpad(store.patterpadPath());
     if (executable === undefined) {
-      const answer = await dialog.showMessageBox(deps.editor()!, {
-        type: "question",
-        message: "Storyletter can't find Patterpad.",
-        detail: "Point to it once and Storyletter will remember where it is.",
-        buttons: ["Locate Patterpad…", "Cancel"],
-        defaultId: 0, cancelId: 1,
-      });
-      if (answer.response !== 0) return null;
+      // Asked in the window, in the shell's confirm with Cancel first, as Patterpad asks
+      // its mirror; the renderer comes back with `locate` once the author says yes.
+      if (locate !== true) {
+        return { locate: { title: "Storyletter can't find Patterpad", body: "Point to it once and Storyletter will remember where it is." } };
+      }
       const picked = await dialog.showOpenDialog(deps.editor()!, {
         title: "Locate Patterpad",
         message: "Choose the Patterpad app. Storyletter will remember where it is.",

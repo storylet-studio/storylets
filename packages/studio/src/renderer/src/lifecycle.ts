@@ -154,6 +154,7 @@ export function createLifecycle(ctx: LifecycleContext) {
     nav.focus = undefined;
     nav.inspected = undefined;
     nav.detail = undefined;
+    nav.clearHistory();
     catalogues.forgetDeck();
     setCameFrom(undefined);
     ctx.liveLink(false);
@@ -187,6 +188,7 @@ export function createLifecycle(ctx: LifecycleContext) {
     if (session.project !== undefined && session.project.dir !== result.project.dir) {
       resetDocTabMemory();
       forgetBoxColours();
+      nav.clearHistory();
       session.remote = undefined;
       problems.reset([]);
     }
