@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Builds on Unreal 5.8 as well as 5.7.** 5.8 keys a JSON object's fields by a shared string type rather than `FString`, so the bundle bridge's key read no longer compiled. Keys are now read through one overload pair that takes either, with no engine-version check; the plugin and its demo build, and every `StoryletEngine.*` test passes, on both. The Hamlet demo's `@world` load reads its keys the same way.
+
 ## [0.11.1] - 2026-10-06
 
 ### Fixed

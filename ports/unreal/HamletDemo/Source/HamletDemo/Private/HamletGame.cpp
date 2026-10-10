@@ -9,6 +9,10 @@
 using namespace storylets;
 
 static std::string S(const FString& In) { return std::string(TCHAR_TO_UTF8(*In)); }
+// A JSON object's key as an FString on 5.7 (FString keys) and 5.8 (a shared string
+// type with ToView()); the overload wins wherever it applies.
+static FString KeyString(const FString& Key) { return Key; }
+template <typename K> static FString KeyString(const K& Key) { return FString(Key.ToView()); }
 static FString F(const std::string& In) { return FString(UTF8_TO_TCHAR(In.c_str())); }
 
 // --- the world ---------------------------------------------------------------
@@ -232,9 +236,9 @@ bool FHamletGame::Load(const FString& Json, FString& OutError)
 		if (env->TryGetObjectField(TEXT("world"), w))
 			for (const auto& kv : (*w)->Values)
 			{
-				if (kv.Value->Type == EJson::Boolean) World.Host(S(kv.Key), StoryletValue::Bool(kv.Value->AsBool()));
-				else if (kv.Value->Type == EJson::Number) World.Host(S(kv.Key), StoryletValue::Num(kv.Value->AsNumber()));
-				else World.Host(S(kv.Key), StoryletValue::Str(S(kv.Value->AsString())));
+				if (kv.Value->Type == EJson::Boolean) World.Host(S(KeyString(kv.Key)), StoryletValue::Bool(kv.Value->AsBool()));
+				else if (kv.Value->Type == EJson::Number) World.Host(S(KeyString(kv.Key)), StoryletValue::Num(kv.Value->AsNumber()));
+				else World.Host(S(KeyString(kv.Key)), StoryletValue::Str(S(kv.Value->AsString())));
 			}
 		// The wrapper's load restores the file's @world into the bound container too (the same values).
 		if (!UStoryletSave::LoadStateFromJson(Storylets.Get(), env->GetStringField(TEXT("storylets")))) { OutError = TEXT("the storylets half did not load"); return false; }

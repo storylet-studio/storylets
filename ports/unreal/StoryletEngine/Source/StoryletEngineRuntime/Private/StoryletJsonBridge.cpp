@@ -11,6 +11,13 @@ namespace
 {
 	std::string Std(const FString& S) { return std::string(TCHAR_TO_UTF8(*S)); }
 
+	// A JSON object's key, as an FString on either engine: 5.7 keys
+	// FJsonObject::Values by FString, and 5.8 by a shared string type with a
+	// ToView(). The FString overload wins wherever it applies, so the template
+	// is only ever chosen on 5.8 (Patter's fix, word for word).
+	FString KeyString(const FString& Key) { return Key; }
+	template <typename K> FString KeyString(const K& Key) { return FString(Key.ToView()); }
+
 	storylets::JsonValue Convert(const TSharedPtr<FJsonValue>& V)
 	{
 		storylets::JsonValue Out;
@@ -45,7 +52,7 @@ namespace
 					// only ever adds), so document order carries through.
 					for (const auto& KV : Obj->Values)
 					{
-						Out.set(Std(KV.Key), Convert(KV.Value));
+						Out.set(Std(KeyString(KV.Key)), Convert(KV.Value));
 					}
 				}
 				break;
