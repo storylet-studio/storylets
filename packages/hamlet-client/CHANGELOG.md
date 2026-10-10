@@ -7,6 +7,12 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Patterplay 0.23.0 in all four hosts.** The web client, and the Godot, Unity and Unreal projects, pin Patter's released 0.23.0 in place of 0.19.0, on the same expression kernel `k492cf234`. Patter's additions since come with it; none changes how the Hamlet plays.
+- **The cross-host saves are current.** The two saves the web client writes for the other hosts' tests were regenerated on these versions (a pending choice's prompt now carries Patter's `padAfter`), and every host loads both.
+- **The Unreal project builds on Unreal 5.8 as well as 5.7.** Patterplay 0.19.0's bundle reader did not compile on 5.8, and neither did the project's own `@world` load; both read a JSON object's keys in a way 5.8 changed, and both now build on either.
+
 ## [0.5.0] - 2026-10-06
 
 ### Changed

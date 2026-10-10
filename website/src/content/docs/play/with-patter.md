@@ -306,7 +306,7 @@ integration.
 Unity 6000.4+ has `ports/unity/HamletDemo`. Press Play. `HamletGame.cs` and `HamletWorld.cs`
 hold it, with Patterplay embedded in `Packages/`.
 
-On Unreal 5.7+, open the `.uproject` in `ports/unreal/HamletDemo`, let it build, and press
+On Unreal 5.7 or 5.8, open the `.uproject` in `ports/unreal/HamletDemo`, let it build, and press
 Play. `HamletGame.cpp` makes two `Create` calls over one world,
 `UStoryletEngine::Create(Bundle, Seed, false, World.Store)` and
 `UPatterEngine::Create(Bundle, World.Mirror)`, with `UHamletWorldSync` keeping the two

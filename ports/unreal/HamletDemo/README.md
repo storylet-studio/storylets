@@ -7,7 +7,7 @@ demos again, in C++, shape for shape.
 
 ```
 ./build.sh                      # once: Patter's plugin (sibling ../Patterplay) from its pinned release, both bundles
-open HamletDemo.uproject        # Unreal 5.7+, let it build, press Play
+open HamletDemo.uproject        # Unreal 5.7 or 5.8, let it build, press Play
 ```
 
 Read `Source/HamletDemo/Public/HamletGame.h` and `Private/HamletGame.cpp` first:

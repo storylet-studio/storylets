@@ -10,6 +10,10 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **Patter scenes play on Patterplay 0.23.0**, on the Board and in Publish Playable HTML, in place of 0.19.0. Nothing changes in how they play.
+
 ## [0.20.2] - 2026-10-10
 
 ### Fixed
