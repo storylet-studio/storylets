@@ -20,6 +20,12 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-10-10
+
+### Fixed
+
+- **Plastic SCM: writing a file already checked out.** In a workspace that keeps files read-only, a command that wrote a file you already had checked out was refused as locked by your own checkout. It now writes it, and an unchanged file is properly checked out first (simple-vc-lib 0.5.1).
+
 ## [0.13.1] - 2026-10-07
 
 ### Fixed

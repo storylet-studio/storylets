@@ -1,6 +1,6 @@
 {
   "name": "@storylet-studio/cli",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "private": true,
   "description": "storyletengine - the Storylet Engine CLI: init, new box, validate, format, export (bundle, playable page, workbook), peek, deal, resolve, links, coverage, contract, share-scopes, pack, unpack, merge. A thin front-end over @storylet-studio/ops.",
   "type": "module",
@@ -21,6 +21,6 @@
   },
   "dependencies": {
     "@storylet-studio/ops": "0.0.0",
-    "@wildwinter/simple-vc-lib": "^0.5.0"
+    "@wildwinter/simple-vc-lib": "^0.5.1"
   }
 }

@@ -10,6 +10,12 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-10-10
+
+### Fixed
+
+- **Plastic SCM: saving after the first checkout.** In a workspace that keeps files read-only, the first save checked a file out and every save after it was refused as locked by your own checkout. Storyletter now sees the file is already checked out and saves it, and an unchanged file is properly checked out on its first save (simple-vc-lib 0.5.1).
+
 ## [0.20.0] - 2026-10-07
 
 ### Changed
