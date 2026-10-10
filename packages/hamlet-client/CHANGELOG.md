@@ -7,6 +7,8 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-10
+
 ### Changed
 
 - **Patterplay 0.23.0 in all four hosts.** The web client, and the Godot, Unity and Unreal projects, pin Patter's released 0.23.0 in place of 0.19.0, on the same expression kernel `k492cf234`. Patter's additions since come with it; none changes how the Hamlet plays.

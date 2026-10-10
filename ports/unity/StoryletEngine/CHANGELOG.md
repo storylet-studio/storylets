@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-10-10
+
+### Changed
+
+- **No change in this runtime.** 0.11.2 is the Unreal plugin's fix for building on Unreal 5.8, released in lockstep, as every runtime version is.
+
 ## [0.11.1] - 2026-10-06
 
 ### Fixed
