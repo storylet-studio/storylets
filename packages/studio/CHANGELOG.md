@@ -10,6 +10,12 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.20.2] - 2026-10-10
+
+### Fixed
+
+- **Plastic SCM: saving after the first checkout, again.** 0.20.1 still refused the second save of a file as locked: it misread what Plastic reports about a checked-out file, so it tried to check the file out on every save. It now reads Plastic's report correctly, checks a file out once, and saves it freely after that (simple-vc-lib 0.5.2).
+
 ## [0.20.1] - 2026-10-10
 
 ### Fixed

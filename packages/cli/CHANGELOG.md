@@ -20,6 +20,12 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.13.3] - 2026-10-10
+
+### Fixed
+
+- **Plastic SCM: writing a file already checked out, again.** 0.13.2 misread what Plastic reports about a checked-out file, so it still tried to check the file out on every write and was refused as locked. It now reads Plastic's report correctly (simple-vc-lib 0.5.2).
+
 ## [0.13.2] - 2026-10-10
 
 ### Fixed
