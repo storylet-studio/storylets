@@ -1,0 +1,34 @@
+/* ---------------------------------------------------------------------------
+   Every face Storyletter's windows draw, declared once. Each window (the editor, the Board, Coverage,
+   Find, Links) imports this file beside theme.css, so no window falls back on its own.
+
+   The family's type set, the same as Patterpad's: Newsreader for reading, Inter for the interface,
+   IBM Plex Mono for machine text. The faces come from their upstream npm packages and are bundled when
+   the app is built; the repository keeps no font files, and the packaged app carries only the files these
+   rules name (plus each package's licence, electron.vite.config.ts). Fontsource for Newsreader and Inter,
+   which reserve no names; IBM's own release for Plex, whose name is reserved, pinned at exactly 1.0.0
+   because later releases run telemetry on install. The rule for the whole family is patterkit's
+   design/fonts.md.
+   --------------------------------------------------------------------------- */
+
+/* Newsreader: the reading face. */
+@import "@fontsource/newsreader/400.css";
+@import "@fontsource/newsreader/400-italic.css";
+@import "@fontsource/newsreader/600.css";
+@import "@fontsource/newsreader/700.css";
+
+/* Inter: the interface face. */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+
+/* IBM Plex Mono (machine text), from IBM's complete file. IBM's own stylesheet declares every weight, so
+   only the one used is declared here. */
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@ibm/plex-mono/fonts/complete/woff2/IBMPlexMono-Regular.woff2") format("woff2");
+}

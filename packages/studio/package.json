@@ -24,6 +24,9 @@
     "publish:mac": "npm run build:mac-icons && electron-vite build && dotenv -e .env.local -- electron-builder --mac --publish always"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/newsreader": "^5.3.0",
+    "@ibm/plex-mono": "1.0.0",
     "@patterkit/core": "^0.3.0",
     "@patterkit/play-helpers": "^0.8.4",
     "@patterkit/runtime": "^0.23.0",
@@ -58,7 +61,9 @@
     "npmRebuild": false,
     "productName": "Storyletter",
     "files": [
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "!node_modules/@fontsource/**",
+      "!node_modules/@ibm/**"
     ],
     "extraResources": [
       {
@@ -99,6 +104,14 @@
         "filter": [
           "**/*",
           "!dist/**"
+        ]
+      },
+      {
+        "from": "../../node_modules/electron/dist",
+        "to": "licences/electron",
+        "filter": [
+          "LICENSE",
+          "LICENSES.chromium.html"
         ]
       }
     ],

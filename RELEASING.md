@@ -156,6 +156,13 @@ The job needs `id-token: write`, and an OIDC-aware npm.
 (`Cannot find module 'sigstore'`, npm/cli#9722) which aborts every publish once `@latest` rolls
 over to it. Patter hit this.
 
+### Every public package carries the LICENSE
+
+npm only packs a package's own LICENSE, and the MIT licence asks for its text to travel with each copy,
+so every public package keeps a copy of the root `LICENSE` (as Patter's do).
+`scripts/package-licences.test.ts` keeps the copies identical; a new public package needs one. The
+runtime's and the helpers' copies reach npm with their next `bump:play` release.
+
 ### The lockstep pair and a model bump
 
 `@storylet-studio/runtime` and `@storylet-studio/play-helpers` depend on `@storylet-studio/model`

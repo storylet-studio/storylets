@@ -23,7 +23,7 @@ export default defineConfig({
     starlight({
       title: "Storylet Studio",
       tagline: "Design playable stories.",
-      customCss: ["./src/styles/storylets.css", "./src/chrome/chrome.css"],
+      customCss: ["./src/chrome/fonts.css", "./src/styles/storylets.css", "./src/chrome/chrome.css"],
       // Every docs page ends with the licence / author / home credit line. The landing page
       // carries the same credit separately, because it does not use Starlight chrome.
       components: { Footer: "./src/chrome/Footer.astro" },
@@ -45,15 +45,6 @@ export default defineConfig({
         alt: "Storylet Studio",
       },
       head: [
-        // Newsreader for headings (the brand reading face), IBM Plex Mono for tags, extensions
-        // and CLI. Loaded from Google Fonts; the OFL licences live in branding/fonts.
-        {
-          tag: "link",
-          attrs: {
-            rel: "stylesheet",
-            href: "https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap",
-          },
-        },
         // Favicon fallbacks beside the SVG above: Safari doesn't do SVG favicons at
         // all, and stray agents request /favicon.ico directly. Same mark, rasterised.
         { tag: "link", attrs: { rel: "icon", href: "/favicon.ico", sizes: "48x48" } },

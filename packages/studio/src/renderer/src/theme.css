@@ -90,9 +90,10 @@
   --char-4: #44793f; --char-5: #2f7a68; --char-6: #37718a; --char-7: #4a6694;
   --char-8: #665f9e; --char-9: #7f5590; --char-10: #96487a; --char-11: #a04a52;
 
-  --font-read: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* The family's type set (fonts.css declares the faces), each over a system stack. */
+  --font-read: "Newsreader", Georgia, "Iowan Old Style", serif;
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 /* Linen, the original green-tinted light palette, kept as an explicit choice. */

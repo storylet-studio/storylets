@@ -10,6 +10,13 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **Storyletter now draws in the family's typefaces,** the same as Patterpad: Newsreader for reading,
+  Inter for the interface, and IBM Plex Mono for code-like text, in every window. It used whatever the
+  computer had before (Palatino, the system font, Menlo), so it looked different on each system.
+  The fonts come with the app; nothing needs installing.
+
 ## [0.20.3] - 2026-10-10
 
 ### Changed

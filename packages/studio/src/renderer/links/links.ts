@@ -25,6 +25,7 @@
 // that and refused it - but one hop across the project stays readable.
 // ---------------------------------------------------------------------------
 
+import "../src/fonts.css"; // every face the windows draw, declared once
 import "../src/theme.css";
 import "../tool-window/base.css";
 import "../src/card-open.css";

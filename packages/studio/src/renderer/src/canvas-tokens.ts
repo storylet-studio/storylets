@@ -107,8 +107,10 @@ function luminance(colour: string): number | undefined {
 }
 
 /** Call `onChange` whenever the theme changes: the editor's own switch (which
- *  sets `data-theme` on the root) and the OS preference behind `system`.
- *  Returns a teardown. */
+ *  sets `data-theme` on the root) and the OS preference behind `system`; and
+ *  whenever web fonts finish loading, because a canvas draws text in whatever
+ *  face is ready at that moment and never redraws itself when the real one
+ *  arrives (fonts.css). Returns a teardown. */
 export function watchCanvasTokens(onChange: (tokens: CanvasTokens) => void): () => void {
   const fire = (): void => onChange(readCanvasTokens());
   const observer = new MutationObserver(fire);
@@ -116,5 +118,6 @@ export function watchCanvasTokens(onChange: (tokens: CanvasTokens) => void): () 
   // `system` follows the OS, which changes without touching data-theme at all.
   const media = window.matchMedia("(prefers-color-scheme: dark)");
   media.addEventListener("change", fire);
-  return () => { observer.disconnect(); media.removeEventListener("change", fire); };
+  document.fonts.addEventListener("loadingdone", fire);
+  return () => { observer.disconnect(); media.removeEventListener("change", fire); document.fonts.removeEventListener("loadingdone", fire); };
 }

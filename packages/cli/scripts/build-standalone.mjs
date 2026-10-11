@@ -15,11 +15,21 @@
 // keychain-less CI) - the binary is still produced, ad-hoc signed, with a
 // note. We do not notarize a CLI. Windows ships unsigned by policy; Linux
 // needs no signature. (Patter's build-standalone, carried whole.)
+//
+// The binary carries the code of about a hundred npm packages, whose licences ask to travel with it. So
+// Bun compiles a generated entry that embeds the Storylet Engine's LICENSE and the notices of every
+// library it contains (collected from a Bun metafile by the shared scripts/third-party-notices.mjs),
+// hands their paths over, then runs src/cli.ts. The host's own binary is then run once to scaffold and
+// validate a project and list the licences, so a binary that cannot do either stops the build. (Patter's
+// also embeds its PDF fonts; this CLI has none.)
 // ---------------------------------------------------------------------------
 
 import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { collectNotices } from "../../../scripts/third-party-notices.mjs";
 
 const pkgDir = dirname(fileURLToPath(new URL("../package.json", import.meta.url)));
 const distDir = join(pkgDir, "dist");
@@ -52,6 +62,43 @@ if (!identity && process.platform === "darwin") {
   }
 }
 
+// The libraries the binary contains: bundle src/cli.ts once (not compiled) for its metafile, then collect
+// every third-party package's licence files. The Storylet Engine's own packages are covered by its LICENSE.
+const scratch = mkdtempSync(join(tmpdir(), "storyletengine-notices-"));
+run("bun", ["build", "src/cli.ts", "--target=bun", "--outdir", join(scratch, "out"), `--metafile=${join(scratch, "meta.json")}`]);
+const notices = collectNotices(join(scratch, "meta.json"), { cwd: pkgDir, exclude: ["@storylet-studio/"] });
+rmSync(scratch, { recursive: true, force: true });
+const noticesFile = join(distDir, "third-party-notices.txt");
+const entry = join(distDir, "standalone-entry.mjs");
+mkdirSync(distDir, { recursive: true });
+writeFileSync(noticesFile, notices.text);
+console.log(`notices: ${notices.packages.length} libraries`);
+writeFileSync(entry, [
+  `import { useEmbeddedNotices } from "../src/notices.ts";`,
+  `import licence from "../LICENSE" with { type: "file" };`,
+  `import libraries from "./third-party-notices.txt" with { type: "file" };`,
+  `useEmbeddedNotices({ licence, libraries });`,
+  `await import("../src/cli.ts");`,
+  "",
+].join("\n"));
+
+// Run a freshly built binary as a user would, from somewhere else: scaffold a project, validate it, and
+// list the licences.
+function smoke(out) {
+  const dir = mkdtempSync(join(tmpdir(), "storyletengine-standalone-"));
+  try {
+    execFileSync(out, ["init", "smoke.storylets", "--name", "Smoke"], { cwd: dir, stdio: "pipe" });
+    execFileSync(out, ["validate", "smoke.storylets"], { cwd: dir, stdio: "pipe" });
+    const listed = execFileSync(out, ["licences"], { cwd: dir, encoding: "utf8" });
+    if ((listed.match(/^=== /gm) ?? []).length !== notices.packages.length || !/^MIT License/m.test(listed)) {
+      throw new Error("licences missing");
+    }
+    console.log(`smoke: ${out} scaffolded and validated a project and listed its licence and ${notices.packages.length} library notices`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 for (const target of targets) {
   const base = TARGETS[target];
   if (!base) {
@@ -59,8 +106,9 @@ for (const target of targets) {
     process.exit(2);
   }
   const outBase = join(distDir, base);
-  run("bun", ["build", "src/cli.ts", "--compile", `--target=bun-${target}`, "--outfile", outBase]);
+  run("bun", ["build", entry, "--compile", `--target=bun-${target}`, "--outfile", outBase]);
   const out = target.startsWith("windows") ? `${outBase}.exe` : outBase;
+  if (target === hostTarget) smoke(out);
 
   if (!target.startsWith("darwin")) continue; // only macOS binaries are signed
   if (process.platform !== "darwin") {
@@ -79,3 +127,6 @@ for (const target of targets) {
   run("codesign", ["--verify", "--strict", "--verbose=2", out]);
   console.log(`signed: ${base} (${identity})`);
 }
+
+rmSync(entry); // dist/ is what a release uploads from: never leave the generated files in it
+rmSync(noticesFile);

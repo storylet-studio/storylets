@@ -25,6 +25,7 @@
 //   head.ts           the head, and the layered Escape
 // ---------------------------------------------------------------------------
 
+import "../src/fonts.css"; // every face the windows draw, declared once
 import "../src/theme.css";
 import "../tool-window/base.css";
 import "./table.css";

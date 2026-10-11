@@ -81,21 +81,42 @@ Its build-time tree is larger and less uniform than the app's: it includes **`li
 static HTML, CSS and images; no part of them is copied into what the site serves, so their
 copyleft terms attach to nothing we publish.
 
-## 4. Fonts and the badge artwork
+## 4. Fonts, and the badge artwork
 
-The brand's typefaces are **Newsreader** and **IBM Plex Mono**, both under the **SIL Open Font
-License 1.1**. Their licence texts are at
-[`branding/fonts/Newsreader-OFL.txt`](./branding/fonts/Newsreader-OFL.txt) and
-[`branding/fonts/IBMPlexMono-OFL.txt`](./branding/fonts/IBMPlexMono-OFL.txt).
+The family's typefaces are **Newsreader**, **Inter**, and **IBM Plex Mono**, all under the **SIL Open
+Font License 1.1**. The rule for the whole family is `design/fonts.md` in patterkit.
 
-**No font binary is stored in this repository and none ships in any build.** All type in the
-marks, icons and badges is converted to outlines, so nothing needs a font installed to render.
+**No font file is stored in this repository.** Each face is an npm dependency, fetched from its
+upstream package when the project is installed or built, and each package carries its own licence
+and copyright notice:
+
+- **Newsreader** (`@fontsource/newsreader`; `@fontsource-variable/newsreader` on the website):
+  (c) The Newsreader Project Authors.
+- **Inter** (`@fontsource/inter`): (c) The Inter Project Authors.
+- **IBM Plex Mono** (`@ibm/plex-mono`, IBM's own release, pinned at exactly 1.0.0): (c) IBM Corp.,
+  with Reserved Font Name "Plex". We use IBM's unmodified files rather than a third party's subset,
+  because the OFL keeps a reserved name off modified versions; and 1.0.0 because later releases run
+  telemetry on install.
+
+**Storyletter** bundles only the font files its windows use, and its packaged app carries each font
+package's licence beside them (`fonts/` in the app), not the whole packages. **The website** bundles
+the faces when it builds, so no page loads fonts from Google.
 
 The badge and icon labels are cut from **IBM Plex Mono Medium** at build time by
-`scripts/make-badges.mjs`, which reads the face from the `@fontsource/ibm-plex-mono` package
-using `fontkit` and emits outlines. The resulting SVG and PNG badges, distributed in the badge
-kit, therefore contain artwork derived from an OFL font. The OFL permits this: the outlines
-are not a font, are not sold as one, and carry no reserved font name.
+`scripts/make-badges.mjs`, which reads the face from IBM's `@ibm/plex-mono` package using `fontkit`
+and emits outlines. The resulting SVG and PNG badges, distributed in the badge kit, therefore contain
+artwork derived from an OFL font. The OFL permits this: the outlines are not a font, are not sold as
+one, and a document made with a font is outside its terms.
+
+**The standalone CLI binaries** carry no font, but they compile in about eighty npm libraries.
+`storyletengine licences` prints the Storylet Engine's own licence and, in a standalone binary, every
+one of those libraries' licence and copyright notices, which the build collects and embeds.
+
+**Storyletter** writes the licence and copyright notice of every library bundled into each part of the
+app to `dist-electron/licences/` (main, preload, renderer), with the Storylet Engine's own `LICENSE`
+beside them, and the font licences to `dist-electron/fonts/`. Electron's licence and Chromium's notices
+ship in the app's resources under `licences/electron/`. The notices are collected at build time by
+`scripts/third-party-notices.mjs` (shared across the family from expr's `tooling/`), as the CLI's are.
 
 ## 5. Reproducing this audit
 

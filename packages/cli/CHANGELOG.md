@@ -20,6 +20,19 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Added
+
+- **`storyletengine licences`** (also `licenses`) prints the Storylet Engine's licence and, in a
+  standalone binary, the licence and copyright notice of every library compiled into it. The binary
+  carries their code, so it now carries their notices too.
+
+### Changed
+
+- **`dist/cli.js` is now a thin build,** as Patter's is: the CLI's own code, with its libraries
+  resolved from `node_modules` beside it. The standalone binaries are still one self-contained file
+  each, and their build now runs the binary once (scaffold, validate, list the licences) before it
+  signs it.
+
 ## [0.13.4] - 2026-10-10
 
 ### Changed

@@ -38,6 +38,7 @@ storyletengine coverage [path]           seeded playthroughs: per-hand and per-c
     [--runs N] [--max-turns M] [--seed S] [--order least|deck]
     [--json] [--fail-on-gap] [--propose]
 storyletengine --version                 print the version (also -v, version)
+storyletengine licences                  print its licence and its libraries' (also licenses)
 storyletengine <command> --help          print one command's usage (also help <command>)
 ```
 
@@ -73,10 +74,11 @@ old list back into the project.
 Patter's CLI distribution, carried whole except for npm: the package is
 private, and nothing here is published there.
 
-- **`dist/cli.js`** is **self-contained** (tsup inlines every workspace
-  and sibling dependency), so `node dist/cli.js` runs with no node_modules.
+- **`dist/cli.js`** is **thin**: the CLI's own code, with its libraries resolved from the
+  workspace's `node_modules` (the same shape as Patter's npm CLI).
 - **Standalone binaries**: `npm run build:standalone` (Bun `--compile`) emits
-  one native executable per platform - no Node required. macOS binaries are
+  one native executable per platform - no Node required - carrying its own licence and every
+  bundled library's notice (`storyletengine licences`). macOS binaries are
   Developer ID signed (hardened runtime + JIT entitlements,
   `entitlements.plist`); Windows ships unsigned by policy.
 - **Release flow**: tagging `cli-vX.Y.Z` runs

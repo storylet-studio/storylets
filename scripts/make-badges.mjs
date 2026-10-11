@@ -86,7 +86,8 @@ function thread(x, y, size, way) {
 }
 
 // --- small labels, cut to curves ------------------------------------------------
-const mono = openFont(join(root, "node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2"));
+// IBM's own Plex Mono (Plex is a Reserved Font Name, so the copyright holder's files; design/fonts.md).
+const mono = openFont(join(root, "node_modules/@ibm/plex-mono/fonts/complete/woff2/IBMPlexMono-Medium.woff2"));
 
 /** Set `text` in Plex Mono Medium as OUTLINES, tracked like the brand's labels.
  *  Returns the path markup and the advance, so callers can centre or stack. */

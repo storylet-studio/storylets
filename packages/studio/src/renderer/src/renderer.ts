@@ -33,6 +33,7 @@
 // that (design review 2026-08, A3 and A17).
 // ---------------------------------------------------------------------------
 
+import "./fonts.css"; // every face the windows draw, declared once
 import "./theme.css";
 import "./shell.css";
 import "@wildwinter/app-shell/tooltip.css";

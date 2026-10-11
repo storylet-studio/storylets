@@ -1,6 +1,9 @@
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
-import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
+import type { Plugin } from "vite";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
 
 // Workspace packages are bundled FROM SOURCE (aliased below), so the packaged
 // app never depends on built dist/ output - the Patterpad arrangement,
@@ -50,14 +53,65 @@ const aliases = {
   // own @wildwinter/expr imports still hit the source alias above.
 };
 
+// The app ships only the font files it uses, never whole font packages (patterkit's design/fonts.md).
+// Vite bundles the faces fonts.css names into the renderer; this copies the licence of every font package
+// it names into dist-electron/fonts, which the OFL requires to travel with the fonts, and package.json's
+// `build.files` leaves the font packages themselves out of node_modules. (Patterpad's does the same, and
+// also copies the files its PDF export reads at run time; Storyletter has no PDF export.)
+function fontLicences(): Plugin {
+  return {
+    name: "storyletter-font-licences",
+    writeBundle() {
+      const req = createRequire(here("package.json"));
+      const out = here("dist-electron/fonts");
+      rmSync(out, { recursive: true, force: true });
+      const fontsCss = readFileSync(here("src/renderer/src/fonts.css"), "utf8");
+      const packages = new Set([...fontsCss.matchAll(/"(@(?:fontsource|ibm)\/[a-z0-9-]+)\//g)].map((m) => m[1]!));
+      for (const pkg of packages) {
+        const dir = (req.resolve.paths(pkg) ?? []).map((p) => join(p, pkg)).find((d) => existsSync(d));
+        const licence = dir && readdirSync(dir).find((f) => /^(licen[cs]e|ofl)/i.test(f));
+        if (!dir || !licence) throw new Error(`storyletter-font-licences: no licence file for ${pkg}`);
+        mkdirSync(join(out, pkg), { recursive: true });
+        copyFileSync(join(dir, licence), join(out, pkg, licence));
+      }
+    },
+  };
+}
+
+// The open-source libraries bundled into each part of the app (main, preload, renderer) carry their
+// licences with them: MIT, ISC, BSD and Apache-2.0 all ask for the notice to travel with every copy, and a
+// bundle keeps none of their files. So each build lists the files it bundled (every chunk's moduleIds) and
+// writes their packages' licence and copyright notices to dist-electron/licences/<part>.txt, with the
+// shared scripts/third-party-notices.mjs (vendored from expr/tooling, the collector the standalone CLI
+// uses). The libraries main leaves external ship in node_modules with their own files. The Storylet
+// Engine's own packages are covered by its LICENSE, copied in beside them. (Patterpad's does the same.)
+type NoticesModule = { collectNoticesFromFiles(files: Iterable<string>, opts: { exclude: string[] }): { text: string; packages: unknown[] } };
+function bundledNotices(part: string): Plugin {
+  const ids = new Set<string>();
+  return {
+    name: "storyletter-bundled-notices",
+    generateBundle(_options, bundle) {
+      for (const chunk of Object.values(bundle)) if (chunk.type === "chunk") for (const id of chunk.moduleIds) ids.add(id);
+    },
+    async writeBundle() {
+      const { collectNoticesFromFiles } = (await import(pathToFileURL(here("../../scripts/third-party-notices.mjs")).href)) as NoticesModule;
+      const { text, packages } = collectNoticesFromFiles(ids, { exclude: ["@storylet-studio/"] });
+      const out = here("dist-electron/licences");
+      mkdirSync(out, { recursive: true });
+      writeFileSync(join(out, `${part}.txt`), `Open-source libraries bundled into Storyletter (${part}), and their licences. ${packages.length} packages.\n\n${text}`);
+      copyFileSync(here("../../LICENSE"), join(out, "LICENSE"));
+    },
+  };
+}
+
 export default defineConfig({
   main: {
     resolve: { alias: aliases },
-    plugins: [externalizeDepsPlugin({ exclude: workspacePkgs })],
+    plugins: [externalizeDepsPlugin({ exclude: workspacePkgs }), bundledNotices("main")],
     build: { outDir: "dist-electron/main", rollupOptions: { input: here("src/main/index.ts") } },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), bundledNotices("preload")],
     build: {
       outDir: "dist-electron/preload",
       rollupOptions: {
@@ -68,6 +122,7 @@ export default defineConfig({
     },
   },
   renderer: {
+    plugins: [fontLicences(), bundledNotices("renderer")],
     resolve: { alias: aliases },
     build: {
       outDir: "dist-electron/renderer",

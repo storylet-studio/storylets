@@ -32,6 +32,7 @@ import {
 import type { BoxKit, CardCoverage, GameKit, Issue, PlannedFileWrite, PlannedWrite } from "@storylet-studio/ops";
 import { contractPropertyPath, contractPropertyType, turnSpan } from "@storylet-studio/model";
 import pkg from "../package.json" with { type: "json" };
+import { libraryNotices, ownLicence } from "./notices.js";
 
 export const USAGE = `storyletengine - Storylet Engine CLI
 
@@ -114,6 +115,8 @@ Usage:
                  [--propose]          Print an auto-proposed coverage block
                                       (drivers + arg domains) instead of running
   storyletengine --version            Print the version and exit (also -v, version)
+  storyletengine licences             Print its licence and those of the libraries it
+                                      carries (also licenses)
   storyletengine <command> --help     Print one command's usage (also help <command>)
 
 Exit codes: 0 ok, 1 the operation found problems, 2 usage. "merge" alone also
@@ -364,6 +367,17 @@ export async function run(
   // import, so the number cannot drift from the manifest the tag is checked against.
   if (command === "version" || command === "--version" || command === "-v") {
     io.log(pkg.version);
+    return 0;
+  }
+  // Its licence and, in a standalone binary, every library compiled into it. Those licences ask to travel
+  // with the copies, and a binary has nothing beside it to carry them, so the tool says what it contains
+  // and under what terms. (Patter's CLI does the same, and lists its PDF fonts too; this one embeds none.)
+  if (command === "licences" || command === "licenses") {
+    io.log(`storyletengine ${pkg.version} is free software under the MIT License:\n\n${ownLicence()}`);
+    const libraries = libraryNotices();
+    io.log(libraries === undefined
+      ? "\n\nIts libraries are in node_modules beside it, each with its own licence file."
+      : `\n\nThis standalone build contains these libraries, under these licences:\n\n${libraries}`);
     return 0;
   }
   if (!isCommand(command)) {
