@@ -114,8 +114,9 @@ one of those libraries' licence and copyright notices, which the build collects 
 
 **Storyletter** writes the licence and copyright notice of every library bundled into each part of the
 app to `dist-electron/licences/` (main, preload, renderer), with the Storylet Engine's own `LICENSE`
-beside them, and the font licences to `dist-electron/fonts/`. Electron's licence and Chromium's notices
-ship in the app's resources under `licences/electron/`. The notices are collected at build time by
+beside them, and the font licences to `dist-electron/fonts/`. Electron's licence (`LICENSE.electron.txt`) and
+Chromium's notices (`LICENSES.chromium.html`) ship in the app's resources, put there by electron-builder
+(26.16.1 and later; earlier versions dropped them from macOS apps). The notices are collected at build time by
 `scripts/third-party-notices.mjs` (shared across the family from expr's `tooling/`), as the CLI's are.
 
 ## 5. Reproducing this audit

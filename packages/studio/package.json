@@ -105,14 +105,6 @@
           "**/*",
           "!dist/**"
         ]
-      },
-      {
-        "from": "../../node_modules/electron/dist",
-        "to": "licences/electron",
-        "filter": [
-          "LICENSE",
-          "LICENSES.chromium.html"
-        ]
       }
     ],
     "directories": {
