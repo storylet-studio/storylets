@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-11
+
 ### Changed
 
 - **Storyletter now draws in the family's typefaces,** the same as Patterpad: Newsreader for reading,
