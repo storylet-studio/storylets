@@ -20,6 +20,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-11
+
 ### Added
 
 - **`storyletengine licences`** (also `licenses`) prints the Storylet Engine's licence and, in a
