@@ -20,6 +20,10 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Changed
+
+- **`export-html` plays Patter scenes on Patterplay 0.26.0**, in place of 0.23.0. Nothing changes in how they play.
+
 ### Fixed
 
 - **Moving a hand's pin on the project map now makes a published bundle stale.** The content
