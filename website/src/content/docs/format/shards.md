@@ -654,7 +654,7 @@ without one.
 | `type` | `boolean`, `number`, `string`, `enum`, `flags` or `quality` ([which to use](/format/property-types/)) |
 | `default` | required, so a declared property always has a value |
 | `values` | for `enum` and `flags`. On a TAG, `values` means something else: this tag's starting values for the properties its group declares |
-| `stages` | for `quality`: the ladder, in order, lowest first |
+| `stages` | for `quality`: the ladder, in order, lowest first; at least two, each named once, and `default` must be one of them |
 | `shared` | not on `@world`. `true` is one value across every flow, `false` a copy per flow; absent takes the scope default |
 | `durable` | not on `@world`. The value [outlives a run](/play/world-state/#durable-state-that-outlives-a-run); the engine never reads it |
 | `writable` | `@world` only. `false` makes the property read-only to the story: a condition may read it, an outcome that writes it is a compile error. The game still moves it through its resolver. Default `true` |

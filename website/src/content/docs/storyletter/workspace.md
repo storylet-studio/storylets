@@ -48,6 +48,11 @@ properties aren't here; they're a contract with the game and stay in
   <figcaption>The Story document: the story's shared state as a page of its own. Expand a row for its <strong>Purpose</strong> and, for a list or quality, its values or stages.</figcaption>
 </figure>
 
+A quality's stages are chips in ladder order. Click a stage's name to rename it, and every
+card, tag and condition naming that stage follows in the same edit, which one Undo takes back.
+Move a stage earlier or later and the row says how many gates compare against the ladder,
+since each of them now reads the new order.
+
 Each row also carries a quiet **uses** chip (the count of everything in the project that
 reads or writes the property), and clicking it opens [Find](#find) on exactly that list.
 Check it before you rename a property.

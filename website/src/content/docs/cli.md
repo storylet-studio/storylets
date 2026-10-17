@@ -110,8 +110,10 @@ ok: .../tavern.storylets
 ```
 
 It checks for property references nothing declares, tag references that point nowhere, hands
-that don't fill in every group their template asks for, card and outcome field values against
-the box's templates, map pictures missing from `assets/`, canonical form, a leftover merge
+that don't fill in every group their template asks for, the box's card and outcome field
+declarations (a name used once, a known type, values for a list or flags, a default that fits)
+and the values cards and outcomes give them, every quality's ladder (at least two stages, each
+named once, the default on it), map pictures missing from `assets/`, canonical form, a leftover merge
 conflict file, and **bundle staleness** (a committed `.storyletsc` whose content hash no
 longer matches the shards is an error). It also warns about a condition reading state nothing
 writes and a condition that can never hold, and, when the project is paired with Patter,
