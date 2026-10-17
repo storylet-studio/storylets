@@ -89,13 +89,23 @@ export function projectHash(source: SourceProject): string {
     // project with no map hashes exactly as it always has.
     ...(source.map !== undefined ? { projectMap: source.map.group } : {}),
     project: source.project,
-    boxes: source.boxes.map((b) => ({
-      path: b.path,
-      box: b.box,
-      tags: b.tags,
-      hands: b.hands,
-      decks: b.decks,
-    })),
+    boxes: source.boxes.map((b) => {
+      // A box's sites are shape, not arrangement (design/engine-server.md
+      // 4.3): they ship as `map.geometry.sites` under `export.map`, and a venue
+      // provisions kiosks against them. Hashed whenever the box is on the map,
+      // flag or no flag, as the zone group is; read through `boxMapOf`, so the
+      // old view-shard address counts only where it is the one read. A box
+      // with nothing placed hashes exactly as it always has.
+      const sites = usesProjectMap(b) ? boxMapOf(b)?.sites : undefined;
+      return {
+        path: b.path,
+        box: b.box,
+        tags: b.tags,
+        hands: b.hands,
+        decks: b.decks,
+        ...(sites !== undefined && Object.keys(sites).length > 0 ? { sites } : {}),
+      };
+    }),
   }));
 }
 

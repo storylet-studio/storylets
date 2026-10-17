@@ -20,6 +20,14 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Fixed
+
+- **Moving a hand's pin on the project map now makes a published bundle stale.** The content
+  hash left out where a box's hands are placed on the map, so with `export.map` on, a bundle could
+  carry pins in the wrong place and `storyletengine validate` still called it fresh. Pins on boxes
+  that use the project map now count toward the hash whether or not `export.map` is on, so
+  re-export any project that places hands on its map after upgrading.
+
 ## [0.14.0] - 2026-10-11
 
 ### Added

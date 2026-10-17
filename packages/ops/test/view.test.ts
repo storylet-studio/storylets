@@ -177,28 +177,42 @@ describe("forgetting an arrangement", () => {
 });
 
 describe("the sidecar never reaches the bundle", () => {
+  // On the project map, so a box's sites are ones that COULD ship: a box off
+  // the map is warned about for placing hands at all. They ship only under
+  // `export.map`, which this project does not ask for.
+  const onMap = (b: SourceBox): SourceProject => ({
+    ...project({ ...b, box: { ...b.box, box: { ...b.box.box, usesMap: true } } }),
+    map: {
+      schema: PROJECTMAP_SCHEMA,
+      group: { id: "d_zone", gameId: "zone", templates: { spatial: { map: true } }, tags: [{ id: "t_docks", gameId: "docks" }] },
+    },
+  });
+
   it("compiles a project with an arrangement to the same bytes as one without", () => {
     // Source-only, exactly as `order` is. The runtime must not be able to tell
     // whether anybody has ever opened a canvas.
     const view: ViewShard = {
       schema: VIEW_SCHEMA,
       canvases: { k_arrival: { cards: { c_gate: { x: 20, y: 40 }, c_inn: { x: 220, y: 40 } } } },
-      map: { sites: { h_all: { x: 5, y: 6 } } },
     };
-    // On the project map, both of them, so the sites are ones that COULD ship:
-    // a box off the map is warned about for placing hands at all. They ship only
-    // under `export.map`, which this project does not ask for.
-    const onMap = (b: SourceBox): SourceProject => ({
-      ...project({ ...b, box: { ...b.box, box: { ...b.box.box, usesMap: true } } }),
-      map: {
-        schema: PROJECTMAP_SCHEMA,
-        group: { id: "d_zone", gameId: "zone", templates: { spatial: { map: true } }, tags: [{ id: "t_docks", gameId: "docks" }] },
-      },
-    });
     const plain = compileProject(onMap(box()));
     const arranged = compileProject(onMap(box(view)));
     expect(arranged.issues).toEqual(plain.issues);
     expect(JSON.stringify(arranged.bundle)).toBe(JSON.stringify(plain.bundle));
+  });
+
+  it("ships no site without `export.map`, but hashes it, because sites are shape", () => {
+    // The old view-shard address of a box's map, read because the box has no
+    // map shard. Sites are what a venue provisions kiosks against
+    // (design/engine-server.md 4.3), so moving one makes a committed bundle
+    // stale whether or not this export carries the geometry, as a zone polygon
+    // does. The hash is the only byte that moves.
+    const view: ViewShard = { schema: VIEW_SCHEMA, map: { sites: { h_all: { x: 5, y: 6 } } } };
+    const plain = compileProject(onMap(box()));
+    const placed = compileProject(onMap(box(view)));
+    expect(placed.issues).toEqual(plain.issues);
+    expect(placed.bundle!.content.hash).not.toBe(plain.bundle!.content.hash);
+    expect(JSON.stringify({ ...placed.bundle, content: plain.bundle!.content })).toBe(JSON.stringify(plain.bundle));
   });
 
   it("never ships the box's colour, even when the map's geometry does", () => {

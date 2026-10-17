@@ -126,6 +126,64 @@ describe("the project map shard", () => {
     expect(projectHash(framed)).toBe(projectHash(base));
     expect(projectHash(moved)).not.toBe(projectHash(base));
   });
+
+  // A box's sites are shape (design/engine-server.md 4.3): under `export.map`
+  // they ship as `map.geometry.sites`, and a venue provisions kiosks against
+  // them. They are hashed whenever the box is on the map, whether or not this
+  // export carries geometry, the same way the zone group is: so turning the
+  // flag on never needs a second rule. Read through `boxMapOf`, so the old
+  // view-shard address counts only where it is the one that is read.
+  describe("and a box's sites", () => {
+    const BOARD = { id: "h_board", gameId: "board", rule: { bindings: { d_district: "v_quay" } } };
+    const sited = (at: { x: number; y: number } | undefined, opts: { usesMap?: true; view?: unknown } = {}): SourceProject => {
+      const source = parse(project({
+        map: projectMap(),
+        boxes: [{
+          folder: "news", id: "b_news", ...(opts.usesMap ? { usesMap: true as const } : {}), hands: [BOARD],
+          ...(at !== undefined ? { map: { schema: "storylets/map@0", map: { sites: { h_board: at } } } } : {}),
+        }],
+      }));
+      if (opts.view !== undefined) source.boxes[0]!.view = opts.view as SourceProject["boxes"][number]["view"];
+      return source;
+    };
+    const exporting = (source: SourceProject): SourceProject =>
+      ({ ...source, project: { ...source.project, export: { ...source.project.export, map: true } } });
+
+    it("changes the hash when a site moves and the export carries the map", () => {
+      const here = exporting(sited({ x: 1, y: 2 }, { usesMap: true }));
+      const there = exporting(sited({ x: 5, y: 2 }, { usesMap: true }));
+      expect(compileProject(here).bundle!.map!.geometry!.sites).toEqual({ news: [{ hand: "board", x: 1, y: 2 }] });
+      expect(projectHash(there)).not.toBe(projectHash(here));
+    });
+
+    it("changes it with `export.map` off too, so the flag never decides what is stale", () => {
+      expect(projectHash(sited({ x: 5, y: 2 }, { usesMap: true }))).not.toBe(projectHash(sited({ x: 1, y: 2 }, { usesMap: true })));
+    });
+
+    it("does not change it for a box off the map, whose sites never ship", () => {
+      expect(projectHash(sited({ x: 5, y: 2 }))).toBe(projectHash(sited({ x: 1, y: 2 })));
+      expect(projectHash(sited({ x: 1, y: 2 }))).toBe(projectHash(sited(undefined)));
+    });
+
+    it("leaves a project with nothing placed hashing as it always has", () => {
+      const bare = sited(undefined, { usesMap: true });
+      const empty = parse(project({
+        map: projectMap(),
+        boxes: [{ folder: "news", id: "b_news", usesMap: true, hands: [BOARD], map: { schema: "storylets/map@0", map: { sites: {} } } }],
+      }));
+      expect(projectHash(empty)).toBe(projectHash(bare));
+    });
+
+    it("reads the view shard's old address only when there is no map shard, as `boxMapOf` does", () => {
+      const legacy = (at: { x: number; y: number }) => ({ schema: "storylets/view@0", map: { sites: { h_board: at } } });
+      // The map shard wins, so a stale copy under `view.map` is not content.
+      expect(projectHash(sited({ x: 1, y: 2 }, { usesMap: true, view: legacy({ x: 9, y: 9 }) })))
+        .toBe(projectHash(sited({ x: 1, y: 2 }, { usesMap: true })));
+      // With no map shard it is the one that ships, so moving it is.
+      expect(projectHash(sited(undefined, { usesMap: true, view: legacy({ x: 9, y: 9 }) })))
+        .not.toBe(projectHash(sited(undefined, { usesMap: true, view: legacy({ x: 1, y: 2 }) })));
+    });
+  });
 });
 
 describe("the bundle a project map compiles to", () => {
