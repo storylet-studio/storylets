@@ -84,6 +84,19 @@ const OMITTED = [
   { member: "snapshotState", why: "part of the state logger's machinery" },
   { member: "diffState", why: "part of the state logger's machinery" },
 
+  // --- fields and ladders, which the Village does not have -----------------
+  // The Village's box declares no card or outcome fields, so there is nothing to
+  // fill in from a default and no quality field to compare. Shown in the docs
+  // (play/javascript.md) and pinned by the corpus's card-field case on all four
+  // runtimes.
+  { member: "fieldDecls", why: "the Village declares no card fields: nothing to look up" },
+  { member: "outcomeFieldDecls", why: "the Village declares no outcome fields: nothing to look up" },
+  { member: "fieldValue", why: "the Village declares no fields, so no default to fall back to" },
+  { member: "effectiveFields", why: "the Village declares no fields, so every card's fields are already all there is" },
+  { member: "stageIndex", why: "a quality's ladder outside a condition, for a host comparing a field's stage. The Village's qualities are only ever read by its own conditions" },
+  { member: "compareStages", why: "same: the Village never compares stages outside a condition" },
+  { member: "nextStage", why: "same: the Village moves its ladders with advance() in outcomes, never from the host" },
+
   // --- doors a game should not go through -----------------------------------
   { member: "setProperty", why: "DELIBERATE TEACHING: a game changes state by PLAYING an outcome, never by writing @story behind the engine's back. The door exists for hosts driving @world, and the Village has no @world" },
   { member: "peek", why: "asks what WOULD be dealt without dealing it, which is an editor and tooling question (Storyletter's Board uses it). A game deals" },
