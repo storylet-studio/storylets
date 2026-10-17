@@ -1,5 +1,11 @@
 # @storylet-studio/model
 
+## 0.9.2
+
+### Patch Changes
+
+- 6a0c9c1: Each package now carries the MIT licence text (LICENSE) in its own folder, so the licence travels with every install.
+
 ## 0.9.1
 
 ### Patch Changes
