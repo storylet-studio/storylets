@@ -7314,6 +7314,253 @@
       ]
     },
     {
+      "name": "a card's fields reach the game with the card, raw, in every type, and the helper fills in defaults",
+      "bundle": {
+        "schema": "storylets/bundle@0",
+        "content": {
+          "project": "conf",
+          "version": "0.0.0",
+          "hash": ""
+        },
+        "metadata": "full",
+        "settings": {
+          "playAdvancesTurns": 1
+        },
+        "world": {
+          "properties": []
+        },
+        "story": {
+          "properties": []
+        },
+        "boxes": [
+          {
+            "id": "b_x",
+            "gameId": "box",
+            "ranking": {
+              "specificity": true
+            },
+            "fields": [
+              {
+                "name": "act",
+                "type": "quality",
+                "default": "arrival",
+                "stages": [
+                  "arrival",
+                  "act-1",
+                  "act-2"
+                ]
+              },
+              {
+                "name": "cue",
+                "type": "text",
+                "default": ""
+              },
+              {
+                "name": "body",
+                "type": "multiline",
+                "default": ""
+              },
+              {
+                "name": "label",
+                "type": "string",
+                "default": ""
+              },
+              {
+                "name": "weight",
+                "type": "number",
+                "default": 0
+              },
+              {
+                "name": "loud",
+                "type": "boolean",
+                "default": false
+              },
+              {
+                "name": "mood",
+                "type": "enum",
+                "default": "calm",
+                "values": [
+                  "calm",
+                  "tense"
+                ]
+              },
+              {
+                "name": "tags",
+                "type": "flags",
+                "default": [],
+                "values": [
+                  "night",
+                  "rain"
+                ]
+              }
+            ],
+            "properties": [],
+            "tagGroups": [
+              {
+                "id": "d_zone",
+                "gameId": "zone",
+                "tags": [
+                  {
+                    "id": "v_docks",
+                    "gameId": "docks",
+                    "properties": [
+                      {
+                        "name": "danger",
+                        "type": "number",
+                        "default": 0
+                      }
+                    ]
+                  },
+                  {
+                    "id": "v_market",
+                    "gameId": "market"
+                  }
+                ]
+              }
+            ],
+            "decks": [
+              {
+                "id": "k_main",
+                "gameId": "main",
+                "properties": [],
+                "cards": [
+                  {
+                    "id": "c_bare",
+                    "gameId": "bare",
+                    "priority": 1,
+                    "redraw": "always",
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_default",
+                    "gameId": "default",
+                    "priority": 2,
+                    "redraw": "always",
+                    "fields": {
+                      "act": "arrival",
+                      "weight": 0
+                    },
+                    "outcomes": []
+                  },
+                  {
+                    "id": "c_full",
+                    "gameId": "full",
+                    "priority": 3,
+                    "redraw": "always",
+                    "fields": {
+                      "act": "act-1",
+                      "cue": "lights down",
+                      "body": "First line.\nSecond line.",
+                      "label": "Prologue",
+                      "weight": 2,
+                      "loud": true,
+                      "mood": "tense",
+                      "tags": [
+                        "night",
+                        "rain"
+                      ]
+                    },
+                    "outcomes": []
+                  }
+                ]
+              }
+            ],
+            "handTemplates": [],
+            "hands": [
+              {
+                "id": "h_q",
+                "gameId": "q",
+                "rule": {
+                  "slots": "unbounded"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "script": [
+        {
+          "op": "deal",
+          "hands": [
+            "h_q"
+          ],
+          "expectBoard": {
+            "h_q": [
+              "c_full",
+              "c_default",
+              "c_bare"
+            ]
+          }
+        },
+        {
+          "op": "assertCardFields",
+          "from": "h_q",
+          "expect": {
+            "c_full": {
+              "act": "act-1",
+              "cue": "lights down",
+              "body": "First line.\nSecond line.",
+              "label": "Prologue",
+              "weight": 2,
+              "loud": true,
+              "mood": "tense",
+              "tags": [
+                "night",
+                "rain"
+              ]
+            },
+            "c_default": {
+              "act": "arrival",
+              "weight": 0
+            },
+            "c_bare": {}
+          }
+        },
+        {
+          "op": "assertCardFields",
+          "from": "h_q",
+          "effective": {
+            "box": "b_x"
+          },
+          "expect": {
+            "c_full": {
+              "act": "act-1",
+              "cue": "lights down",
+              "body": "First line.\nSecond line.",
+              "label": "Prologue",
+              "weight": 2,
+              "loud": true,
+              "mood": "tense",
+              "tags": [
+                "night",
+                "rain"
+              ]
+            },
+            "c_default": {
+              "act": "arrival",
+              "cue": "",
+              "body": "",
+              "label": "",
+              "weight": 0,
+              "loud": false,
+              "mood": "calm",
+              "tags": []
+            },
+            "c_bare": {
+              "act": "arrival",
+              "cue": "",
+              "body": "",
+              "label": "",
+              "weight": 0,
+              "loud": false,
+              "mood": "calm",
+              "tags": []
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "a quality gates by ladder position, not by the alphabet",
       "bundle": {
         "schema": "storylets/bundle@0",

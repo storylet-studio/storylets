@@ -56,7 +56,13 @@ export function renderStoryCentre(host: HTMLElement, ctx: StoryPageContext, rest
     // the property itself: a quiet uses chip per row, opening Find's property
     // mode. Counts fill in asynchronously (one usage scan per declaration).
     const useBtns = new Map<string, HTMLButtonElement>();
-    mountPropertyList(list, dto.story, { onChange: save, sharedByDefault: true, shareScope: "story", rowExtras: (decl) => {
+    let renames = 0;
+    mountPropertyList(list, dto.story, { onChange: save, sharedByDefault: true, shareScope: "story", stages: {
+      target: (decl) => (decl.name.trim() === "" ? undefined : { kind: "property", scope: "story", name: decl.name }),
+      // Its own slot, queued ahead of the page's save (which re-queues behind it).
+      rename: (target, from, to) => ctx.queue(`stage:${renames++}`, () => studio.renameStage(target, from, to)),
+      gates: (target) => studio.stageGates(target),
+    }, rowExtras: (decl) => {
       const b = el("button", { className: "set-uses", text: "uses",
         tip: `Find every read and write of @story.${decl.name}`,
         onClick: () => void studio.openSearch({ mode: "property", query: `@story.${decl.name}` }) });

@@ -335,6 +335,20 @@ export function createProblems(ctx: ProblemsContext) {
     // A project from before the project map: the same prompt it opened with,
     // which says what will change before anything does (the ellipsis promised it).
     if (fix.kind === "upgrade-project") { void ctx.offerMapUpgrade(true); return; }
+    // The stage repair asks too: only the author knows where a value whose
+    // stage was deleted belongs now. Offered in ladder order.
+    if (fix.kind === "pick-stage") {
+      const at = anchor.getBoundingClientRect();
+      openContextMenu(at.left, at.top, fix.options.map((stage) => ({
+        label: stage,
+        onClick: () => void (async () => {
+          const result = await studio.pickStage(fix.deck, fix.card, fix.outcome ?? null, fix.field, fix.bad, stage);
+          if (!ctx.applied(result)) return;
+          await ctx.refreshProject();
+        })(),
+      })));
+      return;
+    }
     // The tag repair ASKS, because there is no single right answer: the group
     // has several tags and only the author knows which was meant. The ellipsis
     // on the button already promised this.

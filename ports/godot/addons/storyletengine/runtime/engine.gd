@@ -2289,3 +2289,59 @@ func _plan_durable(props: Array, cards: Array, save: Dictionary, flow, draft: Di
 static func _put_durable(bag: StoryletPropertyBag, name: String, value) -> void:
 	if bag != null:
 		bag.set_value(name, StoryletValues.to_value(value), {"silent": true, "reason": "host durable", "host": true})
+
+
+# --- field read helpers -------------------------------------------------------
+#
+# A box's card and outcome fields as a host reads them. The engine hands a
+# card's fields (and an outcome's) over exactly as the bundle wrote them:
+# sparse, so "the card sets nothing" stays distinct from "the card sets the
+# default". These fill in the declared defaults when a host wants the whole
+# picture. Patter's game-data helpers by the same rule (patterkit
+# design/family-parity-2026-10.md item 7); every Storylet Engine runtime
+# carries the same four.
+
+## A box's card template, by its gameId (or id). Empty when the box declares
+## none or is not in the bundle.
+static func field_decls(bundle: Dictionary, box: String) -> Array:
+	return _field_box(bundle, box).get("fields", [])
+
+
+## A box's outcome fields, by its gameId (or id). Empty when it declares none.
+static func outcome_field_decls(bundle: Dictionary, box: String) -> Array:
+	return _field_box(bundle, box).get("outcomeFields", [])
+
+
+## One field's effective value: the card's (or outcome's) own when it sets one,
+## else the declared default; null for a name declared nowhere and set nowhere.
+static func field_value(decls: Array, values: Dictionary, name: String) -> Variant:
+	if values.has(name):
+		return values[name]
+	for f in decls:
+		if f.get("name") == name:
+			return f.get("default")
+	return null
+
+
+## Every declared field resolved (the value set, else the default), in
+## declaration order, then any key set with no declaration, kept as it is.
+static func effective_fields(decls: Array, values: Dictionary) -> Dictionary:
+	var out := {}
+	for f in decls:
+		var v = field_value(decls, values, str(f.get("name", "")))
+		if v != null:
+			out[f["name"]] = v
+	for k in values:
+		if not out.has(k):
+			out[k] = values[k]
+	return out
+
+
+static func _field_box(bundle: Dictionary, box: String) -> Dictionary:
+	for b in bundle.get("boxes", []):
+		if b.get("gameId") == box:
+			return b
+	for b in bundle.get("boxes", []):
+		if b.get("id") == box:
+			return b
+	return {}

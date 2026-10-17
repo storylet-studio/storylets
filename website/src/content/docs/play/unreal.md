@@ -90,6 +90,12 @@ hand. Nothing changes in that case. A card with no outcomes is played with an em
 `OutcomeGameId`. A box on the project map can also name the map's zone group in `Peek`
 criteria, beside its own tag groups.
 
+A dealt card's `Fields` hold only what the card sets. The bundle asset's
+`GetEffectiveCardFields(Box, Fields)` (and `GetEffectiveOutcomeFields` for an outcome) fills in
+every field the box declares from its default. For a quality field, `GetFieldStages` gives its
+ladder, and the Storylet stage functions `StageIndex`, `CompareStages` and `NextStage` say where
+a stage stands or what comes after it.
+
 ## Your game's state
 
 Give the engine your `@world` values in a `UStoryletWorld` when you create it. The engine

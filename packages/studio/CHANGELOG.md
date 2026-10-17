@@ -10,9 +10,33 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **Card and outcome fields take the same types as Patter's game data**: Text, Text (multiline),
+  Number, True / False, List, Flags and Quality. A field saved as `string` reads as Text and is
+  written as `text` the next time its box is saved. A Quality field's value is picked from its
+  stages, in ladder order.
+- **Renaming a quality's stage carries everything that names it.** Click a stage's name to
+  rename it. The declaration, its default, every card and outcome field set to that stage, every
+  tag starting there, and every condition and change comparing the quality with it all move
+  together, as one edit that one Undo takes back.
+- **Reordering a quality's stages says what it changes**: how many gates compare against the
+  ladder, since each of them now reads the new order.
+- **A quality field left on a stage that no longer exists offers its stages to choose from**,
+  from the problems bar.
+
 ### Changed
 
 - **Patter scenes play on Patterplay 0.26.0**, on the Board and in Publish Playable HTML, in place of 0.23.0. Nothing changes in how they play.
+- **A quality needs at least two stages**, as it does in Patter: a ladder with one rung has
+  nothing to order. A stage with no name is a problem too.
+- **The card template and outcome fields are checked**, not only the values cards give them: a
+  field needs a name, used once, a type, values for a List or Flags field, and a default that
+  fits. A card's value for a Quality field must be one of its stages.
+
+### Fixed
+
+- **An edit that changes nothing on disk no longer leaves an Undo step behind.**
 
 ## [0.21.0] - 2026-10-11
 

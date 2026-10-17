@@ -53,7 +53,11 @@ export type IssueFix =
   /** A project from before the project map (a box group still marked as a map,
    *  or map frames left in a box): run `format`'s project map migration, the
    *  one planner the CLI runs, after showing the author what it will do. */
-  | { kind: "upgrade-project" };
+  | { kind: "upgrade-project" }
+  /** A quality field's value names no stage (a deleted one, most often): offer
+   *  the field's stages, in ladder order. `card` and `outcome` are ids (the
+   *  outcome only for an outcome field), `field` the field's name. */
+  | { kind: "pick-stage"; deck: string; card: string; outcome?: string; field: string; bad: string; options: string[] };
 
 export interface Issue {
   /** A one-click repair, when one is canonical (storyletter.md section 4). */

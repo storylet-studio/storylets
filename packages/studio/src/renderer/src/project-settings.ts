@@ -13,7 +13,7 @@ import { el, mountSettingsDialog, labelled, labelledToggle, lockControls } from 
 import { shapeNotice } from "./vc-view.js";
 import { ok } from "./results.js";
 import type { SettingsDialog, SettingsSectionHandle } from "@wildwinter/app-shell";
-import type { OpenResult, PlayRung, ProjectSettingsDto, PropertyDeclDto, StudioApi } from "../../shared/api.js";
+import type { OpenResult, PlayRung, ProjectSettingsDto, PropertyDeclDto, StageTargetDto, StudioApi } from "../../shared/api.js";
 import { PLAY_RUNGS, RUNG_BLURB, RUNG_LABEL } from "./play-ladder.js";
 
 /** A text field in the Settings dialog, which saves whole on Save rather than
@@ -96,6 +96,8 @@ export function createProjectSettings(
   readOnly: () => boolean = () => false,
 ): { open(section?: string): void } {
   let data: ProjectSettingsDto | undefined;
+  /** World stages renamed since the dialog opened, carried at Save. */
+  const worldRenames: { target: StageTargetDto; from: string; to: string }[] = [];
   let dialog: SettingsDialog | undefined;
   /** The shell hands back open/destroy and keeps its modal to itself, so the
    *  frame is the node it just appended: what the read-only pass greys, and
@@ -149,7 +151,13 @@ export function createProjectSettings(
           if (data!.worldFile !== undefined) {
             h.append(el("p", { className: "set-note", text: `Shared with the game's other tools: saving writes these to ${data!.worldFile} first, then copies them into this project, so it still compiles on its own.` }));
           }
-          const props = mountPropertyList(h, data!.world, { readOnlySwitch: true, sharingSwitches: false });
+          // A stage renamed here waits for Save with the rest of the dialog, and
+          // is carried first, so the save that follows finds it done.
+          const props = mountPropertyList(h, data!.world, { readOnlySwitch: true, sharingSwitches: false, stages: {
+            target: (decl) => (decl.name.trim() === "" ? undefined : { kind: "property", scope: "world", name: decl.name }),
+            rename: (target, from, to) => { worldRenames.push({ target, from, to }); },
+            gates: (target) => studio.stageGates(target),
+          } });
           h.append(el("h3", { className: "set-cap", text: "Coverage drivers" }));
           h.append(el("p", { className: "set-note", text: "Values the coverage test feeds these properties, so cards gated on them get dealt." }));
           // Tolerate a DTO without the field rather than blanking the panel:
@@ -187,6 +195,9 @@ export function createProjectSettings(
         } },
       ],
       onSave: async () => {
+        for (const r of worldRenames.splice(0)) {
+          if (!ok(await studio.renameStage(r.target, r.from, r.to), onError)) return false;
+        }
         const result = await studio.saveProjectSettings(data!);
         // Refused (a lock, say): the dialog stays open with the edits in it.
         if (!ok(result, onError)) return false;

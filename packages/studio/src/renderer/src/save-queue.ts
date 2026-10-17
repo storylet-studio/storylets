@@ -17,7 +17,7 @@ import type { ConfirmOptions, SaveStatus } from "@wildwinter/app-shell";
 import { ok, quietly } from "./results.js";
 import { remember } from "./session.js";
 import type { Session } from "./session.js";
-import type { BoxEdit, CardEdit, DeckEdit, HandEdit, OpenResult, TagGroupEdit, TemplateEdit } from "../../shared/api.js";
+import type { BoxEdit, CardEdit, DeckEdit, HandEdit, OpenResult, StageTargetDto, TagGroupEdit, TemplateEdit } from "../../shared/api.js";
 
 const AUTOSAVE_MS = 700;
 
@@ -56,6 +56,8 @@ export function createSaveQueue(ctx: SaveQueueContext) {
    *  still waiting, so a sentence typed into a purpose is one write, not one
    *  per keystroke, and edits of different things all run, in the order made. */
   const pendingStructs = new Map<string, Mutation>();
+  /** Each rename its own slot: two in a row must both run. */
+  let stageRenames = 0;
 
   /**
    * The clock and the status are the shell's (0.14.0).
@@ -121,6 +123,11 @@ export function createSaveQueue(ctx: SaveQueueContext) {
     saveTemplate(boxId: string, templateId: string, edit: TemplateEdit): void { queueStruct(`template:${templateId}`, () => studio.saveTemplate(boxId, templateId, edit)); },
     saveTagGroup(boxId: string, groupId: string, edit: TagGroupEdit): void { queueStruct(`tagGroup:${groupId}`, () => studio.saveTagGroup(boxId, groupId, edit)); },
     saveHand(boxId: string, handId: string, edit: HandEdit): void { queueStruct(`hand:${handId}`, () => studio.saveHand(boxId, handId, edit)); },
+    /** A quality's stage renamed, carrying every value naming it. Queued
+     *  before the declaration list's own save, which re-queues behind it. */
+    renameStage(target: StageTargetDto, from: string, to: string): void {
+      queueStruct(`stage:${stageRenames++}`, () => studio.renameStage(target, from, to));
+    },
 
     /** Forget the waiting edits of cards about to be deleted: writing one would
      *  recreate the card. */

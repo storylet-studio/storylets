@@ -8,6 +8,17 @@ section for it.
 
 ## [Unreleased]
 
+### Added
+
+- **Field read helpers**: `fieldDecls(bundle, box)` and `outcomeFieldDecls(bundle, box)` find a
+  box's declarations, `fieldValue(decls, values, name)` reads one field, and
+  `effectiveFields(decls, values)` fills in every declared default a card or outcome leaves out.
+  A card's `fields` stay exactly as the bundle wrote them. The same four on every runtime, as
+  Patter's game-data helpers.
+- **`compareStages`, `stageIndex` and `nextStage`**, the shared kernel's ladder helpers,
+  re-exported: they order a quality field's stages (or a property's) outside a condition, from
+  a ladder or the declaration carrying one.
+
 ## [0.11.2] - 2026-10-10
 
 ### Changed

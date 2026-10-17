@@ -49,6 +49,10 @@ namespace storylets
     // PropertyBag.h
     namespace PropertyTypes = wildwinter::expr::PropertyTypes;
     using wildwinter::expr::LowercaseName;
+    // A quality's ladder outside an expression (a field's stage against a property's).
+    using wildwinter::expr::StageIndex;
+    using wildwinter::expr::CompareStages;
+    using wildwinter::expr::NextStage;
     // StateLogger.h
     using wildwinter::expr::StateSnapshot;
     using wildwinter::expr::StateChange;

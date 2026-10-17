@@ -28,7 +28,7 @@ export {
   useProjectMap,
 } from "./mutate/map.js";
 export { deleteCommentMessage, moveComment, postComment, setCommentResolved } from "./mutate/comments.js";
-export { addCoverageDrivers, addNamedOutcome, declareProperty, repointTag } from "./mutate/quick-fixes.js";
+export { addCoverageDrivers, addNamedOutcome, declareProperty, pickStage, repointTag } from "./mutate/quick-fixes.js";
 
 // The reads the pages make between edits.
 export { boxCatalogue, cardCatalogue } from "./read/catalogue.js";

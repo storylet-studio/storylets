@@ -11,7 +11,7 @@ import { deserialiseAst, evaluate } from "@wildwinter/expr";
 import type { EvalContext, ScalarValue } from "@wildwinter/expr";
 import { matchedSpecificity } from "@wildwinter/expr-specificity";
 import { storyletsDialect } from "@storylet-studio/dialect";
-import { Engine, Flow, makePrng } from "@storylet-studio/runtime";
+import { Engine, Flow, effectiveFields, fieldDecls, makePrng } from "@storylet-studio/runtime";
 import type { DurableSave } from "@storylet-studio/runtime";
 import { effectiveGameId } from "@storylet-studio/model";
 import type { Bundle, FlowSave, LoadProperty, LoadReport } from "@storylet-studio/model";
@@ -479,6 +479,22 @@ export function runScriptedCase(c: ScriptedCase): string[] {
           [g, views.find((v) => v.gameId === g)?.fields ?? {}]));
         if (!same(actual, op.expect)) {
           failures.push(`${at}: expected ${show(op.expect)}, got ${show(actual)}`);
+        }
+        break;
+      }
+      case "assertCardFields": {
+        const names = handGameIds(c.bundle);
+        const board = flowOf(op.flow).board()[names.get(op.from) ?? op.from] ?? [];
+        for (const [cardId, expected] of Object.entries(op.expect)) {
+          const card = board.find((v) => v.id === cardId);
+          if (!card) {
+            failures.push(`${at}: ${cardId} is not on board[${op.from}]`);
+            continue;
+          }
+          const actual = op.effective !== undefined
+            ? effectiveFields(fieldDecls(c.bundle, op.effective.box), card.fields)
+            : card.fields ?? {};
+          if (!same(actual, expected)) failures.push(`${at}: ${cardId} expected ${show(expected)}, got ${show(actual)}`);
         }
         break;
       }

@@ -732,6 +732,50 @@ export const fixtures: Fixtures = {
         { op: "assertOutcomeOrder", card: "c_notice", from: "h_q", expect: ["take", "leave"] },
       ] },
 
+    // A card's fields reach the game with the card, raw (patterkit
+    // design/family-parity-2026-10.md item 17, the corpus's first card-field
+    // case). Every field type is here, a quality among them (its value a
+    // stage of the field's own ladder, which the engine never compares), and
+    // a card that sets a field to its default is told apart from one that
+    // sets nothing: the runtime fills in no defaults.
+    { name: "a card's fields reach the game with the card, raw, in every type, and the helper fills in defaults",
+      fields: [
+        { name: "act", type: "quality", default: "arrival", stages: ["arrival", "act-1", "act-2"] },
+        { name: "cue", type: "text", default: "" },
+        { name: "body", type: "multiline", default: "" },
+        { name: "label", type: "string", default: "" },
+        { name: "weight", type: "number", default: 0 },
+        { name: "loud", type: "boolean", default: false },
+        { name: "mood", type: "enum", default: "calm", values: ["calm", "tense"] },
+        { name: "tags", type: "flags", default: [], values: ["night", "rain"] },
+      ],
+      cards: [
+        { id: "c_full", priority: 3, fields: {
+          act: "act-1", cue: "lights down", body: "First line.\nSecond line.", label: "Prologue",
+          weight: 2, loud: true, mood: "tense", tags: ["night", "rain"],
+        } },
+        { id: "c_default", priority: 2, fields: { act: "arrival", weight: 0 } },
+        { id: "c_bare", priority: 1 },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_full", "c_default", "c_bare"] } },
+        { op: "assertCardFields", from: "h_q", expect: {
+          c_full: { act: "act-1", cue: "lights down", body: "First line.\nSecond line.", label: "Prologue",
+            weight: 2, loud: true, mood: "tense", tags: ["night", "rain"] },
+          c_default: { act: "arrival", weight: 0 },
+          c_bare: {},
+        } },
+        // The helper fills every declared field the card leaves out from its
+        // default, so the three cards differ only where a value was set.
+        { op: "assertCardFields", from: "h_q", effective: { box: "b_x" }, expect: {
+          c_full: { act: "act-1", cue: "lights down", body: "First line.\nSecond line.", label: "Prologue",
+            weight: 2, loud: true, mood: "tense", tags: ["night", "rain"] },
+          c_default: { act: "arrival", cue: "", body: "", label: "", weight: 0, loud: false, mood: "calm", tags: [] },
+          c_bare: { act: "arrival", cue: "", body: "", label: "", weight: 0, loud: false, mood: "calm", tags: [] },
+        } },
+      ] },
+
     // --- quality: the ordered story-stage type (design/quality.md) -------------
     //
     // Stage names chosen to sort WRONGLY as strings throughout (alphabetically

@@ -21,7 +21,7 @@
 
 import { defaultControl, el, labelled, mountPropertyList as mountShellPropertyList } from "@wildwinter/app-shell";
 import type { PropertyListHandle } from "@wildwinter/app-shell";
-import type { PropertyDeclDto } from "../../shared/api.js";
+import type { PropertyDeclDto, StageTargetDto } from "../../shared/api.js";
 import { shows } from "./play-ladder.js";
 import { shareLine } from "./zone-share.js";
 import type { ShareScope } from "./zone-share.js";
@@ -69,7 +69,30 @@ export interface PropListOptions {
    *  Shared tick-box as it is ticked. Drawn where the sentence has something
    *  to say: every scope at the Shared world rung and above, a zone always. */
   shareScope?: ShareScope;
+  /**
+   * Where this list's qualities live, so a stage rename carries every value
+   * and literal naming the stage (ops `stages.ts`) and a reorder says how many
+   * gates it changes the meaning of. `target` names a row's quality (undefined
+   * for one not saved yet: its rename is then the list's own change). Absent,
+   * a rename renames the declaration alone.
+   */
+  stages?: {
+    target: (decl: PropertyDeclDto) => StageTargetDto | undefined;
+    rename: (target: StageTargetDto, from: string, to: string) => void;
+    gates: (target: StageTargetDto) => Promise<number>;
+  };
+  /** A card or outcome TEMPLATE: offer the field types (the family's one list,
+   *  shared with Patterpad's game data: text, multiline, number, boolean, enum,
+   *  flags, quality) rather than a property's, and start a new row as text. */
+  fieldTypes?: boolean;
 }
+
+/** The field types, in the shell list's [value, label] shape, labelled as
+ *  Patterpad labels its game data. */
+export const FIELD_TYPE_OPTIONS: ReadonlyArray<readonly [string, string]> = [
+  ["text", "Text"], ["multiline", "Text (multiline)"], ["number", "Number"], ["boolean", "True / False"],
+  ["enum", "List"], ["flags", "Flags"], ["quality", "Quality"],
+];
 
 /** A labelled checkbox row for one of the declaration's flags. */
 function flagRow(label: string, tip: string, checked: boolean, onChange: (on: boolean) => void): HTMLElement {
@@ -123,6 +146,27 @@ function switches(p: PropertyDeclDto, opts: PropListOptions, changed: () => void
   return details;
 }
 
+/** The shell list's stage hooks: a rename is queued AHEAD of the list's own
+ *  save, so main renames the declaration and every value in one edit and the
+ *  save that follows finds nothing left to change. */
+function stageHooks(stages: NonNullable<PropListOptions["stages"]>, changed: () => void) {
+  return {
+    onStageRename: (decl: PropertyDeclDto, from: string, to: string): void => {
+      const target = stages.target(decl);
+      if (target !== undefined) stages.rename(target, from, to);
+      changed();
+    },
+    onStageReorder: (decl: PropertyDeclDto, note: HTMLElement): void => {
+      const target = stages.target(decl);
+      if (target === undefined) return;
+      void stages.gates(target).then((n) => {
+        note.textContent = n === 0 ? ""
+          : `${n} ${n === 1 ? "gate compares" : "gates compare"} against this ladder, and ${n === 1 ? "it" : "each"} now reads the new order.`;
+      });
+    },
+  };
+}
+
 /** Mount the declaration list into `host`. Mutates `decls` in place. */
 export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], opts: PropListOptions = {}): PropertyListHandle {
   const changed = (): void => opts.onChange?.();
@@ -151,8 +195,10 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
     ...(opts.addLabel !== undefined ? { addLabel: opts.addLabel } : {}),
     emptyText: `No ${emptyNoun} yet. Add one below.`,
     // A new row starts as text, with the DTO's blank default already there.
-    newDecl: () => ({ name: "", type: "string", default: "" }),
+    newDecl: () => ({ name: "", type: opts.fieldTypes === true ? "text" : "string", default: "" }),
+    ...(opts.fieldTypes === true ? { types: FIELD_TYPE_OPTIONS } : {}),
     extraLine: (decl) => [shareLineFor(decl), opts.rowExtras?.(decl) ?? null],
     extraDetails: (decl) => switches(decl, opts, changed, () => repaintShare(decl)),
+    ...(opts.stages !== undefined ? stageHooks(opts.stages, changed) : {}),
   });
 }

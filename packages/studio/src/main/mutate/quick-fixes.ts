@@ -112,6 +112,23 @@ export async function repointTag(
 }
 
 /**
+ * Put a quality field's value back on its ladder: the value names a stage the
+ * field no longer has (deleted, most often), and the author picks which stage
+ * it should be. Asked rather than guessed, as the tag repair is.
+ */
+export async function pickStage(
+  session: ProjectSession, deckId: string, cardId: string, outcomeId: string | undefined, field: string, from: string, to: string,
+): Promise<Written> {
+  const found = locate(session, deckId);
+  if (!found) return gone("deck");
+  const card = found.deck.shard.cards.find((c) => c.id === cardId);
+  const holder = outcomeId === undefined ? card : card?.outcomes.find((o) => o.id === outcomeId);
+  if (!holder || holder.fields?.[field] !== from) return { error: "that value has already changed" };
+  holder.fields[field] = to;
+  return commit(session, "Fix stage", freshKey(), [deckWrite(session, found.deck)]);
+}
+
+/**
  * The Patter quick fix (ops `patter-link.ts`): the card's paired scene names an outcome the card
  * doesn't have, so give it one by that name. The gameId is PINNED to the scene's name, since that
  * name is the link and must not move if the title is edited; the title is read off it

@@ -248,7 +248,7 @@ the box.
       {
         default: "",
         name: "scene",
-        type: "string",
+        type: "text",
       },
     ],
     gameId: "village",
@@ -257,7 +257,7 @@ the box.
       {
         default: "",
         name: "after",
-        type: "string",
+        type: "text",
       },
     ],
     properties: [],
@@ -274,7 +274,14 @@ the box.
 your game (a scene id, an animation reference, a text key). The engine never interprets them
 and expressions can't read them. `outcomeFields` is the same again for **outcomes**, what an
 outcome in this box may carry, declared the same way, for the line your game shows after a
-press without spending a card on it. Leave it out when you have none. `properties` is the
+press without spending a card on it. Leave it out when you have none.
+
+A field's `type` is one of `text`, `multiline`, `number`, `boolean`, `enum`, `flags` and
+`quality`, the list Patter's game data uses (`string` is read as `text`). Every field needs a
+`default` that fits its type; an `enum` or `flags` field lists its `values`, and a `quality`
+field lists its `stages`, at least two, in order. A card's value for a quality field must be
+one of those stages. The bundle carries the values exactly as the cards wrote them, so a
+field a card leaves out arrives missing, not as its default. `properties` is the
 `@box` scope. `ranking.specificity` is the one per-box ranking toggle.
 
 An optional `turn` makes this a **timed box**:

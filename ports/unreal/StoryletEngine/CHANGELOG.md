@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Field read helpers**, in Blueprint on the bundle asset: `GetEffectiveCardFields` and
+  `GetEffectiveOutcomeFields` fill in every declared default a card or outcome leaves out (a
+  dealt card's `Fields` stay exactly as the bundle wrote them), and `GetFieldStages` reads a
+  quality field's ladder. In the engine-free core (`Storylets/Bundle.h`): `FieldDecls`,
+  `OutcomeFieldDecls`, `FieldValue` and `EffectiveFields`.
+- **Storylet stage functions in Blueprint** (`UStoryletStages`): `StageIndex`, `CompareStages`
+  and `NextStage` over a ladder, the last two returning false with the reason for a value that
+  is not a stage.
+- **`StageIndex`, `CompareStages` and `NextStage`** in the shared kernel (`k88b76cef`), for a
+  quality's stages outside a condition, also as `storylets::` names in C++. The kernel id changes, so Patterplay must ship the same
+  kernel in the same release round.
+- **A field declaration carries its stages.** A card or outcome field of type `quality` lists
+  its ladder in the bundle, and the box's field declarations now read it, as property
+  declarations always have.
+
 ## [0.11.2] - 2026-10-10
 
 ### Fixed

@@ -447,12 +447,23 @@ export interface TagGroupDto {
   placeAxis?: boolean;
 }
 
+/** The quality a stage edit is about: ops `StageTarget`, over the bridge.
+ *  `box`, `deck` and `holder` are ids; `holder` names the tag group, tag, hand
+ *  template or hand that declares an @hand property. */
+export type StageTargetDto =
+  | { kind: "property"; scope: "world" | "story" | "box" | "deck" | "hand"; name: string; box?: string; deck?: string; holder?: string }
+  | { kind: "field"; box: string; template: "fields" | "outcomeFields"; name: string };
+
 export interface FieldDeclDto {
+  /** One of the field types (model `FIELD_TYPES`); a shard's older `string`
+   *  arrives here as `text`, so it saves as `text`. */
   name: string;
   type: string;
   /** Display value of the declared default (raw string; coerced on save). */
   default: string;
   values?: string[];
+  /** A quality field's ordered ladder. */
+  stages?: string[];
 }
 
 /** A property declaration in editable form (default as a display string). */
@@ -1702,6 +1713,13 @@ export interface StudioApi {
 
   // --- box / template / tag-group editing (M1b Phase 3) ---------------------
   saveBox(boxId: string, edit: BoxEdit): Promise<OpenResult | { error: string }>;
+  /** Rename a quality's stage and carry every value and literal naming it
+   *  (field values, tag starting values, condition and change literals), in
+   *  one undoable edit with the declaration itself. */
+  renameStage(target: StageTargetDto, from: string, to: string): Promise<OpenResult | { error: string }>;
+  /** How many gates order against a quality's ladder (`>=` and the rest):
+   *  what reordering its stages changes the meaning of. */
+  stageGates(target: StageTargetDto): Promise<number>;
   templateDetail(boxId: string, templateId: string): Promise<TemplateDetail | null>;
   saveTemplate(boxId: string, templateId: string, edit: TemplateEdit): Promise<OpenResult | { error: string }>;
   createTemplate(boxId: string): Promise<{ result: OpenResult; templateId: string } | { error: string }>;
@@ -1844,6 +1862,9 @@ export interface StudioApi {
    *  could read it; without it the declaration falls back to a number. */
   declareProperty(scope: string, name: string, owner: string, guess?: { type: PropertyType; default: ScalarValue }): Promise<OpenResult | { error: string }>;
   repointTag(holder: string, group: string, from: string, to: string): Promise<OpenResult | { error: string }>;
+  /** Put a quality field's value on a stage of its ladder (the pick-stage quick fix);
+   *  `outcome` is null for a card field. */
+  pickStage(deck: string, card: string, outcome: string | null, field: string, from: string, to: string): Promise<OpenResult | { error: string }>;
   /** The Patter quick fix: give card `card` an outcome named `gameId`, which its paired scene
    *  already names. Says where the new outcome is, so the editor can open it. */
   addOutcome(card: string, gameId: string): Promise<{ result: OpenResult; box: string; deck: string; outcome: string } | { error: string }>;
@@ -2241,6 +2262,8 @@ export const INVOKE_CHANNELS = {
   "deck:move": "moveDeck",
   "hand:move": "moveHand",
   "box:save": "saveBox",
+  "stage:rename": "renameStage",
+  "stage:gates": "stageGates",
   "box:catalogue": "boxCatalogue",
   "deck:duplicate": "duplicateDeck",
   "template:duplicate": "duplicateTemplate",
@@ -2298,6 +2321,7 @@ export const INVOKE_CHANNELS = {
   "coverage:info": "coverageInfo",
   "problem:declareProperty": "declareProperty",
   "problem:repointTag": "repointTag",
+  "problem:pickStage": "pickStage",
   "problem:addOutcome": "addOutcome",
   "problem:createScene": "createPatterScene",
   "project:planMapUpgrade": "planMapUpgrade",

@@ -111,6 +111,22 @@ const looks = flow.peek("village", { area: "forest" }, 3);
 A dealt card is `{ id, gameId, title?, purpose?, fields? }`. `fields` is your handoff: the
 scene id, the animation reference, whatever the box's card template declared.
 
+`fields` holds only what the card sets, so a card that leaves a field out doesn't carry its
+default. To get every declared field, filled from its default where the card is silent:
+
+```js
+import { effectiveFields, fieldDecls, compareStages } from "@storylet-studio/runtime";
+
+const decls = fieldDecls(bundle, "village");          // the box's card template
+const values = effectiveFields(decls, card.fields);   // every field, defaults filled in
+const act = decls.find((f) => f.name === "act");      // a quality field
+if (compareStages(act, values.act, "act-1") >= 0) { /* at or past act-1 */ }
+```
+
+`outcomeFieldDecls(bundle, box)` is the same for outcome fields, and `fieldValue(decls,
+values, name)` reads one. `compareStages`, `stageIndex` and `nextStage` order a quality's
+stages outside a condition, from a ladder or the declaration that carries one.
+
 Ask for outcomes when you're about to show them, because a dealt card doesn't carry them:
 
 ```js

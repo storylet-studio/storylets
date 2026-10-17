@@ -21,7 +21,7 @@ import type {
   BoardPatterDto, BoardScopesDto, BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectKit, ProjectSettingsDto,
   RemoteDto, ShardVcDto, VcStatusDto,
 } from "../shared/api.js";
-import { declDto } from "./decls.js";
+import { declDto, fieldDeclDto } from "./decls.js";
 import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
 import { History } from "./history.js";
 import { resetShardStatus, shardStatus } from "./vc.js";
@@ -239,10 +239,10 @@ export function toDto(loaded: LoadedProject): ProjectDto {
         ? { contract: noted(`box:${effectiveGameId(box.box.box)}`)! } : {}),
       ...(box.box.box.turn !== undefined ? { turn: { seconds: box.box.box.turn.seconds } } : {}),
       ...(boxColourOf(box) !== undefined ? { colour: boxColourOf(box)! } : {}),
-      fields: (box.box.box.fields ?? []).map(declDto),
+      fields: (box.box.box.fields ?? []).map(fieldDeclDto),
       // Absent on every box that declares none, which is every box older than
       // 2026-09-13; an empty list is what the editor draws for that.
-      outcomeFields: (box.box.box.outcomeFields ?? []).map(declDto),
+      outcomeFields: (box.box.box.outcomeFields ?? []).map(fieldDeclDto),
       properties: (box.box.box.properties ?? []).map(declDto),
       decks: box.decks
         .map((d, i) => ({ d, o: d.shard.deck.order ?? i }))

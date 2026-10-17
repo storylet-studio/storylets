@@ -797,4 +797,60 @@ namespace StoryletStudio.StoryletEngine
         public string Saved = "";
         public string Bundle = "";
     }
+
+    /// <summary>
+    /// A box's card and outcome fields as a host reads them. The engine hands a
+    /// card's fields (and an outcome's) over exactly as the bundle wrote them:
+    /// sparse, so "the card sets nothing" stays distinct from "the card sets the
+    /// default". These fill in the declared defaults when a host wants the whole
+    /// picture. Patter's GameDataHelpers by the same rule (patterkit
+    /// design/family-parity-2026-10.md item 7); every Storylet Engine runtime
+    /// carries the same four.
+    /// </summary>
+    public static class FieldHelpers
+    {
+        /// <summary>A box's card template, by its gameId (or id). Empty when the
+        /// box declares none or is not in the bundle.</summary>
+        public static List<FieldDecl> FieldDecls(Bundle bundle, string box) =>
+            BoxOf(bundle, box)?.Fields ?? new List<FieldDecl>();
+
+        /// <summary>A box's outcome fields, by its gameId (or id). Empty when it
+        /// declares none.</summary>
+        public static List<FieldDecl> OutcomeFieldDecls(Bundle bundle, string box) =>
+            BoxOf(bundle, box)?.OutcomeFields ?? new List<FieldDecl>();
+
+        /// <summary>One field's effective value: the card's (or outcome's) own
+        /// when it sets one, else the declared default; null for a name declared
+        /// nowhere and set nowhere.</summary>
+        public static ExprValue FieldValue(List<FieldDecl> decls, OrderedMap<string, ExprValue> values, string name)
+        {
+            if (values != null && values.TryGetValue(name, out var v)) return v;
+            foreach (var f in decls) if (f.Name == name) return f.Default;
+            return null;
+        }
+
+        /// <summary>Every declared field resolved (the value set, else the
+        /// default), in declaration order, then any key set with no declaration,
+        /// kept as it is.</summary>
+        public static OrderedMap<string, ExprValue> EffectiveFields(List<FieldDecl> decls, OrderedMap<string, ExprValue> values)
+        {
+            var output = new OrderedMap<string, ExprValue>();
+            foreach (var f in decls)
+            {
+                var v = FieldValue(decls, values, f.Name);
+                if (v != null) output.Set(f.Name, v);
+            }
+            if (values != null)
+                foreach (var pair in values)
+                    if (!output.ContainsKey(pair.Key)) output.Set(pair.Key, pair.Value);
+            return output;
+        }
+
+        private static Box BoxOf(Bundle bundle, string box)
+        {
+            foreach (var b in bundle.Boxes) if (b.GameId == box) return b;
+            foreach (var b in bundle.Boxes) if (b.Id == box) return b;
+            return null;
+        }
+    }
 }

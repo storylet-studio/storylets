@@ -74,6 +74,8 @@ const SHAPES: [RegExp, string][] = [
   [/ address "[^"]*" cannot contain "\/"/, "address-slash"],
   // properties and qualities
   [/^quality "[^"]*" declares no stages/, "quality-no-stages"],
+  [/^quality "[^"]*" declares only one stage/, "quality-one-stage"],
+  [/^quality "[^"]*" has a stage with no name \(stage \d+\)$/, "quality-empty-stage"],
   [/^quality "[^"]*" lists stage "[^"]*" twice$/, "quality-stage-twice"],
   [/^quality "[^"]*" defaults to .*, which is not one of its stages$/, "quality-bad-default"],
   [/^property name "[^"]*" cannot be used \(/, "reserved-property-name"],
@@ -97,6 +99,19 @@ const SHAPES: [RegExp, string][] = [
   // cards
   [/^field "[^"]*" is not in the box's /, "unknown-field"],
   [/^field "[^"]*" does not match its declared type "/, "field-type"],
+  [/^field "[^"]*" is .*, which is not one of its stages$/, "field-off-ladder"],
+  // field declarations, on the card template or the outcome fields
+  [/^(?:a card template|an outcome) field has no name$/, "field-no-name"],
+  [/^the (?:card template declares|outcome fields declare) field "[^"]*" twice$/, "field-twice"],
+  [/^(?:card template|outcome) field "[^"]*" has type .*, which is not a field type/, "field-bad-type"],
+  [/^(?:card template|outcome) field "[^"]*" is (?:enum|flags) but declares no values$/, "field-no-values"],
+  [/^(?:card template|outcome) field "[^"]*" has no default$/, "field-no-default"],
+  [/^(?:card template|outcome) field "[^"]*" defaults to .*, which does not fit its type "/, "field-bad-default"],
+  [/^quality field "[^"]*" on the (?:card template|outcome fields) declares no stages/, "quality-field-no-stages"],
+  [/^quality field "[^"]*" on the (?:card template|outcome fields) declares only one stage/, "quality-field-one-stage"],
+  [/^quality field "[^"]*" on the (?:card template|outcome fields) has a stage with no name \(stage \d+\)$/, "quality-field-empty-stage"],
+  [/^quality field "[^"]*" on the (?:card template|outcome fields) lists stage "[^"]*" twice$/, "quality-field-stage-twice"],
+  [/^quality field "[^"]*" on the (?:card template|outcome fields) defaults to .*, which is not one of its stages$/, "quality-field-bad-default"],
   [/^redraw is the string .*, so its cooldown never fires: write it as the number /, "redraw-string"],
   [/^redraw must be "always", "never" or a whole number of turns/, "redraw-invalid"],
   [/^copies must be an integer >= 1/, "copies"],
@@ -273,6 +288,14 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
     text: `The quality ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} has no stages yet.`,
     next: "A quality is its ladder; add its stages in order.",
   }),
+  "quality-one-stage": (p) => ({
+    text: `The quality ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} has only one stage.`,
+    next: "A ladder needs at least two; add another stage.",
+  }),
+  "quality-empty-stage": (p) => ({
+    text: `The quality ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} has a stage with no name (stage ${pick(p, /\(stage (\d+)\)$/)}).`,
+    next: "Name it, or remove it.",
+  }),
   "quality-stage-twice": (p) => ({
     text: `The quality ${quoted(pick(p, /^quality "([^"]*)"/))} on ${problemName(p)} lists the stage ${quoted(pick(p, /lists stage "([^"]*)" twice$/))} twice.`,
     next: "Remove one.",
@@ -365,6 +388,54 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
   "unknown-field": (p) => ({
     text: `${problemName(p)} has a field called ${quoted(pick(p, /^field "([^"]*)"/))} that the box doesn’t declare.`,
     next: "Declare it on the box, or remove the field.",
+  }),
+  "field-off-ladder": (p) => ({
+    text: `The field ${quoted(pick(p, /^field "([^"]*)"/))} on ${problemName(p)} is at ${spoken(pick(p, /^field "[^"]*" is (.*), which is not/))}, which isn’t one of its stages.`,
+    next: "Pick one of its stages.",
+  }),
+  "field-no-name": (p) => ({
+    text: `${/^an outcome/.test(p.message) ? "An outcome field" : "A card field"} on ${problemName(p)} has no name.`,
+    next: "Name it, or remove it.",
+  }),
+  "field-twice": (p) => ({
+    text: `${/outcome fields/.test(p.message) ? "The outcome fields" : "The card fields"} on ${problemName(p)} declare ${quoted(pick(p, /field "([^"]*)" twice$/))} twice.`,
+    next: "Rename or remove one.",
+  }),
+  "field-bad-type": (p) => ({
+    text: `The field ${quoted(pick(p, /field "([^"]*)"/))} on ${problemName(p)} has the type ${spoken(pick(p, /has type (.*), which is not/))}, which isn’t a field type.`,
+    next: "Pick one of the field types.",
+  }),
+  "field-no-values": (p) => ({
+    text: `The field ${quoted(pick(p, /field "([^"]*)"/))} on ${problemName(p)} has no values to choose from.`,
+    next: "Add its values.",
+  }),
+  "field-no-default": (p) => ({
+    text: `The field ${quoted(pick(p, /field "([^"]*)"/))} on ${problemName(p)} has no default.`,
+    next: "Give it one.",
+  }),
+  "field-bad-default": (p) => ({
+    text: `The field ${quoted(pick(p, /field "([^"]*)"/))} on ${problemName(p)} starts at ${spoken(pick(p, /defaults to (.*), which does not/))}, which doesn’t fit its type.`,
+    next: "Change the default.",
+  }),
+  "quality-field-no-stages": (p) => ({
+    text: `The quality field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} has no stages yet.`,
+    next: "A quality is its ladder; add its stages in order.",
+  }),
+  "quality-field-one-stage": (p) => ({
+    text: `The quality field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} has only one stage.`,
+    next: "A ladder needs at least two; add another stage.",
+  }),
+  "quality-field-empty-stage": (p) => ({
+    text: `The quality field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} has a stage with no name (stage ${pick(p, /\(stage (\d+)\)$/)}).`,
+    next: "Name it, or remove it.",
+  }),
+  "quality-field-stage-twice": (p) => ({
+    text: `The quality field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} lists the stage ${quoted(pick(p, /lists stage "([^"]*)" twice$/))} twice.`,
+    next: "Remove one.",
+  }),
+  "quality-field-bad-default": (p) => ({
+    text: `The quality field ${quoted(pick(p, /^quality field "([^"]*)"/))} on ${problemName(p)} starts at ${spoken(pick(p, /defaults to (.*), which is not/))}, which isn’t one of its stages.`,
+    next: "Pick a stage as its starting point.",
   }),
   "field-type": (p) => ({
     text: `The field ${quoted(pick(p, /^field "([^"]*)"/))} on ${problemName(p)} should be a ${pick(p, /declared type "([^"]*)"$/)}.`,

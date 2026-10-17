@@ -171,8 +171,9 @@ none shows no block.
 ### Fields
 
 The box's card template, as label-and-control rows, one row per declared field. The
-control follows the field's type. True / False fields, and List fields with values, offer
-them in a picker. Every other field is typed.
+control follows the field's type. True / False fields, List fields with values, and Quality
+fields offer them in a picker, a Quality field's stages in ladder order. Every other field is
+typed.
 
 If the box declares no fields, the tab says so and points you at the box's **Card
 template** tab.

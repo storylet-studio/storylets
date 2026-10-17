@@ -6,6 +6,14 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Added
+
+- **Field read helpers**: `StoryletEngine.field_decls(bundle, box)`, `outcome_field_decls`,
+  `field_value` and `effective_fields`, which fill in every declared default a card or outcome
+  leaves out. A card's `fields` stay exactly as the bundle wrote them.
+- **`StoryletExpression.stage_index`, `compare_stages` and `next_stage`**, the shared kernel's
+  ladder helpers, for a quality's stages outside a condition.
+
 ## [0.11.2] - 2026-10-10
 
 ### Changed

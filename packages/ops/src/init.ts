@@ -488,7 +488,7 @@ function actionGameParts(): KitParts {
   const codex: BoxParts = {
     // Not on the map: an entry is about the city as a whole, not a district.
     box: actionBox(3, "codex", "Codex", "The box the game only reads: entries unlock from what the rest of the game did, and are never played.", false,
-      [{ name: "body", type: "string", default: "", purpose: "The entry's text, for the game's codex page." }], false),
+      [{ name: "body", type: "multiline", default: "", purpose: "The entry's text, for the game's codex page." }], false),
     tags: { schema: TAGS_SCHEMA, groups: [] },
     hands: {
       schema: HANDS_SCHEMA,

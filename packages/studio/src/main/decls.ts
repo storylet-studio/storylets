@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseSource } from "@storylet-studio/compiler";
-import type { PropertyDecl, ScalarValue } from "@storylet-studio/model";
+import type { FieldDecl, PropertyDecl, ScalarValue } from "@storylet-studio/model";
 import type { PropertyDeclDto } from "../shared/api.js";
 
 /** A shard value as the text a field edits: a string as it is, anything else
@@ -27,6 +27,13 @@ export const declDto = (d: PropertyDecl): PropertyDeclDto => ({
   ...(d.shared !== undefined ? { shared: d.shared } : {}),
   ...(d.durable !== undefined ? { durable: d.durable } : {}),
   ...(d.purpose !== undefined ? { purpose: d.purpose } : {}),
+});
+
+/** A card or outcome field as the editor's row: a property's row, with the
+ *  older `string` spelling read as `text` (the family's spelling, patterkit
+ *  design/family-parity-2026-10.md item 9), so the next save writes `text`. */
+export const fieldDeclDto = (d: FieldDecl): PropertyDeclDto => ({
+  ...declDto(d as PropertyDecl), type: d.type === "string" ? "text" : d.type,
 });
 
 /** A default typed into a row, read as the declaration's type. */

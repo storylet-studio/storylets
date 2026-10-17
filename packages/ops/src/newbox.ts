@@ -309,7 +309,7 @@ function codexKit(boxShard: BoxShard, tags: TagsShard, hands: HandsShard): DeckS
   boxShard.box.purpose = "The box the game only reads: entries unlock, accumulate and are never played. Priority is the listing order.";
   boxShard.box.ranking = { specificity: false };
   boxShard.box.fields = [{
-    name: "body", type: "string", default: "",
+    name: "body", type: "multiline", default: "",
     purpose: "The entry's text, for the game to show on its codex page.",
   }];
   boxShard.box.properties = [{

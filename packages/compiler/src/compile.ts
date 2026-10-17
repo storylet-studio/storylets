@@ -9,14 +9,14 @@
 // four static scopes are strict.
 // ---------------------------------------------------------------------------
 
-import { compile as compileExpr, parseAndValidate } from "@wildwinter/expr";
-import type { Expression, ExpressionSchema, PropertyMeta } from "@wildwinter/expr";
+import { compile as compileExpr, parseAndValidate, qualityDeclarationProblems } from "@wildwinter/expr";
+import type { Dialect, Expression, ExpressionSchema, PropertyMeta } from "@wildwinter/expr";
 import { storyletsDialectWith, OWN_SCOPES, EXTERNAL_SCOPES } from "@storylet-studio/dialect";
 import { referenceNote, scopesSchema } from "@wildwinter/scoperegistry/scopes";
 import type {
-  Box, Bundle, Card, Deck, Hand, HandTemplate, Outcome, PropertyDecl, ScalarValue, TagGroup,
+  Box, Bundle, Card, Deck, FieldDecl, Hand, HandTemplate, Outcome, PropertyDecl, ScalarValue, TagGroup,
 } from "@storylet-studio/model";
-import { BUNDLE_SCHEMA, PLACE_GROUP, effectiveGameId, isHoleRef, isSpatial, isValidGameId,
+import { BUNDLE_SCHEMA, FIELD_TYPES, PLACE_GROUP, effectiveGameId, isHoleRef, isSpatial, isValidGameId,
   isValidPropertyName, parseHoleRef, propertyNameify, RESERVED_PROPERTY_NAMES, byDisplayOrder, inferDeclFromWrite } from "@storylet-studio/model";
 import { boxMapOf, usesProjectMap } from "./project.js";
 import type { Issue, SourceBox, SourceProject } from "./project.js";
@@ -61,6 +61,40 @@ const valueFits = (decl: PropertyDecl, v: ScalarValue): boolean => {
   }
 };
 
+/**
+ * A quality declaration against the family's one rule (`@wildwinter/expr`'s
+ * `qualityDeclarationProblems`, shared with Patter: at least two stages, none
+ * empty, none twice, the default a stage), in this compiler's words. `subject`
+ * names the declaration as the message opens, `quality "@story.act"`.
+ *
+ * The default is compulsory here, where the kernel leaves it optional, so a
+ * missing one is passed as `null` and reads as off the ladder.
+ */
+const qualityDeclarationMessages = (subject: string, stages: readonly string[] | undefined, dflt: unknown): string[] =>
+  qualityDeclarationProblems(stages, dflt === undefined ? null : dflt).map((p) => {
+    switch (p.kind) {
+      case "too-few-stages": return p.count === 0
+        ? `${subject} declares no stages - a quality is its ladder`
+        : `${subject} declares only one stage - a ladder needs at least two`;
+      case "empty-stage": return `${subject} has a stage with no name (stage ${p.index + 1})`;
+      case "duplicate-stage": return `${subject} lists stage "${p.stage}" twice`;
+      case "default-not-a-stage": return `${subject} defaults to ${JSON.stringify(p.value)}, which is not one of its stages`;
+    }
+  });
+
+/** Does a value fit a field's declaration? A card's or outcome's value, and
+ *  the declaration's own default, by one rule. */
+const fieldValueFits = (decl: FieldDecl, v: unknown): boolean => {
+  switch (decl.type) {
+    case "number": return typeof v === "number";
+    case "boolean": return typeof v === "boolean";
+    case "flags": return Array.isArray(v) && v.every((x) => typeof x === "string" && (decl.values ?? []).includes(x));
+    case "enum": return typeof v === "string" && (decl.values ?? []).includes(v);
+    case "quality": return typeof v === "string" && (decl.stages ?? []).includes(v);
+    default: return typeof v === "string";
+  }
+};
+
 /** Every `@scope.name` an expression's AST reads or names, in the order met. */
 const scopedRefs = (node: unknown): { scope: string; name: string }[] => {
   const out: { scope: string; name: string }[] = [];
@@ -74,6 +108,14 @@ const scopedRefs = (node: unknown): { scope: string; name: string }[] => {
   walk(node);
   return out;
 };
+
+/** The dialect a project's expressions are read in: the engine's own, plus
+ *  every game-wide scope the game's shared scopes folder declares. The one
+ *  `compileProject` uses, for a tool that has to parse an expression the way
+ *  the compiler will (a stage rename rewriting literals, say). */
+export function projectDialect(source: SourceProject): Dialect {
+  return storyletsDialectWith(gameTokens(source.gameScopes?.merged, OWN_SCOPES));
+}
 
 /** The content hash: over the canonical serialisation of the parsed shards,
  *  so formatting and comments never perturb it (schema 2.8). */
@@ -228,18 +270,8 @@ export function compileProject(source: SourceProject): CompileResult {
       // ladder is caught at publish, in the same pass every declaration walks.
       if (d.type === "quality") {
         const ref = `@${scopeLabel}.${d.name}`;
-        if (d.stages === undefined || d.stages.length === 0) {
-          report({ severity: "error", path, where: `${scopeLabel}.${d.name}`, message: `quality "${ref}" declares no stages - a quality is its ladder` });
-        } else {
-          const seen = new Set<string>();
-          for (const stage of d.stages) {
-            if (seen.has(stage)) report({ severity: "error", path, where: `${scopeLabel}.${d.name}`, message: `quality "${ref}" lists stage "${stage}" twice` });
-            seen.add(stage);
-          }
-          if (typeof d.default !== "string" || !seen.has(d.default)) {
-            report({ severity: "error", path, where: `${scopeLabel}.${d.name}`, message: `quality "${ref}" defaults to ${JSON.stringify(d.default)}, which is not one of its stages` });
-          }
-        }
+        const where = `${scopeLabel}.${d.name}`;
+        for (const message of qualityDeclarationMessages(`quality "${ref}"`, d.stages, d.default)) report({ severity: "error", path, where, message });
       }
       if (isValidPropertyName(d.name)) continue;
       const suggestion = propertyNameify(d.name);
@@ -306,7 +338,7 @@ export function compileProject(source: SourceProject): CompileResult {
   // vocabulary's: accepted and unchecked, as before the folder existed.
   const declaredTokens = gameTokens(merged, OWN_SCOPES);
   const otherTokens = [...new Set([...EXTERNAL_SCOPES, ...declaredTokens])];
-  const dialect = storyletsDialectWith(declaredTokens);
+  const dialect = projectDialect(source);
   const otherSchema = merged ? scopesSchema(merged, { except: OWN_SCOPES }).properties : undefined;
   const checkedTokens = new Set(otherSchema ? [...otherSchema.keys()] : []);
 
@@ -796,6 +828,48 @@ export function compileProject(source: SourceProject): CompileResult {
       }
     };
 
+    // The two templates' declarations (patterkit design/family-parity-2026-10.md
+    // items 8 and 9): values were always held to their template, and now the
+    // template is held to the family's rule too. A name, once; a type from the
+    // one list; values for an enum or flags; a default that fits, compulsory
+    // here; and for a quality, the ladder rule Patter checks as well.
+    const checkFieldDecls = (decls: FieldDecl[] | undefined, outcome: boolean): void => {
+      const field = outcome ? "outcomeFields" : "fields";
+      const at = { severity: "error" as const, path: boxPath, where: effectiveGameId(boxDecl), field };
+      const seen = new Set<string>();
+      for (const d of decls ?? []) {
+        if (typeof d.name !== "string" || d.name.trim() === "") {
+          report({ ...at, message: outcome ? "an outcome field has no name" : "a card template field has no name" });
+          continue;
+        }
+        if (seen.has(d.name)) {
+          report({ ...at, message: outcome ? `the outcome fields declare field "${d.name}" twice` : `the card template declares field "${d.name}" twice` });
+        }
+        seen.add(d.name);
+        const subject = `${outcome ? "outcome" : "card template"} field "${d.name}"`;
+        if (!(FIELD_TYPES as readonly string[]).includes(d.type) && d.type !== "string") {
+          report({ ...at, message: `${subject} has type ${JSON.stringify(d.type)}, which is not a field type (text, multiline, number, boolean, enum, flags or quality)` });
+          continue;
+        }
+        if (d.type === "quality") {
+          const quality = `quality field "${d.name}" on the ${outcome ? "outcome fields" : "card template"}`;
+          for (const message of qualityDeclarationMessages(quality, d.stages, d.default)) report({ ...at, message });
+          continue;
+        }
+        if ((d.type === "enum" || d.type === "flags") && (d.values ?? []).length === 0) {
+          report({ ...at, message: `${subject} is ${d.type} but declares no values` });
+          continue;
+        }
+        if (d.default === undefined) {
+          report({ ...at, message: `${subject} has no default` });
+        } else if (!(fieldValueFits(d, d.default) || (d.type === "enum" && d.default === ""))) {
+          report({ ...at, message: `${subject} defaults to ${JSON.stringify(d.default)}, which does not fit its type "${d.type}"` });
+        }
+      }
+    };
+    checkFieldDecls(boxDecl.fields, false);
+    checkFieldDecls(boxDecl.outcomeFields, true);
+
     // Decks and cards.
     const fieldDecls = new Map((boxDecl.fields ?? []).map((f) => [f.name, f]));
     const outcomeFieldDecls = new Map((boxDecl.outcomeFields ?? []).map((f) => [f.name, f]));
@@ -804,8 +878,10 @@ export function compileProject(source: SourceProject): CompileResult {
     // names the shard key the problem is under, which is how the editor knows
     // which page to open.
     const checkFields = (
-      decls: Map<string, { type: string; values?: string[] }>, values: Record<string, unknown> | undefined,
+      decls: Map<string, FieldDecl>, values: Record<string, unknown> | undefined,
       template: string, field: string, path: string, where: string,
+      /** Whose values these are, by id, for the stage picker's quick fix. */
+      holder: { deck: string; card: string; outcome?: string },
     ): void => {
       for (const [name, value] of Object.entries(values ?? {})) {
         const decl = decls.get(name);
@@ -813,12 +889,15 @@ export function compileProject(source: SourceProject): CompileResult {
           report({ severity: "error", path, where, field, message: `field "${name}" is not in the box's ${template}` });
           continue;
         }
-        const ok = decl.type === "number" ? typeof value === "number"
-          : decl.type === "boolean" ? typeof value === "boolean"
-          : decl.type === "flags" ? Array.isArray(value) && value.every((x) => typeof x === "string" && (decl.values ?? []).includes(x))
-          : decl.type === "enum" ? typeof value === "string" && (decl.values ?? []).includes(value)
-          : typeof value === "string";
-        if (!ok) {
+        // A stage off the ladder says so in its own words: it is what a
+        // deleted or renamed stage leaves behind, and the editor offers the
+        // stages either side (patter-qualities.md section 2).
+        if (decl.type === "quality" && typeof value === "string" && !(decl.stages ?? []).includes(value)) {
+          report({ severity: "error", path, where, field, message: `field "${name}" is ${JSON.stringify(value)}, which is not one of its stages`,
+            fix: { kind: "pick-stage", ...holder, field: name, bad: value, options: [...(decl.stages ?? [])] } });
+          continue;
+        }
+        if (!fieldValueFits(decl, value)) {
           report({ severity: "error", path, where, field, message: `field "${name}" does not match its declared type "${decl.type}"` });
         }
       }
@@ -886,7 +965,7 @@ export function compileProject(source: SourceProject): CompileResult {
             message: `durable, but its redraw is ${JSON.stringify(card.redraw ?? "always")}: only "never" means anything past the run, since a cooldown is a turn of a clock that resets with it` });
         }
 
-        checkFields(fieldDecls, card.fields, "card template", "fields", path, effectiveGameId(card));
+        checkFields(fieldDecls, card.fields, "card template", "fields", path, effectiveGameId(card), { deck: deckDecl.id, card: card.id });
 
         const outcomeGameIds = new Map<string, string>();
         const outcomes: Outcome<Expression>[] = [];
@@ -894,7 +973,8 @@ export function compileProject(source: SourceProject): CompileResult {
           claimId(outcome.id, path, `${effectiveGameId(card)}/${effectiveGameId(outcome)}`);
           checkGameId("outcome", outcome, path);
           uniqueGameIds(`outcome (card "${effectiveGameId(card)}")`, outcomeGameIds, effectiveGameId(outcome), path);
-          checkFields(outcomeFieldDecls, outcome.fields, "outcome fields", "outcomeFields", path, `${effectiveGameId(card)}/${effectiveGameId(outcome)}`);
+          checkFields(outcomeFieldDecls, outcome.fields, "outcome fields", "outcomeFields", path, `${effectiveGameId(card)}/${effectiveGameId(outcome)}`,
+            { deck: deckDecl.id, card: card.id, outcome: outcome.id });
           const changes: Record<string, Expression> = {};
           for (const [target, src] of Object.entries(outcome.changes ?? {})) {
             const match = changeTarget.exec(target);

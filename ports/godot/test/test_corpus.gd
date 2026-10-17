@@ -24,7 +24,7 @@ extends SceneTree
 ## Ops that run ON a flow, and so open one lazily. Everything else must not.
 const FLOW_OPS := ["setState", "peek", "deal", "assertBoard", "play",
 	"advanceTurns", "assertOutcomes", "assertOutcomeOrder", "assertOutcomeFields",
-	"assertState"]
+	"assertCardFields", "assertState"]
 
 ## The load report's comparison separator: a UNIT SEPARATOR, because it cannot
 ## occur in an id, a gameId or a property name.
@@ -136,8 +136,20 @@ func _run_all() -> void:
 	_runner_finished = false
 	var xe := _run_expressions(x_expr)
 	_check_runner("expr/expressions")
-	print("expr corpus v%d - prng: %d/%d  expressions: %d/%d" % [
-		int(expr_root["version"]), xp, x_prng.size(), xe, x_expr.size()])
+	# Corpus v4's two families: gates over quality ladders, and the host's stage
+	# helpers. Absent is a failure, as the file itself is.
+	if not (expr_root.has("qualities") and expr_root.has("stages")):
+		_fail("expr corpus", "families", "no qualities or stages family (corpus v4)")
+	var x_qual: Array = expr_root.get("qualities", [])
+	var x_stage: Array = expr_root.get("stages", [])
+	_runner_finished = false
+	var xq := _run_expressions(x_qual, "qualities")
+	_check_runner("expr/qualities")
+	_runner_finished = false
+	var xs := _run_stages(x_stage)
+	_check_runner("expr/stages")
+	print("expr corpus v%d - prng: %d/%d  expressions: %d/%d  qualities: %d/%d  stages: %d/%d" % [
+		int(expr_root["version"]), xp, x_prng.size(), xe, x_expr.size(), xq, x_qual.size(), xs, x_stage.size()])
 
 	# The registry corpus sits beside it too, vendored from ../expr: the contract every
 	# copy of the ScopeRegistry runs, the `writable` rule included, here through
@@ -375,7 +387,7 @@ func _run_expr_prng(cases: Array) -> int:
 
 # -- expressions ------------------------------------------------------------------
 
-func _run_expressions(cases: Array) -> int:
+func _run_expressions(cases: Array, family := "expressions") -> int:
 	var pass_count := 0
 	for c in cases:
 		var name: String = c["name"]
@@ -383,7 +395,7 @@ func _run_expressions(cases: Array) -> int:
 		# form the corpus carries, with no deserialise pass.
 		var node = c["ast"]
 		if not (node is Array):
-			_fail("expressions", name, "malformed AST")
+			_fail(family, name, "malformed AST")
 			continue
 		# The reference runner always supplies a PRNG (seed ?? 0).
 		var prng := StoryletMulberry32.new(int(c.get("seed", 0)))
@@ -391,20 +403,59 @@ func _run_expressions(cases: Array) -> int:
 			"scopes": _scopes_of(c),
 			"host": {"next_random": func() -> float: return prng.next()},
 		}
+		# A quality case's ladders, keyed "scope.name", answer the evaluator's
+		# quality channel.
+		if c.has("qualities"):
+			var ladders: Dictionary = c["qualities"]
+			ctx["qualities"] = func(scope: String, prop: String) -> Variant: return ladders.get(scope + "." + prop)
 		var actual = StoryletExpression.evaluate(node, ctx, _dialect)
 		if c.get("expectError", false):
 			if StoryletExpression.is_error(actual):
 				pass_count += 1
 			else:
-				_fail("expressions", name, "expected an eval error, got %s" % StoryletValues.show(actual))
+				_fail(family, name, "expected an eval error, got %s" % StoryletValues.show(actual))
 		elif StoryletExpression.is_error(actual):
-			_fail("expressions", name, "unexpected error: %s" % actual.message)
+			_fail(family, name, "unexpected error: %s" % actual.message)
 		else:
 			var expected = StoryletValues.to_value(c.get("expected"))
 			if StoryletValues.value_equals(actual, expected):
 				pass_count += 1
 			else:
-				_fail("expressions", name, "expected %s, got %s" % [StoryletValues.show(expected), StoryletValues.show(actual)])
+				_fail(family, name, "expected %s, got %s" % [StoryletValues.show(expected), StoryletValues.show(actual)])
+	_runner_finished = true
+	return pass_count
+
+
+## The host's stage helpers over a ladder (corpus v4), through the vendored
+## kernel: a position, -1, 0, 1 or a stage name, or an EvalError where the case
+## expects one.
+func _run_stages(cases: Array) -> int:
+	var pass_count := 0
+	for c in cases:
+		var name: String = c["name"]
+		var ladder: Array = c["ladder"]
+		var args: Array = c["args"]
+		var actual = null
+		match str(c["call"]):
+			"index": actual = StoryletExpression.stage_index(ladder, args[0])
+			"compare": actual = StoryletExpression.compare_stages(ladder, args[0], args[1])
+			"next": actual = StoryletExpression.next_stage(ladder, args[0])
+			_: actual = StoryletExpression.error("unknown call %s" % c["call"])
+		if c.get("expectError", false):
+			if StoryletExpression.is_error(actual):
+				pass_count += 1
+			else:
+				_fail("stages", name, "expected an error, got %s" % str(actual))
+		elif StoryletExpression.is_error(actual):
+			_fail("stages", name, "unexpected error: %s" % actual.message)
+		else:
+			var expected = c["expected"]
+			var same: bool = (actual is String and expected is String and actual == expected) \
+				or (not (actual is String) and not (expected is String) and float(actual) == float(expected))
+			if same:
+				pass_count += 1
+			else:
+				_fail("stages", name, "expected %s, got %s" % [str(expected), str(actual)])
 	_runner_finished = true
 	return pass_count
 
@@ -807,6 +858,31 @@ func _run_scripted_case(c: Dictionary) -> Array:
 							break
 				if not _same_field_sets(got_fields, want_fields):
 					failures.append("%s: expected %s, got %s" % [at, _show_field_sets(want_fields), _show_field_sets(got_fields)])
+
+			"assertCardFields":
+				# A card's fields as the board hands them over: raw, sparse, no
+				# default filled in. A card carrying none reads as an EMPTY
+				# dictionary, not a missing key.
+				var from_key: String = names.get(op["from"], op["from"])
+				var on_board: Array = session.board().get(from_key, [])
+				var want_cards: Dictionary = op["expect"]
+				var got_cards := {}
+				for card_id in want_cards:
+					var found = null
+					for v in on_board:
+						if v["id"] == card_id:
+							found = v
+							break
+					if found == null:
+						failures.append("%s: %s is not on board[%s]" % [at, card_id, op["from"]])
+					elif op.has("effective"):
+						# Through the helper and the box's declarations.
+						got_cards[card_id] = StoryletEngine.effective_fields(
+							StoryletEngine.field_decls(bundle, str(op["effective"]["box"])), found.get("fields", {}))
+					else:
+						got_cards[card_id] = found.get("fields", {})
+				if got_cards.size() == want_cards.size() and not _same_field_sets(got_cards, want_cards):
+					failures.append("%s: expected %s, got %s" % [at, _show_field_sets(want_cards), _show_field_sets(got_cards)])
 
 			"assertState":
 				for path in op["expect"]:

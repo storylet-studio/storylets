@@ -71,14 +71,37 @@ export interface PropertyDecl {
   purpose?: string;
 }
 
+/**
+ * A field's type: the family's one list, shared with Patter's game data
+ * (patterkit design/family-parity-2026-10.md item 9). `text` is the spelling;
+ * `string` is read as a synonym, the spelling fields had before 2026-10, and
+ * means exactly what `text` does. `multiline` is text a writer expects to run
+ * to more than one line. A `quality` field is a stage of its own ladder
+ * (`stages`), compared by position by a host, never by the engine.
+ */
+export type FieldType = "text" | "multiline" | "string" | "number" | "boolean" | "enum" | "flags" | "quality";
+
+/** Every field type, in the order an editor offers them (`string` left out:
+ *  it is read, never offered). */
+export const FIELD_TYPES: readonly FieldType[] = ["text", "multiline", "number", "boolean", "enum", "flags", "quality"];
+
+/** Is this field type text of either shape (`text`, `multiline`, `string`)? */
+export const isTextFieldType = (type: string): boolean => type === "text" || type === "multiline" || type === "string";
+
 /** A template field (box-defined), of the card template or of the outcome
  *  fields. Data for the host; the engine never interprets fields and they are
- *  not addressable from expressions. */
+ *  not addressable from expressions. The bundle carries the declaration as
+ *  written, `string` included. */
 export interface FieldDecl {
   name: string;
-  type: PropertyType;
+  type: FieldType;
+  /** Required. For an enum, one of `values` or `""` (none chosen); for flags,
+   *  a subset of `values`; for a quality, one of `stages`. */
   default: ScalarValue;
   values?: string[];
+  /** A quality's ordered ladder, by the family's one rule (at least two
+   *  stages, none empty, none twice; `@wildwinter/expr`). */
+  stages?: string[];
   purpose?: string;
 }
 

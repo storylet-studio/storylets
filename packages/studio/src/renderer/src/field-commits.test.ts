@@ -28,7 +28,7 @@ const host = (over: Partial<InspectorHost> = {}): InspectorHost => ({
   openThreads: () => 0, showComments: vi.fn(),
   saveCard: vi.fn(), saveDeckConfig: vi.fn(), deleteCard: vi.fn(),
   saveBox: vi.fn(), saveTemplate: vi.fn(), saveTagGroup: vi.fn(), saveHand: vi.fn(),
-  deleteTemplate: vi.fn(), deleteTagGroup: vi.fn(), deleteHand: vi.fn(), setGroupSpatial: vi.fn(),
+  deleteTemplate: vi.fn(), deleteTagGroup: vi.fn(), deleteHand: vi.fn(), setGroupSpatial: vi.fn(), renameStage: vi.fn(), stageGates: vi.fn(async () => 0),
   handCards: async () => null, deckCatalogue: async () => [], openCardFromHand: vi.fn(), newCardAtHand: vi.fn(), openHand: vi.fn(),
   ...over,
 });

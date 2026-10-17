@@ -23,6 +23,13 @@ the two styles will sit in one file, so it is better known in advance than disco
 ### Changed
 
 - **`export-html` plays Patter scenes on Patterplay 0.26.0**, in place of 0.23.0. Nothing changes in how they play.
+- **`validate` and `build` refuse a quality with fewer than two stages**, or with a stage that has
+  no name, by the rule Patter checks too.
+- **Field declarations are checked**: a name, used once in its template; a type from `text`,
+  `multiline`, `number`, `boolean`, `enum`, `flags` and `quality` (`string` still reads as
+  `text`); values for `enum` and `flags`; a default that fits; and a quality field's stages. A
+  card's or outcome's value for a quality field must be one of its stages.
+- **The codex kit's `body` field is `multiline`.**
 
 ### Fixed
 

@@ -422,6 +422,8 @@ export function createActions(ctx: ActionsContext) {
     saveTemplate: saves.saveTemplate,
     saveTagGroup: saves.saveTagGroup,
     saveHand: saves.saveHand,
+    renameStage: saves.renameStage,
+    stageGates: (target) => studio.stageGates(target),
     // Through the guard, like every other route to deleting a card: this one is
     // the card's own page, where the content at risk is on screen in front of you.
     deleteCard: (deckId, cardId) => void deleteCards(deckId, [cardId]),

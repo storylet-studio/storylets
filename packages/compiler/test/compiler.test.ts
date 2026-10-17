@@ -1253,6 +1253,108 @@ describe("publish-gate validation", () => {
     });
   });
 
+  // --- field declarations (patterkit design/family-parity-2026-10.md items 8
+  // and 9, and patter-qualities.md section 1) ---------------------------------
+  //
+  // Values were always checked against their template; the template itself
+  // never was. A declaration now has a name, once; a type from the family's
+  // one list; values for an enum or flags; a default that fits; and, for a
+  // quality, a ladder by the rule Patter checks too.
+  describe("field declarations", () => {
+    const said = (fields: unknown[], cards: unknown[] = [], outcomeFields?: unknown[]) =>
+      errors(compileFiles(minimal(cards, { fields, ...(outcomeFields ? { outcomeFields } : {}) })).issues);
+    const ACT = { name: "act", type: "quality", default: "arrival", stages: ["arrival", "act-1", "act-2"] };
+
+    it("accepts every type on the family's list, string read as text", () => {
+      expect(said([
+        { name: "a", type: "text", default: "" },
+        { name: "b", type: "multiline", default: "Two\nlines" },
+        { name: "c", type: "string", default: "" },
+        { name: "d", type: "number", default: 0 },
+        { name: "e", type: "boolean", default: false },
+        { name: "f", type: "enum", default: "red", values: ["red", "blue"] },
+        { name: "g", type: "flags", default: [], values: ["met", "warm"] },
+        ACT,
+      ])).toEqual([]);
+    });
+
+    it("accepts an enum default left at none, which is what Storyletter writes", () => {
+      expect(said([{ name: "f", type: "enum", default: "", values: ["red", "blue"] }])).toEqual([]);
+    });
+
+    it("refuses a field with no name", () => {
+      expect(said([{ name: " ", type: "text", default: "" }])).toContain("a card template field has no name");
+    });
+
+    it("refuses a name declared twice, in either template", () => {
+      expect(said([{ name: "cue", type: "text", default: "" }, { name: "cue", type: "number", default: 0 }]))
+        .toContain('the card template declares field "cue" twice');
+      expect(said([], [], [{ name: "after", type: "text", default: "" }, { name: "after", type: "text", default: "" }]))
+        .toContain('the outcome fields declare field "after" twice');
+    });
+
+    it("refuses a type that is not on the list", () => {
+      expect(said([{ name: "when", type: "date", default: "" }]))
+        .toContain('card template field "when" has type "date", which is not a field type (text, multiline, number, boolean, enum, flags or quality)');
+    });
+
+    it("refuses an enum or flags with no values", () => {
+      const e = said([{ name: "f", type: "enum", default: "" }, { name: "g", type: "flags", default: [], values: [] }]);
+      expect(e).toContain('card template field "f" is enum but declares no values');
+      expect(e).toContain('card template field "g" is flags but declares no values');
+    });
+
+    it("refuses a missing default: a field's default is compulsory", () => {
+      expect(said([{ name: "cue", type: "text" }])).toContain('card template field "cue" has no default');
+    });
+
+    it("refuses a default that does not fit the type", () => {
+      const e = said([
+        { name: "n", type: "number", default: "three" },
+        { name: "f", type: "enum", default: "green", values: ["red", "blue"] },
+        { name: "g", type: "flags", default: ["cold"], values: ["met", "warm"] },
+        { name: "t", type: "multiline", default: 4 },
+      ]);
+      expect(e).toContain('card template field "n" defaults to "three", which does not fit its type "number"');
+      expect(e).toContain('card template field "f" defaults to "green", which does not fit its type "enum"');
+      expect(e).toContain('card template field "g" defaults to ["cold"], which does not fit its type "flags"');
+      expect(e).toContain('card template field "t" defaults to 4, which does not fit its type "multiline"');
+    });
+
+    it("holds a quality field to the family's ladder rule", () => {
+      expect(said([{ ...ACT, stages: undefined }])).toContain('quality field "act" on the card template declares no stages - a quality is its ladder');
+      expect(said([{ ...ACT, stages: ["arrival"] }])).toContain('quality field "act" on the card template declares only one stage - a ladder needs at least two');
+      expect(said([{ ...ACT, stages: ["arrival", "act-1", "arrival"] }])).toContain('quality field "act" on the card template lists stage "arrival" twice');
+      expect(said([{ ...ACT, default: "finale" }])).toContain('quality field "act" on the card template defaults to "finale", which is not one of its stages');
+    });
+
+    it("checks a quality field's value is one of its stages", () => {
+      expect(said([ACT], [{ id: "c_1", gameId: "c1", fields: { act: "act-2" }, outcomes: [] }])).toEqual([]);
+      const e = said([ACT], [{ id: "c_1", gameId: "c1", fields: { act: "finale" }, outcomes: [] }]);
+      expect(e).toContain('field "act" is "finale", which is not one of its stages');
+    });
+
+    it("offers the field's stages, in ladder order, for a value off the ladder", () => {
+      const result = compileFiles(minimal([{ id: "c_1", gameId: "c1", fields: { act: "finale" }, outcomes: [] }], { fields: [ACT] }));
+      const issue = result.issues.find((i) => i.message.includes("not one of its stages"))!;
+      expect(issue.fix).toEqual({ kind: "pick-stage", deck: "k_1", card: "c_1", field: "act", bad: "finale", options: ["arrival", "act-1", "act-2"] });
+    });
+
+    it("checks multiline and text values are text", () => {
+      const e = said([{ name: "body", type: "multiline", default: "" }, { name: "cue", type: "text", default: "" }],
+        [{ id: "c_1", gameId: "c1", fields: { body: 3, cue: true }, outcomes: [] }]);
+      expect(e).toContain('field "body" does not match its declared type "multiline"');
+      expect(e).toContain('field "cue" does not match its declared type "text"');
+    });
+
+    it("carries the declaration into the bundle as written, stages and the string spelling included", () => {
+      const fields = [ACT, { name: "cue", type: "string", default: "" }];
+      const result = compileFiles(minimal([], { fields }));
+      expect(errors(result.issues)).toEqual([]);
+      expect(result.bundle!.boxes[0]!.fields).toEqual(fields);
+    });
+  });
+
   it("flags a hand pointing at a missing template", () => {
     const result = compileFiles(minimal([], {
       hands: [{ id: "h_1", gameId: "h1", template: "t_missing" }],
@@ -1586,6 +1688,19 @@ describe("quality declarations", () => {
   it("refuses a quality with no stages: a quality is its ladder", () => {
     const e = errsFor([{ name: "debt", type: "quality", default: "quiet" }]);
     expect(e.some((m) => m.includes("declares no stages"))).toBe(true);
+  });
+
+  // The family's one rule (patterkit design/proposals/patter-qualities.md
+  // section 6), shared with Patter through @wildwinter/expr: a one-rung
+  // ladder has nothing to order. This used to pass here and fail in Patter.
+  it("refuses a quality with only one stage", () => {
+    const e = errsFor([{ name: "debt", type: "quality", default: "quiet", stages: ["quiet"] }]);
+    expect(e.some((m) => m.includes('quality "@story.debt" declares only one stage - a ladder needs at least two'))).toBe(true);
+  });
+
+  it("refuses a stage with no name, saying which", () => {
+    const e = errsFor([{ name: "debt", type: "quality", default: "quiet", stages: ["quiet", " ", "loud"] }]);
+    expect(e.some((m) => m.includes('quality "@story.debt" has a stage with no name (stage 2)'))).toBe(true);
   });
 
   it("refuses a repeated rung, which would make the order ambiguous", () => {

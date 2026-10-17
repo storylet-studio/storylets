@@ -32,11 +32,12 @@ import { chipDot, commentBubble, listMeta, moreMenu } from "./widgets.js";
 import { boxColour } from "./box-tint.js";
 import { mountChanges, mountCondition, previewCondition } from "./expr-panels.js";
 import { mountPropertyList, valueControl } from "./prop-list.js";
+import type { PropListOptions } from "./prop-list.js";
 import { shows } from "./play-ladder.js";
 import { hoistableProperties, hoistProperty } from "./tag-hoist.js";
 import type {
   BindingDto, BoxDto, BoxEdit, CardDto, CardEdit, ConditionProperty, DeckDto, DeckEdit,
-  FieldDeclDto, HandCardGate, HandCardRef, HandCardsDto, HandDetail, HandEdit, OutcomeDto, OutcomeEdit, PropertyDeclDto,
+  FieldDeclDto, StageTargetDto, HandCardGate, HandCardRef, HandCardsDto, HandDetail, HandEdit, OutcomeDto, OutcomeEdit, PropertyDeclDto,
   TagGroupDetail, TagGroupEdit, TemplateDetail, TemplateEdit, ValueDetail,
 } from "../../shared/api.js";
 
@@ -78,6 +79,11 @@ export interface InspectorHost {
   deleteTemplate(boxId: string, templateId: string): void;
   deleteTagGroup(boxId: string, groupId: string): void;
   deleteHand(boxId: string, handId: string): void;
+  /** A quality's stage renamed: queued ahead of the list's own save, so every
+   *  value and literal naming it is carried in the same edit (ops `stages.ts`). */
+  renameStage(target: StageTargetDto, from: string, to: string): void;
+  /** How many gates order against a quality's ladder, for a reorder's note. */
+  stageGates(target: StageTargetDto): Promise<number>;
   /** Make this tag group a map, or stop. Traced outlines are kept either way. */
   setGroupSpatial(boxId: string, groupId: string, on: boolean): void;
   /** What could come up at a hand, tiered (main asks ops `placeTiers`). */
@@ -839,11 +845,16 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
  */
 function fieldRow(decl: FieldDeclDto, current: string, set: (value: string) => void, commit: () => void): HTMLElement {
   let control: HTMLElement;
-  if (decl.type === "boolean" || (decl.type === "enum" && (decl.values?.length ?? 0) > 0)) {
-    control = optionSelect(decl.type === "boolean" ? ["true", "false"] : decl.values!, current,
-      (v) => { set(v); commit(); }, { none: "(unset)" });
+  // A quality field picks a stage, in ladder order: the compiler refuses a
+  // value off the ladder, so free text would only invite the error.
+  const choices = decl.type === "boolean" ? ["true", "false"]
+    : decl.type === "enum" && (decl.values?.length ?? 0) > 0 ? decl.values!
+    : decl.type === "quality" && (decl.stages?.length ?? 0) > 0 ? decl.stages!
+    : undefined;
+  if (choices !== undefined) {
+    control = optionSelect(choices, current, (v) => { set(v); commit(); }, { none: "(unset)" });
   } else {
-    // string / number / flags: text, coerced on save. Committed as typed, so
+    // text / multiline / number / flags: text, coerced on save. Committed as typed, so
     // Cmd+S, Play and the review walk see it (it used to wait for the blur).
     const input = inputField(current, "insp-input insp-mono", { mode: "input", set, commit });
     input.placeholder = FIELD_PLACEHOLDER[decl.type] ?? "Value";
@@ -874,8 +885,19 @@ function slotsControl(bounded: boolean, size: string, choose: (slots: "unbounded
 /** What an empty field of each type asks for, in plain words (the house
  *  style: never an angle-bracketed stub). */
 const FIELD_PLACEHOLDER: Record<string, string> = {
-  string: "Text", number: "A number", flags: "Flags, separated by commas", enum: "A value",
+  text: "Text", multiline: "Text", string: "Text", number: "A number", flags: "Flags, separated by commas", enum: "A value",
 };
+
+/** The `stages` option for a list whose rows are qualities of one kind:
+ *  `make` names a row's quality from its declared name. A row with no name
+ *  yet has no quality to carry anything for. */
+function stagesOf(h: InspectorHost, make: (name: string) => StageTargetDto): NonNullable<PropListOptions["stages"]> {
+  return {
+    target: (decl) => (decl.name.trim() === "" ? undefined : make(decl.name)),
+    rename: (target, from, to) => h.renameStage(target, from, to),
+    gates: (target) => h.stageGates(target),
+  };
+}
 
 /** The shared declaration list (rule 6), wrapped for centre editors: mounts
  *  into a fresh host and feeds every change to the caller's autosave. */
@@ -884,7 +906,7 @@ function propList(
   /** A card TEMPLATE's fields, which are data for the host and carry no state:
    *  neither sharing axis applies to them. `rowExtras` hangs a line's worth at
    *  each row's end (prop-list.ts). */
-  opts: { sharingSwitches?: boolean; rowExtras?: (decl: PropertyDeclDto) => HTMLElement | null; shareScope?: ShareScope } = {},
+  opts: Pick<PropListOptions, "sharingSwitches" | "fieldTypes" | "rowExtras" | "shareScope" | "stages"> = {},
 ): HTMLElement {
   const host = el("div", { className: "prop-list" });
   mountPropertyList(host, decls, { onChange, addLabel, ...opts });
@@ -1443,7 +1465,8 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
 
     if (tab === "properties") {
       if (standalone()) {
-        view.append(propPanel(edit.properties ?? [], commit, "+ Property", { shareScope: "hand" }),
+        view.append(propPanel(edit.properties ?? [], commit, "+ Property", { shareScope: "hand",
+          stages: stagesOf(h, (name) => ({ kind: "property", scope: "hand", box: box.id, holder: detail.id, name })) }),
           el("p", { className: "doc-tab-note", text: "Properties this hand carries for its cards, as @hand." }));
       } else {
         view.append(el("p", { className: "doc-tab-note", text: "These come from this hand's template. Edit them there and every hand of that kind follows." }));
@@ -1625,7 +1648,8 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     // It has one now that a second list shares the page: an unlabelled list
     // above a labelled one reads as the labelled one's preamble.
     view.append(sectHead("Card fields"),
-      propPanel(fields, () => h.saveBox(box.id, { fields }), "+ Field", { sharingSwitches: false }),
+      propPanel(fields, () => h.saveBox(box.id, { fields }), "+ Field", { sharingSwitches: false, fieldTypes: true,
+        stages: stagesOf(h, (name) => ({ kind: "field", box: box.id, template: "fields", name })) }),
       el("p", { className: "doc-tab-note", text: "The fields every card in this box can carry." }));
     // The outcome half, on the SAME tab (2026-09-13). The tab vocabulary is
     // fixed (storyletter.md), and these are two halves of one template rather
@@ -1635,11 +1659,13 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
     // 6), same sharing answer: field data carries no state.
     const outcomeFields: FieldDeclDto[] = box.outcomeFields.map((f) => ({ ...f, values: f.values ? [...f.values] : undefined }));
     view.append(sectHead("Outcome fields"),
-      propPanel(outcomeFields, () => h.saveBox(box.id, { outcomeFields }), "+ Field", { sharingSwitches: false }),
+      propPanel(outcomeFields, () => h.saveBox(box.id, { outcomeFields }), "+ Field", { sharingSwitches: false, fieldTypes: true,
+        stages: stagesOf(h, (name) => ({ kind: "field", box: box.id, template: "outcomeFields", name })) }),
       el("p", { className: "doc-tab-note", text: "The fields every outcome in this box can carry. They're handed to the game with the press." }));
   } else {
     const properties: PropertyDeclDto[] = box.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
-    view.append(propPanel(properties, () => h.saveBox(box.id, { properties }), "+ Property", { shareScope: "box" }),
+    view.append(propPanel(properties, () => h.saveBox(box.id, { properties }), "+ Property", { shareScope: "box",
+      stages: stagesOf(h, (name) => ({ kind: "property", scope: "box", box: box.id, name })) }),
       el("p", { className: "doc-tab-note", text: "Properties the whole box carries, as @box." }));
   }
   centre.replaceChildren(view);
@@ -1686,7 +1712,8 @@ export function renderDeckTabBody(host: HTMLElement, box: BoxDto, deck: DeckDto,
     if (deckRows.length > 0) view.append(el("div", { className: "doc-panel cfg-panel" }, ...deckRows));
   } else {
     const properties: PropertyDeclDto[] = deck.properties.map((p) => ({ ...p, values: p.values ? [...p.values] : undefined }));
-    view.append(propPanel(properties, () => h.saveDeckConfig(deck.id, { properties }), "+ Property", { shareScope: "deck" }),
+    view.append(propPanel(properties, () => h.saveDeckConfig(deck.id, { properties }), "+ Property", { shareScope: "deck",
+      stages: stagesOf(h, (name) => ({ kind: "property", scope: "deck", deck: deck.id, name })) }),
       el("p", { className: "doc-tab-note", text: "Properties this deck carries for its cards, as @deck." }));
   }
   host.replaceChildren(view);
@@ -1756,7 +1783,8 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
     }
 
     if (tab === "properties") {
-      view.append(propPanel(edit.properties, commit, "+ Property", { shareScope: "hand" }),
+      view.append(propPanel(edit.properties, commit, "+ Property", { shareScope: "hand",
+        stages: stagesOf(h, (name) => ({ kind: "property", scope: "hand", box: box.id, holder: detail.id, name })) }),
         el("p", { className: "doc-tab-note", text: "Properties every hand of this kind carries as @hand, each with its own values." }));
       centre.replaceChildren(view);
       return;
@@ -1848,7 +1876,8 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
       down.disabled = i === edit.values.length - 1;
       block.append(el("div", { className: "insp-ohead" }, el("span", { className: "insp-kv" }, chipDot(v.gameId), name),
         el("span", { className: "insp-moves" }, up, down, del)));
-      block.append(bare("Tag properties", "When a hand with this tag is dealt to, these values appear as @hand.<name>.", propList(v.properties, commit, "+ Property", { shareScope: detail.projectMap === true ? "zone" : "tag" })));
+      block.append(bare("Tag properties", "When a hand with this tag is dealt to, these values appear as @hand.<name>.", propList(v.properties, commit, "+ Property", { shareScope: detail.projectMap === true ? "zone" : "tag",
+        ...(v.id !== undefined ? { stages: stagesOf(h, (name) => ({ kind: "property", scope: "hand", box: box.id, holder: v.id!, name })) } : {}) })));
       // What the GROUP declares, this tag's own starting value for each. One
       // row per declaration, using the same control the declaration's own
       // default uses, so a quality offers its stages here too.
@@ -1896,7 +1925,8 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
     const soloPointer = detail.projectMap === true && !shows("sharing")
       ? [soloSharePointer("doc-tab-note")] : [];
     view.append(section("Properties", detail.projectMap === true ? "every zone on the map has these" : "every tag in this group has these",
-      propList(edit.properties, () => { commit(); redraw(); }, "+ Property", { shareScope: detail.projectMap === true ? "zone" : "tag" }), ...soloPointer, ...nudge));
+      propList(edit.properties, () => { commit(); redraw(); }, "+ Property", { shareScope: detail.projectMap === true ? "zone" : "tag",
+        stages: stagesOf(h, (name) => ({ kind: "property", scope: "hand", box: box.id, holder: detail.id, name })) }), ...soloPointer, ...nudge));
     view.append(section("Tags", "declared, not freeform", ...valBody, add));
 
     // The spatial template of play: this group is a map, so its tags carry outlines

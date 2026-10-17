@@ -205,6 +205,17 @@ export type ScriptOp =
    *  bundle wrote them: game data the engine passes through and never reads
    *  (schema 2.7). An outcome with none reads as `{}`. */
   | { op: "assertOutcomeFields"; flow?: string; card: string; from: string; expect: Record<string, Record<string, ScalarValue>> }
+  /** The FIELDS each named card (by id) carries on a hand's board, exactly
+   *  as the bundle wrote them: raw and sparse, a declared default never filled
+   *  in, so "the card sets nothing" stays distinct from "the card sets the
+   *  default". A card with none reads as `{}`. Every named card must be on
+   *  the board. With `effective`, the same fields through the helper. */
+  | { op: "assertCardFields"; flow?: string; from: string; expect: Record<string, Record<string, ScalarValue>>;
+      /** Read through the runtime's `effectiveFields` with the declarations
+       *  of `box` (a gameId or id): every declared field filled from its
+       *  default where the card sets none (patterkit
+       *  design/family-parity-2026-10.md item 7). */
+      effective?: { box: string } }
   /** Paths: "turn.b_x", "story.gold", "value.docks.danger", "box.x.heat",
    *  "world.x", ... - read on the op's flow (the merged view). The owner
    *  segment is a gameId (4.4), box-qualified for a tag gameId two boxes

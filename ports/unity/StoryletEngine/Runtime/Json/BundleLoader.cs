@@ -467,6 +467,7 @@ namespace StoryletStudio.StoryletEngine
                 Type = o.Value<string>("type"),
                 Default = o["default"] != null ? StoryletJson.ToValue(o["default"]) : null,
                 Values = ParseStringList(o["values"]),
+                Stages = ParseStringList(o["stages"]),
                 Purpose = o.Value<string>("purpose"),
             };
         }

@@ -94,11 +94,20 @@ namespace StoryletStudio.StoryletEngine.TestHost
             var exprRoot = JObject.Parse(File.ReadAllText(exprPath));
             var xprng = (JArray)exprRoot["prng"];
             var xexpr = (JArray)exprRoot["expressions"];
+            // Corpus v4's two families: gates over quality ladders, and the host's
+            // stage helpers. Absent is a failure, as the file itself is.
+            var xqual = exprRoot["qualities"] as JArray;
+            var xstage = exprRoot["stages"] as JArray;
+            if (xqual == null || xstage == null) Fail("expr corpus", "families", "no qualities or stages family (corpus v4)");
+            xqual ??= new JArray();
+            xstage ??= new JArray();
             int xp = RunExprPrng(xprng);
-            int xe = RunExpressions(xexpr);
+            int xe = RunExpressions(xexpr, "expressions");
+            int xq = RunExpressions(xqual, "qualities");
+            int xs = RunStages(xstage);
             Console.WriteLine(
                 $"expr corpus v{exprRoot.Value<int>("version")} - " +
-                $"prng: {xp}/{xprng.Count}  expressions: {xe}/{xexpr.Count}");
+                $"prng: {xp}/{xprng.Count}  expressions: {xe}/{xexpr.Count}  qualities: {xq}/{xqual.Count}  stages: {xs}/{xstage.Count}");
 
             // The registry corpus (packages/scoperegistry/corpus.json in ../expr) sits beside
             // it too, and runs through the vendored shared ScopeRegistry. It is the registry's
@@ -289,7 +298,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
             return pass;
         }
 
-        private static int RunExpressions(JArray cases)
+        private static int RunExpressions(JArray cases, string family = "expressions")
         {
             int pass = 0;
             foreach (var c in cases.Cast<JObject>())
@@ -300,6 +309,13 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 {
                     var node = StoryletJson.ToAst(c["ast"]);
                     var ctx = ScopesContext((JObject)c["scopes"]);
+                    // A quality case's ladders, keyed "scope.name", answer the
+                    // evaluator's quality channel.
+                    if (c["qualities"] is JObject ladders)
+                    {
+                        ctx.Qualities = (scope, prop) =>
+                            ladders[scope + "." + prop] is JArray l ? l.Select(x => x.Value<string>()).ToList() : null;
+                    }
                     // The reference runner always supplies a PRNG (seed ?? 0).
                     var prng = new Mulberry32(SeedOf(c["seed"]));
                     ctx.Host = new StoryletsHost { NextRandom = prng.Next };
@@ -319,22 +335,72 @@ namespace StoryletStudio.StoryletEngine.TestHost
                     if (expectError)
                     {
                         if (error != null) pass++;
-                        else Fail("expressions", name, $"expected an eval error, got {actual.ToJsonString()}");
+                        else Fail(family, name, $"expected an eval error, got {actual.ToJsonString()}");
                     }
                     else if (error != null)
                     {
-                        Fail("expressions", name, $"unexpected error: {error}");
+                        Fail(family, name, $"unexpected error: {error}");
                     }
                     else
                     {
                         var expected = StoryletJson.ToValue(c["expected"]);
                         if (actual.ValueEquals(expected)) pass++;
-                        else Fail("expressions", name, $"expected {expected.ToJsonString()}, got {actual.ToJsonString()}");
+                        else Fail(family, name, $"expected {expected.ToJsonString()}, got {actual.ToJsonString()}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    Fail("expressions", name, ex.Message);
+                    Fail(family, name, ex.Message);
+                }
+            }
+            return pass;
+        }
+
+        /// <summary>The host's stage helpers over a ladder (corpus v4), through
+        /// the vendored kernel's Stages: a position, -1, 0, 1 or a stage name,
+        /// or an error where the case expects one.</summary>
+        private static int RunStages(JArray cases)
+        {
+            int pass = 0;
+            foreach (var c in cases.Cast<JObject>())
+            {
+                var name = c.Value<string>("name");
+                var expectError = c.Value<bool?>("expectError") ?? false;
+                var ladder = ((JArray)c["ladder"]).Select(x => x.Value<string>()).ToList();
+                var args = ((JArray)c["args"]).Select(StoryletJson.ToValue).ToList();
+                object actual = null;
+                string error = null;
+                try
+                {
+                    switch (c.Value<string>("call"))
+                    {
+                        case "index": actual = (double)Stages.Index(ladder, args[0]); break;
+                        case "compare": actual = (double)Stages.Compare(ladder, args[0], args[1]); break;
+                        case "next": actual = Stages.Next(ladder, args[0]); break;
+                        default: error = $"unknown call {c.Value<string>("call")}"; break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    error = ex.Message;
+                }
+                if (expectError)
+                {
+                    if (error != null) pass++;
+                    else Fail("stages", name, $"expected an error, got {actual}");
+                }
+                else if (error != null)
+                {
+                    Fail("stages", name, $"unexpected error: {error}");
+                }
+                else
+                {
+                    var expected = c["expected"];
+                    var same = expected.Type == JTokenType.String
+                        ? actual is string str && str == expected.Value<string>()
+                        : actual is double d && d == expected.Value<double>();
+                    if (same) pass++;
+                    else Fail("stages", name, $"expected {expected}, got {actual}");
                 }
             }
             return pass;
@@ -615,6 +681,7 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 case "assertOutcomes":
                 case "assertOutcomeOrder":
                 case "assertOutcomeFields":
+                case "assertCardFields":
                 case "assertState":
                     return true;
                 default:
@@ -1498,6 +1565,35 @@ namespace StoryletStudio.StoryletEngine.TestHost
                             var view = views.Find(v => v.GameId == pair.Key);
                             var actual = view != null ? view.Fields : null;
                             var expected = (JObject)pair.Value;
+                            if (!FieldsMatch(actual, expected))
+                            {
+                                failures.Add($"{at}: {pair.Key} expected {ShowJsonFields(expected)}, got {ShowFields(actual)}");
+                            }
+                        }
+                        break;
+                    }
+
+                    case "assertCardFields":
+                    {
+                        // A card's fields as the board hands them over: raw,
+                        // sparse, no default filled in. A card that carries
+                        // none reads as an empty map.
+                        var from = op.Value<string>("from");
+                        var key = names.TryGetValue(from, out var mapped) ? mapped : from;
+                        var board = session.Board().GetOrDefault(key) ?? new List<DealtCard>();
+                        foreach (var pair in (JObject)op["expect"])
+                        {
+                            var card = board.Find(v => v.Id == pair.Key);
+                            if (card == null)
+                            {
+                                failures.Add($"{at}: {pair.Key} is not on board[{from}]");
+                                continue;
+                            }
+                            var expected = (JObject)pair.Value;
+                            // With `effective`, through the helper and the box's declarations.
+                            var actual = op["effective"] is JObject effective
+                                ? FieldHelpers.EffectiveFields(FieldHelpers.FieldDecls(bundle, effective.Value<string>("box")), card.Fields)
+                                : card.Fields;
                             if (!FieldsMatch(actual, expected))
                             {
                                 failures.Add($"{at}: {pair.Key} expected {ShowJsonFields(expected)}, got {ShowFields(actual)}");

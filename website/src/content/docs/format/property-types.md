@@ -77,7 +77,8 @@ A quality is an **ordered ladder of named stages**, and its value is always exac
 them. Declare `debt`, pick **quality**, and add the stages in story order, `quiet`, then
 `troubled`, then `confronted`. The order you give them is the ladder. That is why the stage
 chips can be reordered and the other lists can't, and the default is the first stage unless
-you pick another.
+you pick another. A quality needs at least two stages, each named once: a ladder with one
+rung has nothing to order.
 
 Because the stages are ordered, a card's condition can ask about position instead of listing
 names.
@@ -93,6 +94,12 @@ destination, so you can insert a stage into the middle of the ladder in producti
 every existing card still works. Play routes through whatever the ladder now says comes
 next, and saved games carry on, because a quality is stored as its stage **name** rather
 than as a position.
+
+Renaming a stage is the one edit that has to reach every place the name is written. Click a
+stage's name in Storyletter to rename it: its default, every card and tag set to it, and every
+condition that compares the quality with it follow, as one edit. Reordering the stages changes
+no value but changes what every `>=` means, so Storyletter says how many gates compare against
+the ladder when you do.
 
 Use a quality for the spine of an arc, the thing that only moves forwards, one step at a
 time.

@@ -12,6 +12,7 @@
 #include "EditorFramework/AssetImportData.h"
 #endif
 
+using StoryletConvert::Std;
 using StoryletConvert::Ue;
 using StoryletConvert::PropertyTypeFrom;
 
@@ -217,3 +218,55 @@ void UStoryletBundle::PostLoad()
 			*GetName(), *LoadError);
 	}
 }
+
+namespace
+{
+	storylets::OrderedMap<std::string, storylets::StoryletValue> FieldsFromUe(const TArray<FStoryletFieldEntry>& Fields)
+	{
+		storylets::OrderedMap<std::string, storylets::StoryletValue> Out;
+		for (const FStoryletFieldEntry& E : Fields) Out.set(Std(E.Name), StoryletValueFromUe(E.Value));
+		return Out;
+	}
+
+	TArray<FStoryletFieldEntry> FieldsToUe(const storylets::OrderedMap<std::string, storylets::StoryletValue>& Fields)
+	{
+		TArray<FStoryletFieldEntry> Out;
+		for (const auto& Pair : Fields)
+		{
+			FStoryletFieldEntry Entry;
+			Entry.Name = Ue(Pair.first);
+			Entry.Value = StoryletValueToUe(Pair.second);
+			Out.Add(MoveTemp(Entry));
+		}
+		return Out;
+	}
+}
+
+TArray<FStoryletFieldEntry> UStoryletBundle::GetEffectiveCardFields(const FString& Box, const TArray<FStoryletFieldEntry>& Fields) const
+{
+	if (!IsCompiled()) return Fields;
+	return FieldsToUe(storylets::EffectiveFields(storylets::FieldDecls(*Compiled->Bundle, Std(Box)), FieldsFromUe(Fields)));
+}
+
+TArray<FStoryletFieldEntry> UStoryletBundle::GetEffectiveOutcomeFields(const FString& Box, const TArray<FStoryletFieldEntry>& Fields) const
+{
+	if (!IsCompiled()) return Fields;
+	return FieldsToUe(storylets::EffectiveFields(storylets::OutcomeFieldDecls(*Compiled->Bundle, Std(Box)), FieldsFromUe(Fields)));
+}
+
+TArray<FString> UStoryletBundle::GetFieldStages(const FString& Box, const FString& Field, bool bOutcomeField) const
+{
+	TArray<FString> Out;
+	if (!IsCompiled()) return Out;
+	const std::vector<storylets::FieldDecl> Decls = bOutcomeField
+		? storylets::OutcomeFieldDecls(*Compiled->Bundle, Std(Box))
+		: storylets::FieldDecls(*Compiled->Bundle, Std(Box));
+	const std::string Name = Std(Field);
+	for (const storylets::FieldDecl& D : Decls)
+	{
+		if (D.name != Name || D.type != storylets::PropertyTypes::Quality || !D.stages.has_value()) continue;
+		for (const std::string& S : *D.stages) Out.Add(Ue(S));
+	}
+	return Out;
+}
+

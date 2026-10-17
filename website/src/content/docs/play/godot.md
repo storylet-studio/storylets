@@ -100,7 +100,10 @@ for outcome in flow.outcomes(card_id, hand_id):            # ask when you show t
 ```
 
 Card views and outcome views are Dictionaries. A card carries `id` and `gameId`, plus `title`,
-`purpose`, and `fields` when the card has them. An outcome carries `id`, `gameId`, and
+`purpose`, and `fields` when the card has them. `fields` holds only what the card sets;
+`StoryletEngine.effective_fields(StoryletEngine.field_decls(bundle, "village"), card["fields"])`
+fills in every declared default, and `StoryletExpression.compare_stages(decl, a, b)` orders a
+quality field's stages. An outcome carries `id`, `gameId`, and
 `available`, plus `title` and `purpose` when it has them, and `fields` when the box declares
 outcome fields. `play()` returns an error String, empty on
 success, and changes nothing if the outcome is gated shut or the card isn't in that hand. A

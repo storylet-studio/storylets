@@ -72,6 +72,25 @@ public:
 		meta = (DisplayName = "Describe Bundle"))
 	FStoryletBundleDescription DescribeBundle() const;
 
+	/** A dealt card's fields with every field the box's card template
+	 *  declares filled in from its default where the card sets none (a card's
+	 *  own Fields hold only what it sets, so "sets nothing" and "sets the
+	 *  default" stay apart). Then any field with no declaration, as it is. Box
+	 *  is the box's gameId (or id); an unknown box declares nothing. */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Fields")
+	TArray<FStoryletFieldEntry> GetEffectiveCardFields(const FString& Box, const TArray<FStoryletFieldEntry>& Fields) const;
+
+	/** The same for an outcome's fields, against the box's outcome fields. */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Fields")
+	TArray<FStoryletFieldEntry> GetEffectiveOutcomeFields(const FString& Box, const TArray<FStoryletFieldEntry>& Fields) const;
+
+	/** A quality field's ladder, in order: the stages of the card field (or,
+	 *  with bOutcomeField, the outcome field) named Field in Box. Empty for a
+	 *  field that is not a quality or not declared. Feed it to the Storylet
+	 *  stage functions to compare or step a field's stage. */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Fields")
+	TArray<FString> GetFieldStages(const FString& Box, const FString& Field, bool bOutcomeField) const;
+
 	/** (Re)compile SourceJson into the cached storylets::Bundle. Sets or
 	 *  clears LoadError; returns false on failure (the raw JSON is kept
 	 *  either way). Called by the importer and PostLoad. */

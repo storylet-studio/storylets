@@ -56,15 +56,22 @@ export async function commit(session: ProjectSession, label: string, key: string
   // editor says so rather than offering an edit the far end would refuse.
   const refusal = refuseWrite(readRemote(session.loaded.dir)?.role, writes.map((w) => w.path));
   if (refusal !== undefined) return refuse(session, refusal);
-  const before = captureBefore(writes.map((w) => w.path));
-  const applied = await applyStates(writes);
+  // A write whose bytes are already on disk changes nothing, and an edit made
+  // only of those is no step at all: a list saved straight after the edit that
+  // already wrote it (a stage rename, say) must not leave an Undo that does
+  // nothing. Leaving those files alone also leaves them checked in.
+  const current = captureBefore(writes.map((w) => w.path));
+  const changing = writes.filter((w, i) => w.content !== current[i]!.content);
+  if (changing.length === 0) return reload(session);
+  const before = captureBefore(changing.map((w) => w.path));
+  const applied = await applyStates(changing);
   if (!applied.ok) {
     // Writes that landed before a delete failed are a change on disk all the
     // same, and the step is how the author takes it back.
-    if (applied.wrote) { session.history.record(label, key, before, writes); onWritten?.(); }
+    if (applied.wrote) { session.history.record(label, key, before, changing); onWritten?.(); }
     return refuse(session, applied.error);
   }
-  session.history.record(label, key, before, writes);
+  session.history.record(label, key, before, changing);
   // NOTHING is tallied here any more (2026-09-07). What the server has not seen
   // is a fact about the shards on disk, worked out by comparing them with the
   // revision last pulled (remote.ts `unpushedShards`), so a write counts by

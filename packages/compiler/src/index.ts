@@ -2,7 +2,7 @@ export { parseSource, canonicalStringify, canonicalCollections, serialiseBundle 
 export type { StringifyOptions } from "./serialize.js";
 export { hash32 } from "./hash.js";
 export { parseProjectFiles, clearParseCache } from "./parse.js";
-export { compileProject, projectHash, bundleIsFresh } from "./compile.js";
+export { compileProject, projectDialect, projectHash, bundleIsFresh } from "./compile.js";
 export { describeDeclarations, describeDisagreement, propertyMeta, sameDeclaration, sameMeta } from "./declarations.js";
 export type { CompileResult } from "./compile.js";
 export { compileMaps, mapDrawing } from "./maps.js";

@@ -769,6 +769,67 @@ namespace storylets
         std::vector<LoadProperty> retypedProperties;
     };
 
+    // --- field read helpers -------------------------------------------------------
+    //
+    // A box's card and outcome fields as a host reads them. The engine hands a
+    // card's fields (and an outcome's) over exactly as the bundle wrote them:
+    // sparse, so "the card sets nothing" stays distinct from "the card sets the
+    // default". These fill in the declared defaults when a host wants the whole
+    // picture. Patter's game-data helpers by the same rule (patterkit
+    // design/family-parity-2026-10.md item 7); every Storylet Engine runtime
+    // carries the same four.
+
+    namespace fieldsdetail
+    {
+        inline const Box* BoxOf(const Bundle& bundle, const std::string& box)
+        {
+            for (const auto& b : bundle.boxes) if (b.gameId == box) return &b;
+            for (const auto& b : bundle.boxes) if (b.id == box) return &b;
+            return nullptr;
+        }
+    }
+
+    /** A box's card template, by its gameId (or id). Empty when the box
+     *  declares none or is not in the bundle. */
+    inline std::vector<FieldDecl> FieldDecls(const Bundle& bundle, const std::string& box)
+    {
+        const Box* b = fieldsdetail::BoxOf(bundle, box);
+        return b ? b->fields : std::vector<FieldDecl>{};
+    }
+
+    /** A box's outcome fields, by its gameId (or id). Empty when it declares none. */
+    inline std::vector<FieldDecl> OutcomeFieldDecls(const Bundle& bundle, const std::string& box)
+    {
+        const Box* b = fieldsdetail::BoxOf(bundle, box);
+        return b ? b->outcomeFields : std::vector<FieldDecl>{};
+    }
+
+    /** One field's effective value: the card's (or outcome's) own when it sets
+     *  one, else the declared default; nullopt for a name declared nowhere and
+     *  set nowhere. */
+    inline std::optional<StoryletValue> FieldValue(const std::vector<FieldDecl>& decls,
+        const OrderedMap<std::string, StoryletValue>& values, const std::string& name)
+    {
+        if (const StoryletValue* v = values.get(name)) return *v;
+        for (const auto& f : decls) if (f.name == name) return f.defaultValue;
+        return std::nullopt;
+    }
+
+    /** Every declared field resolved (the value set, else the default), in
+     *  declaration order, then any key set with no declaration, kept as it is. */
+    inline OrderedMap<std::string, StoryletValue> EffectiveFields(const std::vector<FieldDecl>& decls,
+        const OrderedMap<std::string, StoryletValue>& values)
+    {
+        OrderedMap<std::string, StoryletValue> out;
+        for (const auto& f : decls)
+        {
+            std::optional<StoryletValue> v = FieldValue(decls, values, f.name);
+            if (v.has_value()) out.set(f.name, *v);
+        }
+        for (const auto& pair : values) if (!out.contains(pair.first)) out.set(pair.first, pair.second);
+        return out;
+    }
+
     // --- the bundle loader (neutral JsonValue -> compiled model) ---------------
 
     namespace bundleloader
@@ -854,6 +915,7 @@ namespace storylets
             const JsonValue* def = o.find("default");
             if (def && !def->isNull()) d.defaultValue = ToValue(*def);
             d.values = ParseStringList(o.find("values"));
+            d.stages = ParseStringList(o.find("stages"));
             d.purpose = o.strOr("purpose");
             return d;
         }

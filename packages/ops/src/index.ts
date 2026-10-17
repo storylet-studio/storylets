@@ -54,6 +54,8 @@ export { analyseInfluence, cardNeighbourhood, describeContribution } from "./inf
 // Find: property usage (the Property tab) and find-and-replace over item text (the Replace tab)
 export { runPropertyUsage, runPropertyUsageMany, parsePropertyQuery } from "./usage.js";
 export type { PropertyUsage } from "./usage.js";
+export { renameStage, renameStageInExpression, stageGateCount } from "./stages.js";
+export type { StageRenameResult, StageTarget } from "./stages.js";
 export { runReplace } from "./replace.js";
 export type { ReplaceOptions, ReplaceHit, ReplaceField, ReplacePlan } from "./replace.js";
 // Pin on publish: the editor's Publish writes down every address still following its title

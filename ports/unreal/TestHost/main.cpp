@@ -180,7 +180,7 @@ static std::optional<int> peekCap(const JsonValue& op)
 
 // -- expressions ----------------------------------------------------------------
 
-static int runExpressions(const JsonValue& cases)
+static int runExpressions(const JsonValue& cases, const std::string& family = "expressions")
 {
     int pass = 0;
     for (const auto& c : cases.arr)
@@ -191,6 +191,18 @@ static int runExpressions(const JsonValue& cases)
         {
             AstPtr node = DeserialiseAst(c.at("ast"));
             ScopesHolder holder = scopesContext(c.at("scopes"));
+            // A quality case's ladders, keyed "scope.name", answer the
+            // evaluator's quality channel.
+            std::unordered_map<std::string, std::vector<std::string>> ladders;
+            if (const JsonValue* q = c.find("qualities"); q && q->isObject())
+            {
+                for (const auto& pair : q->obj) ladders[pair.first] = stringList(pair.second);
+                holder.ctx.qualities = [&ladders](const std::string& scope, const std::string& prop) -> const std::vector<std::string>*
+                {
+                    auto it = ladders.find(scope + "." + prop);
+                    return it == ladders.end() ? nullptr : &it->second;
+                };
+            }
             // The reference runner always supplies a PRNG (seed ?? 0).
             Mulberry32 prng(c.numOr("seed", 0));
             StoryletsHost host;
@@ -211,22 +223,69 @@ static int runExpressions(const JsonValue& cases)
             if (expectError)
             {
                 if (error.has_value()) ++pass;
-                else fail("expressions", name, "expected an eval error, got " + actual->toJsonString());
+                else fail(family, name, "expected an eval error, got " + actual->toJsonString());
             }
             else if (error.has_value())
             {
-                fail("expressions", name, "unexpected error: " + *error);
+                fail(family, name, "unexpected error: " + *error);
             }
             else
             {
                 StoryletValue expected = bundleloader::ToValue(c.at("expected"));
                 if (actual->valueEquals(expected)) ++pass;
-                else fail("expressions", name, "expected " + expected.toJsonString() + ", got " + actual->toJsonString());
+                else fail(family, name, "expected " + expected.toJsonString() + ", got " + actual->toJsonString());
             }
         }
         catch (const std::exception& ex)
         {
-            fail("expressions", name, ex.what());
+            fail(family, name, ex.what());
+        }
+    }
+    return pass;
+}
+
+/** The host's stage helpers over a ladder (corpus v4), through the vendored
+ *  kernel: a position, -1, 0, 1 or a stage name, or an error where the case
+ *  expects one. */
+static int runStages(const JsonValue& cases)
+{
+    int pass = 0;
+    for (const auto& c : cases.arr)
+    {
+        std::string name = c.strOr("name");
+        bool expectError = c.boolOr("expectError");
+        std::vector<std::string> ladder = stringList(c.at("ladder"));
+        std::vector<StoryletValue> args;
+        for (const auto& a : c.at("args").arr) args.push_back(bundleloader::ToValue(a));
+        std::optional<std::string> got;
+        std::optional<std::string> error;
+        try
+        {
+            const std::string call = c.strOr("call");
+            if (call == "index") got = std::to_string(StageIndex(ladder, args.at(0)));
+            else if (call == "compare") got = std::to_string(CompareStages(ladder, args.at(0), args.at(1)));
+            else if (call == "next") got = "\"" + NextStage(ladder, args.at(0)) + "\"";
+            else error = "unknown call " + call;
+        }
+        catch (const std::exception& ex)
+        {
+            error = ex.what();
+        }
+        if (expectError)
+        {
+            if (error.has_value()) ++pass;
+            else fail("stages", name, "expected an error, got " + *got);
+        }
+        else if (error.has_value())
+        {
+            fail("stages", name, "unexpected error: " + *error);
+        }
+        else
+        {
+            const JsonValue& e = c.at("expected");
+            const std::string want = e.isString() ? "\"" + e.str + "\"" : std::to_string(static_cast<int>(e.num));
+            if (*got == want) ++pass;
+            else fail("stages", name, "expected " + want + ", got " + *got);
         }
     }
     return pass;
@@ -574,7 +633,7 @@ static bool needsFlow(const std::string& kind)
 {
     return kind == "setState" || kind == "peek" || kind == "deal" || kind == "assertBoard"
         || kind == "play" || kind == "advanceTurns" || kind == "assertOutcomes"
-        || kind == "assertOutcomeOrder" || kind == "assertOutcomeFields" || kind == "assertState";
+        || kind == "assertOutcomeOrder" || kind == "assertOutcomeFields" || kind == "assertCardFields" || kind == "assertState";
 }
 
 /** Execute the ops in order; every expect must match exactly, expectError ops
@@ -985,6 +1044,41 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
                 {
                     wanted.set(field.first, bundleloader::ToValue(field.second));
                 }
+                if (showFields(actual) != showFields(wanted))
+                {
+                    failures.push_back(at + ": " + pair.first + " expected " + showFields(wanted)
+                        + ", got " + showFields(actual));
+                }
+            }
+        }
+        else if (kind == "assertCardFields")
+        {
+            // A card's fields as the board hands them over: raw, sparse, no
+            // default filled in, and an empty map for a card that carries none.
+            std::string from = op.strOr("from");
+            std::vector<DealtCard> board = session->board().getOr(mapped(names, from), {});
+            for (const auto& pair : op.at("expect").obj)
+            {
+                const DealtCard* card = nullptr;
+                for (const auto& v : board)
+                {
+                    if (v.id == pair.first) { card = &v; break; }
+                }
+                if (!card)
+                {
+                    failures.push_back(at + ": " + pair.first + " is not on board[" + from + "]");
+                    continue;
+                }
+                OrderedMap<std::string, StoryletValue> wanted;
+                for (const auto& field : pair.second.obj)
+                {
+                    wanted.set(field.first, bundleloader::ToValue(field.second));
+                }
+                // With `effective`, through the helper and the box's declarations.
+                const JsonValue* effective = op.find("effective");
+                OrderedMap<std::string, StoryletValue> actual = effective && effective->isObject()
+                    ? EffectiveFields(FieldDecls(*running, effective->strOr("box")), card->fields)
+                    : card->fields;
                 if (showFields(actual) != showFields(wanted))
                 {
                     failures.push_back(at + ": " + pair.first + " expected " + showFields(wanted)
@@ -2342,11 +2436,23 @@ int main(int argc, char** argv)
         JsonValue exprRoot = exprParser.parse();
         const JsonValue& exprPrng = exprRoot.at("prng");
         const JsonValue& exprExprs = exprRoot.at("expressions");
+        // Corpus v4's two families: gates over quality ladders, and the host's
+        // stage helpers. Absent is a failure, as the file itself is.
+        static const JsonValue noExprCases;
+        const JsonValue* exprQual = exprRoot.find("qualities");
+        const JsonValue* exprStages = exprRoot.find("stages");
+        if (!exprQual || !exprStages) fail("expr corpus", "families", "no qualities or stages family (corpus v4)");
+        const JsonValue& quals = exprQual ? *exprQual : noExprCases;
+        const JsonValue& stages = exprStages ? *exprStages : noExprCases;
         int xp = runExprPrng(exprPrng);
         int xe = runExpressions(exprExprs);
+        int xq = runExpressions(quals, "qualities");
+        int xs = runStages(stages);
         std::cout << "expr corpus v" << static_cast<int>(exprRoot.numOr("version", 0))
             << " - prng: " << xp << "/" << exprPrng.arr.size()
-            << "  expressions: " << xe << "/" << exprExprs.arr.size() << "\n";
+            << "  expressions: " << xe << "/" << exprExprs.arr.size()
+            << "  qualities: " << xq << "/" << quals.arr.size()
+            << "  stages: " << xs << "/" << stages.arr.size() << "\n";
 
         // The registry corpus, vendored from ../expr beside the other two, run through
         // the shared runner against the vendored ScopeRegistry. It is the registry's

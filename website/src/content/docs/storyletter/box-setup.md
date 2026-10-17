@@ -29,10 +29,12 @@ A box has six tabs, plus **Map** when the box uses the [project map](/storylette
   is here too.
 - **Card template** declares what every card in this box carries. A card's fields are its
   game data, and there's no other mechanism for attaching any. Each field has a name, a
-  type (**Number**, **True / False**, **Text**, **List**, **Flags** or **Quality**, which the
-  files call `number`, `boolean`, `string`, `enum`, `flags` and `quality`;
-  [Property types](/format/property-types/) says which to use), a default, and optional
-  values.
+  type (**Text**, **Text (multiline)**, **Number**, **True / False**, **List**, **Flags** or
+  **Quality**, which the files call `text`, `multiline`, `number`, `boolean`, `enum`, `flags`
+  and `quality`, the same list Patter's game data uses;
+  [Property types](/format/property-types/) says which to use), a default, and the values
+  of a List or Flags field or the stages of a Quality field. Older files spell text
+  `string`, which still reads, and Storyletter writes `text` the next time it saves the box.
   Change a field's name or type and you reshape every card in the box, so in a team this
   is usually lead-owned.
   The same tab declares the box's **Outcome fields** below its card fields, which is what
