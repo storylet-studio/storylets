@@ -661,6 +661,9 @@ namespace StoryletStudio.StoryletEngine
         public OrderedMap<string, List<ExtensionFieldDecl>> Fields = new OrderedMap<string, List<ExtensionFieldDecl>>();
         /// <summary>The project node's values, raw; null when it has none.</summary>
         public OrderedMap<string, object> Project;
+        /// <summary>Every manifest setting, as the project resolved it; null
+        /// when the bundle carries none.</summary>
+        public OrderedMap<string, string> Settings;
     }
 
     /// <summary>A compiled extension field declaration. Default is always
@@ -994,6 +997,17 @@ namespace StoryletStudio.StoryletEngine
         {
             if (bundle.Extensions == null || !bundle.Extensions.TryGetValue(extension, out var ext)) return new List<ExtensionFieldDecl>();
             return ext.Fields.TryGetValue(kind, out var decls) && decls != null ? decls : new List<ExtensionFieldDecl>();
+        }
+
+        /// <summary>One extension's settings, every one the manifest declares,
+        /// as the project resolved them. Empty when the bundle has no such
+        /// extension or it carries no settings. The result is a fresh map.</summary>
+        public static OrderedMap<string, string> ExtensionSettings(Bundle bundle, string extension)
+        {
+            var output = new OrderedMap<string, string>();
+            if (bundle.Extensions != null && bundle.Extensions.TryGetValue(extension, out var ext) && ext.Settings != null)
+                foreach (var pair in ext.Settings) output.Set(pair.Key, pair.Value);
+            return output;
         }
 
         /// <summary>

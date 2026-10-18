@@ -12,27 +12,15 @@ here is part of shipping, not a courtesy.
 
 ### Added
 
-- **Storylet extensions can be edited.** A project that takes a Storylet extension shows its values where the
-  item's own are: a card's after the box's fields on the Fields tab, an outcome's in its block, a deck's, box's,
-  hand template's and hand's on a tab named for the extension, a tag group's and each tag's beside their
-  properties, and the project's in Project Settings. Every type an extension declares has a control, lists,
-  records and maps included, with the extension's help under it. A card or outcome field an extension claims
-  keeps its value and gains the extension's label and help. A choice's own help (an enum value's, each chosen
-  flag's, a stage's) is shown under it. A problem in an extension's data opens the item it is about, and says
-  what is wrong as the writer sees it ("Probe: The card “bell” needs a sound in cue."), in Patterpad's words.
-
-### Changed
-
-- **Undo refuses to overwrite a file that has changed since.** When a pull, a merge or another app has changed a
-  file between an edit and its undo (or redo), Storyletter says which file and leaves it alone, and the steps
-  before it can no longer be undone. It used to put the old bytes back over the newer work.
-
-### Changed
-
-- **A merge that leaves conflicts marks them in the file**, under `unresolved`, so the project's problems
-  list (and anyone else's copy) shows the merge is unresolved until the clash is fixed and the entry
-  removed. Storyletter opens projects that take a Storylet extension, carries and merges the extension's
-  data, and keeps it untouched; editing it comes in a later release.
+- **Storylet extensions.** A project that takes a Storylet extension shows its values where the item's own are: a
+  card's after the box's fields on the Fields tab, an outcome's in its block, a deck's, box's, hand template's and
+  hand's on a tab named for the extension, a tag group's and each tag's beside their properties, and the
+  project's in Project Settings. Every type an extension declares has a control, lists, records and maps
+  included, with the extension's help under it, and a choice's own help (an enum value's, each chosen flag's, a
+  stage's) under that. A card or outcome field an extension claims keeps its value and gains the extension's
+  label and help. A problem in an extension's data opens the item it is about, and says what is wrong as the
+  writer sees it ("Probe: The card “bell” needs a sound in cue."), in the same words Patterpad uses. The data is
+  carried, merged and packed with the project.
 
 ### Changed
 
@@ -41,6 +29,11 @@ here is part of shipping, not a courtesy.
   instead of typed with commas, and a Text (multiline) field is a text area. A blank field says what it falls
   back to, "default (x)", and a value that doesn't fit (not a number, not one of the values) is said under it.
   Text in a Text field that looks like a number or True / False is kept as text.
+- **Undo refuses to overwrite a file that has changed since.** When a pull, a merge or another app has changed a
+  file between an edit and its undo (or redo), Storyletter says which file and leaves it alone, and the steps
+  before it can no longer be undone. It used to put the old bytes back over the newer work.
+- **A merge that leaves conflicts marks them in the file**, under `unresolved`, so the problems list (and anyone
+  else's copy of the project) shows the merge is unresolved until the clash is fixed and the entry removed.
 
 ### Security
 

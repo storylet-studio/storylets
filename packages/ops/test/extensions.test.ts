@@ -91,6 +91,8 @@ describe("the probe project", () => {
 
     const section = bundle!.extensions!["probe"]!;
     expect(section.version).toBe("1.1.0");
+    // Every setting, resolved: the project's value, else the setting's default.
+    expect(section.settings).toEqual({ moodField: "mood" });
     expect(section.project).toEqual({ studio: "Wildwinter" });
     expect(Object.keys(section.fields).sort()).toEqual(["box", "card", "deck", "hand", "handTemplate", "outcome", "project", "tag", "tagGroup"]);
     const cardDecls = section.fields["card"]!;
@@ -250,6 +252,21 @@ describe("validation, driven by the manifest", () => {
     expect(messages(issues, "error")).toEqual([]);
     expect(messages(issues, "warning")).toContain(
       "probe.storyletproj: the Storylet extension \"probe\" claims the card field \"temper\", which no box declares; set the extension's \"moodField\" setting to the field's name, or declare it");
+  });
+
+  it("checks a claim that leaves out its values against the box's own (toolkit 0.2.1)", () => {
+    const issues = issuesAfter((dir) => {
+      const m = JSON.parse(readFileSync(join(dir, "extensions/probe.extension.json"), "utf8"));
+      delete m.targets.storylets.card.claims[0].values;
+      m.targets.storylets.card.claims[0].valueHelp = { calm: "Unhurried.", wild: "A value the box does not have." };
+      writeFileSync(join(dir, "extensions/probe.extension.json"), JSON.stringify(m, null, 2));
+      const deck = read(dir, "harbour/decks/rumours.storyletdeck") as { cards: { fields?: Record<string, unknown> }[] };
+      deck.cards[0]!.fields = { mood: "wild" };
+      write(dir, "harbour/decks/rumours.storyletdeck", deck);
+    });
+    expect(messages(issues).filter((m) => m.includes("manifest"))).toEqual([]);
+    expect(messages(issues, "error")).toContain(
+      "harbour/decks/rumours.storyletdeck: field \"mood\", as the Storylet extension \"probe\" claims it: the value is \"wild\", which is not one of its values");
   });
 
   it("errors when two extensions claim one field, naming both", () => {

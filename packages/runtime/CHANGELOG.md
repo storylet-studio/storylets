@@ -16,8 +16,10 @@ section for it.
   the seven field types). `extensionDecls(bundle, extension, kind)` gives an extension's declarations for a
   node kind, every default resolved, so `effectiveFields(extensionDecls(...), card.extensions?.[id])` fills in
   what a node leaves out. `extensionsOf(bundle, kind, address)` reads the values of a node no view carries:
-  the project, a deck, a hand, a hand template, a tag group or a tag. The same on all four runtimes, with
-  Blueprint taking structured values as JSON text. Bundles without extensions are unchanged.
+  the project, a deck, a hand, a hand template, a tag group or a tag. `extensionSettings(bundle, extension)`
+  reads an extension's settings as the project resolved them (which host field each claim presents). The same
+  on all four runtimes, with Blueprint taking structured values as JSON text. Bundles without extensions are
+  unchanged.
 
 ## [0.12.0] - 2026-10-18
 

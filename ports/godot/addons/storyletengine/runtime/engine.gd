@@ -2324,6 +2324,17 @@ static func extension_decls(bundle: Dictionary, extension: String, kind: String)
 	return fields[kind]
 
 
+## One extension's settings, every one the manifest declares, as the project
+## resolved them. {} when the bundle has no such extension or it carries no
+## settings. The result is a fresh copy.
+static func extension_settings(bundle: Dictionary, extension: String) -> Dictionary:
+	var exts = bundle.get("extensions")
+	if not (exts is Dictionary) or not (exts.get(extension) is Dictionary):
+		return {}
+	var settings = exts[extension].get("settings")
+	return (settings as Dictionary).duplicate() if settings is Dictionary else {}
+
+
 ## A node's extension values, by extension id, raw; {} when it has none or the
 ## address names nothing. For the nodes no view carries, by the names a game
 ## already holds: "project" (no address); "box", "deck", "card" and "hand" by

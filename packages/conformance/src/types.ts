@@ -238,6 +238,10 @@ export type ScriptOp =
    *  through `effectiveFields(extensionDecls(...))` instead. */
   | { op: "assertNodeExtensions"; kind: string; address?: string; expect: Record<string, unknown>;
       effective?: { extension: string } }
+  /** An extension's settings, resolved (the project's value, else the setting's default), read off the bundle
+   *  by the helper `extensionSettings(bundle, extension)`: `{}` when the bundle has no such extension or it
+   *  declares no settings. */
+  | { op: "assertExtensionSettings"; extension: string; expect: Record<string, string> }
   /** Paths: "turn.b_x", "story.gold", "value.docks.danger", "box.x.heat",
    *  "world.x", ... - read on the op's flow (the merged view). The owner
    *  segment is a gameId (4.4), box-qualified for a tag gameId two boxes

@@ -16,8 +16,8 @@
 import { EXTENSIONS_DIR, MANIFEST_EXTENSION, isTextFieldType } from "@storylet-studio/model";
 import type { BundleExtension, ExtensionFieldDecl, FieldDecl, NodeExtensions } from "@storylet-studio/model";
 import {
-  HOSTS, claimClashes, compileEntry, compiledTarget, entryProblems, manifestProblems, orphanedEntries, resolvedClaims,
-  targetOf, valueProblems,
+  HOSTS, claimClashes, compileEntry, compiledTarget, effectiveClaim, entryProblems, manifestProblems, orphanedEntries,
+  resolvedClaims, settingValues, targetOf, valueProblems,
 } from "@wildwinter/toolkit/extensions";
 import type { Manifest, Problem, ResolvedClaim } from "@wildwinter/toolkit/extensions";
 import type { Issue, SourceExtension, SourceProject } from "./project.js";
@@ -139,6 +139,7 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
     takenList.push({ id, version, settings, manifest });
   }
   const sound = new Map(takenList.filter((t) => t.manifest !== undefined).map((t) => [t.id, t.manifest!]));
+  const settingsOf = new Map(takenList.map((t) => [t.id, t.settings]));
 
   // --- claims on host fields ----------------------------------------------------------
   const claims: ResolvedClaim[] = takenList.flatMap((t) => (t.manifest ? resolvedClaims(t.manifest, "storylets", t.settings) : []));
@@ -216,7 +217,13 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
       if (target !== undefined) fields[kind] = compiledTarget(target) as unknown as ExtensionFieldDecl[];
     }
     const project = projectValues.get(id);
-    bundle[id] = { version: manifest.version, fields, ...(project !== undefined ? { project } : {}) };
+    // Every setting, resolved, so a game reads which host field a claim presents as the project chose it.
+    const settings = (manifest.settings ?? []).length > 0 ? settingValues(manifest, settingsOf.get(id)) : undefined;
+    bundle[id] = {
+      version: manifest.version, fields,
+      ...(project !== undefined ? { project } : {}),
+      ...(settings !== undefined ? { settings } : {}),
+    };
   }
   return { issues, compiled: { bundle, nodes: values } };
 }
@@ -263,7 +270,8 @@ function claimIssues(source: SourceProject, claims: readonly ResolvedClaim[]): I
             : [{ where: card.gameId ?? card.id, fields: card.fields }];
           for (const h of holders) {
             if (h.fields === undefined || !Object.prototype.hasOwnProperty.call(h.fields, claim.field)) continue;
-            for (const p of valueProblems(claim.claim, h.fields[claim.field])) {
+            // The claim over the box's own declaration: a claim may leave the values or stages to the box's field.
+            for (const p of valueProblems(effectiveClaim(claim.claim, decl), h.fields[claim.field])) {
               issues.push({ severity: p.severity, path: deck.path, where: h.where, field: outcome ? "outcomeFields" : "fields",
                 message: `field "${claim.field}", as the Storylet extension "${claim.extension}" claims it: ${p.message}`,
                 extension: claim.extension, detail: p.code });

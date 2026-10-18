@@ -1,5 +1,5 @@
 {
-  "version": 14,
+  "version": 15,
   "expressions": [
     {
       "name": "arithmetic precedence",
@@ -7940,6 +7940,10 @@
             },
             "project": {
               "studio": "Wildwinter"
+            },
+            "settings": {
+              "moodField": "temper",
+              "soundField": "sound"
             }
           }
         }
@@ -8228,6 +8232,24 @@
               "line": "Taken."
             }
           }
+        },
+        {
+          "op": "assertExtensionSettings",
+          "extension": "probe",
+          "expect": {
+            "moodField": "temper",
+            "soundField": "sound"
+          }
+        },
+        {
+          "op": "assertExtensionSettings",
+          "extension": "other",
+          "expect": {}
+        },
+        {
+          "op": "assertExtensionSettings",
+          "extension": "absent",
+          "expect": {}
         },
         {
           "op": "assertOutcomeOrder",

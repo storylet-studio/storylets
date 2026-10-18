@@ -76,6 +76,13 @@ export function extensionDecls(bundle: Pick<Bundle, "extensions">, extension: st
   return ext !== undefined && own(ext.fields, kind) ? ext.fields[kind] ?? [] : [];
 }
 
+/** One extension's settings, resolved by the compiler (the project's value, else the setting's default): which
+ *  host field each of its claims presents, say. Empty when the bundle has no such extension or it declares none. */
+export function extensionSettings(bundle: Pick<Bundle, "extensions">, extension: string): Record<string, string> {
+  const ext = bundle.extensions !== undefined && own(bundle.extensions, extension) ? bundle.extensions[extension] : undefined;
+  return { ...(ext?.settings ?? {}) };
+}
+
 /**
  * A node's extension values, by extension id, raw; `{}` when it has none or the
  * address names nothing. For the nodes no view carries, by the names a game

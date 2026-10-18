@@ -12,7 +12,9 @@ export type {
   BoxSummary, BundleDescription, BundleIdentity, HandSummary, MapSummary, MovableHole,
   PropertyScopeKind, PropertyScopeSummary, PropertySummary, TagGroupSummary,
 } from "./describe.js";
-export { effectiveFields, extensionDecls, extensionsOf, fieldDecls, fieldValue, outcomeFieldDecls } from "./fields.js";
+export {
+  effectiveFields, extensionDecls, extensionSettings, extensionsOf, fieldDecls, fieldValue, outcomeFieldDecls,
+} from "./fields.js";
 // A quality's ladder outside an expression, for a host comparing a quality
 // field's stage with a property's: the shared kernel's own helpers, re-exported
 // so a host needs no dependency on it. Each takes a ladder or a declaration.

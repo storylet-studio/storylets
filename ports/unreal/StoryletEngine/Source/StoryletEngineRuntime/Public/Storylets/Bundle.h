@@ -276,6 +276,9 @@ namespace storylets
         OrderedMap<std::string, std::vector<ExtensionFieldDecl>> fields;
         /** The project node's values, raw, when it has any. */
         std::optional<OrderedMap<std::string, JsonValue>> project;
+        /** Every manifest setting, as the project resolved it; empty when the
+         *  bundle carries none. */
+        OrderedMap<std::string, std::string> settings;
     };
 
     /** Cooldown policy, in turns (schema 3.4): "always" | "never" | N. */
@@ -943,6 +946,15 @@ namespace storylets
         return decls ? *decls : std::vector<ExtensionFieldDecl>{};
     }
 
+    /** One extension's settings, every one the manifest declares, as the
+     *  project resolved them. Empty when the bundle has no such extension or it
+     *  carries no settings. */
+    inline OrderedMap<std::string, std::string> ExtensionSettings(const Bundle& bundle, const std::string& extension)
+    {
+        const BundleExtension* ext = bundle.extensions.get(extension);
+        return ext ? ext->settings : OrderedMap<std::string, std::string>{};
+    }
+
     namespace fieldsdetail
     {
         /** The node a game names `name`: its gameId, or its id when it has none. */
@@ -1178,7 +1190,8 @@ namespace storylets
         }
 
         /** The bundle's `extensions` section: each extension's version, its
-         *  declarations by node kind, and the project node's values. */
+         *  declarations by node kind, the project node's values and its
+         *  resolved settings. */
         inline OrderedMap<std::string, BundleExtension> ParseBundleExtensions(const JsonValue& section)
         {
             OrderedMap<std::string, BundleExtension> out;
@@ -1203,6 +1216,14 @@ namespace storylets
                     OrderedMap<std::string, JsonValue> values;
                     for (const auto& field : project->obj) values.set(field.first, field.second);
                     ext.project = std::move(values);
+                }
+                const JsonValue* settings = pair.second.find("settings");
+                if (settings && settings->isObject())
+                {
+                    for (const auto& setting : settings->obj)
+                    {
+                        if (setting.second.isString()) ext.settings.set(setting.first, setting.second.str);
+                    }
                 }
                 out.set(pair.first, std::move(ext));
             }

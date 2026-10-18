@@ -924,6 +924,9 @@ export interface BundleExtension {
   fields: Record<string, ExtensionFieldDecl[]>;
   /** The project node's values, raw, when it has any. */
   project?: Record<string, unknown>;
+  /** Every setting the manifest declares, resolved: the project's value, else the setting's default (the host
+   *  field each claim presents, say). Absent when the manifest declares no settings. */
+  settings?: Record<string, string>;
 }
 
 /**

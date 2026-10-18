@@ -16,6 +16,8 @@
   `NodeExtensions`, `ExtensionFieldDecl`, `BundleExtension`, `ExtensionDecls`, `ExtensionsOf`,
   and `FieldValue` and `EffectiveFields` over extension values; `JsonText` writes a `JsonValue`
   back as strict JSON. A bundle without extensions behaves exactly as before.
+  `ExtensionSettings` (on the bundle asset, a `TMap<FString, FString>`, and in the core) reads the
+  extension's settings as the project resolved them, empty when it has none.
 
 ## [0.12.0] - 2026-10-18
 

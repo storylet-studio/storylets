@@ -112,6 +112,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Extensions")
 	TArray<FStoryletExtensionValues> ExtensionsOf(const FString& Kind, const FString& Address) const;
 
+	/** One extension's settings, every one its manifest declares, as the
+	 *  project resolved them: setting name to value. Empty when the bundle
+	 *  carries no such extension or it has no settings. */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Extensions")
+	TMap<FString, FString> ExtensionSettings(const FString& Extension) const;
+
 	/** The declaration of the field named Field that Extension declares for
 	 *  node kind Kind, in OutDecl (its default in DefaultJson, and in Default
 	 *  as well when it is a scalar). False when no such field is declared.

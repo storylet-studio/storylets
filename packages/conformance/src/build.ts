@@ -53,8 +53,10 @@ import type {
  *  `extensions` values, the fixture fields `extensions` and `nodeExtensions`,
  *  and the ops `assertCardExtensions`, `assertOutcomeExtensions`,
  *  `assertBoxExtensions` and `assertNodeExtensions`. Values are any JSON, so
- *  a runner compares them deeply. No earlier expectation changed. */
-export const CORPUS_VERSION = 14;
+ *  a runner compares them deeply. No earlier expectation changed.
+ *  15: an extension's resolved settings (`extensions[id].settings`) and the op `assertExtensionSettings`. No
+ *  earlier expectation changed. */
+export const CORPUS_VERSION = 15;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>

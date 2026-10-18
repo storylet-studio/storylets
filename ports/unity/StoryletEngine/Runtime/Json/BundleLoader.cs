@@ -484,7 +484,8 @@ namespace StoryletStudio.StoryletEngine
         }
 
         /// <summary>The bundle's extensions section: each extension's version,
-        /// its compiled declarations by node kind and the project node's values,
+        /// its compiled declarations by node kind, the project node's values and
+        /// its resolved settings,
         /// in document order.</summary>
         private static OrderedMap<string, BundleExtension> ParseBundleExtensions(JObject o)
         {
@@ -503,6 +504,15 @@ namespace StoryletStudio.StoryletEngine
                     }
                 }
                 if (e["project"] is JObject project) ext.Project = (OrderedMap<string, object>)StoryletJson.ToJsonTree(project);
+                if (e["settings"] is JObject settings)
+                {
+                    ext.Settings = new OrderedMap<string, string>();
+                    foreach (var setting in settings)
+                    {
+                        if (setting.Value == null || setting.Value.Type != JTokenType.String) throw new StoryletError($"extension {pair.Key} setting {setting.Key} is not a string");
+                        ext.Settings.Set(setting.Key, setting.Value.Value<string>());
+                    }
+                }
                 extensions.Set(pair.Key, ext);
             }
             return extensions;

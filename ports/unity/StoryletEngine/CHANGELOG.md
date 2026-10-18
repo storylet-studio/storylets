@@ -10,6 +10,8 @@
   `FieldHelpers.ExtensionDecls(bundle, extension, kind)` gives an extension's declarations for a node kind, every
   default resolved, and the new `FieldValue` / `TryFieldValue` / `EffectiveFields` overloads fill in what a node
   leaves out. `FieldHelpers.ExtensionsOf(bundle, kind, address)` reads the values of a node no view carries.
+  `FieldHelpers.ExtensionSettings(bundle, extension)` reads the extension's settings as the project resolved
+  them, empty when it has none.
 
 ## [0.12.0] - 2026-10-18
 

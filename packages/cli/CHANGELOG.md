@@ -32,6 +32,11 @@ the two styles will sit in one file, so it is better known in advance than disco
   renaming the stages the extension renamed. `pack` carries the manifests.
 - **`validate` warns about entries in view and map shards for a card, deck or hand that has gone**, one
   warning each. The entries are kept.
+- **`validate` checks an extension's claims on a box's fields**: a box that declares a claimed field with
+  another type is an error naming the box, a claimed field's values are checked against the claim, and a
+  claim on a field no box declares is a warning. A claim may leave out an enum's values (or a quality's
+  stages), and then the box's own are the vocabulary. `export` writes each extension's settings into the
+  bundle, resolved.
 
 ### Changed
 

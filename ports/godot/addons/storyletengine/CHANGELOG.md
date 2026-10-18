@@ -13,7 +13,8 @@ the same version number always means the same runtime behaviour.
   `extensions` by extension id when the node has any. `StoryletEngine.extension_decls(bundle, extension, kind)`
   gives an extension's declarations for a node kind, every default resolved, so `effective_fields` fills in
   what a node leaves out, and `StoryletEngine.extensions_of(bundle, kind, address)` reads the values of a node
-  no view carries.
+  no view carries. `StoryletEngine.extension_settings(bundle, extension)` reads the extension's settings as the
+  project resolved them, `{}` when it has none.
 
 ## [0.12.0] - 2026-10-18
 

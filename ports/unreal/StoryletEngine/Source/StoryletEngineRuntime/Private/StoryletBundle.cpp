@@ -348,6 +348,14 @@ TArray<FStoryletExtensionValues> UStoryletBundle::ExtensionsOf(const FString& Ki
 	return StoryletExtensionsToUe(storylets::ExtensionsOf(*Compiled->Bundle, Std(Kind), Std(Address)));
 }
 
+TMap<FString, FString> UStoryletBundle::ExtensionSettings(const FString& Extension) const
+{
+	TMap<FString, FString> Out;
+	if (!IsCompiled()) return Out;
+	for (const auto& Pair : storylets::ExtensionSettings(*Compiled->Bundle, Std(Extension))) Out.Add(Ue(Pair.first), Ue(Pair.second));
+	return Out;
+}
+
 bool UStoryletBundle::GetExtensionFieldDecl(const FString& Extension, const FString& Kind, const FString& Field,
 	FStoryletFieldDecl& OutDecl) const
 {
