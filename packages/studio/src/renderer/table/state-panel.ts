@@ -9,7 +9,7 @@
 // without a hand could only half answer.
 // ---------------------------------------------------------------------------
 
-import { el } from "@wildwinter/app-shell";
+import { el, rungStrip } from "@wildwinter/app-shell";
 import { coerceStateInput } from "./model.js";
 import type { ScalarValue } from "@storylet-studio/model";
 import type { Board } from "./board-state.js";
@@ -30,19 +30,15 @@ export function statePanel(b: Board): HTMLElement {
     const wrap = el("span", { className: "sr" }, el("span", { className: "srlabel", text: r.label }));
     if (r.stages !== undefined) {
       // A quality renders as its LADDER with the current rung marked
-      // (design/quality.md section 4). Clicking a rung pokes the stage
-      // directly: a free-text input here would invite the exact stage typos
-      // the compiler exists to refuse, and jumping an arc to "resolved" to
-      // look at the late cards is the whole reason a tester wants this row.
-      const ladder = el("span", { className: "seg srladder" });
-      for (const stage of r.stages) {
-        ladder.append(el("button", {
-          className: `seg-opt srrung${r.value === stage ? " on" : ""}`, text: stage,
-          tip: r.value === stage ? "The current stage" : `Jump to "${stage}"`,
-          onClick: () => poke(r.path, stage, r.label),
-        }));
-      }
-      wrap.append(ladder);
+      // (design/quality.md section 4), the family's one strip from the shell.
+      // Clicking a rung pokes the stage directly: a free-text input here would
+      // invite the exact stage typos the compiler exists to refuse, and jumping
+      // an arc to "resolved" to look at the late cards is the whole reason a
+      // tester wants this row.
+      wrap.append(rungStrip({
+        stages: r.stages, value: typeof r.value === "string" ? r.value : undefined,
+        onPick: (stage) => poke(r.path, stage, r.label), pickTip: (stage) => `Jump to "${stage}"`,
+      }));
     } else if (r.editable) {
       const input = el("input", { className: "srval" });
       input.value = String(r.value);

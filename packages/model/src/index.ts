@@ -17,12 +17,16 @@ export type { Expression, ScalarValue, AstNode } from "@wildwinter/expr";
 export type PropertyType = "boolean" | "number" | "string" | "enum" | "flags" | "quality";
 
 /** A property declaration: @world / @story / @box / @deck / tag / hand
- *  state. A declared property always has a value (`default` is required);
- *  referencing an undeclared property is a publish-time error. */
+ *  state. A declared property always has a value; referencing an undeclared
+ *  property is a publish-time error. */
 export interface PropertyDecl {
   name: string;
   type: PropertyType;
-  default: ScalarValue;
+  /** Optional in source: left out, the type's default holds (false, 0, "",
+   *  the first enum value, no flags, the first stage), by the kernel's
+   *  `defaultFor`. The compiler writes the resolved default onto every
+   *  declaration in the bundle, so a bundle's declaration always has one. */
+  default?: ScalarValue;
   values?: string[];
   /**
    * A quality's ordered ladder of stage names (design/quality.md). Order IS
@@ -95,9 +99,11 @@ export const isTextFieldType = (type: string): boolean => type === "text" || typ
 export interface FieldDecl {
   name: string;
   type: FieldType;
-  /** Required. For an enum, one of `values` or `""` (none chosen); for flags,
-   *  a subset of `values`; for a quality, one of `stages`. */
-  default: ScalarValue;
+  /** Optional in source: left out, the type's default holds, as for a
+   *  property, and the compiler writes it into the bundle. When given: for an
+   *  enum, one of `values` or `""` (none chosen); for flags, a subset of
+   *  `values`; for a quality, one of `stages`. */
+  default?: ScalarValue;
   values?: string[];
   /** A quality's ordered ladder, by the family's one rule (at least two
    *  stages, none empty, none twice; `@wildwinter/expr`). */

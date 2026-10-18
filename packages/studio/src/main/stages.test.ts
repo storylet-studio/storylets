@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { openProject } from "./project.js";
 import type { ProjectSession } from "./project.js";
 import { renameQualityStage, stageGates } from "./mutate/stages.js";
-import { pickStage } from "./mutate/quick-fixes.js";
+import { pickStage, pickTagStage } from "./mutate/quick-fixes.js";
 import { commit, freshKey, undo } from "./mutate/write-path.js";
 import { projectWrite } from "./mutate/shards.js";
 
@@ -76,5 +76,21 @@ describe("pickStage", () => {
     expect(session.loaded.source!.boxes[0]!.decks[0]!.shard.cards[0]!.fields?.["beat"]).toBe("open");
     const again = await pickStage(session, deck.shard.deck.id, card.id, undefined, "beat", "gone", "open");
     expect(again).toEqual({ error: "that value has already changed" });
+  });
+});
+
+describe("pickTagStage", () => {
+  it("puts a tag's starting value back on its ladder, writes the tags shard, and refuses one that has already moved", async () => {
+    const session = scratch();
+    const box = session.loaded.source!.boxes[0]!;
+    const tag = { id: "t_x", gameId: "tx", values: { standing: "gone" } as Record<string, string> };
+    const group = { id: "g_x", gameId: "gx", properties: [], tags: [tag] };
+    box.tags.groups.push(group as never);
+    const done = await pickTagStage(session, group.id, tag.id, "standing", "gone", "friend");
+    expect("error" in done).toBe(false);
+    expect(tag.values["standing"]).toBe("friend");
+    const again = await pickTagStage(session, group.id, tag.id, "standing", "gone", "friend");
+    expect(again).toEqual({ error: "that value has already changed" });
+    expect(await pickTagStage(session, "no-such-group", tag.id, "standing", "gone", "friend")).toHaveProperty("error");
   });
 });

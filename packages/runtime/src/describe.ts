@@ -18,6 +18,7 @@
 // template's declarations, exactly as the session's hand bags do).
 // ---------------------------------------------------------------------------
 
+import { defaultFor } from "@wildwinter/scoperegistry";
 import { effectiveGameId, groupsOfBox, isHoleRef } from "@storylet-studio/model";
 import type {
   Box, Bundle, Expression, Hand, PropertyDecl, PropertyType, ScalarValue,
@@ -191,7 +192,7 @@ const summarise = (decls: PropertyDecl[]): PropertySummary[] =>
   decls.map((d) => ({
     name: d.name,
     type: d.type,
-    default: d.default,
+    default: defaultFor(d),
     ...(d.values !== undefined ? { values: d.values } : {}),
     ...(d.durable === true ? { durable: true as const } : {}),
     ...(d.purpose !== undefined ? { purpose: d.purpose } : {}),

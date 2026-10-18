@@ -9,10 +9,13 @@
 // four static scopes are strict.
 // ---------------------------------------------------------------------------
 
-import { compile as compileExpr, parseAndValidate, qualityDeclarationProblems } from "@wildwinter/expr";
+import {
+  compile as compileExpr, parseAndValidate, qualityDeclarationProblems, stagesEitherSide, validateAssignment, valueFits,
+} from "@wildwinter/expr";
 import type { Dialect, Expression, ExpressionSchema, PropertyMeta } from "@wildwinter/expr";
 import { storyletsDialectWith, OWN_SCOPES, EXTERNAL_SCOPES } from "@storylet-studio/dialect";
 import { referenceNote, scopesSchema } from "@wildwinter/scoperegistry/scopes";
+import { defaultFor } from "@wildwinter/scoperegistry";
 import type {
   Box, Bundle, Card, Deck, FieldDecl, Hand, HandTemplate, Outcome, PropertyDecl, ScalarValue, TagGroup,
 } from "@storylet-studio/model";
@@ -45,33 +48,28 @@ const blank = (src: string | undefined): boolean => src === undefined || src.tri
 
 const meta = propertyMeta;
 
+/**
+ * Declarations as the bundle carries them: each with its default, the one it was
+ * given or else its type's by the kernel's `defaultFor` (false, 0, "", the first
+ * enum value, no flags, the first stage). A default is optional in source and
+ * resolved here, for properties and fields alike (the family's rule, ruled
+ * 2026-10-18), so a host always reads one and keeps no defaults table of its own.
+ */
+const resolved = <D extends { type: string; default?: ScalarValue; values?: string[]; stages?: string[] }>(decls: readonly D[]): D[] =>
+  decls.map((d) => (d.default === undefined ? { ...d, default: defaultFor(d) } : d));
+
 const bagSchema = (decls: PropertyDecl[]): Map<string, PropertyMeta> =>
   new Map(decls.map((d) => [d.name, meta(d)]));
-
-/** Does a value fit a declaration's type? The check a tag's own starting value
- *  gets, so `haunting: "loud"` on a number is caught at publish. */
-const valueFits = (decl: PropertyDecl, v: ScalarValue): boolean => {
-  switch (decl.type) {
-    case "number": return typeof v === "number";
-    case "boolean": return typeof v === "boolean";
-    case "flags": return Array.isArray(v);
-    case "enum": return typeof v === "string" && (decl.values?.includes(v) ?? true);
-    case "quality": return typeof v === "string" && (decl.stages?.includes(v) ?? true);
-    default: return typeof v === "string";
-  }
-};
 
 /**
  * A quality declaration against the family's one rule (`@wildwinter/expr`'s
  * `qualityDeclarationProblems`, shared with Patter: at least two stages, none
- * empty, none twice, the default a stage), in this compiler's words. `subject`
- * names the declaration as the message opens, `quality "@story.act"`.
- *
- * The default is compulsory here, where the kernel leaves it optional, so a
- * missing one is passed as `null` and reads as off the ladder.
+ * empty, none twice, a default optional and, when given, a stage), in this
+ * compiler's words. `subject` names the declaration as the message opens,
+ * `quality "@story.act"`.
  */
 const qualityDeclarationMessages = (subject: string, stages: readonly string[] | undefined, dflt: unknown): string[] =>
-  qualityDeclarationProblems(stages, dflt === undefined ? null : dflt).map((p) => {
+  qualityDeclarationProblems(stages, dflt).map((p) => {
     switch (p.kind) {
       case "too-few-stages": return p.count === 0
         ? `${subject} declares no stages - a quality is its ladder`
@@ -81,19 +79,6 @@ const qualityDeclarationMessages = (subject: string, stages: readonly string[] |
       case "default-not-a-stage": return `${subject} defaults to ${JSON.stringify(p.value)}, which is not one of its stages`;
     }
   });
-
-/** Does a value fit a field's declaration? A card's or outcome's value, and
- *  the declaration's own default, by one rule. */
-const fieldValueFits = (decl: FieldDecl, v: unknown): boolean => {
-  switch (decl.type) {
-    case "number": return typeof v === "number";
-    case "boolean": return typeof v === "boolean";
-    case "flags": return Array.isArray(v) && v.every((x) => typeof x === "string" && (decl.values ?? []).includes(x));
-    case "enum": return typeof v === "string" && (decl.values ?? []).includes(v);
-    case "quality": return typeof v === "string" && (decl.stages ?? []).includes(v);
-    default: return typeof v === "string";
-  }
-};
 
 /** Every `@scope.name` an expression's AST reads or names, in the order met. */
 const scopedRefs = (node: unknown): { scope: string; name: string }[] => {
@@ -272,6 +257,17 @@ export function compileProject(source: SourceProject): CompileResult {
         const ref = `@${scopeLabel}.${d.name}`;
         const where = `${scopeLabel}.${d.name}`;
         for (const message of qualityDeclarationMessages(`quality "${ref}"`, d.stages, d.default)) report({ severity: "error", path, where, message });
+      } else if (d.type === "enum" && d.default === "") {
+        // What Storyletter wrote for "(none)" before defaults were optional:
+        // it compiled, and starts at "", which no condition on the property
+        // matches. Said, not refused; the next save in Storyletter clears it.
+        report({ severity: "warning", path, where: `${scopeLabel}.${d.name}`,
+          message: `"@${scopeLabel}.${d.name}" defaults to "", which is none of its values; leave the default blank to start at "${d.values?.[0] ?? ""}"` });
+      } else if (d.default !== undefined && !valueFits(d, d.default)) {
+        // A default may be left out (the type's fills in); one that is given
+        // has to be a value the property can hold.
+        report({ severity: "error", path, where: `${scopeLabel}.${d.name}`,
+          message: `"@${scopeLabel}.${d.name}" defaults to ${JSON.stringify(d.default)}, which does not fit its type "${d.type}"` });
       }
       if (isValidPropertyName(d.name)) continue;
       const suggestion = propertyNameify(d.name);
@@ -523,12 +519,17 @@ export function compileProject(source: SourceProject): CompileResult {
      *  condition", "change @story.gold"). Defaults to the label where the two
      *  happen to agree. */
     field: string = label,
+    /** The property a change assigns this value to: a stage it names must be
+     *  one of that quality's, and a quality's value must be of its ladder. */
+    assignedTo?: { scope: string; name: string },
   ): Expression | undefined => {
     const result = parseAndValidate(src, schema, dialect);
-    for (const issue of result.issues) {
+    const issues = [...result.issues];
+    if (result.ok && result.ast !== null && assignedTo) issues.push(...validateAssignment(assignedTo, result.ast, schema, dialect));
+    for (const issue of issues) {
       report({ severity: issue.severity, path, where, field, message: `${label}: ${issue.message}` });
     }
-    if (!result.ok || result.ast === null) return undefined;
+    if (!result.ok || result.ast === null || issues.some((i) => i.severity === "error")) return undefined;
     noteExternal(result.ast);
     checkOtherScopes(src, result.ast, result.issues, schema, path, where, label, field);
     return compileExpr(src, dialect);
@@ -602,6 +603,12 @@ export function compileProject(source: SourceProject): CompileResult {
         if (!decl) {
           report({ severity: "error", path, where: `${effectiveGameId(group)}/${effectiveGameId(t)}`,
             message: `"${name}" has a value here but the group "${effectiveGameId(group)}" declares no such property; a tag sets values, its group declares them` });
+        } else if (decl.type === "quality" && typeof v === "string" && !valueFits(decl, v)) {
+          // What a deleted or renamed stage leaves behind: the author picks
+          // where the tag starts now, as for a field's value.
+          report({ severity: "error", path, where: `${effectiveGameId(group)}/${effectiveGameId(t)}`,
+            message: `"${name}" starts at ${JSON.stringify(v)} on this tag, which is not one of its stages`,
+            fix: { kind: "pick-tag-stage", group: group.id, tag: t.id, name, bad: v, options: stagesEitherSide(decl, v) } });
         } else if (!valueFits(decl, v)) {
           report({ severity: "error", path, where: `${effectiveGameId(group)}/${effectiveGameId(t)}`,
             message: `"${name}" is ${decl.type} on the group, so ${JSON.stringify(v)} is not a value it can start at` });
@@ -630,7 +637,7 @@ export function compileProject(source: SourceProject): CompileResult {
           const v = t.values?.[decl.name];
           return v === undefined ? decl : { ...decl, default: v };
         });
-        const properties = [...own, ...fromGroup];
+        const properties = resolved([...own, ...fromGroup]);
         return {
           id: t.id,
           gameId: t.gameId,
@@ -831,8 +838,9 @@ export function compileProject(source: SourceProject): CompileResult {
     // The two templates' declarations (patterkit design/family-parity-2026-10.md
     // items 8 and 9): values were always held to their template, and now the
     // template is held to the family's rule too. A name, once; a type from the
-    // one list; values for an enum or flags; a default that fits, compulsory
-    // here; and for a quality, the ladder rule Patter checks as well.
+    // one list; values for an enum or flags; a default that fits when one is
+    // given (left out, the type's fills in, written into the bundle); and for a
+    // quality, the ladder rule Patter checks as well.
     const checkFieldDecls = (decls: FieldDecl[] | undefined, outcome: boolean): void => {
       const field = outcome ? "outcomeFields" : "fields";
       const at = { severity: "error" as const, path: boxPath, where: effectiveGameId(boxDecl), field };
@@ -860,9 +868,8 @@ export function compileProject(source: SourceProject): CompileResult {
           report({ ...at, message: `${subject} is ${d.type} but declares no values` });
           continue;
         }
-        if (d.default === undefined) {
-          report({ ...at, message: `${subject} has no default` });
-        } else if (!(fieldValueFits(d, d.default) || (d.type === "enum" && d.default === ""))) {
+        // An enum field may default to "", none chosen: Storyletter writes that for "(none)".
+        if (d.default !== undefined && !valueFits(d, d.default, { noneChosen: true })) {
           report({ ...at, message: `${subject} defaults to ${JSON.stringify(d.default)}, which does not fit its type "${d.type}"` });
         }
       }
@@ -894,10 +901,10 @@ export function compileProject(source: SourceProject): CompileResult {
         // stages either side (patter-qualities.md section 2).
         if (decl.type === "quality" && typeof value === "string" && !(decl.stages ?? []).includes(value)) {
           report({ severity: "error", path, where, field, message: `field "${name}" is ${JSON.stringify(value)}, which is not one of its stages`,
-            fix: { kind: "pick-stage", ...holder, field: name, bad: value, options: [...(decl.stages ?? [])] } });
+            fix: { kind: "pick-stage", ...holder, field: name, bad: value, options: stagesEitherSide(decl, value) } });
           continue;
         }
-        if (!fieldValueFits(decl, value)) {
+        if (!valueFits(decl, value)) {
           report({ severity: "error", path, where, field, message: `field "${name}" does not match its declared type "${decl.type}"` });
         }
       }
@@ -1041,7 +1048,9 @@ export function compileProject(source: SourceProject): CompileResult {
                 continue;
               }
             }
-            const value = expr(src, deckSchema, path, `${effectiveGameId(card)}/${effectiveGameId(outcome)}`, `change ${target}`, "changes");
+            const [assignedScope, assignedName] = target.slice(1).split(".") as [string, string];
+            const value = expr(src, deckSchema, path, `${effectiveGameId(card)}/${effectiveGameId(outcome)}`, `change ${target}`, "changes",
+              { scope: assignedScope, name: assignedName });
             if (value) changes[target] = value;
           }
           outcomes.push({
@@ -1090,7 +1099,7 @@ export function compileProject(source: SourceProject): CompileResult {
           : {}),
         ...(deckDecl.shared !== undefined ? { shared: deckDecl.shared } : {}),
         ...(deckDecl.durable !== undefined ? { durable: deckDecl.durable } : {}),
-        properties: deckDecl.properties ?? [],
+        properties: resolved(deckDecl.properties ?? []),
         cards: byId(cards),
       });
       // A durable pile with nothing spent for good in it. Said once, on the
@@ -1216,7 +1225,7 @@ export function compileProject(source: SourceProject): CompileResult {
           ? { condition: expr(template.condition!, handSchema, handsPath, effectiveGameId(template), "template condition", "condition") }
           : {}),
         slots: template.slots ?? "unbounded",
-        properties: template.properties ?? [],
+        properties: resolved(template.properties ?? []),
       });
     }
     const templatesById = new Map(handTemplates.map((t) => [t.id, t]));
@@ -1286,7 +1295,7 @@ export function compileProject(source: SourceProject): CompileResult {
           },
         } : {}),
         ...(hand.slots !== undefined ? { slots: hand.slots } : {}),
-        ...(hand.properties !== undefined ? { properties: hand.properties } : {}),
+        ...(hand.properties !== undefined ? { properties: resolved(hand.properties) } : {}),
         // Template-of-play extras (`templates`) are source-only: never compiled.
       });
     }
@@ -1311,11 +1320,11 @@ export function compileProject(source: SourceProject): CompileResult {
       ...(title(boxDecl.purpose) !== undefined ? { purpose: boxDecl.purpose } : {}),
       ranking: { specificity: boxDecl.ranking?.specificity ?? true },
       ...(timed ? { turn: { seconds: boxDecl.turn!.seconds } } : {}),
-      fields: boxDecl.fields ?? [],
+      fields: resolved(boxDecl.fields ?? []),
       // Only when the box declares some: a bundle from a project without them
       // stays byte for byte what it was.
-      ...((boxDecl.outcomeFields ?? []).length > 0 ? { outcomeFields: boxDecl.outcomeFields } : {}),
-      properties: boxDecl.properties ?? [],
+      ...((boxDecl.outcomeFields ?? []).length > 0 ? { outcomeFields: resolved(boxDecl.outcomeFields!) } : {}),
+      properties: resolved(boxDecl.properties ?? []),
       ...(onMap ? { usesMap: true as const } : {}),
       tagGroups: byId(tagGroups),
       decks: byId(decks),
@@ -1388,10 +1397,10 @@ export function compileProject(source: SourceProject): CompileResult {
     metadata: strip ? "stripped" : "full",
     settings: { playAdvancesTurns: source.project.settings?.playAdvancesTurns ?? 1 },
     world: {
-      properties: worldDecls,
+      properties: resolved(worldDecls),
       ...(source.project.world?.registry !== undefined ? { registry: source.project.world.registry } : {}),
     },
-    story: { properties: source.project.story?.properties ?? [] },
+    story: { properties: resolved(source.project.story?.properties ?? []) },
     boxes: byId(boxes),
     // The project map's zone group always ships when there is one: hands and
     // cards reference it by id. Its geometry only under `export.map`.

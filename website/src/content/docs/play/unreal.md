@@ -92,9 +92,10 @@ criteria, beside its own tag groups.
 
 A dealt card's `Fields` hold only what the card sets. The bundle asset's
 `GetEffectiveCardFields(Box, Fields)` (and `GetEffectiveOutcomeFields` for an outcome) fills in
-every field the box declares from its default. For a quality field, `GetFieldStages` gives its
-ladder, and the Storylet stage functions `StageIndex`, `CompareStages` and `NextStage` say where
-a stage stands or what comes after it.
+every field the box declares from its default. `GetFieldDecl(Box, Field)` gives a field's
+declaration (its type, values, stages and default); hand a quality field's to the Storylet stage
+functions `StageIndex`, `CompareStages` and `NextStage` to say where a stage stands or what comes
+after it.
 
 ## Your game's state
 

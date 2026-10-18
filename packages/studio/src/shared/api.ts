@@ -459,8 +459,9 @@ export interface FieldDeclDto {
    *  arrives here as `text`, so it saves as `text`. */
   name: string;
   type: string;
-  /** Display value of the declared default (raw string; coerced on save). */
-  default: string;
+  /** Display value of the declared default (raw string; coerced on save).
+   *  Absent: none given, and the type's holds; for an enum, "" is none chosen. */
+  default?: string;
   values?: string[];
   /** A quality field's ordered ladder. */
   stages?: string[];
@@ -470,7 +471,10 @@ export interface FieldDeclDto {
 export interface PropertyDeclDto {
   name: string;
   type: string;
-  default: string;
+  /** Display value of the declared default. Absent: none given, and the type's
+   *  holds (false, 0, the first value or stage), which the compiler writes into
+   *  the bundle. */
+  default?: string;
   values?: string[];
   /** A quality's ordered ladder of stage names (design/quality.md). */
   stages?: string[];
@@ -1865,6 +1869,9 @@ export interface StudioApi {
   /** Put a quality field's value on a stage of its ladder (the pick-stage quick fix);
    *  `outcome` is null for a card field. */
   pickStage(deck: string, card: string, outcome: string | null, field: string, from: string, to: string): Promise<OpenResult | { error: string }>;
+  /** Put a tag's starting value for a quality on a stage of its ladder (the
+   *  pick-tag-stage quick fix). */
+  pickTagStage(group: string, tag: string, name: string, from: string, to: string): Promise<OpenResult | { error: string }>;
   /** The Patter quick fix: give card `card` an outcome named `gameId`, which its paired scene
    *  already names. Says where the new outcome is, so the editor can open it. */
   addOutcome(card: string, gameId: string): Promise<{ result: OpenResult; box: string; deck: string; outcome: string } | { error: string }>;
@@ -2322,6 +2329,7 @@ export const INVOKE_CHANNELS = {
   "problem:declareProperty": "declareProperty",
   "problem:repointTag": "repointTag",
   "problem:pickStage": "pickStage",
+  "problem:pickTagStage": "pickTagStage",
   "problem:addOutcome": "addOutcome",
   "problem:createScene": "createPatterScene",
   "project:planMapUpgrade": "planMapUpgrade",

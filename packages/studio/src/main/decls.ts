@@ -20,7 +20,7 @@ export const asText = (v: unknown): string => (typeof v === "string" ? v : JSON.
 // a flag the DTO drops is a flag the next save deletes from the shard.
 export const declDto = (d: PropertyDecl): PropertyDeclDto => ({
   name: d.name, type: d.type,
-  default: d.default === undefined ? "" : asText(d.default),
+  ...(d.default !== undefined ? { default: asText(d.default) } : {}),
   ...(d.values !== undefined ? { values: d.values } : {}),
   ...(d.stages !== undefined ? { stages: d.stages } : {}),
   ...(d.writable !== undefined ? { writable: d.writable } : {}),
@@ -45,11 +45,15 @@ export const coerceDefault = (raw: string, type: string): ScalarValue => {
   return t;   // string / enum
 };
 
-export const declFromDto = (d: PropertyDeclDto): PropertyDecl => ({
+export const declFromDto = (d: PropertyDeclDto, opts: { field?: boolean } = {}): PropertyDecl => ({
   name: d.name, type: d.type as PropertyDecl["type"],
-  // A quality with no explicit default starts at its first stage; the compile
-  // gate still checks the result is ON the ladder either way.
-  default: d.type === "quality" && d.default.trim() === "" ? (d.stages?.[0] ?? "") : coerceDefault(d.default, d.type),
+  // A default is optional (the family's rule, ruled 2026-10-18): none given,
+  // the type's holds, and the compiler writes it into the bundle. A blank
+  // default is none given; only a FIELD's enum keeps "", none chosen. A
+  // property always holds one of its values, so an older "" there heals to
+  // none given on the next save.
+  ...(d.default === undefined || (d.default.trim() === "" && !(opts.field === true && d.type === "enum"))
+    ? {} : { default: coerceDefault(d.default, d.type) }),
   ...(d.values !== undefined ? { values: d.values } : {}),
   ...(d.stages !== undefined ? { stages: d.stages } : {}),
   ...(d.writable !== undefined ? { writable: d.writable } : {}),
@@ -62,6 +66,9 @@ export const declFromDto = (d: PropertyDeclDto): PropertyDecl => ({
   ...(d.purpose !== undefined && d.purpose.trim() !== "" ? { purpose: d.purpose.trim() } : {}),
 });
 
+/** A card or outcome field's row back to its declaration: a property's, with an enum's "" kept as none chosen. */
+export const fieldDeclFromDto = (d: PropertyDeclDto): PropertyDecl => declFromDto(d, { field: true });
+
 /** The rows a page saves, minus any left with no name. */
 export const declsFromDtos = (rows: PropertyDeclDto[]): PropertyDecl[] =>
-  rows.filter((d) => d.name.trim()).map(declFromDto);
+  rows.filter((d) => d.name.trim()).map((d) => declFromDto(d));

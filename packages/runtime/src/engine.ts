@@ -77,7 +77,7 @@
 //     board snapshot depends on this; the shared fixture pins it)
 // ---------------------------------------------------------------------------
 
-import { deserialiseAst, evaluate } from "@wildwinter/expr";
+import { deserialiseAst, evaluate, valueFits } from "@wildwinter/expr";
 import type { EvalContext, ExprNode, ScalarValue, ScopeResolver } from "@wildwinter/expr";
 import { matchedSpecificity } from "@wildwinter/expr-specificity";
 import { storyletsDialect, NEVER_PLAYED } from "@storylet-studio/dialect";
@@ -968,29 +968,10 @@ const byKey = <T>(items: T[], key: (item: T) => string): T[] =>
 
 const propKey = (p: LoadProperty): string => `${p.flow ?? ""}${SORT_SEP}${p.path}`;
 
-/**
- * Does a saved value still fit its declaration?
- *
- * The type first, then the declaration's own vocabulary: an enum value or a
- * quality stage the edit struck out is still a string of the right type and
- * still no longer a legal value, and a condition comparing against the ladder
- * would answer nonsense about it. A declaration with no vocabulary (`values` /
- * `stages` absent) constrains nothing, so anything of the right type fits.
- */
-function valueFits(decl: PropertyDecl, value: ScalarValue): boolean {
-  switch (decl.type) {
-    case "boolean": return typeof value === "boolean";
-    case "number": return typeof value === "number";
-    case "string": return typeof value === "string";
-    case "enum":
-      return typeof value === "string" && (decl.values === undefined || decl.values.includes(value));
-    case "quality":
-      return typeof value === "string" && (decl.stages === undefined || decl.stages.includes(value));
-    case "flags":
-      return Array.isArray(value) && value.every((f) => typeof f === "string" && (decl.values === undefined || decl.values.includes(f)));
-    default: return true;
-  }
-}
+// Whether a saved value still fits its declaration is the kernel's `valueFits`
+// (@wildwinter/expr), shared with Patter's loads: the type first, then the
+// declaration's own vocabulary, so an enum value or a stage the edit struck out
+// no longer fits though it is still a string.
 
 /** Walk one bag's worth of saved values against one bag's worth of
  *  declarations: report the orphans, the newcomers and the misfits, and
@@ -1699,7 +1680,7 @@ export class Engine {
       const value = this.internals.worldResolver.get(d.name);
       out.push({
         path: `world.${d.name}`, name: d.name, type: d.type,
-        value: value ?? d.default, default: d.default,
+        value: value ?? defaultFor(d), default: defaultFor(d),
         ...(d.values !== undefined ? { values: d.values } : {}),
         ...(d.stages !== undefined ? { stages: d.stages } : {}),
         // @world is FOREIGN - a host resolver backs it - so writability is whether that
@@ -3394,7 +3375,7 @@ export class Flow {
       const value = this.internals.worldResolver.get(d.name);
       out.push({
         path: `world.${d.name}`, name: d.name, type: d.type,
-        value: value ?? d.default, default: d.default,
+        value: value ?? defaultFor(d), default: defaultFor(d),
         ...(d.values !== undefined ? { values: d.values } : {}),
         ...(d.stages !== undefined ? { stages: d.stages } : {}),
         // @world is FOREIGN - a host resolver backs it - so writability is whether that

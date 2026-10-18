@@ -2487,6 +2487,51 @@ export const fixtures: Fixtures = {
         { op: "assertState", expect: { "story.weather": "fair" } },
       ] },
 
+    // A stage and a flag the edit deleted (the qualities brief, C10): the saved
+    // value is still a string, or a list of strings, of the right type, and
+    // only the declaration's own ladder or flag list can tell it no longer
+    // fits. Both take the default, as the struck-out enum value does, by the
+    // kernel's one fit check.
+    { name: "a stage the edit deleted no longer fits: the quality takes its default",
+      story: [{ name: "act", type: "quality", default: "arrival", stages: ["arrival", "act-1", "act-2"] }],
+      cards: [{ id: "c_any" }],
+      hands: [{ id: "h_q", rule: {} }],
+      bundleB: {
+        story: [{ name: "act", type: "quality", default: "arrival", stages: ["arrival", "act-1"] }],
+        cards: [{ id: "c_any" }],
+        hands: [{ id: "h_q", rule: {} }],
+      },
+      script: [
+        { op: "setState", story: { act: "act-2" } },
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          evicted: [], droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [],
+          retypedProperties: [{ path: "story.act" }],
+        } },
+        { op: "assertState", expect: { "story.act": "arrival" } },
+      ] },
+
+    { name: "a flag the edit deleted no longer fits: the flags take their default",
+      story: [{ name: "marks", type: "flags", default: ["met"], values: ["met", "warm", "owed"] }],
+      cards: [{ id: "c_any" }],
+      hands: [{ id: "h_q", rule: {} }],
+      bundleB: {
+        story: [{ name: "marks", type: "flags", default: ["met"], values: ["met", "warm"] }],
+        cards: [{ id: "c_any" }],
+        hands: [{ id: "h_q", rule: {} }],
+      },
+      script: [
+        { op: "setState", story: { marks: ["warm", "owed"] } },
+        { op: "saveLoad", into: "B", expectReport: {
+          exact: false, project: "conf", flows: ["main"],
+          evicted: [], droppedCooldowns: [], droppedSpent: [],
+          droppedProperties: [], defaultedProperties: [],
+          retypedProperties: [{ path: "story.marks" }],
+        } },
+        { op: "assertState", expect: { "story.marks": ["met"] } },
+      ] },
+
     // --- durable state, as a feature (ruling H, 2026-10-06; corpus version 13) ---
     //
     // `durable` on a declaration says a value outlives the run; on a deck or a

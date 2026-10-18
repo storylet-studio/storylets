@@ -20,6 +20,7 @@
 // ---------------------------------------------------------------------------
 /// <reference lib="dom" />
 
+import { rungStrip } from "@wildwinter/app-shell/value-control";
 import type { Engine, EngineLogEntry, Flow, LogEntry, PropertyRow } from "@storylet-studio/runtime";
 import type { ScalarValue } from "@storylet-studio/model";
 import { serializeState, deserializeState } from "./save.js";
@@ -68,6 +69,12 @@ const CSS = `
 .sl-insp .sl-ident { font-family: ui-monospace, monospace; font-size: 11px; }
 .sl-insp .sl-ident b { font-weight: 600; }
 .sl-insp .sl-note { color: var(--muted, #666); }
+.sl-insp .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line, #ccc); border-radius: 4px; overflow: hidden; }
+.sl-insp .seg-opt { background: none; border: 0; cursor: pointer; color: var(--muted, #666);
+  font: 400 11px ui-monospace, monospace; padding: 1px 6px; }
+.sl-insp .seg-opt + .seg-opt { border-left: 1px solid var(--line, #ccc); }
+.sl-insp .seg-opt.on { color: var(--ink, #222); font-weight: 600; background: var(--accent-soft, #e6eef0); cursor: default; }
+.sl-insp .shell-rung.stray { color: #9a3b2e; text-decoration: line-through; }
 `;
 
 /** Inject the shared panel stylesheet once. Exported so the bundle inspector
@@ -428,16 +435,24 @@ function buildRow(
       read = () => { if (!focused(input)) input.value = String(current() ?? 0); };
       break;
     }
-    case "enum":
     case "quality": {
-      // A quality edits as a dropdown of its STAGE LADDER, closed exactly like an
-      // enum's values. It fell to the string branch until 2026-09-01, so a free-text
-      // box accepted any stage name at all - and an unknown stage is not a harmless
-      // typo: the evaluator refuses it ("X is not a stage of this quality"), so a
-      // slip here broke play rather than being corrected. listProperties has carried
-      // `stages` for this since it was written; nothing consumed it.
+      // A quality shows as its LADDER, the current stage marked, as in both
+      // editors: the family's one strip (@wildwinter/app-shell/value-control).
+      // Closed like an enum: an unknown stage is not a harmless typo, since the
+      // evaluator refuses it, so there is no free text to slip in.
+      const holder = document.createElement("span");
+      const draw = (): void => {
+        const v = current();
+        holder.replaceChildren(rungStrip({ stages: row.stages ?? [], value: typeof v === "string" ? v : undefined, decl: row,
+          onPick: (stage) => { commit(stage); draw(); }, doc: document }));
+      };
+      widget = holder;
+      read = draw;
+      break;
+    }
+    case "enum": {
       const select = document.createElement("select");
-      for (const v of (row.type === "quality" ? row.stages : row.values) ?? []) {
+      for (const v of row.values ?? []) {
         const o = document.createElement("option");
         o.value = v;
         o.textContent = v;

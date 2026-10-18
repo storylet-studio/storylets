@@ -19,7 +19,7 @@ import type { ProjectSession } from "../project.js";
 import type { OpenResult } from "../../shared/api.js";
 import { commit, commitMaking, freshKey } from "./write-path.js";
 import type { Written } from "./write-path.js";
-import { boxWrite, deckWrite, gone, handsWrite, locate, projectWrite } from "./shards.js";
+import { boxWrite, deckWrite, gone, groupHome, handsWrite, locate, mapGroupHome, projectWrite } from "./shards.js";
 
 /**
  * Declare a property that something already refers to.
@@ -126,6 +126,24 @@ export async function pickStage(
   if (!holder || holder.fields?.[field] !== from) return { error: "that value has already changed" };
   holder.fields[field] = to;
   return commit(session, "Fix stage", freshKey(), [deckWrite(session, found.deck)]);
+}
+
+/**
+ * Put a tag's starting value back on its quality's ladder, as `pickStage` does
+ * for a field: the group declares the quality, the tag starts it at a stage
+ * the ladder no longer has, and the author picks which it should be. The group
+ * is a box's own or the project map's zone group.
+ */
+export async function pickTagStage(
+  session: ProjectSession, groupId: string, tagId: string, name: string, from: string, to: string,
+): Promise<Written> {
+  const home = session.loaded.source!.boxes.map((b) => groupHome(session, b, groupId)).find((h) => h !== undefined)
+    ?? mapGroupHome(session, "", groupId);
+  if (!home) return gone("tag group");
+  const tag = home.group.tags.find((t) => t.id === tagId);
+  if (!tag || tag.values?.[name] !== from) return { error: "that value has already changed" };
+  tag.values[name] = to;
+  return commit(session, "Fix stage", freshKey(), [home.write()]);
 }
 
 /**

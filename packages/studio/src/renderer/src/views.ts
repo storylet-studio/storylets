@@ -1257,7 +1257,7 @@ export function renderProblems(
 export function fixLabel(fix: NonNullable<Problem["fix"]>): string {
   if (fix.kind === "declare-property") return `Set up “@${fix.scope}.${fix.name}”`;
   if (fix.kind === "repoint-tag") return "Choose a tag…";
-  if (fix.kind === "pick-stage") return "Choose a stage…";
+  if (fix.kind === "pick-stage" || fix.kind === "pick-tag-stage") return "Choose a stage…";
   if (fix.kind === "add-outcome") return `Add outcome “${fix.gameId}”`;
   if (fix.kind === "create-scene") return "Create the scene in Patter";
   if (fix.kind === "upgrade-project") return "Upgrade the project…";

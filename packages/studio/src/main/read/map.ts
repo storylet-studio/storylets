@@ -11,6 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import { existsSync, statSync } from "node:fs";
+import { defaultFor } from "@wildwinter/scoperegistry";
 import { assetPath, boxColourOf, canvasFurniture, mapSites, movesIn, tagsOfHand } from "@storylet-studio/ops";
 import { PLACE_GROUP, backgroundsOf, effectiveGameId, framesOf, handBinding, isSpatial, polygonOf, stacked, zOf } from "@storylet-studio/model";
 import type { PropertyDecl, TagGroup } from "@storylet-studio/model";
@@ -219,7 +220,8 @@ export function mapZoneDetail(session: ProjectSession, tagId: string): MapZoneDe
   const property = (p: PropertyDecl, own: boolean): MapZonePropertyDto => ({
     name: p.name, type: p.type,
     ...(p.values !== undefined ? { values: p.values } : p.stages !== undefined ? { values: p.stages } : {}),
-    start: asText(tag.values?.[p.name] ?? p.default),
+    // A declaration may give no default: then the type's holds (the kernel's defaultFor), as the bundle says.
+    start: asText(tag.values?.[p.name] ?? defaultFor(p)),
     ...(p.shared === true ? { shared: true } : {}),
     ...(own ? { own: true } : {}),
   });

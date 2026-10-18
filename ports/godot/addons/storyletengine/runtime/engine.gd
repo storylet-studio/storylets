@@ -1773,37 +1773,6 @@ static func _empty_draft() -> Dictionary:
 	}
 
 
-## Does a saved value still fit its declaration?
-##
-## The type first, then the declaration's own vocabulary: an enum value or a
-## quality stage the edit struck out is still a string of the right type and
-## still no longer a legal value. A declaration with no vocabulary constrains
-## nothing, so anything of the right type fits.
-static func _value_fits(decl: Dictionary, value) -> bool:
-	match str(decl.get("type", "")):
-		"boolean":
-			return value is bool
-		"number":
-			return (value is int or value is float) and not (value is bool)
-		"string":
-			return value is String
-		"enum":
-			return value is String and (not decl.has("values") or (decl["values"] as Array).has(value))
-		"quality":
-			return value is String and (not decl.has("stages") or (decl["stages"] as Array).has(value))
-		"flags":
-			if not (value is Array):
-				return false
-			if not decl.has("values"):
-				return true
-			for f in (value as Array):
-				if not (decl["values"] as Array).has(f):
-					return false
-			return true
-		_:
-			return true
-
-
 ## Walk one bag's worth of saved values against one bag's worth of
 ## declarations: report the orphans, the newcomers and the misfits, and return
 ## the values that survive.
@@ -1819,7 +1788,7 @@ static func _walk_scope(decls: Array, saved: Dictionary, prefix: String, flow, d
 		if not by_name.has(name):
 			(draft["droppedProperties"] as Array).append(entry)
 			continue
-		if not _value_fits(by_name[name], saved[name]):
+		if not StoryletPropertyBag.value_fits(by_name[name], saved[name]):
 			(draft["retypedProperties"] as Array).append(entry)
 			continue
 		clean[name] = saved[name]
@@ -2261,7 +2230,7 @@ func _plan_durable(props: Array, cards: Array, save: Dictionary, flow, draft: Di
 		if prop == null:
 			(draft["droppedProperties"] as Array).append(at.call(str(address)))
 			continue
-		if not (_durable_readable(carried[address]) and _value_fits(prop["decl"], carried[address])):
+		if not (_durable_readable(carried[address]) and StoryletPropertyBag.value_fits(prop["decl"], carried[address])):
 			(draft["retypedProperties"] as Array).append(at.call(str(address)))
 			continue
 		values[str(address)] = {"prop": prop, "value": carried[address]}

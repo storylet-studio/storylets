@@ -30,6 +30,14 @@ the two styles will sit in one file, so it is better known in advance than disco
   `text`); values for `enum` and `flags`; a default that fits; and a quality field's stages. A
   card's or outcome's value for a quality field must be one of its stages.
 - **The codex kit's `body` field is `multiline`.**
+- **A default is optional**, on every property and field: left out, the type's holds (false, 0, "",
+  the first value or stage) and `build` writes it into the bundle. A field's missing default is no
+  longer an error. One that is given must fit its type, on a property too; an enum property left at
+  `""` (what Storyletter wrote for "(none)") is a warning, not an error.
+- **A change that sets a quality to a name that is not one of its stages is refused**, as a
+  condition comparing it with one always was. So is a change that sets it to another quality.
+- **A tag that starts a quality on a stage it no longer has** says so in its own words, with the
+  stages to choose from in Storyletter.
 
 ### Fixed
 

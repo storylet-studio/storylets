@@ -31,13 +31,13 @@
     "@storylet-studio/model": "0.9.1",
     "@storylet-studio/runtime": "0.11.2",
     "@storylet-studio/with-patter": ">=0.2.0",
-    "@wildwinter/expr": "^0.5.2",
-    "@wildwinter/scoperegistry": "^0.8.0",
+    "@wildwinter/expr": "^0.6.0",
+    "@wildwinter/scoperegistry": "^0.9.0",
     "@wildwinter/toolkit": "^0.1.0",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1"
   },
   "devDependencies": {
-    "@patterkit/play-helpers": "^0.8.8"
+    "@patterkit/play-helpers": "^0.9.0"
   }
 }

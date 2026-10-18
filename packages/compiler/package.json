@@ -27,8 +27,8 @@
   "dependencies": {
     "@storylet-studio/dialect": "0.3.1",
     "@storylet-studio/model": "0.9.1",
-    "@wildwinter/expr": "^0.5.2",
-    "@wildwinter/scoperegistry": "^0.8.0",
+    "@wildwinter/expr": "^0.6.0",
+    "@wildwinter/scoperegistry": "^0.9.0",
     "@wildwinter/toolkit": "^0.1.0",
     "json5": "^2.2.3"
   }

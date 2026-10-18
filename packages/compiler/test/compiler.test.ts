@@ -1253,6 +1253,58 @@ describe("publish-gate validation", () => {
     });
   });
 
+  // --- a change assigning a quality (the qualities brief, A4) ------------------
+  describe("quality changes", () => {
+    const ACT = { name: "act", type: "quality", stages: ["arrival", "act-1", "act-2"] };
+    const MOOD = { name: "mood", type: "quality", stages: ["low", "high"] };
+    const sets = (src: string) => errors(compileFiles(minimal(
+      [{ id: "c_1", gameId: "c1", outcomes: [{ id: "o_1", gameId: "o1", changes: { "@story.act": src } }] }],
+      { story: [ACT, MOOD] },
+    )).issues);
+
+    it("takes a stage, and advance of the quality", () => {
+      expect(sets('"act-1"')).toEqual([]);
+      expect(sets("advance(@story.act)")).toEqual([]);
+    });
+
+    it("refuses a name that is not a stage, and another quality's stage, at publish", () => {
+      expect(sets('"act-9"').join()).toContain("'act-9' is not a stage of this quality - expected one of: arrival, act-1, act-2");
+      expect(sets("@story.mood").join()).toContain("assigns a stage of a different quality");
+    });
+  });
+
+  // --- property defaults: optional in source, resolved in the bundle (the
+  // family's rule, ruled 2026-10-18) -------------------------------------------
+  describe("property defaults", () => {
+    it("accepts a property with no default, and writes the type's into the bundle", () => {
+      const result = compileFiles(minimal([], {
+        story: [{ name: "met", type: "boolean" }, { name: "act", type: "quality", stages: ["arrival", "act-1"] }],
+        world: [{ name: "gold", type: "number" }],
+        deck: { properties: [{ name: "mood", type: "enum", values: ["calm", "tense"] }] },
+      }));
+      expect(errors(result.issues)).toEqual([]);
+      const b = result.bundle!;
+      expect(b.story.properties.map((d) => [d.name, d.default])).toEqual([["met", false], ["act", "arrival"]]);
+      expect(b.world.properties.map((d) => [d.name, d.default])).toEqual([["gold", 0]]);
+      expect(b.boxes[0]!.decks[0]!.properties.map((d) => [d.name, d.default])).toEqual([["mood", "calm"]]);
+    });
+
+    it("warns, and does not refuse, an enum property left at the old \"\" none", () => {
+      const issues = compileFiles(minimal([], { story: [{ name: "mood", type: "enum", values: ["calm"], default: "" }] })).issues;
+      expect(errors(issues)).toEqual([]);
+      expect(issues.filter((i) => i.severity === "warning").map((i) => i.message))
+        .toContain('"@story.mood" defaults to "", which is none of its values; leave the default blank to start at "calm"');
+    });
+
+    it("refuses a given default that does not fit the type", () => {
+      const e = errors(compileFiles(minimal([], {
+        story: [{ name: "met", type: "boolean", default: "yes" }, { name: "mood", type: "enum", values: ["calm"], default: "loud" }],
+      })).issues);
+      expect(e).toContain('"@story.met" defaults to "yes", which does not fit its type "boolean"');
+      expect(e).toContain('"@story.mood" defaults to "loud", which does not fit its type "enum"');
+    });
+  });
+
   // --- field declarations (patterkit design/family-parity-2026-10.md items 8
   // and 9, and patter-qualities.md section 1) ---------------------------------
   //
@@ -1304,8 +1356,29 @@ describe("publish-gate validation", () => {
       expect(e).toContain('card template field "g" is flags but declares no values');
     });
 
-    it("refuses a missing default: a field's default is compulsory", () => {
-      expect(said([{ name: "cue", type: "text" }])).toContain('card template field "cue" has no default');
+    // Defaults are optional in source and resolved in the bundle, by the
+    // family's rule (ruled 2026-10-18; it replaces "a field's default is
+    // compulsory"): left out, the type's default holds, by the kernel's
+    // defaultFor, and the bundle carries it, so a host never needs a table.
+    it("accepts a field with no default, and writes the type's into the bundle", () => {
+      const fields = [
+        { name: "cue", type: "text" }, { name: "note", type: "multiline" }, { name: "n", type: "number" },
+        { name: "b", type: "boolean" }, { name: "f", type: "enum", values: ["red", "blue"] },
+        { name: "g", type: "flags", values: ["met", "warm"] },
+        { name: "act", type: "quality", stages: ["arrival", "act-1", "act-2"] },
+      ];
+      const result = compileFiles(minimal([], { fields, outcomeFields: [{ name: "after", type: "text" }] }));
+      expect(errors(result.issues)).toEqual([]);
+      const box = result.bundle!.boxes[0]!;
+      expect(box.fields.map((f) => [f.name, f.default])).toEqual([
+        ["cue", ""], ["note", ""], ["n", 0], ["b", false], ["f", "red"], ["g", []], ["act", "arrival"],
+      ]);
+      expect(box.outcomeFields!.map((f) => [f.name, f.default])).toEqual([["after", ""]]);
+    });
+
+    it("keeps a default that is given, an enum's none included", () => {
+      const result = compileFiles(minimal([], { fields: [{ name: "f", type: "enum", default: "", values: ["red"] }, { ...ACT, default: "act-1" }] }));
+      expect(result.bundle!.boxes[0]!.fields.map((f) => f.default)).toEqual(["", "act-1"]);
     });
 
     it("refuses a default that does not fit the type", () => {
@@ -1338,6 +1411,15 @@ describe("publish-gate validation", () => {
       const result = compileFiles(minimal([{ id: "c_1", gameId: "c1", fields: { act: "finale" }, outcomes: [] }], { fields: [ACT] }));
       const issue = result.issues.find((i) => i.message.includes("not one of its stages"))!;
       expect(issue.fix).toEqual({ kind: "pick-stage", deck: "k_1", card: "c_1", field: "act", bad: "finale", options: ["arrival", "act-1", "act-2"] });
+    });
+
+    it("offers the stages for a tag that starts a group's quality off its ladder", () => {
+      const groups = [{ id: "d_1", gameId: "d1",
+        properties: [{ name: "standing", type: "quality", stages: ["stranger", "friend", "kin"] }],
+        tags: [{ id: "v_1", gameId: "v1", values: { standing: "enemy" } }] }];
+      const issue = compileFiles(minimal([], { groups })).issues.find((i) => i.message.includes("not one of its stages"))!;
+      expect(issue.message).toBe('"standing" starts at "enemy" on this tag, which is not one of its stages');
+      expect(issue.fix).toEqual({ kind: "pick-tag-stage", group: "d_1", tag: "v_1", name: "standing", bad: "enemy", options: ["stranger", "friend", "kin"] });
     });
 
     it("checks multiline and text values are text", () => {

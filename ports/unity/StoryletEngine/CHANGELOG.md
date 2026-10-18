@@ -7,11 +7,17 @@
 - **`FieldHelpers`**: `FieldDecls(bundle, box)`, `OutcomeFieldDecls`, `FieldValue` and
   `EffectiveFields`, which fill in every declared default a card or outcome leaves out. A
   card's `Fields` stay exactly as the bundle wrote them.
-- **`Wildwinter.Expr.Stages`** (the shared kernel, `k88b76cef`): `Index`, `Compare` and `Next`
+- **`Wildwinter.Expr.Stages`** (the shared kernel, `k1a333a0e`): `Index`, `Compare` and `Next`
   order a quality's stages outside a condition, from a ladder or a declaration.
 - **A field declaration carries its stages.** A card or outcome field of type `quality` lists
   its ladder in the bundle, and the box's field declarations now read it, as property
   declarations always have.
+
+### Changed
+
+- **A saved value the build no longer takes is put back by the kernel's one check.** A stage or a
+  flag deleted since the save (as an enum value already was) is reported as retyped and takes its
+  default, by the shared kernel's value check, which Patterplay's loads use too. The engine's own copy of the check is gone: it calls `Wildwinter.Expr.ValueFit.Fits`.
 
 ## [0.11.2] - 2026-10-10
 

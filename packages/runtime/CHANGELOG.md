@@ -19,6 +19,15 @@ section for it.
   re-exported: they order a quality field's stages (or a property's) outside a condition, from
   a ladder or the declaration carrying one.
 
+### Changed
+
+- **A saved value the build no longer takes is put back by the kernel's one check.** A stage or a
+  flag deleted since the save (as an enum value already was) is reported as retyped and takes its
+  default, by the shared kernel's value check, which Patterplay's loads use too.
+- **Every declaration in a bundle carries its default**, which the compiler now writes in when the
+  source leaves it out. The engine reads one through the kernel's `defaultFor` either way, so a
+  bundle from an older compiler plays as it did.
+
 ## [0.11.2] - 2026-10-10
 
 ### Changed

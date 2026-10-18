@@ -257,12 +257,6 @@ body { background: var(--bg); font-size: 14px; }
 .srlabel { font-family: var(--font-mono); font-size: 11.5px; }
 .srval { width: 58px; font-family: var(--font-mono); font-size: 12px; padding: 2px 6px; }
 .srval.ro { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface); }
-/* A quality's ladder: the rungs in order, current one marked. The shell's
-   `.seg`, so the row reads as one ladder rather than a list of buttons; the
-   rung names keep the mono voice values use everywhere in this app. */
-.srrung { font-family: var(--font-mono); font-weight: 400; padding: 2px 7px; }
-.srrung.on { font-weight: 600; }
-
 /* A hand's tags: the shell's `.pill`, with the identity dot. */
 .pill i { flex: none; width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--muted); }
 

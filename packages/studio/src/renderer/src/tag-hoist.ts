@@ -9,6 +9,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PropertyDeclDto, TagGroupEdit } from "../../shared/api.js";
+import { defaultFor } from "@wildwinter/scoperegistry";
 
 type Edit = Required<Pick<TagGroupEdit, "properties" | "values">>;
 
@@ -34,21 +35,29 @@ export function hoistableProperties(edit: Edit): string[] {
     .map((decl) => decl.name);
 }
 
+/** A type's own default as the row's text: what a declaration with none starts at (the kernel's defaultFor). */
+const typeDefaultText = (d: { type: string; values?: string[]; stages?: string[] }): string => {
+  const v = defaultFor({ type: d.type, ...(d.values ? { values: d.values } : {}), ...(d.stages ? { stages: d.stages } : {}) });
+  return typeof v === "string" ? v : JSON.stringify(v);
+};
+
 /** Move one hoistable name up to the group. The group takes the COMMONEST
  *  default (fewest per-tag overrides); a tag whose default differed keeps its
  *  start as a value, so behaviour is identical before and after. */
 export function hoistProperty(edit: Edit, name: string): void {
   if (!hoistableProperties(edit).includes(name)) return;
   const decls = edit.values.map((v) => v.properties.find((p) => p.name === name)!);
+  // A declaration with no default starts at its type's, so it counts as that.
+  const start = (d: (typeof decls)[number]): string => d.default ?? typeDefaultText(d);
   const counts = new Map<string, number>();
-  for (const d of decls) counts.set(d.default, (counts.get(d.default) ?? 0) + 1);
+  for (const d of decls) counts.set(start(d), (counts.get(start(d)) ?? 0) + 1);
   const commonest = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]![0];
   edit.properties.push({ ...decls[0]!, default: commonest });
   for (const v of edit.values) {
     const own = v.properties.find((p) => p.name === name)!;
     v.properties = v.properties.filter((p) => p.name !== name);
-    if (own.default !== commonest) {
-      v.values = { ...(v.values ?? {}), [name]: own.default };
+    if (start(own) !== commonest) {
+      v.values = { ...(v.values ?? {}), [name]: start(own) };
     }
   }
 }

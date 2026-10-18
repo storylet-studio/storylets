@@ -23,7 +23,16 @@ here is part of shipping, not a courtesy.
 - **Reordering a quality's stages says what it changes**: how many gates compare against the
   ladder, since each of them now reads the new order.
 - **A quality field left on a stage that no longer exists offers its stages to choose from**,
-  from the problems bar.
+  from the problems bar, and so does a tag that starts a quality on one.
+- **A quality field's value shows as its ladder** on the Fields tab, the current stage marked, as
+  the Board's State tab draws it: one strip, shared with Patterpad. Unset, it says what it falls
+  back to, "default (x)", which also clears a value.
+- **A default can be left blank**, on every property and field list: the blank says what holds
+  instead, "default (False)", "default (calm)", "default (arrival)", and the shard carries no
+  default, which the compiler fills in. An enum field still offers "(none)"; an enum property left
+  at `""` by an older Storyletter is cleared at its next save. A tag's blank starting value says the
+  group's default.
+- **Renaming a stage carries a coverage driver's values** for that quality too.
 
 ### Changed
 

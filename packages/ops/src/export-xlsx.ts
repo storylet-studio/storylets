@@ -13,6 +13,7 @@
 // as in Patter's report-xlsx: heavy, and only this path needs it.
 // ---------------------------------------------------------------------------
 
+import { defaultFor } from "@wildwinter/scoperegistry";
 import { projectHash } from "@storylet-studio/compiler";
 import type { SourceBox, SourceDeck, SourceProject } from "@storylet-studio/compiler";
 import { byDisplayOrder, effectiveGameId, handBinding, PLACE_GROUP } from "@storylet-studio/model";
@@ -75,7 +76,7 @@ const label = (entity: { id: string; gameId?: string; title?: string }): string 
   entity.title ?? effectiveGameId(entity);
 
 const properties = (decls: PropertyDecl[] | undefined): string =>
-  (decls ?? []).map((d) => `${d.name} = ${String(scalar(d.default))}`).join("; ");
+  (decls ?? []).map((d) => `${d.name} = ${String(scalar(defaultFor(d)))}`).join("; ");
 
 const changes = (outcome: Outcome<string>): string =>
   Object.entries(outcome.changes).map(([target, expr]) => `${target} = ${expr}`).join("; ");
@@ -236,7 +237,7 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
             : "",
           ...Object.fromEntries([...lookup.groups.map((g) => g.id), ...extraGroups]
             .map((id) => [`t:${id}`, lookup.tagList(card.tags?.[id])])),
-          ...Object.fromEntries(lookup.fields.map((f) => [`f:${f.name}`, scalar(card.fields?.[f.name] ?? f.default)])),
+          ...Object.fromEntries(lookup.fields.map((f) => [`f:${f.name}`, scalar(card.fields?.[f.name] ?? defaultFor(f))])),
           purpose: card.purpose ?? "",
           outcomes: byDisplayOrder(card.outcomes).map(outcomeLine).join("\n"),
         });
@@ -250,7 +251,7 @@ export async function runExportXlsx(source: SourceProject, opts: ExportXlsxOptio
             // The outcome's own fields, filled from its box's declarations the
             // way a card's are from the deck sheet's: the value, else the
             // declared default, so a reader sees what the host will get.
-            ...Object.fromEntries(lookup.outcomeFields.map((f) => [`of:${f.name}`, scalar(outcome.fields?.[f.name] ?? f.default)])),
+            ...Object.fromEntries(lookup.outcomeFields.map((f) => [`of:${f.name}`, scalar(outcome.fields?.[f.name] ?? defaultFor(f))])),
             purpose: outcome.purpose ?? "",
           });
         }

@@ -78,6 +78,36 @@ struct FStoryletFieldEntry
 	FStoryletValue Value;
 };
 
+/** A card or outcome field's declaration, as the bundle carries it: its
+ *  type, its vocabulary and its default (the one it was given, else its
+ *  type's; the compiler writes it in). Read one with
+ *  UStoryletBundle::GetFieldDecl and hand it to the Storylet stage functions
+ *  to compare or step a quality field's stage. */
+USTRUCT(BlueprintType)
+struct FStoryletFieldDecl
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Name;
+
+	/** The family's field type: text, multiline, number, boolean, enum, flags
+	 *  or quality (string reads as text). */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Type;
+
+	/** An enum's values, or the flags a flags field may hold. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FString> Values;
+
+	/** A quality field's ladder, in order. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FString> Stages;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FStoryletValue Default;
+};
+
 /** A card view in a dealt hand or a peeked list. Carries NO outcome
  *  availability - ask Outcomes() for current truth (schema 5). */
 USTRUCT(BlueprintType)

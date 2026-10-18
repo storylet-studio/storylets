@@ -14,6 +14,12 @@ the same version number always means the same runtime behaviour.
 - **`StoryletExpression.stage_index`, `compare_stages` and `next_stage`**, the shared kernel's
   ladder helpers, for a quality's stages outside a condition.
 
+### Changed
+
+- **A saved value the build no longer takes is put back by the kernel's one check.** A stage or a
+  flag deleted since the save (as an enum value already was) is reported as retyped and takes its
+  default, by the shared kernel's value check, which Patterplay's loads use too. The engine's own copy of the check is gone: it calls `StoryletPropertyBag.value_fits`.
+
 ## [0.11.2] - 2026-10-10
 
 ### Changed

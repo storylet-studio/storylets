@@ -82,10 +82,18 @@ bool FStoryletFieldsTest::RunTest(const FString& Parameters)
 		if (TestNotNull(TEXT("outcome default filled in"), After)) TestEqual(TEXT("after"), After->Value.String, FString(TEXT("Done.")));
 	}
 
-	// The ladder, read off the declaration, and the stage functions over it.
-	const TArray<FString> Stages = Bundle->GetFieldStages(TEXT("box"), TEXT("act"), false);
-	TestEqual(TEXT("the act ladder"), FString::Join(Stages, TEXT(",")), FString(TEXT("arrival,act-1,act-2")));
-	TestEqual(TEXT("a text field has no ladder"), Bundle->GetFieldStages(TEXT("box"), TEXT("cue"), false).Num(), 0);
+	// The declaration, with its ladder, and the stage functions over it.
+	FStoryletFieldDecl Stages;
+	TestTrue(TEXT("act is declared"), Bundle->GetFieldDecl(TEXT("box"), TEXT("act"), false, Stages));
+	TestEqual(TEXT("the act ladder"), FString::Join(Stages.Stages, TEXT(",")), FString(TEXT("arrival,act-1,act-2")));
+	TestEqual(TEXT("act is a quality"), Stages.Type, FString(TEXT("quality")));
+	{
+		FStoryletFieldDecl Cue;
+		TestTrue(TEXT("cue is declared"), Bundle->GetFieldDecl(TEXT("box"), TEXT("cue"), false, Cue));
+		TestEqual(TEXT("a text field has no ladder"), Cue.Stages.Num(), 0);
+		FStoryletFieldDecl None;
+		TestFalse(TEXT("an undeclared field is not found"), Bundle->GetFieldDecl(TEXT("box"), TEXT("nothing"), false, None));
+	}
 
 	TestEqual(TEXT("index"), UStoryletStages::StageIndex(Stages, TEXT("act-2")), 2);
 	TestEqual(TEXT("index of no stage"), UStoryletStages::StageIndex(Stages, TEXT("finale")), -1);

@@ -277,11 +277,14 @@ outcome in this box may carry, declared the same way, for the line your game sho
 press without spending a card on it. Leave it out when you have none.
 
 A field's `type` is one of `text`, `multiline`, `number`, `boolean`, `enum`, `flags` and
-`quality`, the list Patter's game data uses (`string` is read as `text`). Every field needs a
-`default` that fits its type; an `enum` or `flags` field lists its `values`, and a `quality`
-field lists its `stages`, at least two, in order. A card's value for a quality field must be
-one of those stages. The bundle carries the values exactly as the cards wrote them, so a
-field a card leaves out arrives missing, not as its default. `properties` is the
+`quality`, the list Patter's game data uses (`string` is read as `text`). A field's `default`
+is optional: left out, the type's own holds (`false`, `0`, `""`, the first enum value, no flags,
+the first stage), and `build` writes it onto the declaration in the bundle. One you give must fit
+its type; an `enum` field's may be `""`, none chosen. An `enum` or `flags` field lists its
+`values`, and a `quality` field lists its `stages`, at least two, in order. A card's value for a
+quality field must be one of those stages. The bundle carries the values exactly as the cards
+wrote them, so a field a card leaves out arrives missing; the field helpers fill it in from the
+declaration's default. `properties` is the
 `@box` scope. `ranking.specificity` is the one per-box ranking toggle.
 
 An optional `turn` makes this a **timed box**:
@@ -652,9 +655,9 @@ without one.
 |---|---|
 | `name` | referenced as `@scope.name`; lower case, unique in its scope |
 | `type` | `boolean`, `number`, `string`, `enum`, `flags` or `quality` ([which to use](/format/property-types/)) |
-| `default` | required, so a declared property always has a value |
+| `default` | optional: left out, the type's own holds (`false`, `0`, `""`, the first enum value, no flags, the first stage), and `build` writes it into the bundle, so a declared property always has a value. One you give must fit the type |
 | `values` | for `enum` and `flags`. On a TAG, `values` means something else: this tag's starting values for the properties its group declares |
-| `stages` | for `quality`: the ladder, in order, lowest first; at least two, each named once, and `default` must be one of them |
+| `stages` | for `quality`: the ladder, in order, lowest first; at least two, each named once, and a `default`, when given, must be one of them |
 | `shared` | not on `@world`. `true` is one value across every flow, `false` a copy per flow; absent takes the scope default |
 | `durable` | not on `@world`. The value [outlives a run](/play/world-state/#durable-state-that-outlives-a-run); the engine never reads it |
 | `writable` | `@world` only. `false` makes the property read-only to the story: a condition may read it, an outcome that writes it is a compile error. The game still moves it through its resolver. Default `true` |

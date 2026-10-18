@@ -254,19 +254,24 @@ TArray<FStoryletFieldEntry> UStoryletBundle::GetEffectiveOutcomeFields(const FSt
 	return FieldsToUe(storylets::EffectiveFields(storylets::OutcomeFieldDecls(*Compiled->Bundle, Std(Box)), FieldsFromUe(Fields)));
 }
 
-TArray<FString> UStoryletBundle::GetFieldStages(const FString& Box, const FString& Field, bool bOutcomeField) const
+bool UStoryletBundle::GetFieldDecl(const FString& Box, const FString& Field, bool bOutcomeField, FStoryletFieldDecl& OutDecl) const
 {
-	TArray<FString> Out;
-	if (!IsCompiled()) return Out;
+	OutDecl = FStoryletFieldDecl();
+	if (!IsCompiled()) return false;
 	const std::vector<storylets::FieldDecl> Decls = bOutcomeField
 		? storylets::OutcomeFieldDecls(*Compiled->Bundle, Std(Box))
 		: storylets::FieldDecls(*Compiled->Bundle, Std(Box));
 	const std::string Name = Std(Field);
 	for (const storylets::FieldDecl& D : Decls)
 	{
-		if (D.name != Name || D.type != storylets::PropertyTypes::Quality || !D.stages.has_value()) continue;
-		for (const std::string& S : *D.stages) Out.Add(Ue(S));
+		if (D.name != Name) continue;
+		OutDecl.Name = Ue(D.name);
+		OutDecl.Type = Ue(D.type);
+		if (D.values.has_value()) for (const std::string& V : *D.values) OutDecl.Values.Add(Ue(V));
+		if (D.stages.has_value()) for (const std::string& S : *D.stages) OutDecl.Stages.Add(Ue(S));
+		OutDecl.Default = StoryletValueToUe(D.defaultOrTypeDefault());
+		return true;
 	}
-	return Out;
+	return false;
 }
 

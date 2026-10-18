@@ -84,12 +84,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Fields")
 	TArray<FStoryletFieldEntry> GetEffectiveOutcomeFields(const FString& Box, const TArray<FStoryletFieldEntry>& Fields) const;
 
-	/** A quality field's ladder, in order: the stages of the card field (or,
-	 *  with bOutcomeField, the outcome field) named Field in Box. Empty for a
-	 *  field that is not a quality or not declared. Feed it to the Storylet
-	 *  stage functions to compare or step a field's stage. */
+	/** The declaration of the card field (or, with bOutcomeField, the outcome
+	 *  field) named Field in Box, in OutDecl. False when Box declares no such
+	 *  field. Hand a quality field's to the Storylet stage functions to compare
+	 *  or step its stage. */
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Fields")
-	TArray<FString> GetFieldStages(const FString& Box, const FString& Field, bool bOutcomeField) const;
+	bool GetFieldDecl(const FString& Box, const FString& Field, bool bOutcomeField, FStoryletFieldDecl& OutDecl) const;
 
 	/** (Re)compile SourceJson into the cached storylets::Bundle. Sets or
 	 *  clears LoadError; returns false on failure (the raw JSON is kept

@@ -8,7 +8,7 @@ import {
   createCard, createCardOnCanvas, deleteCard, deleteCards, deleteCardsAcross, duplicateCard, layoutDeck, moveCard,
   moveCardsOnCanvas, saveCard, setCanvasFurniture,
 } from "../mutate/cards.js";
-import { addNamedOutcome, declareProperty, pickStage, repointTag } from "../mutate/quick-fixes.js";
+import { addNamedOutcome, declareProperty, pickStage, pickTagStage, repointTag } from "../mutate/quick-fixes.js";
 import { createPatterScene } from "../patter-scene.js";
 import { cardCatalogue } from "../read/catalogue.js";
 import { deckGraph } from "../read/canvas.js";
@@ -53,6 +53,7 @@ export function registerCards(ipc: Ipc, deps: Pick<MainContext, "session">): voi
   ipc.write("problem:repointTag", project(repointTag));
   ipc.write("problem:pickStage", project((open, deck: string, card: string, outcome: string | null, field: string, from: string, to: string) =>
     pickStage(open, deck, card, outcome ?? undefined, field, from, to)));
+  ipc.write("problem:pickTagStage", project(pickTagStage));
   // The Patter quick fix: give a card the outcome its paired scene names (ops patter-link.ts).
   ipc.write("problem:addOutcome", project(addNamedOutcome));
   // The other Patter quick fix: write a stub scene for a card into the paired Patter project.

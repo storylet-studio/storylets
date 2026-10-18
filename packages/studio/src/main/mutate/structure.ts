@@ -11,7 +11,7 @@ import type { BoxShard, DeckShard, HandsShard, ScalarValue, Tag, TagGroup, TagsS
 import { plural } from "@wildwinter/app-shell/util";
 import type { FileState } from "../history.js";
 import type { ProjectSession } from "../project.js";
-import { coerceDefault, declFromDto, declsFromDtos } from "../decls.js";
+import { coerceDefault, declFromDto, declsFromDtos, fieldDeclFromDto } from "../decls.js";
 import type { BoxEdit, BoxKit, DeckEdit, OpenResult, TagGroupEdit } from "../../shared/api.js";
 import { commit, commitMaking, freshKey, refuse } from "./write-path.js";
 import type { Written } from "./write-path.js";
@@ -44,16 +44,16 @@ export async function saveBox(session: ProjectSession, boxId: string, edit: BoxE
   // Deleted rather than written as absent, so a box that is not timed carries
   // no `turn` key at all and the shard reads as it always did.
   if (edit.turn !== undefined) { if (edit.turn === null) delete b.turn; else b.turn = { seconds: edit.turn.seconds }; }
-  if (edit.fields !== undefined) b.fields = edit.fields.map(declFromDto);
+  if (edit.fields !== undefined) b.fields = edit.fields.map(fieldDeclFromDto);
   // The outcome half of the template. Deleted when the list empties rather
   // than written as `outcomeFields: []`, the way `turn` is: a box that declares
   // none must carry no key, so a project that has never seen an outcome field
   // saves back exactly as it was read.
   if (edit.outcomeFields !== undefined) {
-    if (edit.outcomeFields.length > 0) b.outcomeFields = edit.outcomeFields.map(declFromDto);
+    if (edit.outcomeFields.length > 0) b.outcomeFields = edit.outcomeFields.map(fieldDeclFromDto);
     else delete b.outcomeFields;
   }
-  if (edit.properties !== undefined) b.properties = edit.properties.map(declFromDto);
+  if (edit.properties !== undefined) b.properties = edit.properties.map((d) => declFromDto(d));
   const writes: FileState[] = [boxWrite(session, box)];
   // Performed by Patter lives on the PROJECT (`patterBoxes`, never compiled), so this one edit
   // writes the project shard too, in the same undo step. Absent when no box is named.

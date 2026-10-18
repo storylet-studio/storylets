@@ -14,7 +14,7 @@
 // place.
 // ---------------------------------------------------------------------------
 
-import { el, iconNode, openAnchoredPanel, openGameIdEditor, plural } from "@wildwinter/app-shell";
+import { defaultLabel, el, iconNode, openAnchoredPanel, openGameIdEditor, plural, rungStrip } from "@wildwinter/app-shell";
 import { currentDocTab, setDocTab } from "./doc-tab-memory.js";
 import { isAnywhere, placeGroupsOf, whereModel, whereWarning } from "./where.js";
 import { NEVER_LABEL, anywhereLine, gateLabel, movingNote, tierCount, tierLabel } from "./hand-tiers.js";
@@ -845,14 +845,28 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
  */
 function fieldRow(decl: FieldDeclDto, current: string, set: (value: string) => void, commit: () => void): HTMLElement {
   let control: HTMLElement;
-  // A quality field picks a stage, in ladder order: the compiler refuses a
-  // value off the ladder, so free text would only invite the error.
+  // A quality field shows its LADDER, the stage marked, as the Board does: the
+  // family's one strip. Unset, it says what it falls back to, "default (x)",
+  // which also clears a value. Free text would only invite the off-ladder value
+  // the compiler refuses.
+  if (decl.type === "quality" && (decl.stages?.length ?? 0) > 0) {
+    const holder = el("span", { className: "doc-rungs" });
+    const draw = (value: string): void => {
+      holder.replaceChildren(rungStrip({
+        stages: decl.stages!, value: value === "" ? undefined : value, decl,
+        onPick: (stage) => { set(stage); commit(); draw(stage); },
+        onClear: () => { set(""); commit(); draw(""); },
+      }));
+    };
+    draw(current);
+    return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label", text: decl.name }), holder);
+  }
   const choices = decl.type === "boolean" ? ["true", "false"]
     : decl.type === "enum" && (decl.values?.length ?? 0) > 0 ? decl.values!
-    : decl.type === "quality" && (decl.stages?.length ?? 0) > 0 ? decl.stages!
     : undefined;
   if (choices !== undefined) {
-    control = optionSelect(choices, current, (v) => { set(v); commit(); }, { none: "(unset)" });
+    // Unset says what holds instead, "default (x)", by the family's one rule.
+    control = optionSelect(choices, current, (v) => { set(v); commit(); }, { none: defaultLabel(decl) });
   } else {
     // text / multiline / number / flags: text, coerced on save. Committed as typed, so
     // Cmd+S, Play and the review walk see it (it used to wait for the blur).
@@ -1887,13 +1901,13 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
           const shadow = { ...decl, default: v.values?.[decl.name] ?? "" };
           const control = valueControl(shadow, () => {
             v.values ??= {};
-            if (shadow.default.trim() === "") delete v.values[decl.name];
+            if ((shadow.default ?? "").trim() === "") delete v.values[decl.name];
             else v.values[decl.name] = shadow.default;
             commit();
-          });
+          }, defaultLabel(decl));   // left blank, the tag starts at the group's default
           rows.append(el("div", { className: "set-row" },
             el("span", { className: "set-label insp-mono", text: decl.name }), control,
-            el("span", { className: "set-dim", text: `Group default ${decl.default || "(first stage)"}.` })));
+            el("span", { className: "set-dim", text: `Group ${defaultLabel(decl)}.` })));
         }
         block.append(bare("Starts at", "this tag's own value for what the group declares", rows));
       }

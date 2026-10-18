@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { compileProject, projectDialect } from "@storylet-studio/compiler";
 import type { SourceProject } from "@storylet-studio/compiler";
 import { loadProject } from "../src/load.js";
-import { renameStage, renameStageInExpression, stageGateCount } from "../src/stages.js";
+import { renameStage, stageGateCount } from "../src/stages.js";
 
 const exampleDir = fileURLToPath(new URL("./fixtures/the-hamlet.storylets", import.meta.url));
 const fresh = (): SourceProject => loadProject(exampleDir).source!;
@@ -18,37 +18,6 @@ const errors = (source: SourceProject): string[] =>
   compileProject(source).issues.filter((i) => i.severity === "error").map((i) => i.message);
 const conditions = (source: SourceProject): string[] =>
   source.boxes.flatMap((b) => b.decks.flatMap((d) => d.shard.cards.map((c) => c.condition ?? "")));
-
-describe("renameStageInExpression", () => {
-  const dialect = projectDialect(fresh());
-  const act = (scope: string, name: string) => scope === "story" && name === "act";
-
-  it("changes the literal in the author's text, bare reference and all", () => {
-    expect(renameStageInExpression('@act >= "act-1" and @gold > 2', dialect, act, "act-1", "first-act"))
-      .toBe('@act >= "first-act" and @gold > 2');
-  });
-
-  it("finds the quality on either side, and a bare-word literal", () => {
-    expect(renameStageInExpression("arrival == @story.act", dialect, act, "arrival", "prologue"))
-      .toBe("prologue == @story.act");
-  });
-
-  it("leaves a literal compared with something else, and says nothing changed when nothing did", () => {
-    expect(renameStageInExpression('@mood == "act-1"', dialect, act, "act-1", "x")).toBeUndefined();
-    expect(renameStageInExpression("not parseable ((", dialect, act, "act-1", "x")).toBeUndefined();
-  });
-
-  it("rewrites through the parser when the same word also means something else in the expression", () => {
-    const out = renameStageInExpression('@act == "act-1" or @mood == "act-1"', dialect, act, "act-1", "first-act")!;
-    expect(out).toContain('"first-act"');
-    expect(out).toContain('@mood == "act-1"');
-  });
-
-  it("rewrites a change's value assigned to the quality", () => {
-    expect(renameStageInExpression('"act-1"', dialect, act, "act-1", "first-act", true)).toBe('"first-act"');
-    expect(renameStageInExpression("advance(@story.act)", dialect, act, "act-1", "first-act", true)).toBeUndefined();
-  });
-});
 
 describe("renameStage", () => {
   it("renames a story quality's stage in its declaration and every gate, and the project still compiles", () => {
@@ -90,6 +59,14 @@ describe("renameStage", () => {
     expect(result.project).toBe(false);
     expect(result.expressions).toBe(3);
     expect(errors(source)).toEqual([]);
+  });
+
+  it("carries a coverage driver's values for the quality", () => {
+    const source = fresh();
+    source.project.coverage = { drivers: { "@story.act": { kind: "recurring", values: ["arrival", "act-1"] } } };
+    const result = renameStage(source, { kind: "property", scope: "story", name: "act" }, "act-1", "first-act", projectDialect(source))!;
+    expect(source.project.coverage.drivers!["@story.act"]!.values).toEqual(["arrival", "first-act"]);
+    expect(result.project).toBe(true);
   });
 
   it("refuses a target that is not a quality, a stage it does not have, or a name already taken", () => {

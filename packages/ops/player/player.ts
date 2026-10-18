@@ -22,7 +22,7 @@ import { SAVE_SCHEMA } from "@storylet-studio/model";
 import type { Bundle, PropertyBag, SaveEnvelope } from "@storylet-studio/model";
 import { Engine, describeBundle } from "@storylet-studio/runtime";
 import type { DealtCard, Flow, OutcomeView } from "@storylet-studio/runtime";
-import { ScopeRegistry } from "@wildwinter/scoperegistry";
+import { ScopeRegistry, defaultFor } from "@wildwinter/scoperegistry";
 import type { ScopeDeclaration } from "@wildwinter/scoperegistry";
 import { Performer } from "@storylet-studio/with-patter";
 import type { Performance } from "@storylet-studio/with-patter";
@@ -76,7 +76,7 @@ let session: Flow;
 let worldValues: PropertyBag = {};
 const freshWorld = (): void => {
   worldValues = {};
-  for (const d of bundle.world.properties) worldValues[d.name] = d.default;
+  for (const d of bundle.world.properties) worldValues[d.name] = defaultFor(d);
 };
 const worldResolver = {
   get: (n: string) => worldValues[n],

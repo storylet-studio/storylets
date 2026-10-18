@@ -828,35 +828,8 @@ namespace storylets
          *  an id, a gameId or a property name. */
         inline const char* const ReportSep = "\x1f";
 
-        inline bool Contains(const std::optional<std::vector<std::string>>& list, const std::string& item)
-        {
-            if (!list.has_value()) return true;   // no vocabulary constrains nothing
-            return std::find(list->begin(), list->end(), item) != list->end();
-        }
-
-        /**
-         * Does a saved value still fit its declaration?
-         *
-         * The type first, then the declaration's own vocabulary: an enum value
-         * or a quality stage the edit struck out is still a string of the right
-         * type and still no longer a legal value. A declaration with no
-         * vocabulary constrains nothing, so anything of the right type fits.
-         */
-        inline bool ValueFits(const PropertyDecl& decl, const StoryletValue& value)
-        {
-            if (decl.type == PropertyTypes::Boolean) return value.isBool();
-            if (decl.type == PropertyTypes::Number) return value.isNumber();
-            if (decl.type == PropertyTypes::String) return value.isString();
-            if (decl.type == PropertyTypes::Enum) return value.isString() && Contains(decl.values, value.asString());
-            if (decl.type == PropertyTypes::Quality) return value.isString() && Contains(decl.stages, value.asString());
-            if (decl.type == PropertyTypes::Flags)
-            {
-                if (!value.isFlags()) return false;
-                for (const auto& f : value.asFlags()) if (!Contains(decl.values, f)) return false;
-                return true;
-            }
-            return true;
-        }
+        // Whether a saved value still fits its declaration is the kernel's
+        // ValueFits (wildwinter::expr), shared with Patterplay.
 
         /** Walk one bag's worth of saved values against one bag's worth of
          *  declarations: report the orphans, the newcomers and the misfits, and
@@ -879,7 +852,7 @@ namespace storylets
                         draft.droppedProperties.push_back(LoadProperty{flow, prefix + pair.first});
                         continue;
                     }
-                    if (!ValueFits(*found->second, pair.second))
+                    if (!wildwinter::expr::ValueFits(*found->second, pair.second))
                     {
                         draft.retypedProperties.push_back(LoadProperty{flow, prefix + pair.first});
                         continue;
@@ -5031,7 +5004,7 @@ namespace storylets
                 draft.droppedProperties.push_back(LoadProperty{at, pair.first});
                 continue;
             }
-            if (!detail::ValueFits(props[found->second].decl, pair.second))
+            if (!wildwinter::expr::ValueFits(props[found->second].decl, pair.second))
             {
                 draft.retypedProperties.push_back(LoadProperty{at, pair.first});
                 continue;

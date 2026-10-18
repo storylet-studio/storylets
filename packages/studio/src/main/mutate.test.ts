@@ -720,8 +720,10 @@ describe("box mutations", () => {
     if ("error" in reopened) throw new Error(reopened.error);
     const box = reopened.session.loaded.source!.boxes[0]!.box.box;
     expect(box.title).toBe("Street encounters");
+    // A blank default is none given (the family's rule, ruled 2026-10-18): the shard carries no key, and the
+    // compiler writes the type's default into the bundle.
     expect(box.fields).toEqual([
-      { name: "patter-scene", type: "string", default: "" },
+      { name: "patter-scene", type: "string" },
       { name: "weight", type: "number", default: 2 },
     ]);
   });
@@ -739,7 +741,7 @@ describe("box mutations", () => {
     let reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.loaded.source!.boxes[0]!.box.box.outcomeFields).toEqual([
-      { name: "after", type: "string", default: "" },
+      { name: "after", type: "string" },
       { name: "cue", type: "enum", default: "silence", values: ["silence", "bell"] },
     ]);
     expect(reopened.session.dto.boxes.find((b) => b.id === encBox)!.outcomeFields.map((f) => f.name))
@@ -764,7 +766,7 @@ describe("box mutations", () => {
     const reopened = openProject(session.loaded.dir);
     if ("error" in reopened) throw new Error(reopened.error);
     expect(reopened.session.loaded.source!.boxes[0]!.box.box.outcomeFields)
-      .toEqual([{ name: "after", type: "string", default: "" }]);
+      .toEqual([{ name: "after", type: "string" }]);
   });
 
   it("edits the ranking specificity flag", async () => {

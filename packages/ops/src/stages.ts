@@ -11,13 +11,16 @@
 //   - the declaration itself (its stages and, when it starts there, its default)
 //   - card and outcome field values, for a quality FIELD
 //   - tag starting values, for a quality a tag group (or a tag) declares
+//   - a coverage driver's values, for a quality a driver feeds (`@world.act`)
 //   - stage literals in conditions, priorities and changes, where they are
 //     compared with or assigned to the quality
 //
 // A literal is rewritten in the author's own text where that is unambiguous,
 // and the expression re-written through the parser only where it is not: a
 // condition that also compares another quality with the same word keeps that
-// one as it was.
+// one as it was. That rewrite, and the gate count, are the kernel's
+// (`@wildwinter/expr`), shared with Patterpad, so a rename means the same in
+// both editors.
 //
 // Reordering changes no value at all, and is the one edit that changes what
 // gates MEAN without saying so. `stageGateCount` is how the editor says so.
@@ -26,8 +29,8 @@
 // changed, for the caller to write as one undoable step.
 // ---------------------------------------------------------------------------
 
-import { parse, unparse } from "@wildwinter/expr";
-import type { Dialect, ExprNode } from "@wildwinter/expr";
+import { parse, renameStageInExpression, stageGateCount as gatesIn } from "@wildwinter/expr";
+import type { Dialect, StageTargetRef } from "@wildwinter/expr";
 import type { SourceBox, SourceDeck, SourceProject } from "@storylet-studio/compiler";
 import type { FieldDecl, PropertyDecl, TagGroup } from "@storylet-studio/model";
 
@@ -57,60 +60,8 @@ export interface StageRenameResult {
   expressions: number;
 }
 
-const COMPARISONS = new Set(["==", "!=", "<", "<=", ">", ">="]);
-const ORDERING = new Set(["<", "<=", ">", ">="]);
-
-type Ref = (scope: string, name: string) => boolean;
-
-/**
- * Rewrite the stage literal `from` to `to` wherever `src` compares it with the
- * quality `isTarget` names (or, with `assigned`, where the whole expression is
- * that literal: a change's value assigned to the quality). Undefined when
- * nothing changed or the source does not parse.
- */
-export function renameStageInExpression(
-  src: string, dialect: Dialect, isTarget: Ref, from: string, to: string, assigned = false,
-): string | undefined {
-  let ast: ExprNode;
-  try { ast = parse(src, dialect); } catch { return undefined; }
-  let hits = 0;
-  const isRef = (n: ExprNode): boolean => n.kind === "scopedvar" && isTarget(n.scope, n.name);
-  const walk = (n: ExprNode): ExprNode => {
-    switch (n.kind) {
-      case "binary": {
-        let left = walk(n.left);
-        let right = walk(n.right);
-        if (COMPARISONS.has(n.op)) {
-          if (isRef(left) && right.kind === "string" && right.value === from) { right = { kind: "string", value: to }; hits++; }
-          if (isRef(right) && left.kind === "string" && left.value === from) { left = { kind: "string", value: to }; hits++; }
-        }
-        return { ...n, left, right };
-      }
-      case "unary": return { ...n, operand: walk(n.operand) };
-      case "call": return { ...n, args: n.args.map(walk) };
-      default: return n;
-    }
-  };
-  let next = walk(ast);
-  if (assigned && next.kind === "string" && next.value === from) { next = { kind: "string", value: to }; hits++; }
-  if (hits === 0) return undefined;
-
-  // The author's own text, with the literal changed, when that says exactly
-  // the rewritten expression; otherwise the parser's form of it.
-  const wanted = JSON.stringify(next);
-  const esc = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const bare = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(from);
-  const quotedTo = (q: string): string => `${q}${to.replace(/\\/g, "\\\\").replace(new RegExp(q, "g"), `\\${q}`)}${q}`;
-  let text = src.replace(new RegExp(`"${esc}"`, "g"), quotedTo('"')).replace(new RegExp(`'${esc}'`, "g"), quotedTo("'"));
-  if (bare) {
-    const safeTo = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(to) ? to : quotedTo('"');
-    text = text.replace(new RegExp(`(?<![@.\\w"'-])${esc}(?![\\w"'-])`, "g"), safeTo);
-  }
-  try {
-    if (JSON.stringify(parse(text, dialect)) === wanted) return text;
-  } catch { /* fall through to the parser's form */ }
-  return unparse(next, { defaultScope: dialect.defaultScope });
-}
+/** The rewrite inside one expression is the kernel's, shared with Patterpad. */
+export { renameStageInExpression };
 
 /** Every place an expression lives in a box, with a setter and whether its
  *  value is assigned to a property (a change), and which deck it is in. */
@@ -223,7 +174,7 @@ function locate(source: SourceProject, target: StageTarget): Located | undefined
 }
 
 /** Does `(scope, name)` in an expression name the target's quality? */
-const refersTo = (target: StageTarget): Ref | undefined =>
+const refersTo = (target: StageTarget): StageTargetRef | undefined =>
   target.kind === "field" ? undefined : (scope, name) => scope === target.scope && name === target.name;
 
 /** A change's target key (`@story.act`, a bare `@act`) as scope and name. */
@@ -291,6 +242,18 @@ export function renameStage(
     }
   }
 
+  // A coverage driver feeding the quality (`@world.act`) proposes its stages
+  // by name: they follow the rename like any other value.
+  const driver = source.project.coverage?.drivers?.[`@${target.scope}.${target.name}`];
+  if (driver) {
+    const at = driver.values.indexOf(from);
+    if (at >= 0) {
+      driver.values = driver.values.map((v) => (v === from ? to : v));
+      result.values++;
+      result.project = true;
+    }
+  }
+
   const isTarget = refersTo(target)!;
   for (const box of found.boxes) {
     for (const site of boxSites(box)) {
@@ -320,24 +283,11 @@ export function stageGateCount(source: SourceProject, target: StageTarget, diale
   const isTarget = refersTo(target);
   if (!found || !isTarget) return 0;
   let gates = 0;
-  const count = (n: ExprNode): void => {
-    switch (n.kind) {
-      case "binary":
-        if (ORDERING.has(n.op)
-          && [n.left, n.right].some((s) => s.kind === "scopedvar" && isTarget(s.scope, s.name))) gates++;
-        count(n.left); count(n.right);
-        return;
-      case "unary": count(n.operand); return;
-      case "call": n.args.forEach(count); return;
-      default: return;
-    }
-  };
   for (const box of found.boxes) {
     for (const site of boxSites(box)) {
       if (found.deck !== undefined && site.deck !== found.deck) continue;
       const src = site.get();
-      if (src === undefined) continue;
-      try { count(parse(src, dialect)); } catch { /* an unparseable expression is the compiler's to report */ }
+      if (src !== undefined) gates += gatesIn(src, dialect, isTarget);
     }
   }
   return gates;

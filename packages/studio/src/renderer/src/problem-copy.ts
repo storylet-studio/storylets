@@ -93,6 +93,8 @@ const SHAPES: [RegExp, string][] = [
   [/^"[^"]*" is declared both on the group "[^"]*" and on its tag "/, "tag-property-twice"],
   [/^"[^"]*" has a value here but the group "[^"]*" declares no such property/, "tag-value-undeclared"],
   [/^"[^"]*" is \w+ on the group, so .* is not a value it can start at$/, "tag-value-type"],
+  [/^"[^"]*" starts at .* on this tag, which is not one of its stages$/, "tag-value-off-ladder"],
+  [/^"@[a-z]+\.[^"]*" defaults to .*, which does not fit its type "/, "property-bad-default"],
   [/^place tag points at a hand that is not in this box \(id /, "dangling-place"],
   [/points at a tag group that is not in this box \(id |^binds a tag group that is not in this box \(id |^asks each hand to choose from a tag group that is not in this box \(id /, "dangling-tag-group"],
   [/^points at a tag that is not in "[^"]*" \(id |^binds a tag that is not in "[^"]*" \(id |^the tag chosen for "[^"]*" is not in that group \(id /, "dangling-tag"],
@@ -105,7 +107,6 @@ const SHAPES: [RegExp, string][] = [
   [/^the (?:card template declares|outcome fields declare) field "[^"]*" twice$/, "field-twice"],
   [/^(?:card template|outcome) field "[^"]*" has type .*, which is not a field type/, "field-bad-type"],
   [/^(?:card template|outcome) field "[^"]*" is (?:enum|flags) but declares no values$/, "field-no-values"],
-  [/^(?:card template|outcome) field "[^"]*" has no default$/, "field-no-default"],
   [/^(?:card template|outcome) field "[^"]*" defaults to .*, which does not fit its type "/, "field-bad-default"],
   [/^quality field "[^"]*" on the (?:card template|outcome fields) declares no stages/, "quality-field-no-stages"],
   [/^quality field "[^"]*" on the (?:card template|outcome fields) declares only one stage/, "quality-field-one-stage"],
@@ -362,6 +363,14 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
     text: `${problemName(p)} sets ${quoted(pick(p, /^"([^"]*)"/))}, but its group ${quoted(pick(p, /the group "([^"]*)"/))} doesn’t declare that property.`,
     next: "A tag sets values and its group declares them; declare it on the group.",
   }),
+  "tag-value-off-ladder": (p) => ({
+    text: `${problemName(p)} starts ${quoted(pick(p, /^"([^"]*)"/))} at ${spoken(pick(p, /starts at (.*) on this tag/))}, which is no longer one of its stages.`,
+    next: "Choose the stage it starts at now.",
+  }),
+  "property-bad-default": (p) => ({
+    text: `${quoted(pick(p, /^"([^"]*)"/))} starts at ${spoken(pick(p, /defaults to (.*), which does not fit/))}, which doesn’t fit its type.`,
+    next: "Change the default, or clear it to start at the type’s own.",
+  }),
   "tag-value-type": (p) => ({
     text: `${quoted(pick(p, /^"([^"]*)"/))} is a ${pick(p, /is (\w+) on the group/)} on the group, so ${spoken(pick(p, /so (.*) is not a value/))} isn’t a value ${problemName(p)} can start at.`,
   }),
@@ -408,10 +417,6 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
   "field-no-values": (p) => ({
     text: `The field ${quoted(pick(p, /field "([^"]*)"/))} on ${problemName(p)} has no values to choose from.`,
     next: "Add its values.",
-  }),
-  "field-no-default": (p) => ({
-    text: `The field ${quoted(pick(p, /field "([^"]*)"/))} on ${problemName(p)} has no default.`,
-    next: "Give it one.",
   }),
   "field-bad-default": (p) => ({
     text: `The field ${quoted(pick(p, /field "([^"]*)"/))} on ${problemName(p)} starts at ${spoken(pick(p, /defaults to (.*), which does not/))}, which doesn’t fit its type.`,

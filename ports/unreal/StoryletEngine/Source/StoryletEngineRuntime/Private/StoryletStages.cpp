@@ -17,18 +17,18 @@ namespace
 	}
 }
 
-int32 UStoryletStages::StageIndex(const TArray<FString>& Stages, const FString& Value)
+int32 UStoryletStages::StageIndex(const FStoryletFieldDecl& Decl, const FString& Value)
 {
-	return storylets::StageIndex(Ladder(Stages), storylets::StoryletValue::Str(Std(Value)));
+	return storylets::StageIndex(Ladder(Decl.Stages), storylets::StoryletValue::Str(Std(Value)));
 }
 
-bool UStoryletStages::CompareStages(const TArray<FString>& Stages, const FString& A, const FString& B, int32& Result, FString& Error)
+bool UStoryletStages::CompareStages(const FStoryletFieldDecl& Decl, const FString& A, const FString& B, int32& Result, FString& Error)
 {
 	Result = 0;
 	Error.Reset();
 	try
 	{
-		Result = storylets::CompareStages(Ladder(Stages), storylets::StoryletValue::Str(Std(A)), storylets::StoryletValue::Str(Std(B)));
+		Result = storylets::CompareStages(Ladder(Decl.Stages), storylets::StoryletValue::Str(Std(A)), storylets::StoryletValue::Str(Std(B)));
 		return true;
 	}
 	catch (const std::exception& E)
@@ -38,13 +38,13 @@ bool UStoryletStages::CompareStages(const TArray<FString>& Stages, const FString
 	}
 }
 
-bool UStoryletStages::NextStage(const TArray<FString>& Stages, const FString& Value, FString& Next, FString& Error)
+bool UStoryletStages::NextStage(const FStoryletFieldDecl& Decl, const FString& Value, FString& Next, FString& Error)
 {
 	Next.Reset();
 	Error.Reset();
 	try
 	{
-		Next = Ue(storylets::NextStage(Ladder(Stages), storylets::StoryletValue::Str(Std(Value))));
+		Next = Ue(storylets::NextStage(Ladder(Decl.Stages), storylets::StoryletValue::Str(Std(Value))));
 		return true;
 	}
 	catch (const std::exception& E)

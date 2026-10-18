@@ -57,7 +57,11 @@ export type IssueFix =
   /** A quality field's value names no stage (a deleted one, most often): offer
    *  the field's stages, in ladder order. `card` and `outcome` are ids (the
    *  outcome only for an outcome field), `field` the field's name. */
-  | { kind: "pick-stage"; deck: string; card: string; outcome?: string; field: string; bad: string; options: string[] };
+  | { kind: "pick-stage"; deck: string; card: string; outcome?: string; field: string; bad: string; options: string[] }
+  /** A tag's starting value for a quality its group declares names no stage:
+   *  offer the stages, as for a field. `group` and `tag` are ids, `name` the
+   *  property's. */
+  | { kind: "pick-tag-stage"; group: string; tag: string; name: string; bad: string; options: string[] };
 
 export interface Issue {
   /** A one-click repair, when one is canonical (storyletter.md section 4). */

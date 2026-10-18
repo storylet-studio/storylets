@@ -6,15 +6,18 @@
 
 - **Field read helpers**, in Blueprint on the bundle asset: `GetEffectiveCardFields` and
   `GetEffectiveOutcomeFields` fill in every declared default a card or outcome leaves out (a
-  dealt card's `Fields` stay exactly as the bundle wrote them), and `GetFieldStages` reads a
-  quality field's ladder. In the engine-free core (`Storylets/Bundle.h`): `FieldDecls`,
+  dealt card's `Fields` stay exactly as the bundle wrote them), and `GetFieldDecl` reads a
+  field's declaration (`FStoryletFieldDecl`: type, values, stages and default). In the engine-free core (`Storylets/Bundle.h`): `FieldDecls`,
   `OutcomeFieldDecls`, `FieldValue` and `EffectiveFields`.
 - **Storylet stage functions in Blueprint** (`UStoryletStages`): `StageIndex`, `CompareStages`
-  and `NextStage` over a ladder, the last two returning false with the reason for a value that
-  is not a stage.
-- **`StageIndex`, `CompareStages` and `NextStage`** in the shared kernel (`k88b76cef`), for a
+  and `NextStage` over a field's declaration, as the C#, GDScript and C++ ones take one, the
+  last two returning false with the reason for a value that is not a stage.
+- **`StageIndex`, `CompareStages` and `NextStage`** in the shared kernel (`k1a333a0e`), for a
   quality's stages outside a condition, also as `storylets::` names in C++. The kernel id changes, so Patterplay must ship the same
   kernel in the same release round.
+- **A saved stage or flag the build no longer has is put back**, by the shared kernel's value check
+  (`wildwinter::expr::ValueFits`), as an enum value already was: reported as retyped, at its default. The
+  engine's own copy of the check is gone.
 - **A field declaration carries its stages.** A card or outcome field of type `quality` lists
   its ladder in the bundle, and the box's field declarations now read it, as property
   declarations always have.

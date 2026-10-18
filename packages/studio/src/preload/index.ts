@@ -127,6 +127,7 @@ const api: StudioApi = {
   declareProperty: (scope, name, owner, guess) => invoke("problem:declareProperty", scope, name, owner, guess),
   repointTag: (holder, group, from, to) => invoke("problem:repointTag", holder, group, from, to),
   pickStage: (deck, card, outcome, field, from, to) => invoke("problem:pickStage", deck, card, outcome, field, from, to),
+  pickTagStage: (group, tag, name, from, to) => invoke("problem:pickTagStage", group, tag, name, from, to),
   addOutcome: (card, gameId) => invoke("problem:addOutcome", card, gameId),
   createPatterScene: (card) => invoke("problem:createScene", card),
   planMapUpgrade: () => invoke("project:planMapUpgrade"),

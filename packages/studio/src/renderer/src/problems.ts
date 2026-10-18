@@ -349,6 +349,18 @@ export function createProblems(ctx: ProblemsContext) {
       })));
       return;
     }
+    if (fix.kind === "pick-tag-stage") {
+      const at = anchor.getBoundingClientRect();
+      openContextMenu(at.left, at.top, fix.options.map((stage) => ({
+        label: stage,
+        onClick: () => void (async () => {
+          const result = await studio.pickTagStage(fix.group, fix.tag, fix.name, fix.bad, stage);
+          if (!ctx.applied(result)) return;
+          await ctx.refreshProject();
+        })(),
+      })));
+      return;
+    }
     // The tag repair ASKS, because there is no single right answer: the group
     // has several tags and only the author knows which was meant. The ellipsis
     // on the button already promised this.

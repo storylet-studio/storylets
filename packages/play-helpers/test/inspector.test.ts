@@ -253,3 +253,29 @@ describe("the run log panel", () => {
     inspector.destroy();
   });
 });
+
+// A quality shows as its ladder (the family's one strip, @wildwinter/app-shell/value-control).
+describe("createPropertyInspector: a quality", () => {
+  const qBundle = expandBundle({
+    story: [{ name: "act", type: "quality", stages: ["arrival", "act-1", "act-2"], default: "arrival" }],
+    cards: [{ id: "c_a", outcomes: [{ id: "o_go" }] }],
+    hands: [{ id: "h_seat", rule: {}, slots: 1 }],
+  });
+  const marked = (el: HTMLElement): string[] => [...el.querySelectorAll(".shell-rung.on")].map((r) => r.textContent ?? "");
+
+  it("draws the ladder, writes a picked stage through, and follows the engine", () => {
+    const engine = new Engine(qBundle, { seed: 0 });
+    const session = engine.openFlow("main");
+    const inspector = createPropertyInspector(engine, session, { pollMs: 0 });
+    const row = [...inspector.el.querySelectorAll(".sl-row")].find((r) => r.querySelector(".sl-name")?.textContent === "act")! as HTMLElement;
+    expect([...row.querySelectorAll(".shell-rung")].map((r) => r.textContent)).toEqual(["arrival", "act-1", "act-2"]);
+    expect(marked(row)).toEqual(["arrival"]);
+    (row.querySelectorAll(".shell-rung")[2] as HTMLButtonElement).click();
+    expect(session.getProperty("story.act")).toBe("act-2");
+    expect(marked(row)).toEqual(["act-2"]);
+    session.setProperty("story.act", "act-1");
+    inspector.refresh();
+    expect(marked(row)).toEqual(["act-1"]);
+    inspector.destroy();
+  });
+});

@@ -19,7 +19,7 @@
 // debounced autosave.
 // ---------------------------------------------------------------------------
 
-import { defaultControl, el, labelled, mountPropertyList as mountShellPropertyList } from "@wildwinter/app-shell";
+import { defaultControl, el, labelled, mountPropertyList as mountShellPropertyList, stageGateNote } from "@wildwinter/app-shell";
 import type { PropertyListHandle } from "@wildwinter/app-shell";
 import type { PropertyDeclDto, StageTargetDto } from "../../shared/api.js";
 import { shows } from "./play-ladder.js";
@@ -32,8 +32,8 @@ import type { ShareScope } from "./zone-share.js";
  *  wants exactly the same control as its group declaration's default
  *  (design/hand-typing.md step B) and there should be one of these, not two.
  *  It is the shell's `defaultControl`, in this DTO's string encoding. */
-export function valueControl(p: PropertyDeclDto, onChange?: () => void): HTMLElement {
-  return defaultControl(p, onChange);
+export function valueControl(p: PropertyDeclDto, onChange?: () => void, unsetLabel?: string): HTMLElement {
+  return defaultControl(p, onChange, unsetLabel !== undefined ? { unsetLabel } : {});
 }
 
 export interface PropListOptions {
@@ -159,10 +159,7 @@ function stageHooks(stages: NonNullable<PropListOptions["stages"]>, changed: () 
     onStageReorder: (decl: PropertyDeclDto, note: HTMLElement): void => {
       const target = stages.target(decl);
       if (target === undefined) return;
-      void stages.gates(target).then((n) => {
-        note.textContent = n === 0 ? ""
-          : `${n} ${n === 1 ? "gate compares" : "gates compare"} against this ladder, and ${n === 1 ? "it" : "each"} now reads the new order.`;
-      });
+      void stages.gates(target).then((n) => { note.textContent = stageGateNote(n); });
     },
   };
 }
@@ -194,9 +191,10 @@ export function mountPropertyList(host: HTMLElement, decls: PropertyDeclDto[], o
     onChange: changed,
     ...(opts.addLabel !== undefined ? { addLabel: opts.addLabel } : {}),
     emptyText: `No ${emptyNoun} yet. Add one below.`,
-    // A new row starts as text, with the DTO's blank default already there.
-    newDecl: () => ({ name: "", type: opts.fieldTypes === true ? "text" : "string", default: "" }),
-    ...(opts.fieldTypes === true ? { types: FIELD_TYPE_OPTIONS } : {}),
+    // A new row starts as text, with no default: a default is optional, and the type's holds.
+    newDecl: () => ({ name: "", type: opts.fieldTypes === true ? "text" : "string" }),
+    // A field's enum may hold none chosen (""), which "(none)" writes; a property's always holds a value.
+    ...(opts.fieldTypes === true ? { types: FIELD_TYPE_OPTIONS, noneChosen: true } : {}),
     extraLine: (decl) => [shareLineFor(decl), opts.rowExtras?.(decl) ?? null],
     extraDetails: (decl) => switches(decl, opts, changed, () => repaintShare(decl)),
     ...(opts.stages !== undefined ? stageHooks(opts.stages, changed) : {}),

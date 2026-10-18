@@ -2066,7 +2066,7 @@ namespace StoryletStudio.StoryletEngine
                     draft.DroppedProperties.Add(new LoadProperty { Flow = flow, Path = pair.Key });
                     continue;
                 }
-                if (!ValueFits(prop.Decl, pair.Value))
+                if (!ValueFit.Fits(prop.Decl, pair.Value))
                 {
                     draft.RetypedProperties.Add(new LoadProperty { Flow = flow, Path = pair.Key });
                     continue;
@@ -2309,34 +2309,6 @@ namespace StoryletStudio.StoryletEngine
         /// occur in an id, a gameId or a property name.</summary>
         private const string SortSep = "\u001f";
 
-        /// <summary>Does a saved value still fit its declaration?
-        ///
-        /// The type first, then the declaration's own vocabulary: an enum value
-        /// or a quality stage the edit struck out is still a string of the right
-        /// type and still no longer a legal value. A declaration with no
-        /// vocabulary constrains nothing, so anything of the right type
-        /// fits.</summary>
-        private static bool ValueFits(PropertyDecl decl, ExprValue value)
-        {
-            if (value == null) return false;
-            switch (decl.Type)
-            {
-                case PropertyTypes.Boolean: return value.IsBool;
-                case PropertyTypes.Number: return value.IsNumber;
-                case PropertyTypes.String: return value.IsString;
-                case PropertyTypes.Enum:
-                    return value.IsString && (decl.Values == null || decl.Values.Contains(value.AsString));
-                case PropertyTypes.Quality:
-                    return value.IsString && (decl.Stages == null || decl.Stages.Contains(value.AsString));
-                case PropertyTypes.Flags:
-                    if (!value.IsFlags) return false;
-                    if (decl.Values == null) return true;
-                    foreach (var f in value.AsFlags) if (!decl.Values.Contains(f)) return false;
-                    return true;
-                default: return true;
-            }
-        }
-
         /// <summary>Walk one bag's worth of saved values against one bag's worth
         /// of declarations: report the orphans, the newcomers and the misfits,
         /// and return the values that survive.</summary>
@@ -2359,7 +2331,7 @@ namespace StoryletStudio.StoryletEngine
                         draft.DroppedProperties.Add(new LoadProperty { Flow = flow, Path = path(pair.Key) });
                         continue;
                     }
-                    if (!ValueFits(decl, pair.Value))
+                    if (!ValueFit.Fits(decl, pair.Value))
                     {
                         draft.RetypedProperties.Add(new LoadProperty { Flow = flow, Path = path(pair.Key) });
                         continue;
