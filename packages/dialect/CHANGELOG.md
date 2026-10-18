@@ -1,5 +1,12 @@
 # @storylet-studio/dialect
 
+## 0.3.2
+
+### Patch Changes
+
+- abe401f: Takes `@wildwinter/expr` 0.6.0, the kernel the rest of the release is built against.
+- 6a0c9c1: Each package now carries the MIT licence text (LICENSE) in its own folder, so the licence travels with every install.
+
 ## 0.3.1
 
 ### Patch Changes
