@@ -34,6 +34,8 @@ import type { Problem } from "../../shared/api.js";
 export interface ProblemNames {
   title?: string;
   where?: string;
+  /** The whole line, when the caller has worded it already (a Storylet extension's, extension-problems.ts). */
+  line?: string;
 }
 
 /**
@@ -625,6 +627,7 @@ export const PROBLEM_CODES: readonly string[] = [...new Set(SHAPES.map(([, code]
  *  table has never seen comes back raw but titled, and never with a `[where]`
  *  on the end. */
 export function problemText(p: Problem, names?: ProblemNames): string {
+  if (names?.line !== undefined) return names.line;
   // The compiler's `where` is the HOLDER (a card, a hand); the shell's is the
   // reference an entry may print as "(id ...)". For a dangling reference that
   // is the id in the message's tail; otherwise nothing, because the holder is

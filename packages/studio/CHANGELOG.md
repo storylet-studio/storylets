@@ -18,7 +18,8 @@ here is part of shipping, not a courtesy.
   properties, and the project's in Project Settings. Every type an extension declares has a control, lists,
   records and maps included, with the extension's help under it. A card or outcome field an extension claims
   keeps its value and gains the extension's label and help. A choice's own help (an enum value's, each chosen
-  flag's, a stage's) is shown under it. A problem in an extension's data opens the item it is about.
+  flag's, a stage's) is shown under it. A problem in an extension's data opens the item it is about, and says
+  what is wrong as the writer sees it ("Probe: The card “bell” needs a sound in cue."), in Patterpad's words.
 
 ### Changed
 

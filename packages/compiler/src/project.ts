@@ -82,6 +82,10 @@ export interface Issue {
    *  field; which tab holds it is the editor's business, not this one's. */
   field?: string;
   message: string;
+  /** For a Storylet extension's problem: the extension's id, and the check's own code (`@wildwinter/toolkit/
+   *  extensions`' Problem.code: "required", "not-a-stage", "orphan"...), so an editor can word it for the writer. */
+  extension?: string;
+  detail?: string;
 }
 
 export interface SourceDeck {

@@ -268,6 +268,10 @@ export interface Problem {
    *  the diagnostic so nothing here has to read a message back to work out what
    *  went wrong. Patterpad's `problem-fix` slot, with our two canonical fixes. */
   fix?: IssueFix;
+  /** A Storylet extension's problem: the extension's id, and the check's own code ("required", "orphan"...),
+   *  which the bar words it for the writer by (extension-problems.ts). */
+  extension?: string;
+  detail?: string;
 }
 
 export type { IssueFix } from "@storylet-studio/compiler";
@@ -572,8 +576,9 @@ export interface ProjectDto {
   /** The Storylet extensions the project takes and has a sound manifest for, each with its declarations and
    *  every node's values. Absent when it takes none. */
   extensions?: ExtensionDto[];
-  /** The nodes an extension's references and map keys choose from, by kind (`box`, `deck`, `card`, `outcome`,
-   *  `tag`), each with the name an author knows it by. Present only with `extensions`. */
+  /** The nodes an extension's references and map keys choose from, and its problems name, by kind (`box`,
+   *  `deck`, `card`, `outcome`, `tag`, `tagGroup`, `hand`, `handTemplate`), each with the name an author knows
+   *  it by. Present only with `extensions`. */
   extensionNodes?: Record<string, { id: string; label: string }[]>;
   /** The project's own node id, which its extension values are keyed by. Present only with `extensions`. */
   projectNode?: string;
@@ -622,6 +627,8 @@ export interface ExtensionFieldDto {
   editorOnly?: boolean;
   /** A sentence per enum value, flag or stage: the chosen one's is shown under the control. */
   valueHelp?: Record<string, string>;
+  /** A quality's renames: every name a stage has had, to the stage it is now. */
+  renamedStages?: Record<string, string>;
 }
 
 /** The game's shared scopes folder, as the renderer is told it. */

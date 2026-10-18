@@ -18,6 +18,7 @@ import { baseName } from "./paths.js";
 import { boxForPath } from "./problem-copy.js";
 import { expandOutcome, setDocTab } from "./inspector.js";
 import { renderProblems } from "./views.js";
+import { extensionProblemLine } from "./extension-problems.js";
 import { flash, ok, quietly } from "./results.js";
 import type { ProblemNames } from "./problem-copy.js";
 import type { ViewActions } from "./views.js";
@@ -220,7 +221,12 @@ export function createProblems(ctx: ProblemsContext) {
   const bar = el("div", { className: "stepbar problembar" });
   const chip = el("button", { className: "probstat ok" }, iconNode("tick", 12));
 
-  const names = (p: Problem): ProblemNames | undefined => problemNames(p, session.project?.boxes ?? []);
+  const names = (p: Problem): ProblemNames | undefined => {
+    const named = problemNames(p, session.project?.boxes ?? []);
+    // A Storylet extension's problem, worded for the writer from what the project knows of the extension.
+    const line = extensionProblemLine(p, session.project);
+    return line === undefined ? named : { ...(named ?? {}), line };
+  };
 
   function renderBar(): void {
     renderProblems(bar, problems, at,

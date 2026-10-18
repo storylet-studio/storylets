@@ -76,12 +76,16 @@ export function extensionFields(host: ExtensionHost, extension: ExtensionDto, ki
     }
     const key = pendingKey(extension.id, nodeId, decl.name);
     const value = pending.has(key) ? pending.get(key) : values[decl.name];
+    // A stage the extension has since renamed says so, in place of the row's "not one of the stages".
+    const renamedTo = decl.type === "quality" && typeof value === "string" && !(decl.stages ?? []).includes(value)
+      ? decl.renamedStages?.[value] : undefined;
     holder.append(rows.row(`${extension.id}:${nodeId}:${decl.name}`, {
       decl: decl as unknown as ValueDecl,
       value,
       adapter,
       // The card Fields tab's row classes, so an extension's rows line up with the box's own.
       className: "doc-row doc-row-top", labelClassName: "doc-row-label", controlClassName: "insp-input",
+      ...(renamedTo !== undefined ? { replaceProblem: `${extension.name} has since renamed this stage “${renamedTo}”. Pick “${renamedTo}” to update it.` } : {}),
       ...(host.readOnly ? {} : {
         onCommit: (v: unknown) => {
           pending.set(key, v);

@@ -63,10 +63,11 @@ export function extensionNodes(source: SourceProject): Map<string, NodeInfo> {
 }
 
 /** A problem from the shared checks, in this compiler's report shape. */
-const issueOf = (path: string, p: Problem, prefix = "", field?: string): Issue => ({
+const issueOf = (path: string, p: Problem, prefix = "", field?: string, extension?: string): Issue => ({
   severity: p.severity, path,
   ...(field !== undefined ? { field } : {}),
   message: p.path === "" ? `${prefix}${p.message}` : `${prefix}${p.path}: ${p.message}`,
+  ...(extension !== undefined ? { extension, detail: p.code } : {}),
 });
 
 /** The extensions a project takes and the manifests it has, matched up. */
@@ -92,7 +93,7 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
   // --- the manifests --------------------------------------------------------------
   for (const m of source.manifests ?? []) {
     const problems = manifestProblems(m.manifest);
-    for (const p of problems) issues.push(issueOf(m.path, p, "manifest "));
+    for (const p of problems) issues.push(issueOf(m.path, p, "manifest ", undefined, m.id));
     let sound = !problems.some((p) => p.severity === "error");
     const id = (m.manifest as { id?: unknown } | null)?.id;
     if (sound && id !== m.id) {
@@ -114,7 +115,7 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
     const version = typeof entry?.version === "string" ? entry.version : "";
     const settings = (entry?.settings ?? {}) as Record<string, unknown>;
     if (m === undefined) {
-      issues.push({ severity: "warning", path: projectPath, field: "extensions",
+      issues.push({ extension: id, severity: "warning", path: projectPath, field: "extensions",
         message: `the project takes the Storylet extension "${id}", but has no manifest for it at ${EXTENSIONS_DIR}/${id}${MANIFEST_EXTENSION}; its data is left as it is, and not compiled` });
       takenList.push({ id, version, settings });
       continue;
@@ -122,16 +123,16 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
     if (!m.sound) { takenList.push({ id, version, settings }); continue; }
     const manifest = m.manifest as Manifest;
     if (version !== manifest.version) {
-      issues.push({ severity: "warning", path: projectPath, field: "extensions",
+      issues.push({ extension: id, severity: "warning", path: projectPath, field: "extensions",
         message: `the project takes "${id}" ${version === "" ? "with no version" : `at version ${version}`}, but its manifest is version ${manifest.version}; run \`storyletengine format\` to take it (renamed stages are renamed in the data as it does)` });
     }
     const known = new Set((manifest.settings ?? []).map((s) => s.name));
     for (const [name, value] of Object.entries(settings)) {
       if (!known.has(name)) {
-        issues.push({ severity: "warning", path: projectPath, field: "extensions",
+        issues.push({ extension: id, severity: "warning", path: projectPath, field: "extensions",
           message: `"${id}" has no setting "${name}"; it is ignored` });
       } else if (typeof value !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
-        issues.push({ severity: "error", path: projectPath, field: "extensions",
+        issues.push({ extension: id, severity: "error", path: projectPath, field: "extensions",
           message: `"${id}"'s setting "${name}" names a field, so it is a field name, not ${JSON.stringify(value)}` });
       }
     }
@@ -157,33 +158,33 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
     const stem = file.path.split("/").pop()!.replace(/\.storyletextension$/, "");
     const shard = file.shard;
     if (shard.extension !== stem) {
-      issues.push({ severity: "error", path: file.path, field: "extension",
+      issues.push({ extension: stem, severity: "error", path: file.path, field: "extension",
         message: `this shard says it holds "${String(shard.extension)}", but it is named for "${stem}"` });
       continue;
     }
     const takenHere = Object.prototype.hasOwnProperty.call(taken, stem);
     if (!takenHere) {
-      issues.push({ severity: "warning", path: file.path,
+      issues.push({ extension: stem, severity: "warning", path: file.path,
         message: `data for the Storylet extension "${stem}", which the project does not take; it is left as it is, and not compiled` });
       continue;
     }
     const manifest = sound.get(stem);
     const entries = shard.entries;
     if (typeof entries !== "object" || entries === null || Array.isArray(entries)) {
-      issues.push({ severity: "error", path: file.path, field: "entries", message: "entries are an object, by node kind and then node id" });
+      issues.push({ extension: stem, severity: "error", path: file.path, field: "entries", message: "entries are an object, by node kind and then node id" });
       continue;
     }
-    for (const p of orphanedEntries(shard, exists)) issues.push(issueOf(file.path, p));
+    for (const p of orphanedEntries(shard, exists)) issues.push(issueOf(file.path, p, "", undefined, stem));
     if (manifest === undefined) continue;   // reported above; the data stays as it is
     for (const [kind, byNode] of Object.entries(entries)) {
       if (!HOSTS.storylets.kinds.includes(kind)) {
-        issues.push({ severity: "warning", path: file.path, field: "entries",
+        issues.push({ extension: stem, severity: "warning", path: file.path, field: "entries",
           message: `entries.${kind}: "${kind}" is not a Storylets node kind; these entries are kept, and not compiled` });
         continue;
       }
       const target = targetOf(manifest, "storylets", kind);
       if (target === undefined) {
-        issues.push({ severity: "warning", path: file.path, field: "entries",
+        issues.push({ extension: stem, severity: "warning", path: file.path, field: "entries",
           message: `entries.${kind}: "${stem}" declares nothing for a ${kind}; these entries are kept, and not compiled` });
         continue;
       }
@@ -192,11 +193,11 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
         const node = nodes.get(id);
         if (node === undefined || node.kind !== kind) continue;   // an orphan: reported above
         if (node.box !== box) {
-          issues.push({ severity: "warning", path: file.path, where: id,
+          issues.push({ extension: stem, severity: "warning", path: file.path, where: id,
             message: `entries.${kind}.${id} belongs ${node.box === undefined ? "in the project's own shard" : "in its own box's shard"}; it is compiled from here all the same` });
         }
         const problems = entryProblems(target, entry, { exists });
-        for (const p of problems) issues.push(issueOf(file.path, p, `entries.${kind}.${id}${p.path === "" ? ": " : "."}`, "entries"));
+        for (const p of problems) issues.push(issueOf(file.path, p, `entries.${kind}.${id}${p.path === "" ? ": " : "."}`, "entries", stem));
         if (problems.some((p) => p.severity === "error")) continue;
         const compiled = compileEntry(target, entry as Record<string, unknown>);
         if (compiled === undefined) continue;
@@ -241,7 +242,7 @@ function claimIssues(source: SourceProject, claims: readonly ResolvedClaim[]): I
     const declaredSomewhere = source.boxes.some((box) =>
       ((outcome ? box.box.box.outcomeFields : box.box.box.fields) ?? []).some((d) => d.name === claim.field));
     if (!declaredSomewhere) {
-      issues.push({ severity: "warning", path: source.path, field: "extensions",
+      issues.push({ extension: claim.extension, severity: "warning", path: source.path, field: "extensions",
         message: `the Storylet extension "${claim.extension}" claims the ${claim.kind} field "${claim.field}", which no box declares; set the extension's "${claim.claim.setting}" setting to the field's name, or declare it` });
       continue;
     }
@@ -252,7 +253,7 @@ function claimIssues(source: SourceProject, claims: readonly ResolvedClaim[]): I
       const boxPath = `${box.path}/box.storyletbox`;
       const boxName = box.box.box.gameId ?? box.box.box.id;
       if (familyType(decl.type) !== familyType(claim.claim.type)) {
-        issues.push({ severity: "error", path: boxPath, where: boxName, field: outcome ? "outcomeFields" : "fields",
+        issues.push({ extension: claim.extension, severity: "error", path: boxPath, where: boxName, field: outcome ? "outcomeFields" : "fields",
           message: `the Storylet extension "${claim.extension}" claims the ${claim.kind} field "${claim.field}" as ${claim.claim.type}, but box "${boxName}" declares it as ${decl.type}` });
         continue;
       }
@@ -264,7 +265,8 @@ function claimIssues(source: SourceProject, claims: readonly ResolvedClaim[]): I
             if (h.fields === undefined || !Object.prototype.hasOwnProperty.call(h.fields, claim.field)) continue;
             for (const p of valueProblems(claim.claim, h.fields[claim.field])) {
               issues.push({ severity: p.severity, path: deck.path, where: h.where, field: outcome ? "outcomeFields" : "fields",
-                message: `field "${claim.field}", as the Storylet extension "${claim.extension}" claims it: ${p.message}` });
+                message: `field "${claim.field}", as the Storylet extension "${claim.extension}" claims it: ${p.message}`,
+                extension: claim.extension, detail: p.code });
             }
           }
         }

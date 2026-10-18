@@ -43,14 +43,24 @@ export function extensionDtos(source: SourceProject): ExtensionDto[] | undefined
   return out.length > 0 ? out : undefined;
 }
 
-/** What references and map keys choose from: every box, deck, card, outcome and tag, by the name an author
- *  knows it by (a tag and an outcome with their group's or card's name in front, as problems name them). */
+/** What references and map keys choose from, and what a problem names: every box, deck, card, outcome, tag,
+ *  tag group, hand and hand template, by the name an author knows it by (a tag and an outcome with their
+ *  group's or card's name in front, as problems name them). */
 export function extensionNodeChoices(source: SourceProject): Record<string, { id: string; label: string }[]> {
-  const out: Record<string, { id: string; label: string }[]> = { box: [], deck: [], card: [], outcome: [], tag: [] };
+  const out: Record<string, { id: string; label: string }[]> = {
+    box: [], deck: [], card: [], outcome: [], tag: [], tagGroup: [], hand: [], handTemplate: [],
+  };
   const groups = [...source.boxes.flatMap((b) => b.tags.groups ?? []), ...(source.map?.group ? [source.map.group] : [])];
-  for (const g of groups) for (const t of g.tags ?? []) out["tag"]!.push({ id: t.id, label: `${effectiveGameId(g)}/${effectiveGameId(t)}` });
+  for (const g of groups) {
+    out["tagGroup"]!.push({ id: g.id, label: effectiveGameId(g) });
+    for (const t of g.tags ?? []) out["tag"]!.push({ id: t.id, label: `${effectiveGameId(g)}/${effectiveGameId(t)}` });
+  }
   for (const box of source.boxes) {
     out["box"]!.push({ id: box.box.box.id, label: effectiveGameId(box.box.box) });
+    // Not choices a reference can make (the toolkit's references name box, deck, card, outcome and tag), but
+    // names a problem about one of them is worded with.
+    for (const h of box.hands.hands ?? []) out["hand"]!.push({ id: h.id, label: effectiveGameId(h) });
+    for (const t of box.hands.templates ?? []) out["handTemplate"]!.push({ id: t.id, label: effectiveGameId(t) });
     for (const deck of box.decks) {
       out["deck"]!.push({ id: deck.shard.deck.id, label: effectiveGameId(deck.shard.deck) });
       for (const card of deck.shard.cards ?? []) {

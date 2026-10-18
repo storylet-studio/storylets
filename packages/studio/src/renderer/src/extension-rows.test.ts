@@ -30,6 +30,7 @@ const probe: ExtensionDto = {
     card: {
       fields: [
         { name: "note", type: "text", label: "Note", help: "A line for the crew." },
+        { name: "act", type: "quality", stages: ["setup", "turn"], renamedStages: { opening: "setup" } },
         { name: "cue", type: "record", label: "Cue", group: "Sound", fields: [{ name: "sound", type: "text" }, { name: "gain", type: "number" }] },
       ],
       claims: [{ field: "mood", decl: { name: "mood", type: "enum", values: ["calm", "tense"], label: "Mood", help: "The card's mood, as the probe reads it.", valueHelp: { tense: "Clipped." } } }],
@@ -37,7 +38,7 @@ const probe: ExtensionDto = {
     outcome: { fields: [{ name: "line", type: "text", label: "Line" }], claims: [] },
     box: { fields: [{ name: "theme", type: "text", label: "Theme" }], claims: [] },
   },
-  values: { c_bell: { note: "Ring it twice.", cue: { sound: "bell" } }, o_ring: { line: "The bell rings." }, b_harbour: { theme: "salt" } },
+  values: { c_bell: { note: "Ring it twice.", act: "opening", cue: { sound: "bell" } }, o_ring: { line: "The bell rings." }, b_harbour: { theme: "salt" } },
 };
 const project = { boxes: [box], extensions: [probe], extensionNodes: { card: [{ id: "c_bell", label: "bell" }] }, projectNode: "proj_probe" } as unknown as ProjectDto;
 
@@ -68,10 +69,13 @@ describe("a card's Fields tab", () => {
     expect(centre.querySelector(".ext-heading")?.textContent).toBe("Probe");
     expect(centre.querySelector(".ext-group")?.textContent).toBe("Sound");
     const captions = [...centre.querySelectorAll(".shell-fieldrow-label")].map((c) => c.textContent);
-    expect(captions.slice(0, 3)).toEqual(["Mood", "Note", "Cue"]);
+    expect(captions.slice(0, 4)).toEqual(["Mood", "Note", "act", "Cue"]);
     expect(centre.textContent).toContain("A line for the crew.");
     // The tab counts the extension's values with the box's.
-    expect([...centre.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Fields"))?.textContent).toContain("3");
+    expect([...centre.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Fields"))?.textContent).toContain("4");
+    // A stage the extension has renamed says so, in place of the row's own "not one of the stages".
+    const act = [...centre.querySelectorAll(".shell-fieldrow")].find((r) => r.querySelector(".shell-fieldrow-label")?.textContent === "act")!;
+    expect(act.querySelector(".shell-fieldrow-problem")?.textContent).toBe("Probe has since renamed this stage “setup”. Pick “setup” to update it.");
   });
 
   it("draws a claimed field with the extension's label and help, keeping the box's value", () => {
