@@ -1,5 +1,16 @@
 # @storylet-studio/model
 
+## 0.10.0
+
+### Minor Changes
+
+- abe401f: A declaration's `default` is optional, on `PropertyDecl` and `FieldDecl` alike (the family's rule, ruled 2026-10-18): left out, the type's default holds (false, 0, "", the first enum value, no flags, the first stage), and the compiler writes it onto every declaration in the bundle, so a bundle's declaration always has one.
+- c520d2b: Field declarations take the family's one type list, shared with Patter's game data: `FieldType` is `text`, `multiline`, `number`, `boolean`, `enum`, `flags` or `quality`, with `string` read as a synonym of `text`. `FieldDecl` gains `stages` for a quality field, and `FIELD_TYPES` and `isTextFieldType` are exported.
+
+### Patch Changes
+
+- 6a0c9c1: Each package now carries the MIT licence text (LICENSE) in its own folder, so the licence travels with every install.
+
 ## 0.9.1
 
 ### Patch Changes
