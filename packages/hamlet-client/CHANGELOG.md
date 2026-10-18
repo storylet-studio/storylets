@@ -7,9 +7,14 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-18
+
 ### Changed
 
 - **Patterplay 0.28.0 in all four hosts.** The web client, and the Godot, Unity and Unreal projects, pin Patter's released 0.28.0 in place of 0.23.0, on the shared expression kernel `k1a333a0e`, the one the Storylet Engine now ships. Patter's additions since come with it, among them saves that are put back to a default where a stage or value has gone; none changes how the Hamlet plays.
+- **The Storylet Engine 0.12.0 in all four hosts**, on the same kernel as Patterplay 0.28.0.
+- **The cross-host saves are current.** The two saves the web client writes for the other hosts' tests were
+  regenerated on these versions, and every host loads both.
 
 ## [0.5.1] - 2026-10-10
 
