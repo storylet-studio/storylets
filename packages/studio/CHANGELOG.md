@@ -10,6 +10,19 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **A card's or outcome's Fields are drawn by the family's field row**, the one Patterpad's game data uses. Each
+  field's purpose from the Card template shows under its control. Flags are picked from the declared values
+  instead of typed with commas, and a Text (multiline) field is a text area. A blank field says what it falls
+  back to, "default (x)", and a value that doesn't fit (not a number, not one of the values) is said under it.
+  Text in a Text field that looks like a number or True / False is kept as text.
+
+### Security
+
+- **Every window carries a content security policy and stays on its own page**: a window no longer navigates
+  away, opens another window or attaches a web view.
+
 ## [0.22.0] - 2026-10-18
 
 ### Added

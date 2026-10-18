@@ -465,6 +465,8 @@ export interface FieldDeclDto {
   values?: string[];
   /** A quality field's ordered ladder. */
   stages?: string[];
+  /** What the field is for: the Card template's Purpose, shown under the field's control. */
+  purpose?: string;
 }
 
 /** A property declaration in editable form (default as a display string). */

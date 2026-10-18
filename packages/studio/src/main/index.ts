@@ -14,6 +14,7 @@ import { BrowserWindow, app, safeStorage } from "electron";
 import type { ToolWindows } from "@wildwinter/app-shell/tool-window";
 import { createProjectSession } from "@wildwinter/app-shell/session";
 import { configureUpdater, startBackgroundUpdateCheck } from "@wildwinter/app-shell/updater";
+import { guardAllWindows } from "@wildwinter/app-shell/window-guard";
 import { clearParseCache } from "@storylet-studio/compiler";
 import { clearCanonicalCache } from "@storylet-studio/ops";
 import { StudioStore } from "./store.js";
@@ -38,6 +39,13 @@ import { electronIpc } from "./ipc/registrar.js";
 import type { OpenResult } from "../shared/api.js";
 
 registerAssetScheme();
+
+// Every window stays on the page it loaded, opens no other window and attaches
+// no webview (the family's window hardening, patterkit
+// design/family-parity-2026-10.md item 12). Nothing it refuses is opened in the
+// browser instead: the only addresses that leave the app are the About links,
+// by their own allow-list (ipc/state.ts).
+guardAllWindows(app);
 
 // Opt-in remote debugging, for verifying a build without a person at the
 // keyboard: with it on, the renderer can be inspected and driven over the

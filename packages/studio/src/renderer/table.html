@@ -5,7 +5,7 @@
     <!-- The Board draws a box's map, backgrounds and all, so it needs the same
          img-src as the editor window. It may also reach Patterpad's Live Link, on loopback and
          that port only, to take Patter's scenes as they are saved (table/patterpad.ts). -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: storylet-asset:; connect-src 'self' ws://127.0.0.1:4471" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: storylet-asset:; object-src 'none'; base-uri 'none'; connect-src 'self' ws://127.0.0.1:4471" />
     <title>The Board</title>
   </head>
   <body>

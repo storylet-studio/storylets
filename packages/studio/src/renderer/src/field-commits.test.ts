@@ -63,6 +63,27 @@ describe("a card's fields", () => {
     expect(saveCard.mock.lastCall![2].outcomes[0].fields).toEqual([{ name: "after", value: "You pocket the coin" }]);
   });
 
+  it("the Fields tab is the family's field row: purpose shown, flags picked, multiline a text area", () => {
+    const saveCard = vi.fn();
+    const centre = document.createElement("div");
+    setDocTab("card:k_1/c_1", "fields");
+    const typed: BoxDto = { ...box, fields: [
+      { name: "line", type: "multiline", purpose: "What the card says" },
+      { name: "mood", type: "flags", values: ["grim", "wry"] },
+      { name: "weight", type: "number", default: "2" },
+    ] };
+    renderCardWorkspace(centre, typed, deck, { ...card, fields: [{ name: "mood", value: '["wry"]' }] }, [], host({ saveCard }));
+    expect(centre.querySelector(".shell-fieldrow-purpose")?.textContent).toBe("What the card says");
+    const area = centre.querySelector<HTMLTextAreaElement>(".doc-row textarea")!;
+    type(area as unknown as HTMLInputElement, "two\nlines");
+    expect(saveCard.mock.lastCall![2].fields).toContainEqual({ name: "line", value: "two\nlines" });
+    const flags = [...centre.querySelectorAll<HTMLButtonElement>(".shell-flag")];
+    expect(flags.map((f) => `${f.textContent}${f.classList.contains("on") ? "*" : ""}`)).toEqual(["default (none)", "grim", "wry*"]);
+    flags[1]!.click();
+    expect(saveCard.mock.lastCall![2].fields).toContainEqual({ name: "mood", value: '["grim","wry"]' });
+    expect(centre.querySelectorAll<HTMLInputElement>(".doc-row input")[0]!.placeholder).toBe("default (2)");
+  });
+
   it("redraw turns are saved as they are typed, and Esc puts them back", () => {
     const saveCard = vi.fn();
     const centre = document.createElement("div");

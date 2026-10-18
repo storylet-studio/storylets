@@ -14,7 +14,7 @@
 // place.
 // ---------------------------------------------------------------------------
 
-import { defaultLabel, el, iconNode, openAnchoredPanel, openGameIdEditor, plural, rungStrip } from "@wildwinter/app-shell";
+import { defaultLabel, el, fieldRow as shellFieldRow, iconNode, openAnchoredPanel, openGameIdEditor, plural } from "@wildwinter/app-shell";
 import { currentDocTab, setDocTab } from "./doc-tab-memory.js";
 import { isAnywhere, placeGroupsOf, whereModel, whereWarning } from "./where.js";
 import { NEVER_LABEL, anywhereLine, gateLabel, movingNote, tierCount, tierLabel } from "./hand-tiers.js";
@@ -25,6 +25,7 @@ import type { ShareScope } from "./zone-share.js";
 // model/test/id-parity.test.ts holds the two copies to each other.
 import { gameIdify, isHoleRef, turnSpan, PLACE_GROUP } from "@storylet-studio/model";
 import { bindField, inputField, option, optionSelect, segmented } from "./fields.js";
+import { fieldValueFromText, fieldValueToText } from "./field-value.js";
 import { cardHasContent, deleteLabel } from "./deletes.js";
 
 import { openContextMenu, openPopover } from "@wildwinter/app-shell/context-menu";
@@ -834,9 +835,12 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
 }
 
 /**
- * One declared field as a label + control row, the control chosen by the
- * declared type (rule 7: a declared type is a contract, so offer its values
- * rather than asking for typing).
+ * One declared field as a label + control row: the family's field row
+ * (`@wildwinter/app-shell` fieldRow), the control chosen by the declared type
+ * (rule 7: a declared type is a contract, so offer its values rather than
+ * asking for typing), the purpose under it, and unset saying what it falls
+ * back to, "default (x)". Text commits as typed, so Cmd+S, Play and the review
+ * walk see it; Escape puts back what the field held.
  *
  * Shared by the card's Fields tab and an outcome's Fields block, which is why
  * it is out here: the two lists are the same question asked of two entities
@@ -844,37 +848,11 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
  * first time a type gained a control.
  */
 function fieldRow(decl: FieldDeclDto, current: string, set: (value: string) => void, commit: () => void): HTMLElement {
-  let control: HTMLElement;
-  // A quality field shows its LADDER, the stage marked, as the Board does: the
-  // family's one strip. Unset, it says what it falls back to, "default (x)",
-  // which also clears a value. Free text would only invite the off-ladder value
-  // the compiler refuses.
-  if (decl.type === "quality" && (decl.stages?.length ?? 0) > 0) {
-    const holder = el("span", { className: "doc-rungs" });
-    const draw = (value: string): void => {
-      holder.replaceChildren(rungStrip({
-        stages: decl.stages!, value: value === "" ? undefined : value, decl,
-        onPick: (stage) => { set(stage); commit(); draw(stage); },
-        onClear: () => { set(""); commit(); draw(""); },
-      }));
-    };
-    draw(current);
-    return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label", text: decl.name }), holder);
-  }
-  const choices = decl.type === "boolean" ? ["true", "false"]
-    : decl.type === "enum" && (decl.values?.length ?? 0) > 0 ? decl.values!
-    : undefined;
-  if (choices !== undefined) {
-    // Unset says what holds instead, "default (x)", by the family's one rule.
-    control = optionSelect(choices, current, (v) => { set(v); commit(); }, { none: defaultLabel(decl) });
-  } else {
-    // text / multiline / number / flags: text, coerced on save. Committed as typed, so
-    // Cmd+S, Play and the review walk see it (it used to wait for the blur).
-    const input = inputField(current, "insp-input insp-mono", { mode: "input", set, commit });
-    input.placeholder = FIELD_PLACEHOLDER[decl.type] ?? "Value";
-    control = input;
-  }
-  return el("div", { className: "doc-row" }, el("span", { className: "doc-row-label", text: decl.name }), control);
+  return shellFieldRow({
+    decl, value: fieldValueFromText(decl.type, current),
+    onCommit: (v) => { set(fieldValueToText(v)); commit(); },
+    className: "doc-row doc-row-top", labelClassName: "doc-row-label", controlClassName: "insp-input insp-mono",
+  }).el;
 }
 
 /** One tag group as a label row: its colour dot and name, then its control. */
@@ -895,12 +873,6 @@ function slotsControl(bounded: boolean, size: string, choose: (slots: "unbounded
   field.placeholder = "3"; field.disabled = !bounded;
   return el("div", { className: "insp-segrow" }, seg, field);
 }
-
-/** What an empty field of each type asks for, in plain words (the house
- *  style: never an angle-bracketed stub). */
-const FIELD_PLACEHOLDER: Record<string, string> = {
-  text: "Text", multiline: "Text", string: "Text", number: "A number", flags: "Flags, separated by commas", enum: "A value",
-};
 
 /** The `stages` option for a list whose rows are qualities of one kind:
  *  `make` names a row's quality from its declared name. A row with no name
