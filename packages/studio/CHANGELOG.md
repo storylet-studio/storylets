@@ -24,6 +24,8 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
+- **The Board and the playable export play Patter scenes on Patterplay 0.30.0**, in place of 0.28.0, with
+  Patter's extension values and its game data on options among what comes with it.
 - **A card's or outcome's Fields are drawn by the family's field row**, the one Patterpad's game data uses. Each
   field's purpose from the Card template shows under its control. Flags are picked from the declared values
   instead of typed with commas, and a Text (multiline) field is a text area. A blank field says what it falls

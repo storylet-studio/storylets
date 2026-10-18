@@ -40,6 +40,7 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ### Changed
 
+- **`export-html` plays Patter scenes on Patterplay 0.30.0**, in place of 0.28.0.
 - **An unresolved merge is marked in the shard itself**, under `unresolved`, naming each clash with both
   sides' values, in every shard type. `validate`, `export` and `pack` refuse a shard carrying the mark, so
   an unresolved merge cannot reach CI from any machine. Resolve the clash, then remove the entry. The
