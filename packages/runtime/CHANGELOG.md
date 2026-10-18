@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-18
+
 ### Added
 
 - **Storylet extension values**: a bundle can carry the values a Storylet extension gives each node, and every

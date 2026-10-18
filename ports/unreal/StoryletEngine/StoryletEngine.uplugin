@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
-	"Version": 19,
-	"VersionName": "0.12.0",
+	"Version": 20,
+	"VersionName": "0.13.0",
 	"FriendlyName": "Storylet Engine",
 	"Description": "Storylet Engine runtime for Unreal Engine. Loads compiled .storyletsc bundles and deals, peeks and plays storylets, exposed to Blueprint and C++. Every Storylet Engine runtime plays the same bundle with the same behaviour. MIT licensed (see LICENSE).",
 	"Category": "Gameplay",

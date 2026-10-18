@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-18
+
 ### Added
 
 - **Storylet extension values reach the game.** A bundle's `extensions` section and every node's `extensions`

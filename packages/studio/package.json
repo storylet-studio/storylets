@@ -1,7 +1,7 @@
 {
   "name": "@storylet-studio/studio",
   "productName": "Storyletter",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "private": true,
   "description": "Storyletter - the storylet editor. Electron shell over @storylet-studio/ops (one core, many front-ends); cards and decks first.",
   "type": "module",
@@ -34,7 +34,7 @@
     "@storylet-studio/dialect": "0.3.2",
     "@storylet-studio/model": "0.10.0",
     "@storylet-studio/ops": "0.0.0",
-    "@storylet-studio/runtime": "0.12.0",
+    "@storylet-studio/runtime": "0.13.0",
     "@storylet-studio/with-patter": ">=0.2.1",
     "@wildwinter/app-shell": "^0.53.0",
     "@wildwinter/expr-editor": "^0.16.2",

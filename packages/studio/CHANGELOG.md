@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-18
+
 ### Added
 
 - **Storylet extensions.** A project that takes a Storylet extension shows its values where the item's own are: a
