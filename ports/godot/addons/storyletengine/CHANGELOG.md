@@ -6,6 +6,8 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-18
+
 ### Added
 
 - **Field read helpers**: `StoryletEngine.field_decls(bundle, box)`, `outcome_field_decls`,

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-18
+
 ### Added
 
 - **Field read helpers**, in Blueprint on the bundle asset: `GetEffectiveCardFields` and

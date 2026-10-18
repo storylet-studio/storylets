@@ -8,6 +8,8 @@ section for it.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-18
+
 ### Added
 
 - **Field read helpers**: `fieldDecls(bundle, box)` and `outcomeFieldDecls(bundle, box)` find a

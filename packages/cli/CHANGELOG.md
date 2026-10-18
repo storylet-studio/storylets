@@ -20,9 +20,11 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-18
+
 ### Changed
 
-- **`export-html` plays Patter scenes on Patterplay 0.26.0**, in place of 0.23.0. Nothing changes in how they play.
+- **`export-html` plays Patter scenes on Patterplay 0.28.0**, in place of 0.23.0. A Patter save holding a stage or value its scene no longer has is put back to the default as it loads.
 - **`validate` and `build` refuse a quality with fewer than two stages**, or with a stage that has
   no name, by the rule Patter checks too.
 - **Field declarations are checked**: a name, used once in its template; a type from `text`,

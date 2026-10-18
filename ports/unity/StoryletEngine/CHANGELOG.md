@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-18
+
 ### Added
 
 - **`FieldHelpers`**: `FieldDecls(bundle, box)`, `OutcomeFieldDecls`, `FieldValue` and
@@ -18,6 +20,10 @@
 - **A saved value the build no longer takes is put back by the kernel's one check.** A stage or a
   flag deleted since the save (as an enum value already was) is reported as retyped and takes its
   default, by the shared kernel's value check, which Patterplay's loads use too. The engine's own copy of the check is gone: it calls `Wildwinter.Expr.ValueFit.Fits`.
+- **Kernel `k1a333a0e`; beside Patterplay, 0.28.0 or newer.** Installed beside Patterplay, this package
+  still switches its own kernel off and runs on Patterplay's, but only on Patterplay 0.28.0 or newer,
+  the first whose kernel has the value check; beside an older one the compile stops with an error that
+  says to update it.
 
 ## [0.11.2] - 2026-10-10
 

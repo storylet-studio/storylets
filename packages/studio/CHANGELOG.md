@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-18
+
 ### Added
 
 - **Card and outcome fields take the same types as Patter's game data**: Text, Text (multiline),
@@ -36,7 +38,7 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
-- **Patter scenes play on Patterplay 0.26.0**, on the Board and in Publish Playable HTML, in place of 0.23.0. Nothing changes in how they play.
+- **Patter scenes play on Patterplay 0.28.0**, on the Board and in Publish Playable HTML, in place of 0.23.0. A Patter save holding a stage or value its scene no longer has is put back to the default as it loads, and says so.
 - **A quality needs at least two stages**, as it does in Patter: a ladder with one rung has
   nothing to order. A stage with no name is a problem too.
 - **The card template and outcome fields are checked**, not only the values cards give them: a
