@@ -120,12 +120,14 @@ export function reload(session: ProjectSession, written = false): OpenResult {
 }
 
 export async function undo(session: ProjectSession): Promise<Written | null> {
-  const states = session.history.undo();
-  if (!states) return null;
-  const applied = await applyStates(states);
-  // A step that could not be written goes back on the stack, so the author can
+  // The shell's history writes the step back, refusing it when a file has
+  // changed since (a pull, a merge, Patterpad writing the shared scopes): that
+  // step and every one below it are dropped, and the error names the file. A
+  // step that could not be written goes back on the stack, so the author can
   // try again once the file is free, and the error says which file and why.
-  if (!applied.ok) { session.history.undoFailed(); return refuse(session, applied.error); }
+  const outcome = await session.history.applyUndo();
+  if (!outcome) return null;
+  if (!outcome.ok) return refuse(session, outcome.error);
   // An undo is a change to the files like any other, and it is counted the same
   // way: by what the shards now say. An undo back to the pulled text is not an
   // unpushed edit at all, which is what an author who types and undoes expects
@@ -134,10 +136,9 @@ export async function undo(session: ProjectSession): Promise<Written | null> {
 }
 
 export async function redo(session: ProjectSession): Promise<Written | null> {
-  const states = session.history.redo();
-  if (!states) return null;
-  const applied = await applyStates(states);
-  if (!applied.ok) { session.history.redoFailed(); return refuse(session, applied.error); }
+  const outcome = await session.history.applyRedo();
+  if (!outcome) return null;
+  if (!outcome.ok) return refuse(session, outcome.error);
   return reload(session, true);
 }
 

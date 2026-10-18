@@ -24,6 +24,7 @@ import type {
 import { declDto, fieldDeclDto } from "./decls.js";
 import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
 import { History } from "./history.js";
+import { extensionDtos, extensionNodeChoices } from "./extensions.js";
 import { resetShardStatus, shardStatus } from "./vc.js";
 import type { ShardRef } from "./vc.js";
 
@@ -198,7 +199,9 @@ export function toDto(loaded: LoadedProject): ProjectDto {
   // The paired Patter project's published scenes, when there are any: each outcome says how its
   // card's scene reaches it. Read through ops' cache, so an unchanged bundle costs a stat.
   const patterScenes = readPatterLink(loaded).link?.scenes;
+  const extensions = extensionDtos(source);
   return {
+    ...(extensions !== undefined ? { extensions, extensionNodes: extensionNodeChoices(source), projectNode: source.project.project.id } : {}),
     dir: loaded.dir,
     name: source.project.project.name,
     storyPropertyCount: (source.project.story?.properties ?? []).length,

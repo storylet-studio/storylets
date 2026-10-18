@@ -51,7 +51,9 @@ export {
   unresolvedMarkIssues,
 } from "./merge.js";
 // A project's Storylet extensions as files: the manifest a merge reads from the working tree
-export { manifestPath, planExtensionUpgrades, projectManifests, readProjectManifest, soundManifest } from "./extensions.js";
+export {
+  extensionShardPath, manifestPath, planExtensionUpgrades, planExtensionValue, projectManifests, readProjectManifest, soundManifest,
+} from "./extensions.js";
 export type { ExtensionUpgrade } from "./extensions.js";
 export type { ShardMergeInput, ShardMergeStep } from "./merge.js";
 export { analyseInfluence, cardNeighbourhood, describeContribution } from "./influence.js";

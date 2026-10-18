@@ -19,6 +19,7 @@ import { currentDocTab, setDocTab } from "./doc-tab-memory.js";
 import { isAnywhere, placeGroupsOf, whereModel, whereWarning } from "./where.js";
 import { NEVER_LABEL, anywhereLine, gateLabel, movingNote, tierCount, tierLabel } from "./hand-tiers.js";
 import { soloSharePointer } from "./solo-pointer.js";
+import type { ExtensionFieldDto } from "../../shared/api.js";
 import type { ShareScope } from "./zone-share.js";
 // The DERIVED address, computed for placeholders and previews. From the model
 // rather than the shell: this is the same rule the compiler and the CLI use, and
@@ -36,6 +37,14 @@ import { mountPropertyList, valueControl } from "./prop-list.js";
 import type { PropListOptions } from "./prop-list.js";
 import { shows } from "./play-ladder.js";
 import { hoistableProperties, hoistProperty } from "./tag-hoist.js";
+import {
+  claimOn, extensionCount, extensionFields, extensionGroups, extensionTabBody, extensionTabs, extensionsFor, knownTab,
+} from "./extension-rows.js";
+import type { ExtensionHost } from "./extension-rows.js";
+
+/** The page's view of Storylet extensions: the host's, or none (a test's host, a project taking none). */
+const NO_EXTENSIONS: ExtensionHost = { project: () => undefined, save: () => {} };
+const extHost = (h: { extensions?: ExtensionHost }): ExtensionHost => h.extensions ?? NO_EXTENSIONS;
 import type {
   BindingDto, BoxDto, BoxEdit, CardDto, CardEdit, ConditionProperty, DeckDto, DeckEdit,
   FieldDeclDto, StageTargetDto, HandCardGate, HandCardRef, HandCardsDto, HandDetail, HandEdit, OutcomeDto, OutcomeEdit, PropertyDeclDto,
@@ -99,6 +108,8 @@ export interface InspectorHost {
   newCardAtHand(boxId: string, deckId: string, hand: { id: string; title: string }): void;
   /** Open a hand's page on its Cards tab: the place chip in a card's sentence. */
   openHand(boxId: string, handId: string): void;
+  /** Storylet extensions: the open project's, and how a value is saved (extension-rows.ts). Absent: none. */
+  extensions?: ExtensionHost;
 }
 
 /**
@@ -480,7 +491,8 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
       menu: [{ label: deleteLabel("card", cardHasContent(card)), danger: true, onClick: () => h.deleteCard(deck.id, card.id) }],
       comments: { on: card.id, count: h.openThreads(card.id), open: (a) => h.showComments(card.id, edit.title ?? card.gameId, a) },
     }));
-    const setN = edit.fields.filter((f) => f.value.trim() !== "").length;
+    const setN = edit.fields.filter((f) => f.value.trim() !== "").length
+      + extensionsFor(extHost(h).project(), "card").reduce((n, x) => n + extensionCount(x, card.id), 0);
     view.append(docTabs([
       { key: "dealing", label: "Dealing" },
       { key: "outcomes", label: "Outcomes", count: edit.outcomes.length },
@@ -814,6 +826,9 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
   // The Fields tab body: the box-declared card fields as label/control rows.
   // The tab is the label, so the panel carries no section head of its own.
   function cardFieldsBody(): Node[] {
+    // A Storylet extension's own fields follow the box's, in a group headed by its name.
+    const extensionBody = extensionGroups(extHost(h), "card", card.id);
+    if (box.fields.length === 0 && extensionBody.length > 0) return [el("div", { className: "doc-panel" }, ...extensionBody)];
     if (box.fields.length === 0) {
       // Both halves of the orientation the audit found missing: where fields
       // come from, AND what a card with none IS - the cold-start question a
@@ -827,8 +842,8 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
     };
     const fieldBody = box.fields.map((decl) =>
       fieldRow(decl, edit.fields.find((f) => f.name === decl.name)?.value ?? "",
-        (v) => setField(decl.name, v), commit));
-    return [el("div", { className: "doc-panel" }, ...fieldBody)];
+        (v) => setField(decl.name, v), commit, claimOn(extHost(h).project(), "card", decl.name)?.decl));
+    return [el("div", { className: "doc-panel" }, ...fieldBody, ...extensionBody)];
   }
 
   drawCentre();
@@ -847,9 +862,17 @@ export function renderCardWorkspace(centre: HTMLElement, box: BoxDto, deck: Deck
  * (design/outcome-fields-brief.md), and a copy of this would have drifted the
  * first time a type gained a control.
  */
-function fieldRow(decl: FieldDeclDto, current: string, set: (value: string) => void, commit: () => void): HTMLElement {
+function fieldRow(decl: FieldDeclDto, current: string, set: (value: string) => void, commit: () => void, claim?: ExtensionFieldDto): HTMLElement {
+  // A field a Storylet extension claims keeps its own type and value, and is shown with the extension's label,
+  // help and values: the extension's control without moving the data (the proposal's "Claims on host fields").
+  const shown: FieldDeclDto = claim === undefined ? decl : {
+    ...decl,
+    ...(claim.help !== undefined ? { purpose: claim.help } : {}),
+    ...(claim.values !== undefined && decl.values === undefined ? { values: claim.values } : {}),
+  };
   return shellFieldRow({
-    decl, value: fieldValueFromText(decl.type, current),
+    decl: shown, value: fieldValueFromText(decl.type, current),
+    ...(claim?.label !== undefined ? { label: claim.label } : {}),
     onCommit: (v) => { set(fieldValueToText(v)); commit(); },
     className: "doc-row doc-row-top", labelClassName: "doc-row-label", controlClassName: "insp-input insp-mono",
   }).el;
@@ -1205,8 +1228,15 @@ function outcomeBody(o: OutcomeEdit, outcomeFields: FieldDeclDto[], catalogue: C
     };
     const rows = outcomeFields.map((decl) =>
       fieldRow(decl, o.fields?.find((f) => f.name === decl.name)?.value ?? "",
-        (v) => setField(decl.name, v), save));
+        (v) => setField(decl.name, v), save, claimOn(extHost(h).project(), "outcome", decl.name)?.decl));
     body.append(bare("Fields", "what this outcome hands the game", ...rows));
+  }
+  // A Storylet extension's values for the outcome, beside its own fields, under the extension's name. Only
+  // once the outcome exists: a new one has no id to key them by until it is saved.
+  if (o.id) {
+    for (const extension of extensionsFor(extHost(h).project(), "outcome")) {
+      body.append(bare(extension.name, "for the extension", extensionFields(extHost(h), extension, "outcome", o.id)));
+    }
   }
 
   const gateHost = el("div", { className: "insp-exed" });
@@ -1379,7 +1409,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
     // CARDS FIRST (plan item 2): a hand is a place, and what an author opens a
     // place for is what can happen there. The deck page made the same move for
     // the same reason (structure rule 4, 2026-08-04).
-    const tab = currentDocTab(tabKey, "cards");
+    const tab = knownTab(extHost(h).project(), "hand", currentDocTab(tabKey, "cards"), "cards");
     const templateNow = detail.templates.find((t) => t.gameId === edit.template);
     const view = el("div", { className: "insp-card cardedit" });
     // What kind of hand this is, in the designer's own words: its template's
@@ -1411,6 +1441,7 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
       { key: "dealing", label: "Dealing" },
       { key: "slots", label: "Slots", ...(slotsNow !== undefined ? { count: slotsNow } : {}) },
       { key: "properties", label: "Properties", count: (standalone() ? edit.properties?.length ?? 0 : 0) },
+      ...extensionTabs(extHost(h).project(), "hand", detail.id),
     ], tab, (next) => { setDocTab(tabKey, next); draw(); });
     cardsTab = bar.firstElementChild as HTMLElement;
     view.append(bar);
@@ -1423,6 +1454,13 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
       return;
     }
     cardsHost = undefined;
+
+    const extensionBody = extensionTabBody(extHost(h), tab, "hand", detail.id);
+    if (extensionBody !== undefined) {
+      view.append(extensionBody);
+      centre.replaceChildren(view);
+      return;
+    }
 
     if (tab === "slots") {
       if (standalone()) {
@@ -1542,6 +1580,8 @@ export function renderHandWorkspace(centre: HTMLElement, box: BoxDto, detail: Ha
 
 export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, h: InspectorHost): void {
   const view = el("div", { className: "insp-card cardedit" });
+  const extensionBody = extensionTabBody(extHost(h), tab, "box", box.id);
+  if (extensionBody !== undefined) { view.append(extensionBody); centre.replaceChildren(view); return; }
   if (tab === "dealing") {
     let specificity = box.ranking.specificity;
     // WHAT A DEAL IS, and this page is the only place in the app that says so
@@ -1663,6 +1703,8 @@ export function renderBoxTabBody(centre: HTMLElement, box: BoxDto, tab: string, 
 
 export function renderDeckTabBody(host: HTMLElement, box: BoxDto, deck: DeckDto, tab: string, catalogue: ConditionProperty[], h: InspectorHost): void {
   const view = el("div", { className: "insp-card cardedit" });
+  const extensionBody = extensionTabBody(extHost(h), tab, "deck", deck.id);
+  if (extensionBody !== undefined) { view.append(extensionBody); host.replaceChildren(view); return; }
   if (tab === "dealing") {
     let gate = deck.gate ?? "";
     const gateHost = el("div", { className: "insp-exed" });
@@ -1725,7 +1767,7 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
 
   function draw(): void {
     const tabKey = `template:${detail.id}`;
-    const tab = currentDocTab(tabKey, "dealing");
+    const tab = knownTab(extHost(h).project(), "handTemplate", currentDocTab(tabKey, "dealing"), "dealing");
     const view = el("div", { className: "insp-card cardedit" });
     // A TITLE, as a hand has: what the designer calls this kind of hand
     // ("Places in the village"), shown under every one of its hands' titles.
@@ -1744,7 +1786,15 @@ export function renderTemplateWorkspace(centre: HTMLElement, box: BoxDto, detail
       { key: "dealing", label: "Dealing" },
       { key: "bindings", label: "Bindings", count: bound + holes },
       { key: "properties", label: "Properties", count: edit.properties.length },
+      ...extensionTabs(extHost(h).project(), "handTemplate", detail.id),
     ], tab, (next) => { setDocTab(tabKey, next); draw(); }));
+
+    const extensionBody = extensionTabBody(extHost(h), tab, "handTemplate", detail.id);
+    if (extensionBody !== undefined) {
+      view.append(extensionBody);
+      centre.replaceChildren(view);
+      return;
+    }
 
     if (tab === "dealing") {
       // The shared condition, written once and evaluated per instance
@@ -1883,6 +1933,13 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
         }
         block.append(bare("Starts at", "this tag's own value for what the group declares", rows));
       }
+      // A Storylet extension's values for the tag, beside its properties, under the extension's name. A tag
+      // added on this page has no id until it is saved, and so no values yet.
+      if (v.id !== undefined) {
+        for (const extension of extensionsFor(extHost(h).project(), "tag")) {
+          block.append(bare(extension.name, "for the extension", extensionFields(extHost(h), extension, "tag", v.id)));
+        }
+      }
       return block;
     });
     const add = el("button", { className: "insp-add", text: "+ Tag", onClick: () => { edit.values.push({ gameId: "", properties: [] }); commit(); redraw(); } });
@@ -1913,6 +1970,10 @@ export function renderTagGroupWorkspace(centre: HTMLElement, box: BoxDto, detail
     view.append(section("Properties", detail.projectMap === true ? "every zone on the map has these" : "every tag in this group has these",
       propList(edit.properties, () => { commit(); redraw(); }, "+ Property", { shareScope: detail.projectMap === true ? "zone" : "tag",
         stages: stagesOf(h, (name) => ({ kind: "property", scope: "hand", box: box.id, holder: detail.id, name })) }), ...soloPointer, ...nudge));
+    // The group's own Storylet extension values, after its properties: what the group is, before its tags.
+    for (const extension of extensionsFor(extHost(h).project(), "tagGroup")) {
+      view.append(section(extension.name, "for the extension", extensionFields(extHost(h), extension, "tagGroup", detail.id)));
+    }
     view.append(section("Tags", "declared, not freeform", ...valBody, add));
 
     // The spatial template of play: this group is a map, so its tags carry outlines

@@ -94,6 +94,7 @@ const SAMPLES: Record<string, string> = {
   "patter-scene-unplayed": 'Patter scene "Night Settles" (night-settles) matches no card, so nothing deals it',
   "patter-boxes-unknown": "patterBoxes names a box that doesn't exist (box_9)",
   "patter-boxes-unpaired": "patterBoxes names boxes for Patter, but the project isn't paired with a Patter project",
+  "extension-value": "entries.card.c_bell.weight: \"weight\" is 11, above the most it may be, 10",
   "play-ladder": "this project is set to solo play; the deck “Docks” is shared. Change Play in Project Settings, or drop shared from the deck",
   "driver-ref": "coverage driver ref must name a declared @world property (the host seam is the only drivable scope)",
   "driver-kind": 'coverage driver kind must be "initial" or "recurring"',

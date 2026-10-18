@@ -569,6 +569,57 @@ export interface ProjectDto {
    *  tokens it declares, so the dialect accepts them, and which of them are opaque (any
    *  name, unchecked). Absent when there is no folder. */
   gameScopes?: GameScopesDto;
+  /** The Storylet extensions the project takes and has a sound manifest for, each with its declarations and
+   *  every node's values. Absent when it takes none. */
+  extensions?: ExtensionDto[];
+  /** The nodes an extension's references and map keys choose from, by kind (`box`, `deck`, `card`, `outcome`,
+   *  `tag`), each with the name an author knows it by. Present only with `extensions`. */
+  extensionNodes?: Record<string, { id: string; label: string }[]>;
+  /** The project's own node id, which its extension values are keyed by. Present only with `extensions`. */
+  projectNode?: string;
+}
+
+/**
+ * One Storylet extension as the editor draws it: its declarations for each node kind it targets (a field's
+ * label, help, group and type, as the manifest writes them), its claims on host fields resolved to the
+ * field names the project's settings give, and every node's values, by node id (ids are project-unique).
+ */
+export interface ExtensionDto {
+  id: string;
+  name: string;
+  version: string;
+  /** By node kind: `card`, `outcome`, `box`, `deck`, `tagGroup`, `tag`, `handTemplate`, `hand`, `project`. */
+  targets: Record<string, ExtensionTargetDto>;
+  /** By node id: the node's values, raw. */
+  values: Record<string, Record<string, unknown>>;
+}
+
+export interface ExtensionTargetDto {
+  /** The extension's own fields, in the manifest's order. Shaped as `@wildwinter/app-shell/value-rows`' ValueDecl. */
+  fields: ExtensionFieldDto[];
+  /** Host fields this extension presents with its own control and help, by the field's name in this project. */
+  claims: { field: string; decl: ExtensionFieldDto }[];
+}
+
+/** An extension field's declaration, as the manifest writes it (ValueDecl-shaped). */
+export interface ExtensionFieldDto {
+  name: string;
+  type: string;
+  label?: string;
+  help?: string;
+  group?: string;
+  default?: unknown;
+  values?: string[];
+  stages?: string[];
+  to?: string;
+  fields?: ExtensionFieldDto[];
+  key?: { type: string; to?: string };
+  of?: Omit<ExtensionFieldDto, "name"> & { name?: string };
+  id?: string;
+  min?: number;
+  max?: number;
+  required?: boolean;
+  editorOnly?: boolean;
 }
 
 /** The game's shared scopes folder, as the renderer is told it. */
@@ -1758,6 +1809,9 @@ export interface StudioApi {
   // --- editing (M1) ----------------------------------------------------------
   /** Apply a card edit, write canonically, re-validate. */
   saveCard(deckId: string, cardId: string, edit: CardEdit): Promise<OpenResult | { error: string }>;
+  /** Set one Storylet extension field on one node (any kind, by its id), or clear it (`value` undefined).
+   *  Written to the extension's shard for the node's box, or the project's; one undo step per node. */
+  setExtensionValue(extension: string, nodeId: string, field: string, value: unknown): Promise<OpenResult | { error: string }>;
   /** A new card in `deckId`; the result carries its id. Made AT a hand
    *  (`place`, a hand id: the hand page's "+ New card here"), or filed to a
    *  project map zone (`zone`, its tag id), or neither. */
@@ -2293,6 +2347,7 @@ export const INVOKE_CHANNELS = {
   "tag-group:createMap": "createGroupAsMap",
   "tag-group:delete": "deleteTagGroup",
   "card:save": "saveCard",
+  "extension:setValue": "setExtensionValue",
   "card:create": "createCard",
   "card:duplicate": "duplicateCard",
   "card:move": "moveCard",

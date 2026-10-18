@@ -21,7 +21,7 @@ import { loadProject } from "../src/load.js";
 import { runValidate } from "../src/validate.js";
 import { runFormat } from "../src/format.js";
 import { planShardMerge, runMerge } from "../src/merge.js";
-import { projectManifests, readProjectManifest } from "../src/extensions.js";
+import { planExtensionValue, projectManifests, readProjectManifest } from "../src/extensions.js";
 import { runPack } from "../src/pack.js";
 import { runExport } from "../src/export.js";
 
@@ -241,6 +241,17 @@ describe("validation, driven by the manifest", () => {
       "harbour/decks/rumours.storyletdeck: field \"temper\", as the Storylet extension \"probe\" claims it: the value is \"wild\", which is not one of its values");
   });
 
+  it("warns about a claim on a field no box declares", () => {
+    const issues = issuesAfter((dir) => {
+      const project = read(dir, "probe.storyletproj") as { extensions: { probe: { settings: Record<string, string> } } };
+      project.extensions.probe.settings["moodField"] = "temper";
+      write(dir, "probe.storyletproj", project);
+    });
+    expect(messages(issues, "error")).toEqual([]);
+    expect(messages(issues, "warning")).toContain(
+      "probe.storyletproj: the Storylet extension \"probe\" claims the card field \"temper\", which no box declares; set the extension's \"moodField\" setting to the field's name, or declare it");
+  });
+
   it("errors when two extensions claim one field, naming both", () => {
     const issues = issuesAfter((dir) => {
       const m = JSON.parse(readFileSync(join(dir, "extensions/probe.extension.json"), "utf8"));
@@ -366,5 +377,33 @@ describe("packs", () => {
     expect(names).toEqual(expect.arrayContaining([
       "extensions/probe.extension.json", "probe.storyletextension", BOX_SHARD,
     ]));
+  });
+});
+
+describe("setting one value", () => {
+  it("writes a card's value into its box's shard, keeps every other entry, and clears back to nothing", () => {
+    const loaded = loadProject(fixture);
+    const set = planExtensionValue(fixture, loaded.source!, "probe", "c_tide", "note", "High water.")!;
+    expect(set.path).toBe(join(fixture, BOX_SHARD));
+    const after = parseSource(set.content!) as { entries: Entries };
+    expect(after.entries["card"]!["c_tide"]).toEqual({ note: "High water." });
+    expect(after.entries["card"]!["c_bell"]!["note"]).toBe("Ring it twice.");
+    const cleared = planExtensionValue(fixture, loaded.source!, "probe", "c_bell", "note", undefined)!;
+    expect((parseSource(cleared.content!) as { entries: Entries }).entries["card"]!["c_bell"]!["note"]).toBeUndefined();
+  });
+
+  it("writes the project's own values at the root, creates a box's shard when it has none, and deletes one left empty", () => {
+    const dir = scratch();
+    try {
+      rmSync(join(dir, BOX_SHARD));
+      const source = loadProject(dir).source!;
+      expect(planExtensionValue(dir, source, "probe", "proj_probe", "studio", "WW")!.path).toBe(join(dir, "probe.storyletextension"));
+      const made = planExtensionValue(dir, source, "probe", "b_harbour", "theme", "salt")!;
+      expect(made.path).toBe(join(dir, BOX_SHARD));
+      expect(parseSource(made.content!)).toEqual({ schema: "storylets/extension@0", extension: "probe", entries: { box: { b_harbour: { theme: "salt" } } } });
+      writeFileSync(made.path, made.content!);
+      expect(planExtensionValue(dir, loadProject(dir).source!, "probe", "b_harbour", "theme", undefined)!.content).toBeNull();
+      expect(planExtensionValue(dir, source, "probe", "c_gone", "note", "x")).toBeUndefined();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

@@ -123,6 +123,14 @@ export function createSaveQueue(ctx: SaveQueueContext) {
     saveTemplate(boxId: string, templateId: string, edit: TemplateEdit): void { queueStruct(`template:${templateId}`, () => studio.saveTemplate(boxId, templateId, edit)); },
     saveTagGroup(boxId: string, groupId: string, edit: TagGroupEdit): void { queueStruct(`tagGroup:${groupId}`, () => studio.saveTagGroup(boxId, groupId, edit)); },
     saveHand(boxId: string, handId: string, edit: HandEdit): void { queueStruct(`hand:${handId}`, () => studio.saveHand(boxId, handId, edit)); },
+    /** One Storylet extension field on one node; a later value for the same field replaces one still waiting. */
+    saveExtension(extension: string, nodeId: string, field: string, value: unknown, landed?: () => void): void {
+      queueStruct(`ext:${extension}:${nodeId}:${field}`, async () => {
+        const result = await studio.setExtensionValue(extension, nodeId, field, value);
+        landed?.();
+        return result;
+      });
+    },
     /** A quality's stage renamed, carrying every value naming it. Queued
      *  before the declaration list's own save, which re-queues behind it. */
     renameStage(target: StageTargetDto, from: string, to: string): void {

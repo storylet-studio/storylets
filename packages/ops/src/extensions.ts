@@ -10,10 +10,10 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { canonicalStringify } from "@storylet-studio/compiler";
+import { canonicalStringify, extensionNodes } from "@storylet-studio/compiler";
 import type { SourceExtension, SourceProject } from "@storylet-studio/compiler";
-import { EXTENSIONS_DIR, MANIFEST_EXTENSION } from "@storylet-studio/model";
-import type { ProjectExtension } from "@storylet-studio/model";
+import { EXTENSIONS_DIR, EXTENSION_SCHEMA, MANIFEST_EXTENSION, SHARD_EXTENSIONS, UNRESOLVED_KEY } from "@storylet-studio/model";
+import type { ExtensionShard, ProjectExtension } from "@storylet-studio/model";
 import { manifestProblems, parseManifest, renameStages, targetOf } from "@wildwinter/toolkit/extensions";
 import type { Manifest } from "@wildwinter/toolkit/extensions";
 
@@ -105,4 +105,42 @@ export function planExtensionUpgrades(dir: string, source: SourceProject): Exten
     writes.set(join(dir, source.path), canonicalStringify({ ...source.project, extensions: { ...taken, ...moved } }));
   }
   return { writes, report };
+}
+
+/** Where a node's extension values live: its box's shard, or the root shard for the project's own nodes. */
+export function extensionShardPath(dir: string, source: SourceProject, extension: string, nodeId: string): string | undefined {
+  const info = extensionNodes(source).get(nodeId);
+  if (info === undefined) return undefined;
+  const file = `${extension}${SHARD_EXTENSIONS.extension}`;
+  if (info.box === undefined) return join(dir, file);
+  const box = source.boxes.find((b) => b.box.box.id === info.box);
+  return box === undefined ? undefined : join(dir, box.path, file);
+}
+
+/**
+ * The write that sets one extension field on one node, or clears it (`value` undefined): the node's shard
+ * with the entry changed, created when the node had none, and deleted (`content: null`) when nothing is left
+ * in it. Every other entry, and anything else in the shard (an `unresolved` mark), is kept as it is. Undefined
+ * when the node does not exist.
+ */
+export function planExtensionValue(
+  dir: string, source: SourceProject, extension: string, nodeId: string, field: string, value: unknown,
+): { path: string; content: string | null } | undefined {
+  const kind = extensionNodes(source).get(nodeId)?.kind;
+  const path = extensionShardPath(dir, source, extension, nodeId);
+  if (kind === undefined || path === undefined) return undefined;
+  const rel = path.slice(dir.length + 1).split("\\").join("/");
+  const shards: SourceExtension[] = [...(source.extensions ?? []), ...source.boxes.flatMap((b) => b.extensions ?? [])];
+  const existing = shards.find((s) => s.path === rel)?.shard;
+  const shard: ExtensionShard = existing !== undefined
+    ? structuredClone(existing)
+    : { schema: EXTENSION_SCHEMA, extension, entries: {} };
+  const entries = shard.entries;
+  const byNode = { ...(entries[kind] ?? {}) };
+  const entry = { ...(byNode[nodeId] ?? {}) };
+  if (value === undefined) delete entry[field]; else entry[field] = value;
+  if (Object.keys(entry).length > 0) byNode[nodeId] = entry; else delete byNode[nodeId];
+  if (Object.keys(byNode).length > 0) entries[kind] = byNode; else delete entries[kind];
+  const empty = Object.keys(entries).length === 0 && !Object.prototype.hasOwnProperty.call(shard, UNRESOLVED_KEY);
+  return { path, content: empty ? null : canonicalStringify(shard) };
 }

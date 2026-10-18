@@ -163,6 +163,41 @@ describe("main's project after a refused commit (review 2026-10, item 12)", () =
   });
 });
 
+describe("a file changed since the step (patterkit design/patterpad-undo.md, ruling 5)", () => {
+  it("refuses the undo, names the file, keeps what is on disk, and drops that step and the ones below", async () => {
+    const session = scratchProject();
+    const ambush = ambushId(session);
+    await saveCard(session, docks, ambush, { title: "First" });
+    await renameDeck(session, docks, { purpose: "Notes from the harbour." });
+    await saveCard(session, docks, ambush, { title: "Second" });
+    // A pull lands between the edit and its undo.
+    const path = (session.loaded.files.find((f) => f.path.endsWith(".storyletdeck") && f.text.includes("Second"))!).path;
+    const abs = join(session.loaded.dir, path);
+    const pulled = readFileSync(abs, "utf8").replace("Second", "Pulled");
+    writeFileSync(abs, pulled);
+
+    const refused = await undo(session);
+    expect(refused).toMatchObject({ error: expect.stringContaining("has changed since") });
+    expect(refused && "error" in refused && refused.error).toContain(path.split("/").pop()!);
+    expect(readFileSync(abs, "utf8")).toBe(pulled);
+    expect(titleOf(session, ambush)).toBe("Pulled");
+    // Every step below it was taken on top of what the pull replaced.
+    expect(session.history.canUndo).toBe(false);
+    expect(await undo(session)).toBeNull();
+  });
+
+  it("refuses a redo whose file changed since it was undone", async () => {
+    const session = scratchProject();
+    const ambush = ambushId(session);
+    await saveCard(session, docks, ambush, { title: "Edited" });
+    await undo(session);
+    const abs = docksFile(session);
+    writeFileSync(abs, readFileSync(abs, "utf8").replace("Ambush at the ford", "Merged in"));
+    expect(await redo(session)).toMatchObject({ error: expect.stringContaining("docks.storyletdeck has changed since") });
+    expect(session.history.canRedo).toBe(false);
+  });
+});
+
 describe("the undo history's cap (review 2026-10, item 27)", () => {
   it("keeps the newest hundred steps and drops the oldest", () => {
     const history = new History();

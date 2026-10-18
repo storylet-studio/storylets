@@ -203,6 +203,7 @@ export function createActions(ctx: ActionsContext) {
   }
 
   const actions: ViewActions = {
+    project: () => ctx.session.project,
     // The comment openers, the comment machinery's own (comments.ts).
     openThreads: comments.openThreads,
     showComments: comments.showComments,
@@ -433,6 +434,7 @@ export function createActions(ctx: ActionsContext) {
     handCards: (boxId, handId) => studio.handCards(boxId, handId),
     deckCatalogue: (deckId) => studio.cardCatalogue(deckId),
     openHand: actions.openHand,
+    extensions: { project: () => ctx.session.project, save: saves.saveExtension },
     // From a hand's Cards tab, sideways: the card's parent is its deck, and the
     // way back to the place it was opened from is offered beside the way up
     // (structure rule 12), as the map does for a pin.

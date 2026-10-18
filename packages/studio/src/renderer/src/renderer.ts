@@ -316,6 +316,7 @@ const projectSettingsPanel = createProjectSettings(
   // The project file is the shape: under an author's key this dialog is to be
   // read, not typed into (design/engine-server.md 9.1).
   () => session.remote?.role === "author",
+  () => session.project,
 );
 setSettingsOpener((section) => { if (session.project) projectSettingsPanel.open(section); });
 

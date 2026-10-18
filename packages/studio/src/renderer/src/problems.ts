@@ -146,7 +146,38 @@ export function problemTarget(p: Problem, boxes: Boxes): ProblemTarget | undefin
   }
   if (p.path.endsWith(".storyletbox")) return { kind: "boxTemplate", box: box.id };
   if (p.path.endsWith(".storyletproj")) return { kind: "settings" };
+  // A Storylet extension's data or manifest: the node the message names (`entries.card.c_7k2: ...`), on the
+  // page where its values are drawn; the project's own values and the manifest are in Settings.
+  if (p.path.endsWith(".extension.json")) return { kind: "settings" };
+  if (p.path.endsWith(".storyletextension")) return extensionTarget(p, boxes) ?? { kind: "box", box: box.id };
   return { kind: "box", box: box.id };
+}
+
+/** Where a problem in an extension shard lands: the node its message names, by kind and id. */
+function extensionTarget(p: Problem, boxes: Boxes): ProblemTarget | undefined {
+  const m = /^entries\.(\w+)\.([^.:\s[]+)/.exec(p.message);
+  if (!m) return undefined;
+  const [, kind, id] = m as unknown as [string, string, string];
+  if (kind === "project") return { kind: "settings" };
+  for (const box of boxes) {
+    if (kind === "box" && box.id === id) return { kind: "box", box: box.id };
+    if (kind === "tagGroup" || kind === "tag") {
+      const group = kind === "tagGroup" ? box.tagGroups.find((g) => g.id === id) : undefined;
+      if (group) return { kind: "tagGroup", box: box.id, group: group.id };
+    }
+    if (kind === "handTemplate" && box.templates.some((t) => t.id === id)) return { kind: "template", box: box.id, template: id };
+    if (kind === "hand" && box.hands.some((h) => h.id === id)) return { kind: "hand", box: box.id, hand: id };
+    for (const deck of box.decks) {
+      if (kind === "deck" && deck.id === id) return { kind: "deck", box: box.id, deck: deck.id };
+      for (const card of deck.cards) {
+        if (kind === "card" && card.id === id) return { kind: "card", box: box.id, deck: deck.id, card: card.id, tab: "fields" };
+        if (kind === "outcome" && card.outcomes.some((o) => o.id === id)) {
+          return { kind: "card", box: box.id, deck: deck.id, card: card.id, tab: "outcomes", outcome: id };
+        }
+      }
+    }
+  }
+  return undefined;
 }
 
 /** The topbar's quiet health chip: a tick when clean, the count when not, in

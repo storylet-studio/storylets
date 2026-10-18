@@ -159,6 +159,9 @@ const SHAPES: [RegExp, string][] = [
   // @story.gold: ...") to whatever the expression validator said. An
   // unresolved reference is the one shape that has its own idea; the rest are
   // one code, and the entry passes the validator's sentence through.
+  // A Storylet extension's data (compiler extensions.ts): "entries.<kind>.<id>...: what is wrong". Ahead of
+  // the expression catch-all, which would read it as an expression that "doesn't hold up".
+  [/^entries\.\w+\.[^\s:]+: /, "extension-value"],
   [/^[^:]+: unresolved (\w+ )?property reference '/, "unknown-property"],
   [/^[^:]+: /, "expression"],
 ];
@@ -593,6 +596,15 @@ export const STORYLETTER_PROBLEM_COPY: ProblemCopyTable = {
     text: "The project lists boxes for Patter to perform, but it isn’t paired with a Patter project.",
     next: "Pair it with a Patter project, or clear the list.",
   }),
+
+  // --- Storylet extensions ----------------------------------------------------------
+  "extension-value": (p) => {
+    const detail = /^entries\.\w+\.[^\s:]+: (.*)$/.exec(p.message)?.[1] ?? p.message;
+    return {
+      text: `${detail.charAt(0).toUpperCase()}${detail.slice(1)}${/[.!?]$/.test(detail) ? "" : "."}`,
+      next: "Change it on the item’s page, where the extension’s values are.",
+    };
+  },
 
   // --- expressions -------------------------------------------------------------
   "expression": (p) => {

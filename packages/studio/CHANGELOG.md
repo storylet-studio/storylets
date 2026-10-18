@@ -10,6 +10,22 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **Storylet extensions can be edited.** A project that takes a Storylet extension shows its values where the
+  item's own are: a card's after the box's fields on the Fields tab, an outcome's in its block, a deck's, box's,
+  hand template's and hand's on a tab named for the extension, a tag group's and each tag's beside their
+  properties, and the project's in Project Settings. Every type an extension declares has a control, lists,
+  records and maps included, with the extension's help under it. A card or outcome field an extension claims
+  keeps its value and gains the extension's label and help. A problem in an extension's data opens the item it
+  is about.
+
+### Changed
+
+- **Undo refuses to overwrite a file that has changed since.** When a pull, a merge or another app has changed a
+  file between an edit and its undo (or redo), Storyletter says which file and leaves it alone, and the steps
+  before it can no longer be undone. It used to put the old bytes back over the newer work.
+
 ### Changed
 
 - **A merge that leaves conflicts marks them in the file**, under `unresolved`, so the project's problems

@@ -18,6 +18,7 @@ import { vcKeys } from "./vc-view.js";
 import { previewCondition } from "./expr-panels.js";
 import { openContextMenu } from "@wildwinter/app-shell/context-menu";
 import { currentDocTab, docTabs, documentHeading, setDocTab } from "./inspector.js";
+import { extensionTabs, knownTab } from "./extension-rows.js";
 import { problemText } from "./problem-copy.js";
 import { boxConfirm, cardHasContent, deleteLabel, templateConfirm } from "./deletes.js";
 import { placeGroupsOf } from "./where.js";
@@ -44,6 +45,8 @@ export type Focus =
   | { kind: "hands"; box: string };
 
 export interface ViewActions {
+  /** The open project, for the tabs its Storylet extensions add to a deck's and a box's page. Absent: none. */
+  project?(): ProjectDto | undefined;
   /** How many OPEN comment threads it has, for the header bubble. */
   openThreads(id: string): number;
   /** Open the comment popover, anchored to the element that was clicked. */
@@ -575,7 +578,7 @@ export function renderDeckCentre(
   // The container page: trail, identity heading (title + gameId + purpose,
   // above the bar so no tab hides it), then Dealing | Cards | Fields.
   const tabKey = `deck:${deck.id}`;
-  const tab = currentDocTab(tabKey, "cards");
+  const tab = knownTab(actions.project?.(), "deck", currentDocTab(tabKey, "cards"), "cards");
   const trail = crumbTrail([
     { label: box.title ?? box.gameId, go: () => actions.focus({ kind: "box", box: box.id }) },
     { label: "Decks", go: () => actions.focus({ kind: "decks", box: box.id }) },
@@ -599,6 +602,7 @@ export function renderDeckCentre(
     { key: "cards", label: "Cards", count: deck.cards.length },
     { key: "dealing", label: "Dealing" },
     { key: "properties", label: "Properties", count: deck.properties.length },
+    ...extensionTabs(actions.project?.(), "deck", deck.id),
   ], tab, (next) => { setDocTab(tabKey, next); actions.focus({ kind: "deck", box: box.id, deck: deck.id }); });
 
   let body: HTMLElement;
@@ -849,7 +853,7 @@ export function renderBoxCentre(
   const tabKey = `box:${box.id}`;
   const onMap = box.usesMap === true;
   const remembered = currentDocTab(tabKey, onMap ? "map" : "contents");
-  const tab = remembered === "map" && !onMap ? "contents" : remembered;
+  const tab = knownTab(actions.project?.(), "box", remembered === "map" && !onMap ? "contents" : remembered, "contents");
   let titled = box.title ?? "";
   let purpose = box.purpose ?? "";
   let pinned = box.gameIdPinned ?? "";
@@ -898,6 +902,7 @@ export function renderBoxCentre(
     { key: "templates", label: "Hand templates", count: box.templates.length },
     { key: "tags", label: "Tags", count: box.tagGroups.length },
     { key: "properties", label: "Properties", count: box.properties.length },
+    ...extensionTabs(actions.project?.(), "box", box.id),
   ], tab, (next) => { setDocTab(tabKey, next); actions.focus({ kind: "box", box: box.id }); });
 
   let body: HTMLElement;

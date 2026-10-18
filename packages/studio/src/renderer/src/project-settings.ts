@@ -13,7 +13,9 @@ import { el, mountSettingsDialog, labelled, labelledToggle, lockControls } from 
 import { shapeNotice } from "./vc-view.js";
 import { ok } from "./results.js";
 import type { SettingsDialog, SettingsSectionHandle } from "@wildwinter/app-shell";
-import type { OpenResult, PlayRung, ProjectSettingsDto, PropertyDeclDto, StageTargetDto, StudioApi } from "../../shared/api.js";
+import type { OpenResult, PlayRung, ProjectDto, ProjectSettingsDto, PropertyDeclDto, StageTargetDto, StudioApi } from "../../shared/api.js";
+import { extensionFields, extensionsFor } from "./extension-rows.js";
+import type { ExtensionHost } from "./extension-rows.js";
 import { PLAY_RUNGS, RUNG_BLURB, RUNG_LABEL } from "./play-ladder.js";
 
 /** A text field in the Settings dialog, which saves whole on Save rather than
@@ -94,8 +96,23 @@ function playField(d: ProjectSettingsDto): HTMLElement[] {
 export function createProjectSettings(
   studio: StudioApi, onSaved: (result: OpenResult) => void, onError: (msg: string) => void,
   readOnly: () => boolean = () => false,
+  /** The open project, for its Storylet extensions' project-level values: a section each. */
+  project: () => ProjectDto | undefined = () => undefined,
 ): { open(section?: string): void } {
   let data: ProjectSettingsDto | undefined;
+  /** Storylet extension values set since the dialog opened, carried at Save: extension, field, value. */
+  const extensionEdits: { extension: string; field: string; value: unknown }[] = [];
+  /** The extensions the dialog was built with: a project taking others rebuilds it. */
+  let builtFor = "";
+  const extensionHost: ExtensionHost = {
+    project,
+    save: (extension, _node, field, value, landed) => {
+      const at = extensionEdits.findIndex((e) => e.extension === extension && e.field === field);
+      if (at >= 0) extensionEdits.splice(at, 1);
+      extensionEdits.push({ extension, field, value });
+      landed?.();
+    },
+  };
   /** World stages renamed since the dialog opened, carried at Save. */
   const worldRenames: { target: StageTargetDto; from: string; to: string }[] = [];
   let dialog: SettingsDialog | undefined;
@@ -106,6 +123,16 @@ export function createProjectSettings(
   let notice: HTMLElement | undefined;
 
   function build(): SettingsDialog {
+    // One section per Storylet extension with project-level fields, named for the extension, in the Project
+    // group: the project's own values, which have no page but this dialog.
+    const extensionSections = extensionsFor(project(), "project").map((extension) => ({
+      id: `ext-${extension.id}`, label: extension.name, group: "Project",
+      mount: (h: HTMLElement) => {
+        const node = project()?.projectNode;
+        if (node !== undefined) h.append(extensionFields(extensionHost, extension, "project", node));
+        return {};
+      },
+    }));
     return mountSettingsDialog({
       title: "Project settings",
       sections: [
@@ -193,14 +220,22 @@ export function createProjectSettings(
           );
           return {};
         } },
+        ...extensionSections,
       ],
       onSave: async () => {
         for (const r of worldRenames.splice(0)) {
           if (!ok(await studio.renameStage(r.target, r.from, r.to), onError)) return false;
         }
-        const result = await studio.saveProjectSettings(data!);
+        let result = await studio.saveProjectSettings(data!);
         // Refused (a lock, say): the dialog stays open with the edits in it.
         if (!ok(result, onError)) return false;
+        const node = project()?.projectNode;
+        for (const e of extensionEdits.splice(0)) {
+          if (node === undefined) break;
+          const written = await studio.setExtensionValue(e.extension, node, e.field, e.value);
+          if (!ok(written, onError)) return false;
+          result = written;
+        }
         onSaved(result);
       },
     });
@@ -236,6 +271,10 @@ export function createProjectSettings(
         const s = await studio.projectSettings();
         if (!s) return;
         data = s;
+        extensionEdits.length = 0;
+        const shape = extensionsFor(project(), "project").map((x) => x.id).join(",");
+        if (dialog && shape !== builtFor) { dialog.destroy(); dialog = undefined; frame = undefined; notice = undefined; }
+        builtFor = shape;
         if (!dialog) {
           dialog = build();
           frame = document.body.lastElementChild as HTMLDialogElement;

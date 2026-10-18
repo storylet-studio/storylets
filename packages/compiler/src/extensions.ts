@@ -234,6 +234,17 @@ function claimIssues(source: SourceProject, claims: readonly ResolvedClaim[]): I
   for (const claim of claims) {
     if (claim.kind !== "card" && claim.kind !== "outcome") continue;
     const outcome = claim.kind === "outcome";
+    // A claim on a field no box declares presents nothing: most often the
+    // project's setting names a field that was renamed. A warning, as Patter
+    // gives for a claim on game data its project does not declare. Per claim,
+    // not per box: a box without the field is ordinary, as boxes differ.
+    const declaredSomewhere = source.boxes.some((box) =>
+      ((outcome ? box.box.box.outcomeFields : box.box.box.fields) ?? []).some((d) => d.name === claim.field));
+    if (!declaredSomewhere) {
+      issues.push({ severity: "warning", path: source.path, field: "extensions",
+        message: `the Storylet extension "${claim.extension}" claims the ${claim.kind} field "${claim.field}", which no box declares; set the extension's "${claim.claim.setting}" setting to the field's name, or declare it` });
+      continue;
+    }
     for (const box of source.boxes) {
       const decls: readonly FieldDecl[] = (outcome ? box.box.box.outcomeFields : box.box.box.fields) ?? [];
       const decl = decls.find((d) => d.name === claim.field);

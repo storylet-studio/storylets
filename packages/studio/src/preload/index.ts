@@ -84,6 +84,8 @@ const api: StudioApi = {
   createGroupAsMap: (boxId: string) => invoke("tag-group:createMap", boxId),
   deleteTagGroup: (boxId: string, groupId: string) => invoke("tag-group:delete", boxId, groupId),
   saveCard: (deckId: string, cardId: string, edit: CardEdit) => invoke("card:save", deckId, cardId, edit),
+  setExtensionValue: (extension: string, nodeId: string, field: string, value: unknown) =>
+    invoke("extension:setValue", extension, nodeId, field, value),
   createCard: (deckId: string, place?: string, zone?: string) => invoke("card:create", deckId, place, zone),
   duplicateCard: (deckId: string, cardId: string) => invoke("card:duplicate", deckId, cardId),
   moveCard: (deckId: string, cardId: string, targetId: string, before: boolean) => invoke("card:move", deckId, cardId, targetId, before),
