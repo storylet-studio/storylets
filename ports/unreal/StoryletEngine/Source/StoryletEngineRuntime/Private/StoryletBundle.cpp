@@ -5,6 +5,7 @@
 #include "StoryletValueConvert.h"
 
 #include "Storylets/DescribeBundle.h"
+#include "Storylets/JsonParse.h"
 #include "Storylets/JsonValue.h"
 #include "UObject/Package.h" // GetTransientPackage() - not transitively available in the Game target
 
@@ -269,9 +270,132 @@ bool UStoryletBundle::GetFieldDecl(const FString& Box, const FString& Field, boo
 		OutDecl.Type = Ue(D.type);
 		if (D.values.has_value()) for (const std::string& V : *D.values) OutDecl.Values.Add(Ue(V));
 		if (D.stages.has_value()) for (const std::string& S : *D.stages) OutDecl.Stages.Add(Ue(S));
-		OutDecl.Default = StoryletValueToUe(D.defaultOrTypeDefault());
+		const storylets::StoryletValue Default = D.defaultOrTypeDefault();
+		OutDecl.Default = StoryletValueToUe(Default);
+		OutDecl.DefaultJson = Ue(Default.toJsonString());
 		return true;
 	}
 	return false;
 }
 
+namespace
+{
+	/** A JSON scalar as a Storylet value: what the bundle loader reads a field's
+	 *  value as. Nothing for a record, a map, a list holding anything but
+	 *  strings, or null. */
+	bool JsonToScalar(const storylets::JsonValue& V, storylets::StoryletValue& Out)
+	{
+		switch (V.type)
+		{
+			case storylets::JsonValue::Bool: Out = storylets::StoryletValue::Bool(V.b); return true;
+			case storylets::JsonValue::Number: Out = storylets::StoryletValue::Num(V.num); return true;
+			case storylets::JsonValue::String: Out = storylets::StoryletValue::Str(V.str); return true;
+			case storylets::JsonValue::Array:
+			{
+				std::vector<std::string> Flags;
+				for (const storylets::JsonValue& Item : V.arr)
+				{
+					if (!Item.isString()) return false;
+					Flags.push_back(Item.str);
+				}
+				Out = storylets::StoryletValue::Flags(std::move(Flags));
+				return true;
+			}
+			default: return false;
+		}
+	}
+
+	const FStoryletExtensionValues* ExtensionNamed(const TArray<FStoryletExtensionValues>& Extensions, const FString& Extension)
+	{
+		return Extensions.FindByPredicate([&Extension](const FStoryletExtensionValues& E) { return E.Extension == Extension; });
+	}
+}
+
+TArray<FStoryletExtensionEntry> UStoryletBundle::GetEffectiveExtensionValues(const FString& Kind, const FString& Extension,
+	const TArray<FStoryletExtensionValues>& Extensions) const
+{
+	// The core's EffectiveFields over the neutral tree, done on the text: a
+	// value the node sets crosses back exactly as it came, never re-printed.
+	const FStoryletExtensionValues* Own = ExtensionNamed(Extensions, Extension);
+	const TArray<FStoryletExtensionEntry> Values = Own ? Own->Values : TArray<FStoryletExtensionEntry>();
+	if (!IsCompiled()) return Values;
+	TArray<FStoryletExtensionEntry> Out;
+	for (const storylets::ExtensionFieldDecl& D : storylets::ExtensionDecls(*Compiled->Bundle, Std(Extension), Std(Kind)))
+	{
+		const FString Name = Ue(D.name);
+		if (const FStoryletExtensionEntry* Set = Values.FindByPredicate([&Name](const FStoryletExtensionEntry& E) { return E.Name == Name; }))
+		{
+			Out.Add(*Set);
+		}
+		else if (D.defaultValue.has_value())
+		{
+			FStoryletExtensionEntry Entry;
+			Entry.Name = Name;
+			Entry.Json = Ue(storylets::JsonText(*D.defaultValue));
+			Out.Add(MoveTemp(Entry));
+		}
+	}
+	for (const FStoryletExtensionEntry& E : Values)
+	{
+		if (!Out.ContainsByPredicate([&E](const FStoryletExtensionEntry& O) { return O.Name == E.Name; })) Out.Add(E);
+	}
+	return Out;
+}
+
+TArray<FStoryletExtensionValues> UStoryletBundle::ExtensionsOf(const FString& Kind, const FString& Address) const
+{
+	if (!IsCompiled()) return {};
+	return StoryletExtensionsToUe(storylets::ExtensionsOf(*Compiled->Bundle, Std(Kind), Std(Address)));
+}
+
+bool UStoryletBundle::GetExtensionFieldDecl(const FString& Extension, const FString& Kind, const FString& Field,
+	FStoryletFieldDecl& OutDecl) const
+{
+	OutDecl = FStoryletFieldDecl();
+	if (!IsCompiled()) return false;
+	const std::string Name = Std(Field);
+	for (const storylets::ExtensionFieldDecl& D : storylets::ExtensionDecls(*Compiled->Bundle, Std(Extension), Std(Kind)))
+	{
+		if (D.name != Name) continue;
+		OutDecl.Name = Ue(D.name);
+		OutDecl.Type = Ue(D.type);
+		if (D.values.has_value()) for (const std::string& V : *D.values) OutDecl.Values.Add(Ue(V));
+		if (D.stages.has_value()) for (const std::string& S : *D.stages) OutDecl.Stages.Add(Ue(S));
+		if (D.defaultValue.has_value())
+		{
+			OutDecl.DefaultJson = Ue(storylets::JsonText(*D.defaultValue));
+			storylets::StoryletValue Scalar;
+			if (JsonToScalar(*D.defaultValue, Scalar)) OutDecl.Default = StoryletValueToUe(Scalar);
+		}
+		return true;
+	}
+	return false;
+}
+
+bool UStoryletBundle::FindExtensionValue(const TArray<FStoryletExtensionValues>& Extensions, const FString& Extension,
+	const FString& Field, FString& OutJson)
+{
+	OutJson.Reset();
+	const FStoryletExtensionValues* Own = ExtensionNamed(Extensions, Extension);
+	if (!Own) return false;
+	const FStoryletExtensionEntry* Entry = Own->Values.FindByPredicate([&Field](const FStoryletExtensionEntry& E) { return E.Name == Field; });
+	if (!Entry) return false;
+	OutJson = Entry->Json;
+	return true;
+}
+
+bool UStoryletBundle::ExtensionValueToScalar(const FString& Json, FStoryletValue& OutValue)
+{
+	OutValue = FStoryletValue();
+	try
+	{
+		storylets::StoryletValue Scalar;
+		if (!JsonToScalar(storylets::JsonParser(Std(Json)).parse(), Scalar)) return false;
+		OutValue = StoryletValueToUe(Scalar);
+		return true;
+	}
+	catch (const std::exception&)
+	{
+		return false;
+	}
+}

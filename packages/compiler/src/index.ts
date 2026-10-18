@@ -6,11 +6,15 @@ export { compileProject, projectDialect, projectHash, bundleIsFresh } from "./co
 export { describeDeclarations, describeDisagreement, propertyMeta, sameDeclaration, sameMeta } from "./declarations.js";
 export type { CompileResult } from "./compile.js";
 export { compileMaps, mapDrawing } from "./maps.js";
+export { extensionNodes, extensionPass } from "./extensions.js";
+export type { CompiledExtensions } from "./extensions.js";
 export { contentAboveRung, summariseLadder, ladderWarning, playRungOf, PLAY_RUNGS } from "./play-ladder.js";
 export type { LadderItem, LadderItemKind } from "./play-ladder.js";
 export type { MapDrawing } from "./maps.js";
 export { loadProjectFiles, walkProjectFiles } from "./load.js";
-export type { GameScopes, Issue, IssueFix, SourceFile, SourceProject, SourceBox, SourceContract, SourceDeck } from "./project.js";
+export type {
+  GameScopes, Issue, IssueFix, SourceFile, SourceProject, SourceBox, SourceContract, SourceDeck, SourceExtension, SourceManifest,
+} from "./project.js";
 export {
   STORYLETS_OWNER, STORYLETS_SCOPES_FILE, STORYLETS_TOKEN, fromScopeDeclaration, gameTokens, sameDeclarations,
   scopesFilePath, sharedWorld, storyletsScopesFile, toScopeDeclaration, worldDeclarations,

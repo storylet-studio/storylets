@@ -1,0 +1,11 @@
+{
+  schema: "storylets/extension@0",
+  entries: {
+    project: {
+      proj_probe: {
+        studio: "Wildwinter",
+      },
+    },
+  },
+  extension: "probe",
+}

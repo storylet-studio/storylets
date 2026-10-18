@@ -225,6 +225,9 @@ namespace storylets
         std::string title;
         std::string purpose;
         OrderedMap<std::string, StoryletValue> fields;
+        /** The card's Storylet extension values, raw as the bundle wrote them,
+         *  by extension id; empty when it has none. Never read by the engine. */
+        NodeExtensions extensions;
     };
 
     struct OutcomeView
@@ -239,6 +242,8 @@ namespace storylets
          *  outcomeFields. Handed over as the bundle wrote it, never read by
          *  the engine; empty when the outcome carries none. */
         OrderedMap<std::string, StoryletValue> fields;
+        /** The outcome's Storylet extension values, raw; empty when none. */
+        NodeExtensions extensions;
     };
 
     /** What a peek returns: the top of the stock, looked at and put back. The
@@ -379,6 +384,8 @@ namespace storylets
         /** Empty when the box has no title. */
         std::string title;
         double turn = 0;
+        /** The box's Storylet extension values, raw; empty when none. */
+        NodeExtensions extensions;
     };
 
     inline const char* VerdictWire(TraceVerdict v)
@@ -2545,6 +2552,7 @@ namespace storylets
                 v.purpose = o.purpose;
                 v.available = passes(o.condition, ctx);
                 v.fields = o.fields;
+                v.extensions = o.extensions;
                 views.push_back(std::move(v));
             }
             return views;
@@ -3819,6 +3827,7 @@ namespace storylets
             v.title = card.title;
             v.purpose = card.purpose;
             v.fields = card.fields;
+            v.extensions = card.extensions;
             return v;
         }
 
@@ -4150,6 +4159,7 @@ namespace storylets
                 v.gameId = EffectiveGameId(box);
                 v.title = box.title;
                 v.turn = turnCounts_.getOr(box.id, 0);
+                v.extensions = box.extensions;
                 boxes.push_back(std::move(v));
             }
             return boxes;

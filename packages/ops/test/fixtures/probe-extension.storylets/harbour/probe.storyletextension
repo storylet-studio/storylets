@@ -1,0 +1,76 @@
+{
+  schema: "storylets/extension@0",
+  entries: {
+    box: {
+      b_harbour: {
+        theme: "salt",
+      },
+    },
+    card: {
+      c_bell: {
+        act: "opening",
+        beats: [
+          {
+            at: 3,
+            id: "b2",
+          },
+          {
+            at: 1,
+            id: "b1",
+          },
+        ],
+        cue: {
+          gain: 0.5,
+          sound: "bell",
+        },
+        draft: "Maybe three times?",
+        loud: true,
+        marks: [
+          "night",
+        ],
+        next: "c_tide",
+        note: "Ring it twice.",
+        perf: {
+          v_docks: "frown",
+        },
+        tone: "tense",
+        weight: 4,
+        words: [
+          "salt",
+          "rope",
+        ],
+      },
+    },
+    deck: {
+      k_rumours: {
+        pile: 2,
+      },
+    },
+    hand: {
+      h_watch: {
+        seat: "north",
+      },
+    },
+    handTemplate: {
+      ht_stall: {
+        size: 3,
+      },
+    },
+    outcome: {
+      o_ring: {
+        line: "The bell rings.",
+      },
+    },
+    tag: {
+      v_docks: {
+        colour: "tar",
+      },
+    },
+    tagGroup: {
+      d_quarter: {
+        shown: true,
+      },
+    },
+  },
+  extension: "probe",
+}

@@ -4,12 +4,12 @@
 // section 8 - drift is a warning; `format` fixes it).
 // ---------------------------------------------------------------------------
 
-import { sidecarIssues } from "./merge.js";
+import { sidecarIssues, unresolvedMarkIssues } from "./merge.js";
 import { existsSync, readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { bundleIsFresh, canonicalStringify, compileProject, parseSource } from "@storylet-studio/compiler";
 import type { Issue, SourceProject } from "@storylet-studio/compiler";
-import { backgroundsOf, effectiveGameId, isSpatial, polygonOf, SPATIAL } from "@storylet-studio/model";
+import { backgroundsOf, effectiveGameId, isSpatial, MANIFEST_EXTENSION, polygonOf, SPATIAL } from "@storylet-studio/model";
 import type { Bundle, TagGroup } from "@storylet-studio/model";
 import { ASSETS_DIR, assetPath } from "./assets.js";
 import { contractIssues } from "./contract.js";
@@ -58,11 +58,17 @@ export function runValidate(loaded: LoadedProject, opts: ValidateOptions = {}): 
   // A lingering merge sidecar means an unresolved merge: it must never
   // reach CI or export silently (the merge design's demotion net).
   issues.push(...sidecarIssues(loaded.sidecars));
+  // ...and so does a shard carrying the `unresolved` mark, which is the record
+  // that travels with the file: refused here, so CI refuses it on every machine.
+  issues.push(...unresolvedMarkIssues(loaded.files));
 
   if (loaded.source) {
     const compiled = compileProject(loaded.source);
     issues.push(...compiled.issues);
     issues.push(...spatialIssues(loaded.source, loaded.dir));
+    // Entries in the arrangement and map sidecars naming nodes that have gone:
+    // kept, never dropped, and said once each (the family's orphan rule).
+    issues.push(...sidecarOrphanIssues(loaded.source));
     // What a VENUE depends on (design/engine-server.md 4.11, net 1). Errors, and
     // the earliest of the three nets: CI refuses the pull request, which is
     // where a break against a live installation is cheapest.
@@ -89,6 +95,8 @@ export function runValidate(loaded: LoadedProject, opts: ValidateOptions = {}): 
     // verdict is cached per shard and validated by exact text, so an unchanged
     // file is answered from memory: identical bytes cannot drift differently.
     for (const file of loaded.files) {
+      // An extension's manifest is the extension's own JSON, never ours to format.
+      if (file.path.endsWith(MANIFEST_EXTENSION)) continue;
       const remembered = canonical.get(file.path);
       if (remembered && remembered.text === file.text) {
         if (!remembered.ok) reportDrift(issues, file.path);
@@ -236,5 +244,42 @@ function backgroundIssues(group: TagGroup, dir: string, path: string): Issue[] {
       });
     }
   });
+  return issues;
+}
+
+/**
+ * Entries in a box's view and map shards that name a node the box no longer
+ * has: a canvas for a deck that has gone, a card's point on a canvas that is
+ * not its deck's, a site for a hand that has gone. Kept as they are, since a
+ * sidecar entry is inert, and reported one by one as warnings, as extension
+ * data is (patterkit design/proposals/patter-storylet-extensions.md, "Orphans").
+ */
+export function sidecarOrphanIssues(source: SourceProject): Issue[] {
+  const issues: Issue[] = [];
+  for (const box of source.boxes) {
+    const decks = new Map(box.decks.map((d) => [d.shard.deck.id, new Set((d.shard.cards ?? []).map((c) => c.id))]));
+    const viewPath = `${box.path}/view.storyletview`;
+    for (const [deckId, canvas] of Object.entries(box.view?.canvases ?? {})) {
+      const cards = decks.get(deckId);
+      if (cards === undefined) {
+        issues.push({ severity: "warning", path: viewPath, where: deckId, field: "canvases",
+          message: `a canvas for deck ${deckId}, which is not in this box any more; it is kept, and shown nowhere` });
+        continue;
+      }
+      for (const cardId of Object.keys(canvas?.cards ?? {})) {
+        if (!cards.has(cardId)) {
+          issues.push({ severity: "warning", path: viewPath, where: cardId, field: "canvases",
+            message: `a point on deck ${deckId}'s canvas for card ${cardId}, which is not in that deck any more; it is kept, and shown nowhere` });
+        }
+      }
+    }
+    const hands = new Set((box.hands.hands ?? []).map((h) => h.id));
+    for (const handId of Object.keys(box.map?.map?.sites ?? {})) {
+      if (!hands.has(handId)) {
+        issues.push({ severity: "warning", path: `${box.path}/map.storyletmap`, where: handId, field: "sites",
+          message: `a site for hand ${handId}, which is not in this box any more; it is kept, and shown nowhere` });
+      }
+    }
+  }
   return issues;
 }

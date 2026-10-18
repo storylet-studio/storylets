@@ -6,6 +6,15 @@ the same version number always means the same runtime behaviour.
 
 ## [Unreleased]
 
+### Added
+
+- **Storylet extension values reach the game.** A bundle's `extensions` section and every node's `extensions`
+  pass through raw and are never interpreted. A dealt card, an outcome and an entry of `list_boxes()` carry
+  `extensions` by extension id when the node has any. `StoryletEngine.extension_decls(bundle, extension, kind)`
+  gives an extension's declarations for a node kind, every default resolved, so `effective_fields` fills in
+  what a node leaves out, and `StoryletEngine.extensions_of(bundle, kind, address)` reads the values of a node
+  no view carries.
+
 ## [0.12.0] - 2026-10-18
 
 ### Added

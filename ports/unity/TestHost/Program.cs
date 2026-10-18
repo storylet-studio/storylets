@@ -526,6 +526,29 @@ namespace StoryletStudio.StoryletEngine.TestHost
             return "{" + string.Join(",", parts) + "}";
         }
 
+        /// <summary>A neutral JSON tree (OrderedMap / List / bool / double /
+        /// string / null) as canonical text, object keys sorted: two trees are
+        /// the same JSON exactly when their texts match, key order ignored, as
+        /// the JS runner's sameJson compares.</summary>
+        private static string ShowJson(object tree)
+        {
+            switch (tree)
+            {
+                case null: return "null";
+                case bool b: return b ? "true" : "false";
+                case double d: return d.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+                case string str: return JsonConvert.ToString(str);
+                case OrderedMap<string, object> map:
+                    return "{" + string.Join(",", map.Keys.OrderBy(k => k, StringComparer.Ordinal)
+                        .Select(k => JsonConvert.ToString(k) + ":" + ShowJson(map[k]))) + "}";
+                case OrderedMap<string, OrderedMap<string, object>> nested:
+                    return "{" + string.Join(",", nested.Keys.OrderBy(k => k, StringComparer.Ordinal)
+                        .Select(k => JsonConvert.ToString(k) + ":" + ShowJson(nested[k]))) + "}";
+                case List<object> list: return "[" + string.Join(",", list.Select(ShowJson)) + "]";
+                default: throw new Exception($"not a JSON tree: {tree.GetType().Name}");
+            }
+        }
+
         private static string ShowJsonFields(JObject fields)
         {
             var parts = fields.Properties().OrderBy(p => p.Name, StringComparer.Ordinal)
@@ -682,6 +705,9 @@ namespace StoryletStudio.StoryletEngine.TestHost
                 case "assertOutcomeOrder":
                 case "assertOutcomeFields":
                 case "assertCardFields":
+                case "assertCardExtensions":
+                case "assertOutcomeExtensions":
+                case "assertBoxExtensions":
                 case "assertState":
                     return true;
                 default:
@@ -1599,6 +1625,82 @@ namespace StoryletStudio.StoryletEngine.TestHost
                                 failures.Add($"{at}: {pair.Key} expected {ShowJsonFields(expected)}, got {ShowFields(actual)}");
                             }
                         }
+                        break;
+                    }
+
+                    case "assertCardExtensions":
+                    {
+                        // A card's Storylet extension values as the board hands
+                        // them over: raw and sparse, any JSON, compared deeply.
+                        // A card that carries none reads as an empty map.
+                        var from = op.Value<string>("from");
+                        var key = names.TryGetValue(from, out var mapped) ? mapped : from;
+                        var board = session.Board().GetOrDefault(key) ?? new List<DealtCard>();
+                        foreach (var pair in (JObject)op["expect"])
+                        {
+                            var card = board.Find(v => v.Id == pair.Key);
+                            if (card == null)
+                            {
+                                failures.Add($"{at}: {pair.Key} is not on board[{from}]");
+                                continue;
+                            }
+                            // With `effective`, one extension's values through the
+                            // helpers and that extension's card declarations.
+                            object actual = card.Extensions ?? new OrderedMap<string, OrderedMap<string, object>>();
+                            if (op["effective"] is JObject effective)
+                            {
+                                var ext = effective.Value<string>("extension");
+                                actual = FieldHelpers.EffectiveFields(FieldHelpers.ExtensionDecls(bundle, ext, "card"), card.Extensions?.GetOrDefault(ext));
+                            }
+                            var want = ShowJson(StoryletJson.ToJsonTree(pair.Value));
+                            var got = ShowJson(actual);
+                            if (want != got) failures.Add($"{at}: {pair.Key} expected {want}, got {got}");
+                        }
+                        break;
+                    }
+
+                    case "assertOutcomeExtensions":
+                    {
+                        var views = session.Outcomes(op.Value<string>("card"), op.Value<string>("from"));
+                        var actual = new OrderedMap<string, object>();
+                        foreach (var pair in (JObject)op["expect"])
+                        {
+                            actual.Set(pair.Key, (object)views.Find(v => v.GameId == pair.Key)?.Extensions ?? new OrderedMap<string, object>());
+                        }
+                        var want = ShowJson(StoryletJson.ToJsonTree(op["expect"]));
+                        var got = ShowJson(actual);
+                        if (want != got) failures.Add($"{at}: expected {want}, got {got}");
+                        break;
+                    }
+
+                    case "assertBoxExtensions":
+                    {
+                        var views = session.ListBoxes();
+                        var actual = new OrderedMap<string, object>();
+                        foreach (var pair in (JObject)op["expect"])
+                        {
+                            actual.Set(pair.Key, (object)views.Find(v => v.GameId == pair.Key)?.Extensions ?? new OrderedMap<string, object>());
+                        }
+                        var want = ShowJson(StoryletJson.ToJsonTree(op["expect"]));
+                        var got = ShowJson(actual);
+                        if (want != got) failures.Add($"{at}: expected {want}, got {got}");
+                        break;
+                    }
+
+                    case "assertNodeExtensions":
+                    {
+                        // A node no view carries, read off the bundle by the
+                        // helper, by the address a game already holds.
+                        var raw = FieldHelpers.ExtensionsOf(bundle, op.Value<string>("kind"), op.Value<string>("address") ?? "");
+                        object actual = raw;
+                        if (op["effective"] is JObject effective)
+                        {
+                            var ext = effective.Value<string>("extension");
+                            actual = FieldHelpers.EffectiveFields(FieldHelpers.ExtensionDecls(bundle, ext, op.Value<string>("kind")), raw.GetOrDefault(ext));
+                        }
+                        var want = ShowJson(StoryletJson.ToJsonTree(op["expect"]));
+                        var got = ShowJson(actual);
+                        if (want != got) failures.Add($"{at}: expected {want}, got {got}");
                         break;
                     }
 

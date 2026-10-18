@@ -598,11 +598,13 @@ describe("unpack --merge: the return leg", () => {
     const [conflict] = JSON.parse(sidecar!.content).conflicts as { kind: string; base: unknown }[];
     expect(conflict!.kind).toBe("added-both");    // no base: an add, not a both-changed
     expect(conflict!.base).toBeUndefined();
-    // Provisional OURS stands in the file, as it does for any other conflict:
-    // here the merge resolves wholly to ours, so the file already says it and
-    // only the sidecar is written.
-    expect(result.writes.some((w) => w.path.endsWith("rumours.storyletdeck"))).toBe(false);
-    expect(readFileSync(join(ours, rumoursPath), "utf8")).toContain("Our rumour");
+    // Provisional OURS stands in the file, as it does for any other conflict,
+    // and the file is rewritten only to carry the mark naming the clash, so the
+    // unresolved merge travels with the shard and validation refuses it anywhere.
+    const write = result.writes.find((w) => w.path.endsWith("rumours.storyletdeck"));
+    expect(write?.content).toContain("Our rumour");
+    expect(write?.content).toContain("unresolved");
+    expect(write?.content).toContain("added-both");
   });
 
   // --- one read, and only the writes that change something (item 15) ---------

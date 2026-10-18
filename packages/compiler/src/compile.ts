@@ -29,6 +29,8 @@ import { compileMaps } from "./maps.js";
 import { hash32 } from "./hash.js";
 import { gameTokens, sameDeclarations, scopesFilePath, sharedWorld } from "./game-scopes.js";
 import { describeDisagreement, propertyMeta, sameMeta } from "./declarations.js";
+import { extensionHashInput, extensionPass } from "./extensions.js";
+import type { CompiledExtensions } from "./extensions.js";
 
 export interface CompileResult {
   /** Present only when there are no error-severity issues. */
@@ -109,7 +111,12 @@ export function projectHash(source: SourceProject): string {
   // bundle is compiled from (its world block), so an edit to it makes a committed bundle
   // stale. Only then: a project with no folder hashes exactly as it always has.
   const world = sharedWorld(source)?.decls;
+  // Compiled extension data is content: what the bundle carries of it, editor-only
+  // fields left out, as view and notes shards are. A project taking no extension
+  // hashes exactly as it always has.
+  const extensions = extensionHashInput(source);
   return hash32(canonicalStringify({
+    ...(extensions !== undefined ? { extensions } : {}),
     ...(world !== undefined ? { sharedWorld: world } : {}),
     // The project map's zone group is content (it ships as `map.group`), and
     // only it: the map's frames are arrangement, as a box's view shard is. A
@@ -162,6 +169,10 @@ const named = (entity: { gameId?: string; title?: string; id: string } | undefin
 export function compileProject(source: SourceProject): CompileResult {
   const issues: Issue[] = [];
   const report = (issue: Issue): void => { issues.push(issue); };
+  // Storylet extensions: one manifest-driven pass, its values attached to the
+  // nodes once the bundle is assembled (extensions.ts).
+  const extensions = extensionPass(source);
+  issues.push(...extensions.issues);
 
   const strip = source.project.export?.metadata === "stripped";
   const title = (v: string | undefined): string | undefined => (strip ? undefined : v);
@@ -1406,6 +1417,33 @@ export function compileProject(source: SourceProject): CompileResult {
     // cards reference it by id. Its geometry only under `export.map`.
     ...(mapGroup !== undefined ? { map: { group: mapGroup, ...(geometry !== undefined ? { geometry } : {}) } } : {}),
     ...(externalUsed.size > 0 ? { externalScopes: [...externalUsed].sort() } : {}),
+    ...(Object.keys(extensions.compiled.bundle).length > 0 ? { extensions: extensions.compiled.bundle } : {}),
   };
+  attachExtensions(bundle, extensions.compiled);
   return { bundle, issues };
+}
+
+/**
+ * Put each node's compiled extension values on the node, under `extensions`, as
+ * its `fields` are: delivered wherever the node is (ruled 2026-10-18). Ids are
+ * project-unique, so one map serves every kind.
+ */
+function attachExtensions(bundle: Bundle, compiled: CompiledExtensions): void {
+  if (compiled.nodes.size === 0) return;
+  const put = (node: { id: string; extensions?: Record<string, Record<string, unknown>> }): void => {
+    const values = compiled.nodes.get(node.id);
+    if (values !== undefined) node.extensions = sortRecord(values);
+  };
+  const putGroup = (group: TagGroup): void => { put(group); for (const tag of group.tags) put(tag); };
+  if (bundle.map !== undefined) putGroup(bundle.map.group);
+  for (const box of bundle.boxes) {
+    put(box);
+    for (const group of box.tagGroups) putGroup(group);
+    for (const template of box.handTemplates) put(template);
+    for (const hand of box.hands) put(hand);
+    for (const deck of box.decks) {
+      put(deck);
+      for (const card of deck.cards) { put(card); for (const outcome of card.outcomes) put(outcome); }
+    }
+  }
 }

@@ -1,0 +1,30 @@
+{
+  schema: "storylets/project@0",
+  project: {
+    id: "proj_probe",
+    name: "Probe",
+    version: "0.1.0",
+  },
+  export: {
+    bundle: "dist/probe.storyletsc",
+    metadata: "full",
+  },
+  extensions: {
+    probe: {
+      settings: {
+        moodField: "mood",
+      },
+      version: "1.1.0",
+    },
+  },
+  settings: {
+    playAdvancesTurns: 1,
+  },
+  story: {
+    properties: [],
+  },
+  templates: {},
+  world: {
+    properties: [],
+  },
+}

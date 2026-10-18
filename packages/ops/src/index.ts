@@ -48,7 +48,11 @@ export { handDeclarations } from "./analysis-common.js";
 export type { CoverageOrder } from "./coverage-order.js";
 export {
   runMerge, detectMergeType, conflictSidecar, normalForm, planShardMerge, MergeInputError, CONFLICT_SIDECAR_EXTENSION,
+  unresolvedMarkIssues,
 } from "./merge.js";
+// A project's Storylet extensions as files: the manifest a merge reads from the working tree
+export { manifestPath, planExtensionUpgrades, projectManifests, readProjectManifest, soundManifest } from "./extensions.js";
+export type { ExtensionUpgrade } from "./extensions.js";
 export type { ShardMergeInput, ShardMergeStep } from "./merge.js";
 export { analyseInfluence, cardNeighbourhood, describeContribution } from "./influence.js";
 // Find: property usage (the Property tab) and find-and-replace over item text (the Replace tab)

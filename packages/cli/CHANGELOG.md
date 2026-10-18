@@ -20,6 +20,26 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Added
+
+- **Storylet extensions**: a project can take an extension (the project shard's `extensions`, with the
+  extension's manifest in `extensions/<id>.extension.json`) and keep its data in one
+  `<id>.storyletextension` shard per box plus one at the project root. `validate` checks every value
+  against the manifest, reports data for a node that has gone (a warning per entry, kept, never dropped),
+  data for an extension the project does not take, and a project whose manifest is missing; `export`
+  compiles the values onto each node, editor-only fields left out; `merge` merges an extension shard
+  field by field by the manifest it finds in the working tree; `format` takes a new extension version,
+  renaming the stages the extension renamed. `pack` carries the manifests.
+- **`validate` warns about entries in view and map shards for a card, deck or hand that has gone**, one
+  warning each. The entries are kept.
+
+### Changed
+
+- **An unresolved merge is marked in the shard itself**, under `unresolved`, naming each clash with both
+  sides' values, in every shard type. `validate`, `export` and `pack` refuse a shard carrying the mark, so
+  an unresolved merge cannot reach CI from any machine. Resolve the clash, then remove the entry. The
+  `.storyletconflict` file is still written beside the shard for the editor, and still never committed.
+
 ## [0.15.0] - 2026-10-18
 
 ### Changed

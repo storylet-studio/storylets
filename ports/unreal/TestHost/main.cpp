@@ -16,6 +16,7 @@
 // must send for a scripted session, replayed through Storylets/LiveLink.h
 // against a recording sink (LiveLinkFixture.h).
 
+#include <algorithm>
 #include <fstream>
 #include <limits>
 #include <cmath>
@@ -475,6 +476,47 @@ static std::string showSorted(std::vector<std::string> list)
 
 /** A field map as a JSON object with its keys sorted, so two maps compare by
  *  what they hold and not by the order they were written in. */
+/** A tree with every object's keys sorted, as text: the corpus's deep compare
+ *  for extension values (the runner's sameJson), which ignores key order. */
+static JsonValue sortedJson(const JsonValue& v)
+{
+    JsonValue out = v;
+    if (v.isArray())
+    {
+        for (auto& item : out.arr) item = sortedJson(item);
+    }
+    else if (v.isObject())
+    {
+        for (auto& pair : out.obj) pair.second = sortedJson(pair.second);
+        std::sort(out.obj.begin(), out.obj.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+    }
+    return out;
+}
+
+static std::string showJson(const JsonValue& v) { return JsonText(sortedJson(v)); }
+
+static JsonValue valuesJson(const OrderedMap<std::string, JsonValue>& values)
+{
+    JsonValue out = JsonValue::MakeObj();
+    for (const auto& pair : values) out.set(pair.first, pair.second);
+    return out;
+}
+
+static JsonValue extensionsJson(const NodeExtensions& extensions)
+{
+    JsonValue out = JsonValue::MakeObj();
+    for (const auto& pair : extensions) out.set(pair.first, valuesJson(pair.second));
+    return out;
+}
+
+/** One extension's values on a node, raw; empty when it has none. */
+static OrderedMap<std::string, JsonValue> extensionValues(const NodeExtensions& extensions, const std::string& id)
+{
+    const OrderedMap<std::string, JsonValue>* values = extensions.get(id);
+    return values ? *values : OrderedMap<std::string, JsonValue>{};
+}
+
 static std::string showFields(const OrderedMap<std::string, StoryletValue>& fields)
 {
     std::vector<std::string> keys;
@@ -633,7 +675,8 @@ static bool needsFlow(const std::string& kind)
 {
     return kind == "setState" || kind == "peek" || kind == "deal" || kind == "assertBoard"
         || kind == "play" || kind == "advanceTurns" || kind == "assertOutcomes"
-        || kind == "assertOutcomeOrder" || kind == "assertOutcomeFields" || kind == "assertCardFields" || kind == "assertState";
+        || kind == "assertOutcomeOrder" || kind == "assertOutcomeFields" || kind == "assertCardFields" || kind == "assertState"
+        || kind == "assertCardExtensions" || kind == "assertOutcomeExtensions" || kind == "assertBoxExtensions";
 }
 
 /** Execute the ops in order; every expect must match exactly, expectError ops
@@ -1084,6 +1127,89 @@ static std::vector<std::string> runScriptedCase(const JsonValue& c)
                     failures.push_back(at + ": " + pair.first + " expected " + showFields(wanted)
                         + ", got " + showFields(actual));
                 }
+            }
+        }
+        else if (kind == "assertCardExtensions")
+        {
+            // A card's extension values as the board hands them over: raw, any
+            // JSON, compared deeply; with `effective`, one extension's through
+            // the helper and the bundle's resolved declarations.
+            std::string from = op.strOr("from");
+            std::vector<DealtCard> board = session->board().getOr(mapped(names, from), {});
+            const JsonValue* effective = op.find("effective");
+            for (const auto& pair : op.at("expect").obj)
+            {
+                const DealtCard* card = nullptr;
+                for (const auto& v : board)
+                {
+                    if (v.id == pair.first) { card = &v; break; }
+                }
+                if (!card)
+                {
+                    failures.push_back(at + ": " + pair.first + " is not on board[" + from + "]");
+                    continue;
+                }
+                JsonValue actual;
+                if (effective && effective->isObject())
+                {
+                    const std::string ext = effective->strOr("extension");
+                    actual = valuesJson(EffectiveFields(ExtensionDecls(*running, ext, "card"), extensionValues(card->extensions, ext)));
+                }
+                else actual = extensionsJson(card->extensions);
+                if (showJson(actual) != showJson(pair.second))
+                {
+                    failures.push_back(at + ": " + pair.first + " expected " + showJson(pair.second)
+                        + ", got " + showJson(actual));
+                }
+            }
+        }
+        else if (kind == "assertOutcomeExtensions" || kind == "assertBoxExtensions")
+        {
+            // Each named outcome's (or box's) values, by gameId; none reads as {}.
+            const JsonValue& expect = op.at("expect");
+            JsonValue actual = JsonValue::MakeObj();
+            if (kind == "assertOutcomeExtensions")
+            {
+                std::vector<OutcomeView> views = session->outcomes(op.strOr("card"), op.strOr("from"));
+                for (const auto& pair : expect.obj)
+                {
+                    NodeExtensions found;
+                    for (const auto& v : views) if (v.gameId == pair.first) { found = v.extensions; break; }
+                    actual.set(pair.first, extensionsJson(found));
+                }
+            }
+            else
+            {
+                std::vector<BoxView> views = session->listBoxes();
+                for (const auto& pair : expect.obj)
+                {
+                    NodeExtensions found;
+                    for (const auto& v : views) if (v.gameId == pair.first) { found = v.extensions; break; }
+                    actual.set(pair.first, extensionsJson(found));
+                }
+            }
+            if (showJson(actual) != showJson(expect))
+            {
+                failures.push_back(at + ": expected " + showJson(expect) + ", got " + showJson(actual));
+            }
+        }
+        else if (kind == "assertNodeExtensions")
+        {
+            // Read off the bundle, no flow: the nodes no view carries.
+            const std::string nodeKind = op.strOr("kind");
+            NodeExtensions raw = ExtensionsOf(*running, nodeKind, op.strOr("address"));
+            const JsonValue* effective = op.find("effective");
+            JsonValue actual;
+            if (effective && effective->isObject())
+            {
+                const std::string ext = effective->strOr("extension");
+                actual = valuesJson(EffectiveFields(ExtensionDecls(*running, ext, nodeKind), extensionValues(raw, ext)));
+            }
+            else actual = extensionsJson(raw);
+            const JsonValue& expect = op.at("expect");
+            if (showJson(actual) != showJson(expect))
+            {
+                failures.push_back(at + ": expected " + showJson(expect) + ", got " + showJson(actual));
             }
         }
         else if (kind == "assertState")

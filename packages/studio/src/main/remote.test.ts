@@ -370,10 +370,12 @@ describe("pulling", () => {
 
     // Ours stands in the file, and the sidecar records the disagreement: that
     // is the merge's own rule, and it is what the problems bar then shows.
-    // The file is not REWRITTEN to say what it already says (2026-09-07): the
-    // merge resolved to ours, so there is nothing for the plan to write, and a
-    // write here would leave an author who typed nothing looking at an edit.
-    expect(plan.writes.find((w) => w.path === deck.path)).toBeUndefined();
+    // The file IS rewritten, but only to carry the mark naming the clash (ruled
+    // 2026-10-18: an unresolved merge is marked in the shard, so it travels with
+    // the file and CI refuses it): ours, with an `unresolved` entry.
+    const write = plan.writes.find((w) => w.path === deck.path);
+    expect(write?.content).toContain("Our title");
+    expect(write?.content).toContain("unresolved");
     expect(readFileSync(deck.path, "utf8")).toContain("Our title");
     expect(JSON.parse(plan.sidecars[0]!.content).conflicts).toHaveLength(1);
   });

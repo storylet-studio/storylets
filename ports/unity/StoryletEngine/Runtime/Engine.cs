@@ -303,6 +303,12 @@ namespace StoryletStudio.StoryletEngine
         public string Title;
         public string Purpose;
         public OrderedMap<string, ExprValue> Fields;
+        /// <summary>The card's Storylet extension values, by extension id,
+        /// exactly as the bundle wrote them: raw and sparse, any JSON as the
+        /// neutral tree. Null when it has none.
+        /// FieldHelpers.EffectiveFields(FieldHelpers.ExtensionDecls(...), ...)
+        /// fills in the declared defaults.</summary>
+        public OrderedMap<string, OrderedMap<string, object>> Extensions;
     }
 
     public sealed class OutcomeView
@@ -315,6 +321,9 @@ namespace StoryletStudio.StoryletEngine
         /// game data declared by the box's OutcomeFields, never read by the
         /// engine.</summary>
         public OrderedMap<string, ExprValue> Fields;
+        /// <summary>The outcome's Storylet extension values, by extension id,
+        /// raw, as DealtCard.Extensions. Null when it has none.</summary>
+        public OrderedMap<string, OrderedMap<string, object>> Extensions;
         /// <summary>Evaluated against CURRENT state at the moment of the ask.</summary>
         public bool Available;
     }
@@ -483,6 +492,9 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Null when the box has no title.</summary>
         public string Title;
         public double Turn;
+        /// <summary>The box's Storylet extension values, by extension id, raw.
+        /// Null when it has none.</summary>
+        public OrderedMap<string, OrderedMap<string, object>> Extensions;
     }
 
     /// <summary>The world + flow manager (design/flows.md; the shape is

@@ -10,12 +10,13 @@
 import { describe, expect, it } from "vitest";
 import { canonicalStringify } from "@storylet-studio/compiler";
 import { runMerge, MergeInputError, detectMergeType, MERGE_SPECS } from "../src/merge.js";
+import { unresolvedOf, withoutMark } from "@wildwinter/toolkit/extensions";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import {
   SHARD_EXTENSIONS, PROJECT_SCHEMA, BOX_SCHEMA, MAP_SCHEMA, TAGS_SCHEMA, HANDS_SCHEMA,
-  DECK_SCHEMA, VIEW_SCHEMA, NOTES_SCHEMA, CONTRACT_SCHEMA, PROJECTMAP_SCHEMA,
+  DECK_SCHEMA, VIEW_SCHEMA, NOTES_SCHEMA, CONTRACT_SCHEMA, EXTENSION_SCHEMA, PROJECTMAP_SCHEMA,
 } from "@storylet-studio/model";
 import type { ConflictKind } from "../src/merge.js";
 
@@ -486,7 +487,11 @@ describe("merge corpus", () => {
   for (const c of corpus) {
     it(c.name, () => {
       const result = runMerge(c.base, c.ours, c.theirs);
-      if (c.expect) eq(result.merged, c.expect);
+      // The content is the expectation; a clash is also named in the shard,
+      // under `unresolved`, one entry per conflict at its path.
+      if (c.expect) eq(withoutMark(result.merged), c.expect);
+      expect((unresolvedOf(result.merged) ?? []).map((u) => u.path).sort())
+        .toEqual(result.conflicts.map((x) => x.path).sort());
       const kinds = result.conflicts.map((x): [ConflictKind, string] => [x.kind, x.id]).sort();
       expect(kinds).toEqual([...(c.expectConflicts ?? [])].sort());
       expect(result.warnings.length).toBe(c.expectWarnings ?? 0);
@@ -569,7 +574,7 @@ describe("the merge specs cannot drift from the model", () => {
     const schemas: Record<keyof typeof SHARD_EXTENSIONS, string> = {
       project: PROJECT_SCHEMA, box: BOX_SCHEMA, tags: TAGS_SCHEMA,
       hands: HANDS_SCHEMA, deck: DECK_SCHEMA, view: VIEW_SCHEMA, map: MAP_SCHEMA,
-      notes: NOTES_SCHEMA, contract: CONTRACT_SCHEMA,
+      notes: NOTES_SCHEMA, contract: CONTRACT_SCHEMA, extension: EXTENSION_SCHEMA,
     };
     // Every extension is named here, so a NEW one fails this line first.
     expect(Object.keys(schemas).sort()).toEqual(Object.keys(SHARD_EXTENSIONS).sort());
@@ -585,7 +590,7 @@ describe("the merge specs cannot drift from the model", () => {
     const expected: [string, string][] = [
       [PROJECT_SCHEMA, "project"], [BOX_SCHEMA, "box"], [TAGS_SCHEMA, "tags"], [HANDS_SCHEMA, "hands"],
       [DECK_SCHEMA, "deck"], [VIEW_SCHEMA, "view"], [MAP_SCHEMA, "map"], [PROJECTMAP_SCHEMA, "projectmap"],
-      [NOTES_SCHEMA, "notes"], [CONTRACT_SCHEMA, "contract"],
+      [NOTES_SCHEMA, "notes"], [CONTRACT_SCHEMA, "contract"], [EXTENSION_SCHEMA, "extension"],
     ];
     for (const [schema, type] of expected) expect(detectMergeType({ schema }), schema).toBe(type);
     // The version is not part of the type; a name that merely starts like one is not one.

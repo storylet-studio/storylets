@@ -24,7 +24,8 @@ extends SceneTree
 ## Ops that run ON a flow, and so open one lazily. Everything else must not.
 const FLOW_OPS := ["setState", "peek", "deal", "assertBoard", "play",
 	"advanceTurns", "assertOutcomes", "assertOutcomeOrder", "assertOutcomeFields",
-	"assertCardFields", "assertState"]
+	"assertCardFields", "assertCardExtensions", "assertOutcomeExtensions",
+	"assertBoxExtensions", "assertState"]
 
 ## The load report's comparison separator: a UNIT SEPARATOR, because it cannot
 ## occur in an id, a gameId or a property name.
@@ -258,6 +259,35 @@ static func _same_field_sets(a: Dictionary, b: Dictionary) -> bool:
 		if not _same_fields(a[game_id], b[game_id]):
 			return false
 	return true
+
+
+# Extension values are ANY JSON, so they compare deeply: dictionaries by key
+# (order irrelevant), arrays in order, numbers by value (JSON numbers come out
+# of Godot's parser as floats, while an engine could hold ints).
+static func _same_json(a, b) -> bool:
+	if (a is int or a is float) and (b is int or b is float):
+		return float(a) == float(b)
+	if a is Dictionary and b is Dictionary:
+		if a.size() != b.size():
+			return false
+		for k in a:
+			if not b.has(k) or not _same_json(a[k], b[k]):
+				return false
+		return true
+	if a is Array and b is Array:
+		if a.size() != b.size():
+			return false
+		for i in a.size():
+			if not _same_json(a[i], b[i]):
+				return false
+		return true
+	return typeof(a) == typeof(b) and a == b
+
+
+# Any JSON as one line, keys sorted, so a failure reads the same whichever order
+# the two sides hold their keys in.
+static func _show_json(v) -> String:
+	return JSON.stringify(v, "", true)
 
 
 # Fields as a comparable line, names sorted: the failure has to read the same
@@ -883,6 +913,67 @@ func _run_scripted_case(c: Dictionary) -> Array:
 						got_cards[card_id] = found.get("fields", {})
 				if got_cards.size() == want_cards.size() and not _same_field_sets(got_cards, want_cards):
 					failures.append("%s: expected %s, got %s" % [at, _show_field_sets(want_cards), _show_field_sets(got_cards)])
+
+			"assertCardExtensions":
+				# A card's extension values as the board hands them over: raw, by
+				# extension id. A card carrying none reads as an EMPTY dictionary.
+				# With "effective", one extension's values through the helpers.
+				var ext_key: String = names.get(op["from"], op["from"])
+				var ext_board: Array = session.board().get(ext_key, [])
+				for card_id in op["expect"]:
+					var dealt = null
+					for v in ext_board:
+						if v["id"] == card_id:
+							dealt = v
+							break
+					if dealt == null:
+						failures.append("%s: %s is not on board[%s]" % [at, card_id, op["from"]])
+						continue
+					var raw: Dictionary = dealt.get("extensions", {})
+					var got_ext = raw
+					if op.has("effective"):
+						var ext_id := str(op["effective"]["extension"])
+						got_ext = StoryletEngine.effective_fields(
+							StoryletEngine.extension_decls(bundle, ext_id, "card"), raw.get(ext_id, {}))
+					if not _same_json(got_ext, op["expect"][card_id]):
+						failures.append("%s: %s expected %s, got %s" % [at, card_id, _show_json(op["expect"][card_id]), _show_json(got_ext)])
+
+			"assertOutcomeExtensions":
+				# Each named outcome's extension values, raw; none reads as {}.
+				var outcome_views := session.outcomes(op["card"], op["from"])
+				var got_outcomes := {}
+				for game_id in op["expect"]:
+					got_outcomes[game_id] = {}
+					for v in outcome_views:
+						if v["gameId"] == game_id:
+							got_outcomes[game_id] = v.get("extensions", {})
+							break
+				if not _same_json(got_outcomes, op["expect"]):
+					failures.append("%s: expected %s, got %s" % [at, _show_json(op["expect"]), _show_json(got_outcomes)])
+
+			"assertBoxExtensions":
+				# Each named box's extension values off list_boxes(); none reads as {}.
+				var box_rows := session.list_boxes()
+				var got_boxes := {}
+				for game_id in op["expect"]:
+					got_boxes[game_id] = {}
+					for row in box_rows:
+						if row["gameId"] == game_id:
+							got_boxes[game_id] = row.get("extensions", {})
+							break
+				if not _same_json(got_boxes, op["expect"]):
+					failures.append("%s: expected %s, got %s" % [at, _show_json(op["expect"]), _show_json(got_boxes)])
+
+			"assertNodeExtensions":
+				# A node no view carries, read off the bundle by the helper.
+				var node_raw := StoryletEngine.extensions_of(bundle, str(op["kind"]), str(op.get("address", "")))
+				var got_node = node_raw
+				if op.has("effective"):
+					var node_ext := str(op["effective"]["extension"])
+					got_node = StoryletEngine.effective_fields(
+						StoryletEngine.extension_decls(bundle, node_ext, str(op["kind"])), node_raw.get(node_ext, {}))
+				if not _same_json(got_node, op["expect"]):
+					failures.append("%s: expected %s, got %s" % [at, _show_json(op["expect"]), _show_json(got_node)])
 
 			"assertState":
 				for path in op["expect"]:

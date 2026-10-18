@@ -67,6 +67,7 @@ namespace
 		Out.Title = Ue(C.title);
 		Out.Purpose = Ue(C.purpose);
 		Out.Fields = ConvertFields(C.fields);
+		Out.Extensions = StoryletExtensionsToUe(C.extensions);
 		return Out;
 	}
 
@@ -776,6 +777,7 @@ TArray<FStoryletOutcomeView> UStoryletFlow::Outcomes(const FString& CardRef, con
 			V.Purpose = Ue(O.purpose);
 			V.bAvailable = O.available;
 			V.Fields = ConvertFields(O.fields);
+			V.Extensions = StoryletExtensionsToUe(O.extensions);
 			Out.Add(MoveTemp(V));
 		}
 		return Out;
@@ -857,6 +859,7 @@ TArray<FStoryletBoxView> UStoryletFlow::ListBoxes() const
 			V.GameId = Ue(B.gameId);
 			V.Title = Ue(B.title);
 			V.Turn = B.turn;
+			V.Extensions = StoryletExtensionsToUe(B.extensions);
 			Out.Add(MoveTemp(V));
 		}
 		return Out;

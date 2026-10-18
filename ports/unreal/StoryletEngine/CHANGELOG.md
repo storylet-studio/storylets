@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Storylet extension values reach the game.** A bundle's `extensions` section and every node's
+  `extensions` are read, raw, and never interpreted. A dealt card, an outcome and a box view carry
+  theirs as `Extensions` (`FStoryletExtensionValues`: the extension id and its values, each an
+  `FStoryletExtensionEntry` of name and JSON text, since a value may be a record, a map or a list).
+  On the bundle asset: `GetEffectiveExtensionValues` fills in the declared defaults,
+  `ExtensionsOf` reads the nodes no view carries (a deck, a hand, a tag) by address,
+  `GetExtensionFieldDecl` reads a declaration for the stage functions, `FindExtensionValue` picks
+  one value out, and `ExtensionValueToScalar` turns a scalar's text into an `FStoryletValue`.
+  `FStoryletFieldDecl` gains `DefaultJson`. In the engine-free core (`Storylets/Bundle.h`):
+  `NodeExtensions`, `ExtensionFieldDecl`, `BundleExtension`, `ExtensionDecls`, `ExtensionsOf`,
+  and `FieldValue` and `EffectiveFields` over extension values; `JsonText` writes a `JsonValue`
+  back as strict JSON. A bundle without extensions behaves exactly as before.
+
 ## [0.12.0] - 2026-10-18
 
 ### Added

@@ -151,6 +151,16 @@ static func load_from_dict(bundle: Dictionary) -> Dictionary:
 				ok = ok and t is String
 		if not ok:
 			return {"ok": false, "error": "bundle externalScopes must be an array of scope tokens"}
+	# Storylet extensions, optional: each entry an object with a
+	# "fields" object. The values themselves are the game's, never read here.
+	if bundle.has("extensions"):
+		var exts = bundle["extensions"]
+		var ok: bool = exts is Dictionary
+		if ok:
+			for id in exts:
+				ok = ok and exts[id] is Dictionary and exts[id].get("fields") is Dictionary
+		if not ok:
+			return {"ok": false, "error": "bundle extensions must map each extension id to an object with fields"}
 	return {"ok": true, "bundle": bundle}
 
 

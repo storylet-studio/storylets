@@ -2,7 +2,7 @@
 // @storylet-studio/model (packages/model/src/index.ts): the bundle schema
 // "storylets/bundle@1" ("@0" still read; world/story property decls, boxes with
 // decks/cards/outcomes/tag groups/hands/hand templates, ranking, fields, redraw,
-// copies, the home group, the project map), SaveEnvelope ("storylets/save@2"; @1 still read), and the gameId
+// copies, the home group, the project map, Storylet extension values), SaveEnvelope ("storylets/save@2"; @1 still read), and the gameId
 // derivation rules (GameIdify / EffectiveGameId). The loader consumes the
 // core's neutral JsonValue tree (the Unity port's BundleLoader, minus the
 // JSON library), so hosts feed it from any parser. No behaviour lives here.
@@ -225,6 +225,59 @@ namespace storylets
         std::string purpose;
     };
 
+    /** A node's Storylet extension values: extension id -> field -> value, raw
+     *  as authored, in bundle order. Any JSON (a record, map or list as well as
+     *  a scalar), so held as the neutral tree. The engine never interprets
+     *  them; it hands them to the host wherever the node's fields go. Empty
+     *  when the node has none. */
+    using NodeExtensions = OrderedMap<std::string, OrderedMap<std::string, JsonValue>>;
+
+    /** A map field's key: its type, and what a reference key points at. */
+    struct ExtensionKeyDecl
+    {
+        std::string type;
+        std::string to;
+    };
+
+    /** A compiled extension field declaration (packages/model ExtensionFieldDecl):
+     *  the editor's words gone, every default resolved by the compiler. Structured
+     *  types carry their parts: `fields` for a record, `key` and `of` for a map,
+     *  `of` and `id` for a list, `to` for a reference. Read by nothing in the
+     *  engine; the effective-values helpers below fill a node's gaps from it. */
+    struct ExtensionFieldDecl
+    {
+        std::string name;
+        std::string type;
+        /** Always present on a top-level declaration, and may be any JSON.
+         *  Absent only on a map's or list's element (`of`). */
+        std::optional<JsonValue> defaultValue;
+        std::optional<std::vector<std::string>> values;
+        std::optional<std::vector<std::string>> stages;
+        /** A reference's target kind; empty when not a reference. */
+        std::string to;
+        /** A record's fields. */
+        std::vector<ExtensionFieldDecl> fields;
+        std::optional<ExtensionKeyDecl> key;
+        /** A map's or list's element. */
+        std::shared_ptr<ExtensionFieldDecl> of;
+        /** A list of records: the field that identifies an item. */
+        std::string id;
+        std::optional<double> min;
+        std::optional<double> max;
+        std::optional<bool> required;
+    };
+
+    /** One extension as the bundle carries it. */
+    struct BundleExtension
+    {
+        std::string version;
+        /** Compiled declarations by node kind (box, tagGroup, tag, deck, card,
+         *  outcome, handTemplate, hand, project). */
+        OrderedMap<std::string, std::vector<ExtensionFieldDecl>> fields;
+        /** The project node's values, raw, when it has any. */
+        std::optional<OrderedMap<std::string, JsonValue>> project;
+    };
+
     /** Cooldown policy, in turns (schema 3.4): "always" | "never" | N. */
     struct RedrawPolicy
     {
@@ -263,6 +316,7 @@ namespace storylets
          *  the box's outcomeFields. Handed to the host with the outcome, as
          *  the title is; empty when the outcome carries none. */
         OrderedMap<std::string, StoryletValue> fields;
+        NodeExtensions extensions;
     };
 
     struct Card
@@ -297,6 +351,7 @@ namespace storylets
         std::optional<bool> durable;
         /** Card-template data: field name -> value. */
         OrderedMap<std::string, StoryletValue> fields;
+        NodeExtensions extensions;
         std::vector<Outcome> outcomes;
     };
 
@@ -315,6 +370,7 @@ namespace storylets
          *  run unless the card says otherwise (4.2), read by the durable halves. */
         std::optional<bool> durable;
         std::vector<PropertyDecl> properties;
+        NodeExtensions extensions;
         std::vector<Card> cards;
     };
 
@@ -324,6 +380,7 @@ namespace storylets
         std::string gameId;
         std::string title;                      // always empty (tags carry no title)
         std::vector<PropertyDecl> properties;
+        NodeExtensions extensions;
     };
 
     /** A named axis for cross-cutting cards (schema 2.4). Tags are declared,
@@ -341,6 +398,7 @@ namespace storylets
         /** True: a card that omits this group is unavailable wherever the group
          *  is bound, instead of wildcarding in. */
         bool required = false;
+        NodeExtensions extensions;
         std::vector<Tag> tags;
     };
 
@@ -363,6 +421,7 @@ namespace storylets
         std::optional<double> slots;
         /** Declared @hand state every instance carries. */
         std::vector<PropertyDecl> properties;
+        NodeExtensions extensions;
     };
 
     /** A standalone hand's inline rule (schema 2.6): owned by the hand. */
@@ -396,6 +455,7 @@ namespace storylets
         /** Standalone hands' own @hand state (template instances inherit the
          *  template's declarations). */
         std::vector<PropertyDecl> properties;
+        NodeExtensions extensions;
     };
 
     struct RankingPolicy
@@ -423,6 +483,7 @@ namespace storylets
          *  when the box declares none (the key is absent from the bundle). */
         std::vector<FieldDecl> outcomeFields;
         std::vector<PropertyDecl> properties;
+        NodeExtensions extensions;
         /**
          * The box has opted in to the PROJECT MAP (design/project-map-contract.md
          * 1.2, 2.2): its hands may bind the map's zone group and its cards may
@@ -564,6 +625,11 @@ namespace storylets
          *  compiler. The engine reports when the game has not registered one,
          *  and an outcome writing one fails naming it. Empty when none. */
         std::vector<std::string> externalScopes;
+        /** The project's Storylet extensions by id: declarations and the project
+         *  node's values (patterkit design/proposals/patter-storylet-extensions.md,
+         *  "At runtime"). Every other node carries its own values. Empty when the
+         *  project takes none. */
+        OrderedMap<std::string, BundleExtension> extensions;
     };
 
     using BundlePtr = std::shared_ptr<const Bundle>;
@@ -830,6 +896,151 @@ namespace storylets
         return out;
     }
 
+    // Extension values by the same rule (patterkit design/proposals/
+    // patter-storylet-extensions.md, "At runtime"): raw on the node, the
+    // declarations with every default resolved in the bundle, and the same two
+    // helpers, overloaded for the neutral tree, fill them in given
+    // ExtensionDecls. ExtensionsOf reads the values of a node no view carries
+    // (a deck, a hand, a tag), by the address a game already uses.
+
+    /** One extension field's effective value: the node's own when it sets one,
+     *  else the declared default; nullopt for a name declared nowhere and set
+     *  nowhere. */
+    inline std::optional<JsonValue> FieldValue(const std::vector<ExtensionFieldDecl>& decls,
+        const OrderedMap<std::string, JsonValue>& values, const std::string& name)
+    {
+        if (const JsonValue* v = values.get(name)) return *v;
+        for (const auto& f : decls) if (f.name == name) return f.defaultValue;
+        return std::nullopt;
+    }
+
+    /** Every declared extension field resolved (the value set, else the
+     *  default), in declaration order, then any key set with no declaration,
+     *  kept as it is. */
+    inline OrderedMap<std::string, JsonValue> EffectiveFields(const std::vector<ExtensionFieldDecl>& decls,
+        const OrderedMap<std::string, JsonValue>& values)
+    {
+        OrderedMap<std::string, JsonValue> out;
+        for (const auto& f : decls)
+        {
+            std::optional<JsonValue> v = FieldValue(decls, values, f.name);
+            if (v.has_value()) out.set(f.name, *v);
+        }
+        for (const auto& pair : values) if (!out.contains(pair.first)) out.set(pair.first, pair.second);
+        return out;
+    }
+
+    /** One extension's declarations for a node kind (card, outcome, box, deck,
+     *  tagGroup, tag, handTemplate, hand, project), every default resolved.
+     *  Empty when the bundle has no such extension or it declares nothing for
+     *  the kind. */
+    inline std::vector<ExtensionFieldDecl> ExtensionDecls(const Bundle& bundle, const std::string& extension,
+        const std::string& kind)
+    {
+        const BundleExtension* ext = bundle.extensions.get(extension);
+        if (!ext) return {};
+        const std::vector<ExtensionFieldDecl>* decls = ext->fields.get(kind);
+        return decls ? *decls : std::vector<ExtensionFieldDecl>{};
+    }
+
+    namespace fieldsdetail
+    {
+        /** The node a game names `name`: its gameId, or its id when it has none. */
+        template <typename T>
+        const T* Named(const std::vector<T>& items, const std::string& name)
+        {
+            for (const auto& x : items) if ((x.gameId.empty() ? x.id : x.gameId) == name) return &x;
+            return nullptr;
+        }
+
+        template <typename T>
+        NodeExtensions ValuesOf(const T* node) { return node ? node->extensions : NodeExtensions{}; }
+    }
+
+    /**
+     * A node's extension values, by extension id, raw; empty when it has none
+     * or the address names nothing. For the nodes no view carries, by the names
+     * a game already holds: `project` (no address); `box`, `deck`, `card` and
+     * `hand` by gameId; `handTemplate` as "box/template"; `outcome` as
+     * "card/outcome"; `tagGroup` and `tag` as "box/name", or the bare name for
+     * the project map's. An unknown kind is empty.
+     */
+    inline NodeExtensions ExtensionsOf(const Bundle& bundle, const std::string& kind, const std::string& address = "")
+    {
+        using fieldsdetail::Named;
+        using fieldsdetail::ValuesOf;
+        const size_t slash = address.find('/');
+        const bool qualified = slash != std::string::npos;
+        const std::string first = qualified ? address.substr(0, slash) : address;
+        const std::string second = qualified ? address.substr(slash + 1) : std::string();
+        // The first card, in bundle order, a game names `name` (cards are not
+        // copied out: they carry their expressions).
+        const auto cardNamed = [&bundle](const std::string& name) -> const Card*
+        {
+            for (const auto& b : bundle.boxes)
+            {
+                for (const auto& d : b.decks)
+                {
+                    if (const Card* c = Named(d.cards, name)) return c;
+                }
+            }
+            return nullptr;
+        };
+        if (kind == "project")
+        {
+            NodeExtensions out;
+            for (const auto& pair : bundle.extensions)
+            {
+                if (pair.second.project.has_value()) out.set(pair.first, *pair.second.project);
+            }
+            return out;
+        }
+        if (kind == "box") return ValuesOf(Named(bundle.boxes, address));
+        if (kind == "deck")
+        {
+            for (const auto& b : bundle.boxes) if (const Deck* d = Named(b.decks, address)) return d->extensions;
+            return {};
+        }
+        if (kind == "card") return ValuesOf(cardNamed(address));
+        if (kind == "outcome")
+        {
+            if (!qualified) return {};
+            const Card* card = cardNamed(first);
+            return card ? ValuesOf(Named(card->outcomes, second)) : NodeExtensions{};
+        }
+        if (kind == "hand")
+        {
+            for (const auto& b : bundle.boxes) if (const Hand* h = Named(b.hands, address)) return h->extensions;
+            return {};
+        }
+        if (kind == "handTemplate")
+        {
+            if (!qualified) return {};
+            const Box* box = Named(bundle.boxes, first);
+            return box ? ValuesOf(Named(box->handTemplates, second)) : NodeExtensions{};
+        }
+        if (kind == "tagGroup")
+        {
+            if (!qualified)
+            {
+                if (!bundle.map.has_value()) return {};
+                const TagGroup& group = bundle.map->group;
+                return (group.gameId.empty() ? group.id : group.gameId) == first ? group.extensions : NodeExtensions{};
+            }
+            const Box* box = Named(bundle.boxes, first);
+            return box ? ValuesOf(Named(box->tagGroups, second)) : NodeExtensions{};
+        }
+        if (kind == "tag")
+        {
+            if (!qualified) return bundle.map.has_value() ? ValuesOf(Named(bundle.map->group.tags, first)) : NodeExtensions{};
+            const Box* box = Named(bundle.boxes, first);
+            if (!box) return {};
+            for (const auto& g : box->tagGroups) if (const Tag* t = Named(g.tags, second)) return t->extensions;
+            return {};
+        }
+        return {};
+    }
+
     // --- the bundle loader (neutral JsonValue -> compiled model) ---------------
 
     namespace bundleloader
@@ -920,6 +1131,84 @@ namespace storylets
             return d;
         }
 
+        /** A node's `extensions` object, raw: extension id -> field -> value. */
+        inline NodeExtensions ParseNodeExtensions(const JsonValue& o)
+        {
+            NodeExtensions out;
+            const JsonValue* ext = o.find("extensions");
+            if (!ext || !ext->isObject()) return out;
+            for (const auto& pair : ext->obj)
+            {
+                OrderedMap<std::string, JsonValue> values;
+                if (pair.second.isObject())
+                {
+                    for (const auto& field : pair.second.obj) values.set(field.first, field.second);
+                }
+                out.set(pair.first, std::move(values));
+            }
+            return out;
+        }
+
+        inline ExtensionFieldDecl ParseExtensionFieldDecl(const JsonValue& o)
+        {
+            ExtensionFieldDecl d;
+            d.name = o.strOr("name");
+            d.type = o.strOr("type");
+            if (const JsonValue* def = o.find("default")) d.defaultValue = *def;
+            d.values = ParseStringList(o.find("values"));
+            d.stages = ParseStringList(o.find("stages"));
+            d.to = o.strOr("to");
+            const JsonValue* fields = o.find("fields");
+            if (fields && fields->isArray())
+            {
+                for (const auto& f : fields->arr) d.fields.push_back(ParseExtensionFieldDecl(f));
+            }
+            const JsonValue* key = o.find("key");
+            if (key && key->isObject()) d.key = ExtensionKeyDecl{ key->strOr("type"), key->strOr("to") };
+            const JsonValue* of = o.find("of");
+            if (of && of->isObject()) d.of = std::make_shared<ExtensionFieldDecl>(ParseExtensionFieldDecl(*of));
+            d.id = o.strOr("id");
+            const JsonValue* min = o.find("min");
+            if (min && min->isNumber()) d.min = min->num;
+            const JsonValue* max = o.find("max");
+            if (max && max->isNumber()) d.max = max->num;
+            const JsonValue* required = o.find("required");
+            if (required && required->isBool()) d.required = required->b;
+            return d;
+        }
+
+        /** The bundle's `extensions` section: each extension's version, its
+         *  declarations by node kind, and the project node's values. */
+        inline OrderedMap<std::string, BundleExtension> ParseBundleExtensions(const JsonValue& section)
+        {
+            OrderedMap<std::string, BundleExtension> out;
+            for (const auto& pair : section.obj)
+            {
+                if (!pair.second.isObject()) continue;
+                BundleExtension ext;
+                ext.version = pair.second.strOr("version");
+                const JsonValue* fields = pair.second.find("fields");
+                if (fields && fields->isObject())
+                {
+                    for (const auto& kind : fields->obj)
+                    {
+                        std::vector<ExtensionFieldDecl> decls;
+                        for (const auto& f : kind.second.arr) decls.push_back(ParseExtensionFieldDecl(f));
+                        ext.fields.set(kind.first, std::move(decls));
+                    }
+                }
+                const JsonValue* project = pair.second.find("project");
+                if (project && project->isObject())
+                {
+                    OrderedMap<std::string, JsonValue> values;
+                    for (const auto& field : project->obj) values.set(field.first, field.second);
+                    ext.project = std::move(values);
+                }
+                out.set(pair.first, std::move(ext));
+            }
+            return out;
+        }
+
         /** slots: number | "unbounded" (+infinity) | absent (nullopt). */
         inline std::optional<double> ParseSlots(const JsonValue* token)
         {
@@ -949,6 +1238,7 @@ namespace storylets
             {
                 for (const auto& pair : fields->obj) outcome.fields.set(pair.first, ToValue(pair.second));
             }
+            outcome.extensions = ParseNodeExtensions(o);
             return outcome;
         }
 
@@ -1000,6 +1290,7 @@ namespace storylets
             {
                 for (const auto& pair : fields->obj) card.fields.set(pair.first, ToValue(pair.second));
             }
+            card.extensions = ParseNodeExtensions(o);
             const JsonValue* outcomes = o.find("outcomes");
             if (outcomes && outcomes->isArray())
             {
@@ -1022,6 +1313,7 @@ namespace storylets
             if (deckDurable && deckDurable->isBool()) deck.durable = deckDurable->b;
             const JsonValue* props = o.find("properties");
             if (props && props->isArray()) deck.properties = ParsePropertyDecls(*props);
+            deck.extensions = ParseNodeExtensions(o);
             const JsonValue* cards = o.find("cards");
             if (cards && cards->isArray())
             {
@@ -1038,6 +1330,7 @@ namespace storylets
             group.purpose = o.strOr("purpose");
             group.boundBy = o.strOr("boundBy");
             group.required = o.boolOr("required");
+            group.extensions = ParseNodeExtensions(o);
             const JsonValue* tags = o.find("tags");
             if (tags && tags->isArray())
             {
@@ -1048,6 +1341,7 @@ namespace storylets
                     tag.gameId = t.strOr("gameId");
                     const JsonValue* props = t.find("properties");
                     if (props && props->isArray()) tag.properties = ParsePropertyDecls(*props);
+                    tag.extensions = ParseNodeExtensions(t);
                     group.tags.push_back(std::move(tag));
                 }
             }
@@ -1071,6 +1365,7 @@ namespace storylets
             }
             const JsonValue* props = o.find("properties");
             if (props && props->isArray()) t.properties = ParsePropertyDecls(*props);
+            t.extensions = ParseNodeExtensions(o);
             return t;
         }
 
@@ -1096,6 +1391,7 @@ namespace storylets
             if (slots && !slots->isNull()) hand.slots = slots->num;
             const JsonValue* props = o.find("properties");
             if (props && props->isArray()) hand.properties = ParsePropertyDecls(*props);
+            hand.extensions = ParseNodeExtensions(o);
             return hand;
         }
 
@@ -1190,6 +1486,7 @@ namespace storylets
             }
             const JsonValue* props = o.find("properties");
             if (props && props->isArray()) box.properties = ParsePropertyDecls(*props);
+            box.extensions = ParseNodeExtensions(o);
             const JsonValue* groups = o.find("tagGroups");
             if (groups && groups->isArray())
             {
@@ -1260,6 +1557,8 @@ namespace storylets
         {
             for (const auto& token : external->arr) bundle->externalScopes.push_back(token.str);
         }
+        const JsonValue* extensions = b.find("extensions");
+        if (extensions && extensions->isObject()) bundle->extensions = bundleloader::ParseBundleExtensions(*extensions);
         return bundle;
     }
 }

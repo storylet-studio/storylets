@@ -55,7 +55,7 @@ storylets_pkg="$root/ports/unity/StoryletEngine"
 probe_src="$root/ports/unity/TestHost/with-patter"
 patter_dir="${PATTER_DIR:-$root/../patter}"
 patter_pkg="$patter_dir/ports/unity/Patterplay"
-staged_version="0.14.0"
+staged_version="0.28.0"
 
 if [ ! -f "$patter_pkg/package.json" ]; then
   msg="no Patterplay source at $patter_pkg (clone wildwinter/patter beside storylets, or set PATTER_DIR)"

@@ -1,0 +1,22 @@
+{
+  schema: "storylets/box@0",
+  box: {
+    fields: [
+      {
+        default: "calm",
+        name: "mood",
+        type: "enum",
+        values: [
+          "calm",
+          "tense",
+        ],
+      },
+    ],
+    gameId: "harbour",
+    id: "b_harbour",
+    properties: [],
+    ranking: {
+      specificity: true,
+    },
+  },
+}

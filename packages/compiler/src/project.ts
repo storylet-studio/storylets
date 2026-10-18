@@ -5,7 +5,10 @@
 // store both feed this same shape.
 // ---------------------------------------------------------------------------
 
-import type { BoxMap, BoxShard, ContractShard, DeckShard, HandsShard, MapShard, ProjectMapShard, ProjectShard, PropertyDecl, ScalarValue, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
+import type {
+  BoxMap, BoxShard, ContractShard, DeckShard, ExtensionShard, HandsShard, MapShard, ProjectMapShard, ProjectShard, PropertyDecl,
+  ScalarValue, TagsShard, ViewShard, NotesShard,
+} from "@storylet-studio/model";
 import type { MergedScopes, ScopesIssue } from "@wildwinter/scoperegistry/scopes";
 
 /** One shard as text: `path` is project-relative, posix separators. */
@@ -107,6 +110,31 @@ export interface SourceBox {
    *  view sidecar is: most boxes have none, and nothing which ignores notes (the
    *  compiler, the runtime, every fixture) should have to mention them. */
   notes?: NotesShard;
+  /** This box's extension data, one shard per extension that has any here
+   *  (`<extension id>.storyletextension` in the box folder), sorted by path.
+   *  Optional for the view shard's reason: nothing that ignores extensions (the
+   *  runtime, coverage, every hand-built fixture) should have to mention them. */
+  extensions?: SourceExtension[];
+}
+
+/** One extension data shard, as it sits in a box folder or at the root. */
+export interface SourceExtension {
+  /** Project-relative path: `<box>/<id>.storyletextension`, or `<id>.storyletextension` at the root. */
+  path: string;
+  shard: ExtensionShard;
+}
+
+/**
+ * One extension's manifest, as the project keeps it in `extensions/`. `manifest`
+ * is the parsed JSON as it came, unchecked: the compiler's extension pass is what
+ * says whether it is sound (`@wildwinter/toolkit/extensions`' `manifestProblems`).
+ */
+export interface SourceManifest {
+  /** Project-relative path: `extensions/<id>.extension.json`. */
+  path: string;
+  /** The file's stem, which names the extension it should be. */
+  id: string;
+  manifest: unknown;
 }
 
 /**
@@ -177,6 +205,12 @@ export interface SourceProject {
    *  Empty on every project that has never met a server, which is all of them
    *  until one is built. Not compiled: `validate` and the editor read it. */
   contracts: SourceContract[];
+  /** Project-level extension data: the root `<id>.storyletextension` shards. */
+  extensions?: SourceExtension[];
+  /** The extensions' manifests, from `extensions/`, sorted by path. Read whether
+   *  or not the project takes them; the project shard's `extensions` says which
+   *  it does. Optional as `extensions` is. */
+  manifests?: SourceManifest[];
   /** The game's shared scopes, when the loader found a folder (it reads files, so the
    *  parser never sets this). The compiler takes `@world` from it and checks references
    *  into the other tools' scopes against it. */

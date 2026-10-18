@@ -28,6 +28,7 @@
 // ---------------------------------------------------------------------------
 
 import JSON5 from "json5";
+import { EXTENSION_SCHEMA, UNRESOLVED_KEY } from "@storylet-studio/model";
 
 // JSON5 + a tolerated BOM, from @wildwinter/toolkit: four lines both families
 // had written identically. Re-exported so nothing that imports it has to move.
@@ -85,16 +86,33 @@ const isIdSorted = (items: IdItem[]): boolean => items.every((x, i) => i === 0 |
  *  answer and stamping would only add noise to the file. Never mutates the
  *  input. */
 export function canonicalCollections<T>(value: T): T {
-  if (Array.isArray(value)) return value.map((x) => canonicalCollections(x)) as unknown as T;
+  return collections(value, true);
+}
+
+/**
+ * The keys of a SHARD (its top level) whose contents are not ours to reorder.
+ * `unresolved`, in every shard: the merge's record of a clash, holding each side's
+ * value as it was. `entries`, in an extension shard: the extension's data, whose
+ * lists are in the extension's order and whose keys are the extension's, so a
+ * field an extension happens to call `cards` or `tags` is never id-sorted.
+ */
+const opaqueKeys = (obj: Record<string, unknown>): ReadonlySet<string> =>
+  (obj["schema"] === EXTENSION_SCHEMA ? new Set([UNRESOLVED_KEY, "entries"]) : new Set([UNRESOLVED_KEY]));
+
+function collections<T>(value: T, top: boolean): T {
+  if (Array.isArray(value)) return value.map((x) => collections(x, false)) as unknown as T;
   if (typeof value !== "object" || value === null) return value;
   const obj = value as Record<string, unknown>;
+  const opaque = top ? opaqueKeys(obj) : undefined;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
-    if (ID_SORTED_KEYS.has(k) && isIdList(v) && !isIdSorted(v)) {
+    if (opaque?.has(k)) {
+      out[k] = v;
+    } else if (ID_SORTED_KEYS.has(k) && isIdList(v) && !isIdSorted(v)) {
       const stamped = v.map((x, i) => (x.order === undefined ? { ...x, order: i } : x));
-      out[k] = [...stamped].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map((x) => canonicalCollections(x));
+      out[k] = [...stamped].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map((x) => collections(x, false));
     } else {
-      out[k] = canonicalCollections(v);
+      out[k] = collections(v, false);
     }
   }
   return out as T;

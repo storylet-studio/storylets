@@ -11,6 +11,11 @@
 //   - per-box map groups are collapsed into the one PROJECT MAP at the root,
 //     or refused with a sentence per difference (design/project-map-contract.md
 //     4.2; project-map-migration.ts)
+//   - a Storylet extension whose manifest has moved past the project's pin is
+//     taken: its renamed stages renamed in its data, and the pin moved, in one
+//     step (extensions.ts)
+//
+// An extension's manifest is never formatted: it is the extension's own JSON.
 //
 // Putting them here is what lets the compiler's warnings and errors name a
 // single command instead of describing a hand edit, which nobody should ever do
@@ -21,6 +26,8 @@ import { join } from "node:path";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
 import type { Issue } from "@storylet-studio/compiler";
 import type { LoadedProject } from "./load.js";
+import { MANIFEST_EXTENSION } from "@storylet-studio/model";
+import { planExtensionUpgrades } from "./extensions.js";
 import { planMapMigration } from "./map.js";
 import { planProjectMapMigration } from "./project-map-migration.js";
 import type { PlannedMove } from "./project-map-migration.js";
@@ -77,9 +84,16 @@ export function runFormat(loaded: LoadedProject): FormatResult {
     }
   }
   const dropped = new Set(projectMap?.removed ?? []);
+  // Extensions taken at a new version. Only on a run whose project-map
+  // migration wrote nothing, so the two never write one project shard; the
+  // next format takes them.
+  const upgrades = loaded.source !== undefined && (projectMap?.writes.size ?? 0) === 0
+    ? planExtensionUpgrades(loaded.dir, loaded.source) : undefined;
+  for (const [path, content] of upgrades?.writes ?? []) migrated.set(path, content);
 
   for (const file of loaded.files) {
     const path = join(loaded.dir, file.path);
+    if (file.path.endsWith(MANIFEST_EXTENSION)) continue;
     if (dropped.has(path)) { removed.push(path); continue; }
     const moved = migrated.get(path);
     if (moved !== undefined) {
@@ -108,7 +122,9 @@ export function runFormat(loaded: LoadedProject): FormatResult {
   // project map, the project's own notes.
   for (const [path, content] of migrated) changed.push({ path, content });
 
-  return { changed, removed, moved: projectMap?.moved ?? [], migrated: projectMap?.report ?? [], issues };
+  return {
+    changed, removed, moved: projectMap?.moved ?? [], migrated: [...(projectMap?.report ?? []), ...(upgrades?.report ?? [])], issues,
+  };
 }
 
 /** The same shard with nothing in it but its schema: what "this file now says

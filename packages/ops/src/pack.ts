@@ -16,12 +16,12 @@
 // `unpack` is the inverse, and `unpack --merge` is the return leg.
 // ---------------------------------------------------------------------------
 
-import { CONFLICT_SIDECAR_EXTENSION } from "./merge.js";
+import { CONFLICT_SIDECAR_EXTENSION, unresolvedMarkIssues } from "./merge.js";
 import JSZip from "jszip";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { parseSource, walkProjectFiles } from "@storylet-studio/compiler";
-import { SHARD_EXTENSIONS } from "@storylet-studio/model";
+import { SHARD_EXTENSIONS, SOURCE_EXTENSIONS } from "@storylet-studio/model";
 import type { ProjectShard } from "@storylet-studio/model";
 import { ASSETS_DIR, assetUse } from "./assets.js";
 import { findProjectDir, loadProject } from "./load.js";
@@ -67,8 +67,9 @@ export interface PackOptions {
   assets?: boolean;
 }
 
-/** Every shard extension a pack carries. */
-const SHARD_EXTS = Object.values(SHARD_EXTENSIONS);
+/** Every file a pack carries as source: the shards, and the extensions' manifests
+ *  (a project compiles from both, so a delivery without its manifests would not). */
+const SHARD_EXTS = SOURCE_EXTENSIONS;
 
 // A fixed timestamp keeps the zip byte-reproducible: re-packing unchanged
 // source yields an identical file, so a pack can be diffed and hashed.
@@ -125,6 +126,14 @@ export async function runPack(project: string | LoadedProject, opts: PackOptions
     throw new PackError(
       `unresolved merge in this project, so it cannot be packed:\n  ${sidecars.join("\n  ")}\n`
       + "Resolve the conflicts and delete the .storyletconflict sidecars first.");
+  }
+  // The same rule for the mark a merge writes into a shard, which is the record
+  // that survives where a sidecar does not (it is never committed).
+  const marked = [...new Set(unresolvedMarkIssues(loaded.files).map((i) => i.path))];
+  if (marked.length > 0) {
+    throw new PackError(
+      `unresolved merge in this project, so it cannot be packed:\n  ${marked.join("\n  ")}\n`
+      + "Resolve the clashes each shard names under \"unresolved\", then remove the entries.");
   }
   const files = walked.sort((a, b) => a.rel.localeCompare(b.rel));
 

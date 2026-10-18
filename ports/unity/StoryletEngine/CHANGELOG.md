@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Storylet extension values reach the game.** A bundle's `extensions` section and every node's `extensions`
+  are read, raw, as neutral JSON trees, and never interpreted. `DealtCard.Extensions`, `OutcomeView.Extensions`
+  and `BoxView.Extensions` carry a node's values by extension id (null when it has none).
+  `FieldHelpers.ExtensionDecls(bundle, extension, kind)` gives an extension's declarations for a node kind, every
+  default resolved, and the new `FieldValue` / `TryFieldValue` / `EffectiveFields` overloads fill in what a node
+  leaves out. `FieldHelpers.ExtensionsOf(bundle, kind, address)` reads the values of a node no view carries.
+
 ## [0.12.0] - 2026-10-18
 
 ### Added

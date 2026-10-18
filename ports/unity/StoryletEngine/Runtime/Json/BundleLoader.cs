@@ -148,6 +148,9 @@ namespace StoryletStudio.StoryletEngine
                 foreach (var token in external) bundle.ExternalScopes.Add(token.Value<string>());
             }
             if (b["map"] is JObject map) bundle.Map = ParseProjectMap(map);
+            // Storylet extensions: carried for the host, never read by the
+            // engine. Absent leaves the bundle exactly as it was.
+            if (b["extensions"] is JObject extensions) bundle.Extensions = ParseBundleExtensions(extensions);
             return bundle;
         }
 
@@ -259,6 +262,7 @@ namespace StoryletStudio.StoryletEngine
             {
                 foreach (var h in hands) box.Hands.Add(ParseHand((JObject)h));
             }
+            box.Extensions = ParseNodeExtensions(o["extensions"]);
             return box;
         }
 
@@ -271,6 +275,7 @@ namespace StoryletStudio.StoryletEngine
                 Purpose = o.Value<string>("purpose"),
                 BoundBy = o.Value<string>("boundBy"),
                 Required = o.Value<bool?>("required") ?? false,
+                Extensions = ParseNodeExtensions(o["extensions"]),
             };
             if (o["tags"] is JArray tags)
             {
@@ -282,6 +287,7 @@ namespace StoryletStudio.StoryletEngine
                         Id = tag.Value<string>("id"),
                         GameId = tag.Value<string>("gameId"),
                         Properties = tag["properties"] is JArray tagProps ? ParsePropertyDecls(tagProps) : null,
+                        Extensions = ParseNodeExtensions(tag["extensions"]),
                     });
                 }
             }
@@ -299,6 +305,7 @@ namespace StoryletStudio.StoryletEngine
                 Condition = o["condition"] != null ? StoryletJson.ToExpression(o["condition"]) : null,
                 Shared = o["shared"] != null ? o.Value<bool>("shared") : (bool?)null,
                 Durable = o["durable"] != null ? o.Value<bool>("durable") : (bool?)null,
+                Extensions = ParseNodeExtensions(o["extensions"]),
             };
             if (o["properties"] is JArray props) deck.Properties = ParsePropertyDecls(props);
             if (o["cards"] is JArray cards)
@@ -358,6 +365,7 @@ namespace StoryletStudio.StoryletEngine
             {
                 foreach (var outcome in outcomes) card.Outcomes.Add(ParseOutcome((JObject)outcome));
             }
+            card.Extensions = ParseNodeExtensions(o["extensions"]);
             return card;
         }
 
@@ -380,6 +388,7 @@ namespace StoryletStudio.StoryletEngine
                 outcome.Fields = new OrderedMap<string, ExprValue>();
                 foreach (var pair in outcomeFields) outcome.Fields.Set(pair.Key, StoryletJson.ToValue(pair.Value));
             }
+            outcome.Extensions = ParseNodeExtensions(o["extensions"]);
             return outcome;
         }
 
@@ -401,6 +410,7 @@ namespace StoryletStudio.StoryletEngine
                 foreach (var c in chooses) template.Chooses.Add(c.Value<string>());
             }
             if (o["properties"] is JArray props) template.Properties = ParsePropertyDecls(props);
+            template.Extensions = ParseNodeExtensions(o["extensions"]);
             return template;
         }
 
@@ -426,6 +436,7 @@ namespace StoryletStudio.StoryletEngine
             }
             if (o["slots"] != null) hand.Slots = o.Value<double>("slots");
             if (o["properties"] is JArray props) hand.Properties = ParsePropertyDecls(props);
+            hand.Extensions = ParseNodeExtensions(o["extensions"]);
             return hand;
         }
 
@@ -470,6 +481,75 @@ namespace StoryletStudio.StoryletEngine
                 Stages = ParseStringList(o["stages"]),
                 Purpose = o.Value<string>("purpose"),
             };
+        }
+
+        /// <summary>The bundle's extensions section: each extension's version,
+        /// its compiled declarations by node kind and the project node's values,
+        /// in document order.</summary>
+        private static OrderedMap<string, BundleExtension> ParseBundleExtensions(JObject o)
+        {
+            var extensions = new OrderedMap<string, BundleExtension>();
+            foreach (var pair in o)
+            {
+                if (!(pair.Value is JObject e)) throw new StoryletError($"extension {pair.Key} is not an object");
+                var ext = new BundleExtension { Version = e.Value<string>("version") };
+                if (e["fields"] is JObject fields)
+                {
+                    foreach (var kind in fields)
+                    {
+                        var decls = new List<ExtensionFieldDecl>();
+                        if (kind.Value is JArray list) foreach (var d in list) decls.Add(ParseExtensionFieldDecl((JObject)d));
+                        ext.Fields.Set(kind.Key, decls);
+                    }
+                }
+                if (e["project"] is JObject project) ext.Project = (OrderedMap<string, object>)StoryletJson.ToJsonTree(project);
+                extensions.Set(pair.Key, ext);
+            }
+            return extensions;
+        }
+
+        /// <summary>One compiled extension field declaration. The default is any
+        /// JSON, held as the neutral tree; an element declaration (`of`) may
+        /// leave it out, which HasDefault records.</summary>
+        private static ExtensionFieldDecl ParseExtensionFieldDecl(JObject o)
+        {
+            var decl = new ExtensionFieldDecl
+            {
+                Name = o.Value<string>("name"),
+                Type = o.Value<string>("type"),
+                HasDefault = o.ContainsKey("default"),
+                Default = o["default"] != null ? StoryletJson.ToJsonTree(o["default"]) : null,
+                Values = ParseStringList(o["values"]),
+                Stages = ParseStringList(o["stages"]),
+                To = o.Value<string>("to"),
+                IdField = o.Value<string>("id"),
+                Min = o["min"] != null ? o.Value<double>("min") : (double?)null,
+                Max = o["max"] != null ? o.Value<double>("max") : (double?)null,
+                Required = o["required"] != null ? o.Value<bool>("required") : (bool?)null,
+            };
+            if (o["fields"] is JArray fields)
+            {
+                decl.Fields = new List<ExtensionFieldDecl>();
+                foreach (var f in fields) decl.Fields.Add(ParseExtensionFieldDecl((JObject)f));
+            }
+            if (o["key"] is JObject key) decl.Key = new ExtensionKeyDecl { Type = key.Value<string>("type"), To = key.Value<string>("to") };
+            if (o["of"] is JObject of) decl.Of = ParseExtensionFieldDecl(of);
+            return decl;
+        }
+
+        /// <summary>A node's extension values (extension id -> field -> value),
+        /// raw as authored, as the neutral JSON tree. Null when the node has
+        /// none.</summary>
+        private static OrderedMap<string, OrderedMap<string, object>> ParseNodeExtensions(JToken token)
+        {
+            if (!(token is JObject o)) return null;
+            var values = new OrderedMap<string, OrderedMap<string, object>>();
+            foreach (var pair in o)
+            {
+                if (!(pair.Value is JObject fields)) throw new StoryletError($"extension values for {pair.Key} are not an object");
+                values.Set(pair.Key, (OrderedMap<string, object>)StoryletJson.ToJsonTree(fields));
+            }
+            return values;
         }
 
         private static List<string> ParseStringList(JToken token)

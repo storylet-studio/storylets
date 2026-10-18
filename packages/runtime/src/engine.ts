@@ -107,7 +107,7 @@ import {
 } from "@storylet-studio/model";
 import type {
   Box, Bundle, BundleContent, Card, Deck, Expression, FlowSave, Hand, HandTemplate,
-  LoadEviction, LoadProperty, LoadReport, PlayRecord, PropertyBag, PropertyDecl, PropsPartition,
+  LoadEviction, LoadProperty, LoadReport, NodeExtensions, PlayRecord, PropertyBag, PropertyDecl, PropsPartition,
   SaveEnvelope, SaveEnvelopeV1, Tag, TagGroup,
 } from "@storylet-studio/model";
 import { SAVE_SCHEMA, SAVE_SCHEMA_V1 } from "@storylet-studio/model";
@@ -247,6 +247,11 @@ export interface DealtCard {
   title?: string;
   purpose?: string;
   fields?: Record<string, ScalarValue>;
+  /** The card's Storylet extension values, by extension id, exactly as the
+   *  bundle carries them: raw and sparse, any JSON, never read by the engine.
+   *  Absent when it has none. `effectiveFields(extensionDecls(...), ...)`
+   *  fills in defaults. */
+  extensions?: NodeExtensions;
 }
 
 export interface OutcomeView {
@@ -257,6 +262,9 @@ export interface OutcomeView {
   /** The outcome's fields, exactly as the bundle carries them: game data
    *  declared by the box's `outcomeFields`, never read by the engine. */
   fields?: Record<string, ScalarValue>;
+  /** The outcome's Storylet extension values, by extension id, raw, as a
+   *  card's are. Absent when it has none. */
+  extensions?: NodeExtensions;
   /** Evaluated against CURRENT state at the moment of the ask. */
   available: boolean;
 }
@@ -530,6 +538,8 @@ export interface BoxView {
   gameId: string;
   title?: string;
   turn: number;
+  /** The box's Storylet extension values, by extension id, raw. Absent when it has none. */
+  extensions?: NodeExtensions;
 }
 
 /** The sharing default per scope (design/flows.md, the old system's rule):
@@ -2915,6 +2925,7 @@ export class Flow {
       ...(card.title !== undefined ? { title: card.title } : {}),
       ...(card.purpose !== undefined ? { purpose: card.purpose } : {}),
       ...(card.fields !== undefined ? { fields: card.fields } : {}),
+      ...(card.extensions !== undefined ? { extensions: card.extensions } : {}),
     };
   }
 
@@ -3135,6 +3146,7 @@ export class Flow {
       ...(o.title !== undefined ? { title: o.title } : {}),
       ...(o.purpose !== undefined ? { purpose: o.purpose } : {}),
       ...(o.fields !== undefined ? { fields: o.fields } : {}),
+      ...(o.extensions !== undefined ? { extensions: o.extensions } : {}),
       available: this.passes(o.condition, ctx),
     }));
   }
@@ -3347,6 +3359,7 @@ export class Flow {
       gameId: effectiveGameId(b),
       ...(b.title !== undefined ? { title: b.title } : {}),
       turn: this.turnCounts.get(b.id) ?? 0,
+      ...(b.extensions !== undefined ? { extensions: b.extensions } : {}),
     }));
   }
 

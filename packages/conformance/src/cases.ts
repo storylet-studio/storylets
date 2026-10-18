@@ -776,6 +776,149 @@ export const fixtures: Fixtures = {
         } },
       ] },
 
+    // --- Storylet extensions (patterkit proposals/patter-storylet-extensions.md) --
+    //
+    // An extension's values are compiled inline on each node, under
+    // `extensions` keyed by extension id, and delivered wherever the node's
+    // fields are: on the dealt card, the outcome, the box view, and for the
+    // nodes no view carries, read off the bundle by `extensionsOf`. The engine
+    // never interprets them, so the whole contract is that they arrive exactly
+    // as the bundle wrote them, in every type (structured ones included, any
+    // JSON, compared deeply), and that the defaults helper fills in a field a
+    // node leaves out from the bundle's resolved declaration. "probe" is the
+    // internal test extension (never published); "other" shows two extensions
+    // on one node stay apart.
+    { name: "extension values reach the game raw on every node, in every type, and the helper fills in defaults",
+      extensions: {
+        other: { version: "0.1.0", fields: { card: [{ name: "flag", type: "boolean", default: false }] } },
+        probe: {
+          version: "1.0.0",
+          fields: {
+            box: [{ name: "theme", type: "text", default: "" }],
+            card: [
+              { name: "note", type: "text", default: "" },
+              { name: "body", type: "multiline", default: "" },
+              { name: "weight", type: "number", min: 0, max: 10, default: 1 },
+              { name: "loud", type: "boolean", default: false },
+              { name: "tone", type: "enum", values: ["calm", "tense"], default: "calm" },
+              { name: "marks", type: "flags", values: ["night", "rain"], default: [] },
+              { name: "act", type: "quality", stages: ["setup", "turn", "close"], default: "setup" },
+              { name: "next", type: "reference", to: "card", default: "" },
+              { name: "cue", type: "record", default: { gain: 0, sound: "" },
+                fields: [{ name: "sound", type: "text", default: "" }, { name: "gain", type: "number", default: 0 }] },
+              { name: "perf", type: "map", key: { type: "reference", to: "tag" }, of: { type: "enum", values: ["smile", "frown"] }, default: {} },
+              { name: "beats", type: "list", id: "id", default: [],
+                of: { type: "record", fields: [{ name: "id", type: "text", default: "" }, { name: "at", type: "number", default: 0 }] } },
+              { name: "words", type: "list", of: { type: "text" }, default: [] },
+            ],
+            deck: [{ name: "pile", type: "number", default: 0 }],
+            hand: [{ name: "seat", type: "enum", values: ["north", "south"], default: "south" }, { name: "lit", type: "boolean", default: true }],
+            outcome: [{ name: "line", type: "text", default: "" }],
+            project: [{ name: "studio", type: "text", default: "" }],
+            tag: [{ name: "colour", type: "text", default: "grey" }],
+            tagGroup: [{ name: "shown", type: "boolean", default: false }],
+          },
+          project: { studio: "Wildwinter" },
+        },
+      },
+      nodeExtensions: {
+        b_x: { probe: { theme: "harbour" } },
+        d_zone: { probe: { shown: true } },
+        v_docks: { probe: { colour: "tar" } },
+        k_main: { probe: { pile: 2 } },
+        h_q: { probe: { seat: "north" } },
+        c_full: {
+          other: { flag: true },
+          probe: {
+            note: "lights down", body: "First line.\nSecond line.", weight: 4, loud: true, tone: "tense",
+            marks: ["night", "rain"], act: "turn", next: "c_default", cue: { sound: "bell", gain: 0.5 },
+            perf: { v_docks: "frown", v_market: "smile" },
+            beats: [{ id: "b2", at: 3 }, { id: "b1", at: 1 }], words: ["salt", "rope"],
+          },
+        },
+        c_default: { probe: { weight: 1, act: "setup" } },
+        o_take: { probe: { line: "Taken." } },
+      },
+      cards: [
+        { id: "c_full", priority: 3, outcomes: [{ id: "o_take", order: 0 }, { id: "o_leave", order: 1 }] },
+        { id: "c_default", priority: 2 },
+        { id: "c_bare", priority: 1 },
+      ],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_full", "c_default", "c_bare"] } },
+        { op: "assertCardExtensions", from: "h_q", expect: {
+          c_full: {
+            other: { flag: true },
+            probe: {
+              act: "turn", beats: [{ at: 3, id: "b2" }, { at: 1, id: "b1" }], body: "First line.\nSecond line.",
+              cue: { gain: 0.5, sound: "bell" }, loud: true, marks: ["night", "rain"], next: "c_default", note: "lights down",
+              perf: { v_docks: "frown", v_market: "smile" }, tone: "tense", weight: 4, words: ["salt", "rope"],
+            },
+          },
+          c_default: { probe: { act: "setup", weight: 1 } },
+          c_bare: {},
+        } },
+        // Every declared field, from its default where the card sets none: a
+        // structured default arrives whole, as the bundle resolved it.
+        { op: "assertCardExtensions", from: "h_q", effective: { extension: "probe" }, expect: {
+          c_full: {
+            act: "turn", beats: [{ at: 3, id: "b2" }, { at: 1, id: "b1" }], body: "First line.\nSecond line.",
+            cue: { gain: 0.5, sound: "bell" }, loud: true, marks: ["night", "rain"], next: "c_default", note: "lights down",
+            perf: { v_docks: "frown", v_market: "smile" }, tone: "tense", weight: 4, words: ["salt", "rope"],
+          },
+          c_default: {
+            act: "setup", beats: [], body: "", cue: { gain: 0, sound: "" }, loud: false, marks: [], next: "", note: "",
+            perf: {}, tone: "calm", weight: 1, words: [],
+          },
+          c_bare: {
+            act: "setup", beats: [], body: "", cue: { gain: 0, sound: "" }, loud: false, marks: [], next: "", note: "",
+            perf: {}, tone: "calm", weight: 1, words: [],
+          },
+        } },
+        { op: "assertCardExtensions", from: "h_q", effective: { extension: "other" }, expect: {
+          c_full: { flag: true }, c_default: { flag: false }, c_bare: { flag: false },
+        } },
+        { op: "assertOutcomeExtensions", card: "c_full", from: "h_q", expect: {
+          take: { probe: { line: "Taken." } },
+          leave: {},
+        } },
+        { op: "assertBoxExtensions", expect: { box: { probe: { theme: "harbour" } } } },
+        { op: "assertNodeExtensions", kind: "project", expect: { probe: { studio: "Wildwinter" } } },
+        { op: "assertNodeExtensions", kind: "deck", address: "main", expect: { probe: { pile: 2 } } },
+        { op: "assertNodeExtensions", kind: "hand", address: "q", expect: { probe: { seat: "north" } } },
+        { op: "assertNodeExtensions", kind: "hand", address: "q", effective: { extension: "probe" }, expect: { lit: true, seat: "north" } },
+        { op: "assertNodeExtensions", kind: "tagGroup", address: "box/zone", expect: { probe: { shown: true } } },
+        { op: "assertNodeExtensions", kind: "tag", address: "box/docks", expect: { probe: { colour: "tar" } } },
+        { op: "assertNodeExtensions", kind: "tag", address: "box/market", expect: {} },
+        { op: "assertNodeExtensions", kind: "tag", address: "box/market", effective: { extension: "probe" }, expect: { colour: "grey" } },
+        { op: "assertNodeExtensions", kind: "card", address: "default", expect: { probe: { act: "setup", weight: 1 } } },
+        { op: "assertNodeExtensions", kind: "outcome", address: "full/take", expect: { probe: { line: "Taken." } } },
+        // Values ride along: what is dealt, and in what order, is unchanged.
+        { op: "assertOutcomeOrder", card: "c_full", from: "h_q", expect: ["take", "leave"] },
+      ] },
+
+    { name: "a bundle with no extensions hands back none, and the project map's nodes take them by bare name",
+      projectMap: true,
+      uses: true,
+      extensions: { probe: { version: "1.0.0", fields: { tag: [{ name: "colour", type: "text", default: "grey" }] } } },
+      nodeExtensions: { v_quay: { probe: { colour: "slate" } } },
+      cards: [{ id: "c_one" }],
+      hands: [{ id: "h_q", rule: {} }],
+      script: [
+        { op: "deal", hands: ["h_q"], expectBoard: { h_q: ["c_one"] } },
+        { op: "assertCardExtensions", from: "h_q", expect: { c_one: {} } },
+        // No declarations for a card: the helper has nothing to fill in.
+        { op: "assertCardExtensions", from: "h_q", effective: { extension: "probe" }, expect: { c_one: {} } },
+        { op: "assertBoxExtensions", expect: { box: {} } },
+        { op: "assertNodeExtensions", kind: "project", expect: {} },
+        { op: "assertNodeExtensions", kind: "tag", address: "quay", expect: { probe: { colour: "slate" } } },
+        { op: "assertNodeExtensions", kind: "tag", address: "hill", effective: { extension: "probe" }, expect: { colour: "grey" } },
+        { op: "assertNodeExtensions", kind: "tagGroup", address: "district", expect: {} },
+        // An extension the bundle does not have: no declarations, nothing filled.
+        { op: "assertNodeExtensions", kind: "tag", address: "quay", effective: { extension: "absent" }, expect: {} },
+      ] },
+
     // --- quality: the ordered story-stage type (design/quality.md) -------------
     //
     // Stage names chosen to sort WRONGLY as strings throughout (alphabetically

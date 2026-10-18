@@ -11,7 +11,7 @@ import { deserialiseAst, evaluate } from "@wildwinter/expr";
 import type { EvalContext, ScalarValue } from "@wildwinter/expr";
 import { matchedSpecificity } from "@wildwinter/expr-specificity";
 import { storyletsDialect } from "@storylet-studio/dialect";
-import { Engine, Flow, effectiveFields, fieldDecls, makePrng } from "@storylet-studio/runtime";
+import { Engine, Flow, effectiveFields, extensionDecls, extensionsOf, fieldDecls, makePrng } from "@storylet-studio/runtime";
 import type { DurableSave } from "@storylet-studio/runtime";
 import { effectiveGameId } from "@storylet-studio/model";
 import type { Bundle, FlowSave, LoadProperty, LoadReport } from "@storylet-studio/model";
@@ -29,6 +29,14 @@ const conditionPasses = (v: ScalarValue): boolean =>
 
 const show = (v: unknown): string => JSON.stringify(v);
 const same = (a: unknown, b: unknown): boolean => show(a) === show(b);
+/** JSON with every object's keys sorted: extension values are any JSON, and a
+ *  runner compares them deeply, whatever order a map's keys arrive in. */
+const sorted = (v: unknown): unknown =>
+  (Array.isArray(v) ? v.map(sorted)
+    : v !== null && typeof v === "object"
+      ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sorted((v as Record<string, unknown>)[k])])) : v);
+const sameJson = (a: unknown, b: unknown): boolean => show(sorted(a)) === show(sorted(b));
+const showJson = (v: unknown): string => show(sorted(v));
 
 /** Evaluate `ast` against `scopes` (PRNG seeded when `seed` is present). */
 export function runExpressionCase(c: ExpressionCase): { value?: ScalarValue; error?: string } {
@@ -496,6 +504,44 @@ export function runScriptedCase(c: ScriptedCase): string[] {
             : card.fields ?? {};
           if (!same(actual, expected)) failures.push(`${at}: ${cardId} expected ${show(expected)}, got ${show(actual)}`);
         }
+        break;
+      }
+      case "assertCardExtensions": {
+        const names = handGameIds(c.bundle);
+        const board = flowOf(op.flow).board()[names.get(op.from) ?? op.from] ?? [];
+        for (const [cardId, expected] of Object.entries(op.expect)) {
+          const card = board.find((v) => v.id === cardId);
+          if (!card) {
+            failures.push(`${at}: ${cardId} is not on board[${op.from}]`);
+            continue;
+          }
+          const actual = op.effective !== undefined
+            ? effectiveFields(extensionDecls(c.bundle, op.effective.extension, "card"), card.extensions?.[op.effective.extension])
+            : card.extensions ?? {};
+          if (!sameJson(actual, expected)) failures.push(`${at}: ${cardId} expected ${showJson(expected)}, got ${showJson(actual)}`);
+        }
+        break;
+      }
+      case "assertOutcomeExtensions": {
+        const views = flowOf(op.flow).outcomes(op.card, op.from);
+        const actual = Object.fromEntries(Object.keys(op.expect).map((g) =>
+          [g, views.find((v) => v.gameId === g)?.extensions ?? {}]));
+        if (!sameJson(actual, op.expect)) failures.push(`${at}: expected ${showJson(op.expect)}, got ${showJson(actual)}`);
+        break;
+      }
+      case "assertBoxExtensions": {
+        const views = flowOf(undefined).listBoxes();
+        const actual = Object.fromEntries(Object.keys(op.expect).map((g) =>
+          [g, views.find((v) => v.gameId === g)?.extensions ?? {}]));
+        if (!sameJson(actual, op.expect)) failures.push(`${at}: expected ${showJson(op.expect)}, got ${showJson(actual)}`);
+        break;
+      }
+      case "assertNodeExtensions": {
+        const raw = extensionsOf(c.bundle, op.kind, op.address);
+        const actual = op.effective !== undefined
+          ? effectiveFields(extensionDecls(c.bundle, op.effective.extension, op.kind), raw[op.effective.extension])
+          : raw;
+        if (!sameJson(actual, op.expect)) failures.push(`${at}: expected ${showJson(op.expect)}, got ${showJson(actual)}`);
         break;
       }
       case "assertState": {

@@ -1,0 +1,40 @@
+{
+  schema: "storylets/deck@0",
+  deck: {
+    gameId: "rumours",
+    id: "k_rumours",
+    properties: [],
+  },
+  cards: [
+    {
+      fields: {
+        mood: "tense",
+      },
+      gameId: "bell",
+      id: "c_bell",
+      outcomes: [
+        {
+          changes: {},
+          gameId: "ring",
+          id: "o_ring",
+          order: 0,
+        },
+        {
+          changes: {},
+          gameId: "wait",
+          id: "o_wait",
+          order: 1,
+        },
+      ],
+      priority: 2,
+      redraw: "always",
+    },
+    {
+      gameId: "tide",
+      id: "c_tide",
+      outcomes: [],
+      priority: 1,
+      redraw: "always",
+    },
+  ],
+}

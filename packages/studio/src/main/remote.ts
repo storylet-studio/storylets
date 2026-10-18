@@ -39,8 +39,8 @@ import type { Duplex } from "node:stream";
 import tls from "node:tls";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { canonicalStringify, parseSource, walkProjectFiles } from "@storylet-studio/compiler";
-import { SHARD_EXTENSIONS } from "@storylet-studio/model";
-import { normalForm, planShardMerge, runPack, runUnpack } from "@storylet-studio/ops";
+import { SHARD_EXTENSIONS, SOURCE_EXTENSIONS } from "@storylet-studio/model";
+import { normalForm, planShardMerge, projectManifests, runPack, runUnpack } from "@storylet-studio/ops";
 
 /** The record beside the project's shards. Named for the file a pack from a
  *  server carries beside its manifest, because that file IS this record: a
@@ -126,9 +126,9 @@ export function writeRemote(dir: string, remote: RemoteRecord): void {
 
 // --- what the server last sent, and what differs from it ---------------------------
 
-/** Every shard extension there is: what a pack carries, and what the base is
- *  a hash of, one per file. */
-const SHARD_EXTS: readonly string[] = Object.values(SHARD_EXTENSIONS);
+/** Every source file there is, the shards and the extensions' manifests: what a
+ *  pack carries, and what the base is a hash of, one per file. */
+const SHARD_EXTS: readonly string[] = SOURCE_EXTENSIONS;
 
 /**
  * The revision last pulled, one hash per shard.
@@ -309,6 +309,11 @@ export function unpushedShards(dir: string): number {
 const AUTHOR_SHARDS: readonly string[] = [
   SHARD_EXTENSIONS.deck, SHARD_EXTENSIONS.notes, SHARD_EXTENSIONS.view,
 ];
+// An extension's data shard is NOT here: one per box holds a card's values
+// beside the box's own, so the gate can take it only as one class, and it is
+// the designer's for now (ruled 2026-10-18). An extension that needs writers to
+// fill in card values through a server raises the question when one exists.
+// Its manifest is the designer's too: taking an extension is a project decision.
 
 /** Is this path an installation contract? The one shard neither side edits and
  *  the venue writes whole, which is why a pull takes it rather than merging it
@@ -1003,6 +1008,7 @@ export async function planPull(
       ours: existsSync(path) ? readFileSync(path, "utf8") : undefined,
       replace: isContractShard(name),
       sides: { theirs: "pulled", base: "base" },
+      manifest: projectManifests(dir),
     });
     if (step.outcome === "added") plan.added++;
     else if (step.outcome === "replaced") plan.replaced++;

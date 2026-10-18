@@ -7,6 +7,8 @@
 
 #include "StoryletTypes.h"
 #include "Storylets/Kernel.h"   // StoryletValue and the PropertyTypes vocabulary
+#include "Storylets/Bundle.h"   // NodeExtensions
+#include "Storylets/JsonValue.h"
 
 #include <string>
 #include <vector>
@@ -98,4 +100,37 @@ inline storylets::StoryletValue StoryletValueFromUe(const FStoryletValue& V)
 			return storylets::StoryletValue::Flags(std::move(Flags));
 		}
 	}
+}
+
+/** One extension's values on a node, each as strict JSON text. */
+inline TArray<FStoryletExtensionEntry> StoryletExtensionEntriesToUe(
+	const storylets::OrderedMap<std::string, storylets::JsonValue>& Values)
+{
+	using StoryletConvert::Ue;
+	TArray<FStoryletExtensionEntry> Out;
+	Out.Reserve(static_cast<int32>(Values.size()));
+	for (const auto& Pair : Values)
+	{
+		FStoryletExtensionEntry Entry;
+		Entry.Name = Ue(Pair.first);
+		Entry.Json = Ue(storylets::JsonText(Pair.second));
+		Out.Add(MoveTemp(Entry));
+	}
+	return Out;
+}
+
+/** A node's extension values, one entry per extension, in bundle order. */
+inline TArray<FStoryletExtensionValues> StoryletExtensionsToUe(const storylets::NodeExtensions& Extensions)
+{
+	using StoryletConvert::Ue;
+	TArray<FStoryletExtensionValues> Out;
+	Out.Reserve(static_cast<int32>(Extensions.size()));
+	for (const auto& Pair : Extensions)
+	{
+		FStoryletExtensionValues Values;
+		Values.Extension = Ue(Pair.first);
+		Values.Values = StoryletExtensionEntriesToUe(Pair.second);
+		Out.Add(MoveTemp(Values));
+	}
+	return Out;
 }

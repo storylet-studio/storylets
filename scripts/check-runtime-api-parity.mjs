@@ -663,9 +663,11 @@ const SHAPES = {
 const IN_PLACE = "swapped IN PLACE: the UStoryletEngine the caller holds stays valid with the new bundle under it (GetBundle reads it), so there is nothing to hand back";
 
 const FIELDS = [
-  ...["id", "gameId", "title", "purpose", "fields"].map((f) => ({ shape: "DealtCard", field: f })),
-  ...["id", "gameId", "title", "purpose", "fields", "available"].map((f) => ({ shape: "OutcomeView", field: f })),
-  ...["id", "gameId", "title", "turn"].map((f) => ({ shape: "BoxView", field: f })),
+  // `extensions`: a node's Storylet extension values, delivered where its fields are
+  // (patterkit design/proposals/patter-storylet-extensions.md, "At runtime").
+  ...["id", "gameId", "title", "purpose", "fields", "extensions"].map((f) => ({ shape: "DealtCard", field: f })),
+  ...["id", "gameId", "title", "purpose", "fields", "extensions", "available"].map((f) => ({ shape: "OutcomeView", field: f })),
+  ...["id", "gameId", "title", "turn", "extensions"].map((f) => ({ shape: "BoxView", field: f })),
 ].map((row) => ({
   ...row,
   // These three follow each language's naming exactly, so the spellings are

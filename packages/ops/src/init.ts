@@ -10,7 +10,8 @@
 import { basename, join, resolve } from "node:path";
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import {
-  BOX_SCHEMA, BUNDLE_EXTENSION, DECK_SCHEMA, HANDS_SCHEMA, MAP_SCHEMA, PLACE_GROUP, PROJECTMAP_SCHEMA, PROJECT_FOLDER_EXTENSION,
+  BOX_SCHEMA, BUNDLE_EXTENSION, DECK_SCHEMA, EXTENSIONS_DIR, HANDS_SCHEMA, MANIFEST_EXTENSION, MAP_SCHEMA, PLACE_GROUP, PROJECTMAP_SCHEMA,
+  PROJECT_FOLDER_EXTENSION,
   PROJECT_SCHEMA, SHARD_EXTENSIONS, SPATIAL, TAGS_SCHEMA,
 } from "@storylet-studio/model";
 import type { BoxShard, DeckShard, HandsShard, MapShard, ProjectMapShard, ProjectShard, PropertyDecl, TagGroup, TagsShard } from "@storylet-studio/model";
@@ -597,6 +598,10 @@ ${eachShard("merge=storylets")}
 # 'git config merge.ours.driver true' (see vcs-setup.md).
 ${pattern(BUNDLE_EXTENSION.slice(1))}text eol=lf merge=ours
 
+# An extension's manifest is the extension's own JSON, kept in the project so
+# every machine reads the same one, and never edited here: text, merged as text.
+${`${EXTENSIONS_DIR}/*${MANIFEST_EXTENSION}`.padEnd(PATTERN_WIDTH)}text eol=lf
+
 # Background images (an orientation aid on a map): bytes, so nothing should ever
 # try to diff, merge or normalise line endings in one. Plain git is fine for a
 # few MB of floor plan; if yours grow, git-lfs is the escape hatch and nothing
@@ -605,7 +610,9 @@ ${"assets/**".padEnd(PATTERN_WIDTH)}binary
 `;
 
 const GITIGNORE = `# Storylet Studio generated artifacts that are never source:
-# Unresolved merge sidecar (a lingering one is a validate error):
+# Unresolved merge sidecar (a lingering one is a validate error). The merge also
+# names its clashes in the shard itself, under "unresolved", which IS committed
+# with the file, so CI refuses an unresolved merge wherever it goes:
 *${CONFLICT_SIDECAR_EXTENSION}
 `;
 

@@ -18,6 +18,7 @@
 // are kept only for readability + corpus regeneration.
 // ---------------------------------------------------------------------------
 
+import type { BundleExtension, NodeExtensions } from "@storylet-studio/model";
 import type { AstNode, ScalarValue } from "@wildwinter/expr";
 import type { Bundle, FieldDecl, LoadReport, PropertyDecl, RedrawPolicy } from "@storylet-studio/model";
 
@@ -216,6 +217,27 @@ export type ScriptOp =
        *  default where the card sets none (patterkit
        *  design/family-parity-2026-10.md item 7). */
       effective?: { box: string } }
+  /** The EXTENSION values each named card (by id) carries on a hand's board,
+   *  exactly as the bundle wrote them: by extension id, raw and sparse, any
+   *  JSON, compared deeply. A card with none reads as `{}`. With `effective`,
+   *  one extension's values through the helpers instead, `effectiveFields(
+   *  extensionDecls(bundle, extension, "card"), card.extensions?.[extension])`:
+   *  every declared field, a default where the card sets none. */
+  | { op: "assertCardExtensions"; flow?: string; from: string; expect: Record<string, Record<string, unknown>>;
+      effective?: { extension: string } }
+  /** The extension values each named outcome (by gameId) hands back with
+   *  `outcomes()`, raw, as `assertCardExtensions`. None reads as `{}`. */
+  | { op: "assertOutcomeExtensions"; flow?: string; card: string; from: string; expect: Record<string, Record<string, unknown>> }
+  /** The extension values on each box `listBoxes()` returns, by box gameId. */
+  | { op: "assertBoxExtensions"; expect: Record<string, Record<string, unknown>> }
+  /** A node's extension values read off the bundle by the helper
+   *  `extensionsOf(bundle, kind, address)`: `project` (no address), `box`,
+   *  `deck`, `card` and `hand` by gameId, `handTemplate` as "box/template",
+   *  `outcome` as "card/outcome", `tagGroup` and `tag` as "box/name", or the
+   *  bare name for the project map's. With `effective`, one extension's values
+   *  through `effectiveFields(extensionDecls(...))` instead. */
+  | { op: "assertNodeExtensions"; kind: string; address?: string; expect: Record<string, unknown>;
+      effective?: { extension: string } }
   /** Paths: "turn.b_x", "story.gold", "value.docks.danger", "box.x.heat",
    *  "world.x", ... - read on the op's flow (the merged view). The owner
    *  segment is a gameId (4.4), box-qualified for a tag gameId two boxes
@@ -560,6 +582,13 @@ export interface BundleFixture {
   uses?: true;
   /** false drops the scaffold's `d_zone` from `b_x`. */
   scaffoldZone?: false;
+  /** The bundle's `extensions` section, written as a compiler writes it: each
+   *  extension's version, its compiled declarations by node kind (every default
+   *  present) and the project node's values. */
+  extensions?: Record<string, BundleExtension>;
+  /** Extension values by NODE ID (any kind: box, tag group, tag, deck, card,
+   *  outcome, hand template, hand), put on that node as `extensions`. */
+  nodeExtensions?: Record<string, NodeExtensions>;
 }
 
 export interface PeekFixture extends BundleFixture {

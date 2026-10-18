@@ -91,6 +91,50 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Fields")
 	bool GetFieldDecl(const FString& Box, const FString& Field, bool bOutcomeField, FStoryletFieldDecl& OutDecl) const;
 
+	/** One extension's values on a node with every field the extension
+	 *  declares for that node kind filled in from its default where the node
+	 *  sets none, then any value with no declaration, as it is (the extension
+	 *  counterpart of GetEffectiveCardFields). Kind is the node kind: card,
+	 *  outcome, box, deck, tagGroup, tag, handTemplate, hand or project.
+	 *  Extensions is the node's raw list, as a dealt card, an outcome, a box
+	 *  view or ExtensionsOf hands it over. An extension this bundle does not
+	 *  carry declares nothing. */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Extensions")
+	TArray<FStoryletExtensionEntry> GetEffectiveExtensionValues(const FString& Kind, const FString& Extension,
+		const TArray<FStoryletExtensionValues>& Extensions) const;
+
+	/** A node's extension values read off the bundle, raw, by the name a game
+	 *  already holds: project (no address); box, deck, card and hand by
+	 *  gameId; handTemplate as "box/template"; outcome as "card/outcome";
+	 *  tagGroup and tag as "box/name", or the bare name for the project map's.
+	 *  Empty when the node has none, the address names nothing or the kind is
+	 *  unknown. For the nodes no view carries (a deck, a hand, a tag). */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Extensions")
+	TArray<FStoryletExtensionValues> ExtensionsOf(const FString& Kind, const FString& Address) const;
+
+	/** The declaration of the field named Field that Extension declares for
+	 *  node kind Kind, in OutDecl (its default in DefaultJson, and in Default
+	 *  as well when it is a scalar). False when no such field is declared.
+	 *  Hand a quality field's to the Storylet stage functions to compare or
+	 *  step its stage. */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Extensions")
+	bool GetExtensionFieldDecl(const FString& Extension, const FString& Kind, const FString& Field,
+		FStoryletFieldDecl& OutDecl) const;
+
+	/** One extension field's value, as JSON text, in OutJson: the entry named
+	 *  Field under Extension in a node's list. False when the node sets none
+	 *  (pass the list through GetEffectiveExtensionValues first to see the
+	 *  default instead). */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Extensions")
+	static bool FindExtensionValue(const TArray<FStoryletExtensionValues>& Extensions, const FString& Extension,
+		const FString& Field, FString& OutJson);
+
+	/** An extension value's JSON text as a Storylet value, when it is one: a
+	 *  boolean, a number, a string, or a list of strings (as flags). False for
+	 *  a record, a map, any other list, null, or text that is not JSON. */
+	UFUNCTION(BlueprintPure, Category = "Storylet Engine|Extensions")
+	static bool ExtensionValueToScalar(const FString& Json, FStoryletValue& OutValue);
+
 	/** (Re)compile SourceJson into the cached storylets::Bundle. Sets or
 	 *  clears LoadError; returns false on failure (the raw JSON is kept
 	 *  either way). Called by the importer and PostLoad. */

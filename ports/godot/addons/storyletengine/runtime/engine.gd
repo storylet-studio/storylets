@@ -2268,7 +2268,9 @@ static func _put_durable(bag: StoryletPropertyBag, name: String, value) -> void:
 # default". These fill in the declared defaults when a host wants the whole
 # picture. Patter's game-data helpers by the same rule (patterkit
 # design/family-parity-2026-10.md item 7); every Storylet Engine runtime
-# carries the same four.
+# carries the same four. Storylet extension values read through the same two
+# fillers, given extension_decls; extensions_of reads the values of a node no
+# view carries (a deck, a hand, a tag).
 
 ## A box's card template, by its gameId (or id). Empty when the box declares
 ## none or is not in the bundle.
@@ -2304,6 +2306,108 @@ static func effective_fields(decls: Array, values: Dictionary) -> Dictionary:
 		if not out.has(k):
 			out[k] = values[k]
 	return out
+
+
+## One extension's declarations for a node kind ("card", "outcome", "box",
+## "deck", "tagGroup", "tag", "handTemplate", "hand", "project"), every default
+## resolved by the compiler. Empty when the bundle has no such extension or it
+## declares nothing for the kind. Extension values fill in through the SAME two
+## helpers above, given these (patterkit design/proposals/
+## patter-storylet-extensions.md, "At runtime").
+static func extension_decls(bundle: Dictionary, extension: String, kind: String) -> Array:
+	var exts = bundle.get("extensions")
+	if not (exts is Dictionary) or not (exts.get(extension) is Dictionary):
+		return []
+	var fields = exts[extension].get("fields")
+	if not (fields is Dictionary) or not (fields.get(kind) is Array):
+		return []
+	return fields[kind]
+
+
+## A node's extension values, by extension id, raw; {} when it has none or the
+## address names nothing. For the nodes no view carries, by the names a game
+## already holds: "project" (no address); "box", "deck", "card" and "hand" by
+## gameId; "handTemplate" as "box/template"; "outcome" as "card/outcome";
+## "tagGroup" and "tag" as "box/name", or the bare name for the project map's.
+static func extensions_of(bundle: Dictionary, kind: String, address: String = "") -> Dictionary:
+	var slash := address.find("/")
+	var first := address if slash < 0 else address.substr(0, slash)
+	var second := "" if slash < 0 else address.substr(slash + 1)
+	var boxes: Array = bundle.get("boxes", [])
+	var map = bundle.get("map")
+	match kind:
+		"project":
+			var out := {}
+			var exts = bundle.get("extensions")
+			if exts is Dictionary:
+				for id in exts:
+					if exts[id] is Dictionary and exts[id].has("project"):
+						out[id] = exts[id]["project"]
+			return out
+		"box":
+			return _ext_values(_ext_named(boxes, address))
+		"deck":
+			var decks: Array = []
+			for b in boxes:
+				decks.append_array(b.get("decks", []))
+			return _ext_values(_ext_named(decks, address))
+		"card":
+			return _ext_values(_ext_named(_ext_cards(boxes), address))
+		"outcome":
+			if slash < 0:
+				return {}
+			return _ext_values(_ext_named(_ext_named(_ext_cards(boxes), first).get("outcomes", []), second))
+		"hand":
+			var hands: Array = []
+			for b in boxes:
+				hands.append_array(b.get("hands", []))
+			return _ext_values(_ext_named(hands, address))
+		"handTemplate":
+			if slash < 0:
+				return {}
+			return _ext_values(_ext_named(_ext_named(boxes, first).get("handTemplates", []), second))
+		"tagGroup":
+			if slash < 0:
+				if map is Dictionary and _ext_name(map["group"]) == first:
+					return _ext_values(map["group"])
+				return {}
+			return _ext_values(_ext_named(_ext_named(boxes, first).get("tagGroups", []), second))
+		"tag":
+			if slash < 0:
+				return _ext_values(_ext_named(map["group"].get("tags", []), first)) if map is Dictionary else {}
+			var tags: Array = []
+			for g in _ext_named(boxes, first).get("tagGroups", []):
+				tags.append_array(g.get("tags", []))
+			return _ext_values(_ext_named(tags, second))
+	return {}
+
+
+# The name extensions_of addresses a node by: its gameId as the bundle wrote it,
+# else its id (no title fallback, as the JS reference reads it).
+static func _ext_name(node: Dictionary) -> String:
+	var game_id = node.get("gameId")
+	return str(game_id) if game_id != null else str(node.get("id", ""))
+
+
+static func _ext_named(nodes: Array, name: String) -> Dictionary:
+	for n in nodes:
+		if n is Dictionary and _ext_name(n) == name:
+			return n
+	return {}
+
+
+static func _ext_cards(boxes: Array) -> Array:
+	var out: Array = []
+	for b in boxes:
+		for d in b.get("decks", []):
+			out.append_array(d.get("cards", []))
+	return out
+
+
+# A shallow copy, so a host editing what it was handed never edits the bundle.
+static func _ext_values(node: Dictionary) -> Dictionary:
+	var values = node.get("extensions")
+	return (values as Dictionary).duplicate() if values is Dictionary else {}
 
 
 static func _field_box(bundle: Dictionary, box: String) -> Dictionary:

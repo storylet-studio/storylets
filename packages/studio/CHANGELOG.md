@@ -12,6 +12,13 @@ here is part of shipping, not a courtesy.
 
 ### Changed
 
+- **A merge that leaves conflicts marks them in the file**, under `unresolved`, so the project's problems
+  list (and anyone else's copy) shows the merge is unresolved until the clash is fixed and the entry
+  removed. Storyletter opens projects that take a Storylet extension, carries and merges the extension's
+  data, and keeps it untouched; editing it comes in a later release.
+
+### Changed
+
 - **A card's or outcome's Fields are drawn by the family's field row**, the one Patterpad's game data uses. Each
   field's purpose from the Card template shows under its control. Flags are picked from the declared values
   instead of typed with commas, and a Text (multiline) field is a text area. A blank field says what it falls

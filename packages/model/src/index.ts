@@ -378,6 +378,10 @@ export function turnSpan(turns: number, seconds: number, long = false): string {
 // --- entities (generic over expression representation E) ---------------------
 
 export interface Outcome<E> {
+  /** Bundle only: this node's extension values, by extension id, raw as
+   *  authored (editor-only fields stripped). Source keeps them in extension
+   *  shards, never here. Absent when the node has none. */
+  extensions?: NodeExtensions;
   id: string;
   gameId?: string;
   title?: string;
@@ -400,6 +404,10 @@ export interface Outcome<E> {
 }
 
 export interface Card<E> {
+  /** Bundle only: this node's extension values, by extension id, raw as
+   *  authored (editor-only fields stripped). Source keeps them in extension
+   *  shards, never here. Absent when the node has none. */
+  extensions?: NodeExtensions;
   id: string;
   gameId?: string;
   title?: string;
@@ -458,6 +466,10 @@ export interface Card<E> {
 }
 
 export interface Deck<E> {
+  /** Bundle only: this node's extension values, by extension id, raw as
+   *  authored (editor-only fields stripped). Source keeps them in extension
+   *  shards, never here. Absent when the node has none. */
+  extensions?: NodeExtensions;
   id: string;
   gameId?: string;
   title?: string;
@@ -478,6 +490,10 @@ export interface Deck<E> {
 }
 
 export interface Tag {
+  /** Bundle only: this node's extension values, by extension id, raw as
+   *  authored (editor-only fields stripped). Source keeps them in extension
+   *  shards, never here. Absent when the node has none. */
+  extensions?: NodeExtensions;
   id: string;
   gameId?: string;
   /**
@@ -503,6 +519,10 @@ export interface Tag {
 /** A named axis for cross-cutting cards (schema 2.4, renamed from
  *  Dimension). Tags are declared, not freeform. */
 export interface TagGroup {
+  /** Bundle only: this node's extension values, by extension id, raw as
+   *  authored (editor-only fields stripped). Source keeps them in extension
+   *  shards, never here. Absent when the node has none. */
+  extensions?: NodeExtensions;
   id: string;
   gameId?: string;
   purpose?: string;
@@ -608,6 +628,10 @@ export const parseHoleRef = (value: string): HoleRef | undefined => {
 /** A declared kind of hand (schema 2.6): live-inherited, author-side only,
  *  never called from game code. One condition governs every instance. */
 export interface HandTemplate<E> {
+  /** Bundle only: this node's extension values, by extension id, raw as
+   *  authored (editor-only fields stripped). Source keeps them in extension
+   *  shards, never here. Absent when the node has none. */
+  extensions?: NodeExtensions;
   id: string;
   gameId?: string;
   title?: string;
@@ -653,6 +677,10 @@ export interface HandRule<E> {
  *  standalone hand (rule). Exactly one of template / rule. Fully concrete:
  *  deal is name-only. */
 export interface Hand<E> {
+  /** Bundle only: this node's extension values, by extension id, raw as
+   *  authored (editor-only fields stripped). Source keeps them in extension
+   *  shards, never here. Absent when the node has none. */
+  extensions?: NodeExtensions;
   id: string;
   /** The name deal() is called with; a rename is a breaking change
    *  (Reboot 7.4). */
@@ -689,6 +717,10 @@ export interface Hand<E> {
 }
 
 export interface Box<E> {
+  /** Bundle only: this node's extension values, by extension id, raw as
+   *  authored (editor-only fields stripped). Source keeps them in extension
+   *  shards, never here. Absent when the node has none. */
+  extensions?: NodeExtensions;
   id: string;
   gameId?: string;
   title?: string;
@@ -875,7 +907,49 @@ export interface Bundle {
    *  family's shared vocabulary, let through unchecked by the compiler. The
    *  engine reports when the game has not registered one. Absent when none. */
   externalScopes?: string[];
+  /**
+   * The extensions the project takes, by id: each one's version and its
+   * compiled declarations by node kind, every default resolved (what a
+   * defaults helper reads, `extensionDecls`), and the project node's own values.
+   * A node's values sit on the node, under `extensions`. Absent when the project
+   * takes none, so a bundle without them is byte for byte what it was.
+   */
+  extensions?: Record<string, BundleExtension>;
 }
+
+/** One extension as the bundle carries it. */
+export interface BundleExtension {
+  version: string;
+  /** Compiled declarations by node kind: no editor-only fields, no editor words. */
+  fields: Record<string, ExtensionFieldDecl[]>;
+  /** The project node's values, raw, when it has any. */
+  project?: Record<string, unknown>;
+}
+
+/**
+ * A compiled extension field declaration (`@wildwinter/toolkit/extensions`' FieldDecl,
+ * less the editor's words). Its `default` is always present. Structured types
+ * carry their parts: `fields` for a record, `key` and `of` for a map, `of` and
+ * `id` for a list, `to` for a reference.
+ */
+export interface ExtensionFieldDecl {
+  name: string;
+  type: string;
+  default: unknown;
+  values?: string[];
+  stages?: string[];
+  to?: string;
+  fields?: ExtensionFieldDecl[];
+  key?: { type: string; to?: string };
+  of?: Omit<ExtensionFieldDecl, "name" | "default"> & { default?: unknown };
+  id?: string;
+  min?: number;
+  max?: number;
+  required?: boolean;
+}
+
+/** A node's extension values in a bundle: extension id -> field -> value, raw. */
+export type NodeExtensions = Record<string, Record<string, unknown>>;
 
 // --- reading the project map (design/project-map-contract.md 5, Q12) ---------
 //
@@ -1231,7 +1305,28 @@ export const SHARD_EXTENSIONS = {
    *  change rate, and a merge that must never collide with the author's edits,
    *  since the server always wins its own file. */
   contract: ".storyletcontract",
+  /** One extension's data (a Storylet extension's, design: patterkit
+   *  proposals/patter-storylet-extensions.md): one per extension per box, in the
+   *  box folder (`<extension id>.storyletextension`), and one at the project
+   *  root for project-level data. Keyed by node kind and id, merged by the
+   *  extension's manifest, never interpreted by the engine. Its own shard
+   *  because a tool's pass and a writer's edit must not collide on one file. */
+  extension: ".storyletextension",
 } as const;
+
+/**
+ * An extension's manifest, as a project keeps it: `extensions/<id>.extension.json`
+ * at the project root (`@wildwinter/toolkit/extensions`' `MANIFEST_FILE_SUFFIX`). Not a
+ * shard: JSON the extension ships, never written by the tools nor put in the
+ * canonical form, but SOURCE all the same, so a pack carries it and a project
+ * compiles from it.
+ */
+export const MANIFEST_EXTENSION = ".extension.json";
+/** Where a project keeps its extensions' manifests, relative to the root. */
+export const EXTENSIONS_DIR = "extensions";
+
+/** Every file a project's source is made of: its shards and its manifests. */
+export const SOURCE_EXTENSIONS: readonly string[] = [...Object.values(SHARD_EXTENSIONS), MANIFEST_EXTENSION];
 
 /** Where the installation contracts live, relative to the project root. The
  *  directory is the registry, as it is for a box's decks: a contract exists
@@ -1253,6 +1348,42 @@ export const PROJECTMAP_SCHEMA = "storylets/projectmap@0";
  *  held both, and renaming it would break every project for no gain. */
 export const NOTES_SCHEMA = "storylets/notes@0";
 export const CONTRACT_SCHEMA = "storylets/contract@0";
+/** An extension data shard's schema. */
+export const EXTENSION_SCHEMA = "storylets/extension@0";
+
+/**
+ * One extension's data for one box, or for the project (the root shard).
+ *
+ * `entries` is the extension's, by node kind (`card`, `outcome`, `box`, `deck`,
+ * `tagGroup`, `tag`, `handTemplate`, `hand`, `project`) and then node id, and
+ * the canonical form never reorders anything inside it: its lists are the
+ * extension's, in the extension's order. The values are raw, as a tool wrote
+ * them; the extension's manifest says their types.
+ */
+export interface ExtensionShard {
+  schema: typeof EXTENSION_SCHEMA;
+  /** The extension's id: the same as the file's stem. */
+  extension: string;
+  entries: Record<string, Record<string, Record<string, unknown>>>;
+}
+
+/**
+ * The extensions a project takes (the project opts in, ruled 2026-10-18), by id:
+ * the version it is pinned to and its settings (the host fields its claims
+ * present, by setting name). The manifest itself sits in `extensions/`.
+ */
+export interface ProjectExtension {
+  version: string;
+  settings?: Record<string, string>;
+}
+
+/**
+ * The reserved key a merged shard carries an unresolved merge under, in every
+ * shard type (`@wildwinter/toolkit/extensions`' `UNRESOLVED_KEY`): the clashes, each
+ * with its path, its kind and the three values, ours being what the shard now
+ * holds. Validation refuses a shard carrying it; resolving removes it.
+ */
+export const UNRESOLVED_KEY = "unresolved";
 
 /**
  * What one installation depends on, written by the venue's server and read by
@@ -1380,8 +1511,8 @@ export type FurnitureColour = typeof FURNITURE_COLOURS[number];
 
 /** One deck's node canvas: where its cards sit, and the furniture around them.
  *  Sparse throughout. A card with no entry lays out by default, and an entry for
- *  a card that no longer exists is inert, so there is no referential integrity to
- *  maintain against content that moves underneath. */
+ *  a card that no longer exists is inert: kept, and reported by `validate` as a
+ *  warning per entry (the family's orphan rule, 2026-10-18), never dropped. */
 export interface DeckCanvas extends CanvasFurniture {
   /** Keyed by CARD id. */
   cards?: Record<string, ViewPoint>;
@@ -1553,6 +1684,13 @@ export interface ProjectShard {
    * Absent, every card that has a scene is checked and none is required to have one.
    */
   patterBoxes?: string[];
+  /**
+   * The extensions this project takes, by id (ruled 2026-10-18: the project opts
+   * in, a box does not). Authoring config: the bundle carries each one's
+   * compiled declarations and values, never this block. An extension named here
+   * whose manifest is missing is a warning, and its data is left untouched.
+   */
+  extensions?: Record<string, ProjectExtension>;
   world: {
     properties: PropertyDecl[];
     registry?: unknown;

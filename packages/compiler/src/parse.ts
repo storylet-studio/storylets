@@ -6,13 +6,16 @@
 // ---------------------------------------------------------------------------
 
 import {
-  BOX_SCHEMA, CONTRACTS_DIR, CONTRACT_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, MAP_SCHEMA, PROJECT_SCHEMA, PROJECTMAP_SCHEMA,
-  NOTES_SCHEMA, SHARD_EXTENSIONS, TAGS_SCHEMA, VIEW_SCHEMA,
+  BOX_SCHEMA, CONTRACTS_DIR, CONTRACT_SCHEMA, DECK_SCHEMA, EXTENSIONS_DIR, EXTENSION_SCHEMA, HANDS_SCHEMA, MANIFEST_EXTENSION,
+  MAP_SCHEMA, PROJECT_SCHEMA, PROJECTMAP_SCHEMA, NOTES_SCHEMA, SHARD_EXTENSIONS, TAGS_SCHEMA, VIEW_SCHEMA,
   isCaseOnlyPropertyName,
 } from "@storylet-studio/model";
-import type { BoxShard, ContractShard, DeckShard, HandsShard, MapShard, ProjectMapShard, ProjectShard, PropertyDecl, TagsShard, ViewShard , NotesShard } from "@storylet-studio/model";
+import type {
+  BoxShard, ContractShard, DeckShard, ExtensionShard, HandsShard, MapShard, ProjectMapShard, ProjectShard, PropertyDecl,
+  TagsShard, ViewShard, NotesShard,
+} from "@storylet-studio/model";
 import { parseSource } from "./serialize.js";
-import type { Issue, SourceBox, SourceContract, SourceFile, SourceProject } from "./project.js";
+import type { Issue, SourceBox, SourceContract, SourceExtension, SourceFile, SourceManifest, SourceProject } from "./project.js";
 
 interface Parsed {
   file: SourceFile;
@@ -129,11 +132,40 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
   }
 
   // Box folders: every directory holding a box shard.
+  // The extensions' manifests, in their own folder at the root, recognised by
+  // their suffix there as contracts are, so a box called "extensions" keeps
+  // its shards. JSON the extension ships, not a shard: no schema tag is ours to
+  // check here, and the compiler's extension pass judges what it says.
+  const isManifest = (f: SourceFile): boolean =>
+    f.path.startsWith(`${EXTENSIONS_DIR}/`) && f.path.split("/").length === 2 && f.path.endsWith(MANIFEST_EXTENSION);
+  const manifests: SourceManifest[] = [];
+  for (const file of files.filter(isManifest).sort((a, b) => a.path.localeCompare(b.path))) {
+    const id = file.path.slice(EXTENSIONS_DIR.length + 1, -MANIFEST_EXTENSION.length);
+    try {
+      manifests.push({ path: file.path, id, manifest: parseSource(file.text) });
+    } catch (e) {
+      issues.push({ severity: "error", path: file.path, message: `the manifest will not parse: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
+
+  // Extension data shards, `<id>.storyletextension`: one per extension at the
+  // root for project-level data, and one per extension in a box folder. A shard
+  // that will not parse costs only itself, never its box: it is a tool's data,
+  // and the box's own content is still the box's.
+  const isExtensionShard = (f: SourceFile): boolean => ext(f.path) === SHARD_EXTENSIONS.extension;
+  const readExtensions = (shardFiles: SourceFile[]): SourceExtension[] => shardFiles
+    .filter(isExtensionShard).sort((a, b) => a.path.localeCompare(b.path))
+    .flatMap((file) => {
+      const p = parseShard(file, EXTENSION_SCHEMA, issues);
+      return p ? [{ path: file.path, shard: p.value as unknown as ExtensionShard }] : [];
+    });
+  const rootExtensions = readExtensions(files.filter((f) => !f.path.includes("/")));
+
   const boxFolders = new Map<string, SourceFile[]>();
   for (const file of files) {
     const parts = file.path.split("/");
     if (parts.length < 2) continue;
-    if (isContract(file)) continue;
+    if (isContract(file) || isManifest(file)) continue;
     const folder = parts[0]!;
     boxFolders.set(folder, [...(boxFolders.get(folder) ?? []), file]);
   }
@@ -223,6 +255,7 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
         || file.path === viewFile?.path
         || file.path === mapFile?.path
         || file.path === notesFile?.path
+        || (isExtensionShard(file) && file.path.split("/").length === 2)
         || file.path.startsWith(`${folder}/decks/`);
       if (!known) {
         issues.push({ severity: "warning", path: file.path, message: "unrecognised file in a box folder; ignored" });
@@ -237,6 +270,7 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
       ...(viewParsed ? { view: viewParsed.value as unknown as ViewShard } : {}),
       ...(mapParsed ? { map: mapParsed.value as unknown as MapShard } : {}),
       ...(notesParsed ? { notes: notesParsed.value as unknown as NotesShard } : {}),
+      extensions: readExtensions(boxFiles.filter((f) => f.path.split("/").length === 2)),
       decks,
     });
   }
@@ -248,6 +282,8 @@ export function parseProjectFiles(files: SourceFile[]): { project?: SourceProjec
     ...(projectMapParsed ? { map: projectMapParsed.value as unknown as ProjectMapShard } : {}),
     ...(rootNotesParsed ? { notes: rootNotesParsed.value as unknown as NotesShard } : {}),
     contracts,
+    extensions: rootExtensions,
+    manifests,
   };
   foldCaseOnlyPropertyNames(project);
   return { project, issues };

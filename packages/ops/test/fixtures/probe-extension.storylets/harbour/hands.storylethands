@@ -1,0 +1,33 @@
+{
+  schema: "storylets/hands@0",
+  hands: [
+    {
+      chosen: {
+        d_quarter: "v_docks",
+      },
+      gameId: "stall-docks",
+      id: "h_stall",
+      order: 1,
+      template: "ht_stall",
+    },
+    {
+      gameId: "watch",
+      id: "h_watch",
+      order: 0,
+      rule: {
+        slots: "unbounded",
+      },
+    },
+  ],
+  templates: [
+    {
+      chooses: [
+        "d_quarter",
+      ],
+      gameId: "stall",
+      id: "ht_stall",
+      properties: [],
+      slots: 1,
+    },
+  ],
+}

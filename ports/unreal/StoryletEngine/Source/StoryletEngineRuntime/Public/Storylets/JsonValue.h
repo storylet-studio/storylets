@@ -6,6 +6,7 @@
 // document order (bound tag composition, change-write order).
 #pragma once
 
+#include <cmath>
 #include <string>
 #include <utility>
 #include <vector>
@@ -98,4 +99,47 @@ namespace storylets
         void set(const std::string& key, JsonValue val) { obj.emplace_back(key, std::move(val)); }
         void push(JsonValue val) { arr.push_back(std::move(val)); }
     };
+
+    /** A tree as strict, compact JSON text: deterministic, object keys in their
+     *  stored (document) order, numbers as JavaScript prints them. A number
+     *  JSON cannot carry (NaN, an infinity) writes as null, as JSON.stringify
+     *  does. What a host is handed for a value no scalar type can hold, such as
+     *  a Storylet extension's record, map or list; JsonParser reads it back. */
+    inline void WriteJsonText(std::string& out, const JsonValue& v)
+    {
+        switch (v.type)
+        {
+            case JsonValue::Null: out += "null"; break;
+            case JsonValue::Bool: out += v.b ? "true" : "false"; break;
+            case JsonValue::Number: out += std::isfinite(v.num) ? StoryletValue::JsNumber(v.num) : "null"; break;
+            case JsonValue::String: out += StoryletValue::JsonQuote(v.str); break;
+            case JsonValue::Array:
+                out += '[';
+                for (size_t i = 0; i < v.arr.size(); ++i)
+                {
+                    if (i > 0) out += ',';
+                    WriteJsonText(out, v.arr[i]);
+                }
+                out += ']';
+                break;
+            case JsonValue::Object:
+                out += '{';
+                for (size_t i = 0; i < v.obj.size(); ++i)
+                {
+                    if (i > 0) out += ',';
+                    out += StoryletValue::JsonQuote(v.obj[i].first);
+                    out += ':';
+                    WriteJsonText(out, v.obj[i].second);
+                }
+                out += '}';
+                break;
+        }
+    }
+
+    inline std::string JsonText(const JsonValue& v)
+    {
+        std::string out;
+        WriteJsonText(out, v);
+        return out;
+    }
 }

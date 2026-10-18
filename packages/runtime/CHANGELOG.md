@@ -8,6 +8,17 @@ section for it.
 
 ## [Unreleased]
 
+### Added
+
+- **Storylet extension values**: a bundle can carry the values a Storylet extension gives each node, and every
+  runtime hands them over where it hands over fields: `extensions` on a dealt card, an outcome and a box from
+  `listBoxes()`, by extension id, raw as the bundle wrote them (any JSON: records, maps and lists as well as
+  the seven field types). `extensionDecls(bundle, extension, kind)` gives an extension's declarations for a
+  node kind, every default resolved, so `effectiveFields(extensionDecls(...), card.extensions?.[id])` fills in
+  what a node leaves out. `extensionsOf(bundle, kind, address)` reads the values of a node no view carries:
+  the project, a deck, a hand, a hand template, a tag group or a tag. The same on all four runtimes, with
+  Blueprint taking structured values as JSON text. Bundles without extensions are unchanged.
+
 ## [0.12.0] - 2026-10-18
 
 ### Added

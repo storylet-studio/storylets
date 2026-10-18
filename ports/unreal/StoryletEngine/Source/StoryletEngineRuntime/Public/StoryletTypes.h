@@ -106,6 +106,44 @@ struct FStoryletFieldDecl
 
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	FStoryletValue Default;
+
+	/** The default as strict JSON text. For a Storylet extension field of a
+	 *  structured type (record, map, list) this is the only form of it, and
+	 *  Default is left empty. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString DefaultJson;
+};
+
+/** One Storylet extension field's value on a node: its name and its value as
+ *  strict JSON text, raw as the bundle wrote it. An extension value may be any
+ *  JSON (a record, a map or a list as well as a scalar), which no
+ *  FStoryletValue can hold, so it crosses as text: hand a scalar one to
+ *  UStoryletBundle::ExtensionValueToScalar, or parse a structured one with
+ *  the game's JSON reader. The engine never interprets these. */
+USTRUCT(BlueprintType)
+struct FStoryletExtensionEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Name;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Json;
+};
+
+/** One extension's values on a node, by extension id, in bundle order. A node
+ *  carries one of these per extension that sets anything on it. */
+USTRUCT(BlueprintType)
+struct FStoryletExtensionValues
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	FString Extension;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FStoryletExtensionEntry> Values;
 };
 
 /** A card view in a dealt hand or a peeked list. Carries NO outcome
@@ -129,6 +167,11 @@ struct FStoryletDealtCard
 
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FStoryletFieldEntry> Fields;
+
+	/** The card's Storylet extension values, raw; empty when it has none.
+	 *  UStoryletBundle::GetEffectiveExtensionValues fills in the defaults. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FStoryletExtensionValues> Extensions;
 };
 
 /** One outcome on a dealt card; bAvailable is evaluated against CURRENT
@@ -157,6 +200,10 @@ struct FStoryletOutcomeView
 	 *  through as the bundle wrote it; empty when the outcome carries none. */
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	TArray<FStoryletFieldEntry> Fields;
+
+	/** The outcome's Storylet extension values, raw; empty when it has none. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FStoryletExtensionValues> Extensions;
 };
 
 /** One hand's contents (dealt order), keyed by the hand's gameId: the shape
@@ -192,6 +239,10 @@ struct FStoryletBoxView
 
 	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
 	double Turn = 0;
+
+	/** The box's Storylet extension values, raw; empty when it has none. */
+	UPROPERTY(BlueprintReadOnly, Category = "Storylet Engine")
+	TArray<FStoryletExtensionValues> Extensions;
 };
 
 /** The retained-log entry kinds (the trace verbs of schema 5). */

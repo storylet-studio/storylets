@@ -3,7 +3,7 @@
 // at the project's declared output path (or a caller override).
 // ---------------------------------------------------------------------------
 
-import { sidecarIssues } from "./merge.js";
+import { sidecarIssues, unresolvedMarkIssues } from "./merge.js";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, basename } from "node:path";
 import { compileProject, serialiseBundle } from "@storylet-studio/compiler";
@@ -104,7 +104,7 @@ export function runExport(loaded: LoadedProject, out?: string, opts: ExportOptio
   // canonical source with conflicted values resolved PROVISIONALLY to ours, so
   // exporting it ships somebody's discarded edit as though it were agreed.
   // merge.ts has said so since it was written; only validate enforced it.
-  const unresolved = sidecarIssues(loaded.sidecars);
+  const unresolved = [...sidecarIssues(loaded.sidecars), ...unresolvedMarkIssues(loaded.files)];
   if (unresolved.length > 0) return { issues: [...loaded.issues, ...unresolved], writes: [] };
 
   // The override is applied to the source the compiler sees, so there is one

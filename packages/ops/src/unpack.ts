@@ -40,8 +40,9 @@ import JSZip from "jszip";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
-import { SHARD_EXTENSIONS } from "@storylet-studio/model";
+import { SHARD_EXTENSIONS, SOURCE_EXTENSIONS } from "@storylet-studio/model";
 import { planShardMerge } from "./merge.js";
+import { projectManifests } from "./extensions.js";
 import type { MergeResult } from "./merge.js";
 import { ASSETS_DIR, isSafeAssetName } from "./assets.js";
 import { NotAPackError, PACK_MANIFEST } from "./pack.js";
@@ -61,8 +62,9 @@ export class UnsafeEntryError extends Error {}
 // Re-exported so nothing that imports it has to move.
 export { isUnsafeEntry } from "@wildwinter/toolkit/archive";
 
-/** Every shard extension, which is what makes an entry a shard wherever it is. */
-const SHARD_EXTS: readonly string[] = Object.values(SHARD_EXTENSIONS);
+/** Every source extension (the shards and the extensions' manifests), which is
+ *  what makes an entry a shard wherever it is. */
+const SHARD_EXTS: readonly string[] = SOURCE_EXTENSIONS;
 
 /** What an entry is, by its name. A shard by its extension, wherever it sits, so
  *  a box folder called `assets` still holds shards; a picture only directly in
@@ -334,6 +336,8 @@ export async function runUnpackMerge(
   /** The project shard as the merge leaves it, for the World check below. */
   let mergedProject: { rel: string; shard: unknown } | undefined;
 
+  // The manifests the extension shards merge by: this project's own copies.
+  const manifests = projectManifests(projectDir);
   for (const [rel, theirText] of [...theirs.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     const outPath = join(projectDir, rel);
     // The disposition is the one Storyletter's pull uses, from the one planner:
@@ -343,6 +347,7 @@ export async function runUnpackMerge(
       rel, path: outPath, theirs: theirText, base: base.get(rel),
       ours: existsSync(outPath) ? readFileSync(outPath, "utf8") : undefined,
       sides: { theirs: "returned", base: "sent" },
+      manifest: manifests,
     });
     if (step.write !== undefined) writes.push(step.write);
     if (step.sidecar !== undefined) sidecars.push(step.sidecar);

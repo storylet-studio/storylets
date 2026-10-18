@@ -7,9 +7,12 @@
 // a per-shard strategy schema rather than five hand-written mergers.
 //
 // The merged model is ALWAYS valid canonical source; conflicted values
-// resolve provisionally to OURS and are listed separately for the
-// `<file>.storyletconflict` sidecar a UI can render. A lingering sidecar is
-// a validate error, so an unresolved merge cannot reach CI or export.
+// resolve provisionally to OURS, and the clashes are written into the merged
+// shard itself under the reserved key `unresolved` (ruled 2026-10-18, in both
+// formats), so the mark travels with the file and validation, and so CI,
+// refuses it wherever the file goes. They are also listed for the
+// `<file>.storyletconflict` sidecar a UI can render, which stays uncommitted;
+// a lingering sidecar is a validate error too.
 // Hand gameId renames get a dedicated warning: deal(hand) is called by name
 // from game code, so a rename is a breaking change beyond the project's own
 // borders (Reboot 7.4).
@@ -18,14 +21,21 @@
 // ---------------------------------------------------------------------------
 
 import { canonicalStringify, parseSource } from "@storylet-studio/compiler";
-import type { Issue } from "@storylet-studio/compiler";
+import type { Issue, SourceFile } from "@storylet-studio/compiler";
 import {
-  BOX_SCHEMA, CONTRACT_SCHEMA, DECK_SCHEMA, HANDS_SCHEMA, MAP_SCHEMA, NOTES_SCHEMA, PROJECTMAP_SCHEMA,
+  BOX_SCHEMA, CONTRACT_SCHEMA, DECK_SCHEMA, EXTENSION_SCHEMA, HANDS_SCHEMA, MANIFEST_EXTENSION, MAP_SCHEMA, NOTES_SCHEMA,
+  PROJECTMAP_SCHEMA,
   PROJECT_SCHEMA, TAGS_SCHEMA, VIEW_SCHEMA,
 } from "@storylet-studio/model";
+import {
+  ATOMIC as ExtATOMIC, SET as ExtSET, extensionDataStrategy, keyedBy, mapOf, markUnresolved, mergeExtensionData, mergeTree,
+  objectOf, unresolvedProblems, withoutMark,
+} from "@wildwinter/toolkit/extensions";
+import type { Manifest, Strategy } from "@wildwinter/toolkit/extensions";
 import type { PlannedWrite } from "./write.js";
 
-export type MergeFileType = "project" | "box" | "tags" | "hands" | "deck" | "view" | "map" | "projectmap" | "notes" | "contract";
+export type MergeFileType = "project" | "box" | "tags" | "hands" | "deck" | "view" | "map" | "projectmap" | "notes" | "contract"
+  | "extension";
 
 export type ConflictKind =
   | "both-changed"      // both sides changed the same value differently
@@ -54,7 +64,8 @@ export interface Warning {
 
 export interface MergeResult {
   type: MergeFileType;
-  /** The merged model - valid canonical source; conflicts resolved to OURS. */
+  /** The merged model - valid canonical source; conflicts resolved to OURS, and
+   *  named under `unresolved` when there are any. */
   merged: Record<string, unknown>;
   conflicts: Conflict[];
   warnings: Warning[];
@@ -81,8 +92,6 @@ export function sidecarIssues(sidecars: readonly string[]): Issue[] {
 type Obj = Record<string, unknown>;
 
 const eq = (a: unknown, b: unknown): boolean => canonicalStringify(a) === canonicalStringify(b);
-const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
-const asArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
 /** A schema tag without its version: `storylets/deck@0` is `storylets/deck`. */
 const schemaName = (schema: string): string => schema.split("@")[0]!;
@@ -97,7 +106,7 @@ const schemaName = (schema: string): string => schema.split("@")[0]!;
 const MERGE_TYPES: ReadonlyMap<string, MergeFileType> = new Map(([
   [PROJECT_SCHEMA, "project"], [BOX_SCHEMA, "box"], [TAGS_SCHEMA, "tags"], [HANDS_SCHEMA, "hands"],
   [DECK_SCHEMA, "deck"], [VIEW_SCHEMA, "view"], [MAP_SCHEMA, "map"], [PROJECTMAP_SCHEMA, "projectmap"],
-  [NOTES_SCHEMA, "notes"], [CONTRACT_SCHEMA, "contract"],
+  [NOTES_SCHEMA, "notes"], [CONTRACT_SCHEMA, "contract"], [EXTENSION_SCHEMA, "extension"],
 ] as const).map(([schema, type]): [string, MergeFileType] => [schemaName(schema), type]));
 
 /** Detect the merge type from a shard's `schema` tag. The version is not part
@@ -122,19 +131,15 @@ export function detectMergeType(file: { schema?: unknown }): MergeFileType {
 //   object(fields)  a fixed object: named keys get their own strategy,
 //                   everything else is atomic
 
-type Strategy =
-  | { kind: "atomic" }
-  | { kind: "map"; of: Strategy }
-  | { kind: "set" }
-  | { kind: "keyed"; key: "id" | "name"; of: Strategy; renameWarning?: string }
-  | { kind: "object"; fields: Record<string, Strategy> };
-
-const ATOMIC: Strategy = { kind: "atomic" };
-const RECORD: Strategy = { kind: "map", of: ATOMIC };
-const SET: Strategy = { kind: "set" };
+// The engine is `@wildwinter/toolkit/extensions`' `mergeTree`, lifted from this file
+// (family parity item 6): the strategy table below is this format's, the five
+// behaviours and the walk are the family's.
+const ATOMIC: Strategy = ExtATOMIC;
+const RECORD: Strategy = mapOf(ATOMIC);
+const SET: Strategy = ExtSET;
 const keyed = (key: "id" | "name", of: Strategy, renameWarning?: string): Strategy =>
-  ({ kind: "keyed", key, of, ...(renameWarning !== undefined ? { renameWarning } : {}) });
-const object = (fields: Record<string, Strategy>): Strategy => ({ kind: "object", fields });
+  keyedBy(key, of, renameWarning !== undefined ? { renameWarning } : undefined);
+const object = (fields: Record<string, Strategy>): Strategy => objectOf(fields);
 
 /** Declarations (PropertyDecl / FieldDecl / ParamDecl) merge per field. */
 const DECLS = keyed("name", object({}));
@@ -242,143 +247,16 @@ export const MERGE_SPECS: Record<MergeFileType, Strategy> = {
       // reading; both were found by holding the spec to the model.
     }),
     export: RECORD,
+    // The extensions the project takes: per extension, its pin and each setting
+    // merge on their own, so two people setting different settings both land.
+    extensions: { kind: "map", of: object({ settings: RECORD }) },
   }),
+  // An extension's data. This is the strategy WITHOUT the manifest (every
+  // node's entry as one value), what a merge falls back to when the manifest is
+  // missing or unreadable; `runMerge` given the manifest merges each entry
+  // field by field by the extension's types (`@wildwinter/toolkit/extensions`).
+  extension: extensionDataStrategy(undefined, "storylets"),
 };
-
-// --- the engine -----------------------------------------------------------------
-
-interface Ctx {
-  conflicts: Conflict[];
-  warnings: Warning[];
-}
-
-function deletedKind(base: unknown, ours: unknown, theirs: unknown): ConflictKind {
-  const deleted = base !== undefined && (ours === undefined || theirs === undefined);
-  if (deleted) return "delete-vs-edit";
-  return base === undefined ? "added-both" : "both-changed";
-}
-
-/** Classic 3-way of one value (objects compare canonically). */
-function merge3(b: unknown, o: unknown, t: unknown, id: string, path: string, ctx: Ctx): unknown {
-  if (eq(o, t)) return o;
-  if (eq(b, o)) return t;
-  if (eq(b, t)) return o;
-  ctx.conflicts.push({ id, path, base: b, ours: o, theirs: t, kind: deletedKind(b, o, t) });
-  return o;
-}
-
-function mergeValue(spec: Strategy, b: unknown, o: unknown, t: unknown, id: string, path: string, ctx: Ctx): unknown {
-  // Composite strategies only apply when neither side deleted the whole
-  // value; otherwise the delete-vs-edit question is decided HERE, atomically.
-  if (spec.kind === "atomic" || o === undefined || t === undefined || !hasShape(spec, o) || !hasShape(spec, t)) {
-    return merge3(b, o, t, id, path, ctx);
-  }
-  switch (spec.kind) {
-    case "set": {
-      const B = new Set(asArr(b).filter((x): x is string => typeof x === "string"));
-      const O = new Set(asArr(o).filter((x): x is string => typeof x === "string"));
-      const T = new Set(asArr(t).filter((x): x is string => typeof x === "string"));
-      const out = new Set<string>();
-      for (const x of [...O, ...T]) {
-        const kept = (O.has(x) && T.has(x)) || !B.has(x);   // survived both, or added
-        if (kept) out.add(x);
-      }
-      return [...out].sort();
-    }
-    case "map": {
-      const B = isObj(b) ? b : {}, O = o as Obj, T = t as Obj;
-      const out: Obj = {};
-      for (const k of Object.keys({ ...B, ...O, ...T }).sort()) {
-        const v = mergeValue(spec.of, B[k], O[k], T[k], id || k, `${path}.${k}`, ctx);
-        if (v !== undefined) out[k] = v;
-      }
-      return out;
-    }
-    case "object": {
-      const B = isObj(b) ? b : {}, O = o as Obj, T = t as Obj;
-      const out: Obj = {};
-      for (const k of Object.keys({ ...B, ...O, ...T }).sort()) {
-        const v = mergeValue(spec.fields[k] ?? ATOMIC, B[k], O[k], T[k], id, path ? `${path}.${k}` : k, ctx);
-        if (v !== undefined) out[k] = v;
-      }
-      return out;
-    }
-    case "keyed":
-      return mergeKeyed(spec, asArr(b), asArr(o), asArr(t), path, ctx);
-  }
-}
-
-/** Does a value structurally fit a composite strategy? (A type change - e.g. a
- *  scalar where an array was - falls back to atomic 3-way rather than lying.) */
-function hasShape(spec: Strategy, v: unknown): boolean {
-  switch (spec.kind) {
-    case "atomic": return true;
-    case "set":
-    case "keyed": return Array.isArray(v);
-    case "map":
-    case "object": return isObj(v);
-  }
-}
-
-/** The id/name-keyed entity merge: presence logic per key (delete-vs-edit,
- *  added-both), fields recursed, output SORTED by key - the whole of
- *  Patter's ordered-list machinery is unnecessary here (Reboot 7.4). */
-function mergeKeyed(spec: Extract<Strategy, { kind: "keyed" }>, B: unknown[], O: unknown[], T: unknown[], path: string, ctx: Ctx): unknown[] {
-  const keyOf = (v: unknown): string | undefined =>
-    isObj(v) && typeof v[spec.key] === "string" ? (v[spec.key] as string) : undefined;
-  const toMap = (arr: unknown[]): Map<string, unknown> => {
-    const m = new Map<string, unknown>();
-    for (const v of arr) {
-      const k = keyOf(v);
-      if (k !== undefined) m.set(k, v);
-    }
-    return m;
-  };
-  const Bm = toMap(B), Om = toMap(O), Tm = toMap(T);
-  const out = new Map<string, unknown>();
-  const here = (k: string): string => `${path}[${k}]`;
-
-  for (const k of new Set([...Bm.keys(), ...Om.keys(), ...Tm.keys()])) {
-    const b = Bm.get(k), o = Om.get(k), t = Tm.get(k);
-    const inB = Bm.has(k), inO = Om.has(k), inT = Tm.has(k);
-    if (inO && inT) {
-      if (!inB && !eq(o, t)) {
-        ctx.conflicts.push({ id: k, path: here(k), base: undefined, ours: o, theirs: t, kind: "added-both" });
-        out.set(k, o);   // provisional OURS
-      } else {
-        out.set(k, mergeValue(spec.of, b, o, t, k, here(k), ctx));
-      }
-    } else if (inO && !inT) {
-      if (inB && !eq(o, b)) {
-        ctx.conflicts.push({ id: k, path: here(k), base: b, ours: o, theirs: undefined, kind: "delete-vs-edit" });
-        out.set(k, o);   // theirs deleted, ours edited -> provisional OURS keeps it
-      } else if (!inB) {
-        out.set(k, o);   // ours added
-      }                  // else: ours unchanged + theirs deleted -> clean delete
-    } else if (!inO && inT) {
-      if (inB && !eq(t, b)) {
-        ctx.conflicts.push({ id: k, path: here(k), base: b, ours: undefined, theirs: t, kind: "delete-vs-edit" });
-        // ours deleted -> provisional OURS drops it (still flagged)
-      } else if (!inB) {
-        out.set(k, t);   // theirs added
-      }                  // else: theirs unchanged + ours deleted -> clean delete
-    }                    // else: in BASE only -> both deleted -> gone
-  }
-
-  // The dedicated rename warning class (queries): the surviving entity's
-  // author-facing gameId differs from BASE's.
-  if (spec.renameWarning) {
-    for (const [k, v] of out) {
-      const b = Bm.get(k);
-      if (isObj(b) && isObj(v) && typeof b["gameId"] === "string" && typeof v["gameId"] === "string"
-        && b["gameId"] !== v["gameId"]) {
-        ctx.warnings.push({ id: k, path: here(k), message: `${spec.renameWarning} ("${b["gameId"]}" -> "${v["gameId"]}")` });
-      }
-    }
-  }
-
-  return [...out.keys()].sort().map((k) => out.get(k));
-}
 
 /**
  * An ABSENT ancestor, as distinct from one that disagrees. `{}` is how a caller
@@ -395,7 +273,7 @@ const isAbsentBase = (base: Obj): boolean => Object.keys(base).length === 0;
  *  the same shard type and schema version; skew is a MergeInputError. An
  *  ABSENT base (`{}`) is exempt, because an absence has no version to
  *  disagree with - see `isAbsentBase`. */
-export function runMerge(base: Obj, ours: Obj, theirs: Obj, opts?: { type?: MergeFileType }): MergeResult {
+export function runMerge(base: Obj, ours: Obj, theirs: Obj, opts?: { type?: MergeFileType; manifest?: Manifest }): MergeResult {
   const type = opts?.type ?? detectMergeType(ours);
   for (const [label, side] of [["BASE", base], ["THEIRS", theirs]] as const) {
     // The skew check exists to stop a v0 shard's fields being merged into a v1
@@ -408,9 +286,41 @@ export function runMerge(base: Obj, ours: Obj, theirs: Obj, opts?: { type?: Merg
       throw new MergeInputError(`schema version skew: ${label} is ${JSON.stringify(side.schema)}, OURS is ${JSON.stringify(ours.schema)}`);
     }
   }
-  const ctx: Ctx = { conflicts: [], warnings: [] };
-  const merged = mergeValue(MERGE_SPECS[type], base, ours, theirs, "", "", ctx) as Obj;
-  return { type, merged, conflicts: ctx.conflicts, warnings: ctx.warnings };
+  if (type === "extension") {
+    // Compared by content exactly, not through this format's canonical form,
+    // whose id-sorting would read a reordered extension list as no change.
+    const r = mergeExtensionData(base, ours, theirs, {
+      host: "storylets", ...(opts?.manifest !== undefined ? { manifest: opts.manifest } : {}),
+    });
+    return { type, merged: r.merged, conflicts: [...r.conflicts], warnings: [...r.warnings] };
+  }
+  // A mark already on either side is carried until somebody resolves it; the
+  // merge itself runs on the content alone.
+  const r = mergeTree(MERGE_SPECS[type], withoutMark(base), withoutMark(ours), withoutMark(theirs), { equal: eq });
+  return {
+    type, merged: markUnresolved(r.merged as Obj, r.conflicts, { base, ours, theirs }),
+    conflicts: [...r.conflicts], warnings: [...r.warnings],
+  };
+}
+
+/**
+ * The issues a shard carrying the `unresolved` mark raises: one error per
+ * clash. Every shard type, read from the project's files as they are, so a
+ * mark is refused whatever shard it is in (ruled 2026-10-18). `validate`,
+ * `export` and `pack` all ask, as they ask about sidecars.
+ */
+export function unresolvedMarkIssues(files: readonly SourceFile[]): Issue[] {
+  const issues: Issue[] = [];
+  for (const file of files) {
+    if (!file.text.includes("unresolved")) continue;   // the cheap test first: almost no shard has one
+    let shard: unknown;
+    try { shard = parseSource(file.text); } catch { continue; }   // a broken shard is the loader's to report
+    for (const p of unresolvedProblems(shard)) {
+      issues.push({ severity: "error", path: file.path, field: "unresolved",
+        message: `unresolved merge at ${p.path}: the shard holds our side of a clash; resolve it, then remove the entry from "unresolved"` });
+    }
+  }
+  return issues;
 }
 
 /** The sidecar filename for a merged shard (a lingering one is a validate error). */
@@ -470,6 +380,9 @@ export interface ShardMergeInput {
   replace?: boolean;
   /** What a parse failure calls the other two sides ("returned" and "sent"). */
   sides?: { theirs: string; base: string };
+  /** The project's manifest for an extension, by id, so an extension shard merges
+   *  field by field by its types; without one it merges each node's entry whole. */
+  manifest?: (id: string) => Manifest | undefined;
 }
 
 /** What happened to one shard, and what to write for it. */
@@ -503,6 +416,13 @@ export interface ShardMergeStep {
 export function planShardMerge(input: ShardMergeInput): ShardMergeStep {
   const { rel, path, ours, theirs } = input;
   if (ours === undefined) return { outcome: "added", write: { path, content: theirs } };
+  // An extension's manifest is the extension's, not the project's to edit, so
+  // there is nothing to three-way: ours stands unless the caller takes theirs.
+  if (rel.endsWith(MANIFEST_EXTENSION)) {
+    return input.replace === true && ours !== theirs
+      ? { outcome: "replaced", write: { path, content: theirs } }
+      : { outcome: input.replace === true ? "replaced" : "merged" };
+  }
   if (input.replace === true) {
     return { outcome: "replaced", ...(sameShard(ours, theirs) ? {} : { write: { path, content: theirs } }) };
   }
@@ -521,7 +441,10 @@ export function planShardMerge(input: ShardMergeInput): ShardMergeStep {
   // field of theirs reads as an add. `{}` is how `runMerge` is told that, and it
   // is exempt from the schema-skew check for exactly this reason.
   const baseObj = input.base !== undefined ? read(input.base, sides.base) : {};
-  const result = runMerge(baseObj, oursObj, theirsObj);
+  const extensionId = oursObj["schema"] === EXTENSION_SCHEMA && typeof oursObj["extension"] === "string"
+    ? oursObj["extension"] : undefined;
+  const manifest = extensionId !== undefined ? input.manifest?.(extensionId) : undefined;
+  const result = runMerge(baseObj, oursObj, theirsObj, manifest !== undefined ? { manifest } : undefined);
   const content = canonicalStringify(result.merged);
   return {
     outcome: "merged", result,

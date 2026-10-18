@@ -1013,7 +1013,8 @@ static func _cap_trace(trace: Array, taken: Dictionary) -> void:
 
 
 # A card view in a dealt hand or a peeked list. Carries NO outcome
-# availability - ask outcomes() for current truth (schema 5).
+# availability - ask outcomes() for current truth (schema 5). Fields and
+# extension values ride out raw, absent when the card has none.
 func _view(entry: Dictionary) -> Dictionary:
 	var card: Dictionary = entry["card"]
 	var v := {"id": card["id"], "gameId": StoryletBundle.effective_game_id(card)}
@@ -1023,6 +1024,8 @@ func _view(entry: Dictionary) -> Dictionary:
 		v["purpose"] = card["purpose"]
 	if card.has("fields"):
 		v["fields"] = card["fields"]
+	if card.has("extensions"):
+		v["extensions"] = card["extensions"]
 	return v
 
 
@@ -1337,9 +1340,10 @@ func _resolve_dealt(card_id: String, hand_ref: String) -> Dictionary:
 
 ## Outcome availability, evaluated against CURRENT state on every ask (schema
 ## 3.1/5) - never a deal-time snapshot. Returns Array of {"id", "gameId",
-## "title"?, "purpose"?, "fields"?, "available"}; a bad reference push_errors
-## and returns []. "fields" is the outcome's game data, declared by the box's
-## outcomeFields and handed over exactly as the bundle wrote it.
+## "title"?, "purpose"?, "fields"?, "extensions"?, "available"}; a bad reference
+## push_errors and returns []. "fields" is the outcome's game data, declared by
+## the box's outcomeFields, and "extensions" its Storylet extension values by
+## extension id, both handed over exactly as the bundle wrote them.
 func outcomes(card_id: String, from_hand: String) -> Array:
 	if _closed:
 		push_error("StoryletFlow.outcomes: " + _closed_message())
@@ -1359,6 +1363,8 @@ func outcomes(card_id: String, from_hand: String) -> Array:
 			view["purpose"] = o["purpose"]
 		if o.has("fields"):
 			view["fields"] = o["fields"]
+		if o.has("extensions"):
+			view["extensions"] = o["extensions"]
 		view["available"] = _passes(o.get("condition"), ctx)
 		out.append(view)
 	return out
@@ -1638,7 +1644,8 @@ func advance_turns(box_ref: String, n: float = 1.0) -> void:
 
 # --- state access (host surface + test tooling) -----------------------------------
 
-## Every box, bundle order: identity + THIS flow's clock (parity member).
+## Every box, bundle order: identity, its extension values when it carries any,
+## + THIS flow's clock (parity member).
 func list_boxes() -> Array:
 	if _closed:
 		push_error("StoryletFlow.list_boxes: " + _closed_message())
@@ -1648,6 +1655,8 @@ func list_boxes() -> Array:
 		var row := {"id": b["id"], "gameId": StoryletBundle.effective_game_id(b)}
 		if b.has("title"):
 			row["title"] = b["title"]
+		if b.has("extensions"):
+			row["extensions"] = b["extensions"]
 		row["turn"] = _turn_counts.get(b["id"], 0.0)
 		out.append(row)
 	return out

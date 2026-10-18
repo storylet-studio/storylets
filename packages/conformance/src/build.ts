@@ -23,7 +23,7 @@ import type { Expression } from "@wildwinter/expr";
 import { storyletsDialect } from "@storylet-studio/dialect";
 import { BUNDLE_SCHEMA, BUNDLE_SCHEMA_V0, PLACE_GROUP } from "@storylet-studio/model";
 import type {
-  Bundle, Box, Card, Deck, Hand, HandTemplate, Outcome, PropertyDecl, TagGroup,
+  Bundle, Box, Card, Deck, Hand, HandTemplate, NodeExtensions, Outcome, PropertyDecl, TagGroup,
 } from "@storylet-studio/model";
 import type {
   BundleFixture, CardFixture, Corpus, DeckFixture, Fixtures,
@@ -47,8 +47,14 @@ import type {
  *  stream"); their expectations are unchanged.
  *  13: durable state as a feature (ruling H, 2026-10-06): the four ops
  *  `keepPocket`, `keepMemory`, `newRun` and `openFlowDurable`, and `durable`
- *  on the card and deck fixtures. No earlier expectation changed. */
-export const CORPUS_VERSION = 13;
+ *  on the card and deck fixtures. No earlier expectation changed.
+ *  14: Storylet extensions (patterkit design/proposals/patter-storylet-
+ *  extensions.md, phase 3): the bundle's `extensions` section and a node's
+ *  `extensions` values, the fixture fields `extensions` and `nodeExtensions`,
+ *  and the ops `assertCardExtensions`, `assertOutcomeExtensions`,
+ *  `assertBoxExtensions` and `assertNodeExtensions`. Values are any JSON, so
+ *  a runner compares them deeply. No earlier expectation changed. */
+export const CORPUS_VERSION = 14;
 
 const compileSrc = (src: string): Expression => compile(src, storyletsDialect);
 const maybe = (src: string | undefined): Expression | undefined =>
@@ -311,7 +317,7 @@ export function expandBundle(f: BundleFixture): Bundle {
   // bundle cannot carry a map, so it is the same shape and not a
   // compatibility path. It also keeps every earlier case byte-identical.
   const mapShaped = project !== undefined || f.uses === true || f.otherBox?.uses === true;
-  return {
+  const bundle: Bundle = {
     schema: mapShaped ? BUNDLE_SCHEMA : BUNDLE_SCHEMA_V0,
     content: {
       project: f.content?.project ?? "conf",
@@ -324,7 +330,43 @@ export function expandBundle(f: BundleFixture): Bundle {
     story: { properties: f.story ?? [] },
     boxes: byId(boxes),
     ...(project !== undefined ? { map: { group: project } } : {}),
+    ...(f.extensions !== undefined ? { extensions: f.extensions } : {}),
   };
+  return f.nodeExtensions !== undefined ? withExtensions(bundle, f.nodeExtensions) : bundle;
+}
+
+/** A fixture's extension values, put on the nodes they name by id, as the
+ *  compiler puts them: under `extensions`, by extension id. Every node kind
+ *  that can carry them is visited, the project map's group and tags included. */
+function withExtensions(built: Bundle, values: Record<string, NodeExtensions>): Bundle {
+  // A copy first: the scaffold's groups and tags are shared by every case, and
+  // values put on them in place would reach cases that never asked for any.
+  const bundle = structuredClone(built);
+  const seen = new Set<string>();
+  const put = (node: { id: string; extensions?: NodeExtensions }): void => {
+    const v = values[node.id];
+    if (v === undefined) return;
+    node.extensions = sortRecord(v);
+    seen.add(node.id);
+  };
+  const putGroup = (g: TagGroup): void => { put(g); for (const t of g.tags) put(t); };
+  if (bundle.map !== undefined) putGroup(bundle.map.group);
+  for (const box of bundle.boxes) {
+    put(box);
+    for (const g of box.tagGroups) putGroup(g);
+    for (const t of box.handTemplates) put(t);
+    for (const h of box.hands) put(h);
+    for (const d of box.decks) {
+      put(d);
+      for (const c of d.cards) { put(c); for (const o of c.outcomes) put(o); }
+    }
+  }
+  // A fixture naming a node the bundle does not have is a fixture bug: say so
+  // here rather than let a case pass on values that went nowhere.
+  for (const id of Object.keys(values)) {
+    if (!seen.has(id)) throw new Error(`nodeExtensions names "${id}", which is no node of this bundle`);
+  }
+  return bundle;
 }
 
 export function buildCorpus(fixtures: Fixtures): Corpus {

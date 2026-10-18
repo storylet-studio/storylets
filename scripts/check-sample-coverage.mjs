@@ -93,6 +93,8 @@ const OMITTED = [
   { member: "outcomeFieldDecls", why: "the Village declares no outcome fields: nothing to look up" },
   { member: "fieldValue", why: "the Village declares no fields, so no default to fall back to" },
   { member: "effectiveFields", why: "the Village declares no fields, so every card's fields are already all there is" },
+  { member: "extensionDecls", why: "the Village takes no Storylet extension: no extension declarations to look up" },
+  { member: "extensionsOf", why: "the Village takes no Storylet extension: no node carries extension values" },
   { member: "stageIndex", why: "a quality's ladder outside a condition, for a host comparing a field's stage. The Village's qualities are only ever read by its own conditions" },
   { member: "compareStages", why: "same: the Village never compares stages outside a condition" },
   { member: "nextStage", why: "same: the Village moves its ladders with advance() in outcomes, never from the host" },

@@ -1,0 +1,19 @@
+{
+  schema: "storylets/tags@0",
+  groups: [
+    {
+      gameId: "quarter",
+      id: "d_quarter",
+      tags: [
+        {
+          gameId: "docks",
+          id: "v_docks",
+        },
+        {
+          gameId: "market",
+          id: "v_market",
+        },
+      ],
+    },
+  ],
+}

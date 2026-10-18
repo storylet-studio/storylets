@@ -288,6 +288,11 @@ namespace StoryletStudio.StoryletEngine
         /// say one line ("The notice is in your pocket") without spending a card
         /// on it. Null when the outcome carries none.</summary>
         public OrderedMap<string, ExprValue> Fields;
+        /// <summary>Storylet extension values: extension id -> field -> value,
+        /// raw as authored, any JSON (a neutral tree: OrderedMap / List / bool /
+        /// double / string / null). The engine never reads them. Null when the
+        /// node has none.</summary>
+        public OrderedMap<string, OrderedMap<string, object>> Extensions;
     }
 
     public sealed class Card : IIdentified
@@ -325,6 +330,11 @@ namespace StoryletStudio.StoryletEngine
         public bool? Durable;
         /// <summary>Card-template data: field name -> value.</summary>
         public OrderedMap<string, ExprValue> Fields;
+        /// <summary>Storylet extension values: extension id -> field -> value,
+        /// raw as authored, any JSON (a neutral tree: OrderedMap / List / bool /
+        /// double / string / null). The engine never reads them. Null when the
+        /// node has none.</summary>
+        public OrderedMap<string, OrderedMap<string, object>> Extensions;
         public List<Outcome> Outcomes = new List<Outcome>();
     }
 
@@ -343,6 +353,11 @@ namespace StoryletStudio.StoryletEngine
         /// of the run unless the card says otherwise (4.2): see Card.Durable.</summary>
         public bool? Durable;
         public List<PropertyDecl> Properties = new List<PropertyDecl>();
+        /// <summary>Storylet extension values: extension id -> field -> value,
+        /// raw as authored, any JSON (a neutral tree: OrderedMap / List / bool /
+        /// double / string / null). The engine never reads them. Null when the
+        /// node has none.</summary>
+        public OrderedMap<string, OrderedMap<string, object>> Extensions;
         public List<Card> Cards = new List<Card>();
     }
 
@@ -352,6 +367,11 @@ namespace StoryletStudio.StoryletEngine
         public string GameId { get; set; }
         string IIdentified.Title => null;
         public List<PropertyDecl> Properties;
+        /// <summary>Storylet extension values: extension id -> field -> value,
+        /// raw as authored, any JSON (a neutral tree: OrderedMap / List / bool /
+        /// double / string / null). The engine never reads them. Null when the
+        /// node has none.</summary>
+        public OrderedMap<string, OrderedMap<string, object>> Extensions;
     }
 
     /// <summary>A named axis for cross-cutting cards (schema 2.4). Tags are
@@ -369,6 +389,11 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>True: a card that omits this group is unavailable wherever the
         /// group is bound, instead of wildcarding in.</summary>
         public bool Required;
+        /// <summary>Storylet extension values: extension id -> field -> value,
+        /// raw as authored, any JSON (a neutral tree: OrderedMap / List / bool /
+        /// double / string / null). The engine never reads them. Null when the
+        /// node has none.</summary>
+        public OrderedMap<string, OrderedMap<string, object>> Extensions;
         public List<Tag> Tags = new List<Tag>();
     }
 
@@ -391,6 +416,11 @@ namespace StoryletStudio.StoryletEngine
         public double? Slots;
         /// <summary>Declared @hand state every instance carries.</summary>
         public List<PropertyDecl> Properties = new List<PropertyDecl>();
+        /// <summary>Storylet extension values: extension id -> field -> value,
+        /// raw as authored, any JSON (a neutral tree: OrderedMap / List / bool /
+        /// double / string / null). The engine never reads them. Null when the
+        /// node has none.</summary>
+        public OrderedMap<string, OrderedMap<string, object>> Extensions;
     }
 
     /// <summary>A standalone hand's inline rule (schema 2.6): owned by the hand.</summary>
@@ -424,6 +454,11 @@ namespace StoryletStudio.StoryletEngine
         /// <summary>Standalone hands' own @hand state (template instances inherit
         /// the template's declarations).</summary>
         public List<PropertyDecl> Properties;
+        /// <summary>Storylet extension values: extension id -> field -> value,
+        /// raw as authored, any JSON (a neutral tree: OrderedMap / List / bool /
+        /// double / string / null). The engine never reads them. Null when the
+        /// node has none.</summary>
+        public OrderedMap<string, OrderedMap<string, object>> Extensions;
     }
 
     public sealed class RankingPolicy
@@ -477,6 +512,11 @@ namespace StoryletStudio.StoryletEngine
         public List<Deck> Decks = new List<Deck>();
         public List<HandTemplate> HandTemplates = new List<HandTemplate>();
         public List<Hand> Hands = new List<Hand>();
+        /// <summary>Storylet extension values: extension id -> field -> value,
+        /// raw as authored, any JSON (a neutral tree: OrderedMap / List / bool /
+        /// double / string / null). The engine never reads them. Null when the
+        /// node has none.</summary>
+        public OrderedMap<string, OrderedMap<string, object>> Extensions;
     }
 
     /// <summary>Binds bundles to shards (staleness gate) and saves to bundles.</summary>
@@ -605,6 +645,58 @@ namespace StoryletStudio.StoryletEngine
         /// unchecked by the compiler. The engine reports when the game has not
         /// registered one. Null when the content names none.</summary>
         public List<string> ExternalScopes;
+        /// <summary>The Storylet extensions the project takes, by id: each one's
+        /// version, its compiled declarations by node kind (every default
+        /// resolved) and the project node's own values. A node's values sit on
+        /// the node, under Extensions. Null when the project takes none.</summary>
+        public OrderedMap<string, BundleExtension> Extensions;
+    }
+
+    /// <summary>One Storylet extension as the bundle carries it.</summary>
+    public sealed class BundleExtension
+    {
+        public string Version;
+        /// <summary>Compiled declarations by node kind (box, tagGroup, tag,
+        /// deck, card, outcome, handTemplate, hand, project).</summary>
+        public OrderedMap<string, List<ExtensionFieldDecl>> Fields = new OrderedMap<string, List<ExtensionFieldDecl>>();
+        /// <summary>The project node's values, raw; null when it has none.</summary>
+        public OrderedMap<string, object> Project;
+    }
+
+    /// <summary>A compiled extension field declaration. Default is always
+    /// present in a decl and may be any JSON, held as the neutral tree (so a
+    /// JSON null default is a null here). Structured types carry their parts:
+    /// Fields for a record, Key and Of for a map, Of and IdField for a list, To
+    /// for a reference. The engine reads none of it; the helpers read Name and
+    /// Default.</summary>
+    public sealed class ExtensionFieldDecl
+    {
+        /// <summary>Null on a map's or list's element declaration (Of).</summary>
+        public string Name;
+        public string Type;
+        public object Default;
+        /// <summary>False only on an element declaration (Of) that left its
+        /// default out.</summary>
+        public bool HasDefault;
+        public List<string> Values;
+        public List<string> Stages;
+        public string To;
+        public List<ExtensionFieldDecl> Fields;
+        public ExtensionKeyDecl Key;
+        public ExtensionFieldDecl Of;
+        /// <summary>A list's identity field (the bundle's `id`).</summary>
+        public string IdField;
+        public double? Min;
+        public double? Max;
+        public bool? Required;
+    }
+
+    /// <summary>A map extension field's key: its type, and what a reference key
+    /// points to.</summary>
+    public sealed class ExtensionKeyDecl
+    {
+        public string Type;
+        public string To;
     }
 
     // --- the save envelope ----------------------------------------------------
@@ -799,13 +891,15 @@ namespace StoryletStudio.StoryletEngine
     }
 
     /// <summary>
-    /// A box's card and outcome fields as a host reads them. The engine hands a
-    /// card's fields (and an outcome's) over exactly as the bundle wrote them:
-    /// sparse, so "the card sets nothing" stays distinct from "the card sets the
-    /// default". These fill in the declared defaults when a host wants the whole
-    /// picture. Patter's GameDataHelpers by the same rule (patterkit
-    /// design/family-parity-2026-10.md item 7); every Storylet Engine runtime
-    /// carries the same four.
+    /// A box's card and outcome fields, and any node's Storylet extension
+    /// values, as a host reads them. The engine hands a card's fields (and an
+    /// outcome's) over exactly as the bundle wrote them: sparse, so "the card
+    /// sets nothing" stays distinct from "the card sets the default". These fill
+    /// in the declared defaults when a host wants the whole picture. Patter's
+    /// GameDataHelpers by the same rule (patterkit design/family-parity-2026-10.md
+    /// item 7); every Storylet Engine runtime carries the same helpers.
+    /// ExtensionsOf reads the values of a node no view carries (a deck, a hand,
+    /// a tag) by the address a game already uses.
     /// </summary>
     public static class FieldHelpers
     {
@@ -844,6 +938,141 @@ namespace StoryletStudio.StoryletEngine
                 foreach (var pair in values)
                     if (!output.ContainsKey(pair.Key)) output.Set(pair.Key, pair.Value);
             return output;
+        }
+
+        // -- Storylet extension values ------------------------------------------
+        //
+        // The same rule (patterkit design/proposals/patter-storylet-extensions.md,
+        // "At runtime"): values raw on the node, declarations with every default
+        // resolved in the bundle, and the same two helpers fill them in, given
+        // ExtensionDecls. Values are the neutral JSON tree, so a JSON null is a
+        // real value: a field set to null stays null, as a null default does.
+
+        /// <summary>One field's effective value, as the extension helpers read
+        /// it: the node's own when it sets one, else the declared default. False
+        /// for a name declared nowhere and set nowhere.</summary>
+        public static bool TryFieldValue(List<ExtensionFieldDecl> decls, OrderedMap<string, object> values, string name, out object value)
+        {
+            if (values != null && values.TryGetValue(name, out value)) return true;
+            foreach (var f in decls)
+            {
+                if (f.Name != name) continue;
+                value = f.Default;
+                return f.HasDefault;
+            }
+            value = null;
+            return false;
+        }
+
+        /// <summary>One extension field's effective value, by the rule
+        /// FieldValue follows; null for a name declared nowhere and set nowhere
+        /// (TryFieldValue tells that from a JSON null).</summary>
+        public static object FieldValue(List<ExtensionFieldDecl> decls, OrderedMap<string, object> values, string name) =>
+            TryFieldValue(decls, values, name, out var value) ? value : null;
+
+        /// <summary>Every declared extension field resolved (the value set, else
+        /// the default), in declaration order, then any key set with no
+        /// declaration, kept as it is.</summary>
+        public static OrderedMap<string, object> EffectiveFields(List<ExtensionFieldDecl> decls, OrderedMap<string, object> values)
+        {
+            var output = new OrderedMap<string, object>();
+            foreach (var f in decls)
+            {
+                if (f.Name != null && !output.ContainsKey(f.Name) && TryFieldValue(decls, values, f.Name, out var v)) output.Set(f.Name, v);
+            }
+            if (values != null)
+                foreach (var pair in values)
+                    if (!output.ContainsKey(pair.Key)) output.Set(pair.Key, pair.Value);
+            return output;
+        }
+
+        /// <summary>One extension's declarations for a node kind (card, outcome,
+        /// box, deck, tagGroup, tag, handTemplate, hand, project), every default
+        /// resolved. Empty when the bundle has no such extension or it declares
+        /// nothing for the kind.</summary>
+        public static List<ExtensionFieldDecl> ExtensionDecls(Bundle bundle, string extension, string kind)
+        {
+            if (bundle.Extensions == null || !bundle.Extensions.TryGetValue(extension, out var ext)) return new List<ExtensionFieldDecl>();
+            return ext.Fields.TryGetValue(kind, out var decls) && decls != null ? decls : new List<ExtensionFieldDecl>();
+        }
+
+        /// <summary>
+        /// A node's extension values, by extension id, raw; empty when it has
+        /// none or the address names nothing. For the nodes no view carries, by
+        /// the names a game already holds: project (no address); box, deck, card
+        /// and hand by gameId; handTemplate as "box/template"; outcome as
+        /// "card/outcome"; tagGroup and tag as "box/name", or the bare name for
+        /// the project map's. The result is a fresh map; the values in it are the
+        /// bundle's own.
+        /// </summary>
+        public static OrderedMap<string, OrderedMap<string, object>> ExtensionsOf(Bundle bundle, string kind, string address = "")
+        {
+            address = address ?? "";
+            var slash = address.IndexOf('/');
+            var first = slash < 0 ? address : address.Substring(0, slash);
+            var second = slash < 0 ? null : address.Substring(slash + 1);
+            switch (kind)
+            {
+                case "project":
+                {
+                    var output = new OrderedMap<string, OrderedMap<string, object>>();
+                    if (bundle.Extensions != null)
+                        foreach (var pair in bundle.Extensions)
+                            if (pair.Value.Project != null) output.Set(pair.Key, pair.Value.Project);
+                    return output;
+                }
+                case "box": return Copy(Named(bundle.Boxes, address)?.Extensions);
+                case "deck": return Copy(Named(Decks(bundle), address)?.Extensions);
+                case "card": return Copy(Named(Cards(bundle), address)?.Extensions);
+                case "outcome":
+                    return second == null ? Copy(null) : Copy(Named(Named(Cards(bundle), first)?.Outcomes, second)?.Extensions);
+                case "hand": return Copy(Named(Hands(bundle), address)?.Extensions);
+                case "handTemplate":
+                    return second == null ? Copy(null) : Copy(Named(Named(bundle.Boxes, first)?.HandTemplates, second)?.Extensions);
+                case "tagGroup":
+                    if (second == null)
+                        return Copy(bundle.Map?.Group != null && (bundle.Map.Group.GameId ?? bundle.Map.Group.Id) == first ? bundle.Map.Group.Extensions : null);
+                    return Copy(Named(Named(bundle.Boxes, first)?.TagGroups, second)?.Extensions);
+                case "tag":
+                {
+                    if (second == null) return Copy(Named(bundle.Map?.Group?.Tags, first)?.Extensions);
+                    var tags = new List<Tag>();
+                    foreach (var g in Named(bundle.Boxes, first)?.TagGroups ?? new List<TagGroup>()) tags.AddRange(g.Tags);
+                    return Copy(Named(tags, second)?.Extensions);
+                }
+                default: return Copy(null);
+            }
+        }
+
+        private static OrderedMap<string, OrderedMap<string, object>> Copy(OrderedMap<string, OrderedMap<string, object>> values)
+        {
+            var output = new OrderedMap<string, OrderedMap<string, object>>();
+            if (values != null) foreach (var pair in values) output.Set(pair.Key, pair.Value);
+            return output;
+        }
+
+        /// <summary>The first item whose gameId (or, with none, id) is the name:
+        /// the bundle's own gameId, as the JS reference reads it.</summary>
+        private static T Named<T>(IEnumerable<T> items, string name) where T : class, IIdentified
+        {
+            if (items == null) return null;
+            foreach (var x in items) if ((x.GameId ?? x.Id) == name) return x;
+            return null;
+        }
+
+        private static IEnumerable<Deck> Decks(Bundle bundle)
+        {
+            foreach (var b in bundle.Boxes) foreach (var d in b.Decks) yield return d;
+        }
+
+        private static IEnumerable<Card> Cards(Bundle bundle)
+        {
+            foreach (var d in Decks(bundle)) foreach (var c in d.Cards) yield return c;
+        }
+
+        private static IEnumerable<Hand> Hands(Bundle bundle)
+        {
+            foreach (var b in bundle.Boxes) foreach (var h in b.Hands) yield return h;
         }
 
         private static Box BoxOf(Bundle bundle, string box)

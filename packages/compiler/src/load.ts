@@ -7,10 +7,11 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { SHARD_EXTENSIONS } from "@storylet-studio/model";
+import { SOURCE_EXTENSIONS } from "@storylet-studio/model";
 import type { SourceFile } from "./project.js";
 
-const SHARD_EXTENSION_LIST = Object.values(SHARD_EXTENSIONS);
+/** The shards, and the extensions' manifests beside them: every file the project is compiled from. */
+const SOURCE_EXTENSION_LIST = SOURCE_EXTENSIONS;
 
 /** Read every shard file under a `.storylets` project folder. */
 /**
@@ -40,7 +41,7 @@ export function walkProjectFiles(dir: string, exts: readonly string[]): string[]
 }
 
 export function loadProjectFiles(dir: string): SourceFile[] {
-  const files: SourceFile[] = walkProjectFiles(dir, SHARD_EXTENSION_LIST).map((full) => ({
+  const files: SourceFile[] = walkProjectFiles(dir, SOURCE_EXTENSION_LIST).map((full) => ({
     path: relative(dir, full).split("\\").join("/"),
     text: readFileSync(full, "utf8"),
   }));

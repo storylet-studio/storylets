@@ -28,9 +28,10 @@ import {
   GAME_KITS,                       // the same for init's game kits
   planShareScopes, defaultGameScopesParent, // share-scopes: Storyletter's Share Scopes, from the terminal
   leastReachedFirst, sharePct, // coverage: the order and the Runs dealt column, as the window has them
+  findProjectDir, readProjectManifest, // merge: an extension shard merges by the project's own manifest
 } from "@storylet-studio/ops";
 import type { BoxKit, CardCoverage, GameKit, Issue, PlannedFileWrite, PlannedWrite } from "@storylet-studio/ops";
-import { contractPropertyPath, contractPropertyType, turnSpan } from "@storylet-studio/model";
+import { EXTENSION_SCHEMA, contractPropertyPath, contractPropertyType, turnSpan } from "@storylet-studio/model";
 import pkg from "../package.json" with { type: "json" };
 import { libraryNotices, ownLicence } from "./notices.js";
 
@@ -776,9 +777,19 @@ export async function run(
           return 2;
         }
       }
+      // An extension shard merges field by field by its manifest, which the
+      // driver reads from the working tree: git hands it three temp files and
+      // the shard's real path (%P), and the project is found from that path.
+      // No manifest, or one mid-conflict itself, merges each node's entry whole.
+      const ours = sides[1]!;
+      const extensionId = ours["schema"] === EXTENSION_SCHEMA && typeof ours["extension"] === "string"
+        ? ours["extension"] : undefined;
+      const realFile = typeof flags["path"] === "string" ? flags["path"] : typeof flags["o"] === "string" ? flags["o"] : oursPath;
+      const projectDir = extensionId !== undefined ? findProjectDir(realFile) : undefined;
+      const manifest = extensionId !== undefined && projectDir !== undefined ? readProjectManifest(projectDir, extensionId) : undefined;
       let result;
       try {
-        result = runMerge(sides[0]!, sides[1]!, sides[2]!);
+        result = runMerge(sides[0]!, ours, sides[2]!, manifest !== undefined ? { manifest } : undefined);
       } catch (e) {
         if (e instanceof MergeInputError) {
           io.error(e.message);

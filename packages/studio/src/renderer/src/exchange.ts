@@ -196,7 +196,7 @@ export function createExchange(ctx: ExchangeContext) {
       // The ERROR voice, as the returned-pack merge uses: the merge landed, but
       // walking away from unresolved conflicts thinking you were done is exactly
       // what a quiet toast would let somebody do.
-      flashError(`Pulled revision ${done.revision} (${counts}). ${plural(done.conflicts, "conflict")} ${done.conflicts === 1 ? "needs" : "need"} a look. See the .storyletconflict files.`);
+      flashError(`Pulled revision ${done.revision} (${counts}). ${plural(done.conflicts, "conflict")} ${done.conflicts === 1 ? "needs" : "need"} a look: each is named in its file under "unresolved", and in the .storyletconflict file beside it.`);
     } else {
       flash(`Pulled revision ${done.revision} (${counts})`, "ok");
     }
@@ -303,7 +303,7 @@ export function createExchange(ctx: ExchangeContext) {
     ctx.repaintReplacedProject();
     // A conflict is not a failure, but it is not a success either: the shard was
     // written provisionally with OURS and a sidecar sits beside it.
-    if (conflicts > 0) flashError(`Merged the returned pack (${counts}). ${plural(conflicts, "conflict")} ${conflicts === 1 ? "needs" : "need"} a look. See the .storyletconflict files.`);
+    if (conflicts > 0) flashError(`Merged the returned pack (${counts}). ${plural(conflicts, "conflict")} ${conflicts === 1 ? "needs" : "need"} a look: each is named in its file under "unresolved", and in the .storyletconflict file beside it.`);
     else flash(`Merged the returned pack (${counts})`, "ok");
   }
 
