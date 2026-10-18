@@ -869,6 +869,7 @@ function fieldRow(decl: FieldDeclDto, current: string, set: (value: string) => v
     ...decl,
     ...(claim.help !== undefined ? { purpose: claim.help } : {}),
     ...(claim.values !== undefined && decl.values === undefined ? { values: claim.values } : {}),
+    ...(claim.valueHelp !== undefined ? { valueHelp: claim.valueHelp } : {}),
   };
   return shellFieldRow({
     decl: shown, value: fieldValueFromText(decl.type, current),

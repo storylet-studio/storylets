@@ -620,6 +620,8 @@ export interface ExtensionFieldDto {
   max?: number;
   required?: boolean;
   editorOnly?: boolean;
+  /** A sentence per enum value, flag or stage: the chosen one's is shown under the control. */
+  valueHelp?: Record<string, string>;
 }
 
 /** The game's shared scopes folder, as the renderer is told it. */

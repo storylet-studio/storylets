@@ -32,7 +32,7 @@ const probe: ExtensionDto = {
         { name: "note", type: "text", label: "Note", help: "A line for the crew." },
         { name: "cue", type: "record", label: "Cue", group: "Sound", fields: [{ name: "sound", type: "text" }, { name: "gain", type: "number" }] },
       ],
-      claims: [{ field: "mood", decl: { name: "mood", type: "enum", values: ["calm", "tense"], label: "Mood", help: "The card's mood, as the probe reads it." } }],
+      claims: [{ field: "mood", decl: { name: "mood", type: "enum", values: ["calm", "tense"], label: "Mood", help: "The card's mood, as the probe reads it.", valueHelp: { tense: "Clipped." } } }],
     },
     outcome: { fields: [{ name: "line", type: "text", label: "Line" }], claims: [] },
     box: { fields: [{ name: "theme", type: "text", label: "Theme" }], claims: [] },
@@ -79,6 +79,8 @@ describe("a card's Fields tab", () => {
     const mood = [...centre.querySelectorAll(".shell-fieldrow")].find((r) => r.querySelector(".shell-fieldrow-label")?.textContent === "Mood")!;
     expect(mood.textContent).toContain("The card's mood, as the probe reads it.");
     expect(mood.querySelector("select")!.value).toBe("tense");
+    // The chosen value's own help, from the claim, under the control.
+    expect(mood.querySelector(".shell-fieldrow-valuehelp")?.textContent).toBe("Clipped.");
   });
 
   it("saves an extension value through the host, by node and field", () => {

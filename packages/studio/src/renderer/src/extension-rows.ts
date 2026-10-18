@@ -56,6 +56,8 @@ export function extensionCount(extension: ExtensionDto, nodeId: string): number 
 
 const adapterOf = (project: ProjectDto | undefined): ValueAdapter => ({
   nodes: (kind) => project?.extensionNodes?.[kind] ?? [],
+  // A held node by its name wherever the project has it; undefined, so "gone", only when it has none.
+  label: (kind, id) => project?.extensionNodes?.[kind]?.find((n) => n.id === id)?.label,
 });
 
 /** One extension's fields for one node: its rows, under a heading for each of the manifest's groups. */
