@@ -13,6 +13,6 @@
   "dependencies": {
     "@patterkit/play-helpers": "^0.9.4",
     "@patterkit/runtime": "^0.32.0",
-    "@storylet-studio/with-patter": ">=0.2.1"
+    "@storylet-studio/with-patter": ">=0.3.0"
   }
 }
