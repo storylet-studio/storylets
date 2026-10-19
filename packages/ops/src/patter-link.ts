@@ -34,7 +34,7 @@ import type { Issue, SourceProject } from "@storylet-studio/compiler";
 import { effectiveGameId, gameIdify, isValidGameId } from "@storylet-studio/model";
 import type { Card } from "@storylet-studio/model";
 import type { LoadedProject } from "./load.js";
-import { optionsOf, outcomesReported } from "@storylet-studio/with-patter";
+import { optionsOf, outcomesReported, resolveSceneRef, sceneAddressIndex } from "@storylet-studio/with-patter";
 import type { BundleOption } from "@storylet-studio/with-patter";
 
 /** The one Patter bundle schema this check reads. A newer one is reported, not guessed at. */
@@ -52,14 +52,22 @@ export interface PatterSceneShape {
 export interface PatterScenes {
   byId: ReadonlyMap<string, PatterSceneShape>;
   byAddress: ReadonlyMap<string, PatterSceneShape>;
+  /** The scenes as the bundle keys them, and their addresses to their ids: what Patter's
+   *  `resolveSceneRef` reads, built once per bundle. */
+  record: Readonly<Record<string, PatterSceneShape>>;
+  addressIds: ReadonlyMap<string, string>;
   /** The default locale's strings (string id -> text), for an option's words. Empty for a bundle
    *  published with its strings left out (localisation by ids). */
   text: ReadonlyMap<string, string>;
 }
 
-/** The scene a reference names: an internal id first, else an address (Patter's `resolveSceneRef`). */
-export const findScene = (scenes: PatterScenes, ref: string): PatterSceneShape | undefined =>
-  scenes.byId.get(ref) ?? scenes.byAddress.get(ref);
+/** The scene a reference names, by Patter's own `resolveSceneRef` (the scene's address first, then its
+ *  internal id): the function its runtime opens a scene by, so Storyletter's check and Show Card land where
+ *  the game will. This used to try the internal id first (family parity item 1). */
+export const findScene = (scenes: PatterScenes, ref: string): PatterSceneShape | undefined => {
+  const id = resolveSceneRef(scenes.record, ref, scenes.addressIds);
+  return id !== undefined ? scenes.byId.get(id) : undefined;
+};
 
 export interface PatterLink {
   /** The Patter project folder, absolute. */
@@ -198,7 +206,8 @@ function readScenes(bundlePath: string): PatterScenes | "unreadable" | { unknown
   if (table && typeof table === "object") {
     for (const [id, words] of Object.entries(table as Record<string, unknown>)) if (typeof words === "string") text.set(id, words);
   }
-  const scenes: PatterScenes = { byId, byAddress, text };
+  const record = Object.fromEntries(byId) as Record<string, PatterSceneShape>;
+  const scenes: PatterScenes = { byId, byAddress, record, addressIds: sceneAddressIndex(record), text };
   bundleCache.clear(); // one project's bundle at a time: the editor opens many projects in a session
   bundleCache.set(bundlePath, { mtimeMs: stat.mtimeMs, size: stat.size, scenes });
   return scenes;

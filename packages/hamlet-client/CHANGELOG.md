@@ -7,6 +7,11 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Patterplay 0.32.0.** A card finds its Patter scene by Patter's own rule (the scene's address first, then its
+  internal id), and an off-screen or voice-over speaker reads as Patter names it, "Tam (O.S.)".
+
 ## [0.7.0] - 2026-10-18
 
 ### Changed

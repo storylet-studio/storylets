@@ -44,6 +44,6 @@
     "@storylet-studio/model": ">=0.10.0"
   },
   "peerDependencies": {
-    "@patterkit/runtime": ">=0.14.0 <1.0.0"
+    "@patterkit/runtime": ">=0.32.0 <1.0.0"
   }
 }

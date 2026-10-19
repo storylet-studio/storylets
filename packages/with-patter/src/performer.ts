@@ -19,16 +19,18 @@
 // deals, draws what `start` and `choose` return, and plays the outcome.
 // ---------------------------------------------------------------------------
 
+import { resolveSceneRef } from "@patterkit/runtime";
 import type { Bundle as PatterBundle, ChoiceOption, Engine as PatterEngine, Flow as PatterFlow, StepResult } from "@patterkit/runtime";
 
 /**
- * A card's scene reference (its gameId) to the scene's internal id, as Patter's runtime resolves a
- * reference: an internal id first, else a scene's address by Patter's own rules. Undefined when no
- * scene matches.
+ * A card's scene reference (its gameId) to the scene's internal id, by Patter's own rule, the function
+ * its runtime resolves with (`resolveSceneRef`: the scene's address first, then its internal id), so the
+ * Board lands where the game will. This used to try the internal id first, and where one scene's id was
+ * another's address it picked the other scene (family parity item 1). Undefined when no scene matches.
+ * The engine is no longer needed; it stays in the signature for the hosts that pass it.
  */
-export function sceneIdFor(engine: PatterEngine, bundle: PatterBundle, ref: string): string | undefined {
-  if (bundle.scenes[ref]) return ref;
-  return Object.keys(bundle.scenes).find((id) => engine.sceneAddress(id) === ref);
+export function sceneIdFor(_engine: PatterEngine, bundle: PatterBundle, ref: string): string | undefined {
+  return resolveSceneRef(bundle.scenes, ref);
 }
 
 /** One thing the scene has said, for the transcript. */
@@ -173,7 +175,10 @@ export class Performer {
       const step: StepResult = flow.advance();
       this.link?.observe(p.box, p.sceneId ?? null, "id" in step ? step.id : null, step.type);
       if (step.type === "line") {
-        p.transcript.push({ kind: "line", ...(step.characterName ?? step.character ? { who: step.characterName ?? step.character } : {}), text: step.text });
+        // Named as Patter's own playable page names the speaker: its speaker label first ("Tam (O.S.)"),
+        // which carries the qualifier, then the display name, then the cast name.
+        { const who = step.speakerLabel ?? step.characterName ?? step.character;
+          p.transcript.push({ kind: "line", ...(who ? { who } : {}), text: step.text }); }
       } else if (step.type === "text") {
         p.transcript.push({ kind: "text", text: step.text });
       } else if (step.type === "gameEvent") {

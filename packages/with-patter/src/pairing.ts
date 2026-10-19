@@ -6,13 +6,14 @@
 // no dialogue, or a branch that ends without saying what happened, and both
 // look exactly like content somebody meant to write.
 //
-// A card finds its scene as Patter's runtime resolves a reference: an internal
-// id first, else an address (a pinned gameId, else the name's slug). Storyletter
+// A card finds its scene as Patter's runtime resolves a reference: the scene's
+// address first (a pinned gameId, else the name's slug), else its internal id
+// (Patter's own `resolveSceneRef`, the rule its runtime opens a scene by). Storyletter
 // runs the same analysis on the project as you edit (ops `patter-link.ts`, which
 // takes the two walkers below from here); this is the game's copy, on what ships.
 // ---------------------------------------------------------------------------
 
-import { gameIdify } from "@storylet-studio/model";
+import { resolveSceneRef, sceneAddressIndex } from "@patterkit/runtime";
 
 /** Every gameEvent outcome id anywhere under a compiled node, in document order. */
 export function outcomesReported(node: unknown): string[] {
@@ -77,9 +78,11 @@ interface BundleScene { name?: string; gameId?: string; [key: string]: unknown }
 export function checkPairing(storyletBundle: unknown, patterBundle: unknown, boxes?: readonly string[]): string[] {
   const problems: string[] = [];
   const scenes = ((patterBundle as { scenes?: Record<string, BundleScene> }).scenes) ?? {};
-  const address = (s: BundleScene): string => s.gameId?.trim() || gameIdify(s.name ?? "");
-  const byAddress = new Map(Object.entries(scenes).map(([id, s]) => [address(s), id]));
-  const sceneFor = (ref: string): string | undefined => (scenes[ref] ? ref : byAddress.get(ref));
+  // Patter's own rule (`resolveSceneRef`: a scene's address first, then its internal id), the one its
+  // runtime opens a scene by, so the check and the game agree about which scene a card plays.
+  const named = Object.fromEntries(Object.entries(scenes).map(([id, s]) => [id, { gameId: s.gameId, name: s.name ?? "" }]));
+  const byAddress = sceneAddressIndex(named);
+  const sceneFor = (ref: string): string | undefined => resolveSceneRef(named, ref, byAddress);
   const played = new Set<string>();
 
   const allBoxes = ((storyletBundle as { boxes?: { gameId?: string; id: string; decks?: { cards?: BundleCard[] }[] }[] }).boxes) ?? [];

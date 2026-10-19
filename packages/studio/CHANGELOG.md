@@ -10,6 +10,13 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A card plays the Patter scene the game opens.** The Board, the card-to-scene check and Show Scene in Patterpad
+  found a card's scene by its internal id first, where Patter's runtime goes by the scene's address first, so where
+  one scene's id was another's address they picked the other scene. All of them now call Patter's own rule.
+- **The Board names an off-screen or voice-over speaker as Patter does**, "Tam (O.S.)", where it showed "Tam".
+
 ### Added
 
 - **Choose the project's version control**, as Patterpad has it: New Project asks (Git, Perforce, Plastic SCM,

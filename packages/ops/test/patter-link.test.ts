@@ -178,12 +178,23 @@ describe("cards against their scenes", () => {
     expect(messages(game(bundle(...clean())))).toEqual([]);
   });
 
-  it("matches a scene by internal id first, then by address, as Patter's runtime does", () => {
+  it("matches a scene by address, else by internal id, as Patter's runtime does", () => {
     // The Hamlet's hand-written scenes: the id IS the card's gameId, the name slugs to something else.
     const byId = scene("market-bustle", "The Market at Noon", [line()]);
     // Patterpad's own: an scn_ id, and a pinned address naming the card.
     const byAddress = scene("scn_x7k2", "Men at the Forge", [option("o1", "pay-them-off"), option("o2", "stand-with-gareth"), option("o3", "walk-away")], "the-moneylenders-men");
     expect(messages(game(bundle(byId, byAddress)))).toEqual([]);
+  });
+
+  it("takes the address first where one scene's id is another's address (family parity item 1)", () => {
+    // Keyed by the card's name but addressed as something else, and naming an outcome the card lacks:
+    // the id-first rule checked the card against this scene, which the game never opens for it.
+    const keyedByName = scene("the-moneylenders-men", "A Quiet Alley", [option("o1", "haggle")]);
+    const addressed = scene("scn_b", "Men at the Forge", [option("o1", "pay-them-off"), option("o2", "stand-with-gareth"), option("o3", "walk-away")], "the-moneylenders-men");
+    // The card is checked against the scene the game opens, and the other is, truly, played by nothing.
+    expect(messages(game(bundle(scene("scn_market", "Market Bustle", [line()]), keyedByName, addressed)))).toEqual([
+      'warning: Patter scene "A Quiet Alley" (a-quiet-alley) matches no card, so nothing deals it',
+    ]);
   });
 
   it("errors on an outcome the card doesn't have, anchored to the card, offering to add it", () => {

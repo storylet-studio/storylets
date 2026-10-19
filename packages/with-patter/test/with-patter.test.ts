@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { Engine as PatterEngine } from "@patterkit/runtime";
 import { Engine as StoryletEngine } from "@storylet-studio/runtime";
-import { Performer, checkPairing } from "../src/index.js";
+import { Performer, checkPairing, sceneIdFor } from "../src/index.js";
 import type { CardOutcome } from "../src/index.js";
 
 const examples = fileURLToPath(new URL("../../../examples/", import.meta.url));
@@ -158,5 +158,52 @@ describe("checkPairing", () => {
     expect(found).toContain('scene "a-stray" belongs to no card, so nothing can ever play it');
     // Without the boxes, a card is not required to have a scene, and a stray scene is not reported.
     expect(checkPairing(storyletBundle, { ...patterBundle, scenes })).toEqual([]);
+  });
+});
+
+// Family parity item 1: a card finds its scene by Patter's own rule, the scene's address first, then its
+// internal id. Here one scene's internal id is "settle-at-the-inn", the inn card's name, while the inn scene
+// itself (renamed internally) still has that address: the game opens the inn scene, and so must we.
+describe("a card's scene, by Patter's own rule", () => {
+  const inn = patterBundle.scenes["settle-at-the-inn"];
+  const gate = patterBundle.scenes["arrive-at-the-gate"];
+  const scenes = { ...patterBundle.scenes };
+  delete scenes["settle-at-the-inn"];
+  delete scenes["arrive-at-the-gate"];
+  scenes["scn_inn"] = { ...inn, id: "scn_inn", gameId: "settle-at-the-inn" };
+  // The gate scene, keyed by the inn card's name but addressed as something else.
+  scenes["settle-at-the-inn"] = { ...gate, id: "settle-at-the-inn", gameId: "the-old-gate" };
+  const bundle = { ...patterBundle, scenes };
+
+  it("sceneIdFor takes the address first, as openFlow does", () => {
+    const patter = new PatterEngine(bundle, { seed: 7 });
+    expect(sceneIdFor(patter, bundle, "settle-at-the-inn")).toBe("scn_inn");
+    expect(sceneIdFor(patter, bundle, "the-old-gate")).toBe("settle-at-the-inn");
+  });
+
+  it("checkPairing checks the scene the game will open, not the one keyed by the card's name", () => {
+    // The gate scene names "step-through", which the inn card does not declare: checking it against the
+    // inn card, as the old id-first rule did, reported a problem with a scene the game never plays for it.
+    const found = checkPairing(storyletBundle, bundle);
+    expect(found.filter((line) => line.includes('"settle-at-the-inn"'))).toEqual([]);
+  });
+});
+
+describe("the speaker's name in the transcript", () => {
+  it("is Patter's speaker label first, so a qualified line reads as Patter's own playable page has it", () => {
+    const bundle = {
+      schema: "patter/bundle@0", content: { project: "P" }, voiced: false,
+      locales: { default: "en", included: ["en"] },
+      cast: [{ name: "TAM" }], qualifiers: [{ gameId: "os", name: "O.S." }],
+      scenes: { chat: { id: "chat", type: "scene", name: "Chat", blocks: [{ id: "b1", type: "block", name: "B",
+        children: [{ id: "sn1", type: "snippet", beats: [{ id: "l1", kind: "line", character: "TAM", qualifier: "os" }] }] }] } },
+      strings: { en: { l1: "Over here." } },
+    };
+    const patter = new PatterEngine(bundle as never, { seed: 1 });
+    const label = new PatterEngine(bundle as never, { seed: 1 }).openFlow("probe", { scene: "chat" }).advance();
+    expect(label.type === "line" && label.speakerLabel).toContain("O.S.");
+    const p = new Performer(patter, new Set(["box"])).start({ id: "c1", gameId: "chat" }, "box", []);
+    const line = p.transcript.find((b) => b.kind === "line");
+    expect(line).toMatchObject({ kind: "line", who: label.type === "line" ? label.speakerLabel : "", text: "Over here." });
   });
 });
