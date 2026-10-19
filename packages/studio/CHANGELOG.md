@@ -10,6 +10,15 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Changed
+
+- **Merging keeps the order you gave fields and properties.** A pull, a returned pack or a version control merge
+  put the Card template's fields, a box's outcome fields and the project's properties back in name order,
+  undoing Move up and Move down. They now keep your order; if both sides reordered the same list differently,
+  it is a conflict to resolve.
+- **Two replies to one comment thread both survive a merge**, in time order, where they used to be a conflict.
+  A withdrawn message stays withdrawn, and resolving a thread on one side and replying on the other both land.
+
 ## [0.23.1] - 2026-10-19
 
 ### Added

@@ -592,6 +592,41 @@ describe("links: the influence graph", () => {
   });
 });
 
+describe("usage: where a property is read and written", () => {
+  it("lists every read and write of a property, one per line, with the item's trail and id", async () => {
+    const r = await call("usage", "@story.reputation", exampleDir);
+    expect(r.code).toBe(0);
+    expect(r.out.length).toBeGreaterThan(1);
+    for (const line of r.out) expect(line).toMatch(/^(read |write)  @story\.reputation  .+: .+  .+  \(\S+\)$/);
+    expect(r.out.some((l) => l.startsWith("write"))).toBe(true);
+    expect(r.out.some((l) => l.startsWith("read "))).toBe(true);
+  });
+
+  it("a bare name finds the same uses as the scoped one", async () => {
+    expect((await call("usage", "reputation", exampleDir)).out).toEqual((await call("usage", "@story.reputation", exampleDir)).out);
+  });
+
+  it("--json prints the uses as data", async () => {
+    const r = await call("usage", "@story.reputation", exampleDir, "--json");
+    expect(r.code).toBe(0);
+    const uses = JSON.parse(r.out.join("\n")) as { property: string; use: string; item: { id: string } }[];
+    expect(uses.length).toBeGreaterThan(1);
+    expect(uses.every((u) => u.property === "@story.reputation" && typeof u.item.id === "string")).toBe(true);
+  });
+
+  it("a property nothing uses is an answer, not a failure", async () => {
+    const r = await call("usage", "@story.nobody_uses_this", exampleDir);
+    expect(r.code).toBe(0);
+    expect(r.out).toEqual([]);
+    expect(r.err.join("\n")).toContain("no uses of '@story.nobody_uses_this'");
+  });
+
+  it("no property, or something that is not one, is a usage error", async () => {
+    expect((await call("usage")).code).toBe(2);
+    expect((await call("usage", "not a property", exampleDir)).code).toBe(2);
+  });
+});
+
 describe("resolve: the --at lookup from the terminal", () => {
   it("prints where a gameId lives: id, kind, title, gameId, trail, shard", async () => {
     const r = (await call("resolve", "ambush-at-the-ford", exampleDir));

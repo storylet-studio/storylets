@@ -20,6 +20,23 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Added
+
+- **`storyletengine usage <property> [path] [--json]`**: every place a property is read (a When, a priority, a
+  deck's gate, an outcome's When or change value) or written (an outcome's change), one line each with the item's
+  trail and id. The list Storyletter's Find window shows on its Property tab, from the terminal, as `patter usage`
+  is for Patter.
+
+### Changed
+
+- **`merge` keeps the order of declarations.** Property and field lists (the Card template's fields, a box's
+  outcome fields, the project's `@story` and `@world` properties) came back sorted by name from every merge,
+  undoing Move up and Move down. They now keep the author's order: the side that reordered wins, and both
+  reordering differently is a conflict.
+- **`merge` merges replies to one comment thread.** Two people replying to the same thread was a conflict; both
+  replies now land, in time order. A withdrawn message stays withdrawn, and a thread's anchor, marker and
+  resolved state merge one by one. The same rule as Patter's, shared through `@wildwinter/toolkit`.
+
 ## [0.16.0] - 2026-10-18
 
 ### Added

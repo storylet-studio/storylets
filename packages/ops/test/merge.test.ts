@@ -230,10 +230,11 @@ const corpus: Case[] = [
     },
     expect: {
       schema: "storylets/box@0",
+      // Authored order: ours's list, theirs's addition after the field it followed.
       box: { id: "b_1", gameId: "b", fields: [], outcomeFields: [
         { name: "after", type: "string", default: "" },
-        { name: "cue", type: "string", default: "" },
         { name: "sound", type: "string", default: "" },
+        { name: "cue", type: "string", default: "" },
       ], properties: [] },
     },
   },
@@ -333,10 +334,12 @@ const corpus: Case[] = [
       project: { id: "p", name: "P", version: "0.1.0" },
       settings: { playAdvancesTurns: 1 },
       world: { properties: [] },
+      // In the authored order: ours's list, with theirs's addition after the
+      // declaration it followed there.
       story: { properties: [
         { name: "gold", type: "number", default: 10 },   // provisional OURS
-        { name: "ours", type: "boolean", default: false },
         { name: "theirs", type: "boolean", default: true },
+        { name: "ours", type: "boolean", default: false },
       ] },
       templates: {},
       export: { bundle: "dist/p.storyletsc", metadata: "full" },
@@ -467,18 +470,93 @@ const corpus: Case[] = [
     expect: notes([thread("cmt_a", "first", { resolved: true })]),
   },
   {
-    // The deliberate limitation, pinned so it is a decision rather than a
-    // surprise: `CommentMessage` has no id, so a thread's `messages` list is
-    // atomic and two concurrent replies ask a human instead of interleaving.
-    name: "two reviewers reply to the SAME thread: a conflict, nothing lost",
+    // Until 2026-10-19 a thread's `messages` merged as one value, so this was a
+    // conflict. Patter's rule, now shared through the toolkit (family parity
+    // item 5), keys a message by author and timestamp: both replies land, in
+    // time order.
+    name: "two reviewers reply to the SAME thread: both replies land, in time order",
     base: notes([thread("cmt_a", "first")]),
     ours: notes([{ ...thread("cmt_a", "first"), messages: [
-      { author: "A", ts: "2026-08-29T10:00:00Z", body: "first" },
-      { author: "A", ts: "2026-08-29T11:00:00Z", body: "ours" }] }]),
+      { author: "Reviewer", ts: "2026-08-29T10:00:00Z", body: "first" },
+      { author: "A", ts: "2026-08-29T11:30:00Z", body: "ours" }] }]),
     theirs: notes([{ ...thread("cmt_a", "first"), messages: [
-      { author: "A", ts: "2026-08-29T10:00:00Z", body: "first" },
-      { author: "B", ts: "2026-08-29T11:30:00Z", body: "theirs" }] }]),
+      { author: "Reviewer", ts: "2026-08-29T10:00:00Z", body: "first" },
+      { author: "B", ts: "2026-08-29T11:00:00Z", body: "theirs" }] }]),
+    expect: notes([{ ...thread("cmt_a", "first"), messages: [
+      { author: "Reviewer", ts: "2026-08-29T10:00:00Z", body: "first" },
+      { author: "B", ts: "2026-08-29T11:00:00Z", body: "theirs" },
+      { author: "A", ts: "2026-08-29T11:30:00Z", body: "ours" }] }]),
+  },
+  {
+    name: "one reviewer withdraws a reply, the other resolves the thread: both land",
+    base: notes([{ ...thread("cmt_a", "first"), messages: [
+      { author: "Reviewer", ts: "2026-08-29T10:00:00Z", body: "first" },
+      { author: "A", ts: "2026-08-29T11:00:00Z", body: "regret" }] }]),
+    ours: notes([{ ...thread("cmt_a", "first"), messages: [
+      { author: "Reviewer", ts: "2026-08-29T10:00:00Z", body: "first" },
+      { author: "A", ts: "2026-08-29T11:00:00Z", body: "", deleted: true }] }]),
+    theirs: notes([{ ...thread("cmt_a", "first", { resolved: true }), messages: [
+      { author: "Reviewer", ts: "2026-08-29T10:00:00Z", body: "first" },
+      { author: "A", ts: "2026-08-29T11:00:00Z", body: "regret" }] }]),
+    expect: notes([{ ...thread("cmt_a", "first", { resolved: true }), messages: [
+      { author: "Reviewer", ts: "2026-08-29T10:00:00Z", body: "first" },
+      { author: "A", ts: "2026-08-29T11:00:00Z", body: "", deleted: true }] }]),
+  },
+  {
+    name: "two people move the same marker differently: a conflict on the mark",
+    base: notes([thread("cmt_a", "first", { mark: { canvas: "k_1", x: 0, y: 0 } })]),
+    ours: notes([thread("cmt_a", "first", { mark: { canvas: "k_1", x: 10, y: 0 } })]),
+    theirs: notes([thread("cmt_a", "first", { mark: { canvas: "k_1", x: 0, y: 30 } })]),
     expectConflicts: [["both-changed", "cmt_a"]],
+  },
+  // --- declaration order (family parity item 4) ------------------------------
+  {
+    // The Card template's Move up and Move down write file order, and a merge
+    // that sorted by name undid it without a word.
+    name: "one side reorders card fields, the other edits a default: the order and the edit both land",
+    base: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "zeta", type: "text", default: "" }, { name: "alpha", type: "text", default: "" }] } },
+    ours: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "zeta", type: "text", default: "z" }, { name: "alpha", type: "text", default: "" }] } },
+    theirs: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "alpha", type: "text", default: "" }, { name: "zeta", type: "text", default: "" }] } },
+    expect: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "alpha", type: "text", default: "" }, { name: "zeta", type: "text", default: "z" }] } },
+  },
+  {
+    name: "a merge where nothing moved keeps an unsorted declaration list as it was",
+    base: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "zeta", type: "text", default: "" }, { name: "alpha", type: "text", default: "" }] } },
+    ours: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "zeta", type: "text", default: "" }, { name: "alpha", type: "text", default: "" }] } },
+    theirs: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "zeta", type: "text", default: "" }, { name: "alpha", type: "text", default: "a" }] } },
+    expect: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "zeta", type: "text", default: "" }, { name: "alpha", type: "text", default: "a" }] } },
+  },
+  {
+    name: "both sides reorder card fields differently: a conflict, ours kept",
+    base: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "a", type: "text", default: "" }, { name: "b", type: "text", default: "" }, { name: "c", type: "text", default: "" }] } },
+    ours: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "b", type: "text", default: "" }, { name: "a", type: "text", default: "" }, { name: "c", type: "text", default: "" }] } },
+    theirs: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "a", type: "text", default: "" }, { name: "c", type: "text", default: "" }, { name: "b", type: "text", default: "" }] } },
+    expect: { schema: "storylets/box@0",
+      box: { id: "b_1", gameId: "b", properties: [], fields: [
+        { name: "b", type: "text", default: "" }, { name: "a", type: "text", default: "" }, { name: "c", type: "text", default: "" }] } },
+    expectConflicts: [["both-changed", ""]],
   },
 
 ];

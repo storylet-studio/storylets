@@ -56,6 +56,7 @@ storyletengine export-xlsx [path] -o FILE
 storyletengine peek <box> [path] [--where group=tag ...] [--n N] [--set path=value ...] [--seed N] [--deal-all]
 storyletengine deal <hand> [path] [--set path=value ...] [--seed N] [--deal-all]
 storyletengine resolve <query> [path]
+storyletengine usage <property> [path] [--json]
 storyletengine contract show [installation] [path]
 storyletengine merge BASE OURS THEIRS [-o out] [--json] [--path realfile]
 storyletengine links [path] [--deck X | --box X | --card X] [--refs] [--json]
@@ -309,6 +310,25 @@ item](/storyletter/overview/#opening-at-a-particular-item), so what the terminal
 and where the editor lands can't disagree. No match prints `no match for '<query>'` and
 exits 1.
 
+## usage
+
+List every place a property is read or written.
+
+```
+$ storyletengine usage @story.rel_blacksmith the-hamlet.storylets
+read   @story.rel_blacksmith  When: not check_flags(@rel_blacksmith, +met) and @act > arrival  Village > Arrival > Make Yourself Known at the Forge  (c_forge_first)
+write  @story.rel_blacksmith  outcome change: @story.rel_blacksmith ← set_flags(@rel_blacksmith, +met)  Village > Arrival > Make Yourself Known at the Forge > Talk straight: ask if he's hiring  (c_forge_straight)
+read   @story.rel_blacksmith  outcome When: check_flags(@rel_blacksmith, +warm)  Village > Gareth's Debt > The Moneylender's Men > Stand with Gareth against them  (c_gm_stand)
+...
+```
+
+A read is a card's When or priority, a deck's gate, a hand's When, or an outcome's When or
+change value; a write is an outcome's change. Each line names the item it is in, as a trail
+from its box, and its id. Name the property as you would in a condition: `@story.act`,
+`world.time_of_day`, `@box.village.heat`, or a bare `@gold`, which finds that name in any
+scope. `--json` prints the uses as data. A property nothing uses prints nothing and exits 0;
+a project that will not compile exits 1. It is the list Storyletter's Find window shows on
+its Property tab.
 ## contract show
 
 What each [installation contract](/format/shards/#the-installation-contract) in the project

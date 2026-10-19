@@ -1,10 +1,11 @@
 // ---------------------------------------------------------------------------
 // The domain-aware 3-way merge: reconcile storylets source by immutable id,
 // not by line. Inherited from Patter's shipped merge design (patter-merge.md,
-// Reboot 7.4) as a strict subset: NO ordered-list merge exists anywhere -
-// id-sorted storage removed the order dimension entirely - so every shard
-// reduces to id/name-keyed entity merges plus per-field 3-way, driven here by
-// a per-shard strategy schema rather than five hand-written mergers.
+// Reboot 7.4) as a strict subset: id-sorted storage removed the order
+// dimension from every entity list, so every shard reduces to id/name-keyed
+// entity merges plus per-field 3-way, driven here by a per-shard strategy
+// schema rather than five hand-written mergers. The one order kept is a
+// declaration list's, which the author arranges with Move up and Move down.
 //
 // The merged model is ALWAYS valid canonical source; conflicted values
 // resolve provisionally to OURS, and the clashes are written into the merged
@@ -28,7 +29,7 @@ import {
   PROJECT_SCHEMA, TAGS_SCHEMA, VIEW_SCHEMA,
 } from "@storylet-studio/model";
 import {
-  ATOMIC as ExtATOMIC, SET as ExtSET, extensionDataStrategy, keyedBy, mapOf, markUnresolved, mergeExtensionData, mergeTree,
+  ATOMIC as ExtATOMIC, COMMENTS, SET as ExtSET, extensionDataStrategy, keyedBy, mapOf, markUnresolved, mergeExtensionData, mergeTree,
   objectOf, unresolvedProblems, withoutMark,
 } from "@wildwinter/toolkit/extensions";
 import type { Manifest, Strategy } from "@wildwinter/toolkit/extensions";
@@ -125,11 +126,13 @@ export function detectMergeType(file: { schema?: unknown }): MergeFileType {
 //   record          an open string-keyed map of atomics (fields, changes, args)
 //   map(of)         an open string-keyed map of a nested strategy
 //   set             a string[] treated as a set: adds union, deletes respected
-//   keyed(key, of)  an entity array keyed by immutable id (or name for
-//                   declarations), output sorted by key; delete-vs-edit and
-//                   added-both surface as conflicts, never silently
+//   keyed(key, of)  an entity array keyed by immutable id, output sorted by
+//                   key, or by name for declarations, in the authored order;
+//                   delete-vs-edit and added-both surface as conflicts, never
+//                   silently
 //   object(fields)  a fixed object: named keys get their own strategy,
 //                   everything else is atomic
+//   comments        comment threads, merged message by message
 
 // The engine is `@wildwinter/toolkit/extensions`' `mergeTree`, lifted from this file
 // (family parity item 6): the strategy table below is this format's, the five
@@ -141,8 +144,12 @@ const keyed = (key: "id" | "name", of: Strategy, renameWarning?: string): Strate
   keyedBy(key, of, renameWarning !== undefined ? { renameWarning } : undefined);
 const object = (fields: Record<string, Strategy>): Strategy => objectOf(fields);
 
-/** Declarations (PropertyDecl / FieldDecl / ParamDecl) merge per field. */
-const DECLS = keyed("name", object({}));
+/** Declarations (PropertyDecl / FieldDecl / ParamDecl) merge per field, and keep
+ *  the order the author gave them: the Card template and the property lists
+ *  offer Move up and Move down, and a merge that sorted them by name undid that
+ *  silently (family parity item 4). The side that reordered wins; both
+ *  reordering differently is a clash that keeps ours. */
+const DECLS = keyedBy("name", object({}), { order: "preserve" });
 
 const CARD = object({
   tags: { kind: "map", of: SET },   // tags are sets of tag ids per group
@@ -215,14 +222,13 @@ export const MERGE_SPECS: Record<MergeFileType, Strategy> = {
   // reviewer's return leg, and the reason this shard has to have a strategy at
   // all rather than aborting the merge.
   //
-  // A thread's own fields are ATOMIC, `messages` included. That means two people
-  // replying to the SAME thread conflict rather than interleaving, which is a
-  // real limitation and a deliberate one: `CommentMessage` has no id, `keyed`
-  // needs one, and inventing an append-merge for unkeyed lists is a design
-  // decision rather than a bug fix. A conflict loses nothing and asks a human;
-  // silently interleaving two people's replies could reorder an argument.
+  // Within a thread, Patter's rule, shared through the toolkit (family parity
+  // item 5): messages are keyed by author and timestamp, so two replies to one
+  // thread both land in time order rather than clashing, a withdrawn message
+  // stays withdrawn, and the thread's own fields (anchor, mark, resolved) merge
+  // one by one. Threads come back oldest first, the order `threadsFor` shows.
   notes: object({
-    comments: keyed("id", object({})),
+    comments: COMMENTS,
   }),
   // The installation contract. Every key ATOMIC, which is the strategy the file's
   // ownership asks for (design/engine-server.md 4.11): the server owns it, it

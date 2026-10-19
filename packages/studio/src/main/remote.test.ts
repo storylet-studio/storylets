@@ -967,41 +967,45 @@ describe("unpushed shards", () => {
   // `properties` in the project file, `fields` in two box shards - and a base
   // of canonical TEXT counted the sort. The format sorts a list keyed by ID on
   // its own way out, so these are the lists where the two ends could disagree.
-  it("does not count the order of a name-keyed list", async () => {
+  it("counts a reordered declaration list as an edit: Move up is the author's work", async () => {
+    // Until 2026-10-19 the merge sorted name-keyed lists, so their order could
+    // never be a change (the ruling of 2026-09-07). Declarations now keep the
+    // author's order through a merge (family parity item 4), and an order that
+    // survives a merge has to travel with a push, or a reorder never leaves
+    // the machine it was made on.
     const { dir } = levelProject("count-order-hash");
     const proj = findProject(dir);
     const reversed = reorderProperties(proj.text);
     expect(reversed, "the same shard, stored the other way round").not.toBe(proj.text);
-    expect(shardHash(reversed)).toBe(shardHash(proj.text));
-    // The normal form is the merge's own, so a shard already in it is unmoved.
-    expect(canonicalStringify(normalForm(parseSource(proj.text) as Record<string, unknown>)))
-      .toBe(canonicalStringify(normalForm(parseSource(reversed) as Record<string, unknown>)));
+    expect(shardHash(reversed)).not.toBe(shardHash(proj.text));
 
     writeFileSync(proj.path, reversed, "utf8");
     forgetShardHashes();
-    expect(unpushedShards(dir)).toBe(0);
+    expect(unpushedShards(dir)).toBe(1);
   });
 
-  it("reads In sync after a pull that only reordered a shard, and rewrites nothing", async () => {
+  it("takes a reorder made at the other end on a pull, without a conflict", async () => {
     const { dir } = levelProject("count-order-pull");
     const proj = findProject(dir);
     const before = readFileSync(proj.path, "utf8");
 
-    // The server's copy of the same revision, with the project's own properties
-    // the other way round: the shape a pack comes back in once anything at that
-    // end has merged it.
+    // The server's copy of the next revision, with the project's own properties
+    // reordered there and nothing else changed.
     const theirs = copyExample("count-order-pull-theirs");
     const theirProj = findProject(theirs);
-    writeFileSync(theirProj.path, reorderProperties(theirProj.text), "utf8");
+    const reordered = reorderProperties(theirProj.text);
+    writeFileSync(theirProj.path, reordered, "utf8");
 
     const plan = await planPull(dir, await runPack(theirs, { assets: true }), server.revisions[0]!);
-    expect(plan.writes.find((w) => w.path === proj.path), "nothing to write").toBeUndefined();
     expect(plan.conflicts).toBe(0);
+    const write = plan.writes.find((w) => w.path === proj.path);
+    expect(write, "their order is written").toBeDefined();
+    expect(write!.content).not.toBe(before);
+    expect(shardHash(write!.content)).toBe(shardHash(reordered));
 
-    for (const write of plan.writes) writeFileSync(write.path, write.content, "utf8");
+    for (const w of plan.writes) writeFileSync(w.path, w.content, "utf8");
     writeBase(dir, 2, plan.base);
     forgetShardHashes();
-    expect(readFileSync(proj.path, "utf8"), "left exactly as it was").toBe(before);
     expect(unpushedShards(dir)).toBe(0);
     expect(statusLine({ revision: 2, edits: unpushedShards(dir) })).toBe("In sync");
   });

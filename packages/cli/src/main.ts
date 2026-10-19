@@ -22,6 +22,7 @@ import {
   runNewBox, runPack, runUnpack, runUnpackMerge, runValidate, analyseInfluence, describeContribution,
   CONFLICT_SIDECAR_EXTENSION, MergeInputError, NotAPackError, PackError, UnsafeEntryError, isBinaryWrite,
   runResolve, // resolve: the --at lookup from the terminal
+  parsePropertyQuery, propertyUsageReport, // usage: Find's Property tab from the terminal
   runExportXlsx, // export-xlsx: the readable workbook
   runExportHtml, bundleOutputPath, // export-html: the playable page
   BOX_KITS,                        // the one kit list; --kit validates from it
@@ -79,6 +80,11 @@ Usage:
   storyletengine resolve <query> [path]  Find an item by gameId, id or title: which
                                       box, deck and shard it lives in (the same
                                       lookup as Storyletter's --at)
+  storyletengine usage <property>     Where a property is read and written: each
+                 [path] [--json]      condition, priority, gate and outcome
+                                      change, with the item it is in (Find's
+                                      Property tab; @gold, story.act,
+                                      @box.village.heat)
   storyletengine share-scopes [path]  Share the project's scopes with the game's other
                  [--at DIR]           tools: make the game's game-scopes/ folder (in
                                       DIR, else the version-control root above the
@@ -147,6 +153,7 @@ const FLAGS = {
   peek: { boolean: ["deal-all"], valued: ["seed", "n"], repeated: ["where", "set"] },
   deal: { boolean: ["deal-all"], valued: ["seed"], repeated: ["set"] },
   resolve: { boolean: [], valued: [], repeated: [] },
+  usage: { boolean: ["json"], valued: [], repeated: [] },
   "share-scopes": { boolean: [], valued: ["at"], repeated: [] },
   // --assets/--no-assets were read by the handler from the day they were
   // designed and never declared here, so every use of them was an "unknown
@@ -179,6 +186,7 @@ const SHORT: Record<Command, string> = {
   peek: "peek <box> [path] [--where group=tag ...] [--n N] [--set path=value ...] [--seed N] [--deal-all]",
   deal: "deal <hand> [path] [--set path=value ...] [--seed N] [--deal-all]",
   resolve: "resolve <query> [path]",
+  usage: "usage <property> [path] [--json]",
   "share-scopes": "share-scopes [path] [--at DIR]",
   pack: "pack [path] -o FILE [--assets|--no-assets]",
   unpack: "unpack FILE -o DIR [--merge --base SENT.storyletpack]",
@@ -633,6 +641,31 @@ export async function run(
         const title = e.title !== undefined ? `  ${JSON.stringify(e.title)}` : "";
         const trail = e.location.length > 0 ? `  ${e.location.join(" > ")}` : "";
         io.log(`${e.id}  [${kindLabel[e.kind] ?? e.kind}]${title}  ${e.gameId}${trail}  (${e.file})`);
+      }
+      return 0;
+    }
+    case "usage": {
+      // Find's Property tab from the terminal (family parity item 16; Patter's
+      // `patter usage`). Nothing using a property is an answer, exit 0; a
+      // project that would not load or compile is not one, exit 1.
+      const query = positionals[0];
+      if (query === undefined) return usage(io, "usage", "no property given (e.g. @gold, story.act, @box.village.heat)");
+      if (parsePropertyQuery(query) === null) return usage(io, "usage", `"${query}" is not a property (e.g. @gold, story.act, @box.village.heat)`);
+      const loaded = loadProject(positionals[1] ?? ".");
+      printIssues(loaded.issues, io);
+      if (!loaded.source || hasError(loaded.issues)) return 1;
+      const report = propertyUsageReport(loaded, query);
+      printIssues(report.issues, io);
+      if (report.issues.length > 0) return 1;
+      if (flags["json"] === true) {
+        io.log(JSON.stringify(report.usages, null, 2));
+        return 0;
+      }
+      if (report.usages.length === 0) { io.error(`no uses of '${query}'`); return 0; }
+      // One line per use: read or write, the property, where and what, then the item's trail and id.
+      for (const u of report.usages) {
+        const trail = [...u.item.location, u.item.title ?? u.item.gameId].join(" > ");
+        io.log(`${u.use === "write" ? "write" : "read "}  ${u.property}  ${u.where}: ${u.text}  ${trail}  (${u.item.id})`);
       }
       return 0;
     }

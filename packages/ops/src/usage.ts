@@ -3,7 +3,7 @@
 // card's When or priority, a deck's gate, a hand's or hand template's When, an
 // outcome's When, a change's value) or WRITTEN (an outcome's change), each hit
 // naming the item and, for a write, the outcome that makes it. The Find
-// window's Property tab; the CLI could grow it.
+// window's Property tab, and `storyletengine usage`.
 //
 // Built on the influence analysis rather than a second scan: `propertyRefs`
 // (influence.ts) decides what a read is and `writesOf` (analysis-common.ts)
@@ -15,6 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import { compileProject } from "@storylet-studio/compiler";
+import type { Issue } from "@storylet-studio/compiler";
 import type { Box, Bundle, Card, Expression } from "@storylet-studio/model";
 import { byDisplayOrder } from "@storylet-studio/model";
 import { effectiveGameId } from "@storylet-studio/model";
@@ -93,6 +94,19 @@ export function runPropertyUsageMany(loaded: LoadedProject, queries: string[]): 
   if (!bundle) return queries.map(() => []);
   const entries = new Map(indexProject(loaded).map((e) => [e.id, e]));
   return queries.map((query) => usagesOf(bundle, entries, query));
+}
+
+/**
+ * The same, for the terminal, which has to tell "nothing uses it" from "the
+ * project would not compile, so nothing could be asked": the uses, and the
+ * compile's errors when there was no bundle to read.
+ */
+export function propertyUsageReport(loaded: LoadedProject, query: string): { usages: PropertyUsage[]; issues: Issue[] } {
+  if (!loaded.source) return { usages: [], issues: [] };
+  const { bundle, issues } = compileProject(loaded.source);
+  if (!bundle) return { usages: [], issues: issues.filter((i) => i.severity === "error") };
+  const entries = new Map(indexProject(loaded).map((e) => [e.id, e]));
+  return { usages: usagesOf(bundle, entries, query), issues: [] };
 }
 
 function usagesOf(
