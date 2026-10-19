@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-19
+
 ### Fixed
 
 - **A card plays the Patter scene the game opens.** The Board, the card-to-scene check and Show Scene in Patterpad

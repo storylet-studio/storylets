@@ -7,10 +7,14 @@ job reads the section for the tagged version out of this file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-19
+
 ### Changed
 
-- **Patterplay 0.32.0.** A card finds its Patter scene by Patter's own rule (the scene's address first, then its
-  internal id), and an off-screen or voice-over speaker reads as Patter names it, "Tam (O.S.)".
+- **Patterplay 0.32.0 in every host.** The web client, and the Godot, Unity and Unreal zips, which were on 0.30.0:
+  one Patter version everywhere again. A card finds its Patter scene by Patter's own rule (the scene's address first,
+  then its internal id), and in the web client an off-screen or voice-over speaker reads as Patter names it, "Tam
+  (O.S.)".
 
 ## [0.7.0] - 2026-10-18
 

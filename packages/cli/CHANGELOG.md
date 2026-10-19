@@ -20,6 +20,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-19
+
 ### Added
 
 - **Version control beyond git, as Patter has it.** `init --vcs git|perforce|plastic|svn|none` sets a project
