@@ -22,6 +22,14 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ### Added
 
+- **Version control beyond git, as Patter has it.** `init --vcs git|perforce|plastic|svn|none` sets a project
+  up for its system and records it: git's `.gitattributes` and `.gitignore`, Perforce's `.p4ignore`, Plastic's
+  `ignore.conf`, and a `vcs-setup.md` with that system's one-time steps (the git config lines, the Perforce
+  typemap, SVN's auto-props and ignore property, the merge tool to set). `--bundle ignore` keeps the compiled
+  bundle out of version control, to build it in CI.
+- **`storyletengine mergetool BASE THEIRS OURS OUT [--fallback "tool args"]`**: the one global merge tool
+  Perforce, Plastic SCM and SVN allow. Storylet Studio files get the structured merge, anything else goes to
+  your usual tool. The setup and the wrapper are Patter's, shared through `@wildwinter/toolkit`.
 - **`storyletengine usage <property> [path] [--json]`**: every place a property is read (a When, a priority, a
   deck's gate, an outcome's When or change value) or written (an outcome's change), one line each with the item's
   trail and id. The list Storyletter's Find window shows on its Property tab, from the terminal, as `patter usage`
@@ -29,6 +37,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ### Changed
 
+- **`init` with no `--vcs` writes no git files.** It used to write `.gitattributes` and `.gitignore` always;
+  now, as Patter's does, it writes only `vcs-setup.md`, covering every system. Pass `--vcs git` for the git files.
 - **`merge` keeps the order of declarations.** Property and field lists (the Card template's fields, a box's
   outcome fields, the project's `@story` and `@world` properties) came back sorted by name from every merge,
   undoing Move up and Move down. They now keep the author's order: the side that reordered wins, and both

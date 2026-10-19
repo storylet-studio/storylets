@@ -1013,3 +1013,8 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 .mapzone-prop-stages { display: inline-flex; align-items: center; gap: 4px; }
 .mapzone-prop-stages [data-icon] { color: var(--muted); }
 .mapside-h > i { flex: none; display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+
+/* New Project's own fields under the name (version control), stacked as the name is: Patterpad's
+   `.create-details`, the same rule in both apps. */
+.create-details { display: flex; flex-direction: column; gap: 6px; }
+.kit-gallery .create-details select { width: 100%; max-width: none; }

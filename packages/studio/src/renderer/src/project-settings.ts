@@ -13,7 +13,8 @@ import { el, mountSettingsDialog, labelled, labelledToggle, lockControls } from 
 import { shapeNotice } from "./vc-view.js";
 import { ok } from "./results.js";
 import type { SettingsDialog, SettingsSectionHandle } from "@wildwinter/app-shell";
-import type { OpenResult, PlayRung, ProjectDto, ProjectSettingsDto, PropertyDeclDto, StageTargetDto, StudioApi } from "../../shared/api.js";
+import type { OpenResult, PlayRung, ProjectDto, ProjectSettingsDto, PropertyDeclDto, StageTargetDto, StudioApi, VcsSetting } from "../../shared/api.js";
+import { VCS_OPTIONS } from "../../shared/api.js";
 import { extensionFields, extensionsFor } from "./extension-rows.js";
 import type { ExtensionHost } from "./extension-rows.js";
 import { PLAY_RUNGS, RUNG_BLURB, RUNG_LABEL } from "./play-ladder.js";
@@ -26,6 +27,22 @@ function dialogField(value: string, onInput: (v: string) => void): HTMLInputElem
   input.value = value;
   input.addEventListener("input", () => onInput(input.value));
   return input;
+}
+
+/**
+ * The version control system (Patterpad's Version control section, in its words): which system
+ * Storyletter talks to, and what a switch rewrites. "Not set" is offered only to a project that has
+ * not chosen, which every project made before the setting is: Storyletter then works it out from the
+ * folders, as it always did, and once a system is chosen the choice is the project's.
+ */
+function vcsField(d: ProjectSettingsDto): HTMLElement {
+  const sel = el("select");
+  if (d.vcs === "") sel.append(new Option("Not set (found from the folders)", ""));
+  for (const [value, label] of VCS_OPTIONS) sel.append(new Option(label, value));
+  sel.value = d.vcs;
+  sel.addEventListener("change", () => { d.vcs = sel.value as VcsSetting; });
+  return labelled("Version control system", sel,
+    "Storyletter checks a file out before writing where the system locks files, and writes straight away where it merges. Switching systems rewrites the project's vcs-setup.md and ignore rules.");
 }
 
 /**
@@ -164,6 +181,10 @@ export function createProjectSettings(
             labelled("Patter project", patterRow,
               "The Patter project whose scenes these cards play, named after them. Each card is checked against its scene in the Patter project's published bundle, and Edit ▸ Show Scene in Patterpad opens it."),
           );
+          return {};
+        } },
+        { id: "vcs", label: "Version control", group: "Project", mount: (h) => {
+          h.append(vcsField(data!));
           return {};
         } },
         // Story properties are NOT here: they are the designers' daily working

@@ -46,7 +46,7 @@ whatever failed to load.
 ## Every command
 
 ```
-storyletengine init [dir] [--name X] [--kit starter|map-story|action-game]
+storyletengine init [dir] [--name X] [--kit starter|map-story|action-game] [--vcs git|perforce|plastic|svn|none] [--bundle commit|ignore]
 storyletengine new box [path] [--kit blank|rpg|dialogue|jobs|stash|codex|news|acts]
 storyletengine validate [path]
 storyletengine format [path] [--check]            (alias: fmt)
@@ -59,6 +59,7 @@ storyletengine resolve <query> [path]
 storyletengine usage <property> [path] [--json]
 storyletengine contract show [installation] [path]
 storyletengine merge BASE OURS THEIRS [-o out] [--json] [--path realfile]
+storyletengine mergetool BASE THEIRS OURS OUT [--fallback "tool args"]
 storyletengine links [path] [--deck X | --box X | --card X] [--refs] [--json]
 storyletengine coverage [path] [--runs N] [--max-turns M] [--seed S] [--order least|deck] [--json] [--fail-on-gap] [--propose]
 storyletengine share-scopes [path] [--at DIR]
@@ -78,12 +79,25 @@ initialised "The Tavern" in .../tavern.storylets
 next: storyletengine export .../tavern.storylets
 ```
 
-It creates `<dir>.storylets` from a GAME KIT, plus the files that keep a project tidy in a
-repo: `.editorconfig`, `.gitattributes`, `.gitignore`, `.vscode/settings.json`, and
-`vcs-setup.md`. `--kit` is `starter` (the default: one box, one hand, two cards that show
-the loop), `map-story` (a village on a drawn map, whose first scene opens the rest of
-it), or `action-game` (five boxes on one city map, the story side of an action game). Storyletter's New Project picker offers the same kits. See [the
-walkthrough](/cli-walkthrough/#1-make-a-project).
+It creates `<dir>.storylets` from a GAME KIT, plus the files that keep a project tidy:
+`.editorconfig`, `.vscode/settings.json`, and the setup for your version control. `--kit` is
+`starter` (the default: one box, one hand, two cards that show the loop), `map-story` (a
+village on a drawn map, whose first scene opens the rest of it), or `action-game` (five boxes
+on one city map, the story side of an action game). Storyletter's New Project picker offers the
+same kits. See [the walkthrough](/cli-walkthrough/#1-make-a-project).
+
+| Flag | Does |
+|---|---|
+| `--vcs git` | Writes `.gitattributes` (LF text, the structured merge driver) and `.gitignore`, and records git on the project. |
+| `--vcs perforce` | Writes `.p4ignore`, and records Perforce. |
+| `--vcs plastic` | Writes Plastic's `ignore.conf`, and records Plastic SCM. |
+| `--vcs svn` | Records SVN; its ignores are a folder property, so `vcs-setup.md` gives the command. |
+| `--vcs none` | Records that the project has no version control. |
+| `--bundle ignore` | Keeps the compiled bundle out of version control, to build it in CI. The default, `commit`, commits it. |
+
+Every project gets a `vcs-setup.md` with the one-time steps for its system: the git config
+lines, the Perforce typemap, the merge tool to set. With no `--vcs` it covers every system, and
+Storyletter finds the system from the folders. See [version control](/setup/version-control/).
 
 ## new box
 
@@ -369,6 +383,23 @@ to standard error. It exits 1 when there are conflicts and 2 on unparseable inpu
 version control driver falls back to its own behaviour instead of trusting a guess.
 
 Full detail on [version control](/setup/version-control/).
+
+## mergetool
+
+The one global merge tool Perforce, Plastic SCM and SVN allow. Storylet Studio files go to the
+structured merge, exactly as `merge` does them, and anything else goes to your usual tool.
+
+```
+storyletengine mergetool BASE THEIRS OURS OUT --fallback "<your merge tool>"
+```
+
+The four files are in the order those systems agree on: base, theirs, ours, and the output. The
+output is the real file, so a clash leaves its `.storyletconflict` beside it. `--fallback` is
+the command for everything else, with any flags of its own (`"code --wait --merge"`); it is
+given the same four files, in the same order, and its exit code is the merge's. Without a
+fallback, a file that isn't Storylet Studio source exits 2. git doesn't need this: it calls
+`merge` per file. Each system's line is in the project's `vcs-setup.md`, and on [version
+control](/setup/version-control/#perforce-plastic-and-svn-one-merge-tool-for-everything).
 
 ## share-scopes
 

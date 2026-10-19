@@ -2,23 +2,27 @@
 // The init op: scaffold a new `.storylets` project - the project shard, a
 // starter box with a playable two-card loop, and the hygiene files the
 // extension ruling promised (source doc section 2): editor associations
-// registering the shard extensions as JSON5, `.editorconfig`, and git
-// config (`.gitattributes` + `.gitignore`). Pure planned writes: nothing is
-// written here; the caller commits them through the VC layer.
+// registering the shard extensions as JSON5, `.editorconfig`, and the setup
+// for the team's version control (git, Perforce, Plastic SCM or SVN, from
+// `vcs.ts`; with none chosen, a `vcs-setup.md` covering every one, as Patter's
+// init). Pure planned writes: nothing is written here; the caller commits them
+// through the VC layer.
 // ---------------------------------------------------------------------------
 
 import { basename, join, resolve } from "node:path";
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import {
-  BOX_SCHEMA, BUNDLE_EXTENSION, DECK_SCHEMA, EXTENSIONS_DIR, HANDS_SCHEMA, MANIFEST_EXTENSION, MAP_SCHEMA, PLACE_GROUP, PROJECTMAP_SCHEMA,
+  BOX_SCHEMA, BUNDLE_EXTENSION, DECK_SCHEMA, HANDS_SCHEMA, MAP_SCHEMA, PLACE_GROUP, PROJECTMAP_SCHEMA,
   PROJECT_FOLDER_EXTENSION,
   PROJECT_SCHEMA, SHARD_EXTENSIONS, SPATIAL, TAGS_SCHEMA,
 } from "@storylet-studio/model";
+import type { VcsKind } from "@storylet-studio/model";
 import type { BoxShard, DeckShard, HandsShard, MapShard, ProjectMapShard, ProjectShard, PropertyDecl, TagGroup, TagsShard } from "@storylet-studio/model";
 import { canonicalStringify } from "@storylet-studio/compiler";
 import { newId, slug } from "./ids.js";
 import { boxFolderName, boxFolderWrites } from "./box-folder.js";
-import { CONFLICT_SIDECAR_EXTENSION } from "./merge.js";
+import { systemOf, vcsConfigWrites } from "./vcs.js";
+import type { BundlePosture } from "./vcs.js";
 import { projectMapPath } from "./map.js";
 import { districts, rect } from "./newbox.js";
 import type { PlannedWrite } from "./write.js";
@@ -36,6 +40,11 @@ export interface InitOptions {
   name?: string;
   /** The game kit to start from; the starter when absent. */
   kit?: GameKit;
+  /** The version control system to set the project up for, recorded on the project; `"none"` records that
+   *  there is none. Absent records nothing, and the guide then covers every system. */
+  vcs?: VcsKind | "none";
+  /** Whether the compiled bundle is committed (the default) or built in CI and ignored. */
+  bundle?: BundlePosture;
 }
 
 export interface InitResult {
@@ -74,6 +83,7 @@ export function runInit(opts: InitOptions): InitResult {
   const project: ProjectShard = {
     schema: PROJECT_SCHEMA,
     project: { id: newId("proj"), name, version: "0.1.0" },
+    ...(opts.vcs !== undefined ? { vcs: opts.vcs } : {}),
     // The play ladder's rung (design/engine-server.md 4.10). The kit sets it,
     // and the starter kit is a single-player game, so it lands on "solo": the
     // editor then shows nothing about sharing, durability or a venue until an
@@ -108,10 +118,8 @@ export function runInit(opts: InitOptions): InitResult {
         ? [{ path: join(dir, boxFolderName(box.box), `map${SHARD_EXTENSIONS.map}`), content: canonicalStringify(box.sites) }] : []),
     ]),
     { path: join(dir, ".editorconfig"), content: EDITORCONFIG },
-    { path: join(dir, ".gitattributes"), content: GITATTRIBUTES },
-    { path: join(dir, ".gitignore"), content: GITIGNORE },
+    ...vcsConfigWrites(dir, systemOf(opts.vcs), opts.bundle),
     { path: join(dir, ".vscode", "settings.json"), content: VSCODE_SETTINGS },
-    { path: join(dir, "vcs-setup.md"), content: VCS_SETUP },
     { path: projectFile, content: canonicalStringify(project) },
   ];
 
@@ -563,10 +571,6 @@ function actionGameParts(): KitParts {
 
 /** Every shard extension without its dot (`storyletdeck`). */
 const SHARD_NAMES = Object.values(SHARD_EXTENSIONS).map((ext) => ext.slice(1));
-/** `*.storyletdeck`, padded so the attribute columns line up. */
-const PATTERN_WIDTH = Math.max(...SHARD_NAMES.map((name) => name.length)) + 3;
-const pattern = (name: string): string => `*.${name}`.padEnd(PATTERN_WIDTH);
-const eachShard = (attribute: string): string => SHARD_NAMES.map((name) => `${pattern(name)}${attribute}`).join("\n");
 
 const EDITORCONFIG = `# Storylet Studio source is UTF-8 + LF, always (the validator enforces this).
 root = true
@@ -581,40 +585,7 @@ indent_style = space
 indent_size = 2
 `;
 
-const GITATTRIBUTES = `# Storylet Studio source is UTF-8 + LF text (pinned; never let autocrlf touch it).
-${eachShard("text eol=lf")}
 
-# Id-keyed structured merge for storylets source (the 'storyletengine merge'
-# driver; see vcs-setup.md). Until it is registered, git falls back to a
-# normal text merge for these - the format carries the everyday cases anyway
-# (Tier 1 of the merge design). Every shard has a strategy: the arrangement
-# shards (view and map) merge MOST, since positions churn and two designers
-# tidying different corners of a canvas, or of the map, must not conflict.
-${eachShard("merge=storylets")}
-
-# The compiled bundle is committed but REGENERATED, never hand-merged - keep
-# ours on conflict and rebuild ('storyletengine validate' catches a stale
-# one via the content hash). Needs a one-time
-# 'git config merge.ours.driver true' (see vcs-setup.md).
-${pattern(BUNDLE_EXTENSION.slice(1))}text eol=lf merge=ours
-
-# An extension's manifest is the extension's own JSON, kept in the project so
-# every machine reads the same one, and never edited here: text, merged as text.
-${`${EXTENSIONS_DIR}/*${MANIFEST_EXTENSION}`.padEnd(PATTERN_WIDTH)}text eol=lf
-
-# Background images (an orientation aid on a map): bytes, so nothing should ever
-# try to diff, merge or normalise line endings in one. Plain git is fine for a
-# few MB of floor plan; if yours grow, git-lfs is the escape hatch and nothing
-# here depends on it.
-${"assets/**".padEnd(PATTERN_WIDTH)}binary
-`;
-
-const GITIGNORE = `# Storylet Studio generated artifacts that are never source:
-# Unresolved merge sidecar (a lingering one is a validate error). The merge also
-# names its clashes in the shard itself, under "unresolved", which IS committed
-# with the file, so CI refuses an unresolved merge wherever it goes:
-*${CONFLICT_SIDECAR_EXTENSION}
-`;
 
 const VSCODE_SETTINGS = `{
   // Storylet Studio shards are JSON5 (trailing commas, comments) under per-type
@@ -625,31 +596,3 @@ ${SHARD_NAMES.map((name) => `    "*.${name}": "json5"`).join(",\n")}
 }
 `;
 
-const VCS_SETUP = `# VCS setup
-
-\`.gitattributes\` (already emitted) pins storylets shards to UTF-8 + LF text
-and marks the compiled \`.storyletsc\` bundle \`merge=ours\` (regenerated, never
-hand-merged; \`storyletengine validate\` catches a stale one via the content
-hash).
-
-Register the merge drivers once per clone (git config is not repo-tracked):
-
-    git config merge.storylets.name "Storylet Studio structured merge"
-    git config merge.storylets.driver "storyletengine merge %O %A %B -o %A --path %P"
-    git config merge.ours.driver true
-
-(\`%P\` tells the driver the file's real path, so a conflicted merge can put
-its \`.storyletconflict\` sidecar next to the actual shard rather than git's
-temp file.)
-
-Wherever the driver is not registered, git falls back to a normal text merge
-for the shards - safe, because the format carries the everyday cases:
-different decks, different cards in one deck, different fields of one card
-all merge cleanly as text (Tier 1 of the merge design); concurrent adds to
-one deck are the case the driver exists for.
-
-Recommended pre-commit hook (\`.git/hooks/pre-commit\`, executable):
-
-    #!/bin/sh
-    storyletengine validate || exit 1
-`;

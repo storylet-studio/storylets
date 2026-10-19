@@ -7,7 +7,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { JOB_PROGRESS_CHANNEL, PROJECT_CHANGED } from "../shared/api.js";
 import type {
   BoxEdit, CardEdit, DeckEdit, TagGroupEdit, HandEdit, LastPlace, MapLayerPrefs, PaneState, ProjectSettingsDto, ReplaceOptions, ReviewAt, SearchOpen, TemplateEdit, StudioApi, ThemeChoice, ViewMode,
-  ProjectKit, UpdaterPromptOptions,
+  ProjectKit, UpdaterPromptOptions, VcsSetting,
   UpdaterDownloadProgress,
   InvokeArgs, InvokeChannel, InvokeResult, PushArgs, PushChannel, SendArgs, SendChannel,
 } from "../shared/api.js";
@@ -34,7 +34,7 @@ const api: StudioApi = {
   openProjectDialog: () => invoke("project:openDialog"),
   openProjectPath: (path: string) => invoke("project:openPath", path),
   revealProject: () => { void invoke("project:reveal"); },
-  createProject: (name: string, kit?: ProjectKit) => invoke("project:create", name, kit),
+  createProject: (name: string, kit?: ProjectKit, vcs?: Exclude<VcsSetting, "">) => invoke("project:create", name, kit, vcs),
   openExample: (name: string) => invoke("example:open", name),
   closeProject: () => invoke("project:close"),
   clearRecents: () => invoke("state:clearRecents"),

@@ -1642,6 +1642,10 @@ export interface CoverageConfig {
 
 }
 
+/** The version control systems a project can be set up for: `@wildwinter/toolkit/vcs`' list, written out here
+ *  because the model takes no tooling dependency (ops checks the two agree). Absent on a project means none. */
+export type VcsKind = "git" | "perforce" | "plastic" | "svn";
+
 export interface ProjectShard {
   schema: typeof PROJECT_SCHEMA;
   project: {
@@ -1670,6 +1674,15 @@ export interface ProjectShard {
    * that doesn't exist is a project error. (patterkit design/shared-scopes.md.)
    */
   gameScopes?: string;
+  /**
+   * The version control system the project is kept in. Authoring config, never compiled. Set, Storyletter
+   * talks to that system and no other, rather than guessing from the folders above the project (a project
+   * inside an unrelated git checkout would otherwise be staged into it); `"none"` is plain writes, no version
+   * control at all. ABSENT is "not chosen", and Storyletter finds the system from the folders as it always
+   * did, which is every project made before the setting. Patter's `ProjectFile.vcs`, except that Patter
+   * reads absent as none: its projects have had the setting from the start, and ours have not.
+   */
+  vcs?: VcsKind | "none";
   /**
    * The Patter project this one is paired with: a `.patter` folder, relative to the folder
    * holding this file (`"../story/the-hamlet.patter"`). Authoring config, never compiled: the

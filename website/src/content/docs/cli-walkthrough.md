@@ -27,7 +27,7 @@ This page walks all of it in one sitting. Every command and every output below i
 ## 1. Make a project
 
 ```
-$ storyletengine init tavern --name "The Tavern"
+$ storyletengine init tavern --name "The Tavern" --vcs git
 initialised "The Tavern" in .../tavern.storylets
 next: storyletengine export .../tavern.storylets
 ```
@@ -50,7 +50,9 @@ tavern.storylets/
 The small files at the bottom are worth keeping. The shards are JSON5 under their own
 extensions, so `.vscode/settings.json` tells your editor to colour them properly, and
 `.gitattributes` pins the line endings and points git at the merge driver that understands
-them. `vcs-setup.md` has the one-time `git config` lines.
+them. `vcs-setup.md` has the one-time `git config` lines. On Perforce, Plastic or SVN, give
+`--vcs` that system instead, and you get its ignore file and its setup (see [version
+control](/setup/version-control/#choosing-a-system)).
 
 ## 2. See what the starter box already does
 

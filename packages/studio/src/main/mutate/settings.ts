@@ -2,11 +2,14 @@
 // The project shard's settings, saved whole from the settings dialog.
 // ---------------------------------------------------------------------------
 
+import { existsSync } from "node:fs";
 import type { CoverageDriver, ProjectShard } from "@storylet-studio/model";
+import { vcsSwitchPlan } from "@storylet-studio/ops";
 import { gameWorldWrite } from "../game-scopes.js";
 import type { ProjectSession } from "../project.js";
 import { declsFromDtos } from "../decls.js";
 import type { CoverageDriverDto, ProjectSettingsDto } from "../../shared/api.js";
+import type { FileState } from "../history.js";
 import { commit, freshKey } from "./write-path.js";
 import type { Written } from "./write-path.js";
 import { projectWrite } from "./shards.js";
@@ -45,7 +48,18 @@ export async function saveProjectSettings(session: ProjectSession, dto: ProjectS
   // would hide something the project contains.
   p.settings.play = dto.play;
   writeDrivers(p, dto.drivers);
-  return commit(session, "Project settings", freshKey(), [...shared, projectWrite(session)]);
+  // Version control (Patterpad's switch): the new system's setup files written, the old one's that the new
+  // one does not have removed, all in this one step, so its Undo puts the old system back as it was. The
+  // bundle posture carries across. A project that chose nothing yet keeps that until a system is picked.
+  const fromVcs = p.vcs;
+  const toVcs = dto.vcs === "" ? fromVcs : dto.vcs;
+  if (toVcs !== undefined) p.vcs = toVcs;
+  const vcs = vcsSwitchPlan(session.loaded.dir, fromVcs, toVcs);
+  const vcsFiles: FileState[] = [
+    ...vcs.writes.map((w) => ({ path: w.path, content: w.content })),
+    ...vcs.removes.filter((path) => existsSync(path)).map((path) => ({ path, content: null })),
+  ];
+  return commit(session, "Project settings", freshKey(), [...shared, projectWrite(session), ...vcsFiles]);
 }
 
 /** Fold the edited driver list back into the shard's map. A driver with no

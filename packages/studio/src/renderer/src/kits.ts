@@ -9,7 +9,8 @@
 import { openKitGallery } from "@wildwinter/app-shell";
 import type { KitGalleryItem } from "@wildwinter/app-shell";
 import { EXAMPLES } from "../../shared/examples.js";
-import type { BoxKit, ProjectKit } from "../../shared/api.js";
+import type { BoxKit, ProjectKit, VcsSetting } from "../../shared/api.js";
+import { VCS_OPTIONS } from "../../shared/api.js";
 
 // The two kit SCALES have their own names (the author's ruling, 2026-08-29):
 // a BOX KIT scaffolds one box, a GAME KIT scaffolds a whole project. "Kit"
@@ -154,14 +155,26 @@ export const EXAMPLE_KITS: KitGalleryItem<`example:${string}`>[] = EXAMPLES.map(
 export function openNewProject(initial: ProjectStart | undefined, start: {
   /** Open a shipped example as the author's own copy (main asks for a folder). */
   openExample: (file: string) => void;
-  /** Make a project from a game kit (main asks for a folder). */
-  create: (name: string, kit: ProjectKit) => void;
+  /** Make a project from a game kit, kept in `vcs` (main asks for a folder). */
+  create: (name: string, kit: ProjectKit, vcs: Exclude<VcsSetting, "">) => void;
 }): void {
+  // Version control, as Patterpad's New Project asks it: the one list Project Settings offers too, on
+  // None until chosen. The kit's own fields, so an example (opened, not made) never shows it.
+  const vcs = document.createElement("select");
+  for (const [value, label] of VCS_OPTIONS) vcs.append(new Option(label, value));
+  vcs.value = "none";
+  const vcsLabel = document.createElement("label");
+  vcsLabel.className = "kit-gallery-label";
+  vcsLabel.textContent = "Version control";
+  const details = document.createElement("div");
+  details.className = "create-details";
+  details.append(vcsLabel, vcs);
   openKitGallery<ProjectStart>({
     title: "New project",
     what: "A project is one game's worth of storylets. It holds boxes of cards, the places they're dealt to, and the bundle your game loads.",
     namePlaceholder: "Harbour Town",
     nameLabel: "Project name",
+    details,
     ...(initial !== undefined ? { initial } : {}),
     sections: [
       // Both buttons say a folder picker follows, with the ellipsis that
@@ -172,7 +185,7 @@ export function openNewProject(initial: ProjectStart | undefined, start: {
     ],
     onPick: (choice, { name }) => {
       if (choice.startsWith("example:")) { start.openExample(choice.slice("example:".length)); return; }
-      if (name !== undefined) start.create(name, choice as ProjectKit);
+      if (name !== undefined) start.create(name, choice as ProjectKit, vcs.value as Exclude<VcsSetting, "">);
     },
   });
 }

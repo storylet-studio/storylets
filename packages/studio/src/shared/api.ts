@@ -1017,6 +1017,14 @@ export interface TemplateEdit {
 
 /** Project-level settings (the .storyletproj shard), edited in the settings
  *  dialog and written whole on save. */
+/** A project's version control setting, as Project Settings and New Project offer it ("" = not chosen). */
+export type VcsSetting = "git" | "perforce" | "plastic" | "svn" | "none" | "";
+
+/** The systems both pickers list, in Patterpad's order and words (its `VCS_OPTIONS`). */
+export const VCS_OPTIONS: ReadonlyArray<readonly [Exclude<VcsSetting, "">, string]> = [
+  ["git", "Git"], ["perforce", "Perforce"], ["plastic", "Plastic SCM"], ["svn", "Subversion (SVN)"], ["none", "None"],
+];
+
 export interface ProjectSettingsDto {
   name: string;
   /** NOTE: the project's opaque `id` is deliberately NOT here. It binds saves
@@ -1049,6 +1057,10 @@ export interface ProjectSettingsDto {
   warnUnreadWrites: boolean;
   /** The paired Patter project, relative to this project ("" = none): the shard's `patter`. */
   patterProject: string;
+  /** The version control system the project is kept in: the shard's `vcs`. "none" is no version control;
+   *  "" is not chosen, and Storyletter finds the system from the folders (every project made before the
+   *  setting). Changing it rewrites the project's setup files for the new system. */
+  vcs: VcsSetting;
   /** Where `world` lives when the game shares its scopes: the file the World settings
    *  write first ("game-scopes/game.scopes.json"), before the project's synced copy.
    *  Absent when the project's own declarations are the only ones. */
@@ -1734,7 +1746,7 @@ export interface StudioApi {
   /** Scaffold a new project (runInit) under a chosen parent dir; null = cancelled.
    *  `kit` "with-patter" also creates a Patter project beside it, paired, with a
    *  stub scene per card. */
-  createProject(name: string, kit?: ProjectKit): Promise<OpenResult | { error: string } | null>;
+  createProject(name: string, kit?: ProjectKit, vcs?: Exclude<VcsSetting, "">): Promise<OpenResult | { error: string } | null>;
   /** Copy a shipped worked example somewhere the author owns, and open it. Null
    *  when they cancel the folder picker. */
   openExample(name: string): Promise<OpenResult | { error: string } | null>;

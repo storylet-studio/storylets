@@ -14,7 +14,7 @@ import type { HoleDecls, Issue, LoadedProject, PatterReport, PatterScenes, Place
 import { writeBinaryFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, walkProjectFiles, worldDeclarations } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS, effectiveGameId, isSpatial, openThreadCounts, PLACE_GROUP } from "@storylet-studio/model";
-import type { Bundle, Card, CoverageDriver, Hand, HandTemplate, PlayRung } from "@storylet-studio/model";
+import type { Bundle, Card, CoverageDriver, Hand, HandTemplate, PlayRung, VcsKind } from "@storylet-studio/model";
 import type { SourceBox, SourceExtension, SourceProject } from "@storylet-studio/compiler";
 import { boardScopes, gameScopesDto, worldFileLabel } from "./game-scopes.js";
 import type {
@@ -26,7 +26,7 @@ import { declDto, fieldDeclDto } from "./decls.js";
 import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
 import { History, applyStates } from "./history.js";
 import { extensionDtos, extensionNodeChoices } from "./extensions.js";
-import { resetShardStatus, shardStatus } from "./vc.js";
+import { pinVcProvider, pinnedVcs, resetShardStatus, shardStatus } from "./vc.js";
 import type { ShardRef } from "./vc.js";
 
 export interface ProjectSession {
@@ -341,6 +341,7 @@ export function openProject(path: string): { session: ProjectSession; problems: 
   const loaded = loadProject(path);
   if (!loaded.source) return { error: refusal(loaded.issues, "not a storylets project") };
   resetShardStatus();   // a new project never inherits the last one's VC answers
+  pinVcProvider(loaded.source.project.vcs);   // its own system, never one guessed from the folders above
   return {
     session: withHeldGuard({ loaded, dto: toDto(loaded), history: new History(), stamp: diskStamp(loaded) }),
     problems: runValidate(loaded, { checkBundle: false }).issues,
@@ -485,6 +486,9 @@ export function validate(session: ProjectSession): Problem[] {
     session.loaded = loaded;
     session.dto = toDto(loaded);
     session.stamp = stamp;
+    // The project's system moved (Project Settings, an undo or redo of that, a pull, a hand edit):
+    // talk to the new one from the next write on.
+    if (loaded.source.project.vcs !== pinnedVcs()) { resetShardStatus(); pinVcProvider(loaded.source.project.vcs); }
   }
   return runValidate(loaded, { checkBundle: false }).issues;
 }
@@ -530,9 +534,14 @@ export type { ProjectKit };
 /** The Patter project folder the with-Patter kit creates beside `storyletsDir`. */
 export const patterFolderFor = (storyletsDir: string): string => storyletsDir.replace(/\.storylets$/, "") + ".patter";
 
-export function createProject(parentDir: string, name: string, kit: ProjectKit = "starter"): { path: string } | { error: string } {
+export function createProject(
+  parentDir: string, name: string, kit: ProjectKit = "starter", vcs: VcsKind | "none" = "none",
+): { path: string } | { error: string } {
   try {
-    const result = runInit({ dir: `${parentDir}/${name}`, name, kit: kit === "with-patter" ? "starter" : kit });
+    const result = runInit({ dir: `${parentDir}/${name}`, name, kit: kit === "with-patter" ? "starter" : kit, vcs });
+    // The new files go to the system chosen for them (added to it, for one that adds), not to the
+    // last project's; opening the project pins it again.
+    pinVcProvider(vcs);
     const patterDir = patterFolderFor(result.dir);
     if (kit === "with-patter" && existsSync(patterDir)) return { error: `${basename(patterDir)} is already there` };
     const batch = writeTextFiles(result.writes.map((w) => ({ filePath: w.path, content: w.content })));
@@ -641,6 +650,7 @@ export function projectSettings(session: ProjectSession): ProjectSettingsDto {
     },
     warnUnreadWrites: p.validation?.warnUnreadWrites === true,
     patterProject: p.patter ?? "",
+    vcs: p.vcs ?? "",
   };
 }
 

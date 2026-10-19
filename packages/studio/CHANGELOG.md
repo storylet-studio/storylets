@@ -10,6 +10,16 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **Choose the project's version control**, as Patterpad has it: New Project asks (Git, Perforce, Plastic SCM,
+  Subversion or None), and Project Settings has a Version control section. Switching systems rewrites the
+  project's `vcs-setup.md` and ignore rules for the new one and removes the old one's, in one step you can undo.
+- **Storyletter talks to the project's own system and no other.** It used to work the system out from the
+  folders above the project, so a project kept out of version control inside a bigger git checkout had its files
+  added to that checkout, and a Perforce project under a stray `.git` was read as git. A project made before the
+  setting shows "Not set" and is still found from the folders, until a system is chosen.
+
 ### Changed
 
 - **Merging keeps the order you gave fields and properties.** A pull, a returned pack or a version control merge

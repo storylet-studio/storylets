@@ -69,7 +69,7 @@ describe("lifecycle: init -> draw -> export -> validate -> format", () => {
   const dir = join(tmp, "demo.storylets");
 
   it("init scaffolds a project", async () => {
-    const r = (await call("init", join(tmp, "demo"), "--name", "Demo"));
+    const r = (await call("init", join(tmp, "demo"), "--name", "Demo", "--vcs", "git"));
     expect(r.err).toEqual([]);
     expect(r.code).toBe(0);
     expect(existsSync(join(dir, "demo.storyletproj"))).toBe(true);
@@ -224,6 +224,78 @@ describe("format moves a project from before the project map onto it", () => {
 
     expect((await call("format", dir, "--check")).code).toBe(0);
     expect((await call("export", dir, "--map")).code).toBe(0);
+  });
+});
+
+describe("init --vcs and --bundle: the family's version control setup", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "storyletengine-vcs-"));
+
+  it("--vcs perforce writes .p4ignore and the Perforce guide, and records the system", async () => {
+    const r = await call("init", join(tmp, "p4"), "--vcs", "perforce", "--bundle", "ignore");
+    expect(r.code).toBe(0);
+    const dir = join(tmp, "p4.storylets");
+    expect(existsSync(join(dir, ".p4ignore"))).toBe(true);
+    expect(readFileSync(join(dir, ".p4ignore"), "utf8")).toMatch(/^\*\.storyletsc$/m);
+    expect(existsSync(join(dir, ".gitattributes"))).toBe(false);
+    expect(readFileSync(join(dir, "vcs-setup.md"), "utf8")).toContain("## Perforce");
+    expect((parseSource(readFileSync(join(dir, "p4.storyletproj"), "utf8")) as { vcs?: string }).vcs).toBe("perforce");
+  });
+
+  it("with no --vcs, only the guide (every system) and no system recorded", async () => {
+    expect((await call("init", join(tmp, "plain"))).code).toBe(0);
+    const dir = join(tmp, "plain.storylets");
+    expect(existsSync(join(dir, ".gitattributes"))).toBe(false);
+    expect(existsSync(join(dir, ".gitignore"))).toBe(false);
+    expect(readFileSync(join(dir, "vcs-setup.md"), "utf8")).toContain("## SVN");
+  });
+
+  it("an unknown --vcs or --bundle is a usage error", async () => {
+    expect((await call("init", join(tmp, "bad1"), "--vcs", "hg")).code).toBe(2);
+    expect((await call("init", join(tmp, "bad2"), "--bundle", "maybe")).code).toBe(2);
+  });
+});
+
+describe("mergetool: the one global merge tool, BASE THEIRS OURS OUT", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "storyletengine-mergetool-"));
+  const deck = (cards: string): string => `{ schema: "storylets/deck@0", deck: { id: "k_1", gameId: "main", properties: [] }, cards: [${cards}] }\n`;
+  const card = (id: string, extra = ""): string => `{ id: "${id}", gameId: "${id.slice(2)}", priority: 0, redraw: "always", outcomes: []${extra} }`;
+
+  it("storylets source gets the structured merge, written to OUT, no sidecar when clean", async () => {
+    const [b, t, o, out] = ["base", "theirs", "ours", "out"].map((n) => join(tmp, `${n}.storyletdeck`)) as [string, string, string, string];
+    writeFileSync(b, deck(card("c_1", ', title: "Old"')));
+    writeFileSync(o, deck(`${card("c_1", ', title: "New"')}, ${card("c_2")}`));
+    writeFileSync(t, deck(card("c_1", ', title: "Old", condition: "@story.go"')));
+    const r = await call("mergetool", b, t, o, out);
+    expect(r.code).toBe(0);
+    const merged = readFileSync(out, "utf8");
+    expect(merged).toContain('title: "New"');
+    expect(merged).toContain('condition: "@story.go"');
+    expect(merged).toContain('id: "c_2"');
+    expect(existsSync(`${out}.storyletconflict`)).toBe(false);
+  });
+
+  it("a clash exits 1 with the sidecar beside OUT, the real file", async () => {
+    const [b, t, o, out] = ["cb", "ct", "co", "cout"].map((n) => join(tmp, `${n}.storyletdeck`)) as [string, string, string, string];
+    writeFileSync(b, deck(card("c_1", ', title: "Old"')));
+    writeFileSync(o, deck(card("c_1", ', title: "Ours"')));
+    writeFileSync(t, deck(card("c_1", ', title: "Theirs"')));
+    expect((await call("mergetool", b, t, o, out)).code).toBe(1);
+    expect(existsSync(`${out}.storyletconflict`)).toBe(true);
+  });
+
+  it("anything else goes to --fallback, with the four files in order, and returns its code", async () => {
+    const record = join(tmp, "argv.json");
+    const script = join(tmp, "fallback.cjs");
+    writeFileSync(script, `require("fs").writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(2))); process.exit(4);`);
+    const files = ["b.txt", "t.txt", "o.txt", "out.txt"].map((n) => join(tmp, n));
+    const r = await call("mergetool", ...files, "--fallback", `${process.execPath} ${script}`);
+    expect(r.code).toBe(4);
+    expect(JSON.parse(readFileSync(record, "utf8"))).toEqual(files);
+  });
+
+  it("anything else with no --fallback exits 2; fewer than four files is a usage error", async () => {
+    expect((await call("mergetool", ...["b.txt", "t.txt", "o.txt", "out.txt"].map((n) => join(tmp, n)))).code).toBe(2);
+    expect((await call("mergetool", "a", "b")).code).toBe(2);
   });
 });
 

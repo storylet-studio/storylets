@@ -40,7 +40,8 @@ watch it deal.
 
 **File ▸ New Project…** (`Cmd+N` / `Ctrl+N`) opens the **New project** picker. Under
 **Start from a kit**, pick **Starter project**, **Starter project with Patter**, **Map-based
-story** or **Action game**, give it a **Project name**, and choose where to put the folder.
+story** or **Action game**, give it a **Project name**, choose its **Version control** (None
+until you pick one), and choose where to put the folder.
 The Starter project isn't empty: it has one box, one hand to deal to, and two cards that
 already work together, so it plays straight away. Under **Learn from a finished project**,
 **Open a Copy** copies one of the examples instead. Add box kits to a project as you go (see

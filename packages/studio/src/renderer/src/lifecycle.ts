@@ -93,7 +93,7 @@ export function createLifecycle(ctx: LifecycleContext) {
   function newProject(initial?: ProjectStart): void {
     openNewProject(initial, {
       openExample: (file) => void adopt(studio.openExample(file)),
-      create: (name, kit) => void adopt(studio.createProject(name, kit)),
+      create: (name, kit, vcs) => void adopt(studio.createProject(name, kit, vcs)),
     });
   }
 

@@ -218,7 +218,7 @@ See [Live Link](/play/live-link/).
 
 ## Project settings
 
-**File ▸ Project Settings…** (`Cmd+,`) opens a dialog with three sections.
+**File ▸ Project Settings…** (`Cmd+,`) opens a dialog with four sections.
 
 - **General** holds the project's name and version, the **Play** setting (below), and one
   warning switch. **Warn about unread state** also flags state an outcome writes that no
@@ -226,6 +226,12 @@ See [Live Link](/play/live-link/).
   content that will read them; a gate on state nothing writes always warns, whatever
   this says. It also holds **Patter project**, the Patter project this one is paired with
   (see [Working with Patter](/storyletter/patter/#pairing-the-projects)).
+- **Version control** is the system the project is kept in: Git, Perforce, Plastic SCM,
+  Subversion (SVN), or None. Storyletter checks a file out before writing where the system locks
+  files, and writes straight away where it merges. Switching systems rewrites the project's
+  `vcs-setup.md` and ignore rules, in one step you can undo. A project made before the setting
+  shows **Not set**, and Storyletter finds its system from the folders above it (see [Version
+  control](/setup/version-control/#choosing-a-system)).
 - **World** holds the `@world` property declarations (your game's state), and the
   [coverage drivers](/production/coverage-testing/#writing-drivers-by-hand) that stand in
   for them during a test run. Where the game shares its scopes (below), these are the

@@ -42,7 +42,7 @@ describe("the game kits", () => {
 
 describe("the editor and git files init writes", () => {
   const files = (): Map<string, string> => {
-    const result = runInit({ dir: mkdtempSync(join(tmpdir(), "init-files-")), name: "Kit" });
+    const result = runInit({ dir: mkdtempSync(join(tmpdir(), "init-files-")), name: "Kit", vcs: "git" });
     return new Map(result.writes.map((w) => [w.path.slice(result.dir.length + 1).replaceAll("\\", "/"), w.content]));
   };
   /** Every shard extension, from the ONE list: a new one is covered here
@@ -76,8 +76,9 @@ describe("what init writes, and in what order (CLI review 2026-10, items 17 and 
     // Storylet Studio is the whole (the format, the engine, the editor); Storyletter
     // is only the editor, and these files describe the format, not the app.
     for (const kit of GAME_KITS) {
-      const result = runInit({ dir: mkdtempSync(join(tmpdir(), "init-name-")), name: "Kit", kit });
+      const result = runInit({ dir: mkdtempSync(join(tmpdir(), "init-name-")), name: "Kit", kit, vcs: "git" });
       expect(result.writes.find((w) => w.path.endsWith(".gitattributes"))!.content).toContain("Storylet Studio");
+      expect(result.writes.find((w) => w.path.endsWith("vcs-setup.md"))!.content).toContain("Storylet Studio");
     }
   });
 

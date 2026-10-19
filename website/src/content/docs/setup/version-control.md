@@ -10,8 +10,31 @@ control your team already uses. Nothing needs a database or a server, and there'
 step to get your work back out.
 
 Both Storyletter and the CLI write through your version control. A file under Perforce,
-Plastic, or SVN is checked out before it's written, and a new file is added. The system is
-detected from the folder, so there's nothing to configure.
+Plastic, or SVN is checked out before it's written, and a new file is added.
+
+## Choosing a system
+
+Pick the system when you **create the project**, or change it later in **Project Settings ▸
+Version control**. Storylet Studio supports the four common in games:
+
+- **Git** and **SVN** are merge-based: everyone edits, and changes merge together.
+- **Perforce** and **Plastic SCM** are lock-based: a file is checked out, often locked to one
+  person, before it's edited. Storyletter checks files out when it saves, and shows a file
+  somebody else holds as read-only.
+- **None** is a plain project on disk with no version control at all.
+
+Storyletter talks to these through their **own command-line tools** (`git`, `p4`, `cm` for
+Plastic, `svn`), so the tool for your system needs to be installed and on your PATH, the same one
+you'd run in a terminal.
+
+Once a project names its system, Storyletter talks to that system and no other. A project made
+before the setting existed says "Not set" there, and Storyletter works the system out from the
+folders above it, as it always did. Choose one to stop it guessing: a project kept out of version
+control inside a bigger git checkout would otherwise be added to that checkout.
+
+Switching systems writes the new system's setup files (its ignore file and `vcs-setup.md`) and
+removes the old system's, in one step you can undo. From the command line, `storyletengine init
+--vcs git|perforce|plastic|svn|none` does the same for a new project.
 
 ## How merges work
 
@@ -64,10 +87,10 @@ A leftover `.storyletconflict` is a **`validate` error**, so an unresolved merge
 CI, can't export, and can't ship. Resolve it the way you would any conflict, then delete the
 file.
 
-## Registering the driver
+## Registering the driver on git
 
-`storyletengine init` writes the `.gitattributes` entries. The `git config` lines are per
-clone, so they can't be tracked in the repository. Your new project's `vcs-setup.md` holds
+A project set up for git gets the `.gitattributes` entries. The `git config` lines are per
+clone, so they can't be tracked in the repository. Your project's `vcs-setup.md` holds
 them:
 
 ```sh
@@ -89,8 +112,24 @@ Where the driver isn't registered, git falls back to a normal text merge. That's
 because the everyday cases merge as plain text anyway. The driver is for the ones that
 don't.
 
-On Perforce, Plastic, or SVN, point the system's merge tool at the same command for the shard
-extensions. It exits 2 on input it can't parse, so a tool can fall back to its own behaviour.
+## Perforce, Plastic and SVN: one merge tool for everything
+
+These systems allow only **one** merge tool for the whole depot, so `storyletengine mergetool`
+is that tool. It runs the structured merge for Storylet Studio files and hands everything else
+to your usual merge tool, given with `--fallback`. The four files come in the order all three
+systems agree on, BASE THEIRS OURS OUT:
+
+```sh
+# Perforce: P4MERGE, or your client's merge tool setting
+storyletengine mergetool --fallback "<your merge tool>" %b %t %y %r
+
+# Plastic SCM: Preferences > Merge tools, an external tool
+storyletengine mergetool --fallback "<your merge tool>" @basefile @sourcefile @destinationfile @output
+```
+
+SVN calls a script from `[helpers] merge-tool-cmd`, which passes its four arguments straight on.
+A project set up for one of these systems has the lines for it in `vcs-setup.md`, with the
+typemap or auto-props that keep the shards as LF text.
 
 ## The compiled bundle
 
@@ -98,8 +137,9 @@ The default is to **commit the bundle**, marked `merge=ours`. Merging two compil
 meaningless, so on a conflict git keeps yours and you rebuild.
 
 The safety net is the content hash. `validate` errors on a bundle that doesn't match the
-shards, so a stale one can't land without being noticed. If you'd rather not commit the
-bundle, add it to `.gitignore`.
+shards, so a stale one can't land without being noticed. If you'd rather build the bundle in CI,
+`storyletengine init --bundle ignore` adds it to the ignore file, and a switch of system in
+Project Settings keeps that choice.
 
 ## Validate after every merge
 

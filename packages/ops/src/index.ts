@@ -10,6 +10,12 @@ export {
 } from "./game-scopes.js";
 export type { LoadedProject } from "./load.js";
 export { runInit, undoInit, projectFolderName, GAME_KITS } from "./init.js";
+// Version control: the family's setup for git, Perforce, Plastic SCM and SVN (toolkit's), for this format
+export {
+  STORYLETS_VCS_FORMAT, VCS_KINDS, VCS_LABELS, currentBundlePosture, isStoryletSource, isVcsKind, runMergetool,
+  systemOf, vcsConfigWrites, vcsSwitchPlan,
+} from "./vcs.js";
+export type { BundlePosture, MergetoolOptions } from "./vcs.js";
 export type { InitOptions, InitResult, GameKit } from "./init.js";
 export { runNewBox, BOX_KITS } from "./newbox.js";
 export { boxFolderWrites, boxFolderName } from "./box-folder.js";

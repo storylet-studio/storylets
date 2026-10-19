@@ -21,7 +21,8 @@ import type { MainContext } from "../context.js";
 import type { Ipc } from "./registrar.js";
 import { sessionGuards } from "./registrar.js";
 import { EXAMPLES } from "../../shared/examples.js";
-import type { OpenResult, ProjectSettingsDto, StudioApi, VcStatusDto } from "../../shared/api.js";
+import type { OpenResult, ProjectSettingsDto, StudioApi, VcStatusDto, VcsSetting } from "../../shared/api.js";
+import { VCS_OPTIONS } from "../../shared/api.js";
 
 export interface ProjectIpcDeps extends Pick<MainContext, "session" | "editor" | "store" | "openAt"> {
   /** May the author leave the open project? (exchange.ts) */
@@ -88,7 +89,7 @@ export function registerProject(ipc: Ipc, deps: ProjectIpcDeps): void {
     return deps.isKnownPath(path) ? deps.openAt(path) : { error: "that project is not one of yours" };
   });
 
-  ipc.handle("project:create", async (_event, name, kit): Promise<OpenResult | { error: string } | null> => {
+  ipc.handle("project:create", async (_event, name, kit, vcs): Promise<OpenResult | { error: string } | null> => {
     if (!(await deps.mayLeaveProject("close"))) return null;
     const folder = projectFolderName(name);
     const picked = await dialog.showOpenDialog(deps.editor()!, {
@@ -103,7 +104,9 @@ export function registerProject(ipc: Ipc, deps: ProjectIpcDeps): void {
     });
     const parent = picked.filePaths[0];
     if (parent === undefined) return null;
-    const created = createProject(parent, name, kit);
+    // Only a value the picker offers: anything else is no version control, the picker's own default.
+    const system = VCS_OPTIONS.some(([v]) => v === vcs) ? (vcs as Exclude<VcsSetting, "">) : "none";
+    const created = createProject(parent, name, kit, system);
     if ("error" in created) return created;
     return deps.openAt(created.path);
   });

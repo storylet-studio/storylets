@@ -23,6 +23,7 @@ import {
   CONFLICT_SIDECAR_EXTENSION, MergeInputError, NotAPackError, PackError, UnsafeEntryError, isBinaryWrite,
   runResolve, // resolve: the --at lookup from the terminal
   parsePropertyQuery, propertyUsageReport, // usage: Find's Property tab from the terminal
+  VCS_KINDS, isVcsKind, isStoryletSource, runMergetool, // init --vcs, and mergetool for one-tool systems
   runExportXlsx, // export-xlsx: the readable workbook
   runExportHtml, bundleOutputPath, // export-html: the playable page
   BOX_KITS,                        // the one kit list; --kit validates from it
@@ -40,8 +41,12 @@ export const USAGE = `storyletengine - Storylet Engine CLI
 
 Usage:
   storyletengine init [dir]           Scaffold a new .storylets project from a game
-                 [--name X]           kit, with editor associations and git config
-                 [--kit K]            K: ${GAME_KITS.join(", ")} (default starter)
+                 [--name X]           kit, with editor associations and the setup
+                 [--kit K]            for your version control (vcs-setup.md)
+                 [--vcs V]            K: ${GAME_KITS.join(", ")} (default starter)
+                 [--bundle B]         V: ${VCS_KINDS.join(", ")} or none (default
+                                      unset: the guide covers every system)
+                                      B: commit (default) or ignore (built in CI)
   storyletengine new box [path]       Add a box to a project, scaffolded from a kit
                  [--kit K]            K: ${BOX_KITS.join(", ")}
                                       (default blank; the others are narrated)
@@ -106,6 +111,10 @@ Usage:
                  [--path realfile]      plus a .storyletconflict sidecar
                                         (--path: where the sidecar belongs when
                                         -o is a VCS temp file - git's %P)
+  storyletengine mergetool BASE THEIRS OURS OUT  The one global merge tool for
+                 [--fallback "tool args"]  Perforce, Plastic SCM and SVN:
+                                        storylets source gets the structured
+                                        merge, anything else goes to --fallback
   storyletengine links [path]         Which cards can turn which others on and
                  [--deck X | --box X | --card X]   off, from conditions and
                  [--refs] [--json]                 outcomes alone (no playthrough)
@@ -143,7 +152,7 @@ interface Io {
 interface FlagSpec { boolean: readonly string[]; valued: readonly string[]; repeated: readonly string[] }
 
 const FLAGS = {
-  init: { boolean: [], valued: ["name", "kit"], repeated: [] },
+  init: { boolean: [], valued: ["name", "kit", "vcs", "bundle"], repeated: [] },
   new: { boolean: [], valued: ["kit"], repeated: [] },
   validate: { boolean: [], valued: [], repeated: [] },
   format: { boolean: ["check"], valued: [], repeated: [] },
@@ -161,6 +170,7 @@ const FLAGS = {
   pack: { boolean: ["assets", "no-assets"], valued: ["o"], repeated: [] },
   unpack: { boolean: ["merge"], valued: ["o", "base"], repeated: [] },
   merge: { boolean: ["json"], valued: ["o", "path"], repeated: [] },
+  mergetool: { boolean: [], valued: ["fallback"], repeated: [] },
   links: { boolean: ["json", "refs"], valued: ["deck", "box", "card"], repeated: [] },
   coverage: { boolean: ["json", "fail-on-gap", "propose"], valued: ["runs", "max-turns", "seed", "order"], repeated: [] },
   contract: { boolean: [], valued: [], repeated: [] },
@@ -176,7 +186,7 @@ const isCommand = (name: string): name is Command => Object.hasOwn(FLAGS, name);
  *  fix is on screen: every flag, which the old one-off lines each left some
  *  of out. The website's "Every command" block says the same. */
 const SHORT: Record<Command, string> = {
-  init: `init [dir] [--name X] [--kit ${GAME_KITS.join("|")}]`,
+  init: `init [dir] [--name X] [--kit ${GAME_KITS.join("|")}] [--vcs ${VCS_KINDS.join("|")}|none] [--bundle commit|ignore]`,
   new: `new box [path] [--kit ${BOX_KITS.join("|")}]`,
   validate: "validate [path]",
   format: "format [path] [--check]",
@@ -191,6 +201,7 @@ const SHORT: Record<Command, string> = {
   pack: "pack [path] -o FILE [--assets|--no-assets]",
   unpack: "unpack FILE -o DIR [--merge --base SENT.storyletpack]",
   merge: "merge BASE OURS THEIRS [-o out] [--json] [--path realfile]",
+  mergetool: 'mergetool BASE THEIRS OURS OUT [--fallback "tool args"]',
   links: "links [path] [--deck X | --box X | --card X] [--refs] [--json]",
   coverage: "coverage [path] [--runs N] [--max-turns M] [--seed S] [--order least|deck] [--json] [--fail-on-gap] [--propose]",
   contract: "contract show [installation] [path]",
@@ -411,10 +422,20 @@ export async function run(
         if (kit !== undefined && (typeof kit !== "string" || !isGameKit(kit))) {
           return usage(io, "init", `--kit is one of ${GAME_KITS.map((k) => `"${k}"`).join(", ")}, got "${String(kit)}"`);
         }
+        const vcs = flags["vcs"];
+        if (vcs !== undefined && vcs !== "none" && !isVcsKind(vcs)) {
+          return usage(io, "init", `--vcs is one of ${[...VCS_KINDS, "none"].map((k) => `"${k}"`).join(", ")}, got "${String(vcs)}"`);
+        }
+        const bundle = flags["bundle"];
+        if (bundle !== undefined && bundle !== "commit" && bundle !== "ignore") {
+          return usage(io, "init", `--bundle is "commit" or "ignore", got "${String(bundle)}"`);
+        }
         const result = runInit({
           dir: positionals[0] ?? ".",
           ...(typeof flags["name"] === "string" ? { name: flags["name"] } : {}),
           ...(kit !== undefined ? { kit } : {}),
+          ...(vcs !== undefined ? { vcs } : {}),
+          ...(bundle !== undefined ? { bundle } : {}),
         });
         // A half-written project would refuse every rerun ("a project already
         // exists here"), so a failed write takes back the files just made.
@@ -794,76 +815,25 @@ export async function run(
         throw e;
       }
     }
-    case "merge": {
-      const [basePath, oursPath, theirsPath] = positionals;
-      if (!basePath || !oursPath || !theirsPath) return usage(io, "merge");
-      const sides: Record<string, unknown>[] = [];
-      for (const path of [basePath, oursPath, theirsPath]) {
-        try {
-          const parsed = parseSource(readFileSync(path, "utf8"));
-          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("not a shard object");
-          sides.push(parsed as Record<string, unknown>);
-        } catch (e) {
-          // Unparseable input: exit 2, so a VCS driver falls back to its
-          // default behaviour rather than trusting a guess.
-          io.error(`cannot read ${path}: ${e instanceof Error ? e.message : String(e)}`);
-          return 2;
-        }
-      }
-      // An extension shard merges field by field by its manifest, which the
-      // driver reads from the working tree: git hands it three temp files and
-      // the shard's real path (%P), and the project is found from that path.
-      // No manifest, or one mid-conflict itself, merges each node's entry whole.
-      const ours = sides[1]!;
-      const extensionId = ours["schema"] === EXTENSION_SCHEMA && typeof ours["extension"] === "string"
-        ? ours["extension"] : undefined;
-      const realFile = typeof flags["path"] === "string" ? flags["path"] : typeof flags["o"] === "string" ? flags["o"] : oursPath;
-      const projectDir = extensionId !== undefined ? findProjectDir(realFile) : undefined;
-      const manifest = extensionId !== undefined && projectDir !== undefined ? readProjectManifest(projectDir, extensionId) : undefined;
-      let result;
-      try {
-        result = runMerge(sides[0]!, ours, sides[2]!, manifest !== undefined ? { manifest } : undefined);
-      } catch (e) {
-        if (e instanceof MergeInputError) {
-          io.error(e.message);
-          return 2;
-        }
-        throw e;
-      }
-      for (const w of result.warnings) io.error(`warning: ${w.message} (${w.path})`);
-      const out = typeof flags["o"] === "string" ? flags["o"] : undefined;
-      if (flags["json"] === true || out === undefined) {
-        io.log(JSON.stringify(result, null, 2));
-      }
-      if (out === undefined) return result.conflicts.length > 0 ? 1 : 0;
-
-      // Merge writes use PLAIN fs, deliberately outside the VC layer: as a
-      // VCS merge driver we run while the VCS holds its own locks (git's
-      // index.lock), and `-o` is usually a VCS temp file, not a source-tree
-      // shard - staging it would be wrong even if it worked.
-      const write = (path: string, content: string): boolean => {
-        try {
-          mkdirSync(dirname(path), { recursive: true });
-          writeFileSync(path, content);
-          return true;
-        } catch (e) {
-          io.error(`write failed: ${path}: ${e instanceof Error ? e.message : String(e)}`);
-          return false;
-        }
-      };
-      if (!write(out, canonicalStringify(result.merged))) return 1;
-      // The sidecar belongs beside the REAL file (--path, git's %P), not the
-      // merge temp file; without --path it sits beside the output.
-      const realPath = typeof flags["path"] === "string" ? flags["path"] : out;
-      const sidecar = `${realPath}${CONFLICT_SIDECAR_EXTENSION}`;
-      if (result.conflicts.length > 0) {
-        if (!write(sidecar, conflictSidecar(result))) return 1;
-        io.error(`${result.conflicts.length} conflict(s) - wrote ${out} (provisional OURS) + ${sidecar}`);
-        return 1;
-      }
-      if (existsSync(sidecar)) rmSync(sidecar);   // a clean merge clears a stale sidecar
-      io.log(`merged ${out} (${result.type}, no conflicts)`);
-      return 0;
+    case "merge":
+      return mergeCommand(io, positionals, flags);
+    case "mergetool": {
+      // The one global merge tool Perforce, Plastic SCM and SVN allow (Patter's
+      // `patter mergetool`, shared through @wildwinter/toolkit/vcs): storylets
+      // source goes to the structured merge, anything else to --fallback. The
+      // four files come in the order those systems agree on, BASE THEIRS OURS OUT;
+      // git does not need this, it calls `merge` per path.
+      const [basePath, theirsPath, oursPath, outPath] = positionals;
+      if (!basePath || !theirsPath || !oursPath || !outPath) return usage(io, "mergetool", "needs BASE THEIRS OURS OUT");
+      return runMergetool({
+        base: basePath, theirs: theirsPath, ours: oursPath, out: outPath,
+        ...(typeof flags["fallback"] === "string" ? { fallback: flags["fallback"] } : {}),
+        isSource: isStoryletSource,
+        // The output IS the real file here, so the sidecar sits beside it.
+        merge: () => mergeCommand(io, [basePath, oursPath, theirsPath], { o: outPath, path: outPath }),
+        error: (message) => io.error(message),
+        tool: "storyletengine",
+      });
     }
     case "links": {
       // An analysis of a project that did not wholly load answers about the
@@ -1054,4 +1024,78 @@ export async function run(
       return flags["fail-on-gap"] === true && gap ? 1 : 0;
     }
   }
+}
+
+/** `merge BASE OURS THEIRS`, shared by `merge` (git's per-path driver) and
+ *  `mergetool` (the one global tool the other systems allow). */
+function mergeCommand(io: Io, positionals: string[], flags: Record<string, string | boolean>): number {
+  const [basePath, oursPath, theirsPath] = positionals;
+  if (!basePath || !oursPath || !theirsPath) return usage(io, "merge");
+  const sides: Record<string, unknown>[] = [];
+  for (const path of [basePath, oursPath, theirsPath]) {
+    try {
+      const parsed = parseSource(readFileSync(path, "utf8"));
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("not a shard object");
+      sides.push(parsed as Record<string, unknown>);
+    } catch (e) {
+      // Unparseable input: exit 2, so a VCS driver falls back to its
+      // default behaviour rather than trusting a guess.
+      io.error(`cannot read ${path}: ${e instanceof Error ? e.message : String(e)}`);
+      return 2;
+    }
+  }
+  // An extension shard merges field by field by its manifest, which the
+  // driver reads from the working tree: git hands it three temp files and
+  // the shard's real path (%P), and the project is found from that path.
+  // No manifest, or one mid-conflict itself, merges each node's entry whole.
+  const ours = sides[1]!;
+  const extensionId = ours["schema"] === EXTENSION_SCHEMA && typeof ours["extension"] === "string"
+    ? ours["extension"] : undefined;
+  const realFile = typeof flags["path"] === "string" ? flags["path"] : typeof flags["o"] === "string" ? flags["o"] : oursPath;
+  const projectDir = extensionId !== undefined ? findProjectDir(realFile) : undefined;
+  const manifest = extensionId !== undefined && projectDir !== undefined ? readProjectManifest(projectDir, extensionId) : undefined;
+  let result;
+  try {
+    result = runMerge(sides[0]!, ours, sides[2]!, manifest !== undefined ? { manifest } : undefined);
+  } catch (e) {
+    if (e instanceof MergeInputError) {
+      io.error(e.message);
+      return 2;
+    }
+    throw e;
+  }
+  for (const w of result.warnings) io.error(`warning: ${w.message} (${w.path})`);
+  const out = typeof flags["o"] === "string" ? flags["o"] : undefined;
+  if (flags["json"] === true || out === undefined) {
+    io.log(JSON.stringify(result, null, 2));
+  }
+  if (out === undefined) return result.conflicts.length > 0 ? 1 : 0;
+
+  // Merge writes use PLAIN fs, deliberately outside the VC layer: as a
+  // VCS merge driver we run while the VCS holds its own locks (git's
+  // index.lock), and `-o` is usually a VCS temp file, not a source-tree
+  // shard - staging it would be wrong even if it worked.
+  const write = (path: string, content: string): boolean => {
+    try {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, content);
+      return true;
+    } catch (e) {
+      io.error(`write failed: ${path}: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
+  };
+  if (!write(out, canonicalStringify(result.merged))) return 1;
+  // The sidecar belongs beside the REAL file (--path, git's %P), not the
+  // merge temp file; without --path it sits beside the output.
+  const realPath = typeof flags["path"] === "string" ? flags["path"] : out;
+  const sidecar = `${realPath}${CONFLICT_SIDECAR_EXTENSION}`;
+  if (result.conflicts.length > 0) {
+    if (!write(sidecar, conflictSidecar(result))) return 1;
+    io.error(`${result.conflicts.length} conflict(s) - wrote ${out} (provisional OURS) + ${sidecar}`);
+    return 1;
+  }
+  if (existsSync(sidecar)) rmSync(sidecar);   // a clean merge clears a stale sidecar
+  io.log(`merged ${out} (${result.type}, no conflicts)`);
+  return 0;
 }
