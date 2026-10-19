@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@storylet-studio/dialect": "0.3.2",
-    "@storylet-studio/model": "0.11.0",
+    "@storylet-studio/model": "0.12.0",
     "@wildwinter/expr": "^0.6.0",
     "@wildwinter/scoperegistry": ">=0.9.0 <1.0.0",
     "@wildwinter/toolkit": "^0.2.3",
