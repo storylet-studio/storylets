@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-10-19
+
 ### Added
 
 - **Version control on Storylet extension data.** Each extension's data in a box, and the project's own, is a file
