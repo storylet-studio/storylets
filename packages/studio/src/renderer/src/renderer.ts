@@ -317,6 +317,7 @@ const projectSettingsPanel = createProjectSettings(
   // read, not typed into (design/engine-server.md 9.1).
   () => session.remote?.role === "author",
   () => session.project,
+  (frame) => vc.applyExtensionLocks(frame),
 );
 setSettingsOpener((section) => { if (session.project) projectSettingsPanel.open(section); });
 

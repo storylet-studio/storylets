@@ -19,6 +19,7 @@
 import { el } from "@wildwinter/app-shell";
 import { valueRows } from "@wildwinter/app-shell/value-rows";
 import type { ValueAdapter, ValueDecl } from "@wildwinter/app-shell/value-rows";
+import { EXTENSION_PROJECT_OWNER, extensionVcKey } from "../../shared/api.js";
 import type { ExtensionDto, ExtensionFieldDto, ProjectDto } from "../../shared/api.js";
 
 export interface ExtensionHost {
@@ -60,11 +61,22 @@ const adapterOf = (project: ProjectDto | undefined): ValueAdapter => ({
   label: (kind, id) => project?.extensionNodes?.[kind]?.find((n) => n.id === id)?.label,
 });
 
+/** Whose extension shards hold a node's values: its box's id, or the project's own owner for the project and
+ *  the map's tags. */
+export function extensionOwner(project: ProjectDto | undefined, kind: string, nodeId: string): string {
+  if (kind === "project") return EXTENSION_PROJECT_OWNER;
+  return project?.extensionNodes?.[kind]?.find((n) => n.id === nodeId)?.box ?? EXTENSION_PROJECT_OWNER;
+}
+
 /** One extension's fields for one node: its rows, under a heading for each of the manifest's groups. */
 export function extensionFields(host: ExtensionHost, extension: ExtensionDto, kind: string, nodeId: string): HTMLElement {
   const project = host.project();
   const holder = el("div", "ext-fields");
   holder.dataset["extension"] = extension.id;
+  // The shard these values live in, for version control: somebody else holding it locks these rows, and only
+  // these (vc-view.ts `applyExtensionLocks`).
+  holder.dataset["extVc"] = extensionVcKey(extensionOwner(project, kind, nodeId), extension.id);
+  holder.dataset["extName"] = extension.name;
   const values = extension.values[nodeId] ?? {};
   const adapter = adapterOf(project);
   let group: string | undefined;

@@ -346,7 +346,7 @@ export function renderNav(host: HTMLElement, project: ProjectDto, focus: Focus |
   // The project's own row opens its page (the boxes master); Settings
   // lives on that page's menu and under Cmd+, as before.
   const projectRow = el("button", { className: `nav-project${focus?.kind === "project" ? " sel" : ""}`, text: project.name, onClick: () => actions.focus({ kind: "project" }) });
-  projectRow.dataset["vc"] = vcKeys.project;
+  projectRow.dataset["vc"] = vcKeys.projectRow;
   host.replaceChildren(projectRow);
 
   // The story's own state, first-class in the navigator (the author's ruling,

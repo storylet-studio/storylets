@@ -578,8 +578,9 @@ export interface ProjectDto {
   extensions?: ExtensionDto[];
   /** The nodes an extension's references and map keys choose from, and its problems name, by kind (`box`,
    *  `deck`, `card`, `outcome`, `tag`, `tagGroup`, `hand`, `handTemplate`), each with the name an author knows
-   *  it by. Present only with `extensions`. */
-  extensionNodes?: Record<string, { id: string; label: string }[]>;
+   *  it by, and the box whose extension shards hold its values (absent for a node of the project's own, whose
+   *  values are in the root's). Present only with `extensions`. */
+  extensionNodes?: Record<string, { id: string; label: string; box?: string }[]>;
   /** The project's own node id, which its extension values are keyed by. Present only with `extensions`. */
   projectNode?: string;
 }
@@ -668,7 +669,8 @@ export interface BoardScopesDto {
  *    "deck:<deckId>"  that deck's decks/<name>.storyletdeck
  *
  *  A row that edits several shards (a box row: its box + tags + hands) folds
- *  their states in the renderer, most actionable state winning. */
+ *  their states in the renderer, most actionable state winning. Extension
+ *  shards are not listed here: `VcStatusDto.extensions` carries them. */
 export interface ShardVcDto {
   key: string;
   /** Writable on disk right now. `false` = the read-only bit is set; under a
@@ -694,7 +696,20 @@ export interface VcStatusDto {
   /** The backend simple-vc-lib detected ("git" / "perforce" / "filesystem"). */
   system: string;
   shards: ShardVcDto[];
+  /** The extension shards' states, by owner (a box id, or `EXTENSION_PROJECT_OWNER` for the root's) and
+   *  then extension id, trimmed as `shards` is. Each is its own file: one somebody else holds locks that
+   *  extension's data in the box (the editor refuses edits to it), never the box. Patterpad's
+   *  `SceneVcStatus.extensions`. Absent when none has anything to say. */
+  extensions?: Record<string, Record<string, Omit<ShardVcDto, "key">>>;
 }
+
+/** The owner the project's own extension shards (`<id>.storyletextension` at the root) are filed under,
+ *  beside the box ids. Safe as a shared key space because a box id never starts with "@". */
+export const EXTENSION_PROJECT_OWNER = "@project";
+
+/** The version-control key of one extension shard: an owner (a box id, or `EXTENSION_PROJECT_OWNER`) and
+ *  the extension's id. */
+export const extensionVcKey = (owner: string, extension: string): string => `ext:${owner}:${extension}`;
 
 /** A box kit: the scaffold a new box copies (RebootAmendments A10). Blank is
  *  always present; RPG is the narrated encounters starter. Owned by ops

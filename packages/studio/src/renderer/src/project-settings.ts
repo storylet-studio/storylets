@@ -98,6 +98,8 @@ export function createProjectSettings(
   readOnly: () => boolean = () => false,
   /** The open project, for its Storylet extensions' project-level values: a section each. */
   project: () => ProjectDto | undefined = () => undefined,
+  /** Lock the extension sections whose shard somebody else holds (vc-view.ts), after each mount. */
+  lockExtensions: (frame: HTMLElement) => void = () => {},
 ): { open(section?: string): void } {
   let data: ProjectSettingsDto | undefined;
   /** Storylet extension values set since the dialog opened, carried at Save: extension, field, value. */
@@ -261,6 +263,7 @@ export function createProjectSettings(
       frame.querySelector(".settings-body")?.before(notice);
     }
     if (notice) notice.hidden = !off;
+    lockExtensions(frame);
   }
 
   return {

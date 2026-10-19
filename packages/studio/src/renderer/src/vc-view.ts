@@ -13,7 +13,7 @@ import type { IconName } from "@wildwinter/app-shell";
 import type { Focus } from "./views.js";
 import type { Inspected } from "./inspector.js";
 import type { Session } from "./session.js";
-import type { ShardVcDto } from "../../shared/api.js";
+import type { ShardVcDto, VcStatusDto } from "../../shared/api.js";
 
 export { foldVc, vcBadgeFor, paintVcBadges, lockNotice } from "@wildwinter/app-shell";
 export type { VcMap } from "@wildwinter/app-shell";
@@ -26,8 +26,11 @@ export type { VcMap } from "@wildwinter/app-shell";
  *  document mid-edit). */
 export const vcKeys = {
   project: "project",
-  /** A box row: everything the box itself owns (its decks badge separately). */
-  box: (boxId: string): string => `box:${boxId} tags:${boxId} hands:${boxId}`,
+  /** The Story row: the project shard and the project's own extension shards. */
+  projectRow: "project ext:@project",
+  /** A box row: everything the box itself owns, its extension shards included
+   *  (its decks badge separately). */
+  box: (boxId: string): string => `box:${boxId} tags:${boxId} hands:${boxId} ext:${boxId}`,
   boxShard: (boxId: string): string => `box:${boxId}`,
   tags: (boxId: string): string => `tags:${boxId}`,
   hands: (boxId: string): string => `hands:${boxId}`,
@@ -50,6 +53,70 @@ export const VC_STAYS_LIVE = [
  *  list, the shell's mechanism. */
 export function lockControls(host: HTMLElement, off: boolean): void {
   shellLockControls(host, off, VC_STAYS_LIVE);
+}
+
+// --- extension shards ----------------------------------------------------------
+//
+// Each extension's data in a box is a shard of its own (Patterpad's model, its
+// tier 1): somebody else holding one locks THAT extension's rows wherever they
+// are drawn, with a sentence naming the extension and the holder, and leaves
+// the box and its other extensions alone. The rows say which shard they write
+// as `data-ext-vc` (extension-rows.ts), so a poll locks and unlocks them in
+// place, as it does the documents.
+
+/** The sentence a locked extension's rows open with: "Probe's data here is
+ *  locked by bob." Patterpad's words (patterpad-surface `extensionLockMessage`). */
+export function extensionLockMessage(name: string, by: readonly string[] | undefined): string {
+  const who = by?.filter((b) => b).join(", ");
+  return `${name}'s data here is locked by ${who || "someone else"}.`;
+}
+
+/** The extension states by key (`ext:<owner>:<id>`), from the snapshot. */
+export function extensionStates(extensions: VcStatusDto["extensions"]): Map<string, Omit<ShardVcDto, "key">> {
+  const out = new Map<string, Omit<ShardVcDto, "key">>();
+  for (const [owner, byId] of Object.entries(extensions ?? {})) {
+    for (const [id, st] of Object.entries(byId)) out.set(`ext:${owner}:${id}`, st);
+  }
+  return out;
+}
+
+/** What a row badges for each owner's extension shards together, as `ext:<owner>`
+ *  (a box row and the Story row fold it beside their own shards). Untracked is
+ *  left out: a box whose first extension value was written today is an edited
+ *  box, not a new one, which is what `primary` means for the shards in main. */
+export function extensionRowStates(extensions: VcStatusDto["extensions"]): ShardVcDto[] {
+  return Object.entries(extensions ?? {}).map(([owner, byId]) => {
+    const keyed = new Map(Object.entries(byId).map(([id, { untracked: _new, ...st }]) => [id, { key: id, ...st }]));
+    return { ...foldVc(keyed, [...keyed.keys()].join(" "))!, key: `ext:${owner}` };
+  });
+}
+
+/**
+ * Lock every extension group under `root` whose shard somebody else holds, with
+ * the sentence at its head, and hand back the rest. A group inside a region
+ * locked for its own reasons (the whole document held, a role's read-only) is
+ * left for that region to hand back. Returns the holders of what it locked.
+ */
+export function applyExtensionLocks(root: ParentNode, states: ReadonlyMap<string, Omit<ShardVcDto, "key">>): string[] {
+  const holders: string[] = [];
+  root.querySelectorAll<HTMLElement>("[data-ext-vc]").forEach((group) => {
+    const by = states.get(group.dataset["extVc"]!)?.lockedBy;
+    const said = group.querySelector<HTMLElement>(":scope > .ext-lock");
+    if (by?.length) {
+      holders.push(...by);
+      lockControls(group, true);
+      // In place when it already says so: a poll that changes nothing moves nothing.
+      const text = extensionLockMessage(group.dataset["extName"] ?? "This extension", by);
+      if (said?.textContent === text) return;
+      said?.remove();
+      group.prepend(el("p", { className: "ext-lock" },
+        el("span", { className: "vc-lock-glyph" }, iconNode("locked")), el("span", { text })));
+    } else {
+      said?.remove();
+      if (!group.parentElement?.closest(".vc-readonly")) lockControls(group, false);
+    }
+  });
+  return holders;
 }
 
 // --- the role's own read-only, which is not version control at all ------------
@@ -136,6 +203,8 @@ export type VcView = ReturnType<typeof createVcView>;
 export function createVcView(ctx: VcViewContext) {
   const { session } = ctx;
   let shards = new Map<string, ShardVcDto>();
+  /** The extension shards' states, by `ext:<owner>:<id>`. */
+  let extensions = new Map<string, Omit<ShardVcDto, "key">>();
   let system = "";
   let docLocked = false;
   /** Who holds what the open page writes (its own shard, or a frame's). */
@@ -146,6 +215,7 @@ export function createVcView(ctx: VcViewContext) {
   chip.hidden = true;
 
   const vcOf = (keys: string | undefined): ShardVcDto | undefined => foldVc(shards, keys);
+  const extensionHeld = (): boolean => [...extensions.values()].some((s) => (s.lockedBy?.length ?? 0) > 0);
   const openKeys = (): string | undefined => { const p = ctx.place(); return docVcKeys(p.focus, p.inspected); };
 
   /** The shape is read-only under an author's key. Never under a designer's,
@@ -174,6 +244,8 @@ export function createVcView(ctx: VcViewContext) {
     // The address chips were painted before any of this ran, so the ones that
     // have just been shut still offer the click that opens their editor. Told
     // here, which is the only place that knows they are shut.
+    // Last, so neither the document's hand-back nor a frame's undoes them.
+    applyExtensionLocks(host, extensions);
     ctx.afterLock(host);
     docHolders = [...holders];
     docLocked = docHolders.length > 0;
@@ -205,6 +277,8 @@ export function createVcView(ctx: VcViewContext) {
     if (!session.project) return;
     paintVcBadges(document, shards);
     applyDoc();
+    // Anything else drawing an extension's rows: Project Settings.
+    applyExtensionLocks(document, extensions);
     renderChip();
   }
 
@@ -222,7 +296,9 @@ export function createVcView(ctx: VcViewContext) {
      * settled.
      */
     guardAfterClick(): void {
-      if (docLocked || shapeReadOnly()) queueMicrotask(() => applyDoc());
+      // Any held extension shard counts, drawn yet or not: the click may be the
+      // tab switch that draws its rows (a card's Fields tab redraws in place).
+      if (docLocked || extensionHeld() || shapeReadOnly()) queueMicrotask(() => applyDoc());
     },
     /** Pull a fresh snapshot (one throttled, coalesced query in main) and repaint. */
     async refresh(): Promise<void> {
@@ -230,12 +306,17 @@ export function createVcView(ctx: VcViewContext) {
       const dto = await session.studio.vcStatus();
       if (!dto || !session.project) return;   // the project may have closed while we awaited
       system = dto.system;
-      shards = new Map(dto.shards.map((s) => [s.key, s]));
+      shards = new Map([...dto.shards, ...extensionRowStates(dto.extensions)].map((s) => [s.key, s]));
+      extensions = extensionStates(dto.extensions);
       apply();
     },
+    /** Lock the extension groups a surface outside the centre has just drawn
+     *  (Project Settings re-mounts its sections on every open). */
+    applyExtensionLocks(root: ParentNode): void { applyExtensionLocks(root, extensions); },
     /** No project, no version-control state. */
     clear(): void {
       shards = new Map();
+      extensions = new Map();
       docLocked = false;
       docHolders = [];
       chip.hidden = true;

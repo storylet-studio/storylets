@@ -5,11 +5,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { REMOTE_STATUS_THROTTLE_MS, resetShardStatus, setStatusReader, shardStatus } from "./vc.js";
 import { openProject, shardRefs, vcStatus } from "./project.js";
 import type { VCFileStatus } from "@wildwinter/simple-vc-lib";
 
 const exampleDir = fileURLToPath(new URL("../../../../examples/saltmarsh.storylets", import.meta.url));
+/** The internal "probe" extension's fixture: a root shard and one in the harbour box. */
+const probeDir = fileURLToPath(new URL("../../../ops/test/fixtures/probe-extension.storylets", import.meta.url));
 
 /** A canned per-file status; everything unstated is clean and writable. */
 const status = (filePath: string, over: Partial<VCFileStatus> = {}): VCFileStatus =>
@@ -208,5 +211,48 @@ describe("the project's shard refs + DTO", () => {
     setStatusReader(async (paths) => paths.map((p) => status(p, p === tags ? { tracked: false } : {})));
     const dto = await vcStatus(opened.session);
     expect(dto.shards).toEqual([]);   // nothing to say: an uncommitted sidecar is not a new box
+  });
+
+  describe("extension shards (Patterpad's model: each its own key)", () => {
+    const open = () => {
+      const opened = openProject(probeDir);
+      if ("error" in opened) throw new Error(opened.error);
+      return opened.session;
+    };
+
+    it("keys each extension shard by its owner and the extension, primary", () => {
+      const session = open();
+      const boxId = session.dto.boxes[0]!.id;
+      const refs2 = shardRefs(session);
+      const box = refs2.find((r) => r.key === `ext:${boxId}:probe`);
+      const root = refs2.find((r) => r.key === "ext:@project:probe");
+      expect(box?.path).toBe(join(session.loaded.dir, "harbour", "probe.storyletextension"));
+      expect(root?.path).toBe(join(session.loaded.dir, "probe.storyletextension"));
+      expect(box?.primary).toBe(true);
+      expect(root?.primary).toBe(true);
+    });
+
+    it("carries a held extension shard under its box, not among the box's own shards", async () => {
+      const session = open();
+      const boxId = session.dto.boxes[0]!.id;
+      const held = shardRefs(session).find((r) => r.key === `ext:${boxId}:probe`)!.path;
+      setStatusReader(async (paths) => paths.map((p) => status(p, p === held ? { writable: false, lockedBy: ["bo@bo-ws"] } : {})));
+
+      const dto = await vcStatus(session);
+      // The box itself has nothing to say: a lock on its extension data is not a lock on the box.
+      expect(dto.shards).toEqual([]);
+      expect(dto.extensions).toEqual({ [boxId]: { probe: { writable: false, lockedBy: ["bo@bo-ws"] } } });
+    });
+
+    it("carries the project's own extension shards under @project, and leaves `extensions` out when quiet", async () => {
+      const session = open();
+      const root = shardRefs(session).find((r) => r.key === "ext:@project:probe")!.path;
+      setStatusReader(async (paths) => paths.map((p) => status(p, p === root ? { openedByMe: true, dirty: true } : {})));
+      expect((await vcStatus(session)).extensions).toEqual({ "@project": { probe: { writable: true, checkedOutByMe: true, dirty: true } } });
+
+      resetShardStatus();
+      setStatusReader(async (paths) => paths.map((p) => status(p)));
+      expect((await vcStatus(session)).extensions).toBeUndefined();
+    });
   });
 });

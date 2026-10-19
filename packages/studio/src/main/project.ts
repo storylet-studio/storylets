@@ -15,12 +15,13 @@ import { writeBinaryFile, writeTextFiles } from "@wildwinter/simple-vc-lib";
 import { canonicalStringify, compileProject, contentAboveRung, playRungOf, projectHash, summariseLadder, walkProjectFiles, worldDeclarations } from "@storylet-studio/compiler";
 import { SHARD_EXTENSIONS, effectiveGameId, isSpatial, openThreadCounts, PLACE_GROUP } from "@storylet-studio/model";
 import type { Bundle, Card, CoverageDriver, Hand, HandTemplate, PlayRung } from "@storylet-studio/model";
-import type { SourceBox, SourceProject } from "@storylet-studio/compiler";
+import type { SourceBox, SourceExtension, SourceProject } from "@storylet-studio/compiler";
 import { boardScopes, gameScopesDto, worldFileLabel } from "./game-scopes.js";
 import type {
   BoardPatterDto, BoardScopesDto, BoxDto, CardDto, CoverageDriverDto, DeckDto, OpenResult, Problem, ProjectDto, ProjectKit, ProjectSettingsDto,
   RemoteDto, ShardVcDto, VcStatusDto,
 } from "../shared/api.js";
+import { EXTENSION_PROJECT_OWNER, extensionVcKey } from "../shared/api.js";
 import { declDto, fieldDeclDto } from "./decls.js";
 import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
 import { History } from "./history.js";
@@ -364,7 +365,16 @@ export function shardRefs(session: ProjectSession): ShardRef[] {
   // only the box shard primary is what stops a missing sidecar from making the
   // box look new. Tags and hands never carry `untracked` at all, which costs
   // nothing: neither has a row of its own to badge - they are box setup tabs.
+  //
+  // Each extension shard is its own key, and primary, as Patterpad's are: one
+  // somebody else holds locks that extension's data in the box (the editor
+  // refuses edits to it), never the box. Only the shards on disk: a shard not
+  // yet written has nobody to hold it, and the first value creates it.
   const refs: ShardRef[] = [{ key: "project", path: join(dir, source.path), primary: true }];
+  const extensionRefs = (owner: string, shards: SourceExtension[] | undefined): void => {
+    for (const x of shards ?? []) refs.push({ key: extensionVcKey(owner, x.shard.extension), path: join(dir, x.path), primary: true });
+  };
+  extensionRefs(EXTENSION_PROJECT_OWNER, source.extensions);
   for (const box of source.boxes) {
     const id = box.box.box.id;
     refs.push({ key: `box:${id}`, path: join(dir, box.path, `box${SHARD_EXTENSIONS.box}`), primary: true });
@@ -373,6 +383,7 @@ export function shardRefs(session: ProjectSession): ShardRef[] {
     for (const deck of box.decks) {
       refs.push({ key: `deck:${deck.shard.deck.id}`, path: join(dir, deck.path), primary: true });
     }
+    extensionRefs(id, box.extensions);
   }
   return refs;
 }
@@ -382,22 +393,29 @@ export function shardRefs(session: ProjectSession): ShardRef[] {
 export async function vcStatus(session: ProjectSession): Promise<VcStatusDto> {
   const { system, states } = await shardStatus(shardRefs(session));
   const shards: ShardVcDto[] = [];
+  const extensions: NonNullable<VcStatusDto["extensions"]> = {};
   for (const [key, s] of states) {
     // Trimmed to shards with something to SAY, and the three states restored in
     // app-shell 0.26.0 count as something: a shard you hold, or have edited, or
     // have never committed, all need a badge. Leaving the old test here would
     // have carried them across the wire and then dropped them on the floor.
     if (s.writable && !s.lockedBy?.length && !s.outOfDate && !s.checkedOutByMe && !s.dirty && !s.untracked) continue;
-    shards.push({
-      key, writable: s.writable,
+    const state = {
+      writable: s.writable,
       ...(s.lockedBy?.length ? { lockedBy: s.lockedBy } : {}),
       ...(s.outOfDate ? { outOfDate: true } : {}),
       ...(s.checkedOutByMe ? { checkedOutByMe: true } : {}),
       ...(s.dirty ? { dirty: true } : {}),
       ...(s.untracked ? { untracked: true } : {}),
-    });
+    };
+    // An extension shard goes under its owner (a box, or the project), as
+    // Patterpad's scenes carry theirs. Neither an owner nor an extension id
+    // holds a colon, so the key splits cleanly.
+    const ext = /^ext:([^:]+):(.+)$/.exec(key);
+    if (ext) (extensions[ext[1]!] ??= {})[ext[2]!] = state;
+    else shards.push({ key, ...state });
   }
-  return { system, shards };
+  return { system, shards, ...(Object.keys(extensions).length > 0 ? { extensions } : {}) };
 }
 
 export function validate(session: ProjectSession): Problem[] {

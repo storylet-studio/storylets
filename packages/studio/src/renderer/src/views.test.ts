@@ -112,14 +112,14 @@ describe("the shard keys items carry (data-vc, for the lock / read-only badges)"
   const keysIn = (host: HTMLElement): string[] =>
     [...host.querySelectorAll<HTMLElement>("[data-vc]")].map((e) => e.dataset["vc"]!);
 
-  it("names the project, each box (its three own shards) and each deck in the nav", () => {
+  it("names the project, each box (its own shards and extension shards) and each deck in the nav", () => {
     const host = document.createElement("div");
     const expanded = new Set([navId.box("b_1"), navId.collection("b_1", "decks")]);
     renderNav(host, project, { kind: "deck", box: "b_1", deck: "k_1" } as Focus, expanded, stubActions());
     expect(keysIn(host)).toEqual([
-      "project",
+      "project ext:@project",         // the project row: its shard and its own extension shards
       "project",                      // the Story row: @story lives in the project shard
-      "box:b_1 tags:b_1 hands:b_1",   // a box row stands for its box + tags + hands
+      "box:b_1 tags:b_1 hands:b_1 ext:b_1",   // a box row: its box + tags + hands, and its extension shards
       "deck:k_1",                     // decks are a shard each, so they badge per row
       "hands:b_1",                    // every hand lives in the one shard: the collection carries it
     ]);
@@ -128,7 +128,7 @@ describe("the shard keys items carry (data-vc, for the lock / read-only badges)"
   it("names each box on the project page and each deck on the decks master", () => {
     const boxes = document.createElement("div");
     renderProjectCentre(boxes, project, stubActions());
-    expect(keysIn(boxes)).toEqual(["box:b_1 tags:b_1 hands:b_1"]);
+    expect(keysIn(boxes)).toEqual(["box:b_1 tags:b_1 hands:b_1 ext:b_1"]);
     const decks = document.createElement("div");
     renderDecksCentre(decks, box, "cards", stubActions());
     expect(keysIn(decks)).toEqual(["deck:k_1"]);

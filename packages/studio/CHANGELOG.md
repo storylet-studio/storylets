@@ -10,6 +10,15 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **Version control on Storylet extension data.** Each extension's data in a box, and the project's own, is a file
+  of its own, and now badges as the box's other files do: a box row (and the project row) shows when its extension
+  data is changed, checked out or held. When somebody else holds an extension's file (Perforce, Plastic), that
+  extension's fields lock wherever they are drawn (a card's Fields tab, an outcome's block, the extension's own
+  tab, tags and Project Settings), with a line saying so ("Probe's data here is locked by bob."), and the box and
+  its other extensions stay editable. Before, the edit went ahead and failed at save.
+
 ## [0.23.0] - 2026-10-18
 
 ### Added
