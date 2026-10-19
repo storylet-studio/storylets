@@ -18,6 +18,10 @@ here is part of shipping, not a courtesy.
   extension's fields lock wherever they are drawn (a card's Fields tab, an outcome's block, the extension's own
   tab, tags and Project Settings), with a line saying so ("Probe's data here is locked by bob."), and the box and
   its other extensions stay editable. Before, the edit went ahead and failed at save.
+- **Undo and Redo wait for a file somebody else holds.** A step that would change a file someone else holds is
+  refused before anything is written, saying whose it is ("The deck “docks” is locked by bob. It can be changed
+  once they release it."), and stays on the stack to be tried again once they let it go: for a box's files, its
+  decks and its extension data alike.
 
 ## [0.23.0] - 2026-10-18
 

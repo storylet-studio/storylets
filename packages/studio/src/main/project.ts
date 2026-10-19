@@ -5,7 +5,7 @@
 // tests headlessly against the example project.
 // ---------------------------------------------------------------------------
 
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { boxColourOf, contractNotes, defaultGameScopesParent, handDeclarations, isBinaryWrite, loadProject, placeAxes, tagsOfHand, patterOutcomeReports, performedBoxes, planShareScopes, readPatterLink, runExport, runInit, runValidate, undoInit } from "@storylet-studio/ops";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { planProject } from "@patterkit/core";
@@ -24,7 +24,7 @@ import type {
 import { EXTENSION_PROJECT_OWNER, extensionVcKey } from "../shared/api.js";
 import { declDto, fieldDeclDto } from "./decls.js";
 import { addressOf, readRemote, statusLine, unpushedShards } from "./remote.js";
-import { History } from "./history.js";
+import { History, applyStates } from "./history.js";
 import { extensionDtos, extensionNodeChoices } from "./extensions.js";
 import { resetShardStatus, shardStatus } from "./vc.js";
 import type { ShardRef } from "./vc.js";
@@ -342,9 +342,66 @@ export function openProject(path: string): { session: ProjectSession; problems: 
   if (!loaded.source) return { error: refusal(loaded.issues, "not a storylets project") };
   resetShardStatus();   // a new project never inherits the last one's VC answers
   return {
-    session: { loaded, dto: toDto(loaded), history: new History(), stamp: diskStamp(loaded) },
+    session: withHeldGuard({ loaded, dto: toDto(loaded), history: new History(), stamp: diskStamp(loaded) }),
     problems: runValidate(loaded, { checkBundle: false }).issues,
   };
+}
+
+/**
+ * The session's history, writing its undos and redos through `heldRefusal` first: a step that would change a
+ * shard somebody else holds is refused before anything is written, and, as for any write that could not land,
+ * the shell's history keeps the step where it was, to be tried again once they let go. The same rule the
+ * editor's locks read (lockedBy), so an undo can never write what the page would not let the author type into.
+ */
+function withHeldGuard(session: ProjectSession): ProjectSession {
+  session.history = new History({
+    write: async (states) => {
+      const held = await heldRefusal(session, states.filter((s) => !s.local).map((s) => s.path));
+      return held !== undefined ? { ok: false, error: held, wrote: false } : applyStates(states);
+    },
+  });
+  return session;
+}
+
+/** What each shard is, in the words the editor names it by: "The deck “docks”", "Probe's data in the box
+ *  “harbour”". Undefined for a key the project no longer has. */
+function shardName(session: ProjectSession, key: string): string | undefined {
+  const boxName = (id: string): string | undefined => {
+    const box = session.dto.boxes.find((b) => b.id === id);
+    return box && `the box “${box.title ?? box.gameId}”`;
+  };
+  const ext = /^ext:([^:]+):(.+)$/.exec(key);
+  if (ext) {
+    const name = session.dto.extensions?.find((x) => x.id === ext[2])?.name ?? ext[2]!;
+    const where = ext[1] === EXTENSION_PROJECT_OWNER ? "the project" : boxName(ext[1]!);
+    return where && `${name}'s data in ${where}`;
+  }
+  if (key === "project") return "The project file";
+  const [kind, id] = key.split(":") as [string, string];
+  if (kind === "deck") {
+    const deck = session.dto.boxes.flatMap((b) => b.decks).find((d) => d.id === id);
+    return deck && `The deck “${deck.title ?? deck.gameId}”`;
+  }
+  const box = boxName(id);
+  if (box === undefined) return undefined;
+  const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+  return kind === "box" ? cap(box) : `The ${kind} of ${box}`;
+}
+
+/** Why a write of `paths` must wait, when somebody else holds one of the shards among them: each one named
+ *  with its holder ("The deck “docks” is locked by bob."). Undefined when none is held, or the query fails
+ *  (the write then goes ahead, and the VC layer has the last word, as it always had). */
+export async function heldRefusal(session: ProjectSession, paths: readonly string[]): Promise<string | undefined> {
+  const wanted = new Set(paths.map((p) => resolve(p)));
+  const refs = shardRefs(session);
+  const keys = refs.filter((r) => wanted.has(resolve(r.path))).map((r) => r.key);
+  if (keys.length === 0) return undefined;
+  const { states } = await shardStatus(refs);
+  const said = [...new Set(keys)].flatMap((key) => {
+    const by = states.get(key)?.lockedBy;
+    return by?.length ? [`${shardName(session, key) ?? "A file it changes"} is locked by ${by.join(", ")}.`] : [];
+  });
+  return said.length > 0 ? `${said.join(" ")} It can be changed once they release it.` : undefined;
 }
 
 /** Every shard of the open project, keyed the way the editor addresses it
