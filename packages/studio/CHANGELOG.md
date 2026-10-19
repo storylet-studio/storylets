@@ -17,6 +17,12 @@ here is part of shipping, not a courtesy.
   type, and counts a field's default, so a card that leaves its mood alone shows up under the default mood. It
   reads a query exactly as Patterpad's Field tab does.
 
+### Changed
+
+- **One Live Link server for the family.** Storyletter's Live Link now runs on the same server as Patterpad's,
+  from the shared editor shell, with Storyletter's own handling of boards and traces plugged in (family parity
+  item 14). Nothing changes in how it behaves.
+
 ## [0.24.0] - 2026-10-19
 
 ### Fixed
