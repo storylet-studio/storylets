@@ -13,6 +13,7 @@ import type { PaneShell } from "@wildwinter/app-shell";
 import { STORYLETTER_WORDMARK } from "./wordmark.js";
 import { flash, flashError, ok } from "./results.js";
 import { showInPatterpad } from "./show-in-patterpad.js";
+import { trackFieldUndo } from "./field-undo.js";
 import { remember } from "./session.js";
 import type { Navigation } from "./navigation.js";
 import type { SaveQueue } from "./save-queue.js";
@@ -51,6 +52,8 @@ export interface CommandsContext {
 }
 
 export function createCommands(ctx: CommandsContext) {
+  /** Which fields hold typing of their own, for Undo (field-undo.ts). */
+  const fieldUndo = trackFieldUndo(document);
   const { session, nav, saves, comments, exchange } = ctx;
   const studio = session.studio;
   /** Whether the Esc being handled belonged to something on top. */
@@ -85,6 +88,11 @@ export function createCommands(ctx: CommandsContext) {
   /** Edit > Undo / Redo: land pending edits, step history, and fall back calmly
    *  if the step took away what was open. */
   async function undoRedo(which: "undo" | "redo"): Promise<void> {
+    // Typing in the focused field is undone there first, by the page's own text
+    // undo, and its row commits the result as it commits any typing: the screen
+    // and the file stay in step (Patterpad's rule, patter ee3b612). In a dialog,
+    // Settings or the identity fields too, which have no project step at all.
+    if (fieldUndo.route(which) === "field") { document.execCommand(which); return; }
     if (!session.project) return;
     await saves.flush();   // land pending edits before stepping history
     const result = which === "undo" ? await studio.undo() : await studio.redo();

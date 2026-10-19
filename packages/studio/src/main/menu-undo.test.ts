@@ -1,0 +1,68 @@
+// Edit > Undo and Redo always went to the main window, whichever window had the focus, so Cmd+Z in the
+// Search, Coverage or Links window, or on the Board, undid a project edit behind it. Another window gets its
+// own text undo, as Select All already did, and as Patterpad's menu does (patter ee3b612); the main window
+// still decides for itself (commands.ts, field-undo.ts).
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MenuItemConstructorOptions } from "electron";
+import type { StudioState } from "../shared/api.js";
+
+const state = vi.hoisted(() => ({ template: [] as MenuItemConstructorOptions[], focused: null as unknown }));
+
+vi.mock("electron", () => ({
+  app: { getVersion: () => "0.0.0", getPath: () => "/home/someone", isPackaged: true },
+  shell: { openExternal: vi.fn() },
+  BrowserWindow: { getFocusedWindow: () => state.focused },
+  Menu: {
+    buildFromTemplate: (template: MenuItemConstructorOptions[]) => { state.template = template; return template; },
+    setApplicationMenu: vi.fn(),
+  },
+}));
+vi.mock("@wildwinter/app-shell/updater", () => ({ manualCheckForUpdates: vi.fn() }));
+
+const { refreshMenu } = await import("./menu.js");
+
+const STATE = {
+  recents: [], theme: "system", autoRebuild: false, showResolved: false, reviewWalk: false,
+  coverageOverlay: false, panes: { nav: true, inspector: false },
+} as unknown as StudioState;
+
+const fakeWindow = () => ({ webContents: { send: vi.fn(), undo: vi.fn(), redo: vi.fn(), selectAll: vi.fn() } });
+
+const click = (label: string): void => {
+  const edit = state.template.find((m) => m.label === "Edit")!;
+  const item = (edit.submenu as MenuItemConstructorOptions[]).find((i) => i.label === label)!;
+  (item.click as unknown as () => void)();
+};
+
+describe("Edit > Undo and Redo", () => {
+  const main = fakeWindow();
+  beforeEach(() => {
+    vi.clearAllMocks();
+    refreshMenu(main as never, STATE, false, undefined, false, { open: true, deckFocused: false });
+  });
+
+  it("in the editor, hand the choice to the editor's renderer", () => {
+    state.focused = main;
+    click("Undo");
+    click("Redo");
+    expect(main.webContents.send.mock.calls).toEqual([["menu", { cmd: "undo" }], ["menu", { cmd: "redo" }]]);
+    expect(main.webContents.undo).not.toHaveBeenCalled();
+  });
+
+  it("in another window, undo that window's own text and leave the project alone", () => {
+    const search = fakeWindow();
+    state.focused = search;
+    click("Undo");
+    click("Redo");
+    expect(search.webContents.undo).toHaveBeenCalledTimes(1);
+    expect(search.webContents.redo).toHaveBeenCalledTimes(1);
+    expect(main.webContents.send).not.toHaveBeenCalled();
+  });
+
+  it("with no window focused, still go to the editor", () => {
+    state.focused = null;
+    click("Undo");
+    expect(main.webContents.send).toHaveBeenCalledWith("menu", { cmd: "undo" });
+  });
+});

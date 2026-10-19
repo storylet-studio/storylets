@@ -197,11 +197,29 @@ export function refreshMenu(
     {
       label: "Edit",
       submenu: [
-        // Model undo/redo (file-state based), not the text-field native undo:
-        // the spine's items, spelled out rather than Electron's roles for
-        // exactly that reason (EDIT_MENU's note).
-        { ...EDIT_MENU.undo, click: send({ cmd: "undo" }) },
-        { ...EDIT_MENU.redo, click: send({ cmd: "redo" }) },
+        // Undo / redo: the spine's items, spelled out rather than Electron's
+        // roles (EDIT_MENU's note). The editor's renderer decides between the
+        // project's history and the focused field's own typing (field-undo.ts).
+        // Any other window (Search, Coverage, Links, the Board) has no project
+        // history of its own, so it gets the native text undo, as Select All
+        // does: sent on, Cmd+Z there undid a project edit behind it (Patterpad's
+        // rule, patter ee3b612).
+        {
+          ...EDIT_MENU.undo,
+          click: () => {
+            const focused = BrowserWindow.getFocusedWindow();
+            if (focused && focused !== window) { focused.webContents.undo(); return; }
+            send({ cmd: "undo" })();
+          },
+        },
+        {
+          ...EDIT_MENU.redo,
+          click: () => {
+            const focused = BrowserWindow.getFocusedWindow();
+            if (focused && focused !== window) { focused.webContents.redo(); return; }
+            send({ cmd: "redo" })();
+          },
+        },
         { type: "separator" },
         { role: "cut" }, { role: "copy" }, { role: "paste" },
         // NOT the native role, which selects the whole page, and which also took

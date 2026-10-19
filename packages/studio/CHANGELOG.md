@@ -23,6 +23,15 @@ here is part of shipping, not a courtesy.
   once they release it."), and stays on the stack to be tried again once they let it go: for a box's files, its
   decks and its extension data alike.
 
+### Fixed
+
+- **Undo undoes what you're looking at.** Edit ▸ Undo while you're typing in a field undoes that typing in the
+  field, and its value is saved as any typing is; once the field is back where it started, Undo goes on to the
+  project's last change. Redo follows it back. Before, Undo changed the project behind the field while the field
+  went on showing what you'd typed, so the screen and the file disagreed. With a dialog open (Project Settings,
+  User Information) Undo is the dialog's own typing and never reaches the project behind it, and in the Find,
+  Coverage, Links and Board windows it undoes that window's own typing rather than an edit in the editor.
+
 ## [0.23.0] - 2026-10-18
 
 ### Added
