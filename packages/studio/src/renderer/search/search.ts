@@ -1,10 +1,11 @@
 // ---------------------------------------------------------------------------
 // The Find window (Patterpad's detached search tool, ported): a small,
-// frameless, pinnable helper that floats over the editor. Three tabs, in
+// frameless, pinnable helper that floats over the editor. Four tabs, in
 // Patterpad's order and look: FIND filters every navigable thing in the
 // project; REPLACE rewrites text (titles, purposes, card string fields) across
 // every item, previewed before → after; PROPERTY lists every read and write of
-// a property, with the outcome that writes it. A hit drives the editor over
+// a property, with the outcome that writes it; FIELD lists what holds a
+// field's value (`mood = tense`), by the family's one rule (toolkit). A hit drives the editor over
 // IPC and the window stays put, so you can step through hits while the editor
 // stays live underneath. Esc closes.
 // ---------------------------------------------------------------------------
@@ -19,7 +20,10 @@ import { breadcrumb, confirmDialog, debounce, el, iconNode, metaLine, pinButton,
 import { bootToolWindow } from "../tool-window/boot.js";
 import { searchIndex, searchMatch } from "../src/search.js";
 import type { SearchHit } from "../src/search.js";
-import type { ProjectDto, PropertyUsage, ReplaceHit, ReplaceOptions, ReviewAt, SearchMode, SearchOpen } from "../../shared/api.js";
+import type { DeclaredField, FieldUsage, ProjectDto, PropertyUsage, ReplaceHit, ReplaceOptions, ReviewAt, SearchMode, SearchOpen } from "../../shared/api.js";
+
+/** The item a Property or Field hit names (ops' ResolveEntry). */
+type ResolveEntry = PropertyUsage["item"];
 
 const studio = window.studio;
 
@@ -30,6 +34,8 @@ let query = "";
 let replacement = "";
 let hits: SearchHit[] = [];            // Find
 let usages: PropertyUsage[] = [];      // Property
+let fieldHits: FieldUsage[] = [];      // Field
+let declared: DeclaredField[] = [];    // Field's empty state: what there is to type
 let replaceHits: ReplaceHit[] = [];    // Replace (the preview)
 let active = 0;
 /** The kind of thing a hit is, as a word: the caption beside a row is
@@ -43,11 +49,13 @@ const MODES: { mode: SearchMode; label: string }[] = [
   { mode: "find", label: "Find" },
   { mode: "replace", label: "Replace" },
   { mode: "property", label: "Property" },
+  { mode: "field", label: "Field" },
 ];
 const PLACEHOLDER: Record<SearchMode, string> = {
   find: "Decks, cards, hands, tags…",
   replace: "Find text to replace…",
   property: "Property… (@gold, @story.act, @world.time_of_day)",
+  field: "Field… (mood, mood = tense, mood != calm)",
 };
 
 
@@ -77,11 +85,9 @@ const tabEls = new Map<SearchMode, HTMLButtonElement>();
 
 // --- navigation ---------------------------------------------------------------
 
-/** Where a Property hit goes: its item, an outcome as its card with that
- *  outcome expanded. A tag group is never a hit (nothing on it reads a
- *  property), so the fall-through is the box. */
-function placeOf(u: PropertyUsage): ReviewAt {
-  const i = u.item;
+/** Where a Property or Field hit goes: its item, an outcome as its card with
+ *  that outcome expanded. */
+function placeOf(i: ResolveEntry): ReviewAt {
   switch (i.kind) {
     case "card": return { kind: "card", box: i.box, deck: i.deck!, card: i.card! };
     case "outcome": return { kind: "outcome", box: i.box, deck: i.deck!, card: i.card!, outcome: i.id };
@@ -94,7 +100,7 @@ function placeOf(u: PropertyUsage): ReviewAt {
 }
 
 function rowCount(): number {
-  return mode === "find" ? hits.length : mode === "property" ? usages.length : 0;
+  return mode === "find" ? hits.length : mode === "property" ? usages.length : mode === "field" ? fieldHits.length : 0;
 }
 
 function choose(i: number): void {
@@ -102,7 +108,8 @@ function choose(i: number): void {
   // a click that left it on the first row made the next arrow key start over.
   setActive(i);
   if (mode === "find") { const hit = hits[i]; if (hit) void studio.searchReveal(hit.selection); }
-  else if (mode === "property") { const u = usages[i]; if (u) void studio.searchReveal(placeOf(u)); }
+  else if (mode === "property") { const u = usages[i]; if (u) void studio.searchReveal(placeOf(u.item)); }
+  else if (mode === "field") { const f = fieldHits[i]; if (f) void studio.searchReveal(placeOf(f.item)); }
   // Back to the field after a jump (Patterpad's manners, parity row 35): a
   // click on a row leaves the focus on that row, and the next thing an author
   // does is type or step, both of which the field owns.
@@ -157,23 +164,46 @@ function renderFind(): void {
   if (hits.length === 0) emptyList("No matches.", "Type to find a deck, card, hand or tag.");
 }
 
+/** An item as a row names it. An outcome is named with its card, the way the
+ *  editor shows it: a two-crumb trail with the chevron drawn, not typed. */
+function itemLabel(item: ResolveEntry): HTMLElement | string {
+  return item.kind === "outcome"
+    ? breadcrumb([item.location[item.location.length - 1] ?? "", item.title ?? item.gameId])
+    : item.title ?? item.gameId;
+}
+
 function renderProperty(): void {
   listEl.replaceChildren(...usages.map((u, i) => {
     const item = u.item;
-    // An outcome is named with its card, the way the editor shows it: a
-    // two-crumb trail with the chevron drawn, not typed.
-    const label = item.kind === "outcome"
-      ? breadcrumb([item.location[item.location.length - 1] ?? "", item.title ?? item.gameId])
-      : item.title ?? item.gameId;
     return resultRow(i,
       el("span", { className: "sr-kind", text: kindWord(item.kind) }),
-      el("span", { className: "sr-label" }, label),
+      el("span", { className: "sr-label" }, itemLabel(item)),
       el("span", { className: `sr-use ${u.use}`, text: u.use === "read" ? "reads" : "writes" }),
       el("span", { className: "sr-sub" }, metaLine([u.where, u.text])));
   }));
   if (usages.length === 0) {
     emptyList("Nothing reads or writes that property.", "Type a property, such as @gold, @story.act or @world.time_of_day.");
   }
+}
+
+/** What the Field tab suggests typing: the project's own field names, so the
+ *  prompt is an example the author can use as it stands. */
+function fieldPrompt(): string {
+  if (declared.length === 0) return "No fields in this project. Declare them on a box's Card template tab.";
+  const names = declared.slice(0, 2).map((f) => f.field);
+  return `Type a field, such as ${names.join(" or ")}.`;
+}
+
+function renderField(): void {
+  listEl.replaceChildren(...fieldHits.map((f, i) => resultRow(i,
+    el("span", { className: "sr-kind", text: kindWord(f.item.kind) }),
+    el("span", { className: "sr-label" }, itemLabel(f.item)),
+    // The value is the answer, so it stands beside the item, the field named
+    // with it; a value the node only inherits says so, quietly.
+    el("span", { className: `sr-value${f.isDefault ? " default" : ""}`, text: `${f.field}: ${f.text === "" ? "(empty)" : f.text}` }),
+    f.isDefault ? el("span", { className: "sr-use", text: "default" }) : null,
+    el("span", { className: "sr-sub" }, breadcrumb(f.item.location)))));
+  if (fieldHits.length === 0) emptyList("Nothing has that value.", fieldPrompt());
 }
 
 /** The texts a Replace hit names, in the words the editor uses for them. */
@@ -209,6 +239,7 @@ function render(): void {
   if (active >= rowCount()) active = 0;
   if (mode === "find") renderFind();
   else if (mode === "property") renderProperty();
+  else if (mode === "field") renderField();
   else renderReplace();
 }
 
@@ -239,6 +270,14 @@ async function run(): Promise<void> {
     const found = project && query.trim() ? await studio.propertyUsage(query) : [];
     if (mine !== token) return;
     usages = found;
+  } else if (mode === "field") {
+    const [found, fields] = await Promise.all([
+      project && query.trim() ? studio.fieldUsage(query) : Promise.resolve([]),
+      project ? studio.declaredFields() : Promise.resolve([]),
+    ]);
+    if (mine !== token) return;
+    fieldHits = found;
+    declared = fields;
   } else {
     const found = project && query.trim() ? (await studio.replacePreview(replaceOpts())).hits : [];
     if (mine !== token) return;
@@ -248,7 +287,7 @@ async function run(): Promise<void> {
 }
 
 const runLater = debounce(() => void run(), 110);
-/** Find filters as you type; the other two ask main, so they wait a beat. */
+/** Find filters as you type; the others ask main, so they wait a beat. */
 function runSoon(): void {
   runLater.cancel();
   if (mode === "find") { void run(); return; }

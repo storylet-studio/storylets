@@ -10,6 +10,13 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+### Added
+
+- **Find has a Field tab** (Review ▸ Find by Field…): type `mood` to see every card's mood, or `mood = tense` to
+  list the cards that have it. It covers card fields, outcome fields and extension fields, matches a value by its
+  type, and counts a field's default, so a card that leaves its mood alone shows up under the default mood. It
+  reads a query exactly as Patterpad's Field tab does.
+
 ## [0.24.0] - 2026-10-19
 
 ### Fixed

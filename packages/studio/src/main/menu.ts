@@ -299,6 +299,9 @@ export function refreshMenu(
         // Patterpad's item, in Patterpad's menu: Find's Property tab, for "where
         // is @x read or written?". No accelerator there either.
         { ...REVIEW_MENU.findPropertyUsage, enabled: open, click: send({ cmd: "search-property" }) },
+        // Find's Field tab, under Patterpad's label for its twin (family
+        // parity item 16): "which cards have mood = tense?".
+        { label: "Find by Field\u2026", enabled: open, click: send({ cmd: "search-field" }) },
         { type: "separator" },
         // Patterpad's item, and its default: a resolved thread is done, and a
         // reviewer asks to see the archive rather than being shown it.

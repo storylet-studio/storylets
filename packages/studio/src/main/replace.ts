@@ -1,13 +1,13 @@
 // ---------------------------------------------------------------------------
-// The Find window's Property and Replace tabs, main side. Both are thin over
-// the ops: property usage is a read; a replace is previewed as a read and
+// The Find window's Property, Field and Replace tabs, main side. All are thin
+// over the ops: property and field usage are reads; a replace is previewed as a read and
 // applied through `commit`, the one mutation path, so it is ONE undo step
 // (Patterpad's applyReplace is one VC commit for the same reason), the files
 // are written canonically, and the project is re-read and re-validated after.
 // ---------------------------------------------------------------------------
 
-import { runPropertyUsage, runPropertyUsageMany, runReplace } from "@storylet-studio/ops";
-import type { PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
+import { declaredFields as declaredFieldsOf, runFieldUsage, runPropertyUsage, runPropertyUsageMany, runReplace } from "@storylet-studio/ops";
+import type { DeclaredField, FieldUsage, PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
 import { commit } from "./mutate/write-path.js";
 import type { ProjectSession } from "./project.js";
 import type { OpenResult } from "../shared/api.js";
@@ -26,6 +26,19 @@ export function propertyUsage(session: ProjectSession, query: string): PropertyU
  *  with the main process blocked for all of them. */
 export function propertyUsageMany(session: ProjectSession, queries: string[]): PropertyUsage[][] {
   return runPropertyUsageMany(session.loaded, queries.map((q) => q.trim()));
+}
+
+/** What holds the field `query` names, filtered by its value when it gives
+ *  one (`mood = tense`). Not a field query, or a project that does not
+ *  compile, is no hits, as for a property. */
+export function fieldUsage(session: ProjectSession, query: string): FieldUsage[] {
+  if (!query.trim()) return [];
+  return runFieldUsage(session.loaded, query);
+}
+
+/** The fields the project declares: what the Field tab suggests typing. */
+export function declaredFields(session: ProjectSession): DeclaredField[] {
+  return declaredFieldsOf(session.loaded);
 }
 
 /** The hits a Replace-all would make: no writes. Capped like Patterpad's, so a

@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
-// Find's Property and Replace tabs over the bridge.
+// Find's Property, Field and Replace tabs over the bridge.
 // ---------------------------------------------------------------------------
 
-import { applyReplace, propertyUsage, propertyUsageMany, replacePreview } from "../replace.js";
+import { applyReplace, declaredFields, fieldUsage, propertyUsage, propertyUsageMany, replacePreview } from "../replace.js";
 import { serialised } from "../mutate/write-path.js";
 import type { MainContext } from "../context.js";
 import type { Ipc } from "./registrar.js";
@@ -18,6 +18,9 @@ export function registerFind(ipc: Ipc, deps: Pick<MainContext, "session" | "edit
     const session = deps.session();
     return session ? propertyUsageMany(session, queries) : queries.map(() => []);
   });
+  // Find's Field tab: what holds a field's value, and what fields there are.
+  ipc.handle("search:fieldUsage", read(fieldUsage, []));
+  ipc.handle("search:declaredFields", read(declaredFields, []));
   // Find's Replace tab. Preview is read-only. Apply first has the editor flush
   // its pending edits (Patterpad's flushEditorScene: they would otherwise be
   // lost under the rewrite, or land on top of it), then writes through the

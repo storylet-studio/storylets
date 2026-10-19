@@ -7,7 +7,7 @@
 
 import type { Bundle, LoadReport, PlayRung, PropertyType, SaveFile, ScalarValue } from "@storylet-studio/model";
 import type { JobProgress } from "@wildwinter/app-shell/job";
-import type { BoxKit, CoverageOrder, CoverageReport, GameKit, PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
+import type { BoxKit, CoverageOrder, CoverageReport, DeclaredField, FieldUsage, GameKit, PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
 import type { IssueFix } from "@storylet-studio/compiler";
 import type { TraceEvent } from "@storylet-studio/runtime";   // Live Link: the frames carry the runtime's own events
 
@@ -18,7 +18,7 @@ export type { UpdaterDownloadProgress, UpdaterPromptOptions };
 
 export type { CoverageOrder, CoverageReport } from "@storylet-studio/ops";
 // Find: the Property and Replace tabs carry the ops types across unchanged.
-export type { PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
+export type { DeclaredField, FieldUsage, PropertyUsage, ReplaceHit, ReplaceOptions } from "@storylet-studio/ops";
 export type { JobProgress } from "@wildwinter/app-shell/job";
 
 /** The long-job progress channel. Declared HERE, not imported from
@@ -914,10 +914,10 @@ export interface BoxEdit {
   properties?: PropertyDeclDto[];
 }
 
-/** The Find window's tabs (Patterpad's search modes, the three we need):
- *  find an item by name, replace text across items, or find where a property
- *  is read and written. */
-export type SearchMode = "find" | "replace" | "property";
+/** The Find window's tabs (Patterpad's search modes, the four we need):
+ *  find an item by name, replace text across items, find where a property
+ *  is read and written, or list what holds a field's value. */
+export type SearchMode = "find" | "replace" | "property" | "field";
 
 /** How Find is opened: on a tab, optionally with a query already typed (the
  *  Coverage window's gate links open the Property tab on a ref). */
@@ -1678,9 +1678,10 @@ export type MenuCommand =
   | { cmd: "open-recent"; path: string }
   | { cmd: "clear-recents" }
   | { cmd: "search" }
-  // Find's other tabs: Edit > Replace… and Review > Find Property Usage…
+  // Find's other tabs: Edit > Replace…, Review > Find Property Usage… and Find by Field…
   | { cmd: "replace" }
   | { cmd: "search-property" }
+  | { cmd: "search-field" }
   | { cmd: "undo" }
   | { cmd: "redo" }
   // Edit > Select All in the editor: scoped to the canvas or the field (Patterpad's rule).
@@ -1911,6 +1912,10 @@ export interface StudioApi {
   /** Several at once, answered positionally, compiling the project once. Use
    *  this wherever a screen needs counts for a whole list of properties. */
   propertyUsageMany(queries: string[]): Promise<PropertyUsage[][]>;
+  // Find's Field tab: what holds a field's value (ops runFieldUsage), and the
+  // fields the project declares, for the tab's empty state.
+  fieldUsage(query: string): Promise<FieldUsage[]>;
+  declaredFields(): Promise<DeclaredField[]>;
   // Find's Replace tab (ops runReplace). Preview is read-only; apply writes
   // through the mutation path as ONE undo step, after the editor has flushed.
   replacePreview(opts: ReplaceOptions): Promise<{ hits: ReplaceHit[]; items: number }>;
@@ -2409,6 +2414,8 @@ export const INVOKE_CHANNELS = {
   "search:close": "closeSearch",
   "search:propertyUsage": "propertyUsage",
   "search:propertyUsageMany": "propertyUsageMany",
+  "search:fieldUsage": "fieldUsage",
+  "search:declaredFields": "declaredFields",
   "search:replacePreview": "replacePreview",
   "search:replaceApply": "replaceApply",
   "editor:flushed": "editorFlushed",

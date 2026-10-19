@@ -9,7 +9,7 @@
 /* The drag bar, pin and close are the shared .swin-* chrome (app-shell
    tool-window.css, arriving via theme.css); only content styles live here. */
 
-/* The tabs: Patterpad's segmented mode toggle (Find | Replace | Property),
+/* The tabs: Patterpad's segmented mode toggle (Find | Replace | Property | Field),
    standing in the bar where the title was. The control is our container, so
    its frame and the gaps between its buttons opt out of the drag region here;
    the shell's rule only reaches the buttons themselves. */
@@ -41,6 +41,11 @@
 /* Property: reads or writes, said in a word beside the item. */
 .sr-use { flex: none; font: 600 10px/1 var(--font-ui); letter-spacing: 0.04em; padding: 2px 6px; border-radius: var(--radius-pill); border: 1px solid var(--line-soft); color: var(--muted); }
 .sr-use.write { color: var(--accent); border-color: var(--accent); }
+
+/* Field: the value beside the item, the field named with it; an inherited
+   default in the muted ink, with its word. */
+.sr-value { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--ink); }
+.sr-value.default { color: var(--muted); }
 
 /* Replace: before → after (before muted, not struck: the arrow and the ink
    colour show the change), where it is under it, and a per-row Replace. The

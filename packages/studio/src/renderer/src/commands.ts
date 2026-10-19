@@ -157,9 +157,10 @@ export function createCommands(ctx: CommandsContext) {
       case "open-recent": void ctx.adopt(studio.openProjectPath(command.path)); break;
       case "clear-recents": void ctx.clearRecents(); break;
       case "search": if (project) void studio.openSearch(); break;
-      // Find's other tabs: Edit > Replace… and Review > Find Property Usage…
+      // Find's other tabs: Edit > Replace…, Review > Find Property Usage… and Find by Field…
       case "replace": if (project) void studio.openSearch({ mode: "replace" }); break;
       case "search-property": if (project) void studio.openSearch({ mode: "property" }); break;
+      case "search-field": if (project) void studio.openSearch({ mode: "field" }); break;
       case "undo": void undoRedo("undo"); break;
       case "redo": void undoRedo("redo"); break;
       case "table": if (project) afterFlush(() => studio.openTable()); break;

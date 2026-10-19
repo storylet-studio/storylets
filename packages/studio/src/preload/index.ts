@@ -113,6 +113,8 @@ const api: StudioApi = {
   // Find's Property and Replace tabs
   propertyUsage: (query: string) => invoke("search:propertyUsage", query),
   propertyUsageMany: (queries: string[]) => invoke("search:propertyUsageMany", queries),
+  fieldUsage: (query: string) => invoke("search:fieldUsage", query),
+  declaredFields: () => invoke("search:declaredFields"),
   replacePreview: (opts: ReplaceOptions) => invoke("search:replacePreview", opts),
   replaceApply: (opts: ReplaceOptions) => invoke("search:replaceApply", opts),
   onEditorFlush: (handler) => { listen("editor:flush", handler); },

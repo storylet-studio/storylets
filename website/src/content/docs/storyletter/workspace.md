@@ -154,7 +154,7 @@ says "Decks, cards, hands, tags…"). Picking a hit moves the editor underneath 
 window stays put, so you can step through hits without losing your place. `Esc` closes
 it.
 
-The window has three tabs across its top bar: **Find**, **Replace**, and **Property**.
+The window has four tabs across its top bar: **Find**, **Replace**, **Property**, and **Field**.
 
 **Replace** (**Edit ▸ Replace…**, `Cmd+Alt+F`, or `Ctrl+H` on Windows and Linux) finds and
 replaces text across the whole project. That covers the titles and purposes of every box,
@@ -174,6 +174,16 @@ change), each row saying **reads** or **writes** and naming the outcome that wri
 a row to go there. The [Coverage](/production/coverage-testing/) window's "gated on `@x`"
 links open this tab on that property.
 
+**Field** (**Review ▸ Find by Field…**) answers "which cards have `mood = tense`?". Type a
+field to list everything that has it, with its value, or add `= value` or `!= value` to
+narrow the list. It covers the card template's fields on cards, the outcome fields on
+outcomes, and an extension's fields, written `extension.field` (`probe.note`). A value
+matches by the field's type: text and choices ignore case, flags match when the flag is
+set, numbers compare as numbers, and a yes/no field takes `true` or `false`. A card that
+leaves a field alone holds its default, so `mood = calm` finds it too, and its row says
+**default**. Patterpad's Find has the same tab for game data, and reads a query the same
+way.
+
 ## The menus
 
 Every key below is collected, along with the canvas and tool-window keys the menus can't
@@ -185,7 +195,7 @@ show, on [Keyboard shortcuts](/storyletter/shortcuts/).
 | File | New Project… (`Cmd+N`) · Open Project… (`Cmd+O`) · Open Storyletpack… · Open Recent · Close Project · Save (`Cmd+S`) · Export as Storyletpack… · Merge Returned Storyletpack… · Connect to a Server… · New Card (`Shift+Cmd+N`) · Project Settings… (`Cmd+,`) · Share Scopes with Other Tools… · User Information… (Windows and Linux) · Exit (Windows) or Quit (Linux) |
 | Edit | Undo (`Cmd+Z`) · Redo (`Shift+Cmd+Z`) · Cut · Copy · Paste · Select All · Duplicate (`Cmd+D`) · Show Scene in Patterpad (when the project is [paired with Patter](/storyletter/patter/)) · Find… (`Cmd+F`) · Replace… (`Cmd+Alt+F`; `Ctrl+H` on Windows and Linux) |
 | Play | The Board (`Cmd+P`) · Live Link |
-| Review | Review Feedback (`Shift+Cmd+R`) · Next Feedback (`F8`) · Previous Feedback (`Shift+F8`) · Coverage Test… (`Shift+Cmd+C`) · Links… · Find Property Usage… · Show Resolved Comments |
+| Review | Review Feedback (`Shift+Cmd+R`) · Next Feedback (`F8`) · Previous Feedback (`Shift+F8`) · Coverage Test… (`Shift+Cmd+C`) · Links… · Find Property Usage… · Find by Field… · Show Resolved Comments |
 | Publish | Publish Playable HTML… · Publish Spreadsheet… · Publish Bundle (`Shift+Cmd+B`) · Auto Rebuild |
 | View | Project Overview · Up a Level (`Cmd+[`) · Back · Forward · Show Navigator (`Cmd+1`) · Reset View · Coverage Overlay · Colour Theme · Actual Size · Zoom In · Zoom Out · Toggle Full Screen (Windows and Linux; macOS adds its own) |
 | Window | the platform's own window items |

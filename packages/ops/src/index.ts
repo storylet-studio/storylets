@@ -63,9 +63,11 @@ export {
 export type { ExtensionUpgrade } from "./extensions.js";
 export type { ShardMergeInput, ShardMergeStep } from "./merge.js";
 export { analyseInfluence, cardNeighbourhood, describeContribution } from "./influence.js";
-// Find: property usage (the Property tab) and find-and-replace over item text (the Replace tab)
+// Find: property usage (the Property tab), field usage (the Field tab) and find-and-replace over item text (the Replace tab)
 export { runPropertyUsage, runPropertyUsageMany, parsePropertyQuery, propertyUsageReport } from "./usage.js";
 export type { PropertyUsage } from "./usage.js";
+export { runFieldUsage, declaredFields } from "./field-usage.js";
+export type { FieldUsage, DeclaredField } from "./field-usage.js";
 export { renameStage, renameStageInExpression, stageGateCount } from "./stages.js";
 export type { StageRenameResult, StageTarget } from "./stages.js";
 export { runReplace } from "./replace.js";
