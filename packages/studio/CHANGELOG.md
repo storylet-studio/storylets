@@ -16,6 +16,10 @@ here is part of shipping, not a courtesy.
   list the cards that have it. It covers card fields, outcome fields and extension fields, matches a value by its
   type, and counts a field's default, so a card that leaves its mood alone shows up under the default mood. It
   reads a query exactly as Patterpad's Field tab does.
+- **An extension's pick field.** A field that picks one choice from several sources (fixed words, the project's
+  cards, boxes, decks, outcomes or tags, and the extension's own lists in Project Settings) shows them all in one
+  menu, with "auto" first. A value that isn't one of its choices, or a name two sources share, is reported, as
+  Patterpad does. A list entry added in Project Settings is offered before you save.
 
 ### Changed
 

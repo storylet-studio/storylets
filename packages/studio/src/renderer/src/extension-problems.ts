@@ -72,6 +72,14 @@ export function extensionProblemLine(p: Pick<Problem, "message" | "detail" | "ex
   if (clash) return say(`It reads the ${kindWord(clash[1]!)} field ${quoted(clash[2]!)} as ${clash[3]}, but the box ${quoted(clash[4]!)} declares it as ${clash[5]}.`, "Change the field's type on that box's Card template tab so they agree.");
   const undeclared = /^the Storylet extension "[^"]+" claims the (\w+) field "([^"]+)", which no box declares/.exec(m);
   if (undeclared) return say(`It reads the ${kindWord(undeclared[1]!)} field ${quoted(undeclared[2]!)}, which no box declares.`, "Declare it on a box's Card template tab, or give the extension's setting the field's name.");
+  // A name two of a pick's sources hold: `the Storylet extension "<x>": "<name>" is <sources>, so a value naming it is ambiguous`.
+  const pickClash = /^the Storylet extension "[^"]+": "([^"]*)" is (.+), so a value naming it is ambiguous$/.exec(m);
+  if (pickClash) {
+    const listLabel = (list: string): string => x?.targets["project"]?.fields.find((f) => f.name === list)?.label ?? list;
+    const sources = pickClash[2]!.replace(/the list "([^"]*)"/g, (_, list: string) => `the list ${quoted(listLabel(list))}`)
+      .replace(/"([^"]*)"/g, (_, s: string) => quoted(s));
+    return say(`${quoted(pickClash[1]!)} is ${sources}, so a value naming it is ambiguous.`, "Rename one of them.");
+  }
   const notTaken = /^data for the Storylet extension "([^"]+)", which the project does not take/.exec(m);
   if (notTaken) return `There's data here for the extension ${quoted(notTaken[1]!)}, which this project doesn't take. It's kept, but your game won't get it.`;
   return undefined;

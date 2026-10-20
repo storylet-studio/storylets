@@ -14,6 +14,7 @@ const project = {
         fields: [{ name: "note", type: "text", label: "Note" }, { name: "cue", type: "record", label: "cue", fields: [{ name: "sound", type: "text", label: "sound" }] }],
         claims: [{ field: "mood", decl: { name: "mood", type: "enum", label: "Mood" } }],
       },
+      project: { fields: [{ name: "places", type: "list", label: "Places", of: { type: "text" } }], claims: [] },
     },
     values: {},
   }],
@@ -38,6 +39,15 @@ describe("a Storylet extension's problem for the writer", () => {
       .toBe("This project takes the extension “probe”, but its manifest isn't in the extensions folder. Its data is kept, but your game won't get it.");
     expect(line("the Storylet extension \"probe\" claims the card field \"temper\", which no box declares; set the extension's \"moodField\" setting to the field's name, or declare it"))
       .toBe("Probe: It reads the card field “temper”, which no box declares. Declare it on a box's Card template tab, or give the extension's setting the field's name.");
+  });
+
+  it("words a pick's problems: a value not among its choices, one two sources hold, and the project's clash", () => {
+    expect(line('entries.card.c_bell.note: "note" is "Qauy", which is not one of its choices', "not-a-choice"))
+      .toBe("Probe: Note on the card “bell” is “Qauy”, which isn't one of its choices. Pick one on its page.");
+    expect(line('entries.card.c_bell.note: "note" is "c_tide", which is a card and an entry of the list "places"', "pick-ambiguous"))
+      .toBe("Probe: Note on the card “bell” is “c_tide”, which is a card and an entry of the list “places”, so it's ambiguous. Rename one of them.");
+    expect(line('the Storylet extension "probe": "Gate" is a card and an entry of the list "places", so a value naming it is ambiguous', "pick-clash"))
+      .toBe("Probe: “Gate” is a card and an entry of the list “Places”, so a value naming it is ambiguous. Rename one of them.");
   });
 
   it("leaves a problem with no extension, or a shape it does not know, to the table", () => {

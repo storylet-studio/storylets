@@ -131,6 +131,16 @@ export function createProjectSettings(
       extensionEdits.push({ extension, field, value });
       landed?.();
     },
+    // A pick's project lists as they stand in the dialog: the saved values with this dialog's edits over them.
+    projectEntry: (extension) => {
+      const p = project();
+      const saved = p?.projectNode !== undefined ? p.extensions?.find((x) => x.id === extension)?.values[p.projectNode] : undefined;
+      const edits = extensionEdits.filter((e) => e.extension === extension);
+      if (edits.length === 0) return saved;
+      const entry: Record<string, unknown> = { ...(saved ?? {}) };
+      for (const e of edits) { if (e.value === undefined) delete entry[e.field]; else entry[e.field] = e.value; }
+      return entry;
+    },
   };
   /** World stages renamed since the dialog opened, carried at Save. */
   const worldRenames: { target: StageTargetDto; from: string; to: string }[] = [];

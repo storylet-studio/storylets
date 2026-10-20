@@ -158,6 +158,36 @@ describe("validation, driven by the manifest", () => {
       `${BOX_SHARD}: entries.card.c_bell.tune: "tune" is not a field this extension declares; it is kept, and not compiled`);
   });
 
+  it("checks a pick against its words, the cards and the extension's project lists, and reports a name two hold once", () => {
+    const MANIFEST = "extensions/probe.extension.json";
+    const withPicks = (dir: string, places: string[], to: string): void => {
+      const manifest = JSON.parse(readFileSync(join(dir, MANIFEST), "utf8")) as { targets: { storylets: Record<string, { fields: unknown[] }> } };
+      manifest.targets.storylets["card"]!.fields.push(
+        { name: "to", type: "pick", from: [{ words: ["all"] }, { to: "card" }, { list: "places" }] },
+        { name: "look", type: "pick", from: [{ to: "card" }, { list: "places" }] });
+      manifest.targets.storylets["project"]!.fields.push({ name: "places", type: "list", of: { type: "text" } });
+      writeFileSync(join(dir, MANIFEST), JSON.stringify(manifest));
+      // The project's entry in the box's shard, after the root's: its lists are read wherever it sits.
+      write(dir, "probe.storyletextension", { schema: "storylets/extension@0", extension: "probe", entries: {} });
+      editBox(dir, (e) => {
+        e["project"] = { proj_probe: { places } };
+        e["card"]!["c_bell"]!["to"] = to;
+      });
+    };
+    const picks = (issues: Issue[]): string[] => messages(issues).filter((m) => /"(to|look)"|ambiguous/.test(m));
+    expect(picks(issuesAfter((dir) => withPicks(dir, ["Quay"], "Quay")))).toEqual([]);
+    expect(picks(issuesAfter((dir) => withPicks(dir, ["Quay"], "all")))).toEqual([]);
+    expect(messages(issuesAfter((dir) => withPicks(dir, ["Quay"], "Qauy")), "error")).toEqual([
+      `${BOX_SHARD}: entries.card.c_bell.to: "to" is "Qauy", which is not one of its choices`,
+    ]);
+    const clash = issuesAfter((dir) => withPicks(dir, ["Quay", "c_tide"], "c_tide"));
+    expect(picks(clash)).toEqual([
+      `probe.storyletproj: the Storylet extension "probe": "c_tide" is a card and an entry of the list "places", so a value naming it is ambiguous`,
+      `${BOX_SHARD}: entries.card.c_bell.to: "to" is "c_tide", which is a card and an entry of the list "places"`,
+    ]);
+    expect(clash.find((i) => i.detail === "pick-clash")).toMatchObject({ extension: "probe", severity: "warning", field: "extensions" });
+  });
+
   it("reports an entry for a node that has gone, per entry, as a warning, and keeps it", () => {
     const issues = issuesAfter((dir) => editBox(dir, (e) => { e["card"]!["c_gone"] = { note: "x" }; }));
     expect(messages(issues, "error")).toEqual([]);

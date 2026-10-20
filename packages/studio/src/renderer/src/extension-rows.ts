@@ -19,6 +19,8 @@
 import { el } from "@wildwinter/app-shell";
 import { valueRows } from "@wildwinter/app-shell/value-rows";
 import type { ValueAdapter, ValueDecl } from "@wildwinter/app-shell/value-rows";
+import { pickLists } from "@wildwinter/toolkit/extensions";
+import type { TargetDecl } from "@wildwinter/toolkit/extensions";
 import { EXTENSION_PROJECT_OWNER, extensionVcKey } from "../../shared/api.js";
 import type { ExtensionDto, ExtensionFieldDto, ProjectDto } from "../../shared/api.js";
 
@@ -29,6 +31,9 @@ export interface ExtensionHost {
   save(extension: string, nodeId: string, field: string, value: unknown, landed?: () => void): void;
   /** Drawn but not editable (a project open read-only). */
   readOnly?: boolean;
+  /** An extension's project values as they stand, for a pick's project lists, when they differ from the
+   *  project's saved ones: Project Settings' edits not yet saved. */
+  projectEntry?(extension: string): Readonly<Record<string, unknown>> | undefined;
 }
 
 const rows = valueRows();
@@ -55,11 +60,20 @@ export function extensionCount(extension: ExtensionDto, nodeId: string): number 
   return Object.keys(extension.values[nodeId] ?? {}).length;
 }
 
-const adapterOf = (project: ProjectDto | undefined): ValueAdapter => ({
-  nodes: (kind) => project?.extensionNodes?.[kind] ?? [],
-  // A held node by its name wherever the project has it; undefined, so "gone", only when it has none.
-  label: (kind, id) => project?.extensionNodes?.[kind]?.find((n) => n.id === id)?.label,
-});
+/** The adapter for one extension's rows: the project's nodes, and that extension's project lists for a pick's
+ *  `list` sources, read off its project values (the toolkit's `pickLists`) when a choice is asked for, so a list
+ *  entry added in Project Settings is offered before Save. */
+export function adapterOf(host: ExtensionHost, extension: ExtensionDto): ValueAdapter {
+  const project = host.project();
+  const target = { fields: extension.targets["project"]?.fields ?? [] } as unknown as TargetDecl;
+  const saved = project?.projectNode !== undefined ? extension.values[project.projectNode] : undefined;
+  return {
+    nodes: (kind) => project?.extensionNodes?.[kind] ?? [],
+    // A held node by its name wherever the project has it; undefined, so "gone", only when it has none.
+    label: (kind, id) => project?.extensionNodes?.[kind]?.find((n) => n.id === id)?.label,
+    list: (name) => pickLists(target, host.projectEntry?.(extension.id) ?? saved)(name),
+  };
+}
 
 /** Whose extension shards hold a node's values: its box's id, or the project's own owner for the project and
  *  the map's tags. */
@@ -78,7 +92,7 @@ export function extensionFields(host: ExtensionHost, extension: ExtensionDto, ki
   holder.dataset["extVc"] = extensionVcKey(extensionOwner(project, kind, nodeId), extension.id);
   holder.dataset["extName"] = extension.name;
   const values = extension.values[nodeId] ?? {};
-  const adapter = adapterOf(project);
+  const adapter = adapterOf(host, extension);
   let group: string | undefined;
   // Editor-only fields included: they are the editor's data, never compiled, and this is the editor.
   for (const decl of extension.targets[kind]?.fields ?? []) {

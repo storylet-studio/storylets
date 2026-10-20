@@ -17,9 +17,9 @@ import { EXTENSIONS_DIR, MANIFEST_EXTENSION, isTextFieldType } from "@storylet-s
 import type { BundleExtension, ExtensionFieldDecl, FieldDecl, NodeExtensions } from "@storylet-studio/model";
 import {
   HOSTS, claimClashes, compileEntry, compiledTarget, effectiveClaim, entryProblems, manifestProblems, orphanedEntries,
-  resolvedClaims, settingValues, targetOf, valueProblems,
+  pickClashes, pickLists, resolvedClaims, settingValues, targetOf, valueProblems,
 } from "@wildwinter/toolkit/extensions";
-import type { Manifest, Problem, ResolvedClaim } from "@wildwinter/toolkit/extensions";
+import type { Manifest, Problem, ResolvedClaim, TypeDecl, ValueContext } from "@wildwinter/toolkit/extensions";
 import type { Issue, SourceExtension, SourceProject } from "./project.js";
 
 /** What the pass hands the bundle. */
@@ -155,6 +155,33 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
     ...(source.extensions ?? []).map((file) => ({ file })),
     ...source.boxes.flatMap((b) => (b.extensions ?? []).map((file) => ({ file, box: b.box.box.id }))),
   ];
+  // A pick's choices: the project's nodes by kind, and each extension's own project lists, read off its
+  // project entry wherever that entry sits (it belongs in the root shard, but any shard may hold it).
+  const projectId = source.project.project.id;
+  const projectEntries = new Map<string, Record<string, unknown>>();
+  for (const { file } of shards) {
+    const entry = (file.shard.entries as Record<string, Record<string, unknown> | undefined> | undefined)?.["project"]?.[projectId];
+    if (typeof entry === "object" && entry !== null && !Array.isArray(entry) && !projectEntries.has(file.shard.extension)) {
+      projectEntries.set(file.shard.extension, entry as Record<string, unknown>);
+    }
+  }
+  const contexts = new Map<string, ValueContext>();
+  for (const [ext, manifest] of sound) {
+    contexts.set(ext, { exists, list: pickLists(targetOf(manifest, "storylets", "project"), projectEntries.get(ext)) });
+  }
+  const nodesOf = (kind: string): { id: string }[] => [...nodes].filter(([, n]) => n.kind === kind).map(([id]) => ({ id }));
+  for (const [ext, manifest] of [...sound].sort(([a], [b]) => a.localeCompare(b))) {
+    // A name two of a pick's sources hold, once for the project however many fields offer it.
+    const said = new Set<string>();
+    for (const decl of pickDecls(manifest)) {
+      for (const p of pickClashes(decl, { nodes: nodesOf, list: contexts.get(ext)!.list! })) {
+        if (said.has(p.message)) continue;
+        said.add(p.message);
+        issues.push({ extension: ext, severity: p.severity, path: projectPath, field: "extensions", detail: p.code,
+          message: `the Storylet extension "${ext}": ${p.message}` });
+      }
+    }
+  }
   for (const { file, box } of shards) {
     const stem = file.path.split("/").pop()!.replace(/\.storyletextension$/, "");
     const shard = file.shard;
@@ -197,7 +224,7 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
           issues.push({ extension: stem, severity: "warning", path: file.path, where: id,
             message: `entries.${kind}.${id} belongs ${node.box === undefined ? "in the project's own shard" : "in its own box's shard"}; it is compiled from here all the same` });
         }
-        const problems = entryProblems(target, entry, { exists });
+        const problems = entryProblems(target, entry, contexts.get(stem) ?? { exists });
         for (const p of problems) issues.push(issueOf(file.path, p, `entries.${kind}.${id}${p.path === "" ? ": " : "."}`, "entries", stem));
         if (problems.some((p) => p.severity === "error")) continue;
         const compiled = compileEntry(target, entry as Record<string, unknown>);
@@ -226,6 +253,18 @@ export function extensionPass(source: SourceProject): { issues: Issue[]; compile
     };
   }
   return { issues, compiled: { bundle, nodes: values } };
+}
+
+/** Every pick a manifest declares for Storylets, at any depth (in a record, or as a map's or a list's items). */
+function pickDecls(manifest: Manifest): TypeDecl[] {
+  const out: TypeDecl[] = [];
+  const walk = (decl: TypeDecl): void => {
+    if (decl.type === "pick") out.push(decl);
+    for (const f of decl.fields ?? []) walk(f);
+    if (decl.of !== undefined) walk(decl.of);
+  };
+  for (const target of Object.values(manifest.targets.storylets ?? {})) for (const f of target.fields ?? []) walk(f);
+  return out;
 }
 
 /** The family's word for a host field's type: `string` reads as `text`. */

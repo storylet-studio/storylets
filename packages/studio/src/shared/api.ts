@@ -618,6 +618,8 @@ export interface ExtensionFieldDto {
   values?: string[];
   stages?: string[];
   to?: string;
+  /** A pick's sources, in order: fixed words, a reference kind's nodes, the extension's own project lists. */
+  from?: ({ words: string[] } | { to: string } | { list: string })[];
   fields?: ExtensionFieldDto[];
   key?: { type: string; to?: string };
   of?: Omit<ExtensionFieldDto, "name"> & { name?: string };

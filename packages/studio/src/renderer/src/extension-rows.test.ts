@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderBoxTabBody, renderCardWorkspace } from "./inspector.js";
-import { extensionTabs, knownTab } from "./extension-rows.js";
+import { adapterOf, extensionTabs, knownTab } from "./extension-rows.js";
 import { problemTarget } from "./problems.js";
 import { setPlayRung } from "./play-ladder.js";
 import { resetDocTabMemory, setDocTab } from "./doc-tab-memory.js";
@@ -136,5 +136,35 @@ describe("a problem in an extension shard", () => {
     expect(at("entries.outcome.o_ring.line: wrong")).toMatchObject({ kind: "card", card: "c_bell", tab: "outcomes", outcome: "o_ring" });
     expect(at("entries.project.proj_probe.studio: wrong")).toEqual({ kind: "settings" });
     expect(problemTarget({ severity: "error", path: "extensions/probe.extension.json", message: "manifest x" }, [box])).toEqual({ kind: "settings" });
+  });
+});
+
+describe("a pick", () => {
+  const shot: ExtensionDto = {
+    id: "shot", name: "Shot", version: "1.0.0",
+    targets: {
+      card: { fields: [{ name: "to", type: "pick", label: "To", from: [{ words: ["all"] }, { to: "card" }, { list: "places" }] }], claims: [] },
+      project: { fields: [{ name: "places", type: "list", of: { type: "text" } }], claims: [] },
+    },
+    values: { proj_probe: { places: ["Quay"] }, c_bell: { to: "Quay" } },
+  };
+  const withShot = { ...project, extensions: [shot] } as unknown as ProjectDto;
+
+  it("reads the extension's project lists off its saved values, or the host's values as they stand", () => {
+    expect(adapterOf({ project: () => withShot, save: vi.fn() }, shot).list!("places")).toEqual(["Quay"]);
+    expect(adapterOf({ project: () => withShot, save: vi.fn(), projectEntry: () => ({ places: ["Quay", "Gate"] }) }, shot).list!("places"))
+      .toEqual(["Quay", "Gate"]);
+    expect(adapterOf({ project: () => withShot, save: vi.fn() }, shot).list!("nowhere")).toBeUndefined();
+  });
+
+  it("offers its words, the cards and the list's entries on a card's Fields tab", () => {
+    const h = { ...host(), extensions: { project: () => withShot, save: vi.fn() } } as InspectorHost;
+    const centre = document.createElement("div");
+    setDocTab(`card:${deck.id}/${card.id}`, "fields");
+    renderCardWorkspace(centre, box, deck, card, [], h);
+    const row = [...centre.querySelectorAll(".shell-fieldrow")].find((r) => r.querySelector(".shell-fieldrow-label")?.textContent === "To")!;
+    const options = [...row.querySelectorAll("option")].map((o) => o.textContent);
+    expect(options).toEqual(expect.arrayContaining(["all", "bell", "Quay"]));
+    expect(row.querySelector<HTMLElement>(".shell-fieldrow-problem")?.hidden ?? true).toBe(true);
   });
 });

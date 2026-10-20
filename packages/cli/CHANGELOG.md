@@ -20,6 +20,12 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+### Added
+
+- **An extension's pick field** is checked: `validate` reports a value that isn't one of its choices (its words,
+  the project's nodes of a kind, the extension's own project lists, read from its project entry wherever it sits),
+  a value two sources hold, and, once for the project, a name two of a pick's sources share.
+
 ## [0.17.0] - 2026-10-19
 
 ### Added
