@@ -20,6 +20,8 @@ the two styles will sit in one file, so it is better known in advance than disco
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-20
+
 ### Added
 
 - **An extension's pick field** is checked: `validate` reports a value that isn't one of its choices (its words,

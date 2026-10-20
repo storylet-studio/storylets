@@ -10,6 +10,8 @@ here is part of shipping, not a courtesy.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-20
+
 ### Added
 
 - **Find has a Field tab** (Review ▸ Find by Field…): type `mood` to see every card's mood, or `mood = tense` to
