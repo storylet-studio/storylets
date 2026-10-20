@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // The tool windows over the bridge: opening, pinning and closing the Board,
-// Find, Links and Coverage, what each is pointed at, and the editor brought
+// Find, Links, Coverage and Fields, what each is pointed at, and the editor brought
 // forward from one of them.
 // ---------------------------------------------------------------------------
 
@@ -10,7 +10,10 @@ import type { CoverageEvidence } from "../read/links.js";
 import type { MainContext } from "../context.js";
 import type { Ipc } from "./registrar.js";
 import { push } from "./push.js";
-import type { SearchOpen } from "../../shared/api.js";
+import type { FieldsWinState, SearchOpen } from "../../shared/api.js";
+
+/** What the Fields window shows with no project: nothing, until the editor says otherwise. */
+export const NO_FIELDS: FieldsWinState = { hasProject: false, node: null, readOnly: true, grids: [], hint: "" };
 
 export interface WindowsIpcDeps extends Pick<MainContext, "session" | "editor" | "store" | "windows"> {
   /** The last coverage run's evidence, for the Links lens. */
@@ -26,6 +29,8 @@ export interface WindowsIpc {
   forgetLinkFocus(): void;
   /** A query waiting for Find describes the project it was asked about. */
   dropSearchSeed(): void;
+  /** What the Fields window shows describes the project it was sent for. */
+  forgetFieldsState(): void;
   register(ipc: Ipc): void;
 }
 
@@ -34,6 +39,8 @@ export function createWindowsIpc(deps: WindowsIpcDeps): WindowsIpc {
   let linkFocus: string | undefined;
   /** A tab and query handed to Find as it opens, waiting to be collected at its boot. */
   let searchSeed: SearchOpen | undefined;
+  /** What the Fields window shows, as the editor last sent it: a window opening later reads it at boot. */
+  let fieldsState: FieldsWinState = NO_FIELDS;
 
   /** Bring the editor forward, unminimised, if it is there. */
   const editorForward = (): ReturnType<MainContext["editor"]> => {
@@ -46,6 +53,7 @@ export function createWindowsIpc(deps: WindowsIpcDeps): WindowsIpc {
   return {
     forgetLinkFocus: () => { linkFocus = undefined; },
     dropSearchSeed: () => { searchSeed = undefined; },
+    forgetFieldsState: () => { fieldsState = NO_FIELDS; },
     register: (ipc) => {
       // --- the Board ---------------------------------------------------------------
       // Braces, not an expression: `open` returns the window, which cannot cross
@@ -116,6 +124,37 @@ export function createWindowsIpc(deps: WindowsIpcDeps): WindowsIpc {
         pinToolWindow(deps.windows().get("links"), deps.editor(), on);
       });
       ipc.handle("links:close", () => { deps.windows().get("links")?.close(); });
+
+      // --- the Fields window (Pattershot's brief, H1 to H5) --------------------------------
+      // The editor owns the document: it sends what the window shows, and every edit the window makes goes
+      // back to it, to land as the page's own edits do. Main relays, and remembers the follow and the pin.
+      ipc.handle("fields:open", () => {
+        const already = deps.windows().get("fields") !== undefined;
+        const fields = deps.windows().open("fields");
+        // An Edit button asked for it: in front of the editor even when it is not pinned.
+        if (already) fields.show();
+      });
+      ipc.handle("fields:state", (_event, state) => {
+        fieldsState = state;
+        const fields = deps.windows().get("fields");
+        if (fields) push(fields.webContents, "fields:show", state);
+      });
+      ipc.handle("fields:current", () => fieldsState);
+      ipc.handle("fields:commit", (_event, edit) => {
+        if (typeof edit?.nodeId !== "string" || typeof edit.extension !== "string" || typeof edit.field !== "string") return;
+        const window = deps.editor();
+        if (window && !window.isDestroyed()) push(window.webContents, "fields:edit", edit);
+      });
+      ipc.handle("fields:setFollow", (_event, on) => {
+        deps.store().setFieldsFollow(on === true);
+        const window = deps.editor();
+        if (window && !window.isDestroyed()) push(window.webContents, "fields:follow", on === true);
+      });
+      ipc.handle("fields:setPin", (_event, on) => {
+        deps.store().window("fields").setPinned(on);
+        pinToolWindow(deps.windows().get("fields"), deps.editor(), on);
+      });
+      ipc.handle("fields:close", () => { deps.windows().get("fields")?.close(); });
 
       ipc.handle("view:resetWindows", () => deps.windows().rescue());
       // The Coverage window's "Coverage drivers..." button: bring the editor

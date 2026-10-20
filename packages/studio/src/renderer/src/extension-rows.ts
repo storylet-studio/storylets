@@ -22,10 +22,10 @@
 // ---------------------------------------------------------------------------
 
 import { el } from "@wildwinter/app-shell";
-import { extensionFold, isSet, valueRows } from "@wildwinter/app-shell/value-rows";
+import { extensionFold, isRecordMap, isSet, recordMapSummary, valueRows } from "@wildwinter/app-shell/value-rows";
 import type { ValueAdapter, ValueDecl } from "@wildwinter/app-shell/value-rows";
-import { pickLists } from "@wildwinter/toolkit/extensions";
-import type { TargetDecl } from "@wildwinter/toolkit/extensions";
+import { pickLists, valueProblems } from "@wildwinter/toolkit/extensions";
+import type { TargetDecl, TypeDecl } from "@wildwinter/toolkit/extensions";
 import { EXTENSION_PROJECT_OWNER, extensionVcKey } from "../../shared/api.js";
 import type { ExtensionDto, ExtensionFieldDto, ProjectDto } from "../../shared/api.js";
 import { lockControls } from "./vc-view.js";
@@ -40,12 +40,29 @@ export interface ExtensionHost {
   /** An extension's project values as they stand, for a pick's project lists, when they differ from the
    *  project's saved ones: Project Settings' edits not yet saved. */
   projectEntry?(extension: string): Readonly<Record<string, unknown>> | undefined;
+  /** Open (or bring forward) the Fields window on a node, where a map of records is edited as a grid
+   *  (Pattershot's brief, H1). Absent: such a map is drawn in place, as any other field. */
+  openFields?(kind: string, nodeId: string): void;
 }
 
 const rows = valueRows();
 /** Values typed but not yet written, by `extension:node:field`. */
 const pending = new Map<string, unknown>();
 const pendingKey = (ext: string, node: string, field: string): string => `${ext}\u0000${node}\u0000${field}`;
+
+/** Save one value through the host, shown as typed until the write lands: a page's row and the Fields window
+ *  both commit through here, so an edit from either is the same save and the same undo step. */
+export function commitExtensionValue(host: ExtensionHost, extension: string, nodeId: string, field: string, value: unknown): void {
+  const key = pendingKey(extension, nodeId, field);
+  pending.set(key, value);
+  host.save(extension, nodeId, field, value, () => { if (pending.get(key) === value) pending.delete(key); });
+}
+
+/** A node's value for one field as the author last made it: one typed but not yet written, else the saved one. */
+export function shownValue(extension: ExtensionDto, nodeId: string, field: string): unknown {
+  const key = pendingKey(extension.id, nodeId, field);
+  return pending.has(key) ? pending.get(key) : extension.values[nodeId]?.[field];
+}
 
 /** The extensions that declare fields for this kind of node, in the project's order. */
 export function extensionsFor(project: ProjectDto | undefined, kind: string): ExtensionDto[] {
@@ -106,7 +123,9 @@ function extensionParts(host: ExtensionHost, extension: ExtensionDto, kind: stri
   }
   const adapter = adapterOf(host, extension);
   const row = (decl: ExtensionFieldDto): HTMLElement => {
-    const key = pendingKey(extension.id, nodeId, decl.name);
+    if (host.openFields && isRecordMap(decl as unknown as ValueDecl)) {
+      return recordMapSummaryRow(decl, entry?.[decl.name], adapter, () => host.openFields!(kind, nodeId));
+    }
     const value = entry?.[decl.name];
     // A stage the extension has since renamed says so, in place of the row's "not one of the stages".
     const renamedTo = decl.type === "quality" && typeof value === "string" && !(decl.stages ?? []).includes(value)
@@ -118,15 +137,39 @@ function extensionParts(host: ExtensionHost, extension: ExtensionDto, kind: stri
       // The card Fields tab's row classes, so an extension's rows line up with the box's own.
       className: "doc-row doc-row-top", labelClassName: "doc-row-label", controlClassName: "insp-input",
       ...(renamedTo !== undefined ? { replaceProblem: `${extension.name} has since renamed this stage “${renamedTo}”. Pick “${renamedTo}” to update it.` } : {}),
-      ...(host.readOnly ? {} : {
-        onCommit: (v: unknown) => {
-          pending.set(key, v);
-          host.save(extension.id, nodeId, decl.name, v, () => { if (pending.get(key) === v) pending.delete(key); });
-        },
-      }),
+      ...(host.readOnly ? {} : { onCommit: (v: unknown) => commitExtensionValue(host, extension.id, nodeId, decl.name, v) }),
     });
   };
   return { fields, entry, row, group: (name) => el("h4", "ext-group", name) };
+}
+
+/**
+ * A map of records on a page (Pattershot's brief, H3): too big for a row, so a line per key with the record's
+ * set values ("TAM: smile, nod, WREN"), and an Edit button that opens the Fields window, where it is edited as
+ * a grid. With no keys, the Edit button alone. A problem inside it is said here too, so the page still shows
+ * it's there. The Edit button stays live on a locked shard: it only opens the window, which is then read-only.
+ */
+function recordMapSummaryRow(decl: ExtensionFieldDto, value: unknown, adapter: ValueAdapter, open: () => void): HTMLElement {
+  const row = el("div", "shell-fieldrow doc-row doc-row-top ext-summary");
+  const label = el("span", "shell-fieldrow-label doc-row-label", decl.label ?? decl.name);
+  const body = el("div", "shell-fieldrow-body");
+  const lines = recordMapSummary(decl as unknown as ValueDecl, value, adapter);
+  if (lines.length) body.append(el("div", "ext-summary-lines", ...lines.map((l) => el("div", "ext-summary-line", l))));
+  const edit = el("button", "btn ext-edit", "Edit");
+  edit.type = "button";
+  edit.dataset["tip"] = `Edit ${decl.label ?? decl.name} in the Fields window`;
+  edit.addEventListener("click", open);
+  body.append(edit);
+  const exists = (kind: string, id: string): boolean => adapter.nodes(kind).some((n) => n.id === id) || adapter.label?.(kind, id) !== undefined;
+  const inner = value === undefined ? [] : valueProblems(decl as unknown as TypeDecl, value, {
+    exists, ...(adapter.list ? { list: (name: string) => adapter.list!(name) } : {}),
+  }).filter((p) => p.severity === "error");
+  if (inner.length) {
+    body.append(el("p", "shell-fieldrow-problem", "Something in here needs a fix: Edit shows where."));
+    row.classList.add("has-problem");
+  }
+  row.append(label, body);
+  return row;
 }
 
 /** Marks the element holding an extension's rows with the shard they write, for version control: somebody else

@@ -23,7 +23,7 @@ export interface Session {
 }
 
 /** The state before main has answered: what boot starts from. */
-export const INITIAL_STATE: StudioState = { theme: "system", recents: [], panes: { nav: true, inspector: true }, autoRebuild: false, viewMode: "node", boardPinned: true, boardFollow: false, boardView: "map", searchPinned: true, coveragePinned: true, coverageOrder: "least", linksPinned: true, showResolved: false, reviewWalk: false, coverageOverlay: false };
+export const INITIAL_STATE: StudioState = { theme: "system", recents: [], panes: { nav: true, inspector: true }, autoRebuild: false, viewMode: "node", boardPinned: true, boardFollow: false, boardView: "map", searchPinned: true, coveragePinned: true, coverageOrder: "least", linksPinned: true, fieldsPinned: true, fieldsFollow: true, showResolved: false, reviewWalk: false, coverageOverlay: false };
 
 /**
  * Change a remembered state field, and persist it, in one act.

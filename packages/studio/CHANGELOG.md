@@ -20,6 +20,13 @@ here is part of shipping, not a courtesy.
   cards, boxes, decks, outcomes or tags, and the extension's own lists in Project Settings) shows them all in one
   menu, with "auto" first. A value that isn't one of its choices, or a name two sources share, is reported, as
   Patterpad does. A list entry added in Project Settings is offered before you save.
+- **The Fields window, for an extension's map of records.** A field that holds a record for each key (a look,
+  an expression and a gesture for each character on a card, say) is too big for a page, so the page now shows a
+  line per key and an Edit button. Edit opens the Fields window beside the editor, where the field is a grid: a
+  row per key, a column per part, a key added from the menu under it and removed with the button on its row. It
+  follows what you select in the editor (Follow selection, remembered; turn it off to stay on one item), each
+  edit is one step to undo, as on the page, and it is read-only while somebody else holds that extension's data.
+  It works as Patterpad's does.
 
 ### Changed
 

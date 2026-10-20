@@ -40,7 +40,8 @@ export const vcKeys = {
 // Containers list their INSIDES too, because a card face's condition preview is
 // drawn from buttons (pills): disabling those would swallow the click that opens
 // the card.
-const LIVE_LEAVES = [".crumb-back", ".doc-tab", ".centre-step", ".viewbtn", ".doc-collapsed", ".camerabtn"];
+// A map of records' Edit (extension-rows.ts) only opens the Fields window, which is then read-only.
+const LIVE_LEAVES = [".crumb-back", ".doc-tab", ".centre-step", ".viewbtn", ".doc-collapsed", ".camerabtn", ".ext-edit"];
 const LIVE_CONTAINERS = [
   ".outcome-row", ".scard:not(.ghost)", ".listrow:not(.ghost)", ".deck-card:not(.ghost)",
   ".cardwhen", ".ct-when",   // read-only condition previews (pills, not controls)
@@ -317,6 +318,8 @@ export function createVcView(ctx: VcViewContext) {
     /** Lock the extension groups a surface outside the centre has just drawn
      *  (Project Settings re-mounts its sections on every open). */
     applyExtensionLocks(root: ParentNode): void { applyExtensionLocks(root, extensions); },
+    /** Who holds an extension shard (`ext:<owner>:<id>`), when somebody else does: the Fields window's lock. */
+    lockedBy(key: string): readonly string[] | undefined { return extensions.get(key)?.lockedBy; },
     /** No project, no version-control state. */
     clear(): void {
       shards = new Map();

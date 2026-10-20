@@ -23,6 +23,8 @@ const COVERAGE_DEFAULT = { width: 1080, height: 760 };
 const COVERAGE_MIN = { width: 640, height: 420 };
 const LINKS_DEFAULT = { width: 900, height: 560 };
 const LINKS_MIN = { width: 520, height: 360 };
+const FIELDS_DEFAULT = { width: 640, height: 420 };
+const FIELDS_MIN = { width: 420, height: 240 };
 
 export interface ToolWindowDeps {
   store: StudioStore;
@@ -35,12 +37,14 @@ export interface ToolWindowDeps {
   forgetLinkFocus(): void;
   /** The Coverage row's clear: the cached report goes with the project. */
   coverage: { forget(): void };
+  /** The Fields row's clear: what the editor last said to show describes the project that has gone. */
+  forgetFieldsState(): void;
   /** Every tool window created: the Board's close is guarded (lifecycle.ts). */
   guardBoardClose(win: BrowserWindow): void;
 }
 
 /**
- * The four tool windows, as data, on the shell's table (defineToolWindows).
+ * The tool windows, as data, on the shell's table (defineToolWindows).
  *
  * They were four near-identical `openX()` functions, and the differences
  * between them were all mistakes: only the Board forwarded its console to a dev
@@ -74,6 +78,11 @@ export function defineWindows(deps: ToolWindowDeps): ToolWindows<ToolName> {
     // cancelled for the same reason, and its result dropped (`coverageJob`).
     { name: "coverage", title: "Coverage", page: "coverage.html", def: COVERAGE_DEFAULT, min: COVERAGE_MIN, ...store.window("coverage"),
       clear: () => { jobs.cancel(COVERAGE_JOB); deps.coverage.forget(); } },
+    // A map of records (an extension's per-character performance, say) edited as a grid, following the
+    // editor's selection (Pattershot's brief, H1 to H5). The editor owns the document, so it says what to
+    // show and applies every edit; this side only relays and remembers.
+    { name: "fields", title: "Fields", page: "fields.html", def: FIELDS_DEFAULT, min: FIELDS_MIN, ...store.window("fields"),
+      clear: () => { deps.forgetFieldsState(); } },
   ], {
     rendererDir: join(import.meta.dirname, "../renderer"),
     preload: join(import.meta.dirname, "../preload/index.cjs"),

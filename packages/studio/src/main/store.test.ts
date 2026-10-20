@@ -79,6 +79,20 @@ describe("studio store", () => {
     expect(new StudioStore(dir).get().boardFollow).toBe(true);
   });
 
+  it("remembers the Fields window's follow, ON until turned off, and its pin and bounds as its siblings'", () => {
+    // Following the selection is what the window is for (Pattershot's brief, H1); off holds it on one item.
+    const dir = mkdtempSync(join(tmpdir(), "studio-store-"));
+    const fresh = new StudioStore(dir).get();
+    expect(fresh.fieldsFollow).toBe(true);
+    expect(fresh.fieldsPinned).toBe(true);
+    const store = new StudioStore(dir);
+    store.setFieldsFollow(false);
+    store.window("fields").remember({ x: 10, y: 20, width: 640, height: 420 });
+    const again = new StudioStore(dir).get();
+    expect(again.fieldsFollow).toBe(false);
+    expect(again.fieldsBounds).toEqual({ x: 10, y: 20, width: 640, height: 420 });
+  });
+
   it("keeps each project map's layers, per project and per map", () => {
     // How a person looks at the map (what is hidden, the order, the active
     // layer) is theirs, and kept per PROJECT: two projects started from the

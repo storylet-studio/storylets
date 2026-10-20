@@ -1025,3 +1025,8 @@ button.where-chip:hover { border-color: var(--accent); color: var(--accent); }
 .shell-fold-cap.ext-heading:hover { color: var(--ink); }
 .ext-section > .shell-fold-body { display: flex; flex-direction: column; gap: 6px; }
 .ext-section > .shell-fold-body:empty { display: none; }
+
+/* A map of records on a page (extension-rows.ts `recordMapSummaryRow`): a line per key, then the Edit that
+   opens the Fields window, where it is edited as a grid. */
+.ext-summary-lines { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; font-size: 13px; color: var(--ink); }
+.ext-summary .ext-edit { align-self: flex-start; }

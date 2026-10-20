@@ -13,7 +13,7 @@ import type { StudioStore } from "./store.js";
 import type { OpenResult } from "../shared/api.js";
 
 /** The four tool windows, as rows of the shell's table (windows.ts). */
-export type ToolName = "board" | "find" | "links" | "coverage";
+export type ToolName = "board" | "find" | "links" | "coverage" | "fields";
 
 export interface MainContext {
   /** The open project, or none. */

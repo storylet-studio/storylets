@@ -262,7 +262,7 @@ void app.whenReady().then(() => {
   store.resetReviewToggles();
   windows = defineWindows({
     store, editor: () => window, addSatellite: projects.addSatellite, jobs: jobs.host,
-    forgetLinkFocus: () => tools.forgetLinkFocus(), coverage, guardBoardClose: (win) => lifecycle.guardBoardClose(win),
+    forgetLinkFocus: () => tools.forgetLinkFocus(), forgetFieldsState: () => tools.forgetFieldsState(), coverage, guardBoardClose: (win) => lifecycle.guardBoardClose(win),
   });
   serveAssets(() => session);
   registerAll(electronIpc, {

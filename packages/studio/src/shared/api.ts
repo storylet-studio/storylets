@@ -106,6 +106,11 @@ export interface StudioState {
   coverageOrder: CoverageOrder;
   /** The Links window's pin. Default true, like its siblings. */
   linksPinned: boolean;
+  /** The Fields window's pin. Default true, like its siblings. */
+  fieldsPinned: boolean;
+  /** The Fields window follows the editor's selection (Pattershot's brief, H1). On by default: following is
+   *  what the window is for; off holds it on one item. */
+  fieldsFollow: boolean;
   /**
    * Who is commenting: stamped on each message they post.
    *
@@ -129,6 +134,7 @@ export interface StudioState {
   searchBounds?: WindowBounds;
   linksBounds?: WindowBounds;
   coverageBounds?: WindowBounds;
+  fieldsBounds?: WindowBounds;
   /** Expanded nav nodes (disclosure is the user's, not the focus's). */
   navExpanded?: string[];
   /** How each person looks at a project map (MapLayerPrefs), keyed by the
@@ -2189,6 +2195,27 @@ export interface StudioApi {
   onBoardAskClose(handler: () => void): void;
   /** Close the Coverage window from its own chrome (Esc, or the close button). */
   closeCoverage(): Promise<void>;
+  /** Editor: open (or bring forward) the Fields window, where a map of records is edited as a grid. */
+  openFields(): Promise<void>;
+  /** Editor: what the Fields window should show now. Sent on every selection move and edit, only when it
+   *  changed; main keeps the last one for a window that opens later. */
+  sendFieldsState(state: FieldsWinState): Promise<void>;
+  /** Editor: the Fields window edited a field. Apply it as the page's own edit is applied (one undo step). */
+  onFieldsCommit(handler: (edit: FieldsEdit) => void): void;
+  /** Editor: the Fields window started or stopped following the selection. */
+  onFieldsFollow(handler: (on: boolean) => void): void;
+  /** Fields window: the last state the editor sent, read as it boots. */
+  fieldsState(): Promise<FieldsWinState>;
+  /** Fields window: what the editor now says it should show. */
+  onFieldsState(handler: (state: FieldsWinState) => void): void;
+  /** Fields window: an edit, for the editor to apply. */
+  commitFields(edit: FieldsEdit): Promise<void>;
+  /** Fields window: follow the editor's selection, or stay on the item shown (remembered). */
+  setFieldsFollow(on: boolean): Promise<void>;
+  /** Fields window: float over the editor. */
+  setFieldsPinned(on: boolean): Promise<void>;
+  /** Fields window: close itself (Esc, or the close button). */
+  closeFields(): Promise<void>;
 
   /** Coverage window: float over the editor (Board + Find's pin). */
   setCoveragePinned(on: boolean): Promise<void>;
@@ -2319,6 +2346,43 @@ export interface StudioApi {
   /** Live download progress, for a dialog opened with `progress: true`. */
   onUpdaterDownloadProgress(handler: (p: UpdaterDownloadProgress) => void): void;
 }
+
+// --- the Fields window (Pattershot's brief, "a map of records edited in a helper window", H1 to H5) ------
+
+/** One map of records on the item shown, as the Fields window draws it: the field's declaration and value,
+ *  and what its cells need from the project, sent as data because an adapter's functions can't cross to
+ *  another window. */
+export interface FieldsGrid {
+  extension: string;
+  extensionName: string;
+  field: string;
+  decl: ExtensionFieldDto;
+  value: unknown;
+  /** The sentence when somebody else holds the extension's data here, else null: the grid is read-only. */
+  locked: string | null;
+  /** The nodes the key and the cells offer, by kind. */
+  nodes: Record<string, { id: string; label: string }[]>;
+  /** A held node the choices leave out, by kind then id: its name. */
+  labels: Record<string, Record<string, string>>;
+  /** The extension's project lists a pick offers, by name. */
+  lists: Record<string, string[]>;
+}
+
+/** What the Fields window shows: the item and its maps of records, or why there are none. */
+export interface FieldsWinState {
+  hasProject: boolean;
+  /** The item shown ("card", "bell"), or null with nothing selected (or the held item has gone). */
+  node: { id: string; kind: string; label: string } | null;
+  /** Nothing here can be written (a project open read-only). */
+  readOnly: boolean;
+  grids: FieldsGrid[];
+  /** Where such fields are, for the window to say when it has none to show ("Select a card to edit
+   *  Performance here."); empty when the project's extensions have none. */
+  hint: string;
+}
+
+/** One edit from the Fields window: a node's extension field, the whole map (undefined clears it). */
+export interface FieldsEdit { nodeId: string; extension: string; field: string; value: unknown }
 
 // --- the channels -------------------------------------------------------------
 //
@@ -2486,6 +2550,13 @@ export const INVOKE_CHANNELS = {
   "links:close": "closeLinks",
   "board:close": "closeBoard",
   "coverage:close": "closeCoverage",
+  "fields:open": "openFields",
+  "fields:state": "sendFieldsState",
+  "fields:current": "fieldsState",
+  "fields:commit": "commitFields",
+  "fields:setFollow": "setFieldsFollow",
+  "fields:setPin": "setFieldsPinned",
+  "fields:close": "closeFields",
   "bundle:export": "exportBundle",
   "xlsx:export": "exportXlsx",
   "html:export": "exportHtml",
@@ -2540,6 +2611,9 @@ export const PUSH_CHANNELS = {
   [PROJECT_CHANGED]: carries<void>(),
   "links:focus": carries<string | undefined>(),
   "links:reset": carries<void>(),
+  "fields:show": carries<FieldsWinState>(),
+  "fields:edit": carries<FieldsEdit>(),
+  "fields:follow": carries<boolean>(),
   "board:askClose": carries<void>(),
   "project:opened": carries<OpenResult | { error: string } | PackOffer>(),
   "liveLink:status": carries<LiveLinkStatus>(),

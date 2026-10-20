@@ -127,13 +127,15 @@ export default defineConfig({
     build: {
       outDir: "dist-electron/renderer",
       rollupOptions: {
-        // Five windows: the editor shell, the Board, Coverage, Find and Links.
+        // Six windows: the editor shell, the Board, Coverage, Find, Links and Fields.
         input: {
           index: here("src/renderer/index.html"),
           table: here("src/renderer/table.html"),
           coverage: here("src/renderer/coverage.html"),
           search: here("src/renderer/search.html"),
           links: here("src/renderer/links.html"),
+          // A map of records edited as a grid, following the selection (Pattershot's brief, H1).
+          fields: here("src/renderer/fields.html"),
         },
       },
     },

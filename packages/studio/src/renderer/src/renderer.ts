@@ -80,6 +80,7 @@ import { createComments } from "./comments.js";
 import { createProblems } from "./problems.js";
 import { createVcView } from "./vc-view.js";
 import { sweepExtensionFold } from "./extension-rows.js";
+import { createFieldsLink } from "./fields-link.js";
 import { createCatalogues } from "./catalogues.js";
 import { createMapPage } from "./map-page.js";
 import { renderStoryCentre } from "./story-page.js";
@@ -141,7 +142,19 @@ const vc = createVcView({
   session,
   place: () => ({ focus: nav.focus, inspected: nav.inspected }),
   centre: () => shell.centre,
-  afterLock: refreshGameIds,
+  // A poll that moved a lock moves the Fields window's too.
+  afterLock: (host) => { refreshGameIds(host); fieldsLink.push(); },
+});
+
+// The Fields window (Pattershot's brief, H1 to H5): a map of records edited as a grid beside the editor,
+// following the selection. This side owns the document: it says what to show, and saves the window's edits.
+const fieldsLink = createFieldsLink({
+  studio,
+  host: { project: () => session.project, save: saves.saveExtension },
+  selection: () => ({ focus: nav.focus, inspected: nav.inspected, cursor: nav.cursor }),
+  lockedBy: (key) => vc.lockedBy(key),
+  follow: () => session.state.fieldsFollow,
+  redraw: () => renderCentre(),
 });
 
 const comments = createComments({
@@ -248,6 +261,7 @@ const made = createActions({
   offerMapUpgrade: (asked) => offerMapUpgrade(asked),
   openSettings: (section) => projectSettingsPanel.open(section),
   focusNewTitle: () => focusNewTitle(),
+  openFields: (kind, id) => fieldsLink.openOn(kind, id),
 });
 const { actions, host: inspectorHost } = made;
 
@@ -526,6 +540,7 @@ function renderCentre(): void {
   // The fold forgets the rows it kept for nodes this draw didn't show (a value cleared while folded stays only
   // while its node does).
   sweepExtensionFold();
+  fieldsLink.push();
 }
 
 /** A canvas's element goes with the centre's children, but not its window

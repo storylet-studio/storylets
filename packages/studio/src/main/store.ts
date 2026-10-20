@@ -26,6 +26,8 @@ interface StudioSlice {
   autoRebuild: boolean;
   viewMode: ViewMode;
   boardFollow: boolean;
+  /** The Fields window follows the editor's selection. On by default (StudioState.fieldsFollow). */
+  fieldsFollow: boolean;
   /** The Board's List | Map choice. Defaulting to "map" is deliberate: a
    *  project WITH a map opens on it (the richer view), and the Board already
    *  forces "list" when the project has none, so the default costs a mapless
@@ -117,13 +119,13 @@ function slotsOf(slots: ServerSlots | undefined): Partial<Record<ServerRole, Sto
 // `viewMode` was chosen or merely never touched cannot be told apart, and
 // leaving it alone is the answer that never overrules somebody.
 const DEFAULTS: StudioSlice = {
-  theme: "system", autoRebuild: false, viewMode: "node", boardFollow: false, boardViews: {}, showResolved: false,
+  theme: "system", autoRebuild: false, viewMode: "node", boardFollow: false, fieldsFollow: true, boardViews: {}, showResolved: false,
   reviewWalk: false, coverageOverlay: false, coverageOrder: "least",
 };
 
 /** The helper windows, by the keys the shell stores them under. */
-const BOARD = "board", SEARCH = "search", LINKS = "links", COVERAGE = "coverage";
-const WINDOWS = [BOARD, SEARCH, LINKS, COVERAGE];
+const BOARD = "board", SEARCH = "search", LINKS = "links", COVERAGE = "coverage", FIELDS = "fields";
+const WINDOWS = [BOARD, SEARCH, LINKS, COVERAGE, FIELDS];
 
 /**
  * Fold a pre-shell settings file into the shell's shape, once.
@@ -292,6 +294,8 @@ export class StudioStore {
     const cardGroups = s.lastProject !== undefined ? projectCardGroups?.[s.lastProject] : undefined;
     return {
       ...app,
+      // A file from before the Fields window has no say: on, as the default.
+      fieldsFollow: app.fieldsFollow ?? DEFAULTS.fieldsFollow,
       ...(mapLayers !== undefined ? { mapLayers } : {}),
       ...(cardGroups !== undefined ? { cardGroups } : {}),
       boardView: boardPlace?.view ?? "map",
@@ -313,10 +317,12 @@ export class StudioStore {
       boardPinned: win(BOARD).pinned(),
       searchPinned: win(SEARCH).pinned(),
       linksPinned: win(LINKS).pinned(),
+      fieldsPinned: win(FIELDS).pinned(),
       coveragePinned: win(COVERAGE).pinned(),
       ...bounds(BOARD, "boardBounds"),
       ...bounds(SEARCH, "searchBounds"),
       ...bounds(LINKS, "linksBounds"),
+      ...bounds(FIELDS, "fieldsBounds"),
       ...bounds(COVERAGE, "coverageBounds"),
     };
   }
@@ -325,6 +331,7 @@ export class StudioStore {
   setAutoRebuild(on: boolean): void { this.store.patchApp({ autoRebuild: on }); }
   setViewMode(mode: ViewMode): void { this.store.patchApp({ viewMode: mode }); }
   setBoardFollow(on: boolean): void { this.store.patchApp({ boardFollow: on }); }
+  setFieldsFollow(on: boolean): void { this.store.patchApp({ fieldsFollow: on }); }
   /** Patterpad's location, as the author pointed at it (undefined = look for it). */
   patterpadPath(): string | undefined { return this.store.get().app.patterpadPath; }
   setPatterpadPath(path: string): void { this.store.patchApp({ patterpadPath: path }); }

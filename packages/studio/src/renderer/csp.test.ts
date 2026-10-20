@@ -13,6 +13,7 @@ const EXPECTED: Record<string, string> = {
   "table.html": familyCsp({ ...ASSETS, "connect-src": ["ws://127.0.0.1:4471"] }),
   "coverage.html": familyCsp(),
   "links.html": familyCsp(),
+  "fields.html": familyCsp(),
   "search.html": familyCsp(),
 };
 
