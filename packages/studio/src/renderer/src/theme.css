@@ -28,8 +28,15 @@
 
    Theme axis: data-theme="chambray" | "indigo" | "linen" | "baize" on
    <html>; absent = follow-OS (Chambray in light, Indigo in dark). The bare
-   :root IS Chambray, so an explicit data-theme="chambray" needs no block of
-   its own: setting any data-theme detaches the follow-OS media query below.
+   :root IS Chambray; setting any data-theme detaches the follow-OS media
+   query below.
+
+   Every palette block declares --color-scheme, light or dark by its ground
+   (app-shell 0.56): the shell's tokens.css sets color-scheme from it, so
+   native controls (an unticked checkbox, a scrollbar, a select's pop-up)
+   draw for the palette, not for the OS. The bare :root leaves it unset, so
+   follow-OS works through the shell's "light dark" fallback; an explicit
+   Chambray has a block of its own for the token alone.
    --------------------------------------------------------------------------- */
 
 @import "@wildwinter/app-shell/tokens.css";
@@ -96,8 +103,12 @@
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
+/* Chambray chosen explicitly: the bare :root's colours, light whatever the OS. */
+:root[data-theme="chambray"] { --color-scheme: light; }
+
 /* Linen, the original green-tinted light palette, kept as an explicit choice. */
 :root[data-theme="linen"] {
+  --color-scheme: light;
   --bg: #e7ebe5;
   --surface: #f5f8f4;
   --card: #fcfdfb;
@@ -112,6 +123,7 @@
 
 /* Indigo, the dark default, as an explicit choice... */
 :root[data-theme="indigo"] {
+  --color-scheme: dark;
   --bg: #131923;
   --surface: #1c2431;
   --card: #212a39;
@@ -132,6 +144,7 @@
 
 /* Baize, the original green-felt dark palette, kept as an explicit choice. */
 :root[data-theme="baize"] {
+  --color-scheme: dark;
   --bg: #151c1a;
   --surface: #1e2724;
   --card: #232e2a;
@@ -153,6 +166,7 @@
 /* The follow-system default when the OS is dark: Indigo. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
+    --color-scheme: dark;
     --bg: #131923;
     --surface: #1c2431;
     --card: #212a39;

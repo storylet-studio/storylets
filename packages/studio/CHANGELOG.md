@@ -27,6 +27,13 @@ here is part of shipping, not a courtesy.
   from the shared editor shell, with Storyletter's own handling of boards and traces plugged in (family parity
   item 14). Nothing changes in how it behaves.
 
+### Fixed
+
+- **Checkboxes and other native controls follow the palette you chose.** With Linen or Chambray chosen and the
+  system in dark mode, an unticked checkbox drew as a dark filled square; with Indigo or Baize under a light
+  system, as a bright white box. Each palette now says whether it is light or dark, so they draw to match. Left
+  to follow the system, nothing changes.
+
 ## [0.24.0] - 2026-10-19
 
 ### Fixed
